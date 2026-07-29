@@ -1198,6 +1198,9 @@ function ApprovalSettings() {
   // Save to API
   const saveAll = async () => {
     setSaving(true); setSaveMsg(""); setSaveTone("ok");
+    // Mirrors saveTone in a local, because the auto-clear decision at the end
+    // of this function runs before React has committed the state update.
+    let tone = "ok";
     try {
       const payload = approvals.map(a => ({
         id: a.id > 0 ? a.id : undefined,
@@ -1214,15 +1217,19 @@ function ApprovalSettings() {
         // don't belong to this company (stale ids kept across a company switch)
         // and reports them in `skipped` — announcing "Saved successfully!" there
         // left the admin believing a chain was updated when nothing was written.
-        const saved = Number(res.data?.saved || 0);
-        const skipped = Number(res.data?.skipped || 0);
+        // An ABSENT `res.data` is not "saved 0" — `Number(undefined || 0)` would
+        // collapse the two and report a false failure. Unknown counts stay green.
+        const counts = res.data || {};
+        const saved = typeof counts.saved === "number" ? counts.saved : null;
+        const skipped = typeof counts.skipped === "number" ? counts.skipped : 0;
         if (payload.length > 0 && saved === 0) {
-          setSaveMsg("Kuch save nahi hua — page refresh karke dobara try karein"); setSaveTone("err");
+          tone = "err"; setSaveMsg("Kuch save nahi hua — page refresh karke dobara try karein");
         } else if (skipped > 0) {
-          setSaveMsg(`${saved} save hue, ${skipped} nahi — page refresh karke dobara try karein`); setSaveTone("warn");
+          tone = "warn"; setSaveMsg(`${saved} save hue, ${skipped} nahi — page refresh karke dobara try karein`);
         } else {
-          setSaveMsg("Saved successfully!"); setSaveTone("ok");
+          setSaveMsg("Saved successfully!");
         }
+        setSaveTone(tone);
         // Reload to get IDs
         const r2 = await api.get("/approvals/workflows");
         if (r2.success && r2.data) {
@@ -1243,10 +1250,13 @@ function ApprovalSettings() {
           const apiModules = new Set(mapped.map(m => m.module));
           setApprovals([...mapped, ...DEFAULTS.filter(d => !apiModules.has(d.module))]);
         }
-      } else { setSaveMsg("Failed to save: " + (res.message || "Unknown error")); setSaveTone("err"); }
-    } catch (e) { console.error("Save approvals:", e); setSaveMsg("Failed to save"); setSaveTone("err"); }
+      } else { tone = "err"; setSaveMsg("Failed to save: " + (res.message || "Unknown error")); setSaveTone(tone); }
+    } catch (e) { console.error("Save approvals:", e); tone = "err"; setSaveMsg("Failed to save"); setSaveTone(tone); }
     setSaving(false);
-    setTimeout(() => setSaveMsg(""), 3000);
+    // Only a clean success auto-clears. Red and amber tell the user to reload
+    // and redo the setting — 3s is not long enough to read that, and a warning
+    // that vanishes is the same dishonesty as not showing one.
+    if (tone === "ok") setTimeout(() => setSaveMsg(""), 3000);
   };
 
   const categories = ["DESIGN", "PROCUREMENT", "WAREHOUSE", "FINANCE", "PAYMENTS", "HR"];
@@ -1315,7 +1325,7 @@ function ApprovalSettings() {
         return (
           <SectionCard key={cat} title={cat.charAt(0) + cat.slice(1).toLowerCase() + " Approvals"}
             desc={`${catApprovals.filter(a => a.enabled).length} of ${catApprovals.length} workflows active`}
-            action={<>{saveMsg&&<span style={{fontSize:12,color:saveTone==="ok"?T.green:saveTone==="warn"?T.amber:T.red,marginRight:8}}>{saveMsg}</span>}<SaveBtn onClick={saveAll} label={saving?"Saving...":"Save Changes"}/></>}>
+            action={<>{saveMsg&&<span style={{fontSize:12,color:saveTone==="ok"?T.green:saveTone==="warn"?T.amber:T.red,marginRight:8,maxWidth:260,textAlign:"right",lineHeight:1.4}}>{saveMsg}</span>}<SaveBtn onClick={saveAll} label={saving?"Saving...":"Save Changes"}/></>}>
 
             {catApprovals.map((a, ai) => (
               <div key={a.id} style={{ borderBottom: ai < catApprovals.length - 1 ? `1px solid ${T.borderLight}` : "none", padding: "14px 0" }}>
