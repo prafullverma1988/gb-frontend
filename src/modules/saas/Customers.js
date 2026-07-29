@@ -1145,8 +1145,12 @@ function TabCustomers({ onOpenCompany }) {
                     )}
                   </>
                 : <span style={{ fontSize:11, color:T.t4 }}>--</span>}
-              {c.lifecycle && c.lifecycle.state === "grace" && <div style={{ marginTop:3 }}><Badge text={`GRACE · ${c.lifecycle.graceDaysLeft}d`} color={T.amb}/></div>}
-              {c.lifecycle && c.lifecycle.state === "suspended" && <div style={{ marginTop:3 }}><Badge text={c.lifecycle.archived ? "SUSPENDED · PURGE-ELIGIBLE" : "SUSPENDED"} color={T.red}/></div>}
+              {/* access_state, not lifecycle. c.lifecycle is the commercial
+                  bucket (a string); this is the can-they-log-in state (an
+                  object). They used to share the key, so whichever the backend
+                  assigned last won and the other silently rendered nothing. */}
+              {c.access_state && c.access_state.state === "grace" && <div style={{ marginTop:3 }}><Badge text={`GRACE · ${c.access_state.graceDaysLeft}d`} color={T.amb}/></div>}
+              {c.access_state && c.access_state.state === "suspended" && <div style={{ marginTop:3 }}><Badge text={c.access_state.archived ? "SUSPENDED · PURGE-ELIGIBLE" : "SUSPENDED"} color={T.red}/></div>}
             </div>
             <div style={{ fontSize:11.5, color: c.overdue_count > 0 ? T.red : T.t3, fontWeight: c.overdue_count > 0 ? 700 : 400 }}>
               {c.overdue_count > 0 ? `${c.overdue_count} OVERDUE` : (c.next_due ? fmtDate(c.next_due) : "--")}
