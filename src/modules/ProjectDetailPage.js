@@ -12,6 +12,27 @@ import MaterialLedgerDrawer from "../components/MaterialLedgerDrawer";
 import uploadManager from "../utils/uploadManager";
 import EstimateBuilderModal from "./EstimateBuilderModal";
 import MOMModule from "./MOMModule";
+
+// ── "Waiting on" label ─────────────────────────────────────────────────────
+// Backend /approvals/pending bhejta hai: _waitingOn (role label, escalation ke
+// BAAD), _waitingOnName (pehla approver), _waitingOnMore (+N), aur
+// _escalated/_escalatedFrom (level apne-aap upar gaya kyunki project me wo role
+// hai hi nahi). Pehle sirf role dikhta tha — "Waiting on approver" — jisse
+// admin ko na ye pata chalta tha ki kis par ruka hai, na kyun uske paas aaya.
+// Jaan-boojh kar yahan ki apni copy hai: modules self-contained rehte hain
+// (CLAUDE.md), isliye ProjectsModule se import NAHI karte.
+const waitingText = (it) => {
+  if (!it) return null;
+  const role = it._waitingOn || it.pending_role || "";
+  if (!role) return null;
+  const nm = it._waitingOnName;
+  const more = Number(it._waitingOnMore) || 0;
+  return nm ? `${role}: ${nm}${more > 0 ? ` +${more}` : ""}` : role;
+};
+const escalationNote = (it) =>
+  it && it._escalated && it._escalatedFrom
+    ? `is project me koi ${it._escalatedFrom} nahi — isliye ${it._waitingOn || "Admin"} ke paas`
+    : null;
 import MapPicker from "../components/MapPicker";
 import { T, fmt, fmtN, localYMD, PROJ, STATUS_S, STAGES, STAGE_S } from "./shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabIc } from "./shared/ui";
@@ -1307,8 +1328,11 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
               {/* Action buttons — only when it's the viewer's turn (_canActNow).
                   In the "All" view, items waiting on someone else are read-only. */}
               {item._canActNow === false ? (
-                <div style={{ marginTop: 6, padding: "5px 10px", borderRadius: 6, background: T.amb + "14", border: "1px solid " + T.amb + "55", fontSize: 10.5, color: T.amb, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>
-                  ⏳ Waiting on {item.pending_role || item._waitingOn || "approver"}
+                <div style={{ marginTop: 6, padding: "5px 10px", borderRadius: 6, background: T.amb + "14", border: "1px solid " + T.amb + "55", fontSize: 10.5, color: T.amb, fontWeight: 600, display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span>⏳ Waiting on {waitingText(item) || "approver"}</span>
+                  {escalationNote(item) && (
+                    <span style={{ fontWeight: 500, opacity: 0.85, paddingLeft: 15 }}>{escalationNote(item)}</span>
+                  )}
                 </div>
               ) : (
                 <div style={{ display: "flex", gap: 6, marginTop: 6 }}>

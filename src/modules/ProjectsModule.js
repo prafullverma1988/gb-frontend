@@ -1364,7 +1364,28 @@ const MR_STAGE_COLORS={
   Received: {c:"#7C3AED",bg:"#F5F3FF",bdr:"#DDD6FE",label:"Delivered"},
   Rejected: {c:T.red,bg:T.redL,bdr:T.redM,label:"Rejected"},
 };
-function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setRejectId, rejectNote, setRejectNote, onMarkOrdered, onMarkReceived, vendorList=[], onVendorAdded, waitingOn=null}){
+// ── "Waiting on" label — ek hi jagah, taki teeno card same bolein ──────────
+// Backend /approvals/pending bhejta hai:
+//   _waitingOn      role label, escalation LAGNE KE BAAD ("Admin", "Project Manager")
+//   _waitingOnName  pehla approver ka naam · _waitingOnMore  baaki kitne (+N)
+//   _escalated / _escalatedFrom  agar level apne-aap upar gaya (project me wo role hai hi nahi)
+// Sirf role dikhana kaafi nahi tha — admin ko pata hi nahi chalta tha ki
+// rukka kis par hai, aur kyun uske paas aaya.
+const waitingText=(it)=>{
+  if(!it) return null;
+  const role=it._waitingOn||it.pending_role||"";
+  if(!role) return null;
+  const nm=it._waitingOnName;
+  const more=Number(it._waitingOnMore)||0;
+  return nm?`${role}: ${nm}${more>0?` +${more}`:""}`:role;
+};
+// Escalation ki wajah — "is project me koi Project Manager nahi".
+const escalationNote=(it)=>
+  (it&&it._escalated&&it._escalatedFrom)
+    ?`is project me koi ${it._escalatedFrom} nahi — isliye ${it._waitingOn||"Admin"} ke paas`
+    :null;
+
+function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setRejectId, rejectNote, setRejectNote, onMarkOrdered, onMarkReceived, vendorList=[], onVendorAdded, waitingOn=null, waitingNote=null}){
   const [editQty,setEditQty]=useState(String(mr.quantity||""));
   const [showManual,setShowManual]=useState(false);
   const [manualVendor,setManualVendor]=useState("");
@@ -1414,9 +1435,12 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
       {/* Action row — only visible to approver role */}
       <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg}}>
         {stage==="Requested"&&!onApprove&&waitingOn&&(
-          <div style={{padding:"5px 10px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:11}}>⏳</span>
-            <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{waitingOn}</b></span>
+          <div style={{padding:"5px 10px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,display:"flex",flexDirection:"column",gap:2}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:11}}>⏳</span>
+              <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{waitingOn}</b></span>
+            </div>
+            {waitingNote&&<span style={{fontSize:10,color:T.t3,paddingLeft:17}}>{waitingNote}</span>}
           </div>
         )}
         {stage==="Requested"&&onApprove&&(<>
@@ -1507,7 +1531,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
 }
 
 // ── PO Approval Card ──────────────────────────────────────────────────
-function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true, waitingOn=null}){
+function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true, waitingOn=null, waitingNote=null}){
   const act=acting["po"+po.id];
   const fmtAmt=n=>n>=100000?`₹${(n/100000).toFixed(2)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${Number(n||0).toLocaleString("en-IN")}`;
   const fmtDate=d=>{if(!d)return"—";return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"});};
@@ -1598,9 +1622,12 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true,
         </div>
       )}
       {!approved&&!canAct&&waitingOn&&(
-        <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg,display:"flex",alignItems:"center",gap:6}}>
-          <span style={{fontSize:11}}>⏳</span>
-          <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{waitingOn}</b></span>
+        <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg,display:"flex",flexDirection:"column",gap:2}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:11}}>⏳</span>
+            <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{waitingOn}</b></span>
+          </div>
+          {waitingNote&&<span style={{fontSize:10,color:T.t3,paddingLeft:17}}>{waitingNote}</span>}
         </div>
       )}
     </div>
@@ -2066,9 +2093,11 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // to items the engine doesn't track AND when no workflow is enabled.
   const canActOnMr=(id)=>mrKnown.has(String(id))?mrAct.has(String(id)):(!mrWfOn&&isAdminUser);
   const canActOnPo=(id)=>poKnown.has(String(id))?poAct.has(String(id)):(!poWfOn&&isAdminUser);
-  // Waiting-on label (for read-only cards in the All view)
-  const mrWaitMap=new Map(data.centralized.filter(i=>i._source==="material_request").map(i=>[String(i._source_id),i._waitingOn]));
-  const poWaitMap=new Map(data.centralized.filter(i=>i._source==="purchase_order").map(i=>[String(i._source_id),i._waitingOn]));
+  // Waiting-on label (for read-only cards in the All view).
+  // Poora item rakhte hain, sirf _waitingOn string nahi — card ko naam
+  // (_waitingOnName/+N) aur escalation ki wajah dono chahiye.
+  const mrWaitMap=new Map(data.centralized.filter(i=>i._source==="material_request").map(i=>[String(i._source_id),i]));
+  const poWaitMap=new Map(data.centralized.filter(i=>i._source==="purchase_order").map(i=>[String(i._source_id),i]));
   // My/All scope applied only to the pending-approval stage; status tabs
   // (Approved/Ordered/Delivered, approved POs) always show everything.
   const mrScoped=(s)=>mrFiltered(s).filter(m=>apprScope==="all"||s!=="Requested"||canActOnMr(m.id));
@@ -2415,9 +2444,12 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             In the "All" view, items waiting on someone else show a read-only
             badge instead of buttons. */}
         {item._canActNow===false
-          ?<div style={{marginTop:8,padding:"7px 10px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:11.5}}>⏳</span>
-              <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{item._waitingOn||item.pending_role||"approver"}</b></span>
+          ?<div style={{marginTop:8,padding:"7px 10px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,display:"flex",flexDirection:"column",gap:2}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:11.5}}>⏳</span>
+                <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{waitingText(item)||"approver"}</b></span>
+              </div>
+              {escalationNote(item)&&<span style={{fontSize:10,color:T.t3,paddingLeft:17.5}}>{escalationNote(item)}</span>}
             </div>
           :<div style={{display:"flex",gap:6,marginTop:8}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>srcAction("reject")} disabled={!!act}
@@ -2956,7 +2988,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                   msg={mrStage==="Requested"?(apprScope==="my"?"Koi MR aapke approval ke liye nahi!":"Koi pending request nahi!"):"Koi "+mrStage.toLowerCase()+" MR nahi!"}
                   sub={(mrSite!=="All"||mrSearch)?"Filter change karke dekhein":apprScope==="my"&&mrStage==="Requested"?"\"All\" pe switch karke poori list dekhein":"Is stage mein koi item nahi"}/>
               :mrScoped(mrStage).map(mr=><MRFlowCard key={mr.id} mr={mr} stage={mrStage}
-                  waitingOn={!canActOnMr(mr.id)?(mrWaitMap.get(String(mr.id))||"approver"):null}
+                  waitingOn={!canActOnMr(mr.id)?(waitingText(mrWaitMap.get(String(mr.id)))||"approver"):null}
+                  waitingNote={!canActOnMr(mr.id)?escalationNote(mrWaitMap.get(String(mr.id))):null}
                   onApprove={canActOnMr(mr.id)?approveMR:null} onReject={canActOnMr(mr.id)?rejectMR:null} acting={acting} rejectId={rejectId} setRejectId={setRejectId}
                   rejectNote={rejectNote} setRejectNote={setRejectNote}
                   onMarkOrdered={async(id, vendor, expected_delivery)=>{
@@ -3006,7 +3039,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
               :(poView==="pending"?pendingPOsScoped:approvedPOs).map(po=>(
                 <POApprovalCard key={po.id} po={po} approved={poView==="approved"} acting={acting}
                   canAct={canActOnPo(po.id)}
-                  waitingOn={poView==="pending"&&!canActOnPo(po.id)?(poWaitMap.get(String(po.id))||"approver"):null}
+                  waitingOn={poView==="pending"&&!canActOnPo(po.id)?(waitingText(poWaitMap.get(String(po.id)))||"approver"):null}
+                  waitingNote={poView==="pending"&&!canActOnPo(po.id)?escalationNote(poWaitMap.get(String(po.id))):null}
                   onApprove={async()=>{
                     setActing(p=>({...p,["po"+po.id]:"approving"}));
                     const res=await api.patch("/procurement/pos/"+po.id+"/approve",{});
