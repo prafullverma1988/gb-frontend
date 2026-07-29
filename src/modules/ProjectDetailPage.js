@@ -433,6 +433,15 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
     await api.del("/client/projects/" + project.id + "/clients/" + uid);
     loadClients();
   };
+  // The old password cannot be looked up — it was never stored readably — so
+  // "forgot it" is only ever solved by issuing a new one.
+  const resetPw = async (uid) => {
+    if (!window.confirm("Naya password banayein? Purana password band ho jayega.")) return;
+    setCErr("");
+    const r = await api.post("/client/projects/" + project.id + "/clients/" + uid + "/reset-password", {});
+    if (r && r.success) setNewPw({ phone: r.data.phone, password: r.password });
+    else setCErr((r && r.message) || "Reset nahi hua");
+  };
 
   useEffect(() => {
     api.get("/library/cities").then(r => { if (r.success) setCities(r.data || []); }).catch(()=>{});
@@ -601,6 +610,10 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
                     <div style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{c.name}</div>
                     <div style={{ fontSize:10.5, color:T.t4 }}>{c.phone}{c.is_active===0?" · inactive":""}</div>
                   </div>
+                  <button onClick={()=>resetPw(c.user_id)}
+                    style={{ background:"none", border:"none", color:T.blu, fontSize:11.5, fontWeight:600, cursor:"pointer" }}>
+                    Naya password
+                  </button>
                   <button onClick={()=>removeClient(c.user_id)}
                     style={{ background:"none", border:"none", color:T.red, fontSize:11.5, fontWeight:600, cursor:"pointer" }}>
                     Hatao

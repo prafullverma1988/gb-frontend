@@ -899,6 +899,15 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
     await api.del("/client/projects/"+project.id+"/clients/"+uid);
     loadClients();
   };
+  // The old password was never stored readably, so "forgot it" is only ever
+  // solved by issuing a new one.
+  const resetPw = async (uid) => {
+    if(!window.confirm("Naya password banayein? Purana password band ho jayega.")) return;
+    setCErr("");
+    const r = await api.post("/client/projects/"+project.id+"/clients/"+uid+"/reset-password",{});
+    if(r&&r.success) setNewPw({phone:r.data.phone,password:r.password});
+    else setCErr((r&&r.message)||"Reset nahi hua");
+  };
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -1105,6 +1114,10 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
                         <div style={{fontSize:13,fontWeight:600,color:T.t1}}>{c.name}</div>
                         <div style={{fontSize:11,color:T.t4}}>{c.phone}{c.is_active===0?" · inactive":""}</div>
                       </div>
+                      <button onClick={()=>resetPw(c.user_id)}
+                        style={{background:"none",border:"none",color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+                        Naya password
+                      </button>
                       <button onClick={()=>removeClient(c.user_id)}
                         style={{background:"none",border:"none",color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
                         Hatao
