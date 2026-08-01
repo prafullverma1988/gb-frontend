@@ -1437,6 +1437,18 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       setSaveErr(isSubcon?"Subcontractor (party) select karein — bina party ke Sub-Con bill nahi ho sakta.":"Vendor (party) select karein — bina party ke Material Purchase nahi ho sakta.");
       return;
     }
+    // Future-proof: a name can only ever resolve to ONE party. If two active
+    // parties share this name (only possible via a force-override), block the
+    // save rather than silently picking one — the entry would hit the wrong
+    // ledger. The user must open the right party from Party Ledger and pay there.
+    if(party&&String(party).trim()){
+      const pl=String(party).toLowerCase().trim();
+      const matches=(dbParties||[]).filter(p=>String(p.name||"").toLowerCase().trim()===pl);
+      if(matches.length>1){
+        setSaveErr(`"${party}" naam ki ek se zyada party hai — kis ki entry hai clear nahi. Party Ledger me sahi party khol ke wahi se payment/bill karein (ya ek ko rename karein).`);
+        return;
+      }
+    }
     setSaveErr("");
     savingRef.current=true; setSavingTxn(true);    // ← lock immediately
     try{
