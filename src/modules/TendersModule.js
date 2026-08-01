@@ -69,6 +69,40 @@ const PIPELINE = ["bidding","won","agreement","execution","completed","dlp","clo
 const WON_OR_LATER = PIPELINE.slice(PIPELINE.indexOf("won"));
 // In stages par backend actual_completion_date maangta hai — DLP isi se count hota hai.
 const COMPLETION_REQUIRED = ["completed","dlp","closed"];
+// Site (project) tabhi judti hai jab kaam shuru ho.
+const EXEC_OR_LATER = PIPELINE.slice(PIPELINE.indexOf("execution"));
+// In stage change par note compulsory hai (sab roles ke liye).
+const NOTE_REQUIRED_TO = ["won","agreement"];
+
+// routes/tenders.js ke checkTransition ka mirror — yahan sirf UI ke liye
+// (button dikhana, dropdown chhota karna, note field maangna). Asli rok
+// hamesha backend hi lagata hai.
+function checkTransition(from, to, isAdmin) {
+  if (from === to) return {ok:true, kind:"none", noteRequired:false};
+  if (from === "lost") {
+    if (to !== "bidding") return {ok:false, msg:"Lost tender sirf wapas Bidding par ja sakta hai."};
+    return isAdmin ? {ok:true, kind:"revive", noteRequired:true}
+                   : {ok:false, msg:"Lost se wapas laana sirf admin kar sakta hai."};
+  }
+  if (to === "lost") {
+    return from === "bidding" ? {ok:true, kind:"lost", noteRequired:false}
+                              : {ok:false, msg:"Lost sirf Bidding stage se mark hota hai."};
+  }
+  const fi = PIPELINE.indexOf(from), ti = PIPELINE.indexOf(to);
+  if (fi < 0 || ti < 0) return {ok:false, msg:"Ye stage change allowed nahi hai."};
+  if (ti === fi + 1) return {ok:true, kind:"forward", noteRequired:NOTE_REQUIRED_TO.includes(to)};
+  if (ti > fi + 1)   return {ok:false, msg:`Stage skip nahi hota — pehle '${PIPELINE[fi+1]}' par jao.`};
+  return isAdmin ? {ok:true, kind:"backward", noteRequired:true}
+                 : {ok:false, msg:"Stage peeche le jaana sirf admin kar sakta hai."};
+}
+// Edit modal ke dropdown me sirf wahi stage jahan asli me ja sakte hain.
+const legalTargets = (from, isAdmin) =>
+  [...PIPELINE, "lost"].filter(s => s !== from && checkTransition(from, s, isAdmin).ok);
+// Agle stage ka naam (pipeline ka "Aage badhao" button isi par chalta hai).
+const nextStageOf = (s) => {
+  const i = PIPELINE.indexOf(s);
+  return i >= 0 && i < PIPELINE.length - 1 ? PIPELINE[i + 1] : null;
+};
 
 const STATUS_META = {
   bidding:    {label:"Bidding",    c:T.slt, bg:T.sltL},
@@ -88,6 +122,11 @@ const INSTRUMENT_TYPES = [
   {v:"fdr",              l:"FDR"},
   {v:"security_deposit", l:"Security Deposit"},
 ];
+// Bid ke saath sirf EMD jama hoti hai — BG/FDR/SD tender jeetne ke baad.
+const instrumentTypesFor = (status) =>
+  status === "bidding" ? INSTRUMENT_TYPES.filter(t=>t.v==="emd") : INSTRUMENT_TYPES;
+
+const BID_SUBMISSION_TYPES = [{v:"online", l:"Online"}, {v:"offline", l:"Offline / By Post"}];
 const INSTRUMENT_MODES = [
   {v:"dd",     l:"DD"},
   {v:"bg",     l:"BG"},
@@ -340,6 +379,7 @@ function NewTenderModal({onClose, onCreated}) {
   const [form, setForm] = useState({
     tender_no:"", title:"", party_id:"", department_name:"",
     nit_date:"", submission_date:"", estimated_cost:"", emd_amount:"", tender_fee:"",
+    techno_commercial_date:"", reverse_auction_date:"", bid_submission_type:"", nit_clauses:"",
     status:"bidding",
     contract_value:"", loa_date:"", agreement_no:"", agreement_date:"",
     work_order_date:"", stipulated_completion:"", dlp_months:"",
@@ -375,6 +415,10 @@ function NewTenderModal({onClose, onCreated}) {
       party_id: form.party_id || null,
       nit_date: form.nit_date || null,
       submission_date: form.submission_date || null,
+      techno_commercial_date: form.techno_commercial_date || null,
+      reverse_auction_date: form.reverse_auction_date || null,
+      bid_submission_type: form.bid_submission_type || null,
+      nit_clauses: form.nit_clauses.trim() || null,
       estimated_cost: form.estimated_cost || null,
       emd_amount: form.emd_amount || null,
       tender_fee: form.tender_fee || null,
@@ -446,7 +490,22 @@ function NewTenderModal({onClose, onCreated}) {
           </Field>
 
           <Field label="NIT Date"><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
-          <Field label="Submission Date"><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
+          <Field label="Bid Submission Date"><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
+          <Field label="Techno-Commercial Date"><TxtIn type="date" value={form.techno_commercial_date} onChange={v=>set("techno_commercial_date",v)}/></Field>
+          <Field label="Bid Submission Type">
+            <SelIn value={form.bid_submission_type} onChange={v=>set("bid_submission_type",v)}
+              options={BID_SUBMISSION_TYPES} ph="Chuno..."/>
+          </Field>
+          <Field label="Reverse Auction Date" full
+            hint="Bid ke baad reverse auction ho to uski date.">
+            <TxtIn type="date" value={form.reverse_auction_date} onChange={v=>set("reverse_auction_date",v)}/>
+          </Field>
+          <Field label="NIT ke Main Points" full
+            hint="Zaroori clause — SD %, completion period, penalty wagairah. NIT ki copy Documents tab me attach karo.">
+            <textarea value={form.nit_clauses} onChange={e=>set("nit_clauses",e.target.value)} rows={3}
+              style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
+              placeholder="e.g. Clause 5.2 — SD 10%, completion 12 months, LD 0.5%/week"/>
+          </Field>
 
           <Field label="Estimated Cost (₹)"><TxtIn type="number" value={form.estimated_cost} onChange={v=>set("estimated_cost",v)} ph="0"/></Field>
           <Field label="EMD Amount (₹)"><TxtIn type="number" value={form.emd_amount} onChange={v=>set("emd_amount",v)} ph="0"/></Field>
@@ -506,6 +565,11 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
     tender_fee: tender.tender_fee ?? "",
     nit_date: dateOnly(tender.nit_date),
     submission_date: dateOnly(tender.submission_date),
+    techno_commercial_date: dateOnly(tender.techno_commercial_date),
+    reverse_auction_date: dateOnly(tender.reverse_auction_date),
+    bid_submission_type: tender.bid_submission_type || "",
+    nit_clauses: tender.nit_clauses || "",
+    status_note: "",
     loa_date: dateOnly(tender.loa_date),
     agreement_no: tender.agreement_no || "",
     agreement_date: dateOnly(tender.agreement_date),
@@ -544,6 +608,9 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
     if (!form.title.trim())     return setErr("Tender ka title zaroori hai");
     if (wonMissing) return setErr("Is stage ke liye contract value aur department/party dono bharna zaroori hai");
     if (completionMissing) return setErr("Completion date zaroori hai — DLP isi se count hota hai.");
+    if (stageChange && !stageChange.ok) return setErr(stageChange.msg);
+    if (stageChange?.noteRequired && !form.status_note.trim())
+      return setErr("Is stage change ke liye note likhna zaroori hai.");
     setBusy(true);
     const body = {
       tender_no: form.tender_no.trim(),
@@ -557,6 +624,10 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
       tender_fee: form.tender_fee === "" ? null : form.tender_fee,
       nit_date: form.nit_date || null,
       submission_date: form.submission_date || null,
+      techno_commercial_date: form.techno_commercial_date || null,
+      reverse_auction_date: form.reverse_auction_date || null,
+      bid_submission_type: form.bid_submission_type || null,
+      nit_clauses: form.nit_clauses.trim() || null,
       loa_date: form.loa_date || null,
       agreement_no: form.agreement_no.trim() || null,
       agreement_date: form.agreement_date || null,
@@ -565,6 +636,7 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
       actual_completion_date: form.actual_completion_date || null,
       dlp_months: form.dlp_months === "" ? null : form.dlp_months,
       notes: form.notes || null,
+      ...(stageChange && form.status_note.trim() ? {status_note: form.status_note.trim()} : {}),
       // "Khali chhodo to auto" — khali field par key bhejte hi nahi, taaki
       // backend completion date + months se derive kare. Value bhari ho to
       // wahi jaati hai (manual override). Sirf tab null bhejte hain jab user
@@ -596,7 +668,13 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
   };
 
   const partyOpts = parties.map(p=>({v:String(p.id), l:p.name}));
-  const statusOpts = [...PIPELINE.map(s=>({v:s, l:sMeta(s).label})), {v:"lost", l:"Lost"}];
+  // Dropdown me sirf wahi stage jahan asli me ja sakte hain — mojooda stage
+  // hamesha, baaki checkTransition se. Asli rok backend par hai; ye sirf
+  // galat option dikhne se rokta hai.
+  const statusOpts = [tender.status, ...legalTargets(tender.status, isAdmin)]
+    .map(v => ({v, l: sMeta(v).label}));
+  const stageChange = form.status !== tender.status
+    ? checkTransition(tender.status, form.status, isAdmin) : null;
 
   return (
     <Modal title="Tender Edit" Icon={IcEdit} onClose={onClose} width={640}
@@ -608,7 +686,19 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
       <ErrLine msg={err}/>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
         <Field label="Tender Number *"><TxtIn value={form.tender_no} onChange={v=>set("tender_no",v)}/></Field>
-        <Field label="Status"><SelIn value={form.status} onChange={v=>set("status",v)} options={statusOpts}/></Field>
+        <Field label="Status"
+          hint={stageChange && !stageChange.ok ? stageChange.msg : undefined}>
+          <SelIn value={form.status} onChange={v=>set("status",v)} options={statusOpts}/>
+        </Field>
+        {stageChange?.ok && (
+          <Field label={stageChange.noteRequired ? "Stage Change Note *" : "Stage Change Note"} full
+            hint={stageChange.kind === "backward"
+              ? "Stage peeche ja raha hai — kyun, ye likhna zaroori hai."
+              : "Ye note tender ki Stage History me dikhega."}>
+            <TxtIn value={form.status_note} onChange={v=>set("status_note",v)}
+              ph={sMeta(tender.status).label + " se " + sMeta(form.status).label + " — kyun?"}/>
+          </Field>
+        )}
         <Field label="Title *" full><TxtIn value={form.title} onChange={v=>set("title",v)}/></Field>
 
         {needsWonFields && (
@@ -641,7 +731,21 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
         <Field label="Tender Fee (₹)"><TxtIn type="number" value={form.tender_fee} onChange={v=>set("tender_fee",v)}/></Field>
 
         <Field label="NIT Date"><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
-        <Field label="Submission Date"><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
+        <Field label="Bid Submission Date"><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
+        <Field label="Techno-Commercial Date"><TxtIn type="date" value={form.techno_commercial_date} onChange={v=>set("techno_commercial_date",v)}/></Field>
+        <Field label="Bid Submission Type">
+          <SelIn value={form.bid_submission_type} onChange={v=>set("bid_submission_type",v)}
+            options={BID_SUBMISSION_TYPES} ph="Chuno..."/>
+        </Field>
+        <Field label="Reverse Auction Date" full hint="Bid ke baad reverse auction ho to uski date.">
+          <TxtIn type="date" value={form.reverse_auction_date} onChange={v=>set("reverse_auction_date",v)}/>
+        </Field>
+        <Field label="NIT ke Main Points" full
+          hint="Zaroori clause — SD %, completion period, penalty wagairah. NIT ki copy Documents tab me attach karo.">
+          <textarea value={form.nit_clauses} onChange={e=>set("nit_clauses",e.target.value)} rows={3}
+            style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
+            placeholder="e.g. Clause 5.2 — SD 10%, completion 12 months, LD 0.5%/week"/>
+        </Field>
         <Field label="LOA Date"><TxtIn type="date" value={form.loa_date} onChange={v=>set("loa_date",v)}/></Field>
         <Field label="Agreement No."><TxtIn value={form.agreement_no} onChange={v=>set("agreement_no",v)}/></Field>
         <Field label="Agreement Date"><TxtIn type="date" value={form.agreement_date} onChange={v=>set("agreement_date",v)}/></Field>
@@ -914,7 +1018,142 @@ function TenderList({onOpen}) {
 // ════════════════════════════════════════════════════════════════════
 // ADD INSTRUMENT MODAL
 // ════════════════════════════════════════════════════════════════════
-function AddInstrumentModal({tenderId, onClose, onSaved}) {
+// ── STAGE TRANSITION MODAL ──────────────────────────────────────────
+// Pipeline ka "Aage badhao" / "Lost mark karo" isi ko kholta hai.
+// Yahan sirf wahi rok hai jo backend bhi lagata hai — modal pehle bata
+// deta hai taaki 400 khaane ki nautbat na aaye. Do cheezein sirf salah
+// hain, rok nahi: won par instrument reminder, aur completed par adhoore
+// projects ki warning.
+function TransitionModal({tender, projects, target, onClose, onDone}) {
+  const toast = useToast();
+  const isAdmin = ["admin","super_admin"].includes(getUser()?.role);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr]   = useState("");
+
+  const from = tender.status;
+  const t = checkTransition(from, target, isAdmin);
+
+  // Backend ke do hard gate — yahan pehle hi pakad lete hain.
+  const needsWon = WON_OR_LATER.includes(target);
+  const wonMissing = needsWon && (tender.contract_value === null || tender.contract_value === undefined
+    || tender.contract_value === "" || !tender.party_id);
+  const completionMissing = COMPLETION_REQUIRED.includes(target) && !tender.actual_completion_date;
+
+  // Sirf salah — adhoore project ginwa dete hain par rokte nahi.
+  const openProjects = target === "completed"
+    ? (projects || []).filter(p => String(p.status||"").toLowerCase() !== "completed")
+    : [];
+
+  const blocked = !t.ok || wonMissing || completionMissing;
+  const noteMissing = t.noteRequired && !note.trim();
+
+  const go = async () => {
+    setErr("");
+    if (noteMissing) return setErr("Is stage change ke liye note likhna zaroori hai.");
+    setBusy(true);
+    const body = {status: target};
+    if (note.trim()) body.status_note = note.trim();
+    const res = await api.put(`/tenders/${tender.id}`, body);
+    setBusy(false);
+    if (!res?.success) { setErr(res?.message || "Stage change nahi hua"); return; }
+    toast.success(`Tender ab ${sMeta(target).label} me hai`);
+    onDone();
+  };
+
+  const fm = sMeta(from), tm = sMeta(target);
+
+  return (
+    <Modal title="Stage Change" Icon={IcGavel} width={560}
+      sub={`${fm.label} se ${tm.label}`}
+      onClose={onClose}
+      footer={<>
+        <SecBtn label="Cancel" onClick={onClose}/>
+        <PrimBtn label={busy ? "Ho raha hai..." : `${tm.label} karo`} Icon={IcChk}
+          onClick={go} disabled={busy || blocked}/>
+      </>}>
+      <ErrLine msg={err}/>
+
+      {/* from → to */}
+      <div style={{display:"flex", alignItems:"center", justifyContent:"center", gap:12,
+        padding:"12px 0 16px"}}>
+        <Pill label={fm.label} c={fm.c} bg={fm.bg}/>
+        <span style={{color:T.t4, fontSize:16}}>→</span>
+        <Pill label={tm.label} c={tm.c} bg={tm.bg}/>
+      </div>
+
+      {/* Transition hi allowed nahi */}
+      {!t.ok && (
+        <div style={{padding:"10px 12px", background:T.redL, border:`1px solid ${T.redM}`,
+          borderRadius:7, fontSize:12, color:T.red, display:"flex", gap:8, alignItems:"flex-start",
+          marginBottom:11}}>
+          <IcWarn size={14} color={T.red}/><span>{t.msg}</span>
+        </div>
+      )}
+
+      {/* Hard gates — Edit modal me jaakar bharna padega */}
+      {wonMissing && (
+        <div style={{padding:"10px 12px", background:T.ambL, border:`1px solid ${T.ambM}`,
+          borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}>
+          <b style={{color:T.amb}}>Pehle ye bharo</b> — {tm.label} par jaane ke liye
+          <b> Contract Value</b> aur <b>Department/Party</b> dono zaroori hain.
+          Upar <b>Edit</b> button se bhar do, phir yahan wapas aao.
+        </div>
+      )}
+      {completionMissing && (
+        <div style={{padding:"10px 12px", background:T.ambL, border:`1px solid ${T.ambM}`,
+          borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}>
+          <b style={{color:T.amb}}>Pehle ye bharo</b> — <b>Actual Completion Date</b> ke bina
+          {" "}{tm.label} nahi hota (DLP isi date se count hota hai). Edit me bhar do.
+        </div>
+      )}
+
+      {/* Won — instrument reminder (sirf yaad dilana) */}
+      {t.ok && target === "won" && (
+        <div style={{padding:"10px 12px", background:T.indL, border:`1px solid ${T.indM}`,
+          borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}>
+          <b style={{color:T.ind}}>Yaad rakho</b> — jeetne ke baad{" "}
+          <b>BG / FDR / Security Deposit</b> jo bhi department maange, wo{" "}
+          <b>Instruments</b> tab me add karna hoga. (Abhi rok nahi hai, baad me bhi kar sakte ho.)
+        </div>
+      )}
+
+      {/* Completed — adhoore project, warning bhar */}
+      {t.ok && !!openProjects.length && (
+        <div style={{padding:"10px 12px", background:T.ambL, border:`1px solid ${T.ambM}`,
+          borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}>
+          <b style={{color:T.amb}}>{openProjects.length} site abhi complete nahi hai</b>
+          <div style={{marginTop:5}}>
+            {openProjects.map(p=>(
+              <div key={p.id} style={{fontSize:11.5}}>
+                • {p.name} <span style={{color:T.t4}}>({p.status || "--"})</span>
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:6, color:T.t3, fontSize:11}}>
+            Phir bhi aage badh sakte ho — kaagzi taur par tender pehle band ho jata hai.
+          </div>
+        </div>
+      )}
+
+      {/* Note */}
+      {t.ok && (
+        <Field label={t.noteRequired ? "Note *" : "Note (optional)"}
+          hint={t.kind === "backward"
+            ? "Stage peeche ja raha hai — kyun, ye record me rahega."
+            : "Ye note tender ki Stage History me dikhega."}>
+          <textarea value={note} onChange={e=>setNote(e.target.value)} rows={3}
+            style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
+            placeholder={t.kind === "lost"
+              ? "e.g. L1 se 4% zyada the"
+              : `${fm.label} se ${tm.label} — kyun?`}/>
+        </Field>
+      )}
+    </Modal>
+  );
+}
+
+function AddInstrumentModal({tenderId, tenderStatus, onClose, onSaved}) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState("");
@@ -946,17 +1185,22 @@ function AddInstrumentModal({tenderId, onClose, onSaved}) {
   };
 
   const needsValidity = form.type === "bg" || form.type === "fdr";
+  // Bid ke saath sirf EMD jati hai — baaki won ke baad.
+  const typeOpts = instrumentTypesFor(tenderStatus);
+  const bidOnly  = tenderStatus === "bidding";
 
   return (
     <Modal title="Naya Instrument" Icon={IcBank} onClose={onClose} width={560}
-      sub="EMD / BG / FDR / Security Deposit"
+      sub={bidOnly ? "Bid stage — sirf EMD" : "EMD / BG / FDR / Security Deposit"}
       footer={<>
         <SecBtn label="Cancel" onClick={onClose}/>
         <PrimBtn label={busy?"Save ho raha...":"Jodo"} onClick={submit} disabled={busy}/>
       </>}>
       <ErrLine msg={err}/>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
-        <Field label="Type *"><SelIn value={form.type} onChange={v=>set("type",v)} options={INSTRUMENT_TYPES}/></Field>
+        <Field label="Type *" hint={bidOnly ? "BG / FDR / Security Deposit tender won hone ke baad." : undefined}>
+          <SelIn value={form.type} onChange={v=>set("type",v)} options={typeOpts}/>
+        </Field>
         <Field label="Mode"><SelIn value={form.mode} onChange={v=>set("mode",v)} options={INSTRUMENT_MODES}/></Field>
         <Field label="Amount (₹) *"><TxtIn type="number" value={form.amount} onChange={v=>set("amount",v)} ph="0"/></Field>
         <Field label="Reference No."><TxtIn value={form.ref_no} onChange={v=>set("ref_no",v)} ph="DD / BG number"/></Field>
@@ -3220,15 +3464,27 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
   </>);
 }
 
+// minStage = is stage se pehle tab dikhta hi nahi. Bid stage sirf
+// record-keeping ke liye hai: BOQ tabhi chahiye jab kaam mila ho, aur
+// measurement / RA bill / site tabhi jab kaam shuru ho. Instruments +
+// Documents hamesha khule — EMD aur NIT ki copy bid ke saath hi lagti hai.
 const DETAIL_TABS = [
   {id:"overview",    label:"Overview",    Icon:IcGavel},
-  {id:"boq",         label:"BOQ",         Icon:IcTable},
-  {id:"measure",     label:"Measurements",Icon:IcTable},
-  {id:"rabills",     label:"RA Bills",    Icon:IcRupee},
-  {id:"sites",       label:"Sites",       Icon:IcSite},
+  {id:"boq",         label:"BOQ",         Icon:IcTable,  minStage:"won"},
+  {id:"measure",     label:"Measurements",Icon:IcTable,  minStage:"execution"},
+  {id:"rabills",     label:"RA Bills",    Icon:IcRupee,  minStage:"execution"},
+  {id:"sites",       label:"Sites",       Icon:IcSite,   minStage:"execution"},
   {id:"instruments", label:"Instruments", Icon:IcBank},
   {id:"documents",   label:"Documents",   Icon:IcDoc},
 ];
+// Lost tender bidding par hi ruka hua mana jata hai — uske aage ka kuch
+// nahi khulta.
+const stageReached = (status, minStage) => {
+  if (!minStage) return true;
+  const cur = status === "lost" ? "bidding" : status;
+  const ci = PIPELINE.indexOf(cur), mi = PIPELINE.indexOf(minStage);
+  return ci >= 0 && mi >= 0 && ci >= mi;
+};
 
 function TenderDetail({tenderId, onBack, onOpenProject}) {
   const toast = useToast();
@@ -3237,6 +3493,8 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
   const [tab, setTab]         = useState("overview");
   const [showEdit, setShowEdit]   = useState(false);
   const [showInst, setShowInst]   = useState(false);
+  const [moveTo, setMoveTo]       = useState(null);   // stage change modal ka target
+  const isAdmin = ["admin","super_admin"].includes(getUser()?.role);
   const [showLink, setShowLink]   = useState(false);
   const [showSite, setShowSite]   = useState(false);
   const [showDoc,  setShowDoc]    = useState(false);
@@ -3275,6 +3533,14 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
 
   useEffect(()=>{ setLoading(true); load(); }, [load]);
   useEffect(()=>{ setBoqLoading(true); loadBoq(); }, [loadBoq]);
+
+  // Stage peeche gaya (admin) to jis tab par khade the wo gayab ho sakta hai —
+  // aise me chupchaap Overview par le aao, warna khali screen dikhti.
+  useEffect(()=>{
+    if (!data) return;
+    const t = DETAIL_TABS.find(x => x.id === tab);
+    if (t && !stageReached(data.status, t.minStage)) setTab("overview");
+  }, [data, tab]);
 
   useEffect(()=>{
     api.get("/projects").then(r=>{
@@ -3356,7 +3622,9 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
 
   const KEY_DATES = [
     ["NIT Date",             data.nit_date],
-    ["Submission Date",      data.submission_date],
+    ["Bid Submission Date",  data.submission_date],
+    ["Techno-Commercial",    data.techno_commercial_date],
+    ["Reverse Auction",      data.reverse_auction_date],
     ["LOA Date",             data.loa_date],
     ["Agreement Date",       data.agreement_date],
     ["Work Order Date",      data.work_order_date],
@@ -3399,7 +3667,7 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
       {/* ── TABS ── */}
       <div style={{display:"flex", gap:2, background:T.surface, borderRadius:8, padding:4,
         border:`1px solid ${T.b1}`, marginBottom:11, flexWrap:"wrap"}}>
-        {DETAIL_TABS.map(t=>{
+        {DETAIL_TABS.filter(t=>stageReached(data.status, t.minStage)).map(t=>{
           const on = tab===t.id;
           const count = t.id==="sites" ? projects.length
                       : t.id==="instruments" ? instruments.length
@@ -3427,7 +3695,25 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
         {/* Pipeline */}
         <Panel style={{marginBottom:11}}>
           <PHead title="Tender Pipeline"
-            sub={data.status==="lost" ? "Yeh tender lost hai — pipeline aage nahi badhi." : undefined}/>
+            sub={data.status==="lost" ? "Yeh tender lost hai — pipeline aage nahi badhi." : undefined}
+            action={(()=>{
+              // Aage sirf ek step. Peeche jaana Edit modal me hai (admin-only) —
+              // usko pipeline par button banane se galti se click hone ka dar hai.
+              const nxt = nextStageOf(data.status);
+              const canLost = data.status === "bidding";
+              const canRevive = data.status === "lost" && isAdmin;
+              if (!nxt && !canLost && !canRevive) return null;
+              return (
+                <div style={{display:"flex", gap:7}}>
+                  {canLost && <SecBtn label="Lost mark karo" Icon={IcX} color={T.red}
+                    onClick={()=>setMoveTo("lost")}/>}
+                  {canRevive && <SecBtn label="Wapas Bidding me" Icon={IcUndo}
+                    onClick={()=>setMoveTo("bidding")}/>}
+                  {nxt && <PrimBtn label={sMeta(nxt).label + " karo"} Icon={IcChk}
+                    onClick={()=>setMoveTo(nxt)}/>}
+                </div>
+              );
+            })()}/>
           <div style={{padding:"16px 18px"}}>
             {data.status==="lost" ? (
               <div style={{display:"flex", alignItems:"center", gap:10}}>
@@ -3502,7 +3788,19 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
                 {data.dlp_months ? `${data.dlp_months} months` : "--"}
               </div>
             </div>
+            <div>
+              <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", marginBottom:3}}>Bid Submission Type</div>
+              <div style={{fontSize:12.5, color:data.bid_submission_type?T.t1:T.t4, fontWeight:data.bid_submission_type?600:400}}>
+                {(BID_SUBMISSION_TYPES.find(o=>o.v===data.bid_submission_type)||{}).l || "--"}
+              </div>
+            </div>
           </div>
+          {data.nit_clauses && (
+            <div style={{padding:"11px 16px", borderTop:`1px solid ${T.b1}`, background:T.surfaceB}}>
+              <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", marginBottom:4}}>NIT ke Main Points</div>
+              <div style={{fontSize:12.5, color:T.t2, lineHeight:1.55, whiteSpace:"pre-wrap"}}>{data.nit_clauses}</div>
+            </div>
+          )}
           {data.notes && (
             <div style={{padding:"11px 16px", borderTop:`1px solid ${T.b1}`, background:T.surfaceB}}>
               <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", marginBottom:4}}>Notes</div>
@@ -3511,11 +3809,42 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
           )}
         </Panel>
 
-        {/* Sites summary */}
+        {/* Stage history — pichhle 5 change */}
+        {!!(data.stage_log||[]).length && (
+          <Panel style={{marginBottom:11}}>
+            <PHead title="Stage History" sub="Pichhle 5 change"/>
+            <div style={{padding:"11px 16px", display:"flex", flexDirection:"column", gap:9}}>
+              {data.stage_log.map(l=>{
+                const f = sMeta(l.from_status), t2 = sMeta(l.to_status);
+                return (
+                  <div key={l.id} style={{display:"flex", gap:10, alignItems:"flex-start",
+                    paddingBottom:9, borderBottom:`1px solid ${T.b1}`}}>
+                    <div style={{display:"flex", alignItems:"center", gap:6, flexShrink:0}}>
+                      <Pill label={f.label} c={f.c} bg={f.bg}/>
+                      <span style={{color:T.t4, fontSize:11}}>→</span>
+                      <Pill label={t2.label} c={t2.c} bg={t2.bg}/>
+                    </div>
+                    <div style={{minWidth:0, flex:1}}>
+                      {l.note && <div style={{fontSize:12, color:T.t2, lineHeight:1.5,
+                        whiteSpace:"pre-wrap"}}>{l.note}</div>}
+                      <div style={{fontSize:10.5, color:T.t4, marginTop:l.note?3:0}}>
+                        {fmtDate(l.created_at)}{l.created_by_name ? " · " + l.created_by_name : ""}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
+        )}
+
+        {/* Sites summary — stage chahe koi bhi ho, jude hue project hamesha
+            dikhte hain. Gating se pehle bane galat link bhi padhne chahiye. */}
+        {!!projects.length && (
         <Panel>
           <PHead title="Sites" sub={`${projects.length} project is tender se jude hain`}
-            action={<SecBtn label="Sites tab" onClick={()=>setTab("sites")}/>}/>
-          {!projects.length && <Empty Icon={IcSite} text="Abhi koi site nahi jodi."/>}
+            action={stageReached(data.status,"execution")
+              ? <SecBtn label="Sites tab" onClick={()=>setTab("sites")}/> : undefined}/>
           {!!projects.length && (<>
             <div style={{display:"grid", gridTemplateColumns:"2.2fr 1fr 1fr", padding:"7px 16px",
               background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, gap:10}}>
@@ -3533,6 +3862,7 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
             ))}
           </>)}
         </Panel>
+        )}
       </>)}
 
       {/* ══ BOQ ══ */}
@@ -3708,7 +4038,10 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
       {/* onDeleted → list par wapas; TenderList mount hote hi dobara fetch karta hai. */}
       {showEdit && <EditTenderModal tender={data} onClose={()=>setShowEdit(false)}
         onSaved={()=>load()} onDeleted={onBack}/>}
-      {showInst && <AddInstrumentModal tenderId={tenderId} onClose={()=>setShowInst(false)} onSaved={()=>load()}/>}
+      {showInst && <AddInstrumentModal tenderId={tenderId} tenderStatus={data.status}
+        onClose={()=>setShowInst(false)} onSaved={()=>load()}/>}
+      {moveTo && <TransitionModal tender={data} projects={projects} target={moveTo}
+        onClose={()=>setMoveTo(null)} onDone={()=>{ setMoveTo(null); load(); }}/>}
       {showLink && <LinkProjectModal tenderId={tenderId} onClose={()=>setShowLink(false)} onSaved={()=>load()}/>}
       {showSite && <NewSiteModal tender={data} onClose={()=>setShowSite(false)} onSaved={()=>load()}/>}
       {showDoc  && <AddDocumentModal tenderId={tenderId} onClose={()=>setShowDoc(false)} onSaved={()=>load()}/>}
