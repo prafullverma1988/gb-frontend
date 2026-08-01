@@ -19,6 +19,15 @@ const numOf = (v) => {
 };
 const isBlank = (v) => v == null || String(v).trim() === "";
 
+// Total / sub-total / carried-over jaisi rows. Ye na continuation hain na
+// asli item — inhe alag row rehne dena zaroori hai.
+//
+// ⚠️ SYNC: yahi regex + neeche wale do guard (continuation aur grand-total)
+// src/modules/TendersModule.js ke `parseBoqRows` me bhi hain (tender-level
+// BOQ). Dono jaan-boojh kar identical hain — ek jagah badlo to doosri jagah
+// bhi badlo, warna ek hi sheet do screen par alag padhi jayegi.
+const TOTAL_RE = /(sub[\s-]*total|grand\s*total|^total|carried\s*over|brought\s*forward|^c\/o$|^b\/f$)/i;
+
 const TARGETS = [
   { key: "description", label: "Description", re: /description|item|particular|work/i, required: true },
   { key: "unit",        label: "Unit",        re: /^unit|units|uom/i },
@@ -129,13 +138,21 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
     if (!aoa.length || mapping.description == null) return { rows: [], totalRow: null, fileTotal: 0 };
     const get = (row, key) => (mapping[key] != null ? row[mapping[key]] : "");
 
-    // Find + drop the file's grand-total row: last row that reads "total"
-    // in the description with an empty qty.
-    let totalRowIdx = -1;
+    // Find + drop the file's grand-total row.
+    //
+    // It may ONLY be the LAST non-empty row. Scanning backwards for the first
+    // "total"-ish row used to latch onto a mid-sheet Sub Total when more items
+    // followed it — the detected file total was then that section's subtotal,
+    // not the sheet's, so reconciliation failed for a file that was fine.
+    const isEmptyRow = (row) => (row || []).every((c) => isBlank(c));
+    let lastFilled = -1;
     for (let i = dataRowsRaw.length - 1; i >= 0; i--) {
-      const desc = String(get(dataRowsRaw[i], "description") || "");
-      const qty = get(dataRowsRaw[i], "qty");
-      if (/total/i.test(desc) && isBlank(qty)) { totalRowIdx = i; break; }
+      if (!isEmptyRow(dataRowsRaw[i])) { lastFilled = i; break; }
+    }
+    let totalRowIdx = -1;
+    if (lastFilled >= 0) {
+      const desc = String(get(dataRowsRaw[lastFilled], "description") || "");
+      if (TOTAL_RE.test(desc) && isBlank(get(dataRowsRaw[lastFilled], "qty"))) totalRowIdx = lastFilled;
     }
     const totalRow = totalRowIdx >= 0 ? dataRowsRaw[totalRowIdx] : null;
     const fileTotal = totalRow ? numOf(get(totalRow, "amount")) : null;
@@ -153,10 +170,16 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
 
       // A fully empty row (no desc, no qty, no amount) is sheet padding.
       if (isBlank(desc) && qty === 0 && amtCol === 0 && isBlank(get(row, "sor_code"))) return;
-      if (opts.skipTotals && /(sub[\s-]*total|grand\s*total|^total)/i.test(desc) && qty === 0) return;
+      if (opts.skipTotals && TOTAL_RE.test(desc) && qty === 0) return;
       if (opts.skipEmptyDesc && isBlank(desc)) return;
 
-      const isCont = opts.contFromBlankSno && isBlank(sno) && lastPrimaryRowNo != null;
+      // A Sub Total / Carried Over row also has a blank S.No, but it is NOT a
+      // continuation — it used to get swallowed into the previous item as an
+      // extra description line, silently inflating that item's text and hiding
+      // a row the user needed to see. Two tells: total-like wording, or money
+      // in the amount column (a genuine continuation line carries none).
+      const looksTotal = TOTAL_RE.test(desc) || amtCol !== 0;
+      const isCont = opts.contFromBlankSno && isBlank(sno) && lastPrimaryRowNo != null && !looksTotal;
       rowNo += 1;
       const amount = opts.calcAmount ? Math.round(qty * rate * 100) / 100 : amtCol;
       out.push({

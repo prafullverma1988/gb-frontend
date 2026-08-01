@@ -34,6 +34,7 @@ const MasterLibraryModule= lazyWithPreload("library",     () => import("./module
 const WarehouseModule    = lazyWithPreload("warehouse",    () => import("./modules/WarehouseModule"));
 const TownshipCRMModule  = lazyWithPreload("township",     () => import("./modules/TownshipCRMModule"));
 const ReportsModule      = lazyWithPreload("reports",      () => import("./modules/ReportsModule"));
+const TendersModule      = lazyWithPreload("tenders",      () => import("./modules/TendersModule"));
 const ProjectDetailPage  = lazyWithPreload("projectDetail",() => import("./modules/ProjectDetailPage"));
 const ProjectsPage       = lazyWithPreload("projects",     () => import("./modules/ProjectsModule"));
 const SaaSModule         = lazyWithPreload("saas",         () => import("./modules/SaaSModule"));
@@ -98,6 +99,7 @@ const IcRep   =(p)=><Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2
 const IcSet   =(p)=><Ic {...p} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0"/>;
 const IcWH    =(p)=><Ic {...p} d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/>;
 const IcTown  =(p)=><Ic {...p} d="M3 21h18M5 21V7l6-4v18M19 21V11l-6-4M9 9v.01M9 13v.01M9 17v.01"/>;
+const IcGavel =(p)=><Ic {...p} d="M3 21h9M6 15l6-6M4 11l6 6M14.5 3.5l6 6M17.5 6.5L11 13"/>;
 const IcProc  =(p)=><Ic {...p} d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/>;
 const IcMenu  =(p)=><Ic {...p} d="M4 6h16M4 12h16M4 18h16"/>;
 const IcBell  =(p)=><Ic {...p} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>;
@@ -169,6 +171,7 @@ const NAV_GROUPS=[
     {id:"warehouse",   label:"Warehouse",   Icon:IcWH,   sc:"W"},
     {id:"township",    label:"Township CRM",Icon:IcTown, sc:"G"},
     {id:"payroll",     label:"Team & HR",   Icon:IcPay,  sc:"Y"},
+    {id:"tenders",     label:"Tenders",     Icon:IcGavel},
   ]},
   {section:"REPORTS",items:[
     {id:"reports",  label:"Reports",    Icon:IcRep, sc:"B"},
@@ -712,14 +715,15 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     return()=>document.removeEventListener("mousedown",handler);
   },[showProfileMenu]);
 
-  const domainIcons={"surya_ghar":"☀️","surya_ghar_plus":"☀️","solar_commercial":"⚡","construction_individual":"🏗️","housing_projects":"🏠"};
-  const domainColors={"surya_ghar":"#E65100","surya_ghar_plus":"#FF8F00","solar_commercial":"#1565C0","construction_individual":"#2E7D32","housing_projects":"#6A1B9A"};
+  const domainIcons={"surya_ghar":"☀️","surya_ghar_plus":"☀️","solar_commercial":"⚡","construction_individual":"🏗️","housing_projects":"🏠","government_contractor":"🏛️"};
+  const domainColors={"surya_ghar":"#E65100","surya_ghar_plus":"#FF8F00","solar_commercial":"#1565C0","construction_individual":"#2E7D32","housing_projects":"#6A1B9A","government_contractor":"#4B45C4"};
   const DOMAINS=[
     {id:"surya_ghar",label:"Surya Ghar Yojana"},
     {id:"surya_ghar_plus",label:"Surya Ghar + Other Solar"},
     {id:"solar_commercial",label:"Commercial Solar"},
     {id:"construction_individual",label:"Individual Contractor"},
     {id:"housing_projects",label:"Housing Projects"},
+    {id:"government_contractor",label:"Government Contractor"},
   ];
   const activeDomain = user?.company_domain || "construction_individual";
   const activeIcon = domainIcons[activeDomain] || "🏗️";
@@ -750,7 +754,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
     reports:"Reports",library:"Library",settings:"Settings",
     crm:"CRM",mom:"MOM",payroll:"Team & HR",team:"Team & HR",
-    township:"Township CRM"
+    township:"Township CRM",tenders:"Tenders"
   };
   const isVisible=(id)=>{
     if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
@@ -1959,6 +1963,7 @@ export default function App(){
     warehouse:{title:"Warehouse",sub:"Central Stock"},
     township:{title:"Township CRM",sub:"Real-Estate Projects & Sales"},
     payroll:{title:"Payroll",sub:"Staff Payments"},
+    tenders:{title:"Tenders",sub:"Bid · EMD/BG · Agreement · DLP"},
     reports:{title:"Reports",sub:"All Reports"},
     library:{title:"Library",sub:"Master Data"},
     settings:{title:"Settings",sub:"Configuration"},
@@ -1992,6 +1997,7 @@ export default function App(){
     warehouse: guard("warehouse","Warehouse",      <WarehouseModule/>),
     township:  guard("township", "Township CRM",   <TownshipCRMModule/>),
     reports:   guard("reports",  "Reports",        <ReportsModule/>),
+    tenders:   guard("tenders",  "Tenders",        <TendersModule onOpenProject={(pid)=>handleNotifNav("projects","/projects/"+pid+"/overview")}/>),
     settings:  <SettingsModule/>,
     profile:   <SettingsModule initialSection="profile"/>,
     saas:     <SaaSModule/>,

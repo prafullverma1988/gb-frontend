@@ -72,6 +72,7 @@ const DOMAIN_LABELS = {
   surya_ghar_plus:         "Surya Ghar Plus",
   interior_design:         "Interior Design",
   real_estate:             "Real Estate",
+  government_contractor:   "Government Contractor",
 };
 
 // ── Billing helpers (used by Customers + the company page) ─────────────
