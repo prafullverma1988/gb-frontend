@@ -16,6 +16,9 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import * as XLSX from "xlsx";
 import api, { getUser } from "../config/api";
 import { useToast } from "../components/Toast";
+// Receipt lene ke liye Finance ka hi form dobara use hota hai — TabParty aur
+// TabTransaction bhi yahi karte hain, taaki receipt banane ke rules ek jagah rahein.
+import { CreateTransactionModal } from "./FinanceModule";
 
 // ── THEME TOKENS ────────────────────────────────────────────────────
 // Module self-contained rehta hai (Finance/CRM/Projects jaisa) — inhi
@@ -1932,6 +1935,20 @@ function BoqTab({tenderId, boq, loading, reload}) {
   const summary = (boq && boq.summary) || null;
   const imports = (boq && boq.imports) || [];
 
+  // Executed qty BOQ ke GET par nahi aata — uska apna endpoint hai.
+  // Tab khulne par hi laate hain, id se merge karke.
+  const [exec, setExec] = useState({});
+  useEffect(()=>{
+    let dead = false;
+    api.get(`/tenders/${tenderId}/boq-execution`).then(r=>{
+      if (dead || !r?.success || !Array.isArray(r.data)) return;
+      const by = {};
+      for (const row of r.data) by[row.id] = row;
+      setExec(by);
+    }).catch(()=>{});
+    return ()=>{ dead = true; };
+  }, [tenderId, boq]);
+
   const filtered = useMemo(()=>{
     const q = search.trim().toLowerCase();
     if (!q) return items;
@@ -1949,7 +1966,7 @@ function BoqTab({tenderId, boq, loading, reload}) {
     reload();
   };
 
-  const COLS = "70px 84px minmax(200px,2.6fr) 56px 90px 100px 110px 74px";
+  const COLS = "70px 84px minmax(200px,2.2fr) 56px 88px 92px 106px 92px 96px 74px";
 
   const TILES = summary ? [
     {label:"Items", value:summary.item_count, note:`${imports.filter(i=>i.status==="committed").length} import se`,
@@ -2038,9 +2055,9 @@ function BoqTab({tenderId, boq, loading, reload}) {
       {!!items.length && (<>
         <div style={{display:"grid", gridTemplateColumns:COLS, padding:"8px 14px", gap:9,
           background:T.surfaceB, borderBottom:`1px solid ${T.b1}`}}>
-          {["Item No","SOR Code","Description","Unit","Qty","Rate","Amount",""].map((h,i)=>(
+          {["Item No","SOR Code","Description","Unit","Qty","Rate","Amount","Executed Qty","Used %",""].map((h,i)=>(
             <span key={i} style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase",
-              letterSpacing:".6px", textAlign:i>=4&&i<=6?"right":"left"}}>{h}</span>
+              letterSpacing:".6px", textAlign:i>=4&&i<=8?"right":"left"}}>{h}</span>
           ))}
         </div>
 
@@ -2063,6 +2080,25 @@ function BoqTab({tenderId, boq, loading, reload}) {
             <span style={{fontSize:12, color:T.t1, fontWeight:700, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>
               {moneyF(it.amount)}
             </span>
+            {(()=>{
+              const ex  = exec[it.id];
+              const eq  = ex ? Number(ex.executed_qty||0) : null;
+              const pct = ex ? Number(ex.pct_used||0) : null;
+              // BOQ qty se zyada ho gaya = deviation. Rokte nahi, sirf batate hain.
+              const over = pct !== null && pct > 100;
+              return (<>
+                <span style={{fontSize:11.5, color:eq?T.t2:T.t4, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>
+                  {eq === null ? "--" : fmtQty(eq)}
+                </span>
+                <div style={{display:"flex", gap:4, alignItems:"center", justifyContent:"flex-end"}}>
+                  {pct === null ? <span style={{fontSize:11.5, color:T.t4}}>--</span> : (
+                    <span style={{fontSize:11.5, fontWeight:over?700:400, textAlign:"right",
+                      color:over?T.amb:pct>0?T.t2:T.t4, fontVariantNumeric:"tabular-nums"}}>{pct}%</span>
+                  )}
+                  {over && <Pill label="Deviation" c={T.amb} bg={T.ambL}/>}
+                </div>
+              </>);
+            })()}
             <div style={{display:"flex", gap:4, justifyContent:"flex-end"}}>
               <button onClick={()=>setItemModal({item:it})} title="Edit"
                 style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
@@ -2089,7 +2125,7 @@ function BoqTab({tenderId, boq, loading, reload}) {
             fontVariantNumeric:"tabular-nums", gridColumn:"7/8"}}>
             {moneyF(shownTotal)}
           </span>
-          <span/>
+          <span/><span/><span/>
         </div>
       </>)}
     </Panel>
@@ -2102,9 +2138,1093 @@ function BoqTab({tenderId, boq, loading, reload}) {
   </>);
 }
 
+// ════════════════════════════════════════════════════════════════════
+// T3 — MEASUREMENTS (MB) + RA BILLS
+//
+// Backend: gb-backend/routes/tender-billing.js.
+//
+// Do baatein jo poore T3 UI ka aakar tay karti hain:
+//
+// 1. LOCK — backend measurement ko tabhi rokta hai jab uski date kisi
+//    non-cancelled RA bill ke upto_date se pehle (ya barabar) ho. API
+//    row par "locked" flag nahi bhejta, isliye yahan RA bills list se
+//    lock date khud nikaalte hain aur row par taala dikhate hain. Asli
+//    rok phir bhi backend hi lagata hai — ye sirf pehle se bata dena hai.
+//
+// 2. DEDUCTION — bill par wahi heads lagte hain jo Deduction Setup me
+//    configured hain. Ek baar ka "ad-hoc" head backend chupchaap girah
+//    deta hai (applyDeductions sirf config rows par chalta hai), isliye
+//    wizard me ad-hoc row DI HI NAHI GAYI — uske badle Setup me manual
+//    head banane ko kaha jata hai.
+// ════════════════════════════════════════════════════════════════════
+
+// Rupee amount → Indian words (RA bill print par "in words" chahiye).
+const ONES = ["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten",
+  "Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"];
+const TENS = ["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
+const below100 = (n) => n < 20 ? ONES[n] : (TENS[Math.floor(n/10)] + (n%10 ? " " + ONES[n%10] : ""));
+const below1000 = (n) => {
+  const h = Math.floor(n/100), r = n%100;
+  return (h ? ONES[h] + " Hundred" + (r ? " " : "") : "") + (r ? below100(r) : "");
+};
+const numToWordsIN = (amount) => {
+  const total = Math.round(Number(amount) || 0);
+  if (total === 0) return "Zero Rupees Only";
+  const rupees = Math.floor(total);
+  const parts = [];
+  const crore = Math.floor(rupees/10000000);
+  const lakh  = Math.floor((rupees%10000000)/100000);
+  const thou  = Math.floor((rupees%100000)/1000);
+  const rest  = rupees%1000;
+  if (crore) parts.push(below1000(crore) + " Crore");
+  if (lakh)  parts.push(below1000(lakh)  + " Lakh");
+  if (thou)  parts.push(below1000(thou)  + " Thousand");
+  if (rest)  parts.push(below1000(rest));
+  return parts.join(" ").replace(/\s+/g," ").trim() + " Rupees Only";
+};
+
+// Har bill ke status ka rang — list aur drawer dono me wahi.
+const RA_STATUS_STYLE = {
+  draft:     {label:"Draft",     c:T.slt, bg:T.sltL},
+  submitted: {label:"Submitted", c:T.blu, bg:T.bluL},
+  cancelled: {label:"Cancelled", c:T.t4,  bg:T.sltL},
+};
+
+// Non-cancelled bills me sabse aage ka upto_date = lock date.
+const lockDateOf = (bills) => {
+  const ds = (bills||[]).filter(b=>b.status!=="cancelled").map(b=>b.upto_date).filter(Boolean)
+    .map(d=>String(d).slice(0,10)).sort();
+  return ds.length ? ds[ds.length-1] : null;
+};
+
+// Backend ka exact lock message — row tooltip par wahi dikhta hai.
+const LOCK_MSG = "Is date tak ka kaam RA bill me bill ho chuka hai — nayi entry banao aage ki date pe.";
+
+// ── BOQ item picker — dhoondh kar chuno (BOQ 500+ items ka ho sakta hai) ──
+function BoqItemPicker({items, value, onChange}) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const sel = items.find(i=>String(i.id)===String(value));
+  const list = useMemo(()=>{
+    const s = q.trim().toLowerCase();
+    const base = s ? items.filter(i=>[i.item_no,i.description,i.unit]
+      .some(v=>String(v||"").toLowerCase().includes(s))) : items;
+    return base.slice(0, 60);
+  }, [items, q]);
+
+  return (
+    <div style={{position:"relative"}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{...inputStyle, cursor:"pointer", display:"flex",
+        alignItems:"center", justifyContent:"space-between", gap:8}}>
+        <span style={{minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+          color:sel?T.t1:T.t4}}>
+          {sel ? `${sel.item_no||"--"} · ${sel.description}` : "BOQ item dhoondo..."}
+        </span>
+        <IcDown size={12} color={T.t4}/>
+      </div>
+      {open && (
+        <div style={{position:"absolute", top:"calc(100% + 4px)", left:0, right:0, zIndex:5,
+          background:T.surface, border:`1px solid ${T.b2}`, borderRadius:8,
+          boxShadow:"0 10px 30px rgba(0,0,0,.14)", overflow:"hidden"}}>
+          <div style={{padding:8, borderBottom:`1px solid ${T.b1}`}}>
+            <input autoFocus value={q} onChange={e=>setQ(e.target.value)}
+              placeholder="Item no ya description..."
+              style={{...inputStyle, padding:"7px 10px", fontSize:12}}/>
+          </div>
+          <div style={{maxHeight:230, overflowY:"auto"}}>
+            {!list.length && <div style={{padding:"14px 12px", fontSize:12, color:T.t4}}>Koi item nahi mila.</div>}
+            {list.map(i=>(
+              <div key={i.id} onClick={()=>{onChange(i.id); setOpen(false); setQ("");}}
+                style={{padding:"8px 11px", cursor:"pointer", borderBottom:`1px solid ${T.b1}`,
+                  background:String(i.id)===String(value)?T.indL:T.surface}}>
+                <div style={{fontSize:12, color:T.t1, fontWeight:600, overflow:"hidden",
+                  textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                  {i.item_no||"--"} · {i.description}
+                </div>
+                <div style={{fontSize:10.5, color:T.t4, marginTop:2}}>
+                  BOQ {fmtQty(i.qty)} {i.unit||""} · Rate {fmtQty(i.rate)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MEASUREMENT ADD / EDIT MODAL ────────────────────────────────────
+function MeasurementModal({tenderId, sites, boqItems, edit, onClose, onDone}) {
+  const toast = useToast();
+  const isEdit = !!edit?.id;
+  const [f, setF] = useState({
+    project_id:  edit?.project_id  || (sites.length===1 ? sites[0].id : ""),
+    boq_item_id: edit?.boq_item_id || "",
+    mdate:       edit?.mdate ? String(edit.mdate).slice(0,10) : new Date().toISOString().slice(0,10),
+    qty:         edit?.qty ?? "",
+    mb_ref:      edit?.mb_ref || "",
+    remarks:     edit?.remarks || "",
+  });
+  const [busy, setBusy] = useState(false);
+  const set = (k,v) => setF(p=>({...p,[k]:v}));
+
+  const item = boqItems.find(i=>String(i.id)===String(f.boq_item_id));
+
+  const save = async () => {
+    if (!f.project_id)  { toast.error("Site chuno"); return; }
+    if (!f.boq_item_id) { toast.error("BOQ item chuno"); return; }
+    if (!f.mdate)       { toast.error("Date zaroori hai"); return; }
+    if (!(Number(f.qty) > 0)) { toast.error("Qty 0 se badi honi chahiye"); return; }
+    setBusy(true);
+    const body = {
+      project_id: Number(f.project_id), boq_item_id: Number(f.boq_item_id),
+      mdate: f.mdate, qty: Number(f.qty),
+      mb_ref: f.mb_ref || null, remarks: f.remarks || null,
+    };
+    const res = isEdit
+      ? await api.put(`/tenders/${tenderId}/measurements/${edit.id}`, body)
+      : await api.post(`/tenders/${tenderId}/measurements`, body);
+    setBusy(false);
+    // Lock / negative / scoping — sab backend ka message hi dikhate hain.
+    if (!res?.success) { toast.error(res?.message || "Save nahi hua"); return; }
+    toast.success(isEdit ? "Measurement update ho gaya" : "Measurement darj ho gaya");
+    onDone();
+  };
+
+  return (
+    <Modal title={isEdit ? "Measurement Edit" : "Nayi Measurement"} Icon={IcTable}
+      sub={isEdit ? `MB entry #${edit.id}` : "Measurement book (MB) ki entry"}
+      onClose={onClose} width={620}
+      footer={<>
+        <SecBtn label="Cancel" onClick={onClose}/>
+        <PrimBtn label={busy ? "Save ho raha hai..." : "Save"} Icon={IcChk} onClick={save} disabled={busy}/>
+      </>}>
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
+        <Field label="Site *" hint={!sites.length ? "Pehle Sites tab me project link karo." : undefined}>
+          <SelIn value={f.project_id} onChange={v=>set("project_id",v)} ph="Site chuno..."
+            options={sites.map(s=>({v:s.id, l:s.name}))}/>
+        </Field>
+        <Field label="Date *">
+          <TxtIn type="date" value={f.mdate} onChange={v=>set("mdate",v)}/>
+        </Field>
+        <Field label="BOQ Item *" full>
+          <BoqItemPicker items={boqItems} value={f.boq_item_id} onChange={v=>set("boq_item_id",v)}/>
+        </Field>
+        <Field label={`Qty *${item?.unit ? ` (${item.unit})` : ""}`}>
+          <TxtIn type="number" value={f.qty} onChange={v=>set("qty",v)} ph="0"/>
+        </Field>
+        <Field label="MB Ref">
+          <TxtIn value={f.mb_ref} onChange={v=>set("mb_ref",v)} ph="e.g. MB-12 / Page 44"/>
+        </Field>
+        <Field label="Remarks" full>
+          <TxtIn value={f.remarks} onChange={v=>set("remarks",v)} ph="Optional"/>
+        </Field>
+      </div>
+      {item && (
+        <div style={{marginTop:13, padding:"9px 12px", background:T.indL, border:`1px solid ${T.indM}`,
+          borderRadius:7, fontSize:11.5, color:T.t2, lineHeight:1.6}}>
+          <b style={{color:T.ind}}>{item.item_no || "--"}</b> · BOQ qty {fmtQty(item.qty)} {item.unit||""}
+          · Rate {money(item.rate)}
+          {Number(f.qty) > 0 && <> · Is entry ki value <b>{money(round2(Number(f.qty)*Number(item.rate||0)))}</b></>}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// ── MEASUREMENTS TAB ────────────────────────────────────────────────
+function MeasurementsTab({tenderId, sites, boqItems, bills}) {
+  const toast = useToast();
+  const [rows, setRows]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [fSite, setFSite]     = useState("");
+  const [fItem, setFItem]     = useState("");
+  const [modal, setModal]     = useState(null);   // {} = naya, {edit} = edit
+
+  const lockDate = lockDateOf(bills);
+
+  const load = useCallback(async () => {
+    const qs = [];
+    if (fSite) qs.push(`project_id=${fSite}`);
+    if (fItem) qs.push(`boq_item_id=${fItem}`);
+    const res = await api.get(`/tenders/${tenderId}/measurements${qs.length?"?"+qs.join("&"):""}`);
+    setLoading(false);
+    if (!res?.success) { toast.error(res?.message || "Measurements load nahi hue"); return; }
+    setRows(Array.isArray(res.data) ? res.data : []);
+  }, [tenderId, fSite, fItem, toast]);
+  useEffect(()=>{ load(); }, [load]);
+
+  const del = async (m) => {
+    if (!await window.confirmAsync(`${fmtDate(m.mdate)} ki entry (${fmtQty(m.qty)} ${m.unit||""}) hataayein?`)) return;
+    const res = await api.del(`/tenders/${tenderId}/measurements/${m.id}`);
+    if (!res?.success) { toast.error(res?.message || "Delete nahi hua"); return; }
+    toast.success("Entry hat gayi");
+    load();
+  };
+
+  // Item-wise cumulative — kis BOQ item par ab tak kitna ho chuka.
+  const summary = useMemo(()=>{
+    const by = new Map();
+    for (const r of rows) {
+      const k = r.boq_item_id;
+      const cur = by.get(k) || {item_no:r.item_no, unit:r.unit, desc:r.boq_description, qty:0, n:0};
+      cur.qty += Number(r.qty||0); cur.n += 1;
+      by.set(k, cur);
+    }
+    return [...by.values()].sort((a,b)=>String(a.item_no||"").localeCompare(String(b.item_no||"")));
+  }, [rows]);
+
+  const COLS = "104px 96px minmax(120px,1.1fr) minmax(180px,2fr) 100px 120px 78px";
+
+  return (<>
+    <Panel style={{marginBottom:11}}>
+      <PHead title="Measurements (MB)" sub={rows.length ? `${rows.length} entry` : undefined}
+        action={<PrimBtn label="Nayi Measurement" Icon={IcAdd} onClick={()=>setModal({})}/>}/>
+
+      {/* Filters */}
+      <div style={{padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB,
+        display:"flex", gap:9, flexWrap:"wrap", alignItems:"center"}}>
+        <div style={{minWidth:180}}>
+          <SelIn value={fSite} onChange={setFSite} ph="Saari sites"
+            options={sites.map(s=>({v:s.id, l:s.name}))}/>
+        </div>
+        <div style={{minWidth:240}}>
+          <SelIn value={fItem} onChange={setFItem} ph="Saare BOQ items"
+            options={boqItems.map(i=>({v:i.id, l:`${i.item_no||"--"} · ${String(i.description||"").slice(0,44)}`}))}/>
+        </div>
+        {(fSite||fItem) && <SecBtn label="Filter hatao" Icon={IcX} onClick={()=>{setFSite("");setFItem("");}}/>}
+        {lockDate && (
+          <div style={{marginLeft:"auto", display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.t3}}>
+            <IcLock size={12} color={T.amb}/>
+            <span>{fmtDate(lockDate)} tak bill ho chuka — us tarikh tak ki entry lock hai</span>
+          </div>
+        )}
+      </div>
+
+      {loading && <Loading text="Measurements load ho rahe hain..."/>}
+
+      {!loading && !rows.length && (
+        <Empty Icon={IcTable} text={fSite||fItem ? "Is filter me koi entry nahi." : "Abhi koi measurement nahi."}
+          sub={fSite||fItem ? undefined : "Site par kaam hone ke baad MB entry yahan darj karo."}/>
+      )}
+
+      {!loading && !!rows.length && (<>
+        <div style={{display:"grid", gridTemplateColumns:COLS, padding:"8px 14px", gap:9,
+          background:T.surfaceB, borderBottom:`1px solid ${T.b1}`}}>
+          {["Date","MB Ref","Site","BOQ Item","Qty","Entered By",""].map((h,i)=>(
+            <span key={i} style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase",
+              letterSpacing:".6px", textAlign:i===4?"right":"left"}}>{h}</span>
+          ))}
+        </div>
+        {rows.map((m,i)=>{
+          const d = String(m.mdate||"").slice(0,10);
+          const locked = !!lockDate && d <= lockDate;
+          return (
+            <div key={m.id} style={{display:"grid", gridTemplateColumns:COLS, padding:"9px 14px", gap:9,
+              alignItems:"center", borderBottom:i<rows.length-1?`1px solid ${T.b1}`:"none",
+              background:locked?T.surfaceB:T.surface}}>
+              <span style={{fontSize:11.5, color:T.t2, display:"flex", alignItems:"center", gap:5}}>
+                {locked && <span title={LOCK_MSG} style={{lineHeight:0, cursor:"help"}}><IcLock size={11} color={T.amb}/></span>}
+                {fmtDate(m.mdate)}
+              </span>
+              <span style={{fontSize:11.5, color:m.mb_ref?T.t2:T.t4}}>{m.mb_ref || "--"}</span>
+              <span title={m.project_name} style={{fontSize:11.5, color:T.t2, overflow:"hidden",
+                textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.project_name || "--"}</span>
+              <span title={m.boq_description} style={{fontSize:11.5, color:T.t1, overflow:"hidden",
+                textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                <b style={{color:T.ind}}>{m.item_no || "--"}</b> · {m.boq_description || "--"}
+              </span>
+              <span style={{fontSize:12, color:T.t1, fontWeight:600, textAlign:"right",
+                fontVariantNumeric:"tabular-nums"}}>{fmtQty(m.qty)} <span style={{fontSize:10, color:T.t4}}>{m.unit||""}</span></span>
+              <span style={{fontSize:11, color:T.t3, overflow:"hidden", textOverflow:"ellipsis",
+                whiteSpace:"nowrap"}}>{m.created_by_name || "--"}</span>
+              <div style={{display:"flex", gap:4, justifyContent:"flex-end"}}>
+                {locked ? (
+                  <span title={LOCK_MSG} style={{fontSize:10, color:T.amb, cursor:"help", fontWeight:600}}>Locked</span>
+                ) : (<>
+                  <button onClick={()=>setModal({edit:m})} title="Edit"
+                    style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
+                      cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
+                    <IcEdit size={12} color={T.t3}/>
+                  </button>
+                  <button onClick={()=>del(m)} title="Delete"
+                    style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
+                      cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
+                    <IcTrash size={12} color={T.red}/>
+                  </button>
+                </>)}
+              </div>
+            </div>
+          );
+        })}
+      </>)}
+    </Panel>
+
+    {/* Item-wise cumulative strip */}
+    {!!summary.length && (
+      <Panel>
+        <PHead title="Item-wise Cumulative" sub={`${summary.length} BOQ item par kaam hua`}/>
+        <div style={{padding:"10px 14px", display:"flex", gap:8, flexWrap:"wrap"}}>
+          {summary.map((s,i)=>(
+            <div key={i} style={{border:`1px solid ${T.b1}`, borderRadius:8, padding:"8px 11px",
+              background:T.surfaceB, minWidth:170}}>
+              <div style={{fontSize:11, fontWeight:700, color:T.ind}}>{s.item_no || "--"}</div>
+              <div title={s.desc} style={{fontSize:10.5, color:T.t4, maxWidth:190, overflow:"hidden",
+                textOverflow:"ellipsis", whiteSpace:"nowrap", marginTop:1}}>{s.desc || ""}</div>
+              <div style={{fontSize:14, fontWeight:800, color:T.t1, marginTop:4, fontVariantNumeric:"tabular-nums"}}>
+                {fmtQty(s.qty)} <span style={{fontSize:10.5, fontWeight:600, color:T.t3}}>{s.unit||""}</span>
+              </div>
+              <div style={{fontSize:10, color:T.t4, marginTop:1}}>{s.n} entry</div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    )}
+
+    {modal && (
+      <MeasurementModal tenderId={tenderId} sites={sites} boqItems={boqItems} edit={modal.edit}
+        onClose={()=>setModal(null)} onDone={()=>{ setModal(null); load(); }}/>
+    )}
+  </>);
+}
+
+// ── DEDUCTION SETUP MODAL ───────────────────────────────────────────
+const CALC_OPTS = [
+  {v:"pct_gross", l:"% of subtotal"},
+  {v:"fixed",     l:"Fixed amount"},
+  {v:"manual",    l:"Manual (har bill par bharo)"},
+];
+const CALC_LABEL = {pct_gross:"% of subtotal", fixed:"Fixed", manual:"Manual"};
+
+function DeductionSetupModal({tenderId, onClose, onDone}) {
+  const toast = useToast();
+  const [rows, setRows]   = useState([]);
+  const [loading, setLoad]= useState(true);
+  const [add, setAdd]     = useState({head_name:"", calc_type:"pct_gross", rate:"", sort_order:""});
+  const [busy, setBusy]   = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  const load = useCallback(async () => {
+    const res = await api.get(`/tenders/${tenderId}/deductions`);
+    setLoad(false);
+    if (!res?.success) { toast.error(res?.message || "Deduction config load nahi hua"); return; }
+    setRows(Array.isArray(res.data) ? res.data : []);
+  }, [tenderId, toast]);
+  useEffect(()=>{ load(); }, [load]);
+
+  const create = async () => {
+    if (!add.head_name.trim()) { toast.error("Deduction head ka naam zaroori hai"); return; }
+    setBusy(true);
+    const res = await api.post(`/tenders/${tenderId}/deductions`, {
+      head_name: add.head_name.trim(), calc_type: add.calc_type,
+      rate: add.calc_type === "manual" ? null : (add.rate === "" ? null : Number(add.rate)),
+      sort_order: add.sort_order === "" ? null : Number(add.sort_order),
+    });
+    setBusy(false);
+    if (!res?.success) { toast.error(res?.message || "Head add nahi hua"); return; }
+    toast.success("Head jud gaya"); setDirty(true);
+    setAdd({head_name:"", calc_type:"pct_gross", rate:"", sort_order:""});
+    load();
+  };
+
+  const patch = async (r, body) => {
+    const res = await api.put(`/tenders/${tenderId}/deductions/${r.id}`, body);
+    if (!res?.success) { toast.error(res?.message || "Update nahi hua"); return; }
+    setDirty(true); load();
+  };
+
+  const remove = async (r) => {
+    if (!await window.confirmAsync(`"${r.head_name}" head hataayein?\n\nPehle ban chuke bills par asar nahi padega — unme amount snapshot ho chuka hai.`)) return;
+    const res = await api.del(`/tenders/${tenderId}/deductions/${r.id}`);
+    if (!res?.success) { toast.error(res?.message || "Delete nahi hua"); return; }
+    toast.success("Head hat gaya"); setDirty(true); load();
+  };
+
+  const COLS = "minmax(150px,1.6fr) 150px 100px 70px 62px";
+
+  return (
+    <Modal title="Deduction Setup" Icon={IcRupee} width={760}
+      sub="Har RA bill par yahi heads lagte hain"
+      onClose={()=>{ onClose(); if (dirty) onDone(); }}
+      footer={<PrimBtn label="Done" Icon={IcChk} onClick={()=>{ onClose(); if (dirty) onDone(); }}/>}>
+      {loading && <Loading text="Config load ho raha hai..."/>}
+      {!loading && (<>
+        <div style={{display:"grid", gridTemplateColumns:COLS, gap:9, padding:"0 0 7px"}}>
+          {["Head","Type","Rate","Order",""].map((h,i)=>(
+            <span key={i} style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase",
+              letterSpacing:".6px", textAlign:i===2||i===3?"right":"left"}}>{h}</span>
+          ))}
+        </div>
+        {rows.map(r=>(
+          <div key={r.id} style={{display:"grid", gridTemplateColumns:COLS, gap:9, alignItems:"center",
+            padding:"7px 0", borderTop:`1px solid ${T.b1}`}}>
+            <span style={{fontSize:12.5, color:T.t1, fontWeight:600}}>{r.head_name}</span>
+            <SelIn value={r.calc_type} options={CALC_OPTS}
+              onChange={v=>patch(r,{calc_type:v, rate: v==="manual" ? null : (r.rate ?? 0)})}/>
+            <input type="number" defaultValue={r.rate ?? ""} disabled={r.calc_type==="manual"}
+              onBlur={e=>{
+                const v = e.target.value === "" ? null : Number(e.target.value);
+                if (String(v) !== String(r.rate ?? "")) patch(r,{rate:v});
+              }}
+              placeholder={r.calc_type==="manual" ? "--" : "0"}
+              style={{...inputStyle, padding:"7px 9px", fontSize:12, textAlign:"right",
+                background:r.calc_type==="manual"?T.sltL:T.bg,
+                color:r.calc_type==="manual"?T.t4:T.t1}}/>
+            <input type="number" defaultValue={r.sort_order ?? ""}
+              onBlur={e=>{
+                const v = e.target.value === "" ? null : Number(e.target.value);
+                if (String(v) !== String(r.sort_order ?? "")) patch(r,{sort_order:v});
+              }}
+              style={{...inputStyle, padding:"7px 9px", fontSize:12, textAlign:"right"}}/>
+            <div style={{display:"flex", justifyContent:"flex-end"}}>
+              <button onClick={()=>remove(r)} title="Hatao"
+                style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
+                  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
+                <IcTrash size={12} color={T.red}/>
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {/* Naya head */}
+        <div style={{marginTop:13, paddingTop:12, borderTop:`2px solid ${T.b1}`}}>
+          <div style={{fontSize:11, fontWeight:700, color:T.t3, marginBottom:8, textTransform:"uppercase",
+            letterSpacing:".5px"}}>Naya Head</div>
+          <div style={{display:"grid", gridTemplateColumns:COLS, gap:9, alignItems:"center"}}>
+            <TxtIn value={add.head_name} onChange={v=>setAdd(p=>({...p,head_name:v}))} ph="e.g. Withheld"/>
+            <SelIn value={add.calc_type} options={CALC_OPTS}
+              onChange={v=>setAdd(p=>({...p,calc_type:v, rate: v==="manual" ? "" : p.rate}))}/>
+            <input type="number" value={add.rate} disabled={add.calc_type==="manual"}
+              onChange={e=>setAdd(p=>({...p,rate:e.target.value}))}
+              placeholder={add.calc_type==="manual" ? "--" : "0"}
+              style={{...inputStyle, padding:"7px 9px", fontSize:12, textAlign:"right",
+                background:add.calc_type==="manual"?T.sltL:T.bg}}/>
+            <input type="number" value={add.sort_order}
+              onChange={e=>setAdd(p=>({...p,sort_order:e.target.value}))}
+              style={{...inputStyle, padding:"7px 9px", fontSize:12, textAlign:"right"}}/>
+            <div style={{display:"flex", justifyContent:"flex-end"}}>
+              <PrimBtn label="Add" Icon={IcAdd} onClick={create} disabled={busy}/>
+            </div>
+          </div>
+        </div>
+
+        <div style={{marginTop:13, padding:"9px 12px", background:T.ambL, border:`1px solid ${T.ambM}`,
+          borderRadius:7, fontSize:11.5, color:T.t2, lineHeight:1.6}}>
+          Bill par sirf yahi heads lagte hain. Kisi ek bill me alag se kuch kaatna ho (jaise
+          <b> Withheld</b>) to yahan <b>Manual</b> type ka head banao — phir har bill me uska
+          amount alag bhara ja sakta hai. Bill ke andar se naya head nahi jud sakta.
+        </div>
+      </>)}
+    </Modal>
+  );
+}
+
+// ── NEW RA BILL WIZARD (3 step) ─────────────────────────────────────
+function NewRaBillWizard({tenderId, defaultPremium, edit, onClose, onDone}) {
+  // edit = draft bill ka detail object → wahi wizard PUT par chalta hai.
+  const toast = useToast();
+  const [step, setStep]   = useState(1);
+  const [upto, setUpto]   = useState(edit?.upto_date ? String(edit.upto_date).slice(0,10) : new Date().toISOString().slice(0,10));
+  const [prem, setPrem]   = useState(edit ? String(edit.premium_pct ?? "") : (defaultPremium === null || defaultPremium === undefined ? "" : String(defaultPremium)));
+  const [manual, setManual] = useState(()=>{
+    // Edit me manual heads ke snapshot amounts wapas bhar do.
+    const m = {};
+    for (const d of (edit?.deductions || [])) if (d.calc_type === "manual") m[d.head_name] = Number(d.amount||0);
+    return m;
+  });      // {head_name: amount}
+  const [prev, setPrev]   = useState(null);
+  const [busy, setBusy]   = useState(false);
+  const [err, setErr]     = useState(null);
+
+  // Preview backend hi banata hai — koi ganit yahan dobara nahi likha,
+  // warna screen aur bill alag-alag jawab de sakte hain.
+  const runPreview = useCallback(async () => {
+    if (!upto) return;
+    setBusy(true); setErr(null);
+    const body = {upto_date: upto, manual_deductions: manual};
+    if (prem !== "") body.premium_pct = Number(prem);
+    if (edit) body.exclude_bill_id = edit.id;   // apne items billed me na girein
+    const res = await api.post(`/tenders/${tenderId}/ra-bills/preview`, body);
+    setBusy(false);
+    if (!res?.success) {
+      setPrev(null);
+      setErr({msg: res?.message || "Preview nahi bana", negatives: res?.negatives || null});
+      return;
+    }
+    setPrev(res.data);
+    if (prem === "" && res.data?.premium_pct !== undefined) setPrem(String(res.data.premium_pct));
+  }, [tenderId, upto, prem, manual]);
+
+  useEffect(()=>{ if (step>=1) runPreview(); /* eslint-disable-next-line */ }, [upto, step]);
+
+  const manualHeads = (prev?.deductions || []).filter(d=>d.calc_type === "manual");
+
+  const save = async () => {
+    setBusy(true);
+    const body = {upto_date: upto, manual_deductions: manual};
+    if (prem !== "") body.premium_pct = Number(prem);
+    const res = edit
+      ? await api.put(`/tenders/${tenderId}/ra-bills/${edit.id}`, body)
+      : await api.post(`/tenders/${tenderId}/ra-bills`, body);
+    setBusy(false);
+    if (!res?.success) { toast.error(res?.message || (edit ? "Update nahi hua" : "Bill nahi bana")); return; }
+    toast.success(edit ? `RA-${edit.bill_no} update ho gaya` : `RA-${res.data?.bill_no} draft ban gaya`);
+    onDone();
+  };
+
+  const Row = ({l, v, bold, color}) => (
+    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 0",
+      fontSize:bold?13:12.5, fontWeight:bold?800:500, color:color||T.t2}}>
+      <span>{l}</span><span style={{fontVariantNumeric:"tabular-nums"}}>{v}</span>
+    </div>
+  );
+
+  const STEPS = ["Qty & Premium", "Deductions", "Review"];
+
+  return (
+    <Modal title={edit ? `RA-${edit.bill_no} Edit` : "Naya RA Bill"} Icon={IcRupee} width={860}
+      sub={`Step ${step} of 3 — ${STEPS[step-1]}`}
+      onClose={onClose}
+      footer={<>
+        {step > 1 && <SecBtn label="Peeche" onClick={()=>setStep(s=>s-1)}/>}
+        <div style={{flex:1}}/>
+        <SecBtn label="Cancel" onClick={onClose}/>
+        {step < 3 && <PrimBtn label="Aage" Icon={IcDown} onClick={()=>setStep(s=>s+1)} disabled={!prev||busy}/>}
+        {step === 3 && <PrimBtn label={busy?"Save ho raha hai...":(edit?"Update Draft":"Save Draft")} Icon={IcChk} onClick={save} disabled={busy||!prev}/>}
+      </>}>
+
+      {/* Step strip */}
+      <div style={{display:"flex", gap:6, marginBottom:14}}>
+        {STEPS.map((s,i)=>(
+          <div key={s} style={{flex:1, padding:"6px 9px", borderRadius:6, fontSize:11, fontWeight:700,
+            textAlign:"center", background:i+1===step?T.indL:T.surfaceB,
+            color:i+1===step?T.ind:i+1<step?T.grn:T.t4,
+            border:`1px solid ${i+1===step?T.indM:T.b1}`}}>
+            {i+1 < step ? "✓ " : ""}{i+1}. {s}
+          </div>
+        ))}
+      </div>
+
+      {/* ── STEP 1 ── */}
+      {step === 1 && (<>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13, marginBottom:14}}>
+          <Field label="Upto Date *" hint="Is tarikh tak ki saari measurement is bill me aayegi.">
+            <TxtIn type="date" value={upto} onChange={setUpto}/>
+          </Field>
+          <Field label="Premium / Tender %" hint="BOQ summary se bhara hua — badal sakte ho.">
+            <div style={{display:"flex", gap:7}}>
+              <TxtIn type="number" value={prem} onChange={setPrem} ph="0"/>
+              <SecBtn label="Lagao" Icon={IcChk} onClick={runPreview}/>
+            </div>
+          </Field>
+        </div>
+      </>)}
+
+      {/* Error (negative measurement etc.) */}
+      {err && (
+        <div style={{padding:"11px 13px", background:T.redL, border:`1px solid ${T.redM}`, borderRadius:8,
+          fontSize:12, color:T.red, marginBottom:12}}>
+          <div style={{fontWeight:700, display:"flex", alignItems:"center", gap:7}}>
+            <IcWarn size={14} color={T.red}/>{err.msg}
+          </div>
+          {!!err.negatives?.length && (
+            <div style={{marginTop:7, color:T.t2, fontSize:11.5, lineHeight:1.7}}>
+              {err.negatives.map((n,i)=>(
+                <div key={i}>
+                  <b>{n.item_no || n.boq_item_id}</b> — measured {fmtQty(n.measured_cum)},
+                  bill ho chuka {fmtQty(n.billed_cum)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {busy && !prev && <Loading text="Preview ban raha hai..."/>}
+
+      {/* ── STEP 1 preview: item table ── */}
+      {step === 1 && prev && (<>
+        <div style={{fontSize:11, fontWeight:700, color:T.t3, marginBottom:7, textTransform:"uppercase",
+          letterSpacing:".5px"}}>Is bill ke items</div>
+        {!prev.items?.length && <Empty Icon={IcTable} text="Is date tak koi billable measurement nahi."/>}
+        {!!prev.items?.length && (
+          <div style={{border:`1px solid ${T.b1}`, borderRadius:8, overflow:"hidden"}}>
+            <div style={{display:"grid", gridTemplateColumns:"70px minmax(160px,2fr) 52px 84px 84px 84px 84px 104px",
+              gap:8, padding:"7px 11px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`}}>
+              {["Item","Description","Unit","Prev Qty","Upto Qty","This Qty","Rate","Amount"].map((h,i)=>(
+                <span key={i} style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase",
+                  letterSpacing:".5px", textAlign:i>=3?"right":"left"}}>{h}</span>
+              ))}
+            </div>
+            {prev.items.map((it,i)=>(
+              <div key={i} style={{display:"grid", gridTemplateColumns:"70px minmax(160px,2fr) 52px 84px 84px 84px 84px 104px",
+                gap:8, padding:"7px 11px", alignItems:"center",
+                borderBottom:i<prev.items.length-1?`1px solid ${T.b1}`:"none"}}>
+                <span style={{fontSize:11, color:T.ind, fontWeight:700}}>{it.item_no||"--"}</span>
+                <span title={it.description} style={{fontSize:11.5, color:T.t1, overflow:"hidden",
+                  textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{it.description}</span>
+                <span style={{fontSize:11, color:T.t3}}>{it.unit||"--"}</span>
+                <span style={{fontSize:11, color:T.t3, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{fmtQty(it.prev_qty)}</span>
+                <span style={{fontSize:11, color:T.t3, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{fmtQty(it.upto_qty)}</span>
+                <span style={{fontSize:11.5, color:T.t1, fontWeight:700, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{fmtQty(it.this_qty)}</span>
+                <span style={{fontSize:11, color:T.t3, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{fmtQty(it.rate)}</span>
+                <span style={{fontSize:11.5, color:T.t1, fontWeight:700, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{moneyF(it.amount)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{marginTop:12, padding:"10px 13px", background:T.surfaceB, borderRadius:8,
+          border:`1px solid ${T.b1}`}}>
+          <Row l="Gross" v={money(prev.gross)}/>
+          <Row l={`Premium (${prev.premium_pct}%)`} v={money(prev.premium_amount)}/>
+          <div style={{borderTop:`1px solid ${T.b2}`, marginTop:5, paddingTop:3}}>
+            <Row l="Subtotal" v={money(prev.subtotal)} bold color={T.t1}/>
+          </div>
+        </div>
+      </>)}
+
+      {/* ── STEP 2: deduction sheet ── */}
+      {step === 2 && prev && (<>
+        <div style={{fontSize:11, fontWeight:700, color:T.t3, marginBottom:7, textTransform:"uppercase",
+          letterSpacing:".5px"}}>Deduction Sheet</div>
+        <div style={{border:`1px solid ${T.b1}`, borderRadius:8, overflow:"hidden"}}>
+          <div style={{display:"grid", gridTemplateColumns:"minmax(160px,2fr) 140px 90px 120px", gap:9,
+            padding:"7px 12px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`}}>
+            {["Head","Type","Rate","Amount"].map((h,i)=>(
+              <span key={i} style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase",
+                letterSpacing:".5px", textAlign:i>=2?"right":"left"}}>{h}</span>
+            ))}
+          </div>
+          {!prev.deductions?.length && (
+            <div style={{padding:"14px 12px", fontSize:12, color:T.t4}}>Koi deduction head configured nahi.</div>
+          )}
+          {(prev.deductions||[]).map((d,i)=>(
+            <div key={i} style={{display:"grid", gridTemplateColumns:"minmax(160px,2fr) 140px 90px 120px", gap:9,
+              padding:"7px 12px", alignItems:"center",
+              borderBottom:i<prev.deductions.length-1?`1px solid ${T.b1}`:"none"}}>
+              <span style={{fontSize:12, color:T.t1, fontWeight:600}}>{d.head_name}</span>
+              <span style={{fontSize:11, color:T.t3}}>{CALC_LABEL[d.calc_type] || d.calc_type}</span>
+              <span style={{fontSize:11.5, color:T.t3, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>
+                {d.calc_type==="pct_gross" && d.rate !== null ? `${d.rate}%` : d.calc_type==="fixed" ? fmtQty(d.rate) : "--"}
+              </span>
+              {d.calc_type === "manual" ? (
+                <input type="number" value={manual[d.head_name] ?? ""}
+                  onChange={e=>setManual(m=>({...m, [d.head_name]: e.target.value === "" ? 0 : Number(e.target.value)}))}
+                  onBlur={runPreview} placeholder="0"
+                  style={{...inputStyle, padding:"6px 9px", fontSize:12, textAlign:"right"}}/>
+              ) : (
+                <span style={{fontSize:12.5, color:T.t1, fontWeight:700, textAlign:"right",
+                  fontVariantNumeric:"tabular-nums"}}>{moneyF(d.amount)}</span>
+              )}
+            </div>
+          ))}
+        </div>
+        {!manualHeads.length && (
+          <div style={{marginTop:11, padding:"9px 12px", background:T.surfaceB, border:`1px solid ${T.b1}`,
+            borderRadius:7, fontSize:11.5, color:T.t3, lineHeight:1.6}}>
+            Is bill me alag se kuch kaatna ho (jaise Withheld) to pehle <b>Deduction Setup</b> me
+            <b> Manual</b> type ka head banao. Bill ke andar se naya head nahi jud sakta.
+          </div>
+        )}
+        <div style={{marginTop:12, padding:"10px 13px", background:T.surfaceB, borderRadius:8,
+          border:`1px solid ${T.b1}`}}>
+          <Row l="Subtotal" v={money(prev.subtotal)}/>
+          <Row l="Total Deductions" v={"− " + money(prev.deduction_total)} color={T.red}/>
+          <div style={{borderTop:`1px solid ${T.b2}`, marginTop:5, paddingTop:3}}>
+            <Row l="Net Payable" v={money(prev.net_payable)} bold color={T.grn}/>
+          </div>
+        </div>
+      </>)}
+
+      {/* ── STEP 3: review ── */}
+      {step === 3 && prev && (<>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:9, marginBottom:13}}>
+          <Stat label="Upto Date"  value={fmtDate(upto)}            color={T.ind} Icon={IcClock}/>
+          <Stat label="Items"      value={prev.items?.length || 0}  color={T.ind} Icon={IcTable}/>
+          <Stat label="Subtotal"   value={money(prev.subtotal)}     color={T.blu} Icon={IcRupee}/>
+          <Stat label="Net Payable" value={money(prev.net_payable)} color={T.grn} Icon={IcRupee}/>
+        </div>
+        <div style={{padding:"11px 13px", background:T.surfaceB, borderRadius:8, border:`1px solid ${T.b1}`}}>
+          <Row l="Gross" v={money(prev.gross)}/>
+          <Row l={`Premium (${prev.premium_pct}%)`} v={money(prev.premium_amount)}/>
+          <Row l="Subtotal" v={money(prev.subtotal)}/>
+          {(prev.deductions||[]).filter(d=>Number(d.amount)>0).map((d,i)=>(
+            <Row key={i} l={`  ${d.head_name}`} v={"− " + money(d.amount)} color={T.red}/>
+          ))}
+          <div style={{borderTop:`1px solid ${T.b2}`, marginTop:5, paddingTop:3}}>
+            <Row l="Net Payable" v={money(prev.net_payable)} bold color={T.grn}/>
+          </div>
+        </div>
+        <div style={{marginTop:12, padding:"9px 12px", background:T.indL, border:`1px solid ${T.indM}`,
+          borderRadius:7, fontSize:11.5, color:T.t2, lineHeight:1.6}}>
+          Save karne par bill <b>Draft</b> banega. Finance me transaction tab banegi jab tum
+          bill <b>Submit</b> karoge.
+        </div>
+      </>)}
+    </Modal>
+  );
+}
+
+// ── RA BILL DETAIL DRAWER ───────────────────────────────────────────
+function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, onEdit}) {
+  const toast = useToast();
+  const [d, setD]         = useState(null);
+  const [loading, setLoad]= useState(true);
+  const [busy, setBusy]   = useState(false);
+
+  const load = useCallback(async () => {
+    const res = await api.get(`/tenders/${tenderId}/ra-bills/${billId}`);
+    setLoad(false);
+    if (!res?.success) { toast.error(res?.message || "Bill load nahi hua"); onClose(); return; }
+    setD(res.data);
+  }, [tenderId, billId, toast, onClose]);
+  useEffect(()=>{ load(); }, [load]);
+
+  const submit = async () => {
+    if (!await window.confirmAsync(
+      `RA-${d.bill_no} submit karein?\n\nFinance me ${money(d.net_payable)} ki transaction banegi, phir bill lock ho jayega.`)) return;
+    setBusy(true);
+    const res = await api.post(`/tenders/${tenderId}/ra-bills/${billId}/submit`);
+    setBusy(false);
+    if (!res?.success) { toast.error(res?.message || "Submit nahi hua"); return; }
+    toast.success("Bill submit ho gaya — Finance me transaction ban gayi");
+    load(); onChanged();
+  };
+
+  const cancel = async () => {
+    if (!await window.confirmAsync(`RA-${d.bill_no} cancel karein?`)) return;
+    setBusy(true);
+    const res = await api.post(`/tenders/${tenderId}/ra-bills/${billId}/cancel`);
+    setBusy(false);
+    // Receipt-guard ka message backend se aata hai — jaisa hai waisa dikhao.
+    if (!res?.success) { toast.error(res?.message || "Cancel nahi hua"); return; }
+    toast.success("RA bill cancel ho gaya");
+    load(); onChanged();
+  };
+
+  // Print: apni window me self-contained HTML (wahi tarika jo Payroll
+  // payslip use karta hai) — app ki styles print me ghusti nahi.
+  const print = () => {
+    const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const inr = (n) => "Rs. " + Number(n||0).toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2});
+    const itemRows = (d.items||[]).map((it,i)=>`<tr>
+      <td class="c">${i+1}</td><td>${esc(it.item_no)}</td><td>${esc(it.description)}</td>
+      <td class="c">${esc(it.unit)}</td>
+      <td class="r">${fmtQty(it.prev_qty)}</td><td class="r">${fmtQty(it.upto_qty)}</td>
+      <td class="r"><b>${fmtQty(it.this_qty)}</b></td>
+      <td class="r">${fmtQty(it.rate)}</td><td class="r"><b>${inr(it.amount)}</b></td></tr>`).join("");
+    const dedRows = (d.deductions||[]).map(x=>`<tr>
+      <td>${esc(x.head_name)}</td>
+      <td class="c">${x.calc_type==="pct_gross"&&x.rate!==null?esc(x.rate)+"%":x.calc_type==="fixed"?"Fixed":"Manual"}</td>
+      <td class="r">${inr(x.amount)}</td></tr>`).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>RA-${esc(d.bill_no)} ${esc(tender?.tender_no)}</title>
+<style>
+  @page { size:A4; margin:14mm; }
+  *{box-sizing:border-box}
+  body{font-family:"Times New Roman",Georgia,serif;color:#000;font-size:12px;margin:0}
+  h1{font-size:17px;margin:0 0 2px;text-align:center;text-transform:uppercase;letter-spacing:.5px}
+  .dept{text-align:center;font-size:13px;font-weight:bold;margin-bottom:2px}
+  .sub{text-align:center;font-size:11px;margin-bottom:10px}
+  .meta{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11.5px}
+  .meta td{padding:3px 6px;border:1px solid #000}
+  .meta td.k{font-weight:bold;width:132px;background:#f2f2f2}
+  table.grid{width:100%;border-collapse:collapse;margin-bottom:12px}
+  table.grid th,table.grid td{border:1px solid #000;padding:4px 5px;font-size:11px}
+  table.grid th{background:#f2f2f2;font-size:10px;text-transform:uppercase}
+  td.r,th.r{text-align:right} td.c,th.c{text-align:center}
+  .tot td{font-weight:bold;background:#f7f7f7}
+  .sheet{width:60%;margin-left:auto;border-collapse:collapse}
+  .sheet td{border:1px solid #000;padding:4px 6px;font-size:11.5px}
+  .words{margin:10px 0 18px;font-size:12px;border:1px solid #000;padding:6px 8px}
+  .sign{display:flex;justify-content:space-between;margin-top:42px;font-size:11.5px}
+  .sign div{text-align:center;border-top:1px solid #000;padding-top:4px;width:30%}
+  @media print{ .noprint{display:none} }
+</style></head><body>
+  <div class="dept">${esc(tender?.party_name || tender?.department_name || "")}</div>
+  <h1>Running Account Bill — RA ${esc(d.bill_no)}</h1>
+  <div class="sub">${esc(tender?.title || "")}</div>
+  <table class="meta">
+    <tr><td class="k">Tender No</td><td>${esc(tender?.tender_no)}</td>
+        <td class="k">Agreement No</td><td>${esc(tender?.agreement_no || "--")}</td></tr>
+    <tr><td class="k">RA Bill No</td><td>RA-${esc(d.bill_no)}</td>
+        <td class="k">Bill Date</td><td>${fmtDate(d.bill_date)}</td></tr>
+    <tr><td class="k">Upto Date</td><td>${fmtDate(d.upto_date)}</td>
+        <td class="k">Status</td><td>${esc((RA_STATUS_STYLE[d.status]||{}).label || d.status)}</td></tr>
+  </table>
+  <table class="grid">
+    <thead><tr><th class="c">S.No</th><th>Item</th><th>Description</th><th class="c">Unit</th>
+      <th class="r">Prev Qty</th><th class="r">Upto Qty</th><th class="r">This Qty</th>
+      <th class="r">Rate</th><th class="r">Amount</th></tr></thead>
+    <tbody>${itemRows || `<tr><td colspan="9" class="c">No items</td></tr>`}</tbody>
+    <tfoot><tr class="tot"><td colspan="8" class="r">Gross</td><td class="r">${inr(d.gross)}</td></tr>
+      <tr class="tot"><td colspan="8" class="r">Premium (${esc(d.premium_pct)}%)</td><td class="r">${inr(d.premium_amount)}</td></tr>
+      <tr class="tot"><td colspan="8" class="r">Subtotal</td><td class="r">${inr(d.subtotal)}</td></tr></tfoot>
+  </table>
+  <table class="sheet">
+    <tr><td colspan="3" style="font-weight:bold;background:#f2f2f2">Deduction Sheet</td></tr>
+    ${dedRows || `<tr><td colspan="3">No deductions</td></tr>`}
+    <tr><td style="font-weight:bold">Total Deductions</td><td></td><td class="r" style="font-weight:bold">${inr(d.deduction_total)}</td></tr>
+    <tr><td style="font-weight:bold">Net Payable</td><td></td><td class="r" style="font-weight:bold">${inr(d.net_payable)}</td></tr>
+  </table>
+  <div class="words"><b>Net Payable (in words):</b> ${esc(numToWordsIN(d.net_payable))}</div>
+  <div class="sign"><div>Prepared By</div><div>Checked By</div><div>Approved By</div></div>
+  <script>window.print()</script>
+</body></html>`;
+    const w = window.open("", "_blank", "width=900,height=760");
+    if (!w) { toast.error("Print window block ho gayi — browser me popup allow karo."); return; }
+    w.document.write(html); w.document.close();
+  };
+
+  const st = d ? (RA_STATUS_STYLE[d.status] || RA_STATUS_STYLE.draft) : null;
+  const bal = d ? Number(d.balance ?? d.net_payable) : 0;
+
+  return (<>
+    <div onClick={onClose} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:998}}/>
+    <div style={{position:"fixed", top:0, right:0, bottom:0, width:"min(96vw,760px)", background:T.bg,
+      zIndex:999, boxShadow:"-14px 0 40px rgba(0,0,0,.2)", display:"flex", flexDirection:"column",
+      fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+      <div style={{padding:"13px 18px", background:T.surface, borderBottom:`1px solid ${T.b1}`,
+        display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}}>
+        <div style={{display:"flex", alignItems:"center", gap:10, minWidth:0}}>
+          <IcRupee size={18} color={T.ind}/>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:15, fontWeight:800, color:T.t1}}>
+              RA-{d?.bill_no ?? "--"} {st && <span style={{marginLeft:7}}><Pill label={st.label} c={st.c} bg={st.bg}/></span>}
+            </div>
+            <div style={{fontSize:11, color:T.t4, marginTop:1}}>
+              {tender?.tender_no} · Upto {fmtDate(d?.upto_date)}
+            </div>
+          </div>
+        </div>
+        <button onClick={onClose} style={{background:"none", border:"none", cursor:"pointer", color:T.t3,
+          lineHeight:0, padding:4}}><IcX size={18}/></button>
+      </div>
+
+      <div style={{flex:1, overflowY:"auto", padding:"14px 18px"}}>
+        {loading && <Loading text="Bill load ho raha hai..."/>}
+        {!loading && d && (<>
+          <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:9, marginBottom:12}}>
+            <Stat label="Net Payable" value={money(d.net_payable)} color={T.t1}  Icon={IcRupee}/>
+            <Stat label="Received"    value={money(d.received ?? 0)} color={T.grn} Icon={IcRupee}/>
+            <Stat label="Balance"     value={money(bal)} color={bal>0?T.amb:T.grn} Icon={IcClock}/>
+          </div>
+
+          <Panel style={{marginBottom:11}}>
+            <PHead title="Items" sub={`${(d.items||[]).length} item`}/>
+            <div style={{display:"grid", gridTemplateColumns:"64px minmax(140px,2fr) 46px 76px 76px 96px",
+              gap:8, padding:"7px 13px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`}}>
+              {["Item","Description","Unit","This Qty","Rate","Amount"].map((h,i)=>(
+                <span key={i} style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase",
+                  letterSpacing:".5px", textAlign:i>=3?"right":"left"}}>{h}</span>
+              ))}
+            </div>
+            {(d.items||[]).map((it,i)=>(
+              <div key={i} style={{display:"grid", gridTemplateColumns:"64px minmax(140px,2fr) 46px 76px 76px 96px",
+                gap:8, padding:"7px 13px", alignItems:"center",
+                borderBottom:i<d.items.length-1?`1px solid ${T.b1}`:"none"}}>
+                <span style={{fontSize:11, color:T.ind, fontWeight:700}}>{it.item_no||"--"}</span>
+                <span title={it.description} style={{fontSize:11.5, color:T.t1, overflow:"hidden",
+                  textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{it.description}</span>
+                <span style={{fontSize:11, color:T.t3}}>{it.unit||"--"}</span>
+                <span style={{fontSize:11.5, color:T.t1, fontWeight:700, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{fmtQty(it.this_qty)}</span>
+                <span style={{fontSize:11, color:T.t3, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{fmtQty(it.rate)}</span>
+                <span style={{fontSize:11.5, color:T.t1, fontWeight:700, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{moneyF(it.amount)}</span>
+              </div>
+            ))}
+          </Panel>
+
+          <Panel>
+            <PHead title="Deduction Sheet"/>
+            <div style={{padding:"10px 14px"}}>
+              {[["Gross", d.gross, null], [`Premium (${d.premium_pct}%)`, d.premium_amount, null],
+                ["Subtotal", d.subtotal, "rule"]].map(([l,v,mark],i)=>(
+                <div key={i} style={{display:"flex", justifyContent:"space-between", padding:"4px 0",
+                  fontSize:12.5, color:T.t2, borderTop:mark==="rule"?`1px solid ${T.b1}`:"none",
+                  marginTop:mark==="rule"?4:0, paddingTop:mark==="rule"?7:4,
+                  fontWeight:mark==="rule"?700:500}}>
+                  <span>{l}</span><span style={{fontVariantNumeric:"tabular-nums"}}>{money(v)}</span>
+                </div>
+              ))}
+              {(d.deductions||[]).map((x,i)=>(
+                <div key={i} style={{display:"flex", justifyContent:"space-between", padding:"4px 0",
+                  fontSize:12, color:T.t3}}>
+                  <span>{x.head_name}
+                    <span style={{color:T.t4, fontSize:10.5, marginLeft:6}}>
+                      {x.calc_type==="pct_gross"&&x.rate!==null?`${x.rate}%`:CALC_LABEL[x.calc_type]||""}
+                    </span>
+                  </span>
+                  <span style={{color:T.red, fontVariantNumeric:"tabular-nums"}}>− {money(x.amount)}</span>
+                </div>
+              ))}
+              <div style={{display:"flex", justifyContent:"space-between", padding:"7px 0 0", marginTop:4,
+                borderTop:`2px solid ${T.b1}`, fontSize:14, fontWeight:800, color:T.grn}}>
+                <span>Net Payable</span><span style={{fontVariantNumeric:"tabular-nums"}}>{money(d.net_payable)}</span>
+              </div>
+            </div>
+          </Panel>
+        </>)}
+      </div>
+
+      {/* Actions */}
+      {!loading && d && (
+        <div style={{padding:"11px 18px", background:T.surface, borderTop:`1px solid ${T.b1}`,
+          display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
+          {d.status === "draft" && (<>
+            <PrimBtn label="Submit" Icon={IcChk} onClick={submit} disabled={busy}/>
+            <SecBtn label="Edit" Icon={IcEdit} onClick={()=>onEdit(d)} disabled={busy}/>
+            <SecBtn label="Cancel Bill" Icon={IcX} color={T.red} onClick={cancel} disabled={busy}/>
+            <span style={{fontSize:10.5, color:T.t4, marginLeft:2}}>
+              Draft delete ka endpoint nahi hai — cancel hi karo.
+            </span>
+          </>)}
+          {d.status === "submitted" && (<>
+            <PrimBtn label="Receive" Icon={IcRupee} color={T.grn} onClick={()=>onReceive(d)}/>
+            <SecBtn label="Print" Icon={IcDoc} onClick={print}/>
+            <SecBtn label="Cancel Bill" Icon={IcX} color={T.red} onClick={cancel} disabled={busy}/>
+          </>)}
+          {d.status === "cancelled" && (
+            <span style={{fontSize:12, color:T.t4}}>Ye bill cancel ho chuka hai.</span>
+          )}
+        </div>
+      )}
+    </div>
+  </>);
+}
+
+// ── RA BILLS TAB ────────────────────────────────────────────────────
+function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
+  const [showSetup, setSetup]   = useState(false);
+  const [showNew, setNew]       = useState(false);
+  const [editBill, setEditBill] = useState(null);
+  const [openBill, setOpenBill] = useState(null);
+  const [receiveOn, setRecv]    = useState(null);
+  const [fin, setFin] = useState({parties:[], accounts:[], projects:[]});
+
+  // Receive shortcut Finance ka hi form kholta hai — usko parties /
+  // accounts / projects chahiye.
+  useEffect(()=>{
+    let dead = false;
+    Promise.all([api.get("/finance/parties"), api.get("/finance/accounts"), api.get("/projects")])
+      .then(([p,a,pr])=>{
+        if (dead) return;
+        setFin({
+          parties:  p?.success && Array.isArray(p.data)  ? p.data : [],
+          accounts: a?.success && Array.isArray(a.data)  ? a.data : [],
+          projects: pr?.success && Array.isArray(pr.data) ? pr.data.map(x=>x.name) : [],
+        });
+      }).catch(()=>{});
+    return ()=>{ dead = true; };
+  }, []);
+
+  const totals = useMemo(()=>{
+    const live = (bills||[]).filter(b=>b.status!=="cancelled");
+    return {
+      count:    live.length,
+      billed:   live.reduce((s,b)=>s+num(b.net_payable), 0),
+      received: live.reduce((s,b)=>s+num(b.received), 0),
+      balance:  live.reduce((s,b)=>s+num(b.balance), 0),
+    };
+  }, [bills]);
+
+  const COLS = "68px 96px 96px 96px 104px 104px 96px 96px 96px";
+
+  return (<>
+    {!!(bills||[]).length && (
+      <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:10, marginBottom:11}}>
+        <Stat label="Bills"        value={totals.count}           note="cancelled chhod kar" color={T.ind} Icon={IcDoc}/>
+        <Stat label="Total Billed" value={money(totals.billed)}   note={moneyF(totals.billed)}   color={T.blu} Icon={IcRupee}/>
+        <Stat label="Received"     value={money(totals.received)} note={moneyF(totals.received)} color={T.grn} Icon={IcRupee}/>
+        <Stat label="Balance"      value={money(totals.balance)}  note="abhi aana baaki"
+          color={totals.balance>0?T.amb:T.grn} Icon={IcClock}/>
+      </div>
+    )}
+
+    <Panel>
+      <PHead title="RA Bills" sub={(bills||[]).length ? `${bills.length} bill` : undefined}
+        action={<div style={{display:"flex", gap:7}}>
+          <SecBtn label="Deduction Setup" Icon={IcRupee} onClick={()=>setSetup(true)}/>
+          <PrimBtn label="Naya RA Bill" Icon={IcAdd} onClick={()=>setNew(true)}/>
+        </div>}/>
+
+      {loading && <Loading text="RA bills load ho rahe hain..."/>}
+
+      {!loading && !(bills||[]).length && (
+        <Empty Icon={IcRupee} text="Abhi koi RA bill nahi."
+          sub="Measurement (MB) darj hone ke baad naya RA bill banao."/>
+      )}
+
+      {!loading && !!(bills||[]).length && (<>
+        <div style={{display:"grid", gridTemplateColumns:COLS, padding:"8px 14px", gap:9,
+          background:T.surfaceB, borderBottom:`1px solid ${T.b1}`}}>
+          {["RA No","Bill Date","Upto Date","Gross","Deductions","Net","Received","Balance","Status"].map((h,i)=>(
+            <span key={i} style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase",
+              letterSpacing:".5px", textAlign:i>=3&&i<=7?"right":"left"}}>{h}</span>
+          ))}
+        </div>
+        {bills.map((b,i)=>{
+          const st  = RA_STATUS_STYLE[b.status] || RA_STATUS_STYLE.draft;
+          const bal = num(b.balance);
+          return (
+            <div key={b.id} onClick={()=>setOpenBill(b.id)}
+              style={{display:"grid", gridTemplateColumns:COLS, padding:"10px 14px", gap:9,
+                alignItems:"center", cursor:"pointer",
+                borderBottom:i<bills.length-1?`1px solid ${T.b1}`:"none",
+                opacity:b.status==="cancelled"?0.6:1}}>
+              <span style={{fontSize:12.5, fontWeight:700, color:T.ind}}>RA-{b.bill_no}</span>
+              <span style={{fontSize:11.5, color:T.t3}}>{fmtDate(b.bill_date)}</span>
+              <span style={{fontSize:11.5, color:T.t3}}>{fmtDate(b.upto_date)}</span>
+              <span style={{fontSize:11.5, color:T.t2, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{moneyF(b.gross)}</span>
+              <span style={{fontSize:11.5, color:T.red, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>− {moneyF(b.deduction_total)}</span>
+              <span style={{fontSize:12.5, fontWeight:700, color:T.t1, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{moneyF(b.net_payable)}</span>
+              <span style={{fontSize:11.5, color:num(b.received)>0?T.grn:T.t4, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{moneyF(b.received)}</span>
+              <span style={{fontSize:12, fontWeight:600, textAlign:"right", fontVariantNumeric:"tabular-nums",
+                color:bal>0?T.amb:T.grn}}>{moneyF(bal)}</span>
+              <div style={{display:"flex"}}><Pill label={st.label} c={st.c} bg={st.bg}/></div>
+            </div>
+          );
+        })}
+      </>)}
+    </Panel>
+
+    {showSetup && (
+      <DeductionSetupModal tenderId={tenderId} onClose={()=>setSetup(false)} onDone={reload}/>
+    )}
+    {showNew && (
+      <NewRaBillWizard tenderId={tenderId} defaultPremium={boqSummary?.premium_pct ?? null}
+        onClose={()=>setNew(false)} onDone={()=>{ setNew(false); reload(); }}/>
+    )}
+    {editBill && (
+      <NewRaBillWizard tenderId={tenderId} defaultPremium={boqSummary?.premium_pct ?? null}
+        edit={editBill}
+        onClose={()=>setEditBill(null)} onDone={()=>{ setEditBill(null); reload(); }}/>
+    )}
+    {openBill && (
+      <RaBillDrawer tenderId={tenderId} tender={tender} billId={openBill}
+        onClose={()=>setOpenBill(null)} onChanged={reload}
+        onReceive={(bill)=>{ setOpenBill(null); setRecv(bill); }}
+        onEdit={(bill)=>{ setOpenBill(null); setEditBill(bill); }}/>
+    )}
+    {receiveOn && (
+      <CreateTransactionModal
+        type="Payment Received"
+        preParty={tender?.party_name || ""}
+        lockParty={true}
+        preRaBillId={receiveOn.id}
+        dbParties={fin.parties}
+        dbAccounts={fin.accounts}
+        dbProjects={fin.projects}
+        onClose={()=>setRecv(null)}
+        onSaved={()=>{ setRecv(null); reload(); }}
+      />
+    )}
+  </>);
+}
+
 const DETAIL_TABS = [
   {id:"overview",    label:"Overview",    Icon:IcGavel},
   {id:"boq",         label:"BOQ",         Icon:IcTable},
+  {id:"measure",     label:"Measurements",Icon:IcTable},
+  {id:"rabills",     label:"RA Bills",    Icon:IcRupee},
   {id:"sites",       label:"Sites",       Icon:IcSite},
   {id:"instruments", label:"Instruments", Icon:IcBank},
   {id:"documents",   label:"Documents",   Icon:IcDoc},
@@ -2127,6 +3247,17 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
   // tab par item_count ka badge dikh sake.
   const [boq, setBoq] = useState(null);
   const [boqLoading, setBoqLoading] = useState(true);
+  // RA bills detail API par nahi aate. Measurements tab ko bhi inki zaroorat
+  // hai — lock date inhi ke upto_date se nikalti hai — isliye detail level
+  // par ek hi baar laate hain aur dono tab me bhejte hain.
+  const [bills, setBills] = useState([]);
+  const [billsLoading, setBillsLoading] = useState(true);
+  const loadBills = useCallback(async () => {
+    const res = await api.get(`/tenders/${tenderId}/ra-bills`);
+    setBillsLoading(false);
+    if (res?.success && Array.isArray(res.data)) setBills(res.data);
+  }, [tenderId]);
+  useEffect(()=>{ loadBills(); }, [loadBills]);
 
   const load = useCallback(async () => {
     const res = await api.get(`/tenders/${tenderId}`);
@@ -2407,6 +3538,19 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
       {/* ══ BOQ ══ */}
       {tab==="boq" && (
         <BoqTab tenderId={tenderId} boq={boq} loading={boqLoading} reload={loadBoq}/>
+      )}
+
+      {/* ══ MEASUREMENTS ══ */}
+      {tab==="measure" && (
+        <MeasurementsTab tenderId={tenderId} sites={projects}
+          boqItems={(boq && boq.data) || []} bills={bills}/>
+      )}
+
+      {/* ══ RA BILLS ══ */}
+      {tab==="rabills" && (
+        <RaBillsTab tenderId={tenderId} tender={data} bills={bills} loading={billsLoading}
+          boqSummary={(boq && boq.summary) || null}
+          reload={()=>{ loadBills(); load(); }}/>
       )}
 
       {/* ══ SITES ══ */}

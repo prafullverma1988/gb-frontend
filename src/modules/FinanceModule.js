@@ -95,7 +95,7 @@ const isVendorType=(type)=>{
 // CR the party = we owe them more. Running balance = Σ(sign·amount) = the
 // backend's signed live_balance (>0 = they owe us). Keeps the ledger drawer,
 // the party card and the bot in exact agreement.
-const LEDGER_PLUS  = new Set(["sales_invoice","payment","party_payment","settle_out","material_return","contra"]);
+const LEDGER_PLUS  = new Set(["sales_invoice","ra_bill","payment","party_payment","settle_out","material_return","contra"]);
 const LEDGER_MINUS = new Set(["material_purchase","subcon_expense","site_expense","receipt","settle_in"]);
 const ledgerSign = (rawType) => {
   const t = String(rawType||"");
@@ -177,7 +177,7 @@ const WALLET_TXNS=[];
 
 const PARTIES=[];
 const PARTY_TXNS={};
-const TXN_TYPE_META={"Payment In":{color:C.g,bg:C.gl},"Payment Out":{color:C.r,bg:C.rl},"Material Purchase":{color:C.p,bg:C.bl},"Site Expense":{color:C.o,bg:C.ol},"Party Payment":{color:C.pur,bg:C.purl},"Sub-Con Expense":{color:C.teal,bg:C.tealL},"Material Return":{color:C.a,bg:"#FFF8E1"},"Sales Invoice":{color:C.g,bg:C.gl},"Unbilled Material":{color:C.pink,bg:C.pinkL},"Wallet Payment":{color:"#00695C",bg:"#E0F2F1"},"Wallet Top-up":{color:C.p,bg:C.bl},"Settlement":{color:C.ind,bg:C.indL}};
+const TXN_TYPE_META={"Payment In":{color:C.g,bg:C.gl},"Payment Out":{color:C.r,bg:C.rl},"Material Purchase":{color:C.p,bg:C.bl},"Site Expense":{color:C.o,bg:C.ol},"Party Payment":{color:C.pur,bg:C.purl},"Sub-Con Expense":{color:C.teal,bg:C.tealL},"Material Return":{color:C.a,bg:"#FFF8E1"},"Sales Invoice":{color:C.g,bg:C.gl},"RA Bill":{color:C.g,bg:C.gl},"Unbilled Material":{color:C.pink,bg:C.pinkL},"Wallet Payment":{color:"#00695C",bg:"#E0F2F1"},"Wallet Top-up":{color:C.p,bg:C.bl},"Settlement":{color:C.ind,bg:C.indL}};
 const TRANSACTIONS_DATA=[];
 const UNBILLED_PARTIES=[];
 const PAY_REQS_DATA=[];
@@ -934,7 +934,7 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
   );
 }
 
-function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,projectIdByName,onSaved,prefillGRN,settlesRef,lockParty,lockProject,preProject,projectId}){
+function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,projectIdByName,onSaved,prefillGRN,settlesRef,lockParty,lockProject,preProject,projectId,preRaBillId}){
   // Reference the module-scope constants (renamed to keep call sites
   // unchanged — saves dozens of touch-ups below).
   const MAT_HEADS = MAT_HEADS_CONST;
@@ -1096,6 +1096,25 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   useEffect(()=>{
     if (partyObj?.is_staff===1 && project) setProject("");
   }, [partyObj, project]);
+  // ── Tender RA bill attribution (Payment Received only) ──────────
+  // A receipt against a tender is linked to the RA bill it settles by id, so
+  // the tender's Received/Balance is a real join — not a guess from the
+  // description text. Purely optional: plain receipts leave it unset.
+  const [raBills,setRaBills]=useState([]);
+  const [raBillId,setRaBillId]=useState(preRaBillId||null);
+  useEffect(()=>{
+    if(type!=="Payment Received"||!partyObj?.id){ setRaBills([]); return; }
+    let dead=false;
+    api.get(`/tenders/ra-bills/open?party_id=${partyObj.id}`)
+      .then(r=>{ if(!dead&&r?.success&&Array.isArray(r.data)) setRaBills(r.data); })
+      .catch(()=>{ if(!dead) setRaBills([]); });
+    return ()=>{ dead=true; };
+  },[type,partyObj?.id]);
+  // Party changed away from the preselected bill's party → drop the stale link.
+  useEffect(()=>{
+    if(raBillId&&raBills.length&&!raBills.some(b=>b.id===raBillId)) setRaBillId(null);
+  },[raBills,raBillId]);
+
   const partyCreditDays = parseInt(partyObj?.credit_days)||7;
   const [payDueDate,setPayDueDate]=useState(()=>{
     const d=new Date(); d.setDate(d.getDate()+7);
@@ -1531,6 +1550,9 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           return found?.id||null;
         })(),
         to_account_name:type==="Bank Transfer"?toAccount:null,
+        // Tender RA bill this receipt settles (optional). Backend validates the
+        // bill is ours, submitted, and billed to this same party.
+        ...(backType==="receipt"&&raBillId?{ra_bill_id:raBillId}:{}),
       };
 
       // Material bill — payment due date (from party credit days, user-overridable)
@@ -1991,6 +2013,24 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       value={party} onChange={setParty} placeholder="Select party..."/>
                   )}
                 </div>
+                {/* Tender RA bill — only when this party actually has open ones.
+                    Optional: chhodne par receipt normal party ledger me hi
+                    jayegi, bas kisi RA bill ke Received me nahi giney gi. */}
+                {type==="Payment Received" && raBills.length>0 && (
+                  <div>
+                    {lbl("RA Bill (optional)")}
+                    <select value={raBillId||""} onChange={e=>setRaBillId(e.target.value?Number(e.target.value):null)}
+                      style={{...inp(),cursor:"pointer"}}
+                      onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}>
+                      <option value="">— Kisi RA bill se link nahi —</option>
+                      {raBills.map(b=>(
+                        <option key={b.id} value={b.id}>
+                          {`RA-${b.bill_no} · ${b.tender_no} · Net ₹${Number(b.net_payable).toLocaleString("en-IN")} · Balance ₹${Number(b.balance).toLocaleString("en-IN")}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   {lbl("Project"+lockTag(projectLocked))}
                   {/* Project locked when invoked from Project Detail OR GRN;
@@ -3492,7 +3532,7 @@ function FinanceModule(){
     "receipt":"Payment In","payment":"Payment Out",
     "material_purchase":"Material Purchase","site_expense":"Site Expense",
     "party_payment":"Party Payment","subcon_expense":"Sub-Con Expense",
-    "material_return":"Material Return","sales_invoice":"Sales Invoice",
+    "material_return":"Material Return","sales_invoice":"Sales Invoice","ra_bill":"RA Bill",
     "unbilled_material":"Unbilled Material","wallet_payment":"Wallet Payment",
     "wallet_topup":"Wallet Top-up","bank_transfer":"Bank Transfer",
     "settle_in":"Settlement","settle_out":"Settlement",
@@ -3995,7 +4035,7 @@ function FinanceModule(){
   };
   const downloadLedgerPDF=(party)=>{
     const rows=getLedgerRows(party);
-    const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
+    const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
     const rowsHTML=rows.map(t=>{
       const typeLabel=TYPE_LABELS[t.txnType]||t.type||t.txnType||"Transaction";
       const proj=t.project||t.project_name||"";
@@ -4563,7 +4603,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
               // Each row keeps its TRUE running balance (computed on the full,
               // chronological ledger) — filtering only hides rows, so the
               // Balance column and Closing Balance stay accounting-correct.
-              const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
+              const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
               const labelOf=(txn)=>LEDGER_TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
               const projOf=(txn)=>txn.project||txn.project_name||"";
               const ledgerTypeOpts=Array.from(new Set(ledgerRows.map(labelOf))).sort();
@@ -4688,7 +4728,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           return(<>
                           {/* Type label from txnType */}
                           {(()=>{
-                            const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
+                            const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
                             const typeLabel=TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
                             const siteLabel=txn.project||txn.project_name||"";
                             // ONLY user-typed note. `sub` (= auto-generated description
@@ -4920,6 +4960,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   "Party Payment": {label:"Party Payment",  color:T.red,  bg:T.redL,  dir:"out"},
                   "Sub-Con Expense":{label:"Sub-Con",       color:T.red,  bg:T.redL,  dir:"out"},
                   "Sales Invoice": {label:"Sales Invoice",  color:T.grn,  bg:T.grnL,  dir:"in"},
+                  "RA Bill":       {label:"RA Bill",        color:T.grn,  bg:T.grnL,  dir:"in"},
                   "Bank Transfer": {label:"Bank Transfer",  color:T.t3,   bg:T.b1,    dir:"transfer"},
                   "Wallet Payment":{label:"Wallet Out",     color:T.red,  bg:T.redL,  dir:"out"},
                   "Wallet Top-up": {label:"Wallet Top-up",  color:T.slt,  bg:T.sltL,  dir:"internal"},
