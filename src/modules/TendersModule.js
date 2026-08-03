@@ -1044,6 +1044,126 @@ function TenderList({onOpen}) {
 // ════════════════════════════════════════════════════════════════════
 // ADD INSTRUMENT MODAL
 // ════════════════════════════════════════════════════════════════════
+// ── INSTRUMENT RELEASE / REFUND / FORFEIT ───────────────────────────
+// Pehle ye ek confirm-click me ho jata tha — EMD galti se "forfeit" mark ho
+// jaye to na amount ka pata chalta, na bank reference, na wajah. Ab poora
+// form: kitna, kab, kis reference se, aur kyun. Forfeit par wajah compulsory
+// (paisa doob raha hai).
+const ACTION_META = {
+  release: {title:"Release", c:T.blu,
+    sub:"Bank / department ne instrument release kar diya",
+    amtLabel:"Released amount (₹)", refLabel:"Release letter / reference"},
+  refund:  {title:"Refund",  c:T.grn,
+    sub:"Paisa wapas aa gaya",
+    amtLabel:"Wapas aaya amount (₹)", refLabel:"UTR / cheque / reference"},
+  forfeit: {title:"Forfeit", c:T.red,
+    sub:"Instrument zabt ho gaya — paisa wapas nahi aayega",
+    amtLabel:"Zabt hua amount (₹)", refLabel:"Department letter / order no"},
+};
+
+function InstrumentActionModal({tenderId, inst, action, onClose, onDone}) {
+  const toast = useToast();
+  const meta = ACTION_META[action] || ACTION_META.release;
+  const [busy, setBusy] = useState(false);
+  const [err, setErr]   = useState("");
+  const [form, setForm] = useState({
+    date: todayYMD(),
+    amount: inst?.amount ?? "",
+    ref: "",
+    mode: action === "refund" ? "online" : "",
+    remarks: "",
+  });
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const isForfeit = action === "forfeit";
+  const amtNum = numOf(form.amount);
+  const instAmt = numOf(inst?.amount);
+  const shortReason = isForfeit && form.remarks.trim().length < 10;
+  const partial = amtNum > 0 && amtNum < instAmt;
+
+  const submit = async () => {
+    setErr("");
+    if (!form.date) return setErr("Date zaroori hai");
+    if (form.date > todayYMD()) return setErr("Date aaj se aage ki nahi ho sakti");
+    if (amtNum <= 0) return setErr("Amount 0 se bada hona chahiye");
+    if (amtNum > instAmt + 0.009) return setErr(`Instrument ${moneyF(instAmt)} ka hai — usse zyada nahi ho sakta`);
+    if (shortReason) return setErr("Forfeit karne ki wajah likhna zaroori hai (kam se kam 10 akshar).");
+    setBusy(true);
+    const res = await api.put(`/tenders/${tenderId}/instruments/${inst.id}`, {
+      action,
+      release_date: form.date,
+      action_amount: form.amount,
+      action_ref: form.ref.trim() || null,
+      action_mode: form.mode || null,
+      action_remarks: form.remarks.trim() || null,
+    });
+    setBusy(false);
+    if (!res?.success) { setErr(res?.message || "Action nahi hua"); return; }
+    toast.success(`${meta.title} ho gaya`);
+    onDone();
+  };
+
+  return (
+    <Modal title={`${typeLabel(inst.type)} — ${meta.title}`} Icon={IcBank} width={560}
+      sub={meta.sub} onClose={onClose}
+      footer={<>
+        <SecBtn label="Cancel" onClick={onClose}/>
+        <PrimBtn label={busy ? "Ho raha hai..." : `${meta.title} karo`} Icon={IcChk}
+          color={meta.c} onClick={submit} disabled={busy}/>
+      </>}>
+      <ErrLine msg={err}/>
+
+      {/* Kis instrument par — taaki galat row par action na ho jaye */}
+      <div style={{padding:"10px 12px", background:T.surfaceB, border:`1px solid ${T.b1}`,
+        borderRadius:7, marginBottom:13, display:"flex", gap:14, flexWrap:"wrap", fontSize:11.5}}>
+        {[["Type", typeLabel(inst.type)],
+          ["Reference", [modeLabel(inst.mode), inst.ref_no].filter(Boolean).join(" · ") || "--"],
+          ["Bank", inst.bank_name || "--"],
+          ["Jama amount", money(inst.amount)]].map(([l,v])=>(
+          <div key={l}>
+            <div style={{fontSize:9.5, color:T.t4, fontWeight:700, textTransform:"uppercase", letterSpacing:".5px"}}>{l}</div>
+            <div style={{color:T.t1, fontWeight:600, marginTop:2}}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      {isForfeit && (
+        <div style={{padding:"10px 12px", background:T.redL, border:`1px solid ${T.redM}`,
+          borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:13,
+          display:"flex", gap:8, alignItems:"flex-start"}}>
+          <IcWarn size={14} color={T.red}/>
+          <span><b style={{color:T.red}}>Ye paisa wapas nahi aayega.</b> Forfeit ek hi baar hota hai —
+            uske baad status badla nahi ja sakta.</span>
+        </div>
+      )}
+
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
+        <Field label={`${meta.title} Date *`}>
+          <TxtIn type="date" value={form.date} onChange={v=>set("date",v)}/>
+        </Field>
+        <Field label={meta.amtLabel + " *"}
+          hint={partial ? `Jama ${moneyF(instAmt)} me se — baaki ${moneyF(instAmt-amtNum)}` : undefined}>
+          <TxtIn type="number" value={form.amount} onChange={v=>set("amount",v)} ph="0"/>
+        </Field>
+        <Field label={meta.refLabel} full>
+          <TxtIn value={form.ref} onChange={v=>set("ref",v)} ph="e.g. UTR 1234567890 / EE/2026/442"/>
+        </Field>
+        {action === "refund" && (
+          <Field label="Kaise wapas aaya" full>
+            <SelIn value={form.mode} onChange={v=>set("mode",v)} options={INSTRUMENT_MODES} ph="Chuno..."/>
+          </Field>
+        )}
+        <Field label={isForfeit ? "Wajah *" : "Remarks"} full
+          hint={isForfeit ? "Kam se kam 10 akshar — record me hamesha rahega." : undefined}>
+          <textarea value={form.remarks} onChange={e=>set("remarks",e.target.value)} rows={2}
+            placeholder={isForfeit ? "e.g. Bid withdraw kiya, EMD zabt hui" : "Optional"}
+            style={{...inputStyle, resize:"vertical", lineHeight:1.5}}/>
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
 // ── STAGE TRANSITION MODAL ──────────────────────────────────────────
 // Pipeline ka "Aage badhao" / "Lost mark karo" isi ko kholta hai.
 // Yahan sirf wahi rok hai jo backend bhi lagata hai — modal pehle bata
@@ -4000,15 +4120,8 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
     }
   }
 
-  const instAction = async (inst, action, label) => {
-    if (!await window.confirmAsync(
-      `${typeLabel(inst.type)} ${inst.ref_no||""} (${moneyF(inst.amount)}) ko "${label}" mark karein?\n\nYeh ek hi baar ho sakta hai.`
-    )) return;
-    const res = await api.put(`/tenders/${tenderId}/instruments/${inst.id}`, {action});
-    if (!res?.success) { toast.error(res?.message || "Action nahi hua"); return; }
-    toast.success(`${label} ho gaya`);
-    load();
-  };
+  // Ek click me nahi — poora form khulta hai (kitna, kab, reference, wajah).
+  const [instActionOn, setInstActionOn] = useState(null);   // {inst, action}
 
   const unlink = async (p) => {
     if (!await window.confirmAsync(`"${p.name}" ko is tender se alag karein?\n\nProject khud delete nahi hoga.`)) return;
@@ -4391,11 +4504,19 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
                   <span><Pill label={im.label} c={im.c} bg={im.bg}/></span>
                   <div style={{display:"flex", gap:5, justifyContent:"flex-end", flexWrap:"wrap"}}>
                     {isActive ? (<>
-                      <SecBtn label="Release" onClick={()=>instAction(inst,"release","Release")}/>
-                      <SecBtn label="Refund"  color={T.grn} onClick={()=>instAction(inst,"refund","Refund")}/>
-                      <SecBtn label="Forfeit" color={T.red} onClick={()=>instAction(inst,"forfeit","Forfeit")}/>
+                      <SecBtn label="Release" onClick={()=>setInstActionOn({inst, action:"release"})}/>
+                      <SecBtn label="Refund"  color={T.grn} onClick={()=>setInstActionOn({inst, action:"refund"})}/>
+                      <SecBtn label="Forfeit" color={T.red} onClick={()=>setInstActionOn({inst, action:"forfeit"})}/>
                     </>) : (
-                      <span style={{fontSize:11, color:T.t4}}>{fmtDate(inst.release_date)}</span>
+                      <div style={{textAlign:"right", fontSize:10.5, color:T.t4, lineHeight:1.5}}>
+                        <div style={{color:T.t3, fontWeight:600}}>{fmtDate(inst.release_date)}</div>
+                        {inst.action_amount != null && Number(inst.action_amount) !== Number(inst.amount) && (
+                          <div style={{color:T.amb, fontWeight:700}}>{money(inst.action_amount)}</div>
+                        )}
+                        {inst.action_ref && <div title={inst.action_ref} style={{maxWidth:180,
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{inst.action_ref}</div>}
+                        {inst.action_by_name && <div>{inst.action_by_name}</div>}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -4447,6 +4568,10 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
         onSaved={()=>load()} onDeleted={onBack}/>}
       {showInst && <AddInstrumentModal tenderId={tenderId} tenderStatus={data.status}
         onClose={()=>setShowInst(false)} onSaved={()=>load()}/>}
+      {instActionOn && (
+        <InstrumentActionModal tenderId={tenderId} inst={instActionOn.inst} action={instActionOn.action}
+          onClose={()=>setInstActionOn(null)} onDone={()=>{ setInstActionOn(null); load(); }}/>
+      )}
       {moveTo && <TransitionModal tender={data} projects={projects} target={moveTo}
         onClose={()=>setMoveTo(null)} onDone={()=>{ setMoveTo(null); load(); }}/>}
       {showLink && <LinkProjectModal tenderId={tenderId} onClose={()=>setShowLink(false)} onSaved={()=>load()}/>}
