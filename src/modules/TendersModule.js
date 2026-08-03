@@ -135,6 +135,9 @@ const RATE_TYPES = [
   {v:"percentage", l:"Percentage — SOR rate par ±%"},
   {v:"item_rate",  l:"Item Rate — har item ka apna rate"},
 ];
+
+// Party dropdown ka aakhri option — ye koi party id nahi, add-modal kholta hai.
+const NEW_PARTY = "__new_party__";
 const INSTRUMENT_MODES = [
   {v:"dd",     l:"DD"},
   {v:"bg",     l:"BG"},
@@ -378,6 +381,56 @@ function AlertsStrip({alerts, onJump}) {
 // ════════════════════════════════════════════════════════════════════
 // NEW TENDER MODAL — 2 step (Tender Info → Won Details)
 // ════════════════════════════════════════════════════════════════════
+// Department dropdown me na mile to yahin se jod do — Finance → Parties
+// jaane ki zaroorat nahi. Party Library (finance/parties) me hi banti hai,
+// isliye baaki module usi list se uthate rehte hain.
+function AddPartyInlineModal({onClose, onAdded}) {
+  const toast = useToast();
+  const [name, setName] = useState("");
+  const [gstin, setGstin] = useState("");
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const save = async () => {
+    setErr("");
+    if (!name.trim()) return setErr("Department ka naam zaroori hai");
+    setBusy(true);
+    const res = await api.post("/finance/parties", {
+      name: name.trim(), type: "client", roles: "client",
+      gstin: gstin.trim() || null, phone: phone.trim() || null,
+      opening_balance: 0, balance_type: "Nil",
+    });
+    setBusy(false);
+    if (!res?.success) { setErr(res?.message || "Department nahi bana"); return; }
+    toast.success("Department jud gaya");
+    onAdded(res.data);          // caller list refresh karke isi ko select karega
+  };
+
+  return (
+    <Modal title="Naya Department" Icon={IcAdd} width={480}
+      sub="Party Library me Client ban kar jud jayega"
+      onClose={onClose}
+      footer={<>
+        <SecBtn label="Cancel" onClick={onClose}/>
+        <PrimBtn label={busy ? "Save ho raha..." : "Jodo"} Icon={IcChk} onClick={save} disabled={busy}/>
+      </>}>
+      <ErrLine msg={err}/>
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
+        <Field label="Department / Party ka naam *" full>
+          <TxtIn value={name} onChange={setName} ph="e.g. PWD Division Dhamtari"/>
+        </Field>
+        <Field label="GSTIN"><TxtIn value={gstin} onChange={setGstin} ph="Optional"/></Field>
+        <Field label="Phone"><TxtIn value={phone} onChange={setPhone} ph="Optional"/></Field>
+      </div>
+      <div style={{marginTop:12, fontSize:11, color:T.t4, lineHeight:1.5}}>
+        Ye Finance → Parties me Client-type party ban jayegi — wahan se bhi dikhegi aur
+        edit ho sakegi.
+      </div>
+    </Modal>
+  );
+}
+
 function NewTenderModal({onClose, onCreated}) {
   const toast = useToast();
   const [step, setStep]   = useState(1);
@@ -394,11 +447,15 @@ function NewTenderModal({onClose, onCreated}) {
   });
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
-  useEffect(()=>{
-    api.get("/finance/parties?type=client").then(r=>{
-      if (r?.success) setParties(r.data||[]);
-    }).catch(()=>{});
-  },[]);
+  const loadParties = useCallback(async (selectId) => {
+    const r = await api.get("/finance/parties?type=client");
+    if (r?.success) {
+      setParties(r.data || []);
+      if (selectId) set("party_id", String(selectId));   // naya wala turant chun lo
+    }
+  }, []);
+  useEffect(()=>{ loadParties(); }, [loadParties]);
+  const [addParty, setAddParty] = useState(false);
 
   const isWon = form.status === "won";
 
@@ -406,6 +463,14 @@ function NewTenderModal({onClose, onCreated}) {
     setErr("");
     if (!form.tender_no.trim()) return setErr("Tender number zaroori hai");
     if (!form.title.trim())     return setErr("Tender ka title zaroori hai");
+    // Bid-stage ki info naya tender banate waqt hi bhar lo — baad me yaad
+    // nahi rehti. Pata na ho to amount me 0 daalo, baad me Edit se sudhaar do.
+    if (!form.nit_date)             return setErr("NIT date zaroori hai");
+    if (!form.submission_date)      return setErr("Bid submission date zaroori hai");
+    if (!form.bid_submission_type)  return setErr("Bid submission type chuno (Online / Offline)");
+    if (form.estimated_cost === "") return setErr("Estimated cost zaroori hai — pata na ho to 0 daalo");
+    if (form.emd_amount === "")     return setErr("EMD amount zaroori hai — pata na ho to 0 daalo");
+    if (form.tender_fee === "")     return setErr("Tender fee zaroori hai — pata na ho to 0 daalo");
     if (isWon) { setStep(2); return; }
     submit();
   };
@@ -450,7 +515,9 @@ function NewTenderModal({onClose, onCreated}) {
   };
 
   // Party dropdown — Client-type parties (department yahi se aata hai)
-  const partyOpts = parties.map(p=>({v:String(p.id), l:p.name}));
+  // List ke aakhir me "+ Naya Department" — dropdown me na mile to yahin se jod do.
+  const partyOpts = [...parties.map(p=>({v:String(p.id), l:p.name})),
+                     {v:NEW_PARTY, l:"+ Naya Department jodo..."}];
 
   return (
     <Modal title="Naya Tender" Icon={IcGavel} onClose={onClose} width={600}
@@ -491,16 +558,17 @@ function NewTenderModal({onClose, onCreated}) {
 
           <Field label="Department (Party)" full
             hint="Yeh list Finance ki Client-type parties se aati hai. Department na mile to pehle Finance → Parties me Client banao.">
-            <SelIn value={form.party_id} onChange={v=>set("party_id",v)} options={partyOpts} ph="Department chuno..."/>
+            <SelIn value={form.party_id} options={partyOpts} ph="Department chuno..."
+              onChange={v=>{ if (v === NEW_PARTY) { setAddParty(true); return; } set("party_id", v); }}/>
           </Field>
           <Field label="Department Name (free text)" full>
             <TxtIn value={form.department_name} onChange={v=>set("department_name",v)} ph="e.g. PWD Durg Division"/>
           </Field>
 
-          <Field label="NIT Date"><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
-          <Field label="Bid Submission Date"><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
+          <Field label="NIT Date *"><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
+          <Field label="Bid Submission Date *"><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
           <Field label="Techno-Commercial Date"><TxtIn type="date" value={form.techno_commercial_date} onChange={v=>set("techno_commercial_date",v)}/></Field>
-          <Field label="Bid Submission Type">
+          <Field label="Bid Submission Type *">
             <SelIn value={form.bid_submission_type} onChange={v=>set("bid_submission_type",v)}
               options={BID_SUBMISSION_TYPES} ph="Chuno..."/>
           </Field>
@@ -515,9 +583,10 @@ function NewTenderModal({onClose, onCreated}) {
               placeholder="e.g. Clause 5.2 — SD 10%, completion 12 months, LD 0.5%/week"/>
           </Field>
 
-          <Field label="Estimated Cost (₹)"><TxtIn type="number" value={form.estimated_cost} onChange={v=>set("estimated_cost",v)} ph="0"/></Field>
-          <Field label="EMD Amount (₹)"><TxtIn type="number" value={form.emd_amount} onChange={v=>set("emd_amount",v)} ph="0"/></Field>
-          <Field label="Tender Fee (₹)"><TxtIn type="number" value={form.tender_fee} onChange={v=>set("tender_fee",v)} ph="0"/></Field>
+          <Field label="Estimated Cost (₹) *" hint="Pata na ho to 0 — baad me Edit se sudhaar lena.">
+            <TxtIn type="number" value={form.estimated_cost} onChange={v=>set("estimated_cost",v)} ph="0"/></Field>
+          <Field label="EMD Amount (₹) *"><TxtIn type="number" value={form.emd_amount} onChange={v=>set("emd_amount",v)} ph="0"/></Field>
+          <Field label="Tender Fee (₹) *"><TxtIn type="number" value={form.tender_fee} onChange={v=>set("tender_fee",v)} ph="0"/></Field>
         </div>
       )}
 
@@ -542,6 +611,10 @@ function NewTenderModal({onClose, onCreated}) {
             </div>
           )}
         </div>
+      )}
+      {addParty && (
+        <AddPartyInlineModal onClose={()=>setAddParty(false)}
+          onAdded={(pt)=>{ setAddParty(false); loadParties(pt?.id); }}/>
       )}
     </Modal>
   );
@@ -596,11 +669,15 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
   // bheja jata hai, warna backend completion + months se khud nikalta hai.
   const [dlpEndTouched, setDlpEndTouched] = useState(false);
 
-  useEffect(()=>{
-    api.get("/finance/parties?type=client").then(r=>{
-      if (r?.success) setParties(r.data||[]);
-    }).catch(()=>{});
-  },[]);
+  const loadParties = useCallback(async (selectId) => {
+    const r = await api.get("/finance/parties?type=client");
+    if (r?.success) {
+      setParties(r.data || []);
+      if (selectId) set("party_id", String(selectId));
+    }
+  }, []);
+  useEffect(()=>{ loadParties(); }, [loadParties]);
+  const [addParty, setAddParty] = useState(false);
 
   // Won ya uske aage → contract value + party dono chahiye (backend gate).
   const needsWonFields = WON_OR_LATER.includes(form.status);
@@ -681,7 +758,9 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
     onDeleted && onDeleted();
   };
 
-  const partyOpts = parties.map(p=>({v:String(p.id), l:p.name}));
+  // List ke aakhir me "+ Naya Department" — dropdown me na mile to yahin se jod do.
+  const partyOpts = [...parties.map(p=>({v:String(p.id), l:p.name})),
+                     {v:NEW_PARTY, l:"+ Naya Department jodo..."}];
   // Dropdown me sirf wahi stage jahan asli me ja sakte hain — mojooda stage
   // hamesha, baaki checkTransition se. Asli rok backend par hai; ye sirf
   // galat option dikhne se rokta hai.
@@ -735,7 +814,8 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
 
         <Field label={`Department (Party)${needsWonFields?" *":""}`} full
           hint="Finance ki Client-type parties. Naya department Finance → Parties me banao.">
-          <SelIn value={form.party_id} onChange={v=>set("party_id",v)} options={partyOpts} ph="Department chuno..."/>
+          <SelIn value={form.party_id} options={partyOpts} ph="Department chuno..."
+            onChange={v=>{ if (v === NEW_PARTY) { setAddParty(true); return; } set("party_id", v); }}/>
         </Field>
         <Field label="Department Name (free text)" full><TxtIn value={form.department_name} onChange={v=>set("department_name",v)}/></Field>
 
@@ -854,6 +934,10 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
           </div>
         )}
       </div>
+      {addParty && (
+        <AddPartyInlineModal onClose={()=>setAddParty(false)}
+          onAdded={(pt)=>{ setAddParty(false); loadParties(pt?.id); }}/>
+      )}
     </Modal>
   );
 }
@@ -1176,6 +1260,9 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState("");
+  // Won hote hi BG/FDR/SD unlock hote hain — form turant khol dena sabse
+  // aasan hai, warna log baad me bhool jate hain.
+  const [addInstAfter, setAddInstAfter] = useState(true);
 
   const from = tender.status;
   const t = checkTransition(from, target, isAdmin);
@@ -1204,7 +1291,7 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
     setBusy(false);
     if (!res?.success) { setErr(res?.message || "Stage change nahi hua"); return; }
     toast.success(`Tender ab ${sMeta(target).label} me hai`);
-    onDone();
+    onDone({openInstrument: target === "won" && addInstAfter});
   };
 
   const fm = sMeta(from), tm = sMeta(target);
@@ -1258,9 +1345,15 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
       {t.ok && target === "won" && (
         <div style={{padding:"10px 12px", background:T.indL, border:`1px solid ${T.indM}`,
           borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}>
-          <b style={{color:T.ind}}>Yaad rakho</b> — jeetne ke baad{" "}
-          <b>BG / FDR / Security Deposit</b> jo bhi department maange, wo{" "}
-          <b>Instruments</b> tab me add karna hoga. (Abhi rok nahi hai, baad me bhi kar sakte ho.)
+          <b style={{color:T.ind}}>Jeetne ke baad</b> — <b>BG / FDR / Security Deposit</b> jo bhi
+          department maange, wo abhi add kar sakte ho (bid stage me sirf EMD chalti thi).
+          <label style={{display:"flex", alignItems:"center", gap:7, marginTop:8, cursor:"pointer"}}>
+            <input type="checkbox" checked={addInstAfter} onChange={e=>setAddInstAfter(e.target.checked)}
+              style={{width:15, height:15, accentColor:T.ind, cursor:"pointer"}}/>
+            <span style={{fontSize:12, color:T.t1, fontWeight:600}}>
+              Won karte hi instrument jodne ka form kholo
+            </span>
+          </label>
         </div>
       )}
 
@@ -4122,6 +4215,14 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
 
   // Ek click me nahi — poora form khulta hai (kitna, kab, reference, wajah).
   const [instActionOn, setInstActionOn] = useState(null);   // {inst, action}
+  // Galti se laga action wapas lena — sirf admin, wajah ke saath.
+  const [undoOn, setUndoOn] = useState(null);
+  const undoInst = async (inst, reason) => {
+    const res = await api.put(`/tenders/${tenderId}/instruments/${inst.id}`, {action:"undo", reason});
+    if (!res?.success) { toast.error(res?.message || "Undo nahi hua"); return; }
+    toast.success("Action wapas le liya");
+    setUndoOn(null); load();
+  };
 
   const unlink = async (p) => {
     if (!await window.confirmAsync(`"${p.name}" ko is tender se alag karein?\n\nProject khud delete nahi hoga.`)) return;
@@ -4509,7 +4610,10 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
                       <SecBtn label="Forfeit" color={T.red} onClick={()=>setInstActionOn({inst, action:"forfeit"})}/>
                     </>) : (
                       <div style={{textAlign:"right", fontSize:10.5, color:T.t4, lineHeight:1.5}}>
-                        <div style={{color:T.t3, fontWeight:600}}>{fmtDate(inst.release_date)}</div>
+                        <div style={{display:"flex", gap:6, alignItems:"center", justifyContent:"flex-end"}}>
+                          <span style={{color:T.t3, fontWeight:600}}>{fmtDate(inst.release_date)}</span>
+                          {isAdmin && <SecBtn label="Undo" Icon={IcUndo} onClick={()=>setUndoOn(inst)}/>}
+                        </div>
                         {inst.action_amount != null && Number(inst.action_amount) !== Number(inst.amount) && (
                           <div style={{color:T.amb, fontWeight:700}}>{money(inst.action_amount)}</div>
                         )}
@@ -4524,6 +4628,52 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
             })}
           </>)}
         </Panel>
+
+        {/* Instrument par kya-kya hua — action aur unka undo dono */}
+        {!!(data.instrument_log || []).length && (
+          <Panel style={{marginTop:11}}>
+            <PHead title="Instrument History" sub="Release / Refund / Forfeit aur undo"/>
+            <div style={{padding:"11px 16px", display:"flex", flexDirection:"column", gap:9}}>
+              {data.instrument_log.map(l=>{
+                const am = {release:{l:"Release", c:T.blu, bg:T.bluL},
+                            refund:{l:"Refund", c:T.grn, bg:T.grnL},
+                            forfeit:{l:"Forfeit", c:T.red, bg:T.redL},
+                            undo:{l:"Undo", c:T.amb, bg:T.ambL}}[l.action]
+                        || {l:l.action, c:T.t3, bg:T.sltL};
+                const isUndo = l.action === "undo";
+                return (
+                  <div key={l.id} style={{display:"flex", gap:10, alignItems:"flex-start",
+                    paddingBottom:9, borderBottom:`1px solid ${T.b1}`}}>
+                    <div style={{flexShrink:0}}><Pill label={am.l} c={am.c} bg={am.bg}/></div>
+                    <div style={{minWidth:0, flex:1}}>
+                      <div style={{fontSize:12, color:T.t1, fontWeight:600}}>
+                        {typeLabel(l.inst_type)}{l.inst_ref_no ? ` · ${l.inst_ref_no}` : ""}
+                        {l.amount != null && <span style={{marginLeft:8, color:T.t2}}>{money(l.amount)}</span>}
+                      </div>
+                      {isUndo && (
+                        <div style={{fontSize:11, color:T.t3, marginTop:2}}>
+                          {(INST_STATUS_META[l.from_status]||{}).label || l.from_status} → Active
+                          {l.remarks ? ` · purani wajah: ${l.remarks}` : ""}
+                        </div>
+                      )}
+                      {!isUndo && (l.ref || l.remarks) && (
+                        <div style={{fontSize:11.5, color:T.t2, marginTop:2, lineHeight:1.5}}>
+                          {[l.ref, l.remarks].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
+                      {isUndo && l.reason && (
+                        <div style={{fontSize:11.5, color:T.t2, marginTop:2, lineHeight:1.5}}>{l.reason}</div>
+                      )}
+                      <div style={{fontSize:10.5, color:T.t4, marginTop:3}}>
+                        {fmtDate(l.created_at)}{l.created_by_name ? " · " + l.created_by_name : ""}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
+        )}
       </>)}
 
       {/* ══ DOCUMENTS ══ */}
@@ -4572,8 +4722,24 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
         <InstrumentActionModal tenderId={tenderId} inst={instActionOn.inst} action={instActionOn.action}
           onClose={()=>setInstActionOn(null)} onDone={()=>{ setInstActionOn(null); load(); }}/>
       )}
+      {undoOn && (
+        <BoqReasonModal
+          title="Action Wapas Lo"
+          sub={`${typeLabel(undoOn.type)} ${undoOn.ref_no || ""} · abhi ${(INST_STATUS_META[undoOn.status]||{}).label || undoOn.status}`}
+          warn={`Instrument phir se Active ho jayega aur ${(INST_STATUS_META[undoOn.status]||{}).label || undoOn.status} wale saare details (amount, reference, wajah) hat jayenge — wo history me bach jayenge.`}
+          confirmLabel="Wapas lo"
+          onCancel={()=>setUndoOn(null)}
+          onConfirm={(reason)=>undoInst(undoOn, reason)}/>
+      )}
       {moveTo && <TransitionModal tender={data} projects={projects} target={moveTo}
-        onClose={()=>setMoveTo(null)} onDone={()=>{ setMoveTo(null); load(); }}/>}
+        onClose={()=>setMoveTo(null)}
+        onDone={async (o)=>{
+          setMoveTo(null);
+          // load() ka intezaar zaroori — warna instrument form purane status
+          // (bidding) ke saath khulega aur dropdown me sirf EMD dikhega.
+          await load();
+          if (o?.openInstrument) { setTab("instruments"); setShowInst(true); }
+        }}/>}
       {showLink && <LinkProjectModal tenderId={tenderId} onClose={()=>setShowLink(false)} onSaved={()=>load()}/>}
       {showSite && <NewSiteModal tender={data} onClose={()=>setShowSite(false)} onSaved={()=>load()}/>}
       {showDoc  && <AddDocumentModal tenderId={tenderId} onClose={()=>setShowDoc(false)} onSaved={()=>load()}/>}
