@@ -5,7 +5,7 @@ import SearchSelect from "../../components/SearchSelect";
 import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, THead } from "../shared/ui";
 
-function TabAttendance({ project }) {
+function TabAttendance({ project, onRequestPayment }) {
   const projectId = project?.id || 1;
 
   // ── Settings from localStorage ──────────────────────────────────
@@ -473,7 +473,7 @@ function TabAttendance({ project }) {
             const sc = subconLib.find(x=>String(x.id||x.name)===String(selSubconId));
             const scName = sc?.name||sc?.company_name||sc?.firm_name||sc?.party_name||"";
             return(
-              <button onClick={()=>setPaymentReq({type:"subcon",party:sc?{id:sc.id,name:scName}:null})}
+              <button onClick={()=>onRequestPayment?.({type:"subcon",party:sc?{id:sc.id,name:scName}:null})}
                 title={`Request payment for ${scName||"this subcontractor"}`}
                 style={{padding:"5px 12px",borderRadius:6,border:"none",background:T.blu,color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",boxShadow:`0 2px 6px ${T.blu}33`,flexShrink:0,transition:"background .12s"}}
                 onMouseEnter={el=>el.currentTarget.style.background="#1D4ED8"}

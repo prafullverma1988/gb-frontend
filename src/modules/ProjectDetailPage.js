@@ -832,7 +832,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     transaction: <TabTransaction projectId={project.id} projectName={project.name}/>,
     todo:        <TabTodo projectId={project.id}/>,
     task:        <TabTasks projectId={project.id} isAdmin={isAdmin}/>,
-    attendance:  <TabAttendance project={project}/>,
+    attendance:  <TabAttendance project={project} onRequestPayment={(p)=>setPaymentReq(p||{})}/>,
     material:    <TabMaterial project={project}/>,
     subcon:      <TabSubcon projectId={project.id} project={project}/>,
     equipment:   <TabEquipment projectId={project.id}/>,

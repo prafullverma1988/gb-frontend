@@ -6175,7 +6175,7 @@ function ExpenseHeadSection() {
         <FormSelect label="Type" value={form.type} onChange={v => upd("type", v)} options={["Material","Labour","Equipment","Overhead","Other"]} />
         <div style={{ height: 12 }} />
         <FormTextarea label="Description" value={form.description||""} onChange={v => upd("description", v)} rows={2} />
-        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Create"} />
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Create"} />
       </Modal>
     </div>
   );

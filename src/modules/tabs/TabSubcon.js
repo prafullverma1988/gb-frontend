@@ -232,26 +232,6 @@ function TabSubcon({ projectId, project }) {
 
   const fmtC = (v) => "₹"+(parseFloat(v)||0).toLocaleString("en-IN",{maximumFractionDigits:0});
 
-  // ── NEW WO SUBMIT ──
-  const submitWO = async () => {
-    const validItems = woForm.items.filter(i=>i.description&&i.qty&&i.rate);
-    if(!woForm.subcon_name || validItems.length===0) return alert("Subcontractor and at least 1 item required");
-    setSaving(true);
-    const res = await api.post("/subcon/work-orders",{
-      project_id: projectId,
-      subcon_name: woForm.subcon_name,
-      description: woForm.description,
-      retention_pct: parseFloat(woForm.retention_pct||5),
-      tds_pct: parseFloat(woForm.tds_pct||2),
-      start_date: woForm.start_date||null,
-      end_date: woForm.end_date||null,
-      items: validItems.map(i=>({ description:i.description, unit:i.unit, qty:parseFloat(i.qty), rate:parseFloat(i.rate) })),
-    }).catch(()=>({success:false}));
-    setSaving(false);
-    if(res.success){ setShowNewWO(false); loadWOs(); setWoForm({subcon_id:"",subcon_name:"",description:"",retention_pct:5,tds_pct:2,start_date:"",end_date:"",items:[{description:"",unit:"",qty:"",rate:""}]}); }
-    else alert(res.message||"Failed");
-  };
-
   // ── NEW RA BILL SUBMIT ──
   // Branches on selWo.billing_method:
   //   manual           → existing behaviour, items map all WO items with cumulative_qty
@@ -1064,7 +1044,7 @@ function TabSubcon({ projectId, project }) {
       {/* EDIT WO MODAL */}
       {showEditWO&&selWo&&(
         <EditWOModal
-          wo={selWo} subcons={subcons} fmtC={fmtC}
+          wo={selWo} subcons={subcons} projectId={projectId} fmtC={fmtC}
           inpStyle={inpStyle} lblStyle={lblStyle}
           onClose={()=>setShowEditWO(false)}
           onSaved={()=>{ setShowEditWO(false); loadWOs(); selectWo(selWo); }}
@@ -3572,7 +3552,7 @@ function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
 }
 
 
-function EditWOModal({ wo, subcons, fmtC, inpStyle, lblStyle, onClose, onSaved }) {
+function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose, onSaved }) {
   const CATS = ["Civil","Electrical","Plumbing","Finishing","Structural","MEP","Waterproofing","Painting","Tiling","Other"];
   const blankItem = () => ({ description:"", unit:"", qty:"", rate:"", isNew:true });
   const blankSection = () => ({ id: null, title:"", items:[blankItem()], isNew:true });
