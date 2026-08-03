@@ -127,6 +127,14 @@ const instrumentTypesFor = (status) =>
   status === "bidding" ? INSTRUMENT_TYPES.filter(t=>t.v==="emd") : INSTRUMENT_TYPES;
 
 const BID_SUBMISSION_TYPES = [{v:"online", l:"Online"}, {v:"offline", l:"Offline / By Post"}];
+
+// Bid kaise price hui — isse tay hota hai ki bill kis rate par banega.
+//   percentage — department ke SOR rate par ±X% (premium alag line)
+//   item_rate  — har item ka apna quoted rate, premium hota hi nahi
+const RATE_TYPES = [
+  {v:"percentage", l:"Percentage — SOR rate par ±%"},
+  {v:"item_rate",  l:"Item Rate — har item ka apna rate"},
+];
 const INSTRUMENT_MODES = [
   {v:"dd",     l:"DD"},
   {v:"bg",     l:"BG"},
@@ -569,6 +577,9 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
     reverse_auction_date: dateOnly(tender.reverse_auction_date),
     bid_submission_type: tender.bid_submission_type || "",
     nit_clauses: tender.nit_clauses || "",
+    rate_type: tender.rate_type || "percentage",
+    gst_pct: tender.gst_pct ?? "",
+    deviation_limit_pct: tender.deviation_limit_pct ?? "",
     status_note: "",
     loa_date: dateOnly(tender.loa_date),
     agreement_no: tender.agreement_no || "",
@@ -628,6 +639,9 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
       reverse_auction_date: form.reverse_auction_date || null,
       bid_submission_type: form.bid_submission_type || null,
       nit_clauses: form.nit_clauses.trim() || null,
+      rate_type: form.rate_type || "percentage",
+      gst_pct: form.gst_pct === "" ? null : form.gst_pct,
+      deviation_limit_pct: form.deviation_limit_pct === "" ? null : form.deviation_limit_pct,
       loa_date: form.loa_date || null,
       agreement_no: form.agreement_no.trim() || null,
       agreement_date: form.agreement_date || null,
@@ -730,6 +744,17 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
         <Field label="EMD Amount (₹)"><TxtIn type="number" value={form.emd_amount} onChange={v=>set("emd_amount",v)}/></Field>
         <Field label="Tender Fee (₹)"><TxtIn type="number" value={form.tender_fee} onChange={v=>set("tender_fee",v)}/></Field>
 
+        <Field label="Rate Type" full
+          hint="Percentage me bill par premium ki alag line banti hai. Item-rate me har item ka apna rate hi final hai.">
+          <SelIn value={form.rate_type} onChange={v=>set("rate_type",v)} options={RATE_TYPES}/>
+        </Field>
+        <Field label="GST %" hint="Khali = bill me GST ki line nahi.">
+          <TxtIn type="number" value={form.gst_pct} onChange={v=>set("gst_pct",v)} ph="e.g. 18"/>
+        </Field>
+        <Field label="Deviation Limit %"
+          hint="BOQ qty se itne % tak chhoot. Khali = sirf batayenge, rokenge nahi.">
+          <TxtIn type="number" value={form.deviation_limit_pct} onChange={v=>set("deviation_limit_pct",v)} ph="e.g. 10"/>
+        </Field>
         <Field label="NIT Date"><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
         <Field label="Bid Submission Date"><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
         <Field label="Techno-Commercial Date"><TxtIn type="date" value={form.techno_commercial_date} onChange={v=>set("techno_commercial_date",v)}/></Field>
@@ -1010,7 +1035,8 @@ function TenderList({onOpen}) {
         })}
       </Panel>
 
-      {showNew && <NewTenderModal onClose={()=>setShowNew(false)} onCreated={()=>load()}/>}
+      {showNew && <NewTenderModal onClose={()=>setShowNew(false)}
+        onCreated={(t)=>{ load(); if (t?.id) onOpen({id:t.id, tab:"boq", fresh:true}); }}/>}
     </div>
   );
 }
@@ -1629,7 +1655,13 @@ const fmtQty = (n) => Number(n || 0).toLocaleString("en-IN", {maximumFractionDig
 // ════════════════════════════════════════════════════════════════════
 // BOQ ITEM MODAL — manual add / edit
 // ════════════════════════════════════════════════════════════════════
-function BoqItemModal({tenderId, item, onClose, onSaved}) {
+const ITEM_TYPE_OPTS = [
+  {v:"boq",         l:"Tendered (BOQ me tha)"},
+  {v:"extra",       l:"Extra — BOQ me tha hi nahi"},
+  {v:"substituted", l:"Substituted — kisi item ki jagah"},
+];
+
+function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems}) {
   const toast = useToast();
   const isEdit = !!item;
   const [busy, setBusy] = useState(false);
@@ -1641,6 +1673,11 @@ function BoqItemModal({tenderId, item, onClose, onSaved}) {
     unit:        item?.unit || "",
     qty:         item?.qty ?? "",
     rate:        item?.rate ?? "",
+    quoted_rate: item?.quoted_rate ?? "",
+    item_type:   item?.item_type || "boq",
+    substitutes_item_id: item?.substitutes_item_id ? String(item.substitutes_item_id) : "",
+    approval_ref:  item?.approval_ref || "",
+    approval_date: item?.approval_date ? String(item.approval_date).slice(0,10) : "",
   });
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const liveAmount = round2(numOf(form.qty) * numOf(form.rate));
@@ -1650,6 +1687,8 @@ function BoqItemModal({tenderId, item, onClose, onSaved}) {
     if (!form.description.trim()) return setErr("Item ka description zaroori hai");
     if (form.qty === "")  return setErr("Qty zaroori hai");
     if (form.rate === "") return setErr("Rate zaroori hai");
+    if (form.item_type === "substituted" && !form.substitutes_item_id)
+      return setErr("Substituted item ke liye batao kis item ki jagah hai");
     setBusy(true);
     const body = {
       item_no: form.item_no.trim() || null,
@@ -1657,6 +1696,12 @@ function BoqItemModal({tenderId, item, onClose, onSaved}) {
       description: form.description.trim(),
       unit: form.unit.trim() || null,
       qty: form.qty, rate: form.rate,
+      item_type: form.item_type,
+      quoted_rate: form.quoted_rate === "" ? null : form.quoted_rate,
+      substitutes_item_id: form.item_type === "substituted" && form.substitutes_item_id
+        ? Number(form.substitutes_item_id) : null,
+      approval_ref: form.approval_ref.trim() || null,
+      approval_date: form.approval_date || null,
     };
     const res = isEdit
       ? await api.put(`/tenders/${tenderId}/boq/items/${item.id}`, body)
@@ -1684,9 +1729,37 @@ function BoqItemModal({tenderId, item, onClose, onSaved}) {
             style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
             onFocus={e=>e.target.style.borderColor=T.ind} onBlur={e=>e.target.style.borderColor=T.b1}/>
         </Field>
+        <Field label="Item Type" full
+          hint={form.item_type === "boq"
+            ? "Tendered item BOQ total me ginta hai aur premium usi par lagta hai."
+            : "Extra / Substituted item BOQ total se bahar rehta hai — premium us par nahi lagta."}>
+          <SelIn value={form.item_type} onChange={v=>set("item_type",v)} options={ITEM_TYPE_OPTS}/>
+        </Field>
+        {form.item_type === "substituted" && (
+          <Field label="Kis item ki jagah *" full>
+            <BoqItemPicker items={(boqItems||[]).filter(x=>(x.item_type||"boq")==="boq" && x.id!==item?.id)}
+              value={form.substitutes_item_id} onChange={v=>set("substitutes_item_id",String(v))}/>
+          </Field>
+        )}
+        {form.item_type !== "boq" && (<>
+          <Field label="Manzoori Ref" hint="Department ka letter jisme is rate ki manzoori hai.">
+            <TxtIn value={form.approval_ref} onChange={v=>set("approval_ref",v)} ph="e.g. EE/2026/442"/>
+          </Field>
+          <Field label="Manzoori Date">
+            <TxtIn type="date" value={form.approval_date} onChange={v=>set("approval_date",v)}/>
+          </Field>
+        </>)}
         <Field label="Unit"><TxtIn value={form.unit} onChange={v=>set("unit",v)} ph="cum / sqm / MT"/></Field>
         <Field label="Qty *"><TxtIn type="number" value={form.qty} onChange={v=>set("qty",v)} ph="0"/></Field>
-        <Field label="Rate (₹) *"><TxtIn type="number" value={form.rate} onChange={v=>set("rate",v)} ph="0"/></Field>
+        <Field label={isItemRate ? "SOR Rate (₹) *" : "Rate (₹) *"}
+          hint={isItemRate ? "Department ka rate." : undefined}>
+          <TxtIn type="number" value={form.rate} onChange={v=>set("rate",v)} ph="0"/>
+        </Field>
+        {isItemRate && (
+          <Field label="Apna Rate (₹)" hint="Isi rate par bill banega.">
+            <TxtIn type="number" value={form.quoted_rate} onChange={v=>set("quoted_rate",v)} ph="0"/>
+          </Field>
+        )}
         <Field label="Amount">
           <div style={{...inputStyle, background:T.sltL, color:T.t1, fontWeight:700,
             display:"flex", alignItems:"center", justifyContent:"space-between"}}>
@@ -2168,16 +2241,27 @@ function RevertImportModal({tenderId, imp, onClose, onDone}) {
 // ════════════════════════════════════════════════════════════════════
 // BOQ TAB
 // ════════════════════════════════════════════════════════════════════
-function BoqTab({tenderId, boq, loading, reload}) {
+function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
   const toast = useToast();
   const [search, setSearch]   = useState("");
   const [showImport, setShowImport] = useState(false);
+  // Naya tender bana kar aaye ho aur BOQ khali ho to import wizard khud khul
+  // jaye — pehla kaam yahi hota hai. Ek hi baar (uske baad user ki marzi).
+  const autoOpenedRef = useRef(false);
   const [itemModal, setItemModal]   = useState(null);  // {} = naya, {item} = edit
   const [revertOf, setRevertOf]     = useState(null);
 
   const items   = (boq && boq.data) || [];
   const summary = (boq && boq.summary) || null;
   const imports = (boq && boq.imports) || [];
+  const isItemRate = (rateType || summary?.rate_type) === "item_rate";
+
+  useEffect(()=>{
+    if (autoImport && !autoOpenedRef.current && boq && items.length === 0) {
+      autoOpenedRef.current = true;
+      setShowImport(true);
+    }
+  }, [autoImport, boq, items.length]);
 
   // Executed qty BOQ ke GET par nahi aata — uska apna endpoint hai.
   // Tab khulne par hi laate hain, id se merge karke.
@@ -2210,24 +2294,46 @@ function BoqTab({tenderId, boq, loading, reload}) {
     reload();
   };
 
-  const COLS = "70px 84px minmax(200px,2.2fr) 56px 88px 92px 106px 92px 96px 74px";
+  // Item-rate tender me department ke rate ke saath apna rate bhi dikhta hai.
+  const COLS = isItemRate
+    ? "62px 74px minmax(160px,1.9fr) 50px 80px 84px 92px 84px 92px 84px 88px 68px"
+    : "70px 84px minmax(200px,2.2fr) 56px 88px 92px 106px 92px 96px 74px";
 
   const TILES = summary ? [
     {label:"Items", value:summary.item_count, note:`${imports.filter(i=>i.status==="committed").length} import se`,
       color:T.ind, Icon:IcTable},
     {label:"BOQ Total", value:money(summary.boq_total), note:moneyF(summary.boq_total),
       color:T.blu, Icon:IcRupee},
-    {label:"vs Estimated",
-      value: summary.diff_vs_estimated === null ? "--"
-        : `${summary.diff_vs_estimated>=0?"+":"−"}${money(Math.abs(summary.diff_vs_estimated))}`,
-      note: summary.estimated_cost === null ? "Estimate set nahi" : `Estimate ${money(summary.estimated_cost)}`,
-      color: summary.diff_vs_estimated === null ? T.slt : summary.diff_vs_estimated > 0 ? T.red : T.grn,
-      Icon:IcRupee},
-    {label: summary.premium_pct === null ? "Premium" : summary.premium_pct >= 0 ? "Premium (Above)" : "Discount (Below)",
-      value: summary.premium_pct === null ? "--" : `${summary.premium_pct>=0?"+":""}${summary.premium_pct}%`,
-      note: summary.contract_value ? `Contract ${money(summary.contract_value)}` : "Contract value set nahi",
-      color: summary.premium_pct === null ? T.slt : summary.premium_pct >= 0 ? T.amb : T.grn,
-      Icon:IcGavel},
+    // Extra item hon to unka apna tile — wo BOQ total me nahi ginte.
+    summary.extra_count > 0
+      ? {label:"Extra Items", value:money(summary.extra_total),
+         note:`${summary.extra_count} item · BOQ total se bahar`, color:T.amb, Icon:IcRupee}
+      : {label:"vs Estimated",
+         value: summary.diff_vs_estimated === null ? "--"
+           : `${summary.diff_vs_estimated>=0?"+":"−"}${money(Math.abs(summary.diff_vs_estimated))}`,
+         note: summary.estimated_cost === null ? "Estimate set nahi" : `Estimate ${money(summary.estimated_cost)}`,
+         color: summary.diff_vs_estimated === null ? T.slt : summary.diff_vs_estimated > 0 ? T.red : T.grn,
+         Icon:IcRupee},
+    // Item-rate tender me premium hota hi nahi — wahan apne rate ka jod
+    // BOQ se kitna hatt kar hai, wo number kaam ka hai.
+    isItemRate
+      ? {label: (summary.quoted_vs_boq_pct ?? 0) >= 0 ? "Apna Quote (Above)" : "Apna Quote (Below)",
+         value: summary.quoted_vs_boq_pct === null ? "--"
+           : `${summary.quoted_vs_boq_pct>=0?"+":""}${summary.quoted_vs_boq_pct}%`,
+         note: summary.quoted_total ? `Quote ${money(summary.quoted_total)}` : "Apne rate abhi nahi bhare",
+         color: summary.quoted_vs_boq_pct === null ? T.slt : summary.quoted_vs_boq_pct >= 0 ? T.amb : T.grn,
+         Icon:IcGavel}
+      : {label: summary.premium_pct === null ? "Premium" : summary.premium_pct >= 0 ? "Premium (Above)" : "Discount (Below)",
+         value: (() => {
+           const shown = summary.premium_pct_locked ?? summary.premium_pct;
+           return shown === null || shown === undefined ? "--" : `${shown>=0?"+":""}${shown}%`;
+         })(),
+         note: summary.premium_locked_at
+           ? (summary.premium_stale ? "Lock ho chuka — BOQ uske baad badla" : "Award par lock ho chuka")
+           : (summary.contract_value ? `Contract ${money(summary.contract_value)}` : "Contract value set nahi"),
+         color: summary.premium_stale ? T.red
+           : summary.premium_pct === null ? T.slt : summary.premium_pct >= 0 ? T.amb : T.grn,
+         Icon:IcGavel},
   ] : [];
 
   if (loading) return <Panel><Loading text="BOQ load ho raha hai..."/></Panel>;
@@ -2299,9 +2405,12 @@ function BoqTab({tenderId, boq, loading, reload}) {
       {!!items.length && (<>
         <div style={{display:"grid", gridTemplateColumns:COLS, padding:"8px 14px", gap:9,
           background:T.surfaceB, borderBottom:`1px solid ${T.b1}`}}>
-          {["Item No","SOR Code","Description","Unit","Qty","Rate","Amount","Executed Qty","Used %",""].map((h,i)=>(
+          {(isItemRate
+            ? ["Item No","SOR Code","Description","Unit","Qty","SOR Rate","SOR Amount","Apna Rate","Apna Amount","Executed Qty","Used %",""]
+            : ["Item No","SOR Code","Description","Unit","Qty","Rate","Amount","Executed Qty","Used %",""]
+          ).map((h,i)=>(
             <span key={i} style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase",
-              letterSpacing:".6px", textAlign:i>=4&&i<=8?"right":"left"}}>{h}</span>
+              letterSpacing:".6px", textAlign:i>=4&&i<=(isItemRate?10:8)?"right":"left"}}>{h}</span>
           ))}
         </div>
 
@@ -2310,7 +2419,11 @@ function BoqTab({tenderId, boq, loading, reload}) {
         {filtered.map((it,i)=>(
           <div key={it.id} style={{display:"grid", gridTemplateColumns:COLS, padding:"9px 14px", gap:9,
             alignItems:"center", borderBottom:i<filtered.length-1?`1px solid ${T.b1}`:"none"}}>
-            <span style={{fontSize:11.5, color:T.t2, fontWeight:600}}>{it.item_no || "--"}</span>
+            <span style={{fontSize:11.5, color:T.t2, fontWeight:600, display:"flex", alignItems:"center", gap:4}}>
+              {it.item_no || "--"}
+              {it.item_type === "extra" && <Pill label="Extra" c={T.amb} bg={T.ambL}/>}
+              {it.item_type === "substituted" && <Pill label="Sub" c={T.blu} bg={T.bluL}/>}
+            </span>
             <span style={{fontSize:11.5, color:T.t3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
               {it.sor_code || "--"}
             </span>
@@ -2324,6 +2437,14 @@ function BoqTab({tenderId, boq, loading, reload}) {
             <span style={{fontSize:12, color:T.t1, fontWeight:700, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>
               {moneyF(it.amount)}
             </span>
+            {isItemRate && (<>
+              <span style={{fontSize:11.5, color:it.quoted_rate!=null?T.ind:T.t4, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>
+                {it.quoted_rate!=null ? fmtQty(it.quoted_rate) : "--"}
+              </span>
+              <span style={{fontSize:12, color:it.quoted_amount!=null?T.ind:T.t4, fontWeight:700, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>
+                {it.quoted_amount!=null ? moneyF(it.quoted_amount) : "--"}
+              </span>
+            </>)}
             {(()=>{
               const ex  = exec[it.id];
               const eq  = ex ? Number(ex.executed_qty||0) : null;
@@ -2369,13 +2490,14 @@ function BoqTab({tenderId, boq, loading, reload}) {
             fontVariantNumeric:"tabular-nums", gridColumn:"7/8"}}>
             {moneyF(shownTotal)}
           </span>
-          <span/><span/><span/>
+          <span/><span/><span/>{isItemRate && <><span/><span/></>}
         </div>
       </>)}
     </Panel>
 
     {showImport && <BoqImportModal tenderId={tenderId} onClose={()=>setShowImport(false)} onDone={reload}/>}
     {itemModal && <BoqItemModal tenderId={tenderId} item={itemModal.item}
+      isItemRate={isItemRate} boqItems={items}
       onClose={()=>setItemModal(null)} onSaved={reload}/>}
     {revertOf && <RevertImportModal tenderId={tenderId} imp={revertOf}
       onClose={()=>setRevertOf(null)} onDone={reload}/>}
@@ -2864,7 +2986,7 @@ function DeductionSetupModal({tenderId, onClose, onDone}) {
 }
 
 // ── NEW RA BILL WIZARD (3 step) ─────────────────────────────────────
-function NewRaBillWizard({tenderId, defaultPremium, edit, onClose, onDone}) {
+function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit, onClose, onDone}) {
   // edit = draft bill ka detail object → wahi wizard PUT par chalta hai.
   const toast = useToast();
   const [step, setStep]   = useState(1);
@@ -2876,9 +2998,13 @@ function NewRaBillWizard({tenderId, defaultPremium, edit, onClose, onDone}) {
     for (const d of (edit?.deductions || [])) if (d.calc_type === "manual") m[d.head_name] = Number(d.amount||0);
     return m;
   });      // {head_name: amount}
+  const [gst, setGst]     = useState(edit ? String(edit.gst_pct ?? "") : (defaultGst === null || defaultGst === undefined ? "" : String(defaultGst)));
+  const [devReason, setDevReason] = useState(edit?.deviation_reason || "");
   const [prev, setPrev]   = useState(null);
   const [busy, setBusy]   = useState(false);
   const [err, setErr]     = useState(null);
+  // 422 DEVIATION_EXCEEDED — BOQ se zyada kaam, reason chahiye.
+  const [devBlock, setDevBlock] = useState(null);
 
   // Preview backend hi banata hai — koi ganit yahan dobara nahi likha,
   // warna screen aur bill alag-alag jawab de sakte hain.
@@ -2887,17 +3013,26 @@ function NewRaBillWizard({tenderId, defaultPremium, edit, onClose, onDone}) {
     setBusy(true); setErr(null);
     const body = {upto_date: upto, manual_deductions: manual};
     if (prem !== "") body.premium_pct = Number(prem);
+    if (gst !== "")  body.gst_pct = Number(gst);
+    if (devReason.trim()) body.deviation_reason = devReason.trim();
     if (edit) body.exclude_bill_id = edit.id;   // apne items billed me na girein
     const res = await api.post(`/tenders/${tenderId}/ra-bills/preview`, body);
     setBusy(false);
     if (!res?.success) {
       setPrev(null);
-      setErr({msg: res?.message || "Preview nahi bana", negatives: res?.negatives || null});
+      // Deviation ka 422 alag hai — ye "galti" nahi, sirf reason maangta hai.
+      if (res?.code === "DEVIATION_EXCEEDED") {
+        setDevBlock(res.deviations || []); setErr(null);
+      } else {
+        setDevBlock(null);
+        setErr({msg: res?.message || "Preview nahi bana", negatives: res?.negatives || null});
+      }
       return;
     }
+    setDevBlock(null);
     setPrev(res.data);
     if (prem === "" && res.data?.premium_pct !== undefined) setPrem(String(res.data.premium_pct));
-  }, [tenderId, upto, prem, manual]);
+  }, [tenderId, upto, prem, gst, devReason, manual]);
 
   useEffect(()=>{ if (step>=1) runPreview(); /* eslint-disable-next-line */ }, [upto, step]);
 
@@ -2907,6 +3042,8 @@ function NewRaBillWizard({tenderId, defaultPremium, edit, onClose, onDone}) {
     setBusy(true);
     const body = {upto_date: upto, manual_deductions: manual};
     if (prem !== "") body.premium_pct = Number(prem);
+    if (gst !== "")  body.gst_pct = Number(gst);
+    if (devReason.trim()) body.deviation_reason = devReason.trim();
     const res = edit
       ? await api.put(`/tenders/${tenderId}/ra-bills/${edit.id}`, body)
       : await api.post(`/tenders/${tenderId}/ra-bills`, body);
@@ -2955,14 +3092,61 @@ function NewRaBillWizard({tenderId, defaultPremium, edit, onClose, onDone}) {
           <Field label="Upto Date *" hint="Is tarikh tak ki saari measurement is bill me aayegi.">
             <TxtIn type="date" value={upto} onChange={setUpto}/>
           </Field>
-          <Field label="Premium / Tender %" hint="BOQ summary se bhara hua — badal sakte ho.">
+          {!isItemRate && (
+            <Field label="Premium / Tender %" hint="Award par lock hua premium — is bill ke liye badal sakte ho.">
+              <div style={{display:"flex", gap:7}}>
+                <TxtIn type="number" value={prem} onChange={setPrem} ph="0"/>
+                <SecBtn label="Lagao" Icon={IcChk} onClick={runPreview}/>
+              </div>
+            </Field>
+          )}
+          {isItemRate && (
+            <div style={{padding:"9px 12px", background:T.indL, border:`1px solid ${T.indM}`,
+              borderRadius:7, fontSize:11.5, color:T.t2, lineHeight:1.5, alignSelf:"end"}}>
+              <b style={{color:T.ind}}>Item-rate tender</b> — bill apne quoted rate par banta hai,
+              premium alag se nahi lagta.
+            </div>
+          )}
+          <Field label="GST %" hint="Khali chhodo to bill me GST ki line nahi aayegi.">
             <div style={{display:"flex", gap:7}}>
-              <TxtIn type="number" value={prem} onChange={setPrem} ph="0"/>
+              <TxtIn type="number" value={gst} onChange={setGst} ph="0"/>
               <SecBtn label="Lagao" Icon={IcChk} onClick={runPreview}/>
             </div>
           </Field>
         </div>
       </>)}
+
+      {/* Deviation — BOQ qty se zyada kaam. Rokta nahi, reason maangta hai. */}
+      {devBlock && (
+        <div style={{padding:"11px 13px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8,
+          fontSize:12, color:T.t2, marginBottom:12}}>
+          <div style={{fontWeight:700, display:"flex", alignItems:"center", gap:7, color:T.amb}}>
+            <IcWarn size={14} color={T.amb}/>BOQ qty se zyada kaam ho gaya hai
+          </div>
+          <div style={{marginTop:7, fontSize:11.5, lineHeight:1.7}}>
+            {devBlock.map((d,i)=>(
+              <div key={i}>
+                <b>{d.item_no || d.boq_item_id}</b> — BOQ {fmtQty(d.effective_qty)} {d.unit||""},
+                {" "}kaam {fmtQty(d.upto_qty)} {d.unit||""}
+                {d.allowed_qty != null && <> · limit tak {fmtQty(d.allowed_qty)}</>}
+                {" "}(<b style={{color:T.amb}}>+{fmtQty(d.deviation_qty)}</b>)
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:9}}>
+            <Field label="Deviation ka reason *"
+              hint="Kam se kam 10 akshar. Ye bill ke saath record me rahega.">
+              <textarea value={devReason} onChange={e=>setDevReason(e.target.value)} rows={2}
+                placeholder="e.g. Site condition badla, EE approval 12/8/2026"
+                style={{...inputStyle, resize:"vertical", lineHeight:1.5}}/>
+            </Field>
+            <div style={{marginTop:7}}>
+              <PrimBtn label="Reason ke saath aage badho" Icon={IcChk}
+                onClick={runPreview} disabled={devReason.trim().length < 10}/>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Error (negative measurement etc.) */}
       {err && (
@@ -3020,7 +3204,13 @@ function NewRaBillWizard({tenderId, defaultPremium, edit, onClose, onDone}) {
         <div style={{marginTop:12, padding:"10px 13px", background:T.surfaceB, borderRadius:8,
           border:`1px solid ${T.b1}`}}>
           <Row l="Gross" v={money(prev.gross)}/>
-          <Row l={`Premium (${prev.premium_pct}%)`} v={money(prev.premium_amount)}/>
+          {prev.extra_total > 0 && (
+            <Row l="  isme Extra items" v={money(prev.extra_total)} color={T.amb}/>
+          )}
+          {prev.premium_pct !== 0 && (
+            <Row l={`Premium (${prev.premium_pct}% on ${money(prev.premium_base)})`}
+              v={money(prev.premium_amount)}/>
+          )}
           <div style={{borderTop:`1px solid ${T.b2}`, marginTop:5, paddingTop:3}}>
             <Row l="Subtotal" v={money(prev.subtotal)} bold color={T.t1}/>
           </div>
@@ -3073,10 +3263,20 @@ function NewRaBillWizard({tenderId, defaultPremium, edit, onClose, onDone}) {
         <div style={{marginTop:12, padding:"10px 13px", background:T.surfaceB, borderRadius:8,
           border:`1px solid ${T.b1}`}}>
           <Row l="Subtotal" v={money(prev.subtotal)}/>
+          {prev.gst_pct > 0 && (<>
+            <Row l={`GST (${prev.gst_pct}%)`} v={money(prev.gst_amount)}/>
+            <Row l="Bill Amount" v={money(prev.bill_amount)} bold color={T.t1}/>
+          </>)}
           <Row l="Total Deductions" v={"− " + money(prev.deduction_total)} color={T.red}/>
           <div style={{borderTop:`1px solid ${T.b2}`, marginTop:5, paddingTop:3}}>
             <Row l="Net Payable" v={money(prev.net_payable)} bold color={T.grn}/>
           </div>
+          {prev.gst_pct > 0 && (
+            <div style={{marginTop:6, fontSize:10.5, color:T.t4, lineHeight:1.5}}>
+              Deductions GST se pehle wali value (Subtotal) par lagte hain — SD/TDS/cess
+              sab "value of work done" par bante hain.
+            </div>
+          )}
         </div>
       </>)}
 
@@ -3090,8 +3290,15 @@ function NewRaBillWizard({tenderId, defaultPremium, edit, onClose, onDone}) {
         </div>
         <div style={{padding:"11px 13px", background:T.surfaceB, borderRadius:8, border:`1px solid ${T.b1}`}}>
           <Row l="Gross" v={money(prev.gross)}/>
-          <Row l={`Premium (${prev.premium_pct}%)`} v={money(prev.premium_amount)}/>
+          {prev.extra_total > 0 && <Row l="  isme Extra items" v={money(prev.extra_total)} color={T.amb}/>}
+          {prev.premium_pct !== 0 && (
+            <Row l={`Premium (${prev.premium_pct}%)`} v={money(prev.premium_amount)}/>
+          )}
           <Row l="Subtotal" v={money(prev.subtotal)}/>
+          {prev.gst_pct > 0 && (<>
+            <Row l={`GST (${prev.gst_pct}%)`} v={money(prev.gst_amount)}/>
+            <Row l="Bill Amount" v={money(prev.bill_amount)}/>
+          </>)}
           {(prev.deductions||[]).filter(d=>Number(d.amount)>0).map((d,i)=>(
             <Row key={i} l={`  ${d.head_name}`} v={"− " + money(d.amount)} color={T.red}/>
           ))}
@@ -3151,12 +3358,26 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
   const print = () => {
     const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     const inr = (n) => "Rs. " + Number(n||0).toLocaleString("en-IN", {minimumFractionDigits:2, maximumFractionDigits:2});
-    const itemRows = (d.items||[]).map((it,i)=>`<tr>
-      <td class="c">${i+1}</td><td>${esc(it.item_no)}</td><td>${esc(it.description)}</td>
+    // Government RA bill do part me chhapta hai — Part I agreement ke items,
+    // Part II extra / non-tendered. Premium sirf Part I par lagta hai.
+    const all = d.items || [];
+    const partI  = all.filter(it => (it.item_type || "boq") === "boq");
+    const partII = all.filter(it => (it.item_type || "boq") !== "boq");
+    const rowsOf = (arr, off) => arr.map((it,i)=>`<tr>
+      <td class="c">${off+i+1}</td><td>${esc(it.item_no)}</td><td>${esc(it.description)}</td>
       <td class="c">${esc(it.unit)}</td>
       <td class="r">${fmtQty(it.prev_qty)}</td><td class="r">${fmtQty(it.upto_qty)}</td>
       <td class="r"><b>${fmtQty(it.this_qty)}</b></td>
       <td class="r">${fmtQty(it.rate)}</td><td class="r"><b>${inr(it.amount)}</b></td></tr>`).join("");
+    const sec = (label) => `<tr><td colspan="9" style="background:#e8e8e8;font-weight:bold">${label}</td></tr>`;
+    const sub = (label, amt) => `<tr class="tot"><td colspan="8" class="r">${label}</td><td class="r">${inr(amt)}</td></tr>`;
+    const partITotal  = partI.reduce((a,x)=>a+Number(x.amount||0), 0);
+    const partIITotal = partII.reduce((a,x)=>a+Number(x.amount||0), 0);
+    const itemRows = partII.length
+      ? sec("Part I — Agreement Items") + rowsOf(partI, 0) + sub("Sub-total (Part I)", partITotal)
+        + sec("Part II — Extra / Non-Tendered Items") + rowsOf(partII, partI.length)
+        + sub("Sub-total (Part II)", partIITotal)
+      : rowsOf(partI, 0);
     const dedRows = (d.deductions||[]).map(x=>`<tr>
       <td>${esc(x.head_name)}</td>
       <td class="c">${x.calc_type==="pct_gross"&&x.rate!==null?esc(x.rate)+"%":x.calc_type==="fixed"?"Fixed":"Manual"}</td>
@@ -3201,8 +3422,10 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
       <th class="r">Rate</th><th class="r">Amount</th></tr></thead>
     <tbody>${itemRows || `<tr><td colspan="9" class="c">No items</td></tr>`}</tbody>
     <tfoot><tr class="tot"><td colspan="8" class="r">Gross</td><td class="r">${inr(d.gross)}</td></tr>
-      <tr class="tot"><td colspan="8" class="r">Premium (${esc(d.premium_pct)}%)</td><td class="r">${inr(d.premium_amount)}</td></tr>
-      <tr class="tot"><td colspan="8" class="r">Subtotal</td><td class="r">${inr(d.subtotal)}</td></tr></tfoot>
+      ${Number(d.premium_pct) ? `<tr class="tot"><td colspan="8" class="r">Premium (${esc(d.premium_pct)}% on ${inr(d.premium_base ?? d.gross)})</td><td class="r">${inr(d.premium_amount)}</td></tr>` : ""}
+      <tr class="tot"><td colspan="8" class="r">Subtotal (Value of Work Done)</td><td class="r">${inr(d.subtotal)}</td></tr>
+      ${Number(d.gst_pct) ? `<tr class="tot"><td colspan="8" class="r">GST (${esc(d.gst_pct)}%)</td><td class="r">${inr(d.gst_amount)}</td></tr>
+      <tr class="tot"><td colspan="8" class="r">Bill Amount</td><td class="r">${inr(d.bill_amount)}</td></tr>` : ""}</tfoot>
   </table>
   <table class="sheet">
     <tr><td colspan="3" style="font-weight:bold;background:#f2f2f2">Deduction Sheet</td></tr>
@@ -3210,6 +3433,8 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
     <tr><td style="font-weight:bold">Total Deductions</td><td></td><td class="r" style="font-weight:bold">${inr(d.deduction_total)}</td></tr>
     <tr><td style="font-weight:bold">Net Payable</td><td></td><td class="r" style="font-weight:bold">${inr(d.net_payable)}</td></tr>
   </table>
+  ${Number(d.gst_pct) ? `<div style="font-size:10px;margin-top:4px;text-align:right">Deductions are computed on the pre-GST value of work done.</div>` : ""}
+  ${d.deviation_reason ? `<div style="margin-top:8px;border:1px solid #000;padding:6px 8px;font-size:11px"><b>Deviation:</b> ${esc(d.deviation_reason)}</div>` : ""}
   <div class="words"><b>Net Payable (in words):</b> ${esc(numToWordsIN(d.net_payable))}</div>
   <div class="sign"><div>Prepared By</div><div>Checked By</div><div>Approved By</div></div>
   <script>window.print()</script>
@@ -3280,8 +3505,14 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
           <Panel>
             <PHead title="Deduction Sheet"/>
             <div style={{padding:"10px 14px"}}>
-              {[["Gross", d.gross, null], [`Premium (${d.premium_pct}%)`, d.premium_amount, null],
-                ["Subtotal", d.subtotal, "rule"]].map(([l,v,mark],i)=>(
+              {[
+                ["Gross", d.gross, null],
+                ...(Number(d.extra_total) ? [["  isme Extra items", d.extra_total, null]] : []),
+                ...(Number(d.premium_pct) ? [[`Premium (${d.premium_pct}%)`, d.premium_amount, null]] : []),
+                ["Subtotal", d.subtotal, "rule"],
+                ...(Number(d.gst_pct) ? [[`GST (${d.gst_pct}%)`, d.gst_amount, null],
+                                         ["Bill Amount", d.bill_amount, null]] : []),
+              ].map(([l,v,mark],i)=>(
                 <div key={i} style={{display:"flex", justifyContent:"space-between", padding:"4px 0",
                   fontSize:12.5, color:T.t2, borderTop:mark==="rule"?`1px solid ${T.b1}`:"none",
                   marginTop:mark==="rule"?4:0, paddingTop:mark==="rule"?7:4,
@@ -3434,11 +3665,15 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
       <DeductionSetupModal tenderId={tenderId} onClose={()=>setSetup(false)} onDone={reload}/>
     )}
     {showNew && (
-      <NewRaBillWizard tenderId={tenderId} defaultPremium={boqSummary?.premium_pct ?? null}
+      <NewRaBillWizard tenderId={tenderId}
+        defaultPremium={boqSummary?.premium_pct_locked ?? boqSummary?.premium_pct ?? null}
+        defaultGst={tender?.gst_pct ?? null} isItemRate={tender?.rate_type === "item_rate"}
         onClose={()=>setNew(false)} onDone={()=>{ setNew(false); reload(); }}/>
     )}
     {editBill && (
-      <NewRaBillWizard tenderId={tenderId} defaultPremium={boqSummary?.premium_pct ?? null}
+      <NewRaBillWizard tenderId={tenderId}
+        defaultPremium={boqSummary?.premium_pct_locked ?? boqSummary?.premium_pct ?? null}
+        defaultGst={tender?.gst_pct ?? null} isItemRate={tender?.rate_type === "item_rate"}
         edit={editBill}
         onClose={()=>setEditBill(null)} onDone={()=>{ setEditBill(null); reload(); }}/>
     )}
@@ -3464,13 +3699,17 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
   </>);
 }
 
-// minStage = is stage se pehle tab dikhta hi nahi. Bid stage sirf
-// record-keeping ke liye hai: BOQ tabhi chahiye jab kaam mila ho, aur
-// measurement / RA bill / site tabhi jab kaam shuru ho. Instruments +
-// Documents hamesha khule — EMD aur NIT ki copy bid ke saath hi lagti hai.
+// minStage = is stage se pehle tab dikhta hi nahi.
+//
+// BOQ HAMESHA khula hai — bid usi BOQ par lagti hai (percentage tender me
+// department ke SOR rate par premium, item-rate me apna rate). Isliye naya
+// tender banate hi BOQ daalna padta hai, jeetne ka intezaar nahi.
+//
+// Measurement / RA bill / site tabhi jab kaam shuru ho (execution).
+// Instruments + Documents hamesha — EMD aur NIT ki copy bid ke saath hi lagti hai.
 const DETAIL_TABS = [
   {id:"overview",    label:"Overview",    Icon:IcGavel},
-  {id:"boq",         label:"BOQ",         Icon:IcTable,  minStage:"won"},
+  {id:"boq",         label:"BOQ",         Icon:IcTable},
   {id:"measure",     label:"Measurements",Icon:IcTable,  minStage:"execution"},
   {id:"rabills",     label:"RA Bills",    Icon:IcRupee,  minStage:"execution"},
   {id:"sites",       label:"Sites",       Icon:IcSite,   minStage:"execution"},
@@ -3486,11 +3725,11 @@ const stageReached = (status, minStage) => {
   return ci >= 0 && mi >= 0 && ci >= mi;
 };
 
-function TenderDetail({tenderId, onBack, onOpenProject}) {
+function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
   const toast = useToast();
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab]         = useState("overview");
+  const [tab, setTab]         = useState(initialTab || "overview");
   const [showEdit, setShowEdit]   = useState(false);
   const [showInst, setShowInst]   = useState(false);
   const [moveTo, setMoveTo]       = useState(null);   // stage change modal ka target
@@ -3867,7 +4106,8 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
 
       {/* ══ BOQ ══ */}
       {tab==="boq" && (
-        <BoqTab tenderId={tenderId} boq={boq} loading={boqLoading} reload={loadBoq}/>
+        <BoqTab tenderId={tenderId} boq={boq} loading={boqLoading} reload={loadBoq}
+          rateType={data.rate_type} autoImport={freshBoq}/>
       )}
 
       {/* ══ MEASUREMENTS ══ */}
@@ -4053,9 +4293,12 @@ function TenderDetail({tenderId, onBack, onOpenProject}) {
 // ROOT
 // ════════════════════════════════════════════════════════════════════
 export default function TendersModule({onOpenProject}) {
+  // {id, tab} — naya tender banne par seedha BOQ tab par le jate hain,
+  // kyunki bid usi BOQ par lagti hai.
   const [selected, setSelected] = useState(null);
   if (selected) return (
-    <TenderDetail tenderId={selected} onBack={()=>setSelected(null)} onOpenProject={onOpenProject}/>
+    <TenderDetail tenderId={selected.id} initialTab={selected.tab} freshBoq={selected.fresh}
+      onBack={()=>setSelected(null)} onOpenProject={onOpenProject}/>
   );
-  return <TenderList onOpen={setSelected}/>;
+  return <TenderList onOpen={(v)=>setSelected(typeof v === "object" ? v : {id:v})}/>;
 }
