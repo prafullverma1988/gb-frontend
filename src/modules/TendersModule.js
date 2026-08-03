@@ -1655,13 +1655,43 @@ const fmtQty = (n) => Number(n || 0).toLocaleString("en-IN", {maximumFractionDig
 // ════════════════════════════════════════════════════════════════════
 // BOQ ITEM MODAL — manual add / edit
 // ════════════════════════════════════════════════════════════════════
+// BOQ final hone ke baad har badlaav ka reason maanga jata hai. Ek hi chhota
+// modal — delete aur import dono isse chalte hain (edit ka reason BoqItemModal
+// ke andar hi hai, taaki do modal na khulen).
+function BoqReasonModal({title, sub, warn, confirmLabel, onCancel, onConfirm}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const short = reason.trim().length < 10;
+  return (
+    <Modal title={title} Icon={IcLock} sub={sub} width={520} onClose={onCancel}
+      footer={<>
+        <SecBtn label="Cancel" onClick={onCancel}/>
+        <PrimBtn label={busy ? "Ho raha hai..." : confirmLabel} Icon={IcChk} disabled={busy || short}
+          onClick={async ()=>{ setBusy(true); await onConfirm(reason.trim()); setBusy(false); }}/>
+      </>}>
+      {warn && (
+        <div style={{padding:"10px 12px", background:T.ambL, border:`1px solid ${T.ambM}`,
+          borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:12}}>
+          <IcWarn size={13} color={T.amb}/> {warn}
+        </div>
+      )}
+      <Field label="Badalne ka reason *"
+        hint="Kam se kam 10 akshar. Ye BOQ ki Change History me hamesha rahega.">
+        <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={3}
+          placeholder="e.g. EE ki manzoori 12/8/2026 se rate revise hua"
+          style={{...inputStyle, resize:"vertical", lineHeight:1.5}}/>
+      </Field>
+    </Modal>
+  );
+}
+
 const ITEM_TYPE_OPTS = [
   {v:"boq",         l:"Tendered (BOQ me tha)"},
   {v:"extra",       l:"Extra — BOQ me tha hi nahi"},
   {v:"substituted", l:"Substituted — kisi item ki jagah"},
 ];
 
-function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems}) {
+function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems, boqFinal}) {
   const toast = useToast();
   const isEdit = !!item;
   const [busy, setBusy] = useState(false);
@@ -1678,9 +1708,13 @@ function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems}) 
     substitutes_item_id: item?.substitutes_item_id ? String(item.substitutes_item_id) : "",
     approval_ref:  item?.approval_ref || "",
     approval_date: item?.approval_date ? String(item.approval_date).slice(0,10) : "",
+    reason: "",
   });
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const liveAmount = round2(numOf(form.qty) * numOf(form.rate));
+  // Final BOQ me edit, ya naya TENDERED item — dono par reason. Extra /
+  // substituted item jodna post-award ka normal raasta hai, us par nahi.
+  const needsReason = boqFinal && (isEdit || form.item_type === "boq");
 
   const submit = async () => {
     setErr("");
@@ -1689,6 +1723,8 @@ function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems}) 
     if (form.rate === "") return setErr("Rate zaroori hai");
     if (form.item_type === "substituted" && !form.substitutes_item_id)
       return setErr("Substituted item ke liye batao kis item ki jagah hai");
+    if (needsReason && form.reason.trim().length < 10)
+      return setErr("Final BOQ badalne ka reason likhna zaroori hai (kam se kam 10 akshar).");
     setBusy(true);
     const body = {
       item_no: form.item_no.trim() || null,
@@ -1702,6 +1738,7 @@ function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems}) 
         ? Number(form.substitutes_item_id) : null,
       approval_ref: form.approval_ref.trim() || null,
       approval_date: form.approval_date || null,
+      ...(needsReason ? {reason: form.reason.trim()} : {}),
     };
     const res = isEdit
       ? await api.put(`/tenders/${tenderId}/boq/items/${item.id}`, body)
@@ -1767,6 +1804,14 @@ function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems}) 
             <span style={{fontSize:10.5, fontWeight:600, color:T.t4}}>qty × rate</span>
           </div>
         </Field>
+        {needsReason && (
+          <Field label="Badalne ka reason *" full
+            hint="Tender won ho chuka hai — BOQ ab final hai. Ye reason Change History me rahega.">
+            <textarea value={form.reason} onChange={e=>set("reason",e.target.value)} rows={2}
+              placeholder="e.g. EE ki manzoori 12/8/2026 se rate revise hua"
+              style={{...inputStyle, resize:"vertical", lineHeight:1.5}}/>
+          </Field>
+        )}
         <div style={{gridColumn:"1/3", fontSize:11, color:T.t4, lineHeight:1.5}}>
           Amount server par hi nikalta hai (qty × rate) — yahan sirf preview hai.
         </div>
@@ -1780,7 +1825,7 @@ function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems}) 
 // ════════════════════════════════════════════════════════════════════
 const WIZ_STEPS = ["Upload", "Mapping", "Preview", "Commit"];
 
-function BoqImportModal({tenderId, onClose, onDone}) {
+function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
   const toast = useToast();
   const fileRef = useRef(null);
   const [step, setStep] = useState(1);
@@ -1850,15 +1895,23 @@ function BoqImportModal({tenderId, onClose, onDone}) {
   const missing = BOQ_TARGETS.filter(t => t.required && mapping[t.key] == null).map(t => t.label);
   const liveRows = parsed.rows.filter(r => !excluded[r._k]);
   const liveTotal = round2(liveRows.reduce((s,r)=>s+r.amount, 0));
+  const [importReason, setImportReason] = useState("");
   const fileTotalNum = fileTotal === "" ? null : numOf(fileTotal);
   const diff = fileTotalNum === null ? null : round2(liveTotal - fileTotalNum);
   const reconcileOk = diff === null || Math.abs(diff) <= 1;
 
   const commit = async () => {
-    setErr(""); setReconcile(null); setBusy(true);
+    setErr(""); setReconcile(null);
+    // Final BOQ par naya import = poora jod badalna. Reason zaroori hai.
+    if (boqFinal && importReason.trim().length < 10) {
+      setErr("BOQ final hai — naya import karne ka reason likhna zaroori hai (kam se kam 10 akshar).");
+      return;
+    }
+    setBusy(true);
     const res = await api.post(`/tenders/${tenderId}/boq/import`, {
       file_name: fileName,
       source_total: fileTotalNum,
+      ...(boqFinal ? {reason: importReason.trim()} : {}),
       rows: liveRows.map(r => ({
         item_no: r.item_no, sor_code: r.sor_code, description: r.description,
         unit: r.unit, qty: r.qty, rate: r.rate,
@@ -2171,6 +2224,23 @@ function BoqImportModal({tenderId, onClose, onDone}) {
               ))}
             </div>
           </div>
+
+          {/* Final BOQ par naya import poora jod badal deta hai — reason zaroori */}
+          {boqFinal && (
+            <div style={{background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8,
+              padding:"12px 14px", marginBottom:14}}>
+              <div style={{fontSize:12, fontWeight:700, color:T.amb, marginBottom:7,
+                display:"flex", alignItems:"center", gap:6}}>
+                <IcLock size={13} color={T.amb}/>BOQ final hai
+              </div>
+              <Field label="Naya import karne ka reason *"
+                hint="Kam se kam 10 akshar. Ye BOQ ki Change History me rahega.">
+                <textarea value={importReason} onChange={e=>setImportReason(e.target.value)} rows={2}
+                  placeholder="e.g. Department ne revised BOQ bheja, letter 12/8/2026"
+                  style={{...inputStyle, resize:"vertical", lineHeight:1.5}}/>
+              </Field>
+            </div>
+          )}
           {parsed.rows.length !== liveRows.length && (
             <div style={{fontSize:11.5, color:T.t3, marginBottom:10}}>
               {parsed.rows.length - liveRows.length} row exclude ki gayi hain — wo import nahi hongi.
@@ -2255,6 +2325,13 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
   const summary = (boq && boq.summary) || null;
   const imports = (boq && boq.imports) || [];
   const isItemRate = (rateType || summary?.rate_type) === "item_rate";
+  // BOQ tender won hote hi final ho jata hai — uske baad edit/delete sirf
+  // admin, reason ke saath. Backend par bhi yahi rok hai; ye sirf UI hai.
+  const boqFinal = !!(boq && boq.boq_final);
+  const isAdmin  = ["admin","super_admin"].includes(getUser()?.role);
+  const canEdit  = !boqFinal || isAdmin;
+  const changeLog = (boq && boq.change_log) || [];
+  const [delOf, setDelOf] = useState(null);
 
   useEffect(()=>{
     if (autoImport && !autoOpenedRef.current && boq && items.length === 0) {
@@ -2287,11 +2364,19 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
   const shownTotal = round2(filtered.reduce((s,i)=>s+Number(i.amount||0), 0));
 
   const delItem = async (it) => {
+    // Final BOQ par reason wala modal; warna seedha confirm.
+    if (boqFinal) { setDelOf(it); return; }
     if (!await window.confirmAsync(`"${String(it.description||"").slice(0,60)}" hataayein?\n\nBOQ ka jod ghat jayega.`)) return;
     const res = await api.del(`/tenders/${tenderId}/boq/items/${it.id}`);
     if (!res?.success) { toast.error(res?.message || "Delete nahi hua"); return; }
     toast.success("Item hat gaya");
     reload();
+  };
+  const delItemWithReason = async (it, reason) => {
+    const res = await api.del(`/tenders/${tenderId}/boq/items/${it.id}`, {reason});
+    if (!res?.success) { toast.error(res?.message || "Delete nahi hua"); return; }
+    toast.success("Item hat gaya");
+    setDelOf(null); reload();
   };
 
   // Item-rate tender me department ke rate ke saath apna rate bhi dikhta hai.
@@ -2346,6 +2431,51 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
       </div>
     )}
 
+    {/* Change history — BOQ final hone ke baad ke sab badlaav */}
+    {!!changeLog.length && (
+      <Panel style={{marginBottom:11}}>
+        <PHead title="Change History" sub="Final BOQ me kya-kya badla"/>
+        <div style={{padding:"10px 14px", display:"flex", flexDirection:"column", gap:9}}>
+          {changeLog.map(l=>{
+            const act = {edit:{l:"Edit", c:T.amb, bg:T.ambL}, delete:{l:"Deleted", c:T.red, bg:T.redL},
+                         add:{l:"Added", c:T.grn, bg:T.grnL}, add_extra:{l:"Extra Added", c:T.amb, bg:T.ambL},
+                         add_substituted:{l:"Substituted", c:T.blu, bg:T.bluL}}[l.action]
+                     || {l:l.action, c:T.t3, bg:T.sltL};
+            let ch = null;
+            try { ch = l.changes_json ? JSON.parse(l.changes_json) : null; } catch (_) {}
+            return (
+              <div key={l.id} style={{display:"flex", gap:10, alignItems:"flex-start",
+                paddingBottom:9, borderBottom:`1px solid ${T.b1}`}}>
+                <div style={{flexShrink:0}}><Pill label={act.l} c={act.c} bg={act.bg}/></div>
+                <div style={{minWidth:0, flex:1}}>
+                  <div style={{fontSize:12, color:T.t1, fontWeight:600, overflow:"hidden",
+                    textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                    {l.item_no || "--"} · {l.description_snap || ""}
+                  </div>
+                  {ch && Object.keys(ch).length > 0 && (
+                    <div style={{fontSize:11, color:T.t3, marginTop:2, lineHeight:1.6}}>
+                      {Object.entries(ch).map(([k,v])=>(
+                        <span key={k} style={{marginRight:10}}>
+                          {k}: <b style={{color:T.t4}}>{String(v.from ?? "--")}</b>
+                          {" → "}<b style={{color:T.t1}}>{String(v.to ?? "--")}</b>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {l.reason && (
+                    <div style={{fontSize:11.5, color:T.t2, marginTop:3, lineHeight:1.5}}>{l.reason}</div>
+                  )}
+                  <div style={{fontSize:10.5, color:T.t4, marginTop:3}}>
+                    {fmtDate(l.created_at)}{l.created_by_name ? " · " + l.created_by_name : ""}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
+    )}
+
     {/* Imports history */}
     {!!imports.length && (
       <Panel style={{marginBottom:11}}>
@@ -2378,10 +2508,29 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
     {/* Items */}
     <Panel>
       <PHead title="BOQ Items" sub={summary ? `${summary.item_count} items · ${moneyF(summary.boq_total)}` : undefined}
-        action={<div style={{display:"flex", gap:7}}>
-          <SecBtn label="Import Excel" Icon={IcUpload} onClick={()=>setShowImport(true)}/>
+        action={<div style={{display:"flex", gap:7, alignItems:"center"}}>
+          {boqFinal && (
+            <span style={{display:"inline-flex", alignItems:"center", gap:5, fontSize:11,
+              color:T.amb, fontWeight:600, marginRight:2}}>
+              <IcLock size={12} color={T.amb}/>Final
+            </span>
+          )}
+          {canEdit && <SecBtn label="Import Excel" Icon={IcUpload} onClick={()=>setShowImport(true)}/>}
           <PrimBtn label="Add Item" Icon={IcAdd} onClick={()=>setItemModal({})}/>
         </div>}/>
+      {boqFinal && (
+        <div style={{padding:"9px 14px", background:T.ambL, borderBottom:`1px solid ${T.ambM}`,
+          fontSize:11.5, color:T.t2, lineHeight:1.55, display:"flex", gap:7, alignItems:"flex-start"}}>
+          <IcLock size={13} color={T.amb}/>
+          <span>
+            <b style={{color:T.amb}}>BOQ final hai</b> — tender won ho chuka hai, ab yahi agreement ka
+            BOQ hai. {isAdmin
+              ? "Badalna hai to reason likhna zaroori hai; har badlaav Change History me rehta hai."
+              : "Ab ise sirf admin badal sakta hai."}
+            {" "}Extra / Substituted item jodna khula hai — wo BOQ total se bahar rehte hain.
+          </span>
+        </div>
+      )}
 
       {!!items.length && (
         <div style={{padding:"8px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
@@ -2465,16 +2614,24 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
               </>);
             })()}
             <div style={{display:"flex", gap:4, justifyContent:"flex-end"}}>
-              <button onClick={()=>setItemModal({item:it})} title="Edit"
-                style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
-                  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
-                <IcEdit size={12} color={T.t3}/>
-              </button>
-              <button onClick={()=>delItem(it)} title="Delete"
-                style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
-                  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
-                <IcTrash size={12} color={T.red}/>
-              </button>
+              {canEdit ? (<>
+                <button onClick={()=>setItemModal({item:it})}
+                  title={boqFinal ? "Edit (reason zaroori)" : "Edit"}
+                  style={{width:26, height:26, borderRadius:6, border:`1px solid ${boqFinal?T.ambM:T.b1}`,
+                    background:boqFinal?T.ambL:T.surfaceB,
+                    cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
+                  <IcEdit size={12} color={boqFinal?T.amb:T.t3}/>
+                </button>
+                <button onClick={()=>delItem(it)}
+                  title={boqFinal ? "Delete (reason zaroori)" : "Delete"}
+                  style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
+                    cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
+                  <IcTrash size={12} color={T.red}/>
+                </button>
+              </>) : (
+                <span title="Tender won ho chuka hai — BOQ ab sirf admin badal sakta hai."
+                  style={{lineHeight:0, cursor:"help", opacity:.55}}><IcLock size={13} color={T.t4}/></span>
+              )}
             </div>
           </div>
         ))}
@@ -2495,10 +2652,20 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
       </>)}
     </Panel>
 
-    {showImport && <BoqImportModal tenderId={tenderId} onClose={()=>setShowImport(false)} onDone={reload}/>}
+    {showImport && <BoqImportModal tenderId={tenderId} boqFinal={boqFinal}
+      onClose={()=>setShowImport(false)} onDone={reload}/>}
     {itemModal && <BoqItemModal tenderId={tenderId} item={itemModal.item}
-      isItemRate={isItemRate} boqItems={items}
+      isItemRate={isItemRate} boqItems={items} boqFinal={boqFinal}
       onClose={()=>setItemModal(null)} onSaved={reload}/>}
+    {delOf && (
+      <BoqReasonModal
+        title="BOQ Item Hatao"
+        sub={`${delOf.item_no || "--"} · ${String(delOf.description||"").slice(0,60)}`}
+        warn="BOQ final hai — item hatane se jod ghat jayega. Ye record hamesha Change History me rahega."
+        confirmLabel="Hatao"
+        onCancel={()=>setDelOf(null)}
+        onConfirm={(reason)=>delItemWithReason(delOf, reason)}/>
+    )}
     {revertOf && <RevertImportModal tenderId={tenderId} imp={revertOf}
       onClose={()=>setRevertOf(null)} onDone={reload}/>}
   </>);
