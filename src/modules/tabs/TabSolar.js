@@ -1,7 +1,39 @@
 import React, { useState, useEffect } from "react";
-import api from "../../config/api";
+import api, { API_BASE } from "../../config/api";
 import { T } from "../shared/tokens";
 import { Panel } from "../shared/ui";
+
+// Stage status colors (solar)
+const SOLAR_STAGE_S = {
+  pending:     {c:"#6B7280",bg:"#F3F4F6",bdr:"#D1D5DB"},
+  in_progress: {c:"#D97706",bg:"#FFFBEB",bdr:"#FDE68A"},
+  completed:   {c:"#059669",bg:"#ECFDF5",bdr:"#A7F3D0"},
+  skipped:     {c:"#3B82F6",bg:"#EFF6FF",bdr:"#BFDBFE"},
+};
+
+// Stage hints — what each step needs
+const STAGE_HINTS = {
+  1: "Mobile number + Name for PM Surya Ghar portal login",
+  2: "Electricity bill + Residential/Commercial proof upload",
+  3: "DISCOM auto-generates feasibility → upload here",
+  4: "Bank details (from lead docs) + Subsidy slab entry",
+  5: "Agreement template auto-fill → download → sign",
+  6: "PM Surya Ghar portal generates → upload here",
+  7: "Site photo, PAN, Aadhaar, Ele bill needed. Skip if no loan",
+  8: "Create print-ready folder with all loan docs for bank",
+  9: "Enter 70% of sanctioned loan amount",
+  10: "Confirm receiving 70% payment from customer",
+  11: "3 procurement requests: Kit + Structure + Electrical",
+  12: "Track: Requested → Ordered/Transferred → Delivered",
+  13: "Cross-check against PO. Confirm receipt item-wise",
+  14: "Set installation date and assign team",
+  15: "Upload 9 step-by-step photos (leg → panel → serial nos)",
+  16: "11 documents needed for grid sync application to DISCOM",
+  17: "Upload: meter photo in running condition",
+  18: "Verify DCR certificate + Panel/Inverter serial numbers",
+  19: "Remaining ~30% loan disbursement entry",
+  20: "Final payment confirmation → Project Complete ✅",
+};
 
 function TabSuryaGhar({ projectId }) {
   const [stages, setStages] = useState([]);
