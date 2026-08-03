@@ -4113,6 +4113,11 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
   const [showEdit, setShowEdit]   = useState(false);
   const [showInst, setShowInst]   = useState(false);
   const [moveTo, setMoveTo]       = useState(null);   // stage change modal ka target
+  // NOTE: ye dono neeche (early return ke baad) the — React #310 "rendered more
+  // hooks than during the previous render" se poora module crash kar raha tha.
+  // Har hook conditional return se PEHLE hi rehna chahiye.
+  const [instActionOn, setInstActionOn] = useState(null);   // {inst, action} — action form
+  const [undoOn, setUndoOn]       = useState(null);          // galti se laga action wapas lena
   const isAdmin = ["admin","super_admin"].includes(getUser()?.role);
   const [showLink, setShowLink]   = useState(false);
   const [showSite, setShowSite]   = useState(false);
@@ -4213,10 +4218,6 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
     }
   }
 
-  // Ek click me nahi — poora form khulta hai (kitna, kab, reference, wajah).
-  const [instActionOn, setInstActionOn] = useState(null);   // {inst, action}
-  // Galti se laga action wapas lena — sirf admin, wajah ke saath.
-  const [undoOn, setUndoOn] = useState(null);
   const undoInst = async (inst, reason) => {
     const res = await api.put(`/tenders/${tenderId}/instruments/${inst.id}`, {action:"undo", reason});
     if (!res?.success) { toast.error(res?.message || "Undo nahi hua"); return; }
