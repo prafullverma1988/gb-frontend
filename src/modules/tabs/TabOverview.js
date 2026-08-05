@@ -87,6 +87,12 @@ function TabOverview({proj, onRequestPayment}) {
   const [mrs, setMrs]     = useState([]);
   const [team, setTeam]   = useState([]);
   const [payReqs, setPayReqs] = useState([]);
+  // Site media — photos shot from Overview AND inside a task, merged by the
+  // backend. Office needs the same picture the site sees, without hunting
+  // through the Pulse feed.
+  const [media, setMedia] = useState(null);      // null = loading
+  const [mBucket, setMBucket] = useState("Last week");
+  const [mView, setMView] = useState(-1);        // index into the visible list
   const [pnl, setPnl]     = useState(null); // accrual P&L for this project (shared /finance/project-pnl formula)
   const [loading, setLoading] = useState(true);
 
@@ -113,8 +119,27 @@ function TabOverview({proj, onRequestPayment}) {
       if(pr?.success) setPayReqs(pr.data||[]);
       if(pl?.success) setPnl(pl.data?.items?.[0]||null);
     }).finally(()=>{ if(alive) setLoading(false); });
+    // Separate from the Promise.all above so a slow media list never holds up
+    // the KPI row.
+    api.get(`/projects/${pid}/media?type=all`)
+      .then(r=>{ if(alive) setMedia(r?.success && Array.isArray(r.data) ? r.data : []); })
+      .catch(()=>{ if(alive) setMedia([]); });
     return ()=>{ alive=false; };
   },[proj?.id]);
+
+  /* ── Site media helpers ── */
+  const isVid = (m) => m.kind==="video" || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(m.url||"");
+  const bucketOf = (d)=>{
+    const dt=new Date(d); if(isNaN(dt)) return "Older";
+    const days=(Date.now()-dt.getTime())/86400000;
+    return days<=7 ? "Last week" : days<=30 ? "Last month" : "Older";
+  };
+  const mediaBuckets = useMemo(()=>{
+    const g={"Last week":[],"Last month":[],"Older":[]};
+    (media||[]).forEach(m=>{ g[bucketOf(m.created_at)].push(m); });
+    return g;
+  },[media]);
+  const mediaShown = mediaBuckets[mBucket]||[];
 
   /* ── FINANCE derivations ── */
   const fin = useMemo(()=>{
@@ -327,6 +352,54 @@ function TabOverview({proj, onRequestPayment}) {
             </div>
           </Panel>
         </div>
+
+        {/* ── SITE PHOTOS & VIDEOS (full width, bottom) ── */}
+        <Panel>
+          <PHead title="Site Photos & Videos" action={
+            <div style={{display:"flex", gap:6}}>
+              {["Last week","Last month","Older"].map(b=>(
+                <button key={b} onClick={()=>setMBucket(b)}
+                  style={{padding:"4px 10px", borderRadius:14, border:`1px solid ${mBucket===b?T.pur:T.b1}`,
+                    background:mBucket===b?T.purL:T.surface, color:mBucket===b?T.pur:T.t3,
+                    fontSize:10.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit"}}>
+                  {b}{mediaBuckets[b]?.length ? ` · ${mediaBuckets[b].length}` : ""}
+                </button>
+              ))}
+            </div>
+          }/>
+          <div style={{padding:"10px 15px 14px"}}>
+            {media===null && <div style={{padding:"24px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>Loading…</div>}
+            {media!==null && mediaShown.length===0 && (
+              <div style={{padding:"24px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>
+                {mBucket} me koi site photo nahi.
+              </div>
+            )}
+            {mediaShown.length>0 && (
+              <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))", gap:8}}>
+                {mediaShown.map((m,i)=>(
+                  <div key={m.id} onClick={()=>setMView(i)} title={m.task_name||m.caption||""}
+                    style={{position:"relative", paddingTop:"75%", background:T.b1, borderRadius:8, overflow:"hidden", cursor:"zoom-in", border:`1px solid ${T.b1}`}}>
+                    {isVid(m)
+                      ? <><video src={m.url} muted preload="metadata" style={{position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover"}}/>
+                          <div style={{position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,.28)"}}>
+                            <svg width={22} height={22} viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+                          </div></>
+                      : <img src={m.url} alt="" loading="lazy" style={{position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover"}}/>}
+                    {m.task_name && (
+                      <div style={{position:"absolute", left:0, right:0, bottom:0, padding:"12px 6px 4px",
+                        background:"linear-gradient(transparent, rgba(0,0,0,.75))", color:"white", fontSize:9.5,
+                        whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{m.task_name}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Panel>
+
+        {mView>=0 && mediaShown[mView] && (
+          <MediaLightbox items={mediaShown} index={mView} onIndex={setMView} onClose={()=>setMView(-1)} isVid={isVid}/>
+        )}
       </>)}
 
       {/* ══════════════════ FINANCE ══════════════════ */}
@@ -466,5 +539,88 @@ function TabOverview({proj, onRequestPayment}) {
     </div>
   );
 }
+
+/* ── Lightbox with real zoom ──────────────────────────────────────
+   A site photo is only useful if you can get close enough to read a crack,
+   a bar spacing or a level mark, so this zooms properly: scroll wheel to
+   scale around the pointer, drag to pan once zoomed, arrow keys to move
+   between shots, Esc to close. */
+function MediaLightbox({items, index, onIndex, onClose, isVid}){
+  const m = items[index];
+  const [z, setZ] = useState(1);
+  const [off, setOff] = useState({x:0,y:0});
+  const drag = React.useRef(null);
+
+  useEffect(()=>{ setZ(1); setOff({x:0,y:0}); },[index]);
+  useEffect(()=>{
+    const onKey=(e)=>{
+      if(e.key==="Escape") onClose();
+      if(e.key==="ArrowRight" && index<items.length-1) onIndex(index+1);
+      if(e.key==="ArrowLeft"  && index>0)              onIndex(index-1);
+    };
+    window.addEventListener("keydown",onKey);
+    return ()=>window.removeEventListener("keydown",onKey);
+  },[index,items.length,onIndex,onClose]);
+
+  const onWheel=(e)=>{
+    if(isVid(m)) return;
+    e.preventDefault();
+    setZ(prev=>{
+      const nz=Math.min(8, Math.max(1, prev * (e.deltaY<0 ? 1.15 : 1/1.15)));
+      if(nz===1) setOff({x:0,y:0});
+      return nz;
+    });
+  };
+  const onDown=(e)=>{ if(z>1) drag.current={x:e.clientX,y:e.clientY,ox:off.x,oy:off.y}; };
+  const onMove=(e)=>{ if(drag.current) setOff({x:drag.current.ox+(e.clientX-drag.current.x), y:drag.current.oy+(e.clientY-drag.current.y)}); };
+  const stop=()=>{ drag.current=null; };
+
+  return (
+    <div onClick={onClose}
+      style={{position:"fixed", inset:0, background:"rgba(0,0,0,.93)", zIndex:1400, display:"flex", flexDirection:"column"}}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{display:"flex", alignItems:"center", gap:12, padding:"12px 18px", color:"white", flexShrink:0}}>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{fontSize:13, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+            {m.task_name || m.caption || "Site photo"}
+          </div>
+          <div style={{fontSize:11, color:"rgba(255,255,255,.55)", marginTop:2}}>
+            {new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
+            {m.by?` · ${m.by}`:""} · {index+1}/{items.length}
+          </div>
+        </div>
+        {!isVid(m) && (
+          <>
+            <span style={{fontSize:11.5, color:"rgba(255,255,255,.6)"}}>{z.toFixed(1)}×</span>
+            <button onClick={()=>{setZ(1);setOff({x:0,y:0});}} style={lbBtn}>Reset</button>
+          </>
+        )}
+        <button onClick={onClose} style={lbBtn}>Band</button>
+      </div>
+
+      <div onClick={e=>e.stopPropagation()} onWheel={onWheel}
+        onMouseDown={onDown} onMouseMove={onMove} onMouseUp={stop} onMouseLeave={stop}
+        style={{flex:1, overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center",
+          cursor: isVid(m) ? "default" : (z>1 ? (drag.current?"grabbing":"grab") : "zoom-in")}}>
+        {isVid(m)
+          ? <video src={m.url} controls autoPlay style={{maxWidth:"92%", maxHeight:"100%"}}/>
+          : <img src={m.url} alt="" draggable={false}
+              style={{maxWidth:"92%", maxHeight:"100%", objectFit:"contain",
+                transform:`translate(${off.x}px,${off.y}px) scale(${z})`,
+                transition: drag.current?"none":"transform .12s ease-out"}}/>}
+      </div>
+
+      <div onClick={e=>e.stopPropagation()}
+        style={{display:"flex", alignItems:"center", justifyContent:"center", gap:16, padding:"10px 0 16px", flexShrink:0}}>
+        <button onClick={()=>index>0&&onIndex(index-1)} disabled={index===0} style={{...lbBtn, opacity:index===0?.35:1}}>← Pichhla</button>
+        <span style={{fontSize:11, color:"rgba(255,255,255,.4)"}}>
+          {isVid(m) ? "Video" : "Scroll se zoom · drag se ghumayein"}
+        </span>
+        <button onClick={()=>index<items.length-1&&onIndex(index+1)} disabled={index===items.length-1} style={{...lbBtn, opacity:index===items.length-1?.35:1}}>Agla →</button>
+      </div>
+    </div>
+  );
+}
+const lbBtn = {background:"rgba(255,255,255,.15)", border:"none", color:"white", borderRadius:7, padding:"6px 13px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit"};
 
 export default TabOverview;
