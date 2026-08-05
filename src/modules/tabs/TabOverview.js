@@ -566,7 +566,9 @@ function MediaLightbox({items, index, onIndex, onClose, isVid}){
     if(isVid(m)) return;
     e.preventDefault();
     setZ(prev=>{
-      const nz=Math.min(8, Math.max(1, prev * (e.deltaY<0 ? 1.15 : 1/1.15)));
+      // 10x — office often has to read the photo (crack, bar spacing, challan
+      // number), not just look at it.
+      const nz=Math.min(10, Math.max(1, prev * (e.deltaY<0 ? 1.15 : 1/1.15)));
       if(nz===1) setOff({x:0,y:0});
       return nz;
     });
@@ -586,8 +588,16 @@ function MediaLightbox({items, index, onIndex, onClose, isVid}){
           </div>
           <div style={{fontSize:11, color:"rgba(255,255,255,.55)", marginTop:2}}>
             {new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
+            {" · "}{new Date(m.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}
             {m.by?` · ${m.by}`:""} · {index+1}/{items.length}
           </div>
+          {/* Coordinates rather than an address — reverse geocoding would be an
+              API call per photo, and the fix is what proves where it was shot. */}
+          {m.lat!=null && m.lng!=null && (
+            <div style={{fontSize:10.5, color:"rgba(255,255,255,.42)", marginTop:2, fontFamily:"monospace"}}>
+              📍 {Number(m.lat).toFixed(5)}, {Number(m.lng).toFixed(5)}
+            </div>
+          )}
         </div>
         {!isVid(m) && (
           <>
