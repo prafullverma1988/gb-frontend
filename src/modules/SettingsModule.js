@@ -2433,6 +2433,7 @@ function WarehouseSettings() {
   const [photoPolicy, setPhotoPolicy] = useState({
     issue_photo_required: false, expense_photo_required: false,
     photo_geo_required: true, photo_date_stamp: true, photo_gallery_allowed: true,
+    attendance_photo_required: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2450,6 +2451,7 @@ function WarehouseSettings() {
           photo_geo_required:     on(r.data.photo_geo_required, true),
           photo_date_stamp:       on(r.data.photo_date_stamp, true),
           photo_gallery_allowed:  on(r.data.photo_gallery_allowed, true),
+          attendance_photo_required: on(r.data.attendance_photo_required, false),
         });
         setMrFlow(r.data.mr_fulfillment_mode || "procurement_driven");
         setHoldTtl(Number(r.data.mr_soft_hold_ttl_days) || 2);
@@ -2522,6 +2524,12 @@ function WarehouseSettings() {
           desc="ON: wallet se site kharch darj karte waqt bill/receipt ki photo lagani hogi."
           value={photoPolicy.expense_photo_required}
           onChange={v => setPhotoPolicy(p => ({ ...p, expense_photo_required: v }))} />
+
+        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
+          label="👷 Attendance ke saath photo compulsory"
+          desc="ON: hazri save karne se pehle kam se kam ek photo lagani hogi. Labour alag-alag gang me kaam karti hai to ek se zyada photo bhi laga sakte ho — photo poore group ki hoti hai, har mazdoor ki alag nahi."
+          value={photoPolicy.attendance_photo_required}
+          onChange={v => setPhotoPolicy(p => ({ ...p, attendance_photo_required: v }))} />
 
         <ToggleRow icon={<IcBox size={17} color={T.blue} />}
           label="📍 Photo ke saath location record karo"

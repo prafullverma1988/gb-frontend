@@ -62,6 +62,9 @@ function TabAttendance({ project, onRequestPayment }) {
   // ── Libraries ───────────────────────────────────────────────────
   const [workerLib, setWorkerLib] = useState([]);
   const [subconLib, setSubconLib] = useState([]);
+  // false = the project has no work order, so we are showing every subcon in
+  // the company. Worth saying out loud, otherwise the wider list looks like a bug.
+  const [subconScoped, setSubconScoped] = useState(true);
   const [vendorLib, setVendorLib] = useState([]);          // vendors ON THIS PROJECT (selector + daily)
   const [companyVendorLib, setCompanyVendorLib] = useState([]); // full company master (the picker)
   const [rateCard,  setRateCard]  = useState([]);
@@ -116,7 +119,17 @@ function TabAttendance({ project, onRequestPayment }) {
   // ── Load libraries + rate card on mount ─────────────────────────
   useEffect(() => {
     api.get("/library/workers").then(r=>{ if(r.success) setWorkerLib(r.data||[]); }).catch(()=>{});
-    api.get("/finance/parties?type=Subcontractor").then(r=>{ if(r.success) setSubconLib(r.data||[]); }).catch(()=>{});
+    // Only the subcons appointed to THIS project — a company-wide list makes
+    // the marker hunt through firms who have never worked here. The endpoint
+    // falls back to the full list when the project has no work order, and says
+    // so via derived_from, so attendance is never blocked by an empty picker.
+    api.get(`/subcon/project-subcons?project_id=${projectId}`)
+      .then(r=>{
+        if(!r?.success) return;
+        setSubconLib((r.data||[]).map(s=>({ ...s, id: s.subcon_id, name: s.subcon_name })));
+        setSubconScoped(r.derived_from === "work_orders");
+      })
+      .catch(()=>{});
     loadVendors();
     api.get("/library/labour-rates").then(r=>{ if(r.success) setRateCard(r.data||[]); }).catch(()=>{});
     /* eslint-disable-next-line */
@@ -449,6 +462,11 @@ function TabAttendance({ project, onRequestPayment }) {
       {labType==="subcon"&&(
         <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",flexShrink:0}}>Subcontractor</span>
+          {!subconScoped && subconLib.length>0 && (
+            <span style={{fontSize:10,color:T.amb,background:T.ambL,border:`1px solid ${T.amb}33`,padding:"2px 8px",borderRadius:10,flexShrink:0}}>
+              Is project ka koi Work Order nahi — saare subcon dikha rahe hain
+            </span>
+          )}
           {subconLib.length===0
             ?<span style={{fontSize:12,color:T.t4}}>No subcontractors in library. Add via <b>Master Library → Subcontractors</b>.</span>
             :<div style={{display:"flex",gap:6,flexWrap:"wrap",flex:1}}>
