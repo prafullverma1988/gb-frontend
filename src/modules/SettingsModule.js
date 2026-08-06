@@ -2428,6 +2428,12 @@ function WarehouseSettings() {
   const [grnPhotoReq, setGrnPhotoReq] = useState(false);
   const [mrFlow, setMrFlow] = useState("procurement_driven"); // procurement_driven | warehouse_driven
   const [holdTtl, setHoldTtl] = useState(2);
+  // Photo policy — one place for "where is a photo required, and what rides
+  // with it". Defaults match the backend so an unsaved form never flips them.
+  const [photoPolicy, setPhotoPolicy] = useState({
+    issue_photo_required: false, expense_photo_required: false,
+    photo_geo_required: true, photo_date_stamp: true, photo_gallery_allowed: true,
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
@@ -2437,6 +2443,14 @@ function WarehouseSettings() {
       if (r?.success && r.data) {
         setWhProcMode(r.data.warehouse_procurement_mode || "direct");
         setGrnPhotoReq(r.data.grn_photo_required === 1 || r.data.grn_photo_required === true);
+        const on = (v, dflt) => (v === undefined || v === null ? dflt : Number(v) === 1);
+        setPhotoPolicy({
+          issue_photo_required:   on(r.data.issue_photo_required, false),
+          expense_photo_required: on(r.data.expense_photo_required, false),
+          photo_geo_required:     on(r.data.photo_geo_required, true),
+          photo_date_stamp:       on(r.data.photo_date_stamp, true),
+          photo_gallery_allowed:  on(r.data.photo_gallery_allowed, true),
+        });
         setMrFlow(r.data.mr_fulfillment_mode || "procurement_driven");
         setHoldTtl(Number(r.data.mr_soft_hold_ttl_days) || 2);
       }
@@ -2451,6 +2465,7 @@ function WarehouseSettings() {
         grn_photo_required: grnPhotoReq,
         mr_fulfillment_mode: mrFlow,
         mr_soft_hold_ttl_days: holdTtl,
+        ...photoPolicy,
       });
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 1800);
@@ -2489,12 +2504,42 @@ function WarehouseSettings() {
         </div>
       </SectionCard>
 
-      <SectionCard title="GRN Photo Policy"
-        desc="GRN (material receive) ke time challan / material / quality ki photo attach karna compulsory rakhna hai ya optional.">
+      <SectionCard title="Photo Policy"
+        desc="Kahan photo lagana zaroori hai, aur har photo ke saath kya record ho. Ye poori company par lagu hota hai.">
         <ToggleRow icon={<IcBox size={17} color={T.blue} />}
-          label="📷 Photo compulsory at GRN time"
-          desc="ON: User ko kam se kam ek photo (challan ya material) attach karni hogi, warna Submit GRN block. OFF: Photo optional — attach kar sakte ho par enforcement nahi."
+          label="📷 GRN ke saath photo compulsory"
+          desc="ON: material receive karte waqt kam se kam ek photo (challan ya material) lagani hogi, warna GRN save nahi hoga. OFF: photo laga sakte ho par zaroori nahi."
           value={grnPhotoReq} onChange={setGrnPhotoReq} />
+
+        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
+          label="⚠️ Issue ke saath photo compulsory"
+          desc="ON: site issue raise karte waqt problem ki photo lagani hogi. Photo se issue samajhne aur theek karne me kaafi farak padta hai."
+          value={photoPolicy.issue_photo_required}
+          onChange={v => setPhotoPolicy(p => ({ ...p, issue_photo_required: v }))} />
+
+        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
+          label="💰 Site expense ke saath photo compulsory"
+          desc="ON: wallet se site kharch darj karte waqt bill/receipt ki photo lagani hogi."
+          value={photoPolicy.expense_photo_required}
+          onChange={v => setPhotoPolicy(p => ({ ...p, expense_photo_required: v }))} />
+
+        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
+          label="📍 Photo ke saath location record karo"
+          desc="ON: photo ke saath GPS location (lat/lng) save hoti hai — baad me pata rehta hai photo site ke kis hisse me li gayi thi. Address nahi, sirf coordinates."
+          value={photoPolicy.photo_geo_required}
+          onChange={v => setPhotoPolicy(p => ({ ...p, photo_geo_required: v }))} />
+
+        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
+          label="🕒 Photo par date-time dikhao"
+          desc="ON: gallery aur viewer me har photo ke saath kab li gayi thi wo dikhta hai."
+          value={photoPolicy.photo_date_stamp}
+          onChange={v => setPhotoPolicy(p => ({ ...p, photo_date_stamp: v }))} />
+
+        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
+          label="🖼 Gallery se photo upload allow karo"
+          desc="OFF karne par sirf LIVE camera chalega — purani ya kisi aur ki photo gallery se nahi lag sakti. Ye backdating rokne ka control hai, isliye baaki settings se alag rakha gaya hai."
+          value={photoPolicy.photo_gallery_allowed}
+          onChange={v => setPhotoPolicy(p => ({ ...p, photo_gallery_allowed: v }))} />
       </SectionCard>
 
       <SectionCard title="MR Fulfillment Flow"
