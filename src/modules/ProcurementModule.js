@@ -2695,9 +2695,17 @@ function ProcurementModule(){
         // EDIT mode — PUT existing PO + flip back to Draft + create fresh approval entry
         // Sanitize date: only valid YYYY-MM-DD reaches backend (no "TBD" / empty / formatted strings)
         const validDate = (d) => d && /^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? d : null;
+        // Send the party ID alongside the name so a later vendor rename can
+        // never detach the PO from its party. The vendor field is a picker, so
+        // an exact name match against the loaded party list is the id; a
+        // hand-typed name yields null and the backend resolves by name as before.
+        const vendorPartyId = (dbVendors.find(v =>
+          String(v?.name||"").trim().toLowerCase() === String(newPO.vendor||"").trim().toLowerCase()
+        )||{}).id || null;
         if (newPO.editPoId) {
           const res = await api.put("/procurement/pos/"+newPO.editPoId,{
             vendor_name: newPO.vendor,
+            vendor_party_id: vendorPartyId,
             project_id: newPO.projectId || 1,
             project_name: newPO.project,
             delivery_site: newPO.deliverySite,
@@ -2738,6 +2746,7 @@ function ProcurementModule(){
         const linked_mr_ids = (createPOPrefill||[]).map(m=>m.id).filter(Boolean);
         const res = await api.post("/procurement/pos",{
           vendor_name: newPO.vendor,
+          vendor_party_id: vendorPartyId,
           project_id: newPO.projectId || (createPOPrefill||[])[0]?.project_id || 1,
           project_name: newPO.project,
           delivery_site: newPO.deliverySite,
