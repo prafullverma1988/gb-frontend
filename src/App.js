@@ -33,6 +33,7 @@ const MOMModule          = lazyWithPreload("mom",          () => import("./modul
 const MasterLibraryModule= lazyWithPreload("library",     () => import("./modules/MasterLibraryModule"));
 const WarehouseModule    = lazyWithPreload("warehouse",    () => import("./modules/WarehouseModule"));
 const FuelModule         = lazyWithPreload("fuel",         () => import("./modules/FuelModule"));
+const MachineryModule    = lazyWithPreload("machinery",    () => import("./modules/MachineryModule"));
 const TownshipCRMModule  = lazyWithPreload("township",     () => import("./modules/TownshipCRMModule"));
 const ReportsModule      = lazyWithPreload("reports",      () => import("./modules/ReportsModule"));
 const TendersModule      = lazyWithPreload("tenders",      () => import("./modules/TendersModule"));
@@ -82,6 +83,7 @@ function prefetchAllModules(){
     safePreload("MasterLibraryModule", MasterLibraryModule);
     safePreload("WarehouseModule",     WarehouseModule);
     safePreload("FuelModule",          FuelModule);
+    safePreload("MachineryModule",     MachineryModule);
     safePreload("TownshipCRMModule",   TownshipCRMModule);
     safePreload("ReportsModule",       ReportsModule);
     safePreload("SaaSModule",          SaaSModule);
@@ -101,6 +103,7 @@ const IcRep   =(p)=><Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2
 const IcSet   =(p)=><Ic {...p} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0"/>;
 const IcWH    =(p)=><Ic {...p} d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/>;
 const IcFuel  =(p)=><Ic {...p} d="M12 2.7s6 6.3 6 10.3a6 6 0 01-12 0c0-4 6-10.3 6-10.3z"/>;
+const IcMach  =(p)=><Ic {...p} d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z"/>;
 const IcTown  =(p)=><Ic {...p} d="M3 21h18M5 21V7l6-4v18M19 21V11l-6-4M9 9v.01M9 13v.01M9 17v.01"/>;
 const IcGavel =(p)=><Ic {...p} d="M3 21h9M6 15l6-6M4 11l6 6M14.5 3.5l6 6M17.5 6.5L11 13"/>;
 const IcProc  =(p)=><Ic {...p} d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/>;
@@ -173,6 +176,7 @@ const NAV_GROUPS=[
     {id:"procurement", label:"Procurement", Icon:IcProc, sc:"P"},
     {id:"warehouse",   label:"Warehouse",   Icon:IcWH,   sc:"W"},
     {id:"fuel",        label:"Fuel",        Icon:IcFuel},
+    {id:"machinery",   label:"Machinery",   Icon:IcMach},
     {id:"township",    label:"Township CRM",Icon:IcTown, sc:"G"},
     {id:"payroll",     label:"Team & HR",   Icon:IcPay,  sc:"Y"},
     {id:"tenders",     label:"Tenders",     Icon:IcGavel},
@@ -557,6 +561,7 @@ const SEARCH_ITEMS=[
   {id:"procurement",label:"Procurement",  icon:"M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18",  sc:"Alt+P", section:"Finance & Ops"},
   {id:"warehouse", label:"Warehouse",     icon:"M3 21V8l9-5 9 5v13M9 21v-6h6v6",                          sc:"Alt+W", section:"Finance & Ops"},
   {id:"fuel",      label:"Fuel",          icon:"M12 2.7s6 6.3 6 10.3a6 6 0 01-12 0c0-4 6-10.3 6-10.3z",   section:"Finance & Ops"},
+  {id:"machinery", label:"Machinery",     icon:"M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z", section:"Finance & Ops"},
   {id:"township",  label:"Township CRM",  icon:"M3 21h18M5 21V7l6-4v18M19 21V11l-6-4",                    sc:"Alt+G", section:"Finance & Ops"},
   {id:"payroll",   label:"Team & HR",     icon:"M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2",    sc:"Alt+Y", section:"Finance & Ops"},
   {id:"crm",       label:"CRM",           icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+C", section:"Navigation"},
@@ -1967,6 +1972,7 @@ export default function App(){
     procurement:{title:"Procurement",sub:"PO · RFQ · Materials"},
     warehouse:{title:"Warehouse",sub:"Central Stock"},
     fuel:{title:"Fuel",sub:"Diesel, barrel stock & machine consumption"},
+    machinery:{title:"Machinery",sub:"Fleet health, service, documents & reminders"},
     township:{title:"Township CRM",sub:"Real-Estate Projects & Sales"},
     payroll:{title:"Payroll",sub:"Staff Payments"},
     tenders:{title:"Tenders",sub:"Bid · EMD/BG · Agreement · DLP"},
@@ -2002,6 +2008,7 @@ export default function App(){
     library:   guard("library",  "Library",        <MasterLibraryModule/>),
     warehouse: guard("warehouse","Warehouse",      <WarehouseModule/>),
     fuel:      guard("fuel","Fuel",                <FuelModule/>),
+    machinery: guard("machinery","Machinery",      <MachineryModule/>),
     township:  guard("township", "Township CRM",   <TownshipCRMModule/>),
     reports:   guard("reports",  "Reports",        <ReportsModule/>),
     tenders:   guard("tenders",  "Tenders",        <TendersModule onOpenProject={(pid)=>handleNotifNav("projects","/projects/"+pid+"/overview")}/>),
