@@ -635,6 +635,302 @@ function MachineForm({ open, onClose, onSaved, machine, parties }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// IMPORT WIZARD
+//
+// Library ka purana CSV import 7 column padhta tha aur har fail hui row ko
+// chup-chaap gira deta tha. Yahan teen cheezein alag hain: Excel bhi chalti
+// hai, column khud match hote hain (par badle ja sakte hain), aur commit se
+// pehle har row ka faisla dikh jaata hai.
+// ══════════════════════════════════════════════════════════════════
+const IMPORT_COLS = [
+  { key: "name", label: "Machine ka naam", required: true, aliases: ["machine", "equipment name", "equipment", "naam", "machine name"] },
+  { key: "registration_no", label: "Gadi no.", aliases: ["registration", "reg no", "reg", "vehicle no", "number plate", "gadi"] },
+  { key: "code", label: "Code", aliases: ["equipment code", "asset code"] },
+  { key: "machine_type", label: "Machine type", aliases: ["type", "category", "prakar", "equipment type", "machine category"] },
+  { key: "ownership", label: "Ownership", aliases: ["owned rented", "own rented", "own", "owned", "rented", "hire type", "malikana", "apni kiraye"] },
+  { key: "measurement_mode", label: "Rate type", aliases: ["mode", "measurement", "basis", "rate basis"] },
+  { key: "default_rate", label: "Rate", aliases: ["rate", "default rate", "kiraya", "hire rate", "rent", "amount", "rate per unit"] },
+  { key: "meter_unit", label: "Meter unit", aliases: ["meter", "meter type"] },
+  { key: "opening_hours", label: "Opening hours", aliases: ["hour meter", "hours", "hmr"] },
+  { key: "opening_km", label: "Opening km", aliases: ["odometer", "km", "kms"] },
+  { key: "fuel_per_hour", label: "Fuel norm (L/hr)", aliases: ["fuel norm", "l/hr", "lph", "mileage"] },
+  { key: "make", label: "Make", aliases: ["brand", "company"] },
+  { key: "model", label: "Model", aliases: [] },
+  { key: "chassis_no", label: "Chassis no.", aliases: ["chassis"] },
+  { key: "engine_no", label: "Engine no.", aliases: ["engine"] },
+  { key: "operator_name", label: "Operator", aliases: ["driver", "chalak"] },
+];
+
+const norm = (s) => String(s == null ? "" : s).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+// Header ka naam target column se milao. Exact match pehle, phir alias, phir
+// "isme wo shabd hai" — is order me, warna "Rate type" ko "Rate" utha leta hai.
+function autoMap(header) {
+  const used = new Set();
+  const map = {};
+  for (const c of IMPORT_COLS) {
+    const want = [norm(c.label), norm(c.key), ...c.aliases.map(norm)];
+    let idx = header.findIndex((h, i) => !used.has(i) && want.includes(norm(h)));
+    if (idx < 0) idx = header.findIndex((h, i) => !used.has(i) && norm(h) && want.some((w) => norm(h) === w));
+    if (idx >= 0) { map[c.key] = idx; used.add(idx); }
+  }
+  return map;
+}
+
+const OWNERSHIP_WORDS = { owned: "owned", own: "owned", apni: "owned", self: "owned", company: "owned", rented: "rented", rent: "rented", hired: "rented", kiraya: "rented", kiraye: "rented", leased: "rented" };
+const MODE_WORDS = { hourly: "hourly", hour: "hourly", hr: "hourly", ghanta: "hourly", daily: "daily", day: "daily", din: "daily", km: "km", kilometer: "km", kms: "km", trip: "trip", trips: "trip", fera: "trip", fixed: "fixed", lump: "fixed", lumpsum: "fixed" };
+const UNIT_WORDS = { hours: "hours", hour: "hours", hr: "hours", hmr: "hours", km: "km", odometer: "km", both: "both", dono: "both" };
+
+function ImportWizard({ open, onClose, onDone }) {
+  const [step, setStep] = useState(1);
+  const [fileName, setFileName] = useState("");
+  const [aoa, setAoa] = useState([]);
+  const [headerRow, setHeaderRow] = useState(0);
+  const [map, setMap] = useState({});
+  const [preview, setPreview] = useState(null);
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setStep(1); setFileName(""); setAoa([]); setHeaderRow(0); setMap({});
+    setPreview(null); setResult(null); setError("");
+  }, [open]);
+
+  const onFile = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    setError("");
+    try {
+      const XLSX = await import("xlsx");
+      const buf = await f.arrayBuffer();
+      // cellFormula:false → formula load hi nahi hota, sirf cached value.
+      const wb = XLSX.read(new Uint8Array(buf), { type: "array", cellFormula: false, cellText: true, cellDates: false });
+      if (!wb.SheetNames.length) { setError("File me koi sheet nahi mili"); return; }
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false, defval: "" });
+      if (!rows.length) { setError("Sheet khaali hai"); return; }
+      // Header wo row hai jisme sabse zyada bhare hue khaane hain — file ke
+      // upar aksar title/logo ki adhoori rows hoti hain.
+      let best = 0, bestN = -1;
+      for (let i = 0; i < Math.min(rows.length, 10); i++) {
+        const n = (rows[i] || []).filter((c) => String(c).trim()).length;
+        if (n > bestN) { bestN = n; best = i; }
+      }
+      setFileName(f.name); setAoa(rows); setHeaderRow(best);
+      setMap(autoMap(rows[best] || []));
+      setStep(2);
+    } catch (_) { setError("File padhne me dikkat — sahi .xlsx / .xls / .csv chuno"); }
+  };
+
+  const header = aoa[headerRow] || [];
+  const parsed = useMemo(() => {
+    if (map.name == null) return [];
+    const out = [];
+    for (let i = headerRow + 1; i < aoa.length; i++) {
+      const r = aoa[i] || [];
+      const cell = (k) => (map[k] == null ? "" : String(r[map[k]] == null ? "" : r[map[k]]).trim());
+      const name = cell("name");
+      if (!name) continue;
+      const numOf = (k) => { const v = cell(k).replace(/[^0-9.-]/g, ""); return v === "" ? null : Number(v); };
+      out.push({
+        _row: i + 1,
+        name,
+        registration_no: cell("registration_no") || null,
+        code: cell("code") || null,
+        machine_type: cell("machine_type") || null,
+        type: cell("machine_type") || null,
+        ownership: OWNERSHIP_WORDS[norm(cell("ownership")).split(" ")[0]] || "rented",
+        measurement_mode: MODE_WORDS[norm(cell("measurement_mode")).split(" ")[0]] || "hourly",
+        default_rate: numOf("default_rate") || 0,
+        meter_unit: UNIT_WORDS[norm(cell("meter_unit")).split(" ")[0]] || null,
+        opening_hours: numOf("opening_hours"),
+        opening_km: numOf("opening_km"),
+        fuel_per_hour: numOf("fuel_per_hour"),
+        make: cell("make") || null, model: cell("model") || null,
+        chassis_no: cell("chassis_no") || null, engine_no: cell("engine_no") || null,
+        operator_name: cell("operator_name") || null,
+      });
+    }
+    return out;
+  }, [aoa, headerRow, map]);
+
+  const runPreview = async () => {
+    setBusy(true); setError("");
+    const r = await api.post("/machinery/import", { rows: parsed, dry_run: true });
+    setBusy(false);
+    if (!r || !r.success) { setError((r && r.message) || "Preview nahi ban paya"); return; }
+    setPreview(r.data); setStep(3);
+  };
+
+  const commit = async () => {
+    setBusy(true); setError("");
+    const r = await api.post("/machinery/import", { rows: parsed, dry_run: false });
+    setBusy(false);
+    if (!r || !r.success) { setError((r && r.message) || "Import fail hua — kuch bhi save nahi hua"); return; }
+    setResult(r.data); setStep(4); onDone();
+  };
+
+  const template = async () => {
+    const XLSX = await import("xlsx");
+    const rows = [
+      IMPORT_COLS.map((c) => c.label),
+      ["JCB 3DX Backhoe Loader", "MP09 AB 1234", "EQ-JCB-01", "excavator", "owned", "hourly", "0", "hours", "4318", "", "8", "JCB", "3DX", "", "", "Ram Singh"],
+      ["Tipper 10 wheel", "MP09 CD 5678", "EQ-TIP-01", "tipper", "rented", "km", "42", "km", "", "128400", "", "Tata", "Signa", "", "", ""],
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Machines");
+    XLSX.writeFile(wb, "sanchalan_machinery_template.xlsx");
+  };
+
+  const missingReq = IMPORT_COLS.filter((c) => c.required && map[c.key] == null);
+
+  return (
+    <Modal open={open} onClose={onClose} width={860} title="Excel se machines import"
+      sub={fileName || "Naam ke alawa sab optional — baad me edit ho sakta hai"}
+      footer={
+        step === 1 ? <Btn ghost onClick={onClose}>Cancel</Btn>
+        : step === 2 ? <><Btn ghost onClick={() => setStep(1)}>Peeche</Btn>
+            <Btn onClick={runPreview} disabled={busy || !!missingReq.length || !parsed.length}>{busy ? "Dekh rahe hain..." : `Jaanch karo (${parsed.length})`}</Btn></>
+        : step === 3 ? <><Btn ghost onClick={() => setStep(2)}>Peeche</Btn>
+            <Btn onClick={commit} disabled={busy || !preview || !preview.summary.ok}>{busy ? "Import ho raha hai..." : `${preview ? preview.summary.ok : 0} machine import karo`}</Btn></>
+        : <Btn onClick={onClose}>Theek hai</Btn>
+      }>
+
+      {step === 1 && (
+        <>
+          <Notice>
+            Jis machine ka <b>naam ya gadi no.</b> pehle se register me hai, wo skip ho jayegi —
+            purana record import se kabhi overwrite nahi hota.
+          </Notice>
+          <label style={{ display: "block", border: `2px dashed ${T.b2}`, borderRadius: 12, padding: "34px 20px", textAlign: "center", cursor: "pointer" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.t2 }}>Excel / CSV file chuno</div>
+            <div style={{ fontSize: 11.5, color: T.t4, marginTop: 5 }}>.xlsx · .xls · .csv</div>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={onFile} style={{ display: "none" }} />
+          </label>
+          <div style={{ textAlign: "center", marginTop: 12 }}>
+            <button type="button" onClick={template}
+              style={{ background: "none", border: "none", color: T.ind, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+              Template download karo
+            </button>
+          </div>
+        </>
+      )}
+
+      {step === 2 && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: 11.5, color: T.t3 }}>Header row</span>
+            <select value={headerRow} onChange={(e) => { const h = Number(e.target.value); setHeaderRow(h); setMap(autoMap(aoa[h] || [])); }}
+              style={{ ...inp, width: 150 }}>
+              {aoa.slice(0, 10).map((r, i) => <option key={i} value={i}>Row {i + 1}</option>)}
+            </select>
+            <span style={{ fontSize: 11.5, color: T.t4 }}>{parsed.length} machine mili</span>
+          </div>
+          {!!missingReq.length && (
+            <div style={{ marginBottom: 12, padding: "9px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>
+              {missingReq.map((c) => c.label).join(", ")} ka column chuno — uske bina import nahi hoga
+            </div>
+          )}
+          {/* Ownership bahut kuch tay karti hai — kaagaz ka scope, diesel kiska,
+              aur completeness ka hisaab. Column na mile to sab chup-chaap
+              "rented" ban jaate; ye keh dena zaroori hai. */}
+          {map.ownership == null && (
+            <div style={{ marginBottom: 12, padding: "9px 12px", background: T.ambL, color: T.amb, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>
+              Ownership ka column nahi chuna — saari machine <b>Rented</b> maani jayengi. Apni machines
+              baad me ek-ek kar ke badalni padengi.
+            </div>
+          )}
+          {map.measurement_mode != null && (() => {
+            // Jo shabd hum pehchante hi nahi wo chup-chaap 'hourly' ban jaate
+            // hain — ek tipper ka km rate ghante ka ban jana mehanga padta hai.
+            const bad = [...new Set(parsed.map((p, i) => {
+              const raw = String((aoa[headerRow + 1 + i] || [])[map.measurement_mode] || "").trim();
+              return raw && !MODE_WORDS[norm(raw).split(" ")[0]] ? raw : null;
+            }).filter(Boolean))];
+            return bad.length ? (
+              <div style={{ marginBottom: 12, padding: "9px 12px", background: T.ambL, color: T.amb, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>
+                Rate type me ye shabd samajh nahi aaye: {bad.slice(0, 5).join(", ")} — wo rows "Per hour" maani jayengi.
+              </div>
+            ) : null;
+          })()}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {IMPORT_COLS.map((c) => (
+              <Field key={c.key} label={c.label + (c.required ? " *" : "")}>
+                <select value={map[c.key] == null ? "" : map[c.key]}
+                  onChange={(e) => setMap((p) => ({ ...p, [c.key]: e.target.value === "" ? null : Number(e.target.value) }))}
+                  style={inp}>
+                  <option value="">— nahi hai —</option>
+                  {header.map((h, i) => <option key={i} value={i}>{String(h).trim() || `Column ${i + 1}`}</option>)}
+                </select>
+              </Field>
+            ))}
+          </div>
+        </>
+      )}
+
+      {step === 3 && preview && (
+        <>
+          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+            {[
+              { l: "Banengi", v: preview.summary.ok, c: T.grn },
+              { l: "Skip (pehle se hai)", v: preview.summary.skip, c: T.amb },
+              { l: "Galti", v: preview.summary.error, c: T.red },
+            ].map((x) => (
+              <div key={x.l} style={{ flex: 1, border: `1.5px solid ${T.b1}`, borderTop: `3px solid ${x.c}`, borderRadius: 10, padding: "10px 13px" }}>
+                <div style={{ fontSize: 19, fontWeight: 800, color: x.c }}>{x.v}</div>
+                <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>{x.l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ maxHeight: 320, overflowY: "auto", border: `1px solid ${T.b1}`, borderRadius: 10 }}>
+            <Row head cols="52px 1.5fr 1fr 90px 1.6fr">
+              <span>Row</span><span>Machine</span><span>Gadi no.</span><span>Faisla</span><span>Wajah</span>
+            </Row>
+            {preview.verdicts.map((v) => (
+              <Row key={v.row} cols="52px 1.5fr 1fr 90px 1.6fr">
+                <span style={{ fontSize: 11.5, color: T.t4 }}>{v.row}</span>
+                <span style={{ fontSize: 12, color: T.t1 }}>{v.name || "—"}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{v.registration_no || "—"}</span>
+                <span>
+                  {v.status === "ok" ? <Pill label="Banegi" c={T.grn} bg={T.grnL} />
+                    : v.status === "skip" ? <Pill label="Skip" c={T.amb} bg={T.ambL} />
+                    : <Pill label="Galti" c={T.red} bg={T.redL} />}
+                </span>
+                <span style={{ fontSize: 11, color: T.t3 }}>{v.reason || "—"}</span>
+              </Row>
+            ))}
+          </div>
+        </>
+      )}
+
+      {step === 4 && result && (
+        <>
+          <div style={{ padding: "13px 15px", background: T.grnL, border: `1px solid ${T.grn}33`, borderRadius: 10, marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.grn }}>{result.created.length} machine ban gayi</div>
+            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 3 }}>
+              {result.summary.skip} skip (pehle se thi) · {result.summary.error} galti wali chhod di gayi.
+              {" "}Kaagaz aur meter har machine me alag se bharne honge — completeness bar batata rahega kya baaki hai.
+            </div>
+          </div>
+          <div style={{ maxHeight: 260, overflowY: "auto", border: `1px solid ${T.b1}`, borderRadius: 10 }}>
+            {result.created.map((c) => (
+              <Row key={c.id} cols="52px 1fr">
+                <span style={{ fontSize: 11.5, color: T.t4 }}>{c.row}</span>
+                <span style={{ fontSize: 12, color: T.t1 }}>{c.name}</span>
+              </Row>
+            ))}
+          </div>
+        </>
+      )}
+
+      {error && <div style={{ marginTop: 12, padding: "9px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>{error}</div>}
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
 // DOCUMENT FORM
 // ══════════════════════════════════════════════════════════════════
 function DocForm({ open, onClose, onSaved, machine }) {
@@ -1047,6 +1343,7 @@ function MachineryModule() {
   const [parties, setParties] = useState([]);
   const [formOpen, setFormOpen] = useState(false);
   const [editMachine, setEditMachine] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   // silent = background refresh. Spinner sirf pehli baar; warna machine detail
   // khuli ho to wo unmount ho kar apna tab bhool jaata hai.
@@ -1128,7 +1425,11 @@ function MachineryModule() {
             </div>
 
             {tab === "fleet" && (
-              <Panel title="Fleet" action={<Btn size="sm" icon={IcAdd} onClick={() => { setEditMachine(null); setFormOpen(true); }}>Machine</Btn>}>
+              <Panel title="Fleet" action={
+                <div style={{ display: "flex", gap: 7 }}>
+                  <Btn size="sm" ghost onClick={() => setImportOpen(true)}>Excel import</Btn>
+                  <Btn size="sm" icon={IcAdd} onClick={() => { setEditMachine(null); setFormOpen(true); }}>Machine</Btn>
+                </div>}>
                 {fleet.length === 0 && (
                   <Empty>
                     Koi machine register nahi.<br />
@@ -1237,6 +1538,8 @@ function MachineryModule() {
           </>
         )}
       </div>
+
+      <ImportWizard open={importOpen} onClose={() => setImportOpen(false)} onDone={() => load(true)} />
 
       <MachineForm open={formOpen} machine={editMachine} parties={parties}
         onClose={() => { setFormOpen(false); setEditMachine(null); }}
