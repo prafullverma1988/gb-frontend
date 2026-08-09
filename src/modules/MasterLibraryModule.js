@@ -991,16 +991,18 @@ function PartyMasterSection() {
   // A party can hold several roles (Material Vendor + Subcon + Transporter).
   // Staff is EXCLUSIVE — selecting it clears the others and vice-versa.
   const ROLE_OPTIONS = [
-    { key: "material_vendor", label: "Material Vendor" },
-    { key: "client",          label: "Client" },
-    { key: "subcontractor",   label: "Subcontractor" },
-    { key: "labour_vendor",   label: "Labour Vendor" },
-    { key: "transporter",     label: "Transporter" },
-    { key: "consultant",      label: "Consultant" },
-    { key: "staff",           label: "Staff" },
+    { key: "material_vendor",  label: "Material Vendor" },
+    { key: "equipment_vendor", label: "Equipment Vendor" },
+    { key: "client",           label: "Client" },
+    { key: "subcontractor",    label: "Subcontractor" },
+    { key: "labour_vendor",    label: "Labour Vendor" },
+    { key: "transporter",      label: "Transporter" },
+    { key: "consultant",       label: "Consultant" },
+    { key: "staff",            label: "Staff" },
   ];
   const ROLE_ALIAS = {
     "material vendor":"material_vendor","material supplier":"material_vendor","supplier":"material_vendor","vendor":"material_vendor","other vendor":"material_vendor",
+    "equipment":"equipment_vendor","equipment vendor":"equipment_vendor","machinery":"equipment_vendor",
     "client":"client","subcontractor":"subcontractor","sub-contractor":"subcontractor","subcon":"subcontractor",
     "labour vendor":"labour_vendor","labor vendor":"labour_vendor","transporter":"transporter","consultant":"consultant","staff":"staff",
   };
@@ -1036,8 +1038,8 @@ function PartyMasterSection() {
   // values ("Supplier" / "Material Supplier") so existing parties show up
   // under the same chip without needing a DB migration. "Staff" is new —
   // app users get a staff-party automatically; this is for off-app casual staff.
-  const types = ["All", "Material Vendor", "Client", "Subcontractor", "Labour Vendor", "Transporter", "Consultant", "Staff"];
-  const typeColors = { "Material Vendor": { c: T.blue, bg: T.blueSoft }, Supplier: { c: T.blue, bg: T.blueSoft }, "Material Supplier": { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, "Labour Vendor": { c: T.amber, bg: T.amberSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft }, Staff: { c: T.teal, bg: T.tealSoft }, staff: { c: T.teal, bg: T.tealSoft } };
+  const types = ["All", "Material Vendor", "Equipment Vendor", "Client", "Subcontractor", "Labour Vendor", "Transporter", "Consultant", "Staff"];
+  const typeColors = { "Material Vendor": { c: T.blue, bg: T.blueSoft }, "Equipment Vendor": { c: T.rose, bg: T.roseSoft }, Supplier: { c: T.blue, bg: T.blueSoft }, "Material Supplier": { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, "Labour Vendor": { c: T.amber, bg: T.amberSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft }, Staff: { c: T.teal, bg: T.tealSoft }, staff: { c: T.teal, bg: T.tealSoft } };
   const isStaffForm = Array.isArray(form.roles) ? form.roles.includes("staff") : form.type === "Staff";
 
   const filtered = parties.filter(p => {
@@ -1173,7 +1175,7 @@ function PartyMasterSection() {
       // Multi-role: render one colored badge per role, separated by a " / "
       // divider so multiple roles read as "Material Vendor / Transporter".
       const keys = parsePartyRoles(r);
-      const keyToLabel = { material_vendor:"Material Vendor", client:"Client", subcontractor:"Subcontractor", labour_vendor:"Labour Vendor", transporter:"Transporter", consultant:"Consultant", staff:"Staff" };
+      const keyToLabel = { material_vendor:"Material Vendor", equipment_vendor:"Equipment Vendor", client:"Client", subcontractor:"Subcontractor", labour_vendor:"Labour Vendor", transporter:"Transporter", consultant:"Consultant", staff:"Staff" };
       return (
         <span style={{ display:"inline-flex", flexWrap:"wrap", alignItems:"center", gap:4 }}>
           {keys.map((k, i) => {
@@ -1216,7 +1218,7 @@ function PartyMasterSection() {
       {detailParty && (() => {
         const p = detailParty;
         const roleKeys = parsePartyRoles(p);
-        const keyToLabel = { material_vendor:"Material Vendor", client:"Client", subcontractor:"Subcontractor", labour_vendor:"Labour Vendor", transporter:"Transporter", consultant:"Consultant", staff:"Staff" };
+        const keyToLabel = { material_vendor:"Material Vendor", equipment_vendor:"Equipment Vendor", client:"Client", subcontractor:"Subcontractor", labour_vendor:"Labour Vendor", transporter:"Transporter", consultant:"Consultant", staff:"Staff" };
         const Row = ({ label, value, mono }) => (
           <div style={{ display:"flex", padding:"9px 0", borderBottom:`1px solid ${T.borderLight}` }}>
             <span style={{ width:130, flexShrink:0, fontSize:11.5, color:T.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:".3px" }}>{label}</span>
@@ -5774,9 +5776,13 @@ function EquipmentSection() {
         const list = (r.data || []).filter(p => {
           // Canonical stored key is material_vendor; also accept legacy labels
           // + roles column so multi-role vendors still surface.
+          // equipment_vendor belongs here too — this is the machine-hire
+          // vendor picker, and those parties were being filtered out.
           const t = String(p.type || "").toLowerCase().trim();
           const roles = String(p.roles || "").toLowerCase();
           return t === "material_vendor" || roles.includes("material_vendor") ||
+                 t === "equipment_vendor" || roles.includes("equipment_vendor") ||
+                 t === "equipment" || t === "transporter" || roles.includes("transporter") ||
                  t === "vendor" || t === "material vendor" || t === "supplier" ||
                  t === "material supplier" || t === "labour vendor";
         });

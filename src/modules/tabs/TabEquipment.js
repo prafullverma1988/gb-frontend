@@ -4,6 +4,16 @@ import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
 import TabTripTracking from "./TabTripTracking";
 
+// Route keys as the backend stores them (routes/equipment.js PAYMENT_ROUTES).
+// "site_exp" used to fall through unlabelled and render as raw text.
+const ROUTE_LABEL = {
+  vendor: "Vendor",
+  site_exp: "Site expense",
+  subcon_against: "Sub-con",
+  owned: "Owned",
+  subcon_self_paid: "Contractor paid",
+};
+
 function TabEquipment({ projectId }) {
   // Top-level view toggle: existing Equipment sections vs Trip Tracking.
   const [view, setView] = useState("equipment");
@@ -40,7 +50,7 @@ function TabEquipment({ projectId }) {
     usage_date: localYMD(), start_time: "", end_time: "",
     hours_or_days: "", rate_used: "", trip_charge: "", lump_amount: "",
     settlement_side: "company", vendor_id: "", subcon_id: "",
-    fuel_qty: "", fuel_cost: "", operator_name: "", meter_start: "", meter_end: "",
+    fuel_qty: "", fuel_cost: "", fuel_vendor_id: "", operator_name: "", meter_start: "", meter_end: "",
   };
   const [logForm, setLogForm] = useState(emptyLog);
   const [logSaving, setLogSaving] = useState(false);
@@ -108,10 +118,13 @@ function TabEquipment({ projectId }) {
     }).catch(() => {});
   }, []);
 
-  const totalCost = usageRows
-    .filter(u => u.finance_status === "confirmed")
-    .reduce((s, u) => s + (Number(u.total_amount) || 0), 0);
-  const confirmedCount = usageRows.filter(u => u.finance_status === "confirmed").length;
+  // Hire and diesel are separate ledger legs, so the tile has to add them
+  // back together — total_amount alone understates what the machine cost.
+  const confirmed = usageRows.filter(u => u.finance_status === "confirmed");
+  const hireCost = confirmed.reduce((s, u) => s + (Number(u.total_amount) || 0), 0);
+  const fuelCost = confirmed.reduce((s, u) => s + (Number(u.fuel_cost) || 0), 0);
+  const totalCost = hireCost + fuelCost;
+  const confirmedCount = confirmed.length;
 
   const saveUsage = async () => {
     if (!projectId) { setLogErr("Project missing"); return; }
@@ -139,6 +152,7 @@ function TabEquipment({ projectId }) {
     if (logForm.subcon_id) body.subcon_id = parseInt(logForm.subcon_id, 10);
     if (logForm.fuel_qty !== "") body.fuel_qty = parseFloat(logForm.fuel_qty) || 0;
     if (logForm.fuel_cost !== "") body.fuel_cost = parseFloat(logForm.fuel_cost) || 0;
+    if (logForm.fuel_vendor_id) body.fuel_vendor_id = parseInt(logForm.fuel_vendor_id, 10);
     if (logForm.operator_name) body.operator_name = logForm.operator_name;
     if (logForm.meter_start !== "") body.meter_start = parseFloat(logForm.meter_start) || 0;
     if (logForm.meter_end !== "") body.meter_end = parseFloat(logForm.meter_end) || 0;
@@ -200,19 +214,23 @@ function TabEquipment({ projectId }) {
     return <Pill label="Pending" c={T.amb} bg={T.ambL} />;
   };
 
-  const vendorParties = partiesList.filter(p => {
-    const t = String(p.type || "").toLowerCase();
-    return t.includes("vendor") || t === "supplier" || t === "material supplier";
-  });
-  const subconParties = partiesList.filter(p => {
-    const t = String(p.type || "").toLowerCase();
-    return t === "subcon" || t === "sub-con" || t === "subcontractor";
-  });
+  // A party can hold several roles; `roles` is the canonical comma list and
+  // `type` is only the primary. Matching on `type` alone hid equipment
+  // vendors (stored as type "equipment") from this picker entirely.
+  const partyHasRole = (p, wanted) => {
+    const bag = (String(p.roles || "") + "," + String(p.type || "")).toLowerCase();
+    return wanted.some(w => bag.split(",").map(s => s.trim()).includes(w));
+  };
+  const vendorParties = partiesList.filter(p => partyHasRole(p,
+    ["material_vendor", "equipment_vendor", "equipment", "vendor", "supplier", "material vendor", "material supplier", "transporter"]));
+  const subconParties = partiesList.filter(p => partyHasRole(p,
+    ["subcontractor", "subcon", "sub-con"]));
 
   const dispDuration = (u) => {
     if (u.measurement_mode === "fixed") return "Fixed";
     const n = Number(u.hours_or_days) || 0;
     if (u.measurement_mode === "daily") return `${n} day${n !== 1 ? "s" : ""}`;
+    if (u.measurement_mode === "trip") return `${n} trip${n !== 1 ? "s" : ""}`;
     return `${n} hr`;
   };
 
@@ -286,7 +304,9 @@ function TabEquipment({ projectId }) {
       {/* ── KPI: Total equipment cost ─────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
         <Stat label="Total Equipment Cost" value={`₹${fmtN(Math.round(totalCost))}`}
-          note={`${confirmedCount} confirmed entr${confirmedCount === 1 ? "y" : "ies"}`}
+          note={fuelCost > 0
+            ? `Hire ₹${fmtN(Math.round(hireCost))} + diesel ₹${fmtN(Math.round(fuelCost))}`
+            : `${confirmedCount} confirmed entr${confirmedCount === 1 ? "y" : "ies"}`}
           color={T.blu} />
         <Stat label="Usage Entries" value={usageRows.length}
           note={`${usageRows.filter(u => (u.finance_status || "suggested") === "suggested").length} awaiting review`}
@@ -312,8 +332,8 @@ function TabEquipment({ projectId }) {
                 <THead cols="100px 1.6fr 1fr 90px 80px 100px 1.1fr 1fr"
                   headers={["Date", "Equipment", "Mode / Dur.", "Rate", "Trip", "Total", "Route", "Status"]} />
                 {usageRows.map(u => {
-                  const route = u.confirmed_route || u.suggested_route || "—";
-                  const routeLabel = route === "vendor" ? "Vendor" : route === "subcon" ? "Sub-con" : route === "owned" ? "Owned" : route === "log_only" ? "Log only" : route;
+                  const route = u.finance_confirmed_route || u.suggested_route || "—";
+                  const routeLabel = ROUTE_LABEL[route] || route;
                   return (
                     <div key={u.id} style={{ display: "grid", gridTemplateColumns: "100px 1.6fr 1fr 90px 80px 100px 1.1fr 1fr",
                       padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
@@ -646,6 +666,16 @@ function TabEquipment({ projectId }) {
                 <div>
                   <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Fuel Cost (₹)</div>
                   <input value={logForm.fuel_cost} onChange={e => updLog("fuel_cost", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
+                </div>
+                <div style={{ gridColumn: "1 / 3" }}>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Fuel paid to (pump / vendor)</div>
+                  <select value={logForm.fuel_vendor_id} onChange={e => updLog("fuel_vendor_id", e.target.value)} style={inp}>
+                    <option value="">— Site cash (no separate payee) —</option>
+                    {vendorParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  <div style={{ fontSize: 10, color: T.t4, marginTop: 4 }}>
+                    Diesel ka kharcha rent se alag book hota hai. Pump chuno to wo Pending Payments me jayega, warna site expense.
+                  </div>
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Operator Name</div>

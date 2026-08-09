@@ -6,6 +6,15 @@ import api from "../config/api";
 import apiCache from "../utils/apiCache";
 import useDebounce from "../utils/useDebounce";
 
+// A party holds multiple roles: `roles` is the canonical comma list and
+// `type` is only the primary one. Matching on `type` alone dropped equipment
+// vendors (stored as type "equipment") out of every picker.
+const equipHasRole = (p, wanted) => {
+  const bag = (String(p.roles || "") + "," + String(p.type || ""))
+    .toLowerCase().split(",").map(s => s.trim());
+  return wanted.some(w => bag.includes(w));
+};
+
 // ── ICON BASE ────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none",style})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={style}><path d={d}/></svg>
@@ -955,6 +964,9 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     "material vendor":"material_vendor","material supplier":"material_vendor","material_supplier":"material_vendor","supplier":"material_vendor","vendor":"material_vendor","other vendor":"material_vendor",
     "client":"client","subcontractor":"subcontractor","sub-contractor":"subcontractor","sub-con":"subcontractor","subcon":"subcontractor","contractor":"subcontractor",
     "labour vendor":"labour_vendor","labor vendor":"labour_vendor","transporter":"transporter","consultant":"consultant","staff":"staff",
+    // Machine hire — kept out of material_vendor on purpose: an equipment
+    // vendor must not show up in the material-bill picker.
+    "equipment":"equipment_vendor","equipment vendor":"equipment_vendor","machinery":"equipment_vendor",
   };
   const _canon = (v) => { const k=String(v||"").toLowerCase().trim(); return _ROLE_ALIAS[k]||k; };
   const _phasRole = (p, roleKey) => {
@@ -5497,11 +5509,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
             )}
             {!equipReviewLoading && equipReview.map(row=>{
               const routeOf = (r) => {
-                const route = r.confirmed_route || r.suggested_route || "";
+                const route = r.finance_confirmed_route || r.suggested_route || "";
                 if (route === "vendor") return { label: "Rental against vendor", party: equipParties.find(p=>p.id===r.vendor_id)?.name || r.vendor_party_name || "" };
-                if (route === "subcon") return { label: "Subcon against", party: equipParties.find(p=>p.id===r.subcon_id)?.name || r.subcon_party_name || "" };
+                if (route === "subcon_against") return { label: "Subcon against", party: equipParties.find(p=>p.id===r.subcon_id)?.name || r.subcon_party_name || "" };
                 if (route === "owned") return { label: "Owned equipment", party: "" };
-                if (route === "log_only") return { label: "Log only", party: "" };
+                if (route === "site_exp") return { label: "Site expense", party: equipParties.find(p=>p.id===r.vendor_id)?.name || r.vendor_party_name || "" };
                 return { label: route || "—", party: "" };
               };
               const r = routeOf(row);
@@ -5514,24 +5526,33 @@ Status: ${ledgerRow.status||"unpaid"}`;
               const isRateBlocking = row.approval_status === "pending" && Number(row.rate_changed) === 1;
               const isEditingRoute = equipRouteEdit && equipRouteEdit.usageId === row.id;
               const acting = equipActing === row.id;
+              // These used to swallow every failure in an empty catch, so a
+              // rejected route change looked identical to a successful one.
               const doConfirm = async () => {
                 setEquipActing(row.id);
                 try {
-                  await api.post(`/equipment/usage/${row.id}/confirm`, {});
-                } catch(e){}
+                  const r = await api.post(`/equipment/usage/${row.id}/confirm`, {});
+                  if (r?.success === false) window.alert(r.message || "Confirm failed");
+                } catch(e){ window.alert(e?.message || "Network error"); }
                 setEquipActing(null);
                 loadEquipReview();
                 refreshPendPmts();   // confirmed → pending settlement appears immediately
               };
               const doApproveRate = async () => {
                 setEquipActing(row.id);
-                try { await api.post(`/equipment/usage/${row.id}/approve-rate`, {}); } catch(e){}
+                try {
+                  const r = await api.post(`/equipment/usage/${row.id}/approve-rate`, {});
+                  if (r?.success === false) window.alert(r.message || "Approve failed");
+                } catch(e){ window.alert(e?.message || "Network error"); }
                 setEquipActing(null);
                 loadEquipReview();
               };
               const doRejectRate = async () => {
                 setEquipActing(row.id);
-                try { await api.post(`/equipment/usage/${row.id}/reject-rate`, {}); } catch(e){}
+                try {
+                  const r = await api.post(`/equipment/usage/${row.id}/reject-rate`, {});
+                  if (r?.success === false) window.alert(r.message || "Reject failed");
+                } catch(e){ window.alert(e?.message || "Network error"); }
                 setEquipActing(null);
                 loadEquipReview();
               };
@@ -5539,13 +5560,22 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 if (!equipRouteEdit) return;
                 setEquipActing(row.id);
                 try {
-                  await api.post(`/equipment/usage/${row.id}/change-route`, {
+                  const rc = await api.post(`/equipment/usage/${row.id}/change-route`, {
                     route: equipRouteEdit.route,
-                    vendor_id: equipRouteEdit.route === "vendor" ? (equipRouteEdit.vendor_id || null) : null,
-                    subcon_id: equipRouteEdit.route === "subcon" ? (equipRouteEdit.subcon_id || null) : null,
+                    vendor_id: equipRouteEdit.route === "vendor" || equipRouteEdit.route === "site_exp"
+                      ? (equipRouteEdit.vendor_id || null) : null,
+                    subcon_id: equipRouteEdit.route === "subcon_against" ? (equipRouteEdit.subcon_id || null) : null,
                   });
-                  await api.post(`/equipment/usage/${row.id}/confirm`, {});
-                } catch(e){}
+                  // Route change must land before confirm — confirming on a
+                  // failed change would lock the row to the wrong ledger.
+                  if (rc?.success === false) {
+                    window.alert(rc.message || "Route change failed");
+                    setEquipActing(null);
+                    return;
+                  }
+                  const rf = await api.post(`/equipment/usage/${row.id}/confirm`, {});
+                  if (rf?.success === false) window.alert(rf.message || "Confirm failed");
+                } catch(e){ window.alert(e?.message || "Network error"); setEquipActing(null); return; }
                 setEquipActing(null);
                 setEquipRouteEdit(null);
                 loadEquipReview();
@@ -5596,7 +5626,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     <div style={{marginTop:12,padding:"10px 12px",background:T.bluL,border:`1px solid ${T.blu}33`,borderRadius:8}}>
                       <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:8}}>Change route</div>
                       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-                        {[{k:"vendor",l:"Rental against vendor"},{k:"subcon",l:"Subcon against"},{k:"owned",l:"Owned equipment"},{k:"log_only",l:"Log only"}].map(o=>(
+                        {/* Keys MUST match routes/equipment.js PAYMENT_ROUTES.
+                            "log_only" is not a route — it is a finance_status
+                            set at entry time, and sending it here 400'd. */}
+                        {[{k:"vendor",l:"Rental against vendor"},{k:"subcon_against",l:"Subcon against"},{k:"owned",l:"Owned equipment"},{k:"site_exp",l:"Site expense"}].map(o=>(
                           <button key={o.k} onClick={()=>setEquipRouteEdit({...equipRouteEdit,route:o.k})}
                             style={{
                               padding:"6px 12px",borderRadius:6,border:`1.5px solid ${equipRouteEdit.route===o.k?T.blu:T.b1}`,
@@ -5605,20 +5638,20 @@ Status: ${ledgerRow.status||"unpaid"}`;
                             }}>{o.l}</button>
                         ))}
                       </div>
-                      {equipRouteEdit.route === "vendor" && (
+                      {(equipRouteEdit.route === "vendor" || equipRouteEdit.route === "site_exp") && (
                         <select value={equipRouteEdit.vendor_id || ""} onChange={e=>setEquipRouteEdit({...equipRouteEdit,vendor_id:e.target.value?parseInt(e.target.value,10):null})}
                           style={{width:"100%",height:34,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                          <option value="">— Select vendor —</option>
-                          {equipParties.filter(p=>String(p.type||"").toLowerCase().includes("vendor")||String(p.type||"").toLowerCase()==="supplier"||String(p.type||"").toLowerCase()==="material supplier").map(p=>(
+                          <option value="">{equipRouteEdit.route === "site_exp" ? "— No payee (site cash) —" : "— Select vendor —"}</option>
+                          {equipParties.filter(p=>equipHasRole(p,["material_vendor","equipment_vendor","equipment","vendor","supplier","material vendor","material supplier","transporter"])).map(p=>(
                             <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
                         </select>
                       )}
-                      {equipRouteEdit.route === "subcon" && (
+                      {equipRouteEdit.route === "subcon_against" && (
                         <select value={equipRouteEdit.subcon_id || ""} onChange={e=>setEquipRouteEdit({...equipRouteEdit,subcon_id:e.target.value?parseInt(e.target.value,10):null})}
                           style={{width:"100%",height:34,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,background:T.surface,outline:"none",fontFamily:"inherit"}}>
                           <option value="">— Select sub-contractor —</option>
-                          {equipParties.filter(p=>{const t=String(p.type||"").toLowerCase();return t==="subcon"||t==="sub-con"||t==="subcontractor";}).map(p=>(
+                          {equipParties.filter(p=>equipHasRole(p,["subcontractor","subcon","sub-con"])).map(p=>(
                             <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
                         </select>
