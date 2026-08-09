@@ -88,6 +88,50 @@ const expiryTone = (days) => {
 const meterAge = (days) =>
   days == null ? "tareekh nahi" : days === 0 ? "aaj" : days === 1 ? "kal" : `${days} din purani`;
 
+// Kiraye ka basis. 'km' tipper/trailer ke liye — ganit wahi (qty × rate) hai,
+// sirf quantity ka naam badalta hai.
+const MODES = [
+  { k: "hourly", l: "Per hour", unit: "₹/hr" },
+  { k: "daily", l: "Per day", unit: "₹/day" },
+  { k: "km", l: "Per km", unit: "₹/km" },
+  { k: "trip", l: "Per trip", unit: "₹/trip" },
+  { k: "fixed", l: "Fixed / lump", unit: "₹ lump" },
+];
+const modeUnit = (k) => (MODES.find((m) => m.k === k) || MODES[0]).unit;
+
+// Ek party ke kai role ho sakte hain: `roles` canonical comma list hai, `type`
+// sirf primary. Dono padhe jaate hain taaki pehle se bane vendor kaam karte
+// rahein, koi unhe dobara tag kare ya na kare.
+const hasRole = (p, wanted) => {
+  const bag = (String(p.roles || "") + "," + String(p.type || ""))
+    .toLowerCase().split(",").map((s) => s.trim());
+  return wanted.some((r) => bag.includes(r));
+};
+const FUEL_VENDOR_ROLES = ["fuel_vendor", "material_vendor", "fuel", "vendor", "supplier"];
+const HIRE_VENDOR_ROLES = ["equipment_vendor", "equipment", "machinery", "vendor", "supplier", "subcontractor"];
+
+// Wahi Cloudinary preset jo baaki app use karta hai, par yahan module ke andar
+// rakha gaya (WarehouseModule/FuelModule jaisa) — module apni dependency khud
+// rakhta hai. /auto/ isliye ki insurance ki copy aksar PDF hoti hai; /image/
+// par wo upload hi nahi hoti.
+const uploadDoc = (file) => new Promise((resolve, reject) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("upload_preset", "gb_buildcon_drawings");
+  fd.append("folder", "gb_buildcon/machinery");
+  const xhr = new XMLHttpRequest();
+  xhr.onload = () => {
+    try {
+      const d = JSON.parse(xhr.responseText);
+      if (xhr.status === 200 && d.secure_url) resolve(d.secure_url);
+      else reject(new Error((d.error && d.error.message) || "Upload failed"));
+    } catch (_) { reject(new Error("Upload ka jawab samajh nahi aaya")); }
+  };
+  xhr.onerror = () => reject(new Error("Network error — upload nahi hua"));
+  xhr.open("POST", "https://api.cloudinary.com/v1_1/dd632nqfm/auto/upload");
+  xhr.send(fd);
+});
+
 // ── SHARED BITS ───────────────────────────────────────────────────
 const StatCard = ({ label, value, sub, color, icon: Icon }) => (
   <div style={{ padding: "13px 15px", background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 12, borderTop: `3px solid ${color}`, display: "flex", alignItems: "flex-start", gap: 12 }}>
@@ -168,6 +212,86 @@ const Field = ({ label, children, hint, span }) => (
   </div>
 );
 
+// Kaagaz ki copy. Upload turant hota hai aur URL state me aa jaata hai, isliye
+// machine save karte waqt file pehle se chadhi hoti hai — background queue par
+// bharosa karke save karne se aadhi machines bina copy ke reh jaati.
+const FileField = ({ value, onChange, label = "Copy (photo / PDF)" }) => {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const pick = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { setError("File 10MB se badi hai"); return; }
+    setError(""); setBusy(true);
+    try { onChange(await uploadDoc(f)); }
+    catch (ex) { setError(ex.message || "Upload nahi hua"); }
+    setBusy(false);
+  };
+  return (
+    <Field label={label}>
+      {value ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <a href={value} target="_blank" rel="noreferrer"
+            style={{ fontSize: 11.5, color: T.ind, fontWeight: 700, textDecoration: "none" }}>Chadhi hui copy dekho</a>
+          <button type="button" onClick={() => onChange(null)}
+            style={{ background: "none", border: "none", color: T.t3, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>hatao</button>
+        </div>
+      ) : (
+        <label style={{ ...inp, display: "flex", alignItems: "center", cursor: busy ? "wait" : "pointer", color: busy ? T.t4 : T.t3 }}>
+          {busy ? "Chadh rahi hai..." : "File chuno"}
+          <input type="file" accept="image/*,.pdf" onChange={pick} disabled={busy} style={{ display: "none" }} />
+        </label>
+      )}
+      {error && <div style={{ fontSize: 10.5, color: T.red, marginTop: 4, fontWeight: 600 }}>{error}</div>}
+    </Field>
+  );
+};
+
+// Kitna record poora hai. Number akela bekaar hai — kami ka naam saath hona
+// chahiye, warna user ko pata hi nahi chalta ki bhare kya.
+const CompletenessBar = ({ c, compact }) => {
+  if (!c) return <span style={{ fontSize: 11.5, color: T.t4 }}>—</span>;
+  const col = c.pct >= 90 ? T.grn : c.pct >= 60 ? T.amb : T.red;
+  return (
+    <div title={c.missing.length ? "Baaki: " + c.missing.map((m) => m.label).join(", ") : "Poora record"}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <div style={{ flex: 1, height: 6, background: T.sltL, borderRadius: 4, overflow: "hidden", minWidth: 52 }}>
+          <div style={{ width: c.pct + "%", height: "100%", background: col, borderRadius: 4 }} />
+        </div>
+        <span style={{ fontSize: 11, fontWeight: 700, color: col, minWidth: 30, textAlign: "right" }}>{c.pct}%</span>
+      </div>
+      {!compact && (
+        <div style={{ fontSize: 10, color: T.t4, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {c.missing.length ? c.missing.slice(0, 2).map((m) => m.label).join(" · ") + (c.missing.length > 2 ? ` +${c.missing.length - 2}` : "") : "Poora"}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Party dropdown. Role ke hisaab se chhanti hai par "sab dikhao" ka raasta
+// khula rehta hai — warna jis pump ko kisi ne tag nahi kiya wo list se gayab
+// rehta hai aur user ko lagta hai party bani hi nahi.
+const PartyPicker = ({ value, onChange, parties, roles, placeholder }) => {
+  const [all, setAll] = useState(false);
+  const list = all ? parties : parties.filter((p) => hasRole(p, roles));
+  const selectedMissing = value && !list.some((p) => String(p.id) === String(value));
+  const shown = selectedMissing ? [...list, ...parties.filter((p) => String(p.id) === String(value))] : list;
+  return (
+    <>
+      <select value={value || ""} onChange={(e) => onChange(e.target.value || null)} style={inp}>
+        <option value="">{placeholder || "— chuno —"}</option>
+        {shown.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+      <button type="button" onClick={() => setAll((v) => !v)}
+        style={{ background: "none", border: "none", color: T.t3, fontSize: 10.5, cursor: "pointer", padding: "4px 0 0", fontFamily: "inherit" }}>
+        {all ? `sirf sahi role wale (${parties.filter((p) => hasRole(p, roles)).length})` : `saari parties dikhao (${parties.length})`}
+      </button>
+    </>
+  );
+};
+
 const Modal = ({ open, onClose, title, sub, width = 620, children, footer }) => {
   if (!open) return null;
   return (
@@ -211,6 +335,306 @@ const MeterCell = ({ meter, unit }) => {
 };
 
 // ══════════════════════════════════════════════════════════════════
+// MACHINE MASTER FORM
+//
+// Machine yahin banti hai — Library me ab uska section nahi hai, taaki ek
+// gaadi do jagah edit na ho.
+//
+// Naya banate waqt teen kaagaz (insurance / fitness / PUC) form ke andar hi
+// bhare jaate hain. Alag se "pehle machine banao, phir document add karo" ka
+// matlab hota hai ki zyadatar log doosra step kabhi karte hi nahi — aur expiry
+// ki bell, jo is poore module ki jaan hai, kabhi bajti hi nahi.
+// ══════════════════════════════════════════════════════════════════
+const KEY_DOCS = [
+  { k: "insurance", l: "Insurance" },
+  { k: "fitness", l: "Fitness certificate" },
+  { k: "puc", l: "PUC" },
+];
+
+function MachineForm({ open, onClose, onSaved, machine, parties }) {
+  const editing = !!machine;
+  const [f, setF] = useState({});
+  const [docs, setDocs] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState("id");
+  const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const updDoc = (t, k, v) => setDocs((p) => ({ ...p, [t]: { ...(p[t] || {}), [k]: v } }));
+
+  useEffect(() => {
+    if (!open) return;
+    setError(""); setTab("id"); setDocs({});
+    setF(machine ? {
+      ...machine,
+      // Masked key wapas bhejna asli key ko mita dega — isliye box khaali
+      // shuru hota hai aur "set hai" alag se dikhaya jaata hai.
+      telematics_api_key: "",
+    } : {
+      ownership: "owned", measurement_mode: "hourly", meter_unit: "hours",
+      fuel_responsibility: "rent_included", opening_read_at: todayStr(),
+    });
+  }, [open, machine]);
+
+  const owned = String(f.ownership || "").toLowerCase() === "owned";
+  const fuelOurs = owned || f.fuel_responsibility === "company";
+
+  const save = async () => {
+    setError("");
+    if (!String(f.name || "").trim()) { setError("Machine ka naam zaroori hai"); setTab("id"); return; }
+    // Jis kaagaz ki koi bhi detail bhari hai par valid-till nahi, wo chup-chaap
+    // girne se accha hai ki abhi rok diya jaye.
+    const docList = [];
+    for (const d of KEY_DOCS) {
+      const v = docs[d.k];
+      if (!v) continue;
+      const touched = v.doc_no || v.valid_till || v.provider_name || v.photo_url || v.amount;
+      if (!touched) continue;
+      if (!v.valid_till) { setError(`${d.l} ki "valid till" date daalein — uske bina reminder nahi chalega`); setTab("docs"); return; }
+      docList.push({ doc_type: d.k, ...v, amount: v.amount ? parseFloat(v.amount) : null });
+    }
+
+    const body = {
+      name: String(f.name).trim(), code: f.code || null,
+      type: f.type || null, machine_type: f.machine_type || null, capacity: f.capacity || null,
+      ownership: f.ownership || "rented", registration_no: f.registration_no || null,
+      make: f.make || null, model: f.model || null, year: f.year || null,
+      chassis_no: f.chassis_no || null, engine_no: f.engine_no || null,
+      operator_name: f.operator_name || null,
+      measurement_mode: f.measurement_mode || "hourly",
+      default_rate: f.default_rate ? parseFloat(f.default_rate) : 0,
+      meter_unit: f.meter_unit || "hours",
+      fuel_responsibility: owned ? "company" : (f.fuel_responsibility || "rent_included"),
+      fuel_vendor_party_id: f.fuel_vendor_party_id || null,
+      fuel_per_hour: f.fuel_per_hour ? parseFloat(f.fuel_per_hour) : null,
+      purchase_date: f.purchase_date || null,
+      purchase_cost: f.purchase_cost ? parseFloat(f.purchase_cost) : null,
+      telematics_enabled: f.telematics_enabled == null || f.telematics_enabled === "" ? null : Number(f.telematics_enabled),
+      telematics_vendor_party_id: f.telematics_vendor_party_id || null,
+      telematics_device_id: f.telematics_device_id || null,
+      telematics_api_url: f.telematics_api_url || null,
+    };
+    if (f.telematics_api_key) body.telematics_api_key = f.telematics_api_key;
+    if (!editing) {
+      body.documents = docList;
+      body.opening_hours = f.opening_hours || null;
+      body.opening_km = f.opening_km || null;
+      body.opening_read_at = f.opening_read_at || todayStr();
+    }
+
+    setBusy(true);
+    try {
+      const r = editing
+        ? await api.put(`/machinery/fleet/${machine.id}`, body)
+        : await api.post("/machinery/fleet", body);
+      if (r && r.success) { onSaved(); onClose(); }
+      else setError((r && r.message) || "Save failed");
+    } catch (e) { setError((e && e.message) || "Network error"); }
+    setBusy(false);
+  };
+
+  const TABS = [
+    { id: "id", l: "Pehchaan" },
+    { id: "rate", l: "Rate & fuel" },
+    { id: "tele", l: "Telematics" },
+    ...(editing ? [] : [{ id: "docs", l: "Kaagaz & meter" }]),
+  ];
+
+  return (
+    <Modal open={open} onClose={onClose} width={720}
+      title={editing ? "Machine edit karein" : "Nayi machine"}
+      sub={editing ? machine.name : "Register wahi ek hai — Library me ab machine ka section nahi"}
+      footer={<><Btn ghost onClick={onClose}>Cancel</Btn><Btn onClick={save} disabled={busy}>{busy ? "Saving..." : editing ? "Update" : "Machine banao"}</Btn></>}>
+
+      <div style={{ display: "flex", gap: 2, borderBottom: `1.5px solid ${T.b1}`, marginBottom: 16 }}>
+        {TABS.map((x) => (
+          <button key={x.id} type="button" onClick={() => setTab(x.id)}
+            style={{ padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none", background: "none", fontFamily: "inherit", marginBottom: "-1.5px", color: tab === x.id ? T.ind : T.t3, borderBottom: `2px solid ${tab === x.id ? T.ind : "transparent"}` }}>
+            {x.l}
+          </button>
+        ))}
+      </div>
+
+      {tab === "id" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Machine ka naam *" span={2}>
+            <input value={f.name || ""} onChange={(e) => upd("name", e.target.value)} placeholder="e.g. JCB 3DX Backhoe Loader" style={inp} />
+          </Field>
+          <Field label="Gadi no. (registration)" hint="Yahi do machine ko sach me alag karta hai — naam nahi.">
+            <input value={f.registration_no || ""} onChange={(e) => upd("registration_no", e.target.value)} placeholder="MP09 AB 1234" style={inp} />
+          </Field>
+          <Field label="Code">
+            <input value={f.code || ""} onChange={(e) => upd("code", e.target.value)} placeholder="EQ-JCB-01" style={inp} />
+          </Field>
+          <Field label="Ownership">
+            <select value={f.ownership || "owned"} onChange={(e) => upd("ownership", e.target.value)} style={inp}>
+              <option value="owned">Apni (Owned)</option>
+              <option value="rented">Kiraye ki (Rented)</option>
+            </select>
+          </Field>
+          <Field label="Machine type">
+            <input value={f.machine_type || ""} onChange={(e) => upd("machine_type", e.target.value)} placeholder="excavator / tipper / roller" style={inp} />
+          </Field>
+          <Field label="Meter kis cheez ka">
+            <select value={f.meter_unit || "hours"} onChange={(e) => upd("meter_unit", e.target.value)} style={inp}>
+              <option value="hours">Hour-meter (ghante)</option>
+              <option value="km">Odometer (km)</option>
+              <option value="both">Dono</option>
+            </select>
+          </Field>
+          <Field label="Operator">
+            <input value={f.operator_name || ""} onChange={(e) => upd("operator_name", e.target.value)} style={inp} />
+          </Field>
+          <Field label="Make"><input value={f.make || ""} onChange={(e) => upd("make", e.target.value)} style={inp} /></Field>
+          <Field label="Model"><input value={f.model || ""} onChange={(e) => upd("model", e.target.value)} style={inp} /></Field>
+          <Field label="Chassis no."><input value={f.chassis_no || ""} onChange={(e) => upd("chassis_no", e.target.value)} style={inp} /></Field>
+          <Field label="Engine no."><input value={f.engine_no || ""} onChange={(e) => upd("engine_no", e.target.value)} style={inp} /></Field>
+          {owned && (
+            <>
+              <Field label="Purchase date">
+                <input type="date" value={f.purchase_date ? String(f.purchase_date).slice(0, 10) : ""} onChange={(e) => upd("purchase_date", e.target.value)} style={inp} />
+              </Field>
+              <Field label="Purchase cost (₹)">
+                <input value={f.purchase_cost || ""} inputMode="decimal" onChange={(e) => upd("purchase_cost", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
+              </Field>
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "rate" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Rate type">
+            <select value={f.measurement_mode || "hourly"} onChange={(e) => upd("measurement_mode", e.target.value)} style={inp}>
+              {MODES.map((m) => <option key={m.k} value={m.k}>{m.l}</option>)}
+            </select>
+          </Field>
+          <Field label={`Rate (${modeUnit(f.measurement_mode)})`}>
+            <input value={f.default_rate || ""} inputMode="decimal" onChange={(e) => upd("default_rate", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
+          </Field>
+          {!owned && (
+            <Field label="Kiraye ka vendor" span={2}>
+              <PartyPicker value={f.default_vendor_id} onChange={(v) => upd("default_vendor_id", v)}
+                parties={parties} roles={HIRE_VENDOR_ROLES} placeholder="— kis se kiraye par li hai —" />
+            </Field>
+          )}
+          <Field label="Diesel kiska" span={2}
+            hint="Rent me shaamil hai to hum na litre track karte hain na cost — Fuel module me ye machine aayegi hi nahi.">
+            {/* Apni machine ka diesel hamesha hamara hi hai — wahan ye box
+                disabled hai, par tab bhi "company" hi padhna chahiye. Pehle
+                yahan default 'rent_included' dikh jaata tha, jo owned machine
+                par seedha ulta padhta hai. */}
+            <select value={owned ? "company" : (f.fuel_responsibility || "rent_included")}
+              onChange={(e) => upd("fuel_responsibility", e.target.value)} style={inp} disabled={owned}>
+              <option value="company">Hamara (company deti hai)</option>
+              <option value="rent_included">Kiraye me shaamil (vendor ka)</option>
+            </select>
+          </Field>
+          {fuelOurs && (
+            <>
+              <Field label="Fuel vendor (pump)" hint="Iska diesel aam taur par kahan se bharta hai.">
+                <PartyPicker value={f.fuel_vendor_party_id} onChange={(v) => upd("fuel_vendor_party_id", v)}
+                  parties={parties} roles={FUEL_VENDOR_ROLES} placeholder="— pump chuno —" />
+              </Field>
+              <Field label="Fuel norm (L/hr)" hint="Isse zyada kharcha hone par Fuel module khud batata hai.">
+                <input value={f.fuel_per_hour || ""} inputMode="decimal" onChange={(e) => upd("fuel_per_hour", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 8" style={inp} />
+              </Field>
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "tele" && (
+        <>
+          <Notice>
+            Abhi ye sirf <b>record</b> hai — koi API call nahi hoti. Vendor tay hone par yahin
+            se jud jayega, dobara sab bharna nahi padega.
+          </Notice>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="GPS / telematics laga hai?" span={2}>
+              <select value={f.telematics_enabled == null ? "" : String(f.telematics_enabled)}
+                onChange={(e) => upd("telematics_enabled", e.target.value === "" ? null : Number(e.target.value))} style={inp}>
+                <option value="">— abhi tay nahi —</option>
+                <option value="1">Haan, laga hai</option>
+                <option value="0">Nahi</option>
+              </select>
+            </Field>
+            {Number(f.telematics_enabled) === 1 && (
+              <>
+                <Field label="Telematics vendor" span={2}>
+                  <PartyPicker value={f.telematics_vendor_party_id} onChange={(v) => upd("telematics_vendor_party_id", v)}
+                    parties={parties} roles={["vendor", "supplier", "consultant", "material_vendor"]} placeholder="— vendor chuno —" />
+                </Field>
+                <Field label="Device / IMEI no.">
+                  <input value={f.telematics_device_id || ""} onChange={(e) => upd("telematics_device_id", e.target.value)} style={inp} />
+                </Field>
+                <Field label="API URL">
+                  <input value={f.telematics_api_url || ""} onChange={(e) => upd("telematics_api_url", e.target.value)} placeholder="https://..." style={inp} />
+                </Field>
+                <Field label="API key" span={2}
+                  hint={f.telematics_api_key_set
+                    ? `Abhi set hai (${f.telematics_api_key_masked}). Badalni ho tabhi nayi type karein — khaali chhodne par purani bani rahegi.`
+                    : "Ye key kabhi wapas screen par nahi dikhegi — sirf aakhri 4 akshar."}>
+                  <input type="password" autoComplete="new-password" value={f.telematics_api_key || ""}
+                    onChange={(e) => upd("telematics_api_key", e.target.value)}
+                    placeholder={f.telematics_api_key_set ? "badalni ho to nayi key" : ""} style={inp} />
+                </Field>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {tab === "docs" && !editing && (
+        <>
+          <Notice>
+            {owned
+              ? <>Teen kaagaz jo aksar chuk jaate hain. Sirf <b>valid till</b> zaroori hai — usi par reminder chalta hai.</>
+              : <>Kiraye ki machine par hum vendor ka kaagaz <b>sirf expiry ke liye</b> dekhte hain. Unfit machine aapki site par chale to zimmedari aapki hai.</>}
+          </Notice>
+          {KEY_DOCS.map((d) => (
+            <div key={d.k} style={{ border: `1px solid ${T.b1}`, borderRadius: 10, padding: "11px 13px", marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 9 }}>{d.l}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                <Field label="Number">
+                  <input value={(docs[d.k] || {}).doc_no || ""} onChange={(e) => updDoc(d.k, "doc_no", e.target.value)} style={inp} />
+                </Field>
+                <Field label="Valid till">
+                  <input type="date" value={(docs[d.k] || {}).valid_till || ""} onChange={(e) => updDoc(d.k, "valid_till", e.target.value)} style={inp} />
+                </Field>
+                <FileField value={(docs[d.k] || {}).photo_url} onChange={(u) => updDoc(d.k, "photo_url", u)} />
+              </div>
+            </div>
+          ))}
+          <div style={{ border: `1px solid ${T.b1}`, borderRadius: 10, padding: "11px 13px" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 3 }}>Aaj ka meter</div>
+            <div style={{ fontSize: 10.5, color: T.t4, marginBottom: 9 }}>
+              Iske bina koi bhi "service due" mehaz andaza rahega.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+              {(f.meter_unit === "hours" || f.meter_unit === "both") && (
+                <Field label="Hour-meter (hrs)">
+                  <input value={f.opening_hours || ""} inputMode="decimal" onChange={(e) => upd("opening_hours", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
+                </Field>
+              )}
+              {(f.meter_unit === "km" || f.meter_unit === "both") && (
+                <Field label="Odometer (km)">
+                  <input value={f.opening_km || ""} inputMode="decimal" onChange={(e) => upd("opening_km", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
+                </Field>
+              )}
+              <Field label="Kis din ki">
+                <input type="date" value={f.opening_read_at || todayStr()} onChange={(e) => upd("opening_read_at", e.target.value)} style={inp} />
+              </Field>
+            </div>
+          </div>
+        </>
+      )}
+
+      {error && <div style={{ marginTop: 12, padding: "9px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>{error}</div>}
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
 // DOCUMENT FORM
 // ══════════════════════════════════════════════════════════════════
 function DocForm({ open, onClose, onSaved, machine }) {
@@ -237,6 +661,7 @@ function DocForm({ open, onClose, onSaved, machine }) {
         valid_from: f.valid_from || null, valid_till: f.valid_till,
         amount: f.amount ? parseFloat(f.amount) : null,
         reminder_days: f.reminder_days || "30,15,7",
+        photo_url: f.photo_url || null,
         note: f.note || null,
       });
       if (r && r.success) { onSaved(); onClose(); }
@@ -278,10 +703,11 @@ function DocForm({ open, onClose, onSaved, machine }) {
         <Field label="Valid till *">
           <input type="date" value={f.valid_till || ""} onChange={(e) => upd("valid_till", e.target.value)} style={inp} />
         </Field>
-        <Field label="Reminder (din pehle)" span={2}
+        <Field label="Reminder (din pehle)"
           hint="Aakhri din aur uska ek din pehle hamesha yaad dilaya jayega, chahe yahan kuch bhi ho.">
           <input value={f.reminder_days || ""} onChange={(e) => upd("reminder_days", e.target.value)} placeholder="30,15,7" style={inp} />
         </Field>
+        <FileField value={f.photo_url} onChange={(u) => upd("photo_url", u)} />
         <Field label="Note" span={2}>
           <input value={f.note || ""} onChange={(e) => upd("note", e.target.value)} style={inp} />
         </Field>
@@ -370,7 +796,7 @@ function MeterForm({ open, onClose, onSaved, machine, current }) {
 // ══════════════════════════════════════════════════════════════════
 // MACHINE DETAIL
 // ══════════════════════════════════════════════════════════════════
-function MachineDetail({ id, onBack, onChanged }) {
+function MachineDetail({ id, onBack, onChanged, onEdit }) {
   const [tab, setTab] = useState("ov");
   const [m, setM] = useState(null);
   const [timeline, setTimeline] = useState([]);
@@ -458,8 +884,25 @@ function MachineDetail({ id, onBack, onChanged }) {
             </div>
           )}
           <Btn ghost icon={IcGauge} onClick={() => setMeterOpen(true)}>Meter</Btn>
+          {onEdit && <Btn ghost onClick={() => onEdit(m)}>Edit</Btn>}
         </div>
       </div>
+
+      {/* Record kitna poora hai — detail me kami ka poora naam dikhta hai,
+          list ke chhote bar ke ulat. */}
+      {m.completeness && m.completeness.missing.length > 0 && (
+        <div style={{ background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 10, padding: "11px 14px", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: T.t1, marginBottom: 5 }}>Record adhoora hai</div>
+              <div style={{ fontSize: 11, color: T.t3 }}>
+                Baaki: {m.completeness.missing.map((x) => x.label).join(" · ")}
+              </div>
+            </div>
+            <div style={{ width: 130 }}><CompletenessBar c={m.completeness} compact /></div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 2, borderBottom: `1.5px solid ${T.b1}`, marginBottom: 16, overflowX: "auto" }}>
         {TABS.map((x) => (
@@ -601,19 +1044,24 @@ function MachineryModule() {
   const [due, setDue] = useState([]);
   const [gaps, setGaps] = useState({ gaps: [], counts: {} });
   const [openId, setOpenId] = useState(null);
+  const [parties, setParties] = useState([]);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editMachine, setEditMachine] = useState(null);
 
   // silent = background refresh. Spinner sirf pehli baar; warna machine detail
   // khuli ho to wo unmount ho kar apna tab bhool jaata hai.
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
-    const [f, d, g] = await Promise.all([
+    const [f, d, g, p] = await Promise.all([
       api.get("/machinery/fleet").catch(() => null),
       api.get("/machinery/due").catch(() => null),
       api.get("/machinery/reports/gaps").catch(() => null),
+      api.get("/finance/parties").catch(() => null),
     ]);
     setFleet(f?.success ? f.data || [] : []);
     setDue(d?.success ? d.data || [] : []);
     setGaps(g?.success ? g.data || { gaps: [], counts: {} } : { gaps: [], counts: {} });
+    setParties(p?.success ? p.data || [] : []);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -635,7 +1083,12 @@ function MachineryModule() {
     { l: "Machines", v: fleet.length, sub: `${owned.length} owned · ${fleet.length - owned.length} rented`, c: T.ind, I: IcTruck },
     { l: "Kaagaz khatam / paas", v: active.length, sub: expired.length ? `${expired.length} nikal chuke` : "30 din ke andar", c: active.length ? T.red : T.grn, I: IcDoc },
     { l: "Meter purani/nahi", v: (gaps.counts.meter || 0), sub: "iske bina service due nahi nikalti", c: (gaps.counts.meter ? T.amb : T.grn), I: IcGauge },
-    { l: "Reg. no. missing", v: (gaps.counts.registration_no || 0), sub: "owned machines", c: (gaps.counts.registration_no ? T.amb : T.grn), I: IcAlert },
+    // Chautha tile ab poore record ka haal batata hai. Sirf "reg. no. missing"
+    // se kaam nahi chalta — jis machine ka rate ya kaagaz nahi, wo bhi utni hi
+    // adhoori hai, aur wo tile me kahin dikhta hi nahi tha.
+    { l: "Record poora", v: (gaps.avg_pct != null ? gaps.avg_pct : 100) + "%",
+      sub: gaps.gaps && gaps.gaps.length ? `${gaps.gaps.length} machine adhoori` : "sab poori",
+      c: (gaps.avg_pct >= 90 ? T.grn : gaps.avg_pct >= 60 ? T.amb : T.red), I: IcAlert },
   ]), [fleet, owned, active, expired, gaps]);
 
   const TABS = [
@@ -656,7 +1109,8 @@ function MachineryModule() {
     <div style={{ background: T.bg, height: "100%", display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px 20px" }}>
         {openId ? (
-          <MachineDetail id={openId} onBack={() => setOpenId(null)} onChanged={() => load(true)} />
+          <MachineDetail id={openId} onBack={() => setOpenId(null)} onChanged={() => load(true)}
+            onEdit={(m) => { setEditMachine(m); setFormOpen(true); }} />
         ) : (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
@@ -674,19 +1128,24 @@ function MachineryModule() {
             </div>
 
             {tab === "fleet" && (
-              <Panel title="Fleet">
-                {fleet.length === 0 && <Empty>Koi machine register nahi. Library → Equipment se add karein.</Empty>}
+              <Panel title="Fleet" action={<Btn size="sm" icon={IcAdd} onClick={() => { setEditMachine(null); setFormOpen(true); }}>Machine</Btn>}>
+                {fleet.length === 0 && (
+                  <Empty>
+                    Koi machine register nahi.<br />
+                    <span style={{ fontSize: 11.5 }}>Upar "Machine" se add karein — gadi no., rate, kaagaz aur aaj ka meter ek hi form me.</span>
+                  </Empty>
+                )}
                 {fleet.length > 0 && (
                   <>
-                    <Row head cols="1.8fr 100px 1.1fr 1.2fr 130px">
-                      <span>Machine</span><span>Ownership</span><span>Current meter</span><span>Documents</span><span>Health</span>
+                    <Row head cols="1.7fr 92px 1fr 1.1fr 120px 110px">
+                      <span>Machine</span><span>Ownership</span><span>Current meter</span><span>Documents</span><span>Health</span><span>Detail poora</span>
                     </Row>
                     {fleet.map((m) => {
                       const tone = m.doc_status ? expiryTone(m.doc_status.days) : null;
                       const bad = m.doc_status && m.doc_status.days < 0;
                       const soon = m.doc_status && m.doc_status.days >= 0 && m.doc_status.days <= 30;
                       return (
-                        <Row key={m.id} cols="1.8fr 100px 1.1fr 1.2fr 130px" onClick={() => setOpenId(m.id)}>
+                        <Row key={m.id} cols="1.7fr 92px 1fr 1.1fr 120px 110px" onClick={() => setOpenId(m.id)}>
                           <div>
                             <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{m.name}{m.code ? ` — ${m.code}` : ""}</div>
                             <div style={{ fontSize: 10.5, color: T.t4 }}>
@@ -705,6 +1164,7 @@ function MachineryModule() {
                               : soon ? <Pill label="Dhyan dein" c={T.amb} bg={T.ambL} />
                               : <Pill label="OK" c={T.grn} bg={T.grnL} />}
                           </span>
+                          <span><CompletenessBar c={m.completeness} /></span>
                         </Row>
                       );
                     })}
@@ -763,11 +1223,11 @@ function MachineryModule() {
                     <Row key={g.id} cols="1.6fr 1fr 1.4fr">
                       <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{g.name}</span>
                       <span><Pill label={g.owned ? "Owned" : "Rented"} c={g.owned ? T.ind : T.t3} bg={g.owned ? T.indL : T.sltL} /></span>
+                      {/* Labels ab backend ke completeness se aate hain —
+                          pehle yahan apni alag list thi jo fleet ke bar se
+                          alag hi bolti thi. */}
                       <span style={{ fontSize: 11.5, color: T.t3 }}>
-                        {g.missing.map((k) => ({
-                          registration_no: "registration no.", meter: "meter reading",
-                          fuel_norm: "fuel norm (L/hr)", documents: "koi kaagaz nahi",
-                        }[k] || k)).join(" · ")}
+                        {(g.missing_labels || g.missing).join(" · ")}
                       </span>
                     </Row>
                   ))}
@@ -777,6 +1237,10 @@ function MachineryModule() {
           </>
         )}
       </div>
+
+      <MachineForm open={formOpen} machine={editMachine} parties={parties}
+        onClose={() => { setFormOpen(false); setEditMachine(null); }}
+        onSaved={() => load(true)} />
     </div>
   );
 }

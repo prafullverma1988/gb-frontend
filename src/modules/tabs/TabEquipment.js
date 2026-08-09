@@ -231,7 +231,17 @@ function TabEquipment({ projectId }) {
     const n = Number(u.hours_or_days) || 0;
     if (u.measurement_mode === "daily") return `${n} day${n !== 1 ? "s" : ""}`;
     if (u.measurement_mode === "trip") return `${n} trip${n !== 1 ? "s" : ""}`;
+    // km wali machine (tipper/trailer) ka kiraya km par chalta hai — quantity
+    // wahi field hai, sirf unit alag. "12 hr" likhna jhooth hota.
+    if (u.measurement_mode === "km") return `${n} km`;
     return `${n} hr`;
+  };
+
+  // Usage form ki quantity ka naam machine ke mode se aata hai.
+  const QTY_LABEL = { daily: "Days", km: "Km", trip: "Trips", fixed: "Quantity" };
+  const qtyLabelFor = (eqId) => {
+    const m = eqId ? masterList.find((x) => String(x.id) === String(eqId)) : null;
+    return QTY_LABEL[m && m.measurement_mode] || "Hours or Days";
   };
 
   // Collapsible section helper (inline)
@@ -614,7 +624,10 @@ function TabEquipment({ projectId }) {
                   <input type="time" value={logForm.end_time} onChange={e => updLog("end_time", e.target.value)} style={inp} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Hours or Days</div>
+                  {/* Ye ek hi field har mode ki quantity hai — sirf naam mode
+                      par nirbhar hai. "Hours or Days" likha rehna km/trip wali
+                      machine par galat basis batata tha. */}
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{qtyLabelFor(logForm.equipment_id)}</div>
                   <input value={logForm.hours_or_days} onChange={e => updLog("hours_or_days", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 4" style={inp} />
                 </div>
                 <div>

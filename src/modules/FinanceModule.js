@@ -5518,11 +5518,15 @@ Status: ${ledgerRow.status||"unpaid"}`;
               };
               const r = routeOf(row);
               const mode = row.measurement_mode || "hourly";
-              const dur = mode === "hourly"
-                ? `${row.hours_or_days || 0} hr`
-                : mode === "daily"
-                  ? `${row.hours_or_days || 0} day${(row.hours_or_days||0)>1?"s":""}`
-                  : "Fixed";
+              // 'trip' aur 'km' pehle chup-chaap "Fixed" dikhte the — review
+              // karne wale ko wo basis hi galat dikhta tha jis par wo paisa
+              // pass kar raha hai.
+              const q = Number(row.hours_or_days) || 0;
+              const dur = mode === "hourly" ? `${q} hr`
+                : mode === "daily" ? `${q} day${q > 1 ? "s" : ""}`
+                : mode === "km"   ? `${q} km`
+                : mode === "trip" ? `${q} trip${q > 1 ? "s" : ""}`
+                : "Fixed";
               const isRateBlocking = row.approval_status === "pending" && Number(row.rate_changed) === 1;
               const isEditingRoute = equipRouteEdit && equipRouteEdit.usageId === row.id;
               const acting = equipActing === row.id;
