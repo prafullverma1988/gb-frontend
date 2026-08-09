@@ -344,11 +344,17 @@ function TabAttendance({ project, onRequestPayment }) {
         daily_rate: rate, phone: wfForm.phone, rateStatus:"card",
       });
       if(r.success) {
-        setWorkforce(prev=>({...prev, company:[...prev.company,{...wfForm,id:r.data?.id||Date.now(),dailyRate:rate,daily_rate:rate,rateStatus:"card"}]}));
+        // Take the rate/status the SERVER stored, not what was typed — an
+        // off-card rate is held at the card rate until approved, so showing
+        // the typed value here would be a lie the next refresh undoes.
+        const savedRate   = Number(r.data?.daily_rate ?? rate) || 0;
+        const savedStatus = r.data?.rate_status || "card";
+        setWorkforce(prev=>({...prev, company:[...prev.company,{...wfForm,id:r.data?.id||Date.now(),dailyRate:savedRate,daily_rate:savedRate,rateStatus:savedStatus,pendingRate:r.data?.pending_rate||null}]}));
         // Refresh library
         api.get("/library/workers").then(res=>{ if(res.success) setWorkerLib(res.data||[]); });
         setWfForm({name:"",role:"Labour",category:"Unskilled",dailyRate:"",phone:"",city:""});
         setShowNewWf(false);
+        if(r.rate_pending && r.message) alert(r.message);
       }
     } catch(e){}
     setWfSaving(false);

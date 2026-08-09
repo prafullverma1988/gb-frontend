@@ -4417,6 +4417,9 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
           })));
         }
         setModal(null);
+        // Rate gate — the stored rate may be the card rate, not what was
+        // typed. Without this the field just "reverts" with no explanation.
+        if(res.rate_pending && res.message) alert(res.message);
       }else{ setErr(res.message||"Save failed"); }
     }catch(e){ setErr(e.message||"Network error"); }
     setSaving(false);

@@ -6479,7 +6479,13 @@ function WorkersSection() {
     setSaving(true);
     const res = await apiSave({ ...form, daily_rate: parseFloat(form.daily_rate)||0 }, editing?.id);
     setSaving(false);
-    if (res.success) setShowModal(false);
+    if (res.success) {
+      setShowModal(false);
+      // Rate gate: the server may have stored the CARD rate instead of the
+      // one typed here. Say so, otherwise the number silently "changes back"
+      // and it looks like the save was lost.
+      if (res.rate_pending && res.message) alert(res.message);
+    }
     else alert(res.message || "Save failed");
   };
 
@@ -6509,6 +6515,10 @@ function WorkersSection() {
     })).filter(r => r.name);
     const res = await api.post("/library/workers/bulk", { rows: mapped });
     if (res.success) await reload();
+    // An import is not a way around the rate card either — rows whose rate
+    // differs land at the card rate with an approval raised. Say how many,
+    // otherwise the sheet's numbers appear to have been ignored.
+    if (res.data?.rate_pending && res.data?.message) alert(res.data.message);
     return res.data;
   };
 
