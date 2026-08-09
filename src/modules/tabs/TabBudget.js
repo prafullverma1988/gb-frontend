@@ -59,7 +59,11 @@ export default function TabBudget({ project }) {
   const [libLoading, setLibLoading] = useState(false);
   const [ohPct, setOhPct]         = useState("");     // overhead % helper input
 
-  const MODE_UNIT = { hourly: "HOUR", daily: "DAY", trip: "TRIP", fixed: "LS" };
+  // km Machinery master se aata hai — iske bina per-km machine ki budget line
+  // par chup-chaap "HOUR" chipak jaata tha jabki rate ₹/km hai. Fallback "HOUR"
+  // rehne diya taaki purani rows na tootein, par har jaana-pehchana mode yahan
+  // hona chahiye.
+  const MODE_UNIT = { hourly: "HOUR", daily: "DAY", km: "KM", trip: "TRIP", fixed: "LS" };
   const LIB_EP = {
     material:  "/library/materials",
     labour:    "/library/labour-rates",

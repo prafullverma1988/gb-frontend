@@ -494,7 +494,7 @@ function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRe
             </div>
             <div style={{ fontSize: 11, color: T.t3, marginTop: 3, lineHeight: 1.45 }}>
               Norm ke bina Reports me variance column khaali rahega — pata hi nahi chalega ki kis machine ne zyada piya.
-              Library → Equipment / Machinery me har machine ka norm bharein.
+              Machinery module me machine kholo → Edit → "Rate &amp; fuel" me norm bharein.
               {normMissing.length <= 6 && (
                 <span style={{ color: T.t4 }}> ({normMissing.map((m) => m.name).join(", ")})</span>
               )}
@@ -827,7 +827,7 @@ function ReportsTab({ byEquipment, byProject, from, to, onRange }) {
               </Row>
             ))}
             <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-              Norm = Library me set "Fuel per hour" × us duration ke ghante. Sirf ghante wali machine par lagta hai.
+              Norm = Machinery me set "Fuel norm (L/hr)" × us duration ke ghante. Sirf ghante wali machine par lagta hai.
             </div>
           </>
         )}

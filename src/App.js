@@ -764,7 +764,11 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
     reports:"Reports",library:"Library",settings:"Settings",
     crm:"CRM",mom:"MOM",payroll:"Team & HR",team:"Team & HR",
-    township:"Township CRM",tenders:"Tenders"
+    township:"Township CRM",tenders:"Tenders",
+    // Iske bina machinery kisi bhi non-admin ko dikh hi nahi sakti (isVisible
+    // ALWAYS_ON par gir jaata hai) — jabki kaagaz-expiry ki bell accountant ko
+    // jaati hai aur uska link /machinery hai. Yahan hone se ye grantable ho jata hai.
+    machinery:"Machinery"
   };
   const isVisible=(id)=>{
     if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
@@ -997,7 +1001,8 @@ function MobileBottomNav({active,setActive,enabledModules,user}){
     dashboard:"Dashboard",projects:"Projects",design:"Design",
     finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
     reports:"Reports",library:"Library",settings:"Settings",
-    crm:"CRM",mom:"MOM",payroll:"Payroll"
+    crm:"CRM",mom:"MOM",payroll:"Payroll",
+    machinery:"Machinery"
   };
   const isVisible=(id)=>{
     if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
