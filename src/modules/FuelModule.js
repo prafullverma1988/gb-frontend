@@ -858,6 +858,52 @@ function ReportsTab({ byEquipment, byProject, from, to, onRange }) {
   );
 }
 
+// Cross-check compares a manual entry against a sensor reading or a physical
+// dip. The sensor side does not exist yet — telematics is E3 — so this tab
+// states its shape and which checks are genuinely live, and invents nothing
+// to fill the space.
+function CrossCheckTab({ stores, byEquipment }) {
+  const withStock = stores.filter((s) => Number(s.litres) > 0);
+  const noNormCount = byEquipment.filter((e) => e.norm_missing).length;
+  const CheckRow = ({ name, live, note }) => (
+    <Row cols="1.6fr 110px 1.4fr">
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{name}</span>
+      <span>{live
+        ? <Pill label="Chaalu" c={T.grn} bg={T.grnL} />
+        : <Pill label="Baaki hai" c={T.t3} bg={T.sltL} />}</span>
+      <span style={{ fontSize: 11.5, color: T.t3 }}>{note}</span>
+    </Row>
+  );
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ padding: "11px 14px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 8, fontSize: 12, color: T.ind, lineHeight: 1.55 }}>
+        Manual entry vs sensor / physical — jahan farak tolerance se zyada hoga, wahi yahan aayega.
+        Kiraye par li hui "rent included" machines isse bahar rahengi.
+      </div>
+
+      <Panel title="Kaunsi jaanch abhi chalu hai">
+        <CheckRow name="Barrel ka dipstick check" live
+          note={`${withStock.length} drum me stock hai — Barrel Stock tab se "Dipstick"`} />
+        <CheckRow name="Norm vs actual (litre/ghanta)" live
+          note={"Reports tab me variance" + (noNormCount > 0 ? ` · ${noNormCount} machine ka norm baaki` : "")} />
+        <CheckRow name="Fill vs sensor (level jump)"
+          note="Machine par sensor lagne ke baad" />
+        <CheckRow name="Raat ka fuel drop"
+          note="Sensor ke bina pata nahi chalta" />
+      </Panel>
+
+      <Panel title="Flagged entries">
+        <Empty>
+          Abhi koi flag nahi.<br />
+          <span style={{ fontSize: 11.5 }}>
+            Sensor wali jaanch abhi lagi nahi hai — tab tak dipstick aur norm-variance hi asli cross-check hain.
+          </span>
+        </Empty>
+      </Panel>
+    </div>
+  );
+}
+
 const DateRange = ({ from, to, onRange }) => (
   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
     <input type="date" value={from} onChange={(e) => onRange(e.target.value, to)}
@@ -1015,6 +1061,9 @@ function FuelModule() {
     { id: "refueling", l: "Refueling",     I: IcDrop, badge: purchases.length + issues.length || null },
     { id: "barrel",    l: "Barrel Stock",  I: IcDrum, badge: stores.filter((s) => s.below_reorder).length || null, bc: T.amb },
     { id: "vendor",    l: "Vendor Ledger", I: IcTruck },
+    // No badge: a count here would have to be invented until the sensor
+    // checks (E3) actually run.
+    { id: "cc",        l: "Cross-check",   I: IcRuler },
     { id: "reports",   l: "Reports",       I: IcChart },
   ];
 
@@ -1072,6 +1121,9 @@ function FuelModule() {
         {tab === "vendor" && (
           <VendorTab vendorRows={byVendor} from={from} to={to}
             onRange={(f, t2) => { setFrom(f); setTo(t2); }} />
+        )}
+        {tab === "cc" && (
+          <CrossCheckTab stores={stores} byEquipment={byEquipment} />
         )}
         {tab === "reports" && (
           <ReportsTab byEquipment={byEquipment} byProject={byProject} from={from} to={to}
