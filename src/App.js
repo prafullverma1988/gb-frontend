@@ -768,7 +768,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     // Iske bina machinery kisi bhi non-admin ko dikh hi nahi sakti (isVisible
     // ALWAYS_ON par gir jaata hai) — jabki kaagaz-expiry ki bell accountant ko
     // jaati hai aur uska link /machinery hai. Yahan hone se ye grantable ho jata hai.
-    machinery:"Machinery"
+    fuel:"Fuel",machinery:"Machinery"
   };
   const isVisible=(id)=>{
     if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
@@ -1002,7 +1002,7 @@ function MobileBottomNav({active,setActive,enabledModules,user}){
     finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
     reports:"Reports",library:"Library",settings:"Settings",
     crm:"CRM",mom:"MOM",payroll:"Payroll",
-    machinery:"Machinery"
+    fuel:"Fuel",machinery:"Machinery"
   };
   const isVisible=(id)=>{
     if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
