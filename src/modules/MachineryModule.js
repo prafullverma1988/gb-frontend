@@ -635,6 +635,150 @@ function MachineForm({ open, onClose, onSaved, machine, parties }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// COST REPORT (M3.1)
+//
+// Do sawal ka jawab: apni machine ghante ka kitna padti hai, aur jo rate hum
+// project se le rahe hain wo us lagat ko cover karta hai ya nahi.
+//
+// Poora ankda likha jaata hai (₹84,000), fmtC ka chhota roop (₹84.0K) nahi —
+// accounts isi se milaan karta hai aur gol kiya hua number milaan me kaam
+// nahi aata.
+//
+// Jis machine ka hisaab nahi ban saka wo CHHUPTI nahi — uski wajah usi row me
+// likhi hoti hai. Khaali table se accha hai ye batana ki bharna kya baaki hai.
+// ══════════════════════════════════════════════════════════════════
+const rupee = (n) => "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
+
+function CostReport({ econ, health }) {
+  if (!econ) return <Empty>Report load ho rahi hai...</Empty>;
+  const rows = econ.machines || [];
+  const f = econ.fleet || {};
+  const okRows = rows.filter((m) => m.cost_per_unit != null);
+  const blocked = rows.filter((m) => m.cost_per_unit == null);
+  const ovr = f.own_vs_rent || {};
+
+  return (
+    <>
+      {econ.note && <Notice>{econ.note}</Notice>}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
+        <StatCard label="Kul kharcha" value={rupee(f.cost_total)} sub={econ.window.from + " se " + econ.window.to} color={T.ind} icon={IcWrench} />
+        <StatCard label="Apni machine se recovery" value={rupee(f.recovery_total)} sub="project se liya gaya" color={T.grn} icon={IcTruck} />
+        <StatCard label="Hisaab ban saka" value={f.with_cost_per_unit + "/" + rows.length} sub={blocked.length ? blocked.length + " par data kam" : "sab par"} color={blocked.length ? T.amb : T.grn} icon={IcGauge} />
+        <StatCard label="Breakdown" value={f.breakdown_count || 0} sub={f.preventive_pct != null ? f.preventive_pct + "% preventive" : (f.service_count ? "ratio abhi nahi" : "koi service nahi")} color={f.breakdown_count ? T.red : T.grn} icon={IcAlert} />
+      </div>
+
+      <Panel title="Machine ka hisaab" style={{ marginBottom: 12 }}>
+        {okRows.length === 0 && (
+          <Empty>
+            Abhi kisi machine ka ₹/hr nahi nikal saka.<br />
+            <span style={{ fontSize: 11.5 }}>Neeche har machine par wajah likhi hai — zyadatar me meter unit set karna aur do reading darj hona kaafi hota hai.</span>
+          </Empty>
+        )}
+        {okRows.length > 0 && (
+          <>
+            <Row head cols="1.5fr 78px 1fr 1.1fr 1fr 110px">
+              <span>Machine</span><span>Kiski</span><span>Chali</span><span>Kharcha</span><span>Per unit</span><span>Rate cover?</span>
+            </Row>
+            {okRows.map((m) => (
+              <Row key={m.equipment_id} cols="1.5fr 78px 1fr 1.1fr 1fr 110px">
+                <div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{m.name}</div>
+                  <div style={{ fontSize: 10, color: T.t4 }}>{m.registration_no || "reg. no. nahi"}</div>
+                </div>
+                <span><Pill label={m.owned ? "Apni" : "Kiraye"} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
+                {/* Numerator aur denominator dono dikhte hain — akela "₹420/hr"
+                    par koi bharosa nahi kar sakta, na use jaanch sakta hai. */}
+                <div>
+                  <div style={{ fontSize: 12 }}>{fmtN(m.run.value)} {m.unit === "km" ? "km" : "hrs"}</div>
+                  <div style={{ fontSize: 9.5, color: T.t4 }}>{fmtD(m.run.from_at)} → {fmtD(m.run.to_at)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{rupee(m.cost.total)}</div>
+                  <div style={{ fontSize: 9.5, color: T.t4 }}>
+                    {[m.cost.fuel ? "diesel " + rupee(m.cost.fuel) : null,
+                      m.cost.service ? "service " + rupee(m.cost.service) : null,
+                      m.cost.documents ? "kaagaz " + rupee(m.cost.documents) : null,
+                      m.cost.hire_paid ? "kiraya " + rupee(m.cost.hire_paid) : null].filter(Boolean).join(" · ") || "—"}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>
+                    {rupee(m.cost_per_unit)}<span style={{ fontSize: 10, fontWeight: 500, color: T.t4 }}>/{m.unit === "km" ? "km" : "hr"}</span>
+                  </div>
+                  {m.recovery_per_unit != null && (
+                    <div style={{ fontSize: 9.5, color: T.t4 }}>liya {rupee(m.recovery_per_unit)}</div>
+                  )}
+                </div>
+                <span>
+                  {m.covers_cost === null ? <span style={{ fontSize: 11, color: T.t4 }}>—</span>
+                    : m.covers_cost ? <Pill label="Haan" c={T.grn} bg={T.grnL} />
+                    : <Pill label="Nahi — rate kam" c={T.red} bg={T.redL} />}
+                </span>
+              </Row>
+            ))}
+            <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4, lineHeight: 1.55 }}>
+              Isme <b>depreciation aur operator ki salary shaamil nahi</b> hai. Kiraye ki machine par
+              service (aur aksar diesel) vendor ka hota hai, isliye uska kharcha kam dikhega — dono
+              taraf ka hisaab adhoora hai, seedhi tulna mat karein.
+            </div>
+          </>
+        )}
+      </Panel>
+
+      {blocked.length > 0 && (
+        <Panel title={blocked.length + " machine ka hisaab abhi nahi ban saka"} style={{ marginBottom: 12 }}>
+          {blocked.map((m) => (
+            <Row key={m.equipment_id} cols="1.5fr 78px 1fr 1.6fr">
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{m.name}</span>
+              <span><Pill label={m.owned ? "Apni" : "Kiraye"} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
+              <span style={{ fontSize: 11.5, color: T.t3 }}>kharcha {rupee(m.cost.total)}</span>
+              <span style={{ fontSize: 11, color: T.amb }}>{m.run.reason}</span>
+            </Row>
+          ))}
+        </Panel>
+      )}
+
+      {ovr.owned && (ovr.owned.machines > 0 || ovr.rented.machines > 0) && (
+        <Panel title="Apni vs kiraye ki" style={{ marginBottom: 12 }}>
+          <Row head cols="1fr 1fr 1fr"><span>Kiski</span><span>Machines</span><span>Aausat per unit</span></Row>
+          <Row cols="1fr 1fr 1fr">
+            <span style={{ fontSize: 12.5, color: T.t1 }}>Apni</span>
+            <span style={{ fontSize: 12 }}>{ovr.owned.machines}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 700 }}>{ovr.owned.avg_cost_per_unit != null ? rupee(ovr.owned.avg_cost_per_unit) : "—"}</span>
+          </Row>
+          <Row cols="1fr 1fr 1fr">
+            <span style={{ fontSize: 12.5, color: T.t1 }}>Kiraye ki</span>
+            <span style={{ fontSize: 12 }}>{ovr.rented.machines}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 700 }}>{ovr.rented.avg_cost_per_unit != null ? rupee(ovr.rented.avg_cost_per_unit) : "—"}</span>
+          </Row>
+          <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.amb, lineHeight: 1.55 }}>{ovr.warning}</div>
+        </Panel>
+      )}
+
+      {health && (health.machines || []).length > 0 && (
+        <Panel title="Preventive vs breakdown" style={{ marginBottom: 12 }}>
+          <Row head cols="1.6fr 1.2fr 1fr 1fr"><span>Machine</span><span>Service</span><span>Breakdown</span><span>Downtime</span></Row>
+          {health.machines.map((m) => (
+            <Row key={m.equipment_id} cols="1.6fr 1.2fr 1fr 1fr">
+              <span style={{ fontSize: 12.5, color: T.t1 }}>{m.name}</span>
+              <span style={{ fontSize: 12 }}>{m.service_count}{m.preventive_pct != null ? " (" + m.preventive_pct + "% preventive)" : ""}</span>
+              <span style={{ fontSize: 12, color: m.breakdowns ? T.red : T.t3 }}>{m.breakdowns}</span>
+              <span style={{ fontSize: 12, color: T.t3 }}>
+                {m.downtime_hours != null ? fmtN(m.downtime_hours) + " hrs" : <span style={{ color: T.t4 }}>darj nahi</span>}
+              </span>
+            </Row>
+          ))}
+          {health.downtime_coverage && (
+            <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>{health.downtime_coverage}</div>
+          )}
+        </Panel>
+      )}
+    </>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
 // IMPORT WIZARD
 //
 // Library ka purana CSV import 7 column padhta tha aur har fail hui row ko
@@ -1764,21 +1908,27 @@ function MachineryModule() {
   const [formOpen, setFormOpen] = useState(false);
   const [editMachine, setEditMachine] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [econ, setEcon] = useState(null);
+  const [health, setHealth] = useState(null);
 
   // silent = background refresh. Spinner sirf pehli baar; warna machine detail
   // khuli ho to wo unmount ho kar apna tab bhool jaata hai.
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
-    const [f, d, g, p] = await Promise.all([
+    const [f, d, g, p, ec, he] = await Promise.all([
       api.get("/machinery/fleet").catch(() => null),
       api.get("/machinery/due").catch(() => null),
       api.get("/machinery/reports/gaps").catch(() => null),
       api.get("/finance/parties").catch(() => null),
+      api.get("/machinery/reports/cost").catch(() => null),
+      api.get("/machinery/reports/health").catch(() => null),
     ]);
     setFleet(f?.success ? f.data || [] : []);
     setDue(d?.success ? d.data || [] : []);
     setGaps(g?.success ? g.data || { gaps: [], counts: {} } : { gaps: [], counts: {} });
     setParties(p?.success ? p.data || [] : []);
+    setEcon(ec?.success ? ec.data : null);
+    setHealth(he?.success ? he.data : null);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1937,11 +2087,8 @@ function MachineryModule() {
 
             {tab === "insights" && (
               <div style={{ display: "grid", gap: 12 }}>
-                <Notice>
-                  Insights ko do cheezein chahiye jo abhi jam nahi rahi: <b>meter readings</b> aur <b>service history</b>.
-                  Wo aate hi service ki tareekh ka anumaan, L/hr se sehat ka ishaara, aur "apni machine sasti ya kiraye ki" — teeno yahin dikhne lagenge.
-                </Notice>
-                <Panel title="Abhi kya kami hai">
+                <CostReport econ={econ} health={health} />
+                <Panel title="Abhi kya kami hai" style={{ marginTop: 2 }}>
                   {(gaps.gaps || []).length === 0 && <Empty>Koi kami nahi — Insights M2/M3 me chalu honge.</Empty>}
                   {(gaps.gaps || []).map((g) => (
                     <Row key={g.id} cols="1.6fr 1fr 1.4fr">
