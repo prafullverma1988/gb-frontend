@@ -2601,10 +2601,12 @@ function WalletSettings() {
     { key: "site_exp",  label: "Site expense",  desc: "Site par hua kharch — receipt / material photo" },
     { key: "party_pay", label: "Party payment", desc: "Vendor / labour ko wallet se payment" },
     { key: "salary",    label: "Salary",        desc: "Staff salary wallet se" },
-    { key: "petrol",    label: "Petrol",        desc: "Fuel / travel kharch" },
+    { key: "petrol",    label: "Petrol",        desc: "Staff ka travel kharch" },
+    { key: "fuel",      label: "Diesel",        desc: "Machine ka diesel — pump ki slip" },
+    { key: "service",   label: "Service",       desc: "Machine ki service / repair ka bill" },
     { key: "transfer",  label: "Wallet transfer", desc: "Ek staff wallet se doosre wallet me" },
   ];
-  const [policy, setPolicy] = useState({ site_exp: "required", party_pay: "required", salary: "optional", petrol: "optional", transfer: "optional" });
+  const [policy, setPolicy] = useState({ site_exp: "required", party_pay: "required", salary: "optional", petrol: "optional", fuel: "required", service: "required", transfer: "optional" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
@@ -2619,6 +2621,8 @@ function WalletSettings() {
     { key: "site_exp",  label: "Site Exp" },
     { key: "party_pay", label: "Party Pay" },
     { key: "petrol",    label: "Petrol" },
+    { key: "fuel",      label: "Diesel" },
+    { key: "service",   label: "Service" },
     { key: "generic",   label: "Other" },
   ];
   const [limits, setLimits] = useState(null);

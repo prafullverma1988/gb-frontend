@@ -1081,6 +1081,181 @@ function ImportWizard({ open, onClose, onDone }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// SERVICE FORM (M2)
+//
+// Ek hi form dono kaam karta hai: nayi service (turant band ya khuli chhodo)
+// aur khuli service ko band karna. Parts ki grid me har line apni cost aur
+// (chaahe to) apni life rakhti hai — wahi life us part ka agla due banati hai,
+// template ke aam niyam se upar.
+//
+// Udhaar par party lazmi (payable kisi ke naam hona chahiye); cash par
+// highway ka mechanic free-text naam se chal jaata hai — ye Fuel ke "hamesha
+// party" se jaan-bujh kar dheela hai.
+// ══════════════════════════════════════════════════════════════════
+const SERVICE_VENDOR_ROLES = ["equipment_vendor", "material_vendor", "vendor", "supplier", "subcontractor"];
+
+function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templates }) {
+  const closing = !!existing;                    // khuli service band ho rahi hai
+  const [f, setF] = useState({});
+  const [items, setItems] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const updItem = (i, k, v) => setItems((p) => p.map((it, n) => (n === i ? { ...it, [k]: v } : it)));
+
+  useEffect(() => {
+    if (!open) return;
+    setError("");
+    setF(existing ? {
+      service_date: existing.service_date, service_type: existing.service_type || "preventive",
+      payment_mode: existing.payment_mode || "cash",
+      vendor_party_id: existing.vendor_party_id, vendor_name: existing.vendor_name,
+      labour_cost: "", invoice_no: existing.invoice_no || "", note: existing.note || "",
+      keep_open: false,
+    } : {
+      service_date: todayStr(), service_type: "preventive", payment_mode: "cash", keep_open: false,
+    });
+    setItems([{ item: "", part_category: "other", cost: "", life_hours: "", template_id: "" }]);
+  }, [open, existing]);
+
+  const partsTotal = items.reduce((a, it) => a + (parseFloat(it.cost) || 0), 0);
+  const total = partsTotal + (parseFloat(f.labour_cost) || 0);
+
+  const save = async () => {
+    setError("");
+    const liveItems = items
+      .filter((it) => String(it.item || "").trim())
+      .map((it) => ({
+        item: it.item.trim(), part_category: it.part_category || "other",
+        cost: parseFloat(it.cost) || 0,
+        life_hours: it.life_hours ? parseFloat(it.life_hours) : null,
+        template_id: it.template_id ? Number(it.template_id) : null,
+      }));
+    if (f.payment_mode === "credit" && total > 0 && !f.vendor_party_id) {
+      setError("Udhaar par party chunna zaroori hai — payable kisi ke naam hoga"); return;
+    }
+    const body = {
+      equipment_id: machine.id,
+      service_date: f.service_date, service_type: f.service_type,
+      payment_mode: f.payment_mode,
+      vendor_party_id: f.vendor_party_id || null,
+      vendor_name: f.vendor_name || null,
+      labour_cost: parseFloat(f.labour_cost) || 0,
+      invoice_no: f.invoice_no || null, note: f.note || null,
+      photo_url: f.photo_url || null,
+      items: liveItems,
+    };
+    setBusy(true);
+    try {
+      let r;
+      if (closing) r = await api.put("/machinery/service/" + existing.id, body);
+      else if (f.keep_open) r = await api.post("/machinery/service", { ...body, close_now: false });
+      else r = await api.post("/machinery/service", { ...body, close_now: true });
+      if (r && r.success) { onSaved(); onClose(); }
+      else setError((r && r.message) || "Save failed");
+    } catch (e) { setError((e && e.message) || "Network error"); }
+    setBusy(false);
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} width={760}
+      title={closing ? "Service band karein" : "Service darj karein"}
+      sub={machine ? machine.name + (machine.registration_no ? ` · ${machine.registration_no}` : "") : ""}
+      footer={<><Btn ghost onClick={onClose}>Cancel</Btn>
+        <Btn onClick={save} disabled={busy}>{busy ? "Saving..." : closing ? "Band karo" : f.keep_open ? "Kholo (machine Under Repair)" : "Darj karo"}</Btn></>}>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <Field label="Date">
+          <input type="date" value={f.service_date || ""} onChange={(e) => upd("service_date", e.target.value)} style={inp} />
+        </Field>
+        <Field label="Type">
+          <select value={f.service_type || "preventive"} onChange={(e) => upd("service_type", e.target.value)} style={inp}>
+            <option value="preventive">Preventive (time par)</option>
+            <option value="breakdown">Breakdown (kharab hui)</option>
+            <option value="overhaul">Overhaul</option>
+          </select>
+        </Field>
+        <Field label="Payment">
+          <select value={f.payment_mode || "cash"} onChange={(e) => upd("payment_mode", e.target.value)} style={inp}>
+            <option value="cash">Cash (site se diya)</option>
+            <option value="credit">Udhaar (baad me pay)</option>
+          </select>
+        </Field>
+        <Field label={f.payment_mode === "credit" ? "Vendor (party) *" : "Vendor (party)"} span={2}>
+          <PartyPicker value={f.vendor_party_id} onChange={(v) => upd("vendor_party_id", v)}
+            parties={parties || []} roles={SERVICE_VENDOR_ROLES} placeholder="— workshop / mechanic chuno —" />
+        </Field>
+        {!f.vendor_party_id && (
+          <Field label="Ya naam likho (sirf cash)" hint="Highway ka mechanic — ek baar ka kaam.">
+            <input value={f.vendor_name || ""} onChange={(e) => upd("vendor_name", e.target.value)} style={inp}
+              disabled={f.payment_mode === "credit"} placeholder={f.payment_mode === "credit" ? "udhaar par party zaroori" : ""} />
+          </Field>
+        )}
+      </div>
+
+      {!closing && (
+        <label style={{ display: "flex", gap: 8, alignItems: "flex-start", margin: "12px 0 2px", cursor: "pointer" }}>
+          <input type="checkbox" checked={!!f.keep_open} onChange={(e) => upd("keep_open", e.target.checked)} style={{ marginTop: 2 }} />
+          <span style={{ fontSize: 11.5, color: T.t2 }}>
+            <b>Machine abhi workshop me hai</b> — service khuli rahegi, machine "Under Repair" ho jayegi.
+            Bill aane par isi row par click karke band karna.
+          </span>
+        </label>
+      )}
+
+      {(closing || !f.keep_open) && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, margin: "14px 0 8px" }}>Kya-kya hua / badla</div>
+          {items.map((it, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1.6fr 110px 90px 90px 130px 26px", gap: 8, marginBottom: 7, alignItems: "center" }}>
+              <input value={it.item} onChange={(e) => updItem(i, "item", e.target.value)} placeholder="e.g. Engine oil 15W40" style={inp} />
+              <select value={it.part_category} onChange={(e) => updItem(i, "part_category", e.target.value)} style={inp}>
+                {["oil", "filter", "tyre", "hydraulic", "electrical", "engine", "other"].map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input value={it.cost} inputMode="decimal" onChange={(e) => updItem(i, "cost", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="₹" style={inp} />
+              <input value={it.life_hours} inputMode="decimal" onChange={(e) => updItem(i, "life_hours", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="life hrs" style={inp}
+                title="Is part ki apni life (ghante) — bharoge to iska agla due isi se banega, template se nahi" />
+              <select value={it.template_id || ""} onChange={(e) => updItem(i, "template_id", e.target.value)} style={inp}
+                title="Kaunsa service task poora hua — uska due clock isi se aage badhta hai">
+                <option value="">— task —</option>
+                {(templates || []).map((t) => <option key={t.id} value={t.id}>{t.task}</option>)}
+              </select>
+              <button type="button" onClick={() => setItems((p) => p.filter((_, n) => n !== i))}
+                style={{ background: "none", border: "none", color: T.t4, cursor: "pointer", fontSize: 14 }}>×</button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setItems((p) => [...p, { item: "", part_category: "other", cost: "", life_hours: "", template_id: "" }])}
+            style={{ background: "none", border: "none", color: T.ind, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", padding: "2px 0 10px" }}>
+            + line
+          </button>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <Field label="Labour / mechanic (₹)">
+              <input value={f.labour_cost || ""} inputMode="decimal" onChange={(e) => upd("labour_cost", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
+            </Field>
+            <Field label="Bill no.">
+              <input value={f.invoice_no || ""} onChange={(e) => upd("invoice_no", e.target.value)} style={inp} />
+            </Field>
+            <FileField value={f.photo_url} onChange={(u) => upd("photo_url", u)} label="Bill (photo / PDF)" />
+          </div>
+          {/* Total poora likha jaata hai, fmtC ka chhota roop nahi — accounts
+              isi ankde se milaan karega. */}
+          <div style={{ marginTop: 10, padding: "9px 13px", background: T.surfaceB, borderRadius: 8, fontSize: 12.5, fontWeight: 700, color: T.t1 }}>
+            Total: ₹{total.toLocaleString("en-IN")} <span style={{ fontWeight: 500, color: T.t4 }}>(parts ₹{partsTotal.toLocaleString("en-IN")} + labour)</span>
+          </div>
+        </>
+      )}
+
+      <Field label="Note">
+        <input value={f.note || ""} onChange={(e) => upd("note", e.target.value)} style={{ ...inp, marginTop: 10 }} />
+      </Field>
+
+      {error && <div style={{ marginTop: 12, padding: "9px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>{error}</div>}
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
 // DOCUMENT FORM
 // ══════════════════════════════════════════════════════════════════
 function DocForm({ open, onClose, onSaved, machine }) {
@@ -1242,22 +1417,35 @@ function MeterForm({ open, onClose, onSaved, machine, current }) {
 // ══════════════════════════════════════════════════════════════════
 // MACHINE DETAIL
 // ══════════════════════════════════════════════════════════════════
-function MachineDetail({ id, onBack, onChanged, onEdit }) {
+function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
   const [tab, setTab] = useState("ov");
   const [m, setM] = useState(null);
   const [timeline, setTimeline] = useState([]);
+  const [services, setServices] = useState([]);
+  const [svcDue, setSvcDue] = useState(null);
   const [loading, setLoading] = useState(true);
   const [docOpen, setDocOpen] = useState(false);
   const [meterOpen, setMeterOpen] = useState(false);
+  const [svcOpen, setSvcOpen] = useState(false);
+  const [svcEdit, setSvcEdit] = useState(null);   // khuli service jise band karna hai
+  const [svcTemplates, setSvcTemplates] = useState([]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const [a, b] = await Promise.all([
+  // silent = form-save ke baad ka refresh. Spinner sirf pehli baar — warna har
+  // save par poori detail blank ho kar apna tab bhool jaati hai.
+  const load = useCallback(async (silent) => {
+    if (!silent) setLoading(true);
+    const [a, b, c, d, e] = await Promise.all([
       api.get("/machinery/fleet/" + id).catch(() => null),
       api.get("/machinery/fleet/" + id + "/timeline").catch(() => null),
+      api.get("/machinery/service?equipment_id=" + id).catch(() => null),
+      api.get("/machinery/fleet/" + id + "/service-due").catch(() => null),
+      api.get("/machinery/templates?equipment_id=" + id).catch(() => null),
     ]);
     setM(a?.success ? a.data : null);
     setTimeline(b?.success ? b.data || [] : []);
+    setServices(c?.success ? c.data || [] : []);
+    setSvcDue(d?.success ? d.data : null);
+    setSvcTemplates(e?.success ? e.data || [] : []);
     setLoading(false);
   }, [id]);
   useEffect(() => { load(); }, [load]);
@@ -1314,6 +1502,10 @@ function MachineDetail({ id, onBack, onChanged, onEdit }) {
           <div style={{ fontSize: 11.5, color: T.t3, marginTop: 4, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
             {m.registration_no || <span style={{ color: T.amb }}>Registration no. nahi bhara</span>}
             <Pill label={owned ? "Owned" : "Rented"} c={owned ? T.ind : T.t3} bg={owned ? T.indL : T.sltL} />
+            {/* Workshop me padi machine ka status dikhna zaroori hai — warna
+                service kholne se jo badla, wo kahin dikhta hi nahi aur log
+                maanenge ki kuch hua hi nahi. */}
+            {m.status === "Under Repair" && <Pill label="Under Repair" c={T.red} bg={T.redL} />}
             {m.operator_name && <span>· Operator: {m.operator_name}</span>}
           </div>
           <div style={{ fontSize: 11.5, color: T.t3, marginTop: 7 }}>
@@ -1386,14 +1578,89 @@ function MachineDetail({ id, onBack, onChanged, onEdit }) {
       )}
 
       {activeTab === "svc" && (
-        <Panel title="Service log">
-          <Empty>
-            Service log agle phase (M2) me aayega.<br />
-            <span style={{ fontSize: 11.5 }}>
-              Tab tak kaunsa part kab badla — wo yahan nahi rakha ja sakta.
-            </span>
-          </Empty>
-        </Panel>
+        <>
+          {/* Agli service kab — task-wise. Andaza alert nahi banta: meter
+              purana ho to wahi likha aata hai. */}
+          {svcDue && svcDue.tasks && svcDue.tasks.length > 0 && (
+            <Panel title="Agli service kab" style={{ marginBottom: 14 }}>
+              <Row head cols="1.5fr 90px 1fr 1fr">
+                <span>Task</span><span>Haalat</span><span>Kitna baaki</span><span>Aakhri baar</span>
+              </Row>
+              {svcDue.tasks.map((tk) => {
+                const tone = tk.status === "overdue" ? { c: T.red, bg: T.redL, l: "Overdue" }
+                  : tk.status === "due" ? { c: T.amb, bg: T.ambL, l: "Due" }
+                  : tk.status === "soon" ? { c: T.amb, bg: T.ambL, l: "Jaldi" }
+                  : tk.status === "unknown" ? { c: T.t3, bg: T.sltL, l: "Pata nahi" }
+                  : { c: T.grn, bg: T.grnL, l: "OK" };
+                return (
+                  <Row key={tk.template_id} cols="1.5fr 90px 1fr 1fr">
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>
+                      {tk.task}{tk.from_part && <span style={{ fontSize: 9.5, color: T.ind, fontWeight: 700 }}> · part ki life se</span>}
+                    </span>
+                    <span><Pill label={tone.l} c={tone.c} bg={tone.bg} /></span>
+                    <span style={{ fontSize: 11.5, color: tk.remaining != null && tk.remaining < 0 ? T.red : T.t3 }}>
+                      {tk.remaining == null ? (tk.reason || "—")
+                        : `${tk.remaining < 0 ? Math.abs(tk.remaining) + " " : tk.remaining + " "}${tk.basis === "km" ? "km" : tk.basis === "days" ? "din" : "hrs"}${tk.remaining < 0 ? " upar" : " baaki"}`}
+                      {tk.meter_stale && <span style={{ color: T.amb }}> · meter purana, andaza</span>}
+                    </span>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{tk.last_service ? fmtD(tk.last_service) : "kabhi nahi"}</span>
+                  </Row>
+                );
+              })}
+            </Panel>
+          )}
+          {svcDue && svcDue.no_templates && (
+            <Notice>
+              Is machine ke liye koi service task set nahi — bina task ke "agli service kab" nikal hi nahi sakta.{" "}
+              <button type="button" onClick={async () => {
+                const r = await api.post("/machinery/templates/seed", {}).catch(() => null);
+                if (r && r.success) load(true);
+                else window.alert((r && r.message) || "Seed nahi chala");
+              }}
+                style={{ background: "none", border: "none", color: T.ind, fontWeight: 700, fontSize: 11.5, cursor: "pointer", fontFamily: "inherit", padding: 0, textDecoration: "underline" }}>
+                Aam service tasks bhar do
+              </button>{" "}
+              (JCB/tipper/roller ke standard kaam, intervals ke saath — baad me edit ho sakte hain).
+            </Notice>
+          )}
+
+          <Panel title="Service log"
+            action={<Btn size="sm" icon={IcWrench} onClick={() => { setSvcEdit(null); setSvcOpen(true); }}>Service</Btn>}>
+            {services.length === 0 && (
+              <Empty>
+                Koi service darj nahi.<br />
+                <span style={{ fontSize: 11.5 }}>Kaunsa part kab badla, kitne ka — sab yahin jama hota hai.</span>
+              </Empty>
+            )}
+            {services.length > 0 && (
+              <>
+                <Row head cols="92px 1.2fr 1.2fr 90px 100px 110px">
+                  <span>Date</span><span>Kya hua</span><span>Vendor</span><span>Type</span><span style={{ textAlign: "right" }}>Kharcha</span><span>Payment</span>
+                </Row>
+                {services.map((s) => (
+                  <Row key={s.id} cols="92px 1.2fr 1.2fr 90px 100px 110px"
+                    onClick={s.status === "open" ? () => { setSvcEdit(s); setSvcOpen(true); } : undefined}>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(s.service_date)}</span>
+                    <span style={{ fontSize: 12, color: T.t1 }}>
+                      {s.status === "open"
+                        ? <Pill label="KHULI HAI — band karne ko click" c={T.amb} bg={T.ambL} />
+                        : (s.items || []).map((i) => i.item).join(", ") || s.note || "—"}
+                    </span>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{s.vendor || "—"}</span>
+                    <span style={{ fontSize: 11, color: s.service_type === "breakdown" ? T.red : T.t3 }}>{s.service_type}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, textAlign: "right" }}>{s.total_cost > 0 ? fmtC(s.total_cost) : "—"}</span>
+                    <span>
+                      {s.status === "open" ? <span style={{ fontSize: 11, color: T.t4 }}>—</span>
+                        : s.payment_mode === "credit"
+                          ? <Pill label={s.settlement_status === "paid" ? "Paid" : "Baaki"} c={s.settlement_status === "paid" ? T.grn : T.amb} bg={s.settlement_status === "paid" ? T.grnL : T.ambL} />
+                          : <Pill label="Cash" c={T.slt} bg={T.sltL} />}
+                    </span>
+                  </Row>
+                ))}
+              </>
+            )}
+          </Panel>
+        </>
       )}
 
       {activeTab === "fuel" && (
@@ -1473,9 +1740,12 @@ function MachineDetail({ id, onBack, onChanged, onEdit }) {
       )}
 
       <DocForm open={docOpen} onClose={() => setDocOpen(false)} machine={m}
-        onSaved={() => { load(); onChanged && onChanged(); }} />
+        onSaved={() => { load(true); onChanged && onChanged(); }} />
       <MeterForm open={meterOpen} onClose={() => setMeterOpen(false)} machine={m} current={m.meter}
-        onSaved={() => { load(); onChanged && onChanged(); }} />
+        onSaved={() => { load(true); onChanged && onChanged(); }} />
+      <ServiceForm open={svcOpen} onClose={() => { setSvcOpen(false); setSvcEdit(null); }}
+        machine={m} parties={parties} existing={svcEdit} templates={svcTemplates}
+        onSaved={() => { load(true); onChanged && onChanged(); }} />
     </div>
   );
 }
@@ -1556,7 +1826,7 @@ function MachineryModule() {
     <div style={{ background: T.bg, height: "100%", display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px 20px" }}>
         {openId ? (
-          <MachineDetail id={openId} onBack={() => setOpenId(null)} onChanged={() => load(true)}
+          <MachineDetail id={openId} onBack={() => setOpenId(null)} onChanged={() => load(true)} parties={parties}
             onEdit={(m) => { setEditMachine(m); setFormOpen(true); }} />
         ) : (
           <>
@@ -1611,7 +1881,10 @@ function MachineryModule() {
                               : <span style={{ fontSize: 11, color: T.t4 }}>{m.owned ? "Koi kaagaz nahi" : "Verify baaki"}</span>}
                           </span>
                           <span>
-                            {bad ? <Pill label="Action needed" c={T.red} bg={T.redL} />
+                            {/* Workshop me padi machine kaagaz ke rang se chhup jaati thi —
+                                repair sab par bhaari hai. */}
+                            {m.status === "Under Repair" ? <Pill label="Under Repair" c={T.red} bg={T.redL} />
+                              : bad ? <Pill label="Action needed" c={T.red} bg={T.redL} />
                               : soon ? <Pill label="Dhyan dein" c={T.amb} bg={T.ambL} />
                               : <Pill label="OK" c={T.grn} bg={T.grnL} />}
                           </span>

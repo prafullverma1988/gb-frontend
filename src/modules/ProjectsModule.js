@@ -2750,7 +2750,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     catch(e){setSaveErr(e.message);}
     setActing(p=>({...p,["w"+it.txn_id]:null}));
   };
-  const WCAT_LBL={site_exp:"Site Expense",party_pay:"Party Payment",salary:"Salary",petrol:"Petrol",generic:"Other"};
+  const WCAT_LBL={site_exp:"Site Expense",party_pay:"Party Payment",salary:"Salary",petrol:"Petrol",fuel:"Diesel",service:"Service",generic:"Other"};
   const WalletApprovalCard=({item:it})=>{
     const act=acting["w"+it.txn_id];
     const blocked=walletPhotoBlocked(it);
