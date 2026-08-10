@@ -659,7 +659,73 @@ const IMPORT_COLS = [
   { key: "chassis_no", label: "Chassis no.", aliases: ["chassis"] },
   { key: "engine_no", label: "Engine no.", aliases: ["engine"] },
   { key: "operator_name", label: "Operator", aliases: ["driver", "chalak"] },
+  // Kaagaz ki expiry import me hona hi chahiye. 40 machine import karke phir
+  // 120 document haath se bharna — import ka matlab hi khatam ho jaata, aur
+  // expiry hi is module ki jaan hai.
+  { key: "insurance_no", label: "Insurance no.", aliases: ["policy no", "insurance policy"] },
+  { key: "insurance_till", label: "Insurance valid till", aliases: ["insurance expiry", "insurance", "policy expiry", "bima"] },
+  { key: "fitness_no", label: "Fitness no.", aliases: ["fitness certificate no"] },
+  { key: "fitness_till", label: "Fitness valid till", aliases: ["fitness expiry", "fitness", "fc expiry", "fc"] },
+  { key: "puc_no", label: "PUC no.", aliases: ["puc certificate no"] },
+  { key: "puc_till", label: "PUC valid till", aliases: ["puc expiry", "puc", "pollution", "pollution expiry"] },
+  // Telematics. Device/IMEI har machine ka alag hota hai, isliye bulk me isi
+  // ka sabse zyada matlab hai. API key yahan JAAN-BUJH KAR nahi hai — wo ek
+  // secret hai, aur Excel file WhatsApp/email par ghumti hai. Key machine
+  // kholkar bhari jaati hai, jahan wo masked rehti hai aur kabhi wapas nahi
+  // dikhti.
+  { key: "telematics_enabled", label: "GPS laga hai (haan/nahi)", aliases: ["gps", "telematics", "tracker", "gps hai"] },
+  { key: "telematics_device_id", label: "Device / IMEI no.", aliases: ["imei", "device id", "device", "gps device", "tracker id"] },
+  { key: "telematics_vendor", label: "Telematics vendor", aliases: ["gps vendor", "tracker vendor", "gps company"] },
+  { key: "telematics_api_url", label: "Telematics API URL", aliases: ["gps api", "api url"] },
 ];
+
+// "haan/nahi" ke wo saare roop jo log sach me likhte hain.
+const YESNO = { haan: 1, ha: 1, hai: 1, yes: 1, y: 1, true: 1, "1": 1, laga: 1, lga: 1, on: 1,
+                nahi: 0, nhi: 0, no: 0, n: 0, false: 0, "0": 0, off: 0 };
+
+const DOC_IMPORT = [
+  { type: "insurance", no: "insurance_no", till: "insurance_till", label: "Insurance" },
+  { type: "fitness", no: "fitness_no", till: "fitness_till", label: "Fitness" },
+  { type: "puc", no: "puc_no", till: "puc_till", label: "PUC" },
+];
+
+// Excel se date teen shakl me aati hai: serial number (date-formatted cell),
+// JS Date, ya plain text. Text me Bharat ka riwaaj dd/mm/yyyy hai — us par
+// hi chalte hain, par parse ki hui date preview me dikhayi jaati hai taaki
+// galat padhi gayi date chhupe nahi.
+const EXCEL_EPOCH = Date.UTC(1899, 11, 30);   // 1900 leap-year bug samet
+function parseSheetDate(v) {
+  if (v == null || v === "") return null;
+  if (v instanceof Date && !isNaN(v)) {
+    const p = (n) => String(n).padStart(2, "0");
+    return v.getFullYear() + "-" + p(v.getMonth() + 1) + "-" + p(v.getDate());
+  }
+  const s = String(v).trim();
+  if (!s) return null;
+  // Serial number — 1990 se 2100 tak ka hi maano, warna "42" jaisa koi number
+  // bhi date ban jayega.
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    if (n < 32874 || n > 73415) return null;
+    const d = new Date(EXCEL_EPOCH + Math.round(n) * 86400000);
+    return d.toISOString().slice(0, 10);
+  }
+  let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);          // yyyy-mm-dd
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);          // dd/mm/yyyy
+  if (m) {
+    let [, d, mo, y] = m;
+    if (y.length === 2) y = (Number(y) > 70 ? "19" : "20") + y;
+    if (Number(mo) > 12) return null;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  const parsed = new Date(s);                                       // "15 Aug 2027"
+  if (!isNaN(parsed)) {
+    const p = (n) => String(n).padStart(2, "0");
+    return parsed.getFullYear() + "-" + p(parsed.getMonth() + 1) + "-" + p(parsed.getDate());
+  }
+  return null;
+}
 
 const norm = (s) => String(s == null ? "" : s).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -731,10 +797,28 @@ function ImportWizard({ open, onClose, onDone }) {
     for (let i = headerRow + 1; i < aoa.length; i++) {
       const r = aoa[i] || [];
       const cell = (k) => (map[k] == null ? "" : String(r[map[k]] == null ? "" : r[map[k]]).trim());
+      const rawCell = (k) => (map[k] == null ? null : r[map[k]]);
       const name = cell("name");
       if (!name) continue;
       const numOf = (k) => { const v = cell(k).replace(/[^0-9.-]/g, ""); return v === "" ? null : Number(v); };
+
+      // Kaagaz: date parse ho gayi to document banega. Jo date padhi na ja
+      // sake wo chup-chaap girni nahi chahiye — use badDates me rakh kar
+      // preview me naam le kar dikhate hain.
+      const documents = [];
+      const badDates = [];
+      for (const d of DOC_IMPORT) {
+        const rawTill = rawCell(d.till);
+        const no = cell(d.no) || null;
+        const till = parseSheetDate(rawTill);
+        if (till) documents.push({ doc_type: d.type, doc_no: no, valid_till: till });
+        else if (String(rawTill == null ? "" : rawTill).trim()) badDates.push(`${d.label}: "${String(rawTill).trim()}"`);
+        else if (no) badDates.push(`${d.label} ka number hai par date nahi`);
+      }
+
       out.push({
+        documents,
+        _bad_dates: badDates,
         _row: i + 1,
         name,
         registration_no: cell("registration_no") || null,
@@ -751,6 +835,17 @@ function ImportWizard({ open, onClose, onDone }) {
         make: cell("make") || null, model: cell("model") || null,
         chassis_no: cell("chassis_no") || null, engine_no: cell("engine_no") || null,
         operator_name: cell("operator_name") || null,
+        // NULL = column hi nahi tha (poocha hi nahi gaya). 0 = "nahi" — wo
+        // poora jawab hai aur completeness me ginta hai.
+        telematics_enabled: (() => {
+          const raw = cell("telematics_enabled");
+          if (!raw) return null;
+          const v = YESNO[norm(raw)];
+          return v == null ? null : v;
+        })(),
+        telematics_device_id: cell("telematics_device_id") || null,
+        telematics_api_url: cell("telematics_api_url") || null,
+        _telematics_vendor_name: cell("telematics_vendor") || null,
       });
     }
     return out;
@@ -774,13 +869,38 @@ function ImportWizard({ open, onClose, onDone }) {
 
   const template = async () => {
     const XLSX = await import("xlsx");
+    // Sample rows column ke naam se banti hain, position se nahi — pehle ye
+    // haath se likhi thi aur naya column judte hi saari values khisak jaati.
+    const sample = (o) => IMPORT_COLS.map((c) => (o[c.key] == null ? "" : o[c.key]));
     const rows = [
       IMPORT_COLS.map((c) => c.label),
-      ["JCB 3DX Backhoe Loader", "MP09 AB 1234", "EQ-JCB-01", "excavator", "owned", "hourly", "0", "hours", "4318", "", "8", "JCB", "3DX", "", "", "Ram Singh"],
-      ["Tipper 10 wheel", "MP09 CD 5678", "EQ-TIP-01", "tipper", "rented", "km", "42", "km", "", "128400", "", "Tata", "Signa", "", "", ""],
+      sample({
+        name: "JCB 3DX Backhoe Loader", registration_no: "MP09 AB 1234", code: "EQ-JCB-01",
+        machine_type: "excavator", ownership: "owned", measurement_mode: "hourly",
+        default_rate: 0, meter_unit: "hours", opening_hours: 4318, fuel_per_hour: 8,
+        make: "JCB", model: "3DX", operator_name: "Ram Singh",
+        telematics_enabled: "haan", telematics_device_id: "868120050012345",
+        telematics_vendor: "Trakzee", telematics_api_url: "https://api.trakzee.example/v1",
+        insurance_no: "UII/2026/8891", insurance_till: "30-06-2027",
+        fitness_no: "FIT-2201", fitness_till: "28-02-2027",
+        puc_no: "PUC-44120", puc_till: "15-11-2026",
+      }),
+      sample({
+        name: "Tipper 10 wheel", registration_no: "MP09 CD 5678", code: "EQ-TIP-01",
+        machine_type: "tipper", ownership: "rented", measurement_mode: "km",
+        default_rate: 42, meter_unit: "km", opening_km: 128400,
+        make: "Tata", model: "Signa",
+        telematics_enabled: "nahi",
+        insurance_till: "31-03-2027",
+      }),
     ];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // Date columns ko text rakho — warna Excel "30-06-2027" ko apne local
+    // format me badal deta hai aur wapas import karte waqt mahina/din palat
+    // sakte hain.
+    ws["!cols"] = IMPORT_COLS.map((c) => ({ wch: Math.max(12, c.label.length + 2) }));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Machines");
+    XLSX.utils.book_append_sheet(wb, ws, "Machines");
     XLSX.writeFile(wb, "sanchalan_machinery_template.xlsx");
   };
 
@@ -877,6 +997,7 @@ function ImportWizard({ open, onClose, onDone }) {
               { l: "Banengi", v: preview.summary.ok, c: T.grn },
               { l: "Skip (pehle se hai)", v: preview.summary.skip, c: T.amb },
               { l: "Galti", v: preview.summary.error, c: T.red },
+              { l: "Kaagaz banenge", v: preview.summary.documents || 0, c: T.ind },
             ].map((x) => (
               <div key={x.l} style={{ flex: 1, border: `1.5px solid ${T.b1}`, borderTop: `3px solid ${x.c}`, borderRadius: 10, padding: "10px 13px" }}>
                 <div style={{ fontSize: 19, fontWeight: 800, color: x.c }}>{x.v}</div>
@@ -884,23 +1005,50 @@ function ImportWizard({ open, onClose, onDone }) {
               </div>
             ))}
           </div>
+          {/* Jo date padhi hi na ja saki wo chup-chaap girni nahi chahiye —
+              us machine ka kaagaz banega hi nahi aur bell kabhi bajegi nahi. */}
+          {(() => {
+            const bad = parsed.filter((p) => p._bad_dates && p._bad_dates.length);
+            if (!bad.length) return null;
+            return (
+              <div style={{ marginBottom: 12, padding: "9px 12px", background: T.ambL, color: T.amb, fontSize: 11.5, borderRadius: 7, fontWeight: 600, lineHeight: 1.5 }}>
+                In rows ki date samajh nahi aayi — un machines ke kaagaz nahi banenge (machine ban jayegi):
+                {bad.slice(0, 4).map((p) => (
+                  <div key={p._row} style={{ fontWeight: 500 }}>row {p._row} · {p.name} — {p._bad_dates.join(", ")}</div>
+                ))}
+                {bad.length > 4 && <div style={{ fontWeight: 500 }}>…aur {bad.length - 4} row</div>}
+                <div style={{ fontWeight: 500, marginTop: 4 }}>Date ka format <b>dd-mm-yyyy</b> rakhein (jaise 30-06-2027).</div>
+              </div>
+            );
+          })()}
           <div style={{ maxHeight: 320, overflowY: "auto", border: `1px solid ${T.b1}`, borderRadius: 10 }}>
-            <Row head cols="52px 1.5fr 1fr 90px 1.6fr">
-              <span>Row</span><span>Machine</span><span>Gadi no.</span><span>Faisla</span><span>Wajah</span>
+            <Row head cols="46px 1.4fr 0.9fr 78px 1.1fr 1.2fr">
+              <span>Row</span><span>Machine</span><span>Gadi no.</span><span>Faisla</span><span>Kaagaz</span><span>Wajah</span>
             </Row>
-            {preview.verdicts.map((v) => (
-              <Row key={v.row} cols="52px 1.5fr 1fr 90px 1.6fr">
-                <span style={{ fontSize: 11.5, color: T.t4 }}>{v.row}</span>
-                <span style={{ fontSize: 12, color: T.t1 }}>{v.name || "—"}</span>
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{v.registration_no || "—"}</span>
-                <span>
-                  {v.status === "ok" ? <Pill label="Banegi" c={T.grn} bg={T.grnL} />
-                    : v.status === "skip" ? <Pill label="Skip" c={T.amb} bg={T.ambL} />
-                    : <Pill label="Galti" c={T.red} bg={T.redL} />}
-                </span>
-                <span style={{ fontSize: 11, color: T.t3 }}>{v.reason || "—"}</span>
-              </Row>
-            ))}
+            {preview.verdicts.map((v) => {
+              const src = parsed.find((p) => p._row === v.row);
+              const docs = (src && src.documents) || [];
+              return (
+                <Row key={v.row} cols="46px 1.4fr 0.9fr 78px 1.1fr 1.2fr">
+                  <span style={{ fontSize: 11.5, color: T.t4 }}>{v.row}</span>
+                  <span style={{ fontSize: 12, color: T.t1 }}>{v.name || "—"}</span>
+                  <span style={{ fontSize: 11.5, color: T.t3 }}>{v.registration_no || "—"}</span>
+                  <span>
+                    {v.status === "ok" ? <Pill label="Banegi" c={T.grn} bg={T.grnL} />
+                      : v.status === "skip" ? <Pill label="Skip" c={T.amb} bg={T.ambL} />
+                      : <Pill label="Galti" c={T.red} bg={T.redL} />}
+                  </span>
+                  {/* Parse ki hui date dikhana zaroori hai — 06-07 ulta padha
+                      gaya ho to yahin pakda jayega, import ke baad nahi. */}
+                  <span style={{ fontSize: 10.5, color: T.t3, lineHeight: 1.45 }}>
+                    {docs.length
+                      ? docs.map((d) => `${docLabel(d.doc_type).slice(0, 3)} ${fmtD(d.valid_till)}`).join(" · ")
+                      : <span style={{ color: T.t4 }}>—</span>}
+                  </span>
+                  <span style={{ fontSize: 11, color: v.note ? T.amb : T.t3 }}>{v.reason || v.note || "—"}</span>
+                </Row>
+              );
+            })}
           </div>
         </>
       )}
@@ -911,7 +1059,9 @@ function ImportWizard({ open, onClose, onDone }) {
             <div style={{ fontSize: 13, fontWeight: 700, color: T.grn }}>{result.created.length} machine ban gayi</div>
             <div style={{ fontSize: 11.5, color: T.t3, marginTop: 3 }}>
               {result.summary.skip} skip (pehle se thi) · {result.summary.error} galti wali chhod di gayi.
-              {" "}Kaagaz aur meter har machine me alag se bharne honge — completeness bar batata rahega kya baaki hai.
+              {result.documents_created > 0
+                ? <> {result.documents_created} kaagaz bhi darj ho gaye — unki expiry par bell apne aap jayegi.</>
+                : <> Kaagaz kisi row me nahi mile — machine kholkar bharne honge, warna expiry ki bell nahi bajegi.</>}
             </div>
           </div>
           <div style={{ maxHeight: 260, overflowY: "auto", border: `1px solid ${T.b1}`, borderRadius: 10 }}>
