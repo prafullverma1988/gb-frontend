@@ -1244,12 +1244,57 @@ function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templ
   const [items, setItems] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [reading, setReading] = useState(false);   // M4 — bill padha ja raha hai
+  const [bill, setBill] = useState(null);          // padhne ka natija + warnings
   const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const updItem = (i, k, v) => setItems((p) => p.map((it, n) => (n === i ? { ...it, [k]: v } : it)));
 
+  // ── M4: bill ki photo se khaane bharna ────────────────────────
+  // Ye SIRF form bharta hai. Save aadmi hi dabata hai, aur wahi zimmedar hai —
+  // isliye jo padha gaya wo dikhta bhi hai (warnings ke saath), chhupta nahi.
+  const readBill = async () => {
+    if (!f.photo_url) return;
+    setReading(true); setBill(null); setError("");
+    try {
+      const r = await api.post("/machinery/service/parse-bill",
+        { photo_url: f.photo_url, equipment_id: machine && machine.id });
+      if (!r || !r.success) { setBill({ failed: true, message: (r && r.message) || "Bill padha nahi ja saka" }); }
+      else {
+        const d = r.data.draft || {};
+        // Jo aadmi ne khud likh diya hai use mat chheddo — sirf khaali khaane
+        // bharo. Bharay hue khaane par likh dena wo galti hai jo dikhti bhi
+        // nahi.
+        setF((p) => ({
+          ...p,
+          invoice_no: p.invoice_no || d.invoice_no || "",
+          labour_cost: (p.labour_cost === "" || p.labour_cost == null) && d.labour_cost != null
+            ? String(d.labour_cost) : p.labour_cost,
+          service_date: d.service_date && !closing ? (p.service_date === todayStr() ? d.service_date : p.service_date) : p.service_date,
+          // Vendor ka naam tabhi jab koi party na chuni ho — party hamesha
+          // free-text se upar hai.
+          vendor_name: p.vendor_party_id ? p.vendor_name : (p.vendor_name || d.vendor_name || ""),
+        }));
+        const parsed = (d.items || []).map((it) => ({
+          item: it.item, part_category: it.part_category || "other",
+          cost: it.cost != null ? String(it.cost) : "", life_hours: "", template_id: "",
+        }));
+        if (parsed.length) {
+          setItems((p) => {
+            const typed = p.filter((it) => String(it.item || "").trim());
+            // Khaali lines ki jagah parsed lines; aadmi ne kuch likha ho to
+            // uske neeche jodo, mitao mat.
+            return typed.length ? [...typed, ...parsed] : parsed;
+          });
+        }
+        setBill({ ...r.data, added: parsed.length });
+      }
+    } catch (e) { setBill({ failed: true, message: (e && e.message) || "Network error" }); }
+    setReading(false);
+  };
+
   useEffect(() => {
     if (!open) return;
-    setError("");
+    setError(""); setBill(null);
     setF(existing ? {
       service_date: existing.service_date, service_type: existing.service_type || "preventive",
       payment_mode: existing.payment_mode || "cash",
@@ -1380,8 +1425,51 @@ function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templ
             <Field label="Bill no.">
               <input value={f.invoice_no || ""} onChange={(e) => upd("invoice_no", e.target.value)} style={inp} />
             </Field>
-            <FileField value={f.photo_url} onChange={(u) => upd("photo_url", u)} label="Bill (photo / PDF)" />
+            <FileField value={f.photo_url} onChange={(u) => { upd("photo_url", u); setBill(null); }} label="Bill (photo / PDF)" />
           </div>
+
+          {/* M4 — bill se bharo. Button photo lagne ke BAAD hi aata hai, aur
+              apne aap nahi chalta: har baar padhne ka paisa lagta hai. */}
+          {f.photo_url && (
+            <div style={{ marginTop: 10 }}>
+              <button type="button" onClick={readBill} disabled={reading}
+                style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + T.ind,
+                         background: reading ? T.surfaceB : T.surface, color: T.ind,
+                         fontSize: 12, fontWeight: 700, cursor: reading ? "default" : "pointer", fontFamily: "inherit" }}>
+                {reading ? "Bill padha ja raha hai…" : "✨ Bill se khaane bharein"}
+              </button>
+              <span style={{ fontSize: 10.5, color: T.t4, marginLeft: 10 }}>
+                Bhare hue khaane nahi badlenge — sirf khaali bharenge.
+              </span>
+            </div>
+          )}
+
+          {bill && (
+            <div style={{ marginTop: 10, padding: "10px 13px", borderRadius: 8, fontSize: 11.5,
+                          background: bill.failed ? T.redL : bill.confidence === "high" ? T.grnL : T.ambL,
+                          border: "1px solid " + (bill.failed ? T.red : bill.confidence === "high" ? T.grn : T.amb),
+                          color: T.t1 }}>
+              {bill.failed ? (
+                <b>{bill.message}</b>
+              ) : (
+                <>
+                  <b>
+                    Bill padh liya — {bill.added} line{bill.added === 1 ? "" : "en"} bhari
+                    {bill.read && bill.read.total_on_bill != null
+                      ? `, bill par total ₹${Number(bill.read.total_on_bill).toLocaleString("en-IN")}`
+                      : ", bill par total nahi mila"}.
+                  </b>
+                  <div style={{ marginTop: 3 }}>
+                    Ye AI ne padha hai — Save se pehle khud jaanch lein.
+                    {bill.confidence !== "high" ? " (bharosa: " + bill.confidence + ")" : ""}
+                  </div>
+                  {(bill.warnings || []).map((w, i) => (
+                    <div key={i} style={{ marginTop: 4, color: T.t2 }}>• {w}</div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
           {/* Total poora likha jaata hai, fmtC ka chhota roop nahi — accounts
               isi ankde se milaan karega. */}
           <div style={{ marginTop: 10, padding: "9px 13px", background: T.surfaceB, borderRadius: 8, fontSize: 12.5, fontWeight: 700, color: T.t1 }}>
