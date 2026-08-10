@@ -160,6 +160,19 @@ const T={bg:"#F4F6F9",surface:"#FFFFFF",surfaceB:"#F8F9FB",t1:"#111827",t2:"#374
 const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:`${(n/1000).toFixed(0)}K`;
 const fmtN=(n)=>Math.abs(n).toLocaleString("en-IN");
 
+// ── MODULE ACCESS MAP ─────────────────────────────────────────────────
+// GET /settings/modules returns company_modules rows straight from MySQL, so
+// is_enabled arrives as the NUMBER 0/1 — not a boolean. Every gate below asks
+// `=== false`, and `0 === false` is false in JS, so a module switched OFF in
+// SaaS Admin stayed fully visible and openable. Normalise to real booleans
+// here, at the single point where the map is built.
+// A key that is absent still means ENABLED (same rule the backend documents).
+const toModuleMap=(rows)=>{
+  const map={};
+  (rows||[]).forEach(m=>{ if(m&&m.key!=null) map[m.key]=!!Number(m.is_enabled); });
+  return map;
+};
+
 // ── NAV GROUPS ────────────────────────────────────────────────────────
 const NAV_GROUPS=[
   {section:null,items:[
@@ -772,10 +785,14 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
   };
   const isVisible=(id)=>{
     if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
-    // Admins always see everything
-    if(["admin","super_admin"].includes(user?.role)) return true;
-    // Company-level module toggle
+    // Company-level module toggle FIRST. This is a SaaS entitlement — what the
+    // company has actually bought — not a role permission, so a company admin
+    // must not bypass it. It used to sit below the admin short-circuit, which
+    // meant a module switched OFF in SaaS Admin still showed (and opened) for
+    // every admin of that tenant.
     if(enabledModules && enabledModules[id]===false) return false;
+    // Admins see every module the company DOES have.
+    if(["admin","super_admin"].includes(user?.role)) return true;
     // Role-based permission check from DB (Settings → Roles & Access)
     const perms = user?.module_permissions;
     const modName = MODULE_MAP_NAV[id];
@@ -1006,8 +1023,9 @@ function MobileBottomNav({active,setActive,enabledModules,user}){
   };
   const isVisible=(id)=>{
     if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
-    if(["admin","super_admin"].includes(user?.role)) return true;
+    // Entitlement before role — same rule as the desktop sidebar above.
     if(enabledModules && enabledModules[id]===false) return false;
+    if(["admin","super_admin"].includes(user?.role)) return true;
     const perms = user?.module_permissions;
     const modName = MODULE_MAP_MOBILE[id];
     if(perms && modName) return !!(perms[modName]?.view);
@@ -1810,9 +1828,7 @@ export default function App(){
     api.get("/settings/modules")
       .then(res=>{
         if(res.success){
-          const map={};
-          res.data.forEach(m=>{map[m.key]=m.is_enabled;});
-          setEnabledModules(map);
+          setEnabledModules(toModuleMap(res.data));
         } else {
           setEnabledModules({}); // fallback: show all
         }
@@ -1954,11 +1970,8 @@ export default function App(){
         setNav("dashboard");
         // Re-fetch modules for new company
         const modRes=await api.get("/settings/modules");
-        if(modRes.success){
-          const map={};
-          modRes.data.forEach(m=>{map[m.key]=m.is_enabled;});
-          setEnabledModules(map);
-        } else setEnabledModules({});
+        if(modRes.success) setEnabledModules(toModuleMap(modRes.data));
+        else setEnabledModules({});
       }
     }catch(e){console.error("Switch company error:",e);}
     setSwitching(false);
