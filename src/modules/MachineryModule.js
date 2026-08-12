@@ -107,7 +107,6 @@ const hasRole = (p, wanted) => {
     .toLowerCase().split(",").map((s) => s.trim());
   return wanted.some((r) => bag.includes(r));
 };
-const FUEL_VENDOR_ROLES = ["fuel_vendor", "material_vendor", "fuel", "vendor", "supplier"];
 const HIRE_VENDOR_ROLES = ["equipment_vendor", "equipment", "machinery", "vendor", "supplier", "subcontractor"];
 
 // Wahi Cloudinary preset jo baaki app use karta hai, par yahan module ke andar
@@ -404,7 +403,6 @@ function MachineForm({ open, onClose, onSaved, machine, parties }) {
       default_rate: f.default_rate ? parseFloat(f.default_rate) : 0,
       meter_unit: f.meter_unit || "hours",
       fuel_responsibility: owned ? "company" : (f.fuel_responsibility || "rent_included"),
-      fuel_vendor_party_id: f.fuel_vendor_party_id || null,
       fuel_per_hour: f.fuel_per_hour ? parseFloat(f.fuel_per_hour) : null,
       purchase_date: f.purchase_date || null,
       purchase_cost: f.purchase_cost ? parseFloat(f.purchase_cost) : null,
@@ -529,16 +527,15 @@ function MachineForm({ open, onClose, onSaved, machine, parties }) {
               <option value="rent_included">Kiraye me shaamil (vendor ka)</option>
             </select>
           </Field>
+          {/* "Fuel vendor (pump)" yahan se HATA diya gaya. Machine ka pump fix
+              hota hi nahi — diesel jahan se mile wahan se aata hai, aur pump
+              har entry par Fuel module me chuna jaata hai. Ise master par
+              poochna ek jhoothi pakkai thi: bharne wala kuch bhar deta, aur
+              wo kahin lagta bhi nahi tha. */}
           {fuelOurs && (
-            <>
-              <Field label="Fuel vendor (pump)" hint="Iska diesel aam taur par kahan se bharta hai.">
-                <PartyPicker value={f.fuel_vendor_party_id} onChange={(v) => upd("fuel_vendor_party_id", v)}
-                  parties={parties} roles={FUEL_VENDOR_ROLES} placeholder="— pump chuno —" />
-              </Field>
-              <Field label="Fuel norm (L/hr)" hint="Isse zyada kharcha hone par Fuel module khud batata hai.">
-                <input value={f.fuel_per_hour || ""} inputMode="decimal" onChange={(e) => upd("fuel_per_hour", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 8" style={inp} />
-              </Field>
-            </>
+            <Field label="Fuel norm (L/hr)" hint="Isse zyada kharcha hone par Fuel module khud batata hai.">
+              <input value={f.fuel_per_hour || ""} inputMode="decimal" onChange={(e) => upd("fuel_per_hour", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 8" style={inp} />
+            </Field>
           )}
         </div>
       )}
@@ -797,6 +794,13 @@ const IMPORT_COLS = [
   { key: "meter_unit", label: "Meter unit", aliases: ["meter", "meter type"] },
   { key: "opening_hours", label: "Opening hours", aliases: ["hour meter", "hours", "hmr"] },
   { key: "opening_km", label: "Opening km", aliases: ["odometer", "km", "kms"] },
+  // Kiraye ki machine ka malik. Form me ye hamesha se tha, import me chhoot
+  // gaya tha — matlab 20 rented machine import karke phir ek-ek kholkar vendor
+  // bharna padta tha, aur uske bina kiraye ka paisa kisi ke naam nahi baithta.
+  { key: "default_vendor", label: "Kiraye ka vendor (malik)", aliases: ["vendor", "owner", "malik", "hire vendor", "kiraya vendor", "rented from", "supplier", "party"] },
+  // "Diesel kiska" — apni machine par hamesha company, kiraye wali par asli
+  // sawaal. Ye tay karta hai ki machine Fuel module me aayegi bhi ya nahi.
+  { key: "fuel_responsibility", label: "Diesel kiska (hamara / kiraye me)", aliases: ["diesel", "fuel", "diesel kiska", "fuel responsibility", "fuel kiska", "diesel kaun dega"] },
   { key: "fuel_per_hour", label: "Fuel norm (L/hr)", aliases: ["fuel norm", "l/hr", "lph", "mileage"] },
   { key: "make", label: "Make", aliases: ["brand", "company"] },
   { key: "model", label: "Model", aliases: [] },
@@ -890,6 +894,18 @@ function autoMap(header) {
 const OWNERSHIP_WORDS = { owned: "owned", own: "owned", apni: "owned", self: "owned", company: "owned", rented: "rented", rent: "rented", hired: "rented", kiraya: "rented", kiraye: "rented", leased: "rented" };
 const MODE_WORDS = { hourly: "hourly", hour: "hourly", hr: "hourly", ghanta: "hourly", daily: "daily", day: "daily", din: "daily", km: "km", kilometer: "km", kms: "km", trip: "trip", trips: "trip", fera: "trip", fixed: "fixed", lump: "fixed", lumpsum: "fixed" };
 const UNIT_WORDS = { hours: "hours", hour: "hours", hr: "hours", hmr: "hours", km: "km", odometer: "km", both: "both", dono: "both" };
+// "Diesel kiska" — Excel me log ye poora vaakya likhte hain, ek shabd nahi.
+// Isliye pehla shabd nahi, poora text dekha jaata hai.
+const FUEL_RESP_WORDS = [
+  [/rent|kiray|kiraye|vendor|shaamil|shamil|included|malik/i, "rent_included"],
+  [/company|hamara|humara|apna|apni|self|own|hum/i, "company"],
+];
+const fuelRespOf = (raw) => {
+  const s = String(raw || "").trim();
+  if (!s) return null;                       // column khaali = kuch mat kaho
+  for (const [re, val] of FUEL_RESP_WORDS) if (re.test(s)) return val;
+  return null;
+};
 
 function ImportWizard({ open, onClose, onDone }) {
   const [step, setStep] = useState(1);
@@ -975,6 +991,11 @@ function ImportWizard({ open, onClose, onDone }) {
         meter_unit: UNIT_WORDS[norm(cell("meter_unit")).split(" ")[0]] || null,
         opening_hours: numOf("opening_hours"),
         opening_km: numOf("opening_km"),
+        // Vendor Excel me NAAM se aata hai (id kaun likhega) — server use party
+        // master se milata hai, aur na mile to chup-chaap null nahi karta,
+        // preview me likh kar batata hai.
+        _default_vendor_name: cell("default_vendor") || null,
+        fuel_responsibility: fuelRespOf(cell("fuel_responsibility")),
         fuel_per_hour: numOf("fuel_per_hour"),
         make: cell("make") || null, model: cell("model") || null,
         chassis_no: cell("chassis_no") || null, engine_no: cell("engine_no") || null,
