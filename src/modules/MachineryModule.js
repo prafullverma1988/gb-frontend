@@ -93,6 +93,7 @@ const meterAge = (days) =>
 const MODES = [
   { k: "hourly", l: "Per hour", unit: "₹/hr" },
   { k: "daily", l: "Per day", unit: "₹/day" },
+  { k: "monthly", l: "Per month", unit: "₹/month" },
   { k: "km", l: "Per km", unit: "₹/km" },
   { k: "trip", l: "Per trip", unit: "₹/trip" },
   { k: "fixed", l: "Fixed / lump", unit: "₹ lump" },
@@ -892,7 +893,7 @@ function autoMap(header) {
 }
 
 const OWNERSHIP_WORDS = { owned: "owned", own: "owned", apni: "owned", self: "owned", company: "owned", rented: "rented", rent: "rented", hired: "rented", kiraya: "rented", kiraye: "rented", leased: "rented" };
-const MODE_WORDS = { hourly: "hourly", hour: "hourly", hr: "hourly", ghanta: "hourly", daily: "daily", day: "daily", din: "daily", km: "km", kilometer: "km", kms: "km", trip: "trip", trips: "trip", fera: "trip", fixed: "fixed", lump: "fixed", lumpsum: "fixed" };
+const MODE_WORDS = { hourly: "hourly", hour: "hourly", hr: "hourly", ghanta: "hourly", daily: "daily", day: "daily", din: "daily", monthly: "monthly", month: "monthly", mahina: "monthly", maheena: "monthly", mah: "monthly", km: "km", kilometer: "km", kms: "km", trip: "trip", trips: "trip", fera: "trip", fixed: "fixed", lump: "fixed", lumpsum: "fixed" };
 const UNIT_WORDS = { hours: "hours", hour: "hours", hr: "hours", hmr: "hours", km: "km", odometer: "km", both: "both", dono: "both" };
 // "Diesel kiska" — Excel me log ye poora vaakya likhte hain, ek shabd nahi.
 // Isliye pehla shabd nahi, poora text dekha jaata hai.

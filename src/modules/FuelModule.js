@@ -254,6 +254,21 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
   const store = stores.find((s) => String(s.id) === String(f.store_id));
   const isIssue = path === "store_machine";
 
+  // Barrel do jagah ho sakta hai: warehouse me, ya kisi project par. Pehle wo
+  // chuna jaata hai, phir usi ka barrel — isse list chhoti aur naam saaf.
+  const projectsWithStores = useMemo(() => {
+    const seen = new Map();
+    for (const s of stores) if (s.project_id) seen.set(s.project_id, s.project_name || ("Project #" + s.project_id));
+    return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [stores]);
+
+  const scopedStores = useMemo(() => {
+    if (!f.store_scope) return [];
+    if (f.store_scope === "warehouse") return stores.filter((s) => !s.project_id);
+    const pid = String(f.store_scope).slice(1);
+    return stores.filter((s) => String(s.project_id) === pid);
+  }, [stores, f.store_scope]);
+
   const save = async () => {
     setError("");
     if (!litres) { setError("Litres bharein"); return; }
@@ -261,6 +276,11 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
     if (!isIssue && !f.vendor_party_id) { setError("Pump / vendor chunein"); return; }
     if (path !== "pump_store" && !f.equipment_id) { setError("Machine chunein"); return; }
     if (path !== "pump_machine" && !f.store_id) { setError("Barrel chunein"); return; }
+    // Warehouse ka barrel kisi ek project ka nahi hota. Diesel jis site par
+    // pi liya gaya, kharcha wahin jaata hai — aur wo sirf yahin pata chalta hai.
+    if (isIssue && store && !store.project_id && !f.project_id) {
+      setError("Warehouse ke barrel se nikaal rahe hain — project chunein (kharcha usi par jayega)"); return;
+    }
     if (isIssue && store && litres > Number(store.litres) + 0.001) {
       setError(`${store.name} me sirf ${fmtL(store.litres)} hai`); return;
     }
@@ -333,11 +353,40 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {/* Barrel chunne se PEHLE ye poochte hain ki wo kahan pada hai. Ek hi
+            lambi list me site aur warehouse ke drum ghul-mil jaate the, aur
+            "drum 3258" jaise naam se koi nahi bata sakta ki wo kaunsa hai. */}
         {path !== "pump_machine" && (
-          <Field label="Barrel / store" span={path === "pump_store" ? 1 : 1}>
-            <select value={f.store_id || ""} onChange={(e) => upd("store_id", e.target.value)} style={inp}>
+          <>
+            <Field label="Barrel kahan ka">
+              <select value={f.store_scope || ""} onChange={(e) => { upd("store_scope", e.target.value); upd("store_id", ""); }} style={inp}>
+                <option value="">— Chunein —</option>
+                <option value="warehouse">Warehouse (central store)</option>
+                {projectsWithStores.map((p) => <option key={p.id} value={"p" + p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Barrel / store">
+              <select value={f.store_id || ""} onChange={(e) => upd("store_id", e.target.value)} style={inp}
+                disabled={!f.store_scope}>
+                <option value="">{f.store_scope ? "— Chunein —" : "— pehle upar wala chunein —"}</option>
+                {scopedStores.map((s) => <option key={s.id} value={s.id}>{s.name} — {fmtL(s.litres)}</option>)}
+              </select>
+              {f.store_scope && scopedStores.length === 0 && (
+                <div style={{ fontSize: 11, color: T.t4, marginTop: 4 }}>Yahan koi barrel nahi hai.</div>
+              )}
+            </Field>
+          </>
+        )}
+
+        {/* Warehouse ka drum kisi ek site ka nahi hota. Diesel jis project par
+            pi liya gaya, kharcha wahin jaata hai — aur wo baat sirf isi pal
+            pata chalti hai, isliye yahin poochi jaati hai. */}
+        {isIssue && store && !store.project_id && (
+          <Field label="Kis project ka kaam" span={2}
+            hint="Warehouse ka diesel hai — jitna nikla, utna kharcha isi project par jayega.">
+            <select value={f.project_id || ""} onChange={(e) => upd("project_id", e.target.value)} style={inp}>
               <option value="">— Chunein —</option>
-              {stores.map((s) => <option key={s.id} value={s.id}>{s.name} — {fmtL(s.litres)}</option>)}
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
         )}
@@ -632,12 +681,18 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
 
   const saveStore = async () => {
     setError("");
-    if (!f.project_id) { setError("Project chunein"); return; }
+    // Barrel do jagah ho sakta hai: kisi project par, ya central warehouse me.
+    // Warehouse wale ka koi project nahi hota — uska diesel jis site par pi
+    // liya jayega, kharcha wahin jayega.
+    const atWarehouse = f.scope === "warehouse";
+    if (!atWarehouse && !f.project_id) { setError("Project chunein — ya 'Warehouse' chunein"); return; }
     if (!f.name?.trim()) { setError("Barrel ka naam likhein"); return; }
     setBusy(true);
     try {
       const r = await api.post("/fuel/stores", {
-        project_id: parseInt(f.project_id, 10), name: f.name.trim(),
+        project_id: atWarehouse ? null : parseInt(f.project_id, 10),
+        location: atWarehouse ? (f.location || "").trim() || null : null,
+        name: f.name.trim(),
         capacity_l: f.capacity_l ? parseFloat(f.capacity_l) : null,
         reorder_level_l: f.reorder_level_l ? parseFloat(f.reorder_level_l) : null,
       });
@@ -707,12 +762,38 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
       <Modal open={newOpen} onClose={() => setNewOpen(false)} title="Naya barrel / store" width={520}
         footer={<><Btn ghost onClick={() => setNewOpen(false)}>Cancel</Btn><Btn onClick={saveStore} disabled={busy}>{busy ? "Saving..." : "Banayein"}</Btn></>}>
         <div style={{ display: "grid", gap: 12 }}>
-          <Field label="Project">
-            <select value={f.project_id || ""} onChange={(e) => setF((p) => ({ ...p, project_id: e.target.value }))} style={inp}>
-              <option value="">— Chunein —</option>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+          {/* Barrel kahan rakha hai — site par ya central store me. Warehouse
+              wala har project ko diesel deta hai, isliye uska koi ek project
+              nahi hota. */}
+          <Field label="Barrel kahan hai">
+            <div style={{ display: "flex", gap: 8 }}>
+              {[{ k: "project", l: "Kisi project par" }, { k: "warehouse", l: "Warehouse (central store)" }].map((o) => {
+                const on = (f.scope || "project") === o.k;
+                return (
+                  <button key={o.k} type="button"
+                    onClick={() => setF((p) => ({ ...p, scope: o.k, project_id: o.k === "warehouse" ? "" : p.project_id }))}
+                    style={{ flex: 1, padding: "9px 10px", borderRadius: 7, cursor: "pointer", fontFamily: "inherit",
+                      fontSize: 12.5, fontWeight: 700,
+                      border: "1.5px solid " + (on ? T.ind : T.border),
+                      background: on ? T.indL || T.surfaceB : T.surface,
+                      color: on ? T.ind : T.t2 }}>{o.l}</button>
+                );
+              })}
+            </div>
           </Field>
+
+          {(f.scope || "project") === "project" ? (
+            <Field label="Project">
+              <select value={f.project_id || ""} onChange={(e) => setF((p) => ({ ...p, project_id: e.target.value }))} style={inp}>
+                <option value="">— Chunein —</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+          ) : (
+            <Field label="Kahan rakha hai (optional)" hint="Warehouse ka diesel har project ko mil sakta hai. Kharcha tab banta hai jab wo kisi machine me daala jaata hai — usi project par.">
+              <input value={f.location || ""} onChange={(e) => setF((p) => ({ ...p, location: e.target.value }))} placeholder="e.g. Main Site Store" style={inp} />
+            </Field>
+          )}
           <Field label="Naam"><input value={f.name || ""} onChange={(e) => setF((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. Site drum 1" style={inp} /></Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="Capacity (L)"><input value={f.capacity_l || ""} onChange={(e) => setF((p) => ({ ...p, capacity_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} /></Field>
