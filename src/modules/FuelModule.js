@@ -334,6 +334,9 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
         res = await api.post("/fuel/issues", {
           store_id: parseInt(f.store_id, 10),
           equipment_id: parseInt(f.equipment_id, 10),
+          // Khaali chhoda to server barrel ka apna project le lega. Doosra
+          // chuna to kharcha wahan transfer hoga.
+          project_id: f.project_id ? parseInt(f.project_id, 10) : null,
           litres,
           issued_at: toSqlDateTime(f.filled_at),
           meter_reading: f.meter_reading ? parseFloat(f.meter_reading) : null,
@@ -424,10 +427,13 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
         {/* Warehouse ka drum kisi ek site ka nahi hota. Diesel jis project par
             pi liya gaya, kharcha wahin jaata hai — aur wo baat sirf isi pal
             pata chalti hai, isliye yahin poochi jaati hai. */}
-        {isIssue && store && !store.project_id && (
+        {isIssue && store && (
           <Field label="Kis project ka kaam" span={2}
-            hint="Warehouse ka diesel hai — jitna nikla, utna kharcha isi project par jayega.">
-            <select value={f.project_id || ""} onChange={(e) => upd("project_id", e.target.value)} style={inp}>
+            hint={store.project_id
+              ? "Diesel jis site par pi liya gaya, kharcha wahi project uthata hai. Doosra project chuna to kharcha wahan TRANSFER ho jayega."
+              : "Warehouse ka diesel hai — jitna nikla, utna kharcha isi project par jayega."}>
+            <select value={f.project_id || (store.project_id ? String(store.project_id) : "")}
+              onChange={(e) => upd("project_id", e.target.value)} style={inp}>
               <option value="">— Chunein —</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
