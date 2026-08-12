@@ -220,6 +220,9 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [slipBusy, setSlipBusy] = useState(false);
+  const [slipMsg, setSlipMsg] = useState(null);
+  const [slipRead, setSlipRead] = useState(null);   // AI ne parchi se kya padha
 
   const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
@@ -269,6 +272,45 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
     return stores.filter((s) => String(s.project_id) === pid);
   }, [stores, f.store_scope]);
 
+  // ── Parchi padho (F3) ─────────────────────────────────────────
+  // Ye sirf form bharta hai. Milaan SERVER par hota hai jab entry save hoti
+  // hai — number ka faisla hamesha server ka, warna client jo bhej de wahi
+  // "sach" ban jaata. Yahan jo dikhta hai wo bas ek jhalak hai.
+  const readSlip = async () => {
+    if (!f.photo_url) return;
+    setSlipBusy(true); setSlipMsg(null);
+    try {
+      const r = await api.post("/fuel/parse-slip", { photo_url: f.photo_url });
+      if (!r || !r.success) {
+        setSlipMsg({ bad: true, title: (r && r.message) || "Parchi padhi nahi ja saki" });
+      } else {
+        const d = r.data.read || {};
+        setSlipRead(d);
+        // Jo aadmi ne khud likh diya hai use mat chhedo — sirf khaali bharo.
+        setF((p) => ({
+          ...p,
+          litres: p.litres || (d.litres != null ? String(d.litres) : p.litres),
+          rate: p.rate || (d.rate != null ? String(d.rate) : p.rate),
+          amount: p.amount || (d.amount != null ? String(d.amount) : p.amount),
+          slip_no: p.slip_no || d.slip_no || "",
+        }));
+        const lines = [];
+        if (d.litres != null) lines.push(`Litre: ${d.litres}`);
+        if (d.rate != null) lines.push(`Rate: ₹${d.rate}`);
+        if (d.amount != null) lines.push(`Total: ₹${d.amount}`);
+        if (d.slip_no) lines.push(`Slip no.: ${d.slip_no}`);
+        if (r.data.derived && r.data.derived.length) {
+          lines.push(`(${r.data.derived.join(", ")} parchi par nahi tha — baaki do se nikala gaya)`);
+        }
+        lines.push("Save karte waqt ye aapke type kiye hue se milaya jayega — farq hua to Cross-check me dikhega.");
+        setSlipMsg({ warn: r.data.confidence !== "high", title: "Parchi padh li — jaanch lein", lines });
+      }
+    } catch (e) {
+      setSlipMsg({ bad: true, title: (e && e.message) || "Network error" });
+    }
+    setSlipBusy(false);
+  };
+
   const save = async () => {
     setError("");
     if (!litres) { setError("Litres bharein"); return; }
@@ -309,6 +351,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           filled_at: toSqlDateTime(f.filled_at),
           slip_no: f.slip_no || null,
           slip_photo_url: f.photo_url || null,
+          slip_read: slipRead || null,
           meter_reading: f.meter_reading ? parseFloat(f.meter_reading) : null,
           payment_mode: f.payment_mode || "credit",
           note: f.note || null,
@@ -474,6 +517,34 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
               </>
             )}
           </div>
+
+          {/* Parchi ab sirf ek file nahi rahegi — usme se litre, rate aur total
+              padh kar aapke type kiye hue se milaya jaata hai. Button ke peeche
+              hai kyunki har baar padhne ka paisa lagta hai. */}
+          {!isIssue && f.photo_url && (
+            <div style={{ marginTop: 9 }}>
+              <button type="button" onClick={readSlip} disabled={slipBusy}
+                style={{ padding: "7px 13px", borderRadius: 7, cursor: slipBusy ? "default" : "pointer",
+                  fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                  border: "1.5px solid " + T.ind, background: T.surface, color: T.ind }}>
+                {slipBusy ? "Parchi padhi ja rahi hai…" : "✨ Parchi padho"}
+              </button>
+              <span style={{ fontSize: 11, color: T.t4, marginLeft: 9 }}>
+                Bhare hue fields nahi badlenge — sirf khaali bharenge.
+              </span>
+            </div>
+          )}
+
+          {slipMsg && (
+            <div style={{ marginTop: 9, padding: "9px 12px", borderRadius: 7, fontSize: 11.5,
+              background: slipMsg.bad ? T.redL : slipMsg.warn ? T.ambL : T.grnL,
+              border: "1px solid " + (slipMsg.bad ? T.red : slipMsg.warn ? T.amb : T.grn) }}>
+              <b style={{ color: slipMsg.bad ? T.red : slipMsg.warn ? T.amb : T.grn }}>{slipMsg.title}</b>
+              {slipMsg.lines && slipMsg.lines.map((l, i) => (
+                <div key={i} style={{ color: T.t2, marginTop: 3 }}>• {l}</div>
+              ))}
+            </div>
+          )}
         </Field>
 
         <Field label="Note (optional)" span={2}>
@@ -943,7 +1014,10 @@ function ReportsTab({ byEquipment, byProject, from, to, onRange }) {
 // dip. The sensor side does not exist yet — telematics is E3 — so this tab
 // states its shape and which checks are genuinely live, and invents nothing
 // to fill the space.
-function CrossCheckTab({ stores, byEquipment }) {
+function CrossCheckTab({ stores, byEquipment, purchases }) {
+  // Jin entries par parchi padhi gayi thi aur ankde nahi mile — yahi wo
+  // "Flagged entries" hai jo ab tak khaali rehti thi.
+  const flagged = (purchases || []).filter((p) => p.slip_flag === "mismatch");
   const withStock = stores.filter((s) => Number(s.litres) > 0);
   const noNormCount = byEquipment.filter((e) => e.norm_missing).length;
   const CheckRow = ({ name, live, note }) => (
@@ -973,13 +1047,41 @@ function CrossCheckTab({ stores, byEquipment }) {
           note="Sensor ke bina pata nahi chalta" />
       </Panel>
 
-      <Panel title="Flagged entries">
-        <Empty>
-          Abhi koi flag nahi.<br />
-          <span style={{ fontSize: 11.5 }}>
-            Sensor wali jaanch abhi lagi nahi hai — tab tak dipstick aur norm-variance hi asli cross-check hain.
-          </span>
-        </Empty>
+      {/* Parchi vs entry — ab ye khaali nahi rehta. Jis entry par AI ne parchi
+          padhi thi aur ankde nahi mile, wo yahan khud aa jaati hai. */}
+      <Panel title="Parchi aur entry me farq">
+        {flagged.length === 0 ? (
+          <Empty>
+            Abhi koi farq nahi mila.<br />
+            <span style={{ fontSize: 11.5 }}>
+              Entry karte waqt parchi ki photo se "Parchi padho" dabaiye — jo padha jaayega wo aapke
+              type kiye hue se apne aap milaya jaayega, aur farq yahan aa jayega.
+            </span>
+          </Empty>
+        ) : (
+          <>
+            {flagged.map((p) => (
+              <div key={p.id} style={{ padding: "11px 0", borderBottom: "1px solid " + T.border }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>
+                    {p.vendor_party_name || p.vendor_name || "—"}
+                    <span style={{ fontWeight: 500, color: T.t4, fontSize: 11.5 }}>
+                      {"  "}{String(p.filled_at || "").slice(0, 10)}{p.slip_no ? ` · slip ${p.slip_no}` : ""}
+                    </span>
+                  </span>
+                  <span style={{ fontSize: 12.5, fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                    {fmtL(p.litres)} · {fmtC(p.amount)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: T.red, marginTop: 4 }}>{p.slip_note}</div>
+              </div>
+            ))}
+            <div style={{ fontSize: 11.5, color: T.t4, marginTop: 10 }}>
+              Farq apne aap theek nahi kiya jaata aur entry roki bhi nahi jaati — parchi dhundhli ho
+              sakti hai, aur diesel to site par aa hi chuka hota hai. Faisla aapka.
+            </div>
+          </>
+        )}
       </Panel>
     </div>
   );
@@ -1204,7 +1306,7 @@ function FuelModule() {
             onRange={(f, t2) => { setFrom(f); setTo(t2); }} />
         )}
         {tab === "cc" && (
-          <CrossCheckTab stores={stores} byEquipment={byEquipment} />
+          <CrossCheckTab stores={stores} byEquipment={byEquipment} purchases={purchases} />
         )}
         {tab === "reports" && (
           <ReportsTab byEquipment={byEquipment} byProject={byProject} from={from} to={to}
