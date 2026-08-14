@@ -62,6 +62,7 @@ const IcChk    = (p)=><Ic {...p} d="M20 6L9 17l-5-5"/>;
 const IcLink   = (p)=><Ic {...p} d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>;
 const IcTable  = (p)=><Ic {...p} d="M3 5h18v14H3zM3 10h18M9 10v9M15 10v9"/>;
 const IcTrash  = (p)=><Ic {...p} d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>;
+const IcMapPin = (p)=><Ic {...p} d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0zM12 13a3 3 0 100-6 3 3 0 000 6z"/>;
 const IcUndo   = (p)=><Ic {...p} d="M3 7v6h6M3 13a9 9 0 103-7.7L3 8"/>;
 
 // ── CONSTANTS (backend enums ke saath exact match) ──────────────────
@@ -3078,6 +3079,383 @@ function MeasurementModal({tenderId, sites, boqItems, edit, onClose, onDone}) {
   );
 }
 
+// ── MAP TAB (P2b) — pipeline alignment ──────────────────────────────
+// The BOQ says how many metres; it never says where. This is the "where":
+// each site's pipeline drawn as lines, with UGR / pump house / HDD pins on
+// them. Two ways in — draw it here, or import the .kml the department sent
+// (or the PM exported from Google Earth / My Maps). Length is always
+// computed server-side from the geometry, never typed.
+//
+// Progress colouring is deliberately NOT here — that comes from DPR/MB in
+// P3, so the map never becomes a second place to record work.
+let _gmapsPromise = null;
+function loadGoogleMaps(apiKey) {
+  if (typeof window === "undefined") return Promise.reject(new Error("SSR"));
+  if (window.google?.maps?.drawing) return Promise.resolve(window.google);
+  if (_gmapsPromise) return _gmapsPromise;
+  _gmapsPromise = new Promise((resolve, reject) => {
+    const cb = "__gmapsTender_" + Math.random().toString(36).slice(2);
+    window[cb] = () => { delete window[cb]; resolve(window.google); };
+    const s = document.createElement("script");
+    // Only `geometry` — Google removed DrawingManager in Maps JS 3.65, so the
+    // drawing below is our own click-to-add-vertex handler on the map.
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=${cb}&libraries=geometry`;
+    s.async = true; s.defer = true;
+    s.onerror = () => { _gmapsPromise = null; reject(new Error("Google Maps load nahi hua")); };
+    document.head.appendChild(s);
+  });
+  return _gmapsPromise;
+}
+
+const LINE_TYPES  = [
+  {v:"rising",  l:"Rising main", c:"#DC2626"},
+  {v:"gravity", l:"Gravity",     c:"#2563EB"},
+  {v:"inlet",   l:"Inlet",       c:"#059669"},
+  {v:"outlet",  l:"Outlet",      c:"#D97706"},
+  {v:"other",   l:"Other",       c:"#6B7280"},
+];
+const POINT_TYPES = [
+  {v:"ugr",        l:"UGR"},
+  {v:"pump_house", l:"Pump House"},
+  {v:"hdd",        l:"HDD crossing"},
+  {v:"valve",      l:"Valve chamber"},
+  {v:"other",      l:"Other"},
+];
+const lineColour = (t) => (LINE_TYPES.find(x=>x.v===t) || LINE_TYPES[4]).c;
+const alignLabel = (kind, t) => ((kind==="point"?POINT_TYPES:LINE_TYPES).find(x=>x.v===t)?.l) || t;
+const fmtKm = (m) => Number(m||0) >= 1000
+  ? (Number(m)/1000).toLocaleString("en-IN",{maximumFractionDigits:2}) + " km"
+  : Math.round(Number(m||0)) + " m";
+
+function MapTab({tenderId, sites}) {
+  const toast = useToast();
+  const apiKey = process.env.REACT_APP_GOOGLE_MAPS_KEY;
+  const mapDiv  = useRef(null);
+  const mapRef  = useRef(null);
+  const shapesRef = useRef([]);      // saved alignments drawn on the map
+  const draftRef  = useRef(null);    // the polyline being drawn right now
+  const modeRef   = useRef(null);    // map listener reads the live mode
+  // The map is created ONCE. The click handler needs the current site filter
+  // and site list, but reading them from state would put them in the effect's
+  // deps — and re-running it rebuilds the Map on every parent render, which
+  // leaves the instance bound to a stale node and the map blank.
+  const fSiteRef  = useRef("");
+  const sitesRef  = useRef([]);
+
+  const [items, setItems]     = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapErr, setMapErr]   = useState("");
+  const [fSite, setFSite]     = useState("");
+  const [pending, setPending] = useState(null);   // {kind, coords} — abhi drawn, save baaki
+  const [busy, setBusy]       = useState(false);
+  const [mode, setMode]       = useState(null);   // null | "line" | "point"
+  const [draftPts, setDraftPts] = useState([]);   // line ke abhi tak ke points
+
+  useEffect(()=>{ fSiteRef.current = fSite; }, [fSite]);
+  useEffect(()=>{ sitesRef.current = sites; }, [sites]);
+
+  const load = useCallback(async () => {
+    const [a, s] = await Promise.all([
+      api.get(`/tenders/${tenderId}/alignments${fSite?`?project_id=${fSite}`:""}`),
+      api.get(`/tenders/${tenderId}/alignments-summary`),
+    ]);
+    setLoading(false);
+    if (a?.success) setItems(Array.isArray(a.data)?a.data:[]);
+    else toast.error(a?.message || "Alignment load nahi hua");
+    if (s?.success) setSummary(s.data);
+  }, [tenderId, fSite, toast]);
+  useEffect(()=>{ load(); }, [load]);
+
+  // Boot the map once; the overlay redraw effect below keeps it in sync.
+  useEffect(()=>{
+    if (!apiKey) { setMapErr("REACT_APP_GOOGLE_MAPS_KEY set nahi hai — map nahi dikhega."); return; }
+    let dead = false;
+    loadGoogleMaps(apiKey).then((g)=>{
+      if (dead || !mapDiv.current) return;
+      mapRef.current = new g.maps.Map(mapDiv.current, {
+        center: {lat:21.19, lng:81.28},        // Chhattisgarh — pehli baar ka default
+        zoom: 12, mapTypeId: "hybrid",          // satellite + labels: gali dikhti hai
+        streetViewControl: false, fullscreenControl: true,
+      });
+      // Our own drawing: click the map to drop vertices. Google removed
+      // DrawingManager in Maps JS 3.65, and doing it by hand also lets the
+      // buttons speak the same Hinglish as the rest of the screen.
+      mapRef.current.addListener("click", (e)=>{
+        const m = modeRef.current;
+        if (!m) return;
+        const pt = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+        if (m === "point") {
+          modeRef.current = null; setMode(null);
+          setPending({ kind:"point", coords:[pt], name:"", atype:"ugr",
+            project_id: fSiteRef.current || (sitesRef.current.length===1 ? sitesRef.current[0].id : "") });
+          return;
+        }
+        setDraftPts(prev=>{
+          const next = [...prev, pt];
+          if (!draftRef.current) {
+            draftRef.current = new g.maps.Polyline({ path: next, strokeColor:"#DC2626",
+              strokeWeight:4, strokeOpacity:0.95, editable:true, map: mapRef.current });
+          } else {
+            draftRef.current.setPath(next);
+          }
+          return next;
+        });
+      });
+      setMapReady(true);
+    }).catch(e=>{ if (!dead) setMapErr(e.message || "Map load nahi hua"); });
+    return ()=>{ dead = true; };
+  }, [apiKey]);
+
+  // Render saved alignments; refit the viewport so a fresh tender isn't
+  // left staring at the default centre.
+  useEffect(()=>{
+    const g = window.google;
+    if (!mapReady || !g || !mapRef.current) return;
+    shapesRef.current.forEach(s=>s.setMap(null));
+    shapesRef.current = [];
+    const bounds = new g.maps.LatLngBounds();
+    let any = false;
+
+    for (const it of items) {
+      const coords = it.geometry || [];
+      if (!coords.length) continue;
+      any = true;
+      if (it.kind === "line") {
+        const pl = new g.maps.Polyline({ path: coords, strokeColor: lineColour(it.atype),
+          strokeWeight: 4, strokeOpacity: 0.9, map: mapRef.current });
+        pl.addListener("click", ()=>toast.info?.(`${it.name} · ${fmtKm(it.length_m)}`));
+        shapesRef.current.push(pl);
+        coords.forEach(c=>bounds.extend(c));
+      } else {
+        const mk = new g.maps.Marker({ position: coords[0], map: mapRef.current, title: it.name,
+          label: { text: (alignLabel("point", it.atype)||"?").slice(0,1), color:"#fff", fontSize:"11px", fontWeight:"700" } });
+        shapesRef.current.push(mk);
+        bounds.extend(coords[0]);
+      }
+    }
+    if (any) mapRef.current.fitBounds(bounds);
+  }, [items, mapReady, toast]);
+
+  // ── Drawing controls ──────────────────────────────────────────
+  const clearDraft = useCallback(()=>{
+    if (draftRef.current) { draftRef.current.setMap(null); draftRef.current = null; }
+    setDraftPts([]);
+  }, []);
+  const startMode = (m) => {
+    clearDraft();
+    modeRef.current = m; setMode(m);
+    if (mapRef.current) mapRef.current.setOptions({ draggableCursor: m ? "crosshair" : null });
+  };
+  const stopMode = useCallback(()=>{
+    modeRef.current = null; setMode(null);
+    if (mapRef.current) mapRef.current.setOptions({ draggableCursor: null });
+  }, []);
+  const undoPoint = () => {
+    setDraftPts(prev=>{
+      const next = prev.slice(0, -1);
+      if (draftRef.current) {
+        if (next.length) draftRef.current.setPath(next);
+        else { draftRef.current.setMap(null); draftRef.current = null; }
+      }
+      return next;
+    });
+  };
+  const finishLine = () => {
+    // The user may have dragged vertices after placing them, so take the
+    // path off the overlay itself rather than the click history.
+    const live = draftRef.current
+      ? draftRef.current.getPath().getArray().map(p=>({lat:p.lat(), lng:p.lng()}))
+      : draftPts;
+    if (live.length < 2) { toast.error("Line ke liye kam se kam 2 point chahiye"); return; }
+    stopMode();
+    setPending({ kind:"line", coords: live, name:"", atype:"rising",
+      project_id: fSite || (sites.length===1 ? sites[0].id : "") });
+  };
+  // Leaving the tab mid-draw should not leave an overlay stuck on the map.
+  useEffect(()=>()=>{ if (draftRef.current) draftRef.current.setMap(null); }, []);
+
+  const savePending = async () => {
+    if (!pending) return;
+    if (!pending.project_id) { toast.error("Site chuno — kis site ki line hai"); return; }
+    setBusy(true);
+    const res = await api.post(`/tenders/${tenderId}/alignments`, {
+      project_id: Number(pending.project_id), name: pending.name || undefined,
+      kind: pending.kind, atype: pending.atype, geometry: pending.coords,
+    });
+    setBusy(false);
+    if (!res?.success) { toast.error(res?.message || "Save nahi hua"); return; }
+    toast.success(pending.kind==="line" ? `Line save hui — ${fmtKm(res.data.length_m)}` : "Point save hua");
+    setPending(null); clearDraft(); load();
+  };
+
+  const del = async (it) => {
+    if (!await window.confirmAsync(`"${it.name}" hataayein?`)) return;
+    const res = await api.del(`/tenders/${tenderId}/alignments/${it.id}`);
+    if (!res?.success) { toast.error(res?.message || "Delete nahi hua"); return; }
+    toast.success("Hat gaya"); load();
+  };
+
+  const importKml = async (file) => {
+    if (!file) return;
+    if (!fSite && sites.length !== 1) { toast.error("Pehle upar se site chuno — KML usi site me jayegi"); return; }
+    const text = await file.text().catch(()=>null);
+    if (!text) { toast.error("File padhi nahi gayi"); return; }
+    setBusy(true);
+    const res = await api.post(`/tenders/${tenderId}/alignments/import-kml`, {
+      project_id: Number(fSite || sites[0].id), file_name: file.name, kml: text,
+    });
+    setBusy(false);
+    if (!res?.success) { toast.error(res?.message || "Import nahi hua"); return; }
+    toast.success(`${res.data.lines} line + ${res.data.points} point import huye · ${fmtKm(res.data.total_length_m)}`);
+    load();
+  };
+
+  const drawnVsBoq = summary && summary.boq_running_qty > 0
+    ? summary.total_length_m - summary.boq_running_qty : null;
+
+  return (<>
+    <Panel style={{marginBottom:11}}>
+      <PHead title="Pipeline Map" sub={items.length ? `${items.length} alignment` : "Line draw karo ya KML import karo"}
+        action={<div style={{display:"flex", gap:8, alignItems:"center"}}>
+          <div style={{minWidth:170}}>
+            <SelIn value={fSite} onChange={setFSite} ph="Saari sites" options={sites.map(s=>({v:s.id, l:s.name}))}/>
+          </div>
+          <label style={{display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:7,
+            border:`1px solid ${T.b1}`, background:T.surface, fontSize:12, color:T.t2, cursor:"pointer", whiteSpace:"nowrap"}}>
+            <IcUpload size={13}/> KML import
+            <input type="file" accept=".kml,application/vnd.google-earth.kml+xml" style={{display:"none"}}
+              onChange={e=>{ importKml(e.target.files?.[0]); e.target.value=""; }}/>
+          </label>
+        </div>}/>
+
+      {/* Sanity strip — drawn vs what the BOQ tendered */}
+      {summary && (
+        <div style={{display:"flex", gap:9, flexWrap:"wrap", padding:"10px 14px",
+          borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
+          {[["Drawn length", fmtKm(summary.total_length_m), T.ind],
+            ["Structures", String(summary.total_points), T.blu],
+            ["BOQ (RMT items)", summary.boq_running_qty ? fmtKm(summary.boq_running_qty) : "—", T.t2],
+            ...(drawnVsBoq !== null ? [["Farak", (drawnVsBoq>0?"+":"") + fmtKm(Math.abs(drawnVsBoq)),
+              Math.abs(drawnVsBoq) > Math.max(500, summary.boq_running_qty*0.05) ? T.amb : T.grn]] : []),
+          ].map(([l,v,c],i)=>(
+            <div key={i} style={{border:`1px solid ${T.b1}`, borderRadius:8, padding:"7px 12px", background:T.surface, minWidth:118}}>
+              <div style={{fontSize:15, fontWeight:800, color:c, fontVariantNumeric:"tabular-nums"}}>{v}</div>
+              <div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".3px", marginTop:2}}>{l}</div>
+            </div>
+          ))}
+          {drawnVsBoq !== null && Math.abs(drawnVsBoq) > Math.max(500, summary.boq_running_qty*0.05) && (
+            <div style={{alignSelf:"center", fontSize:11.5, color:T.amb, maxWidth:280}}>
+              Drawn aur BOQ me farak hai — alignment adhoori ho sakti hai (ya BOQ me non-pipeline RMT items hain).
+            </div>
+          )}
+        </div>
+      )}
+
+      {!apiKey || mapErr ? (
+        <div style={{padding:"26px 16px", textAlign:"center", fontSize:12.5, color:T.t3}}>
+          {mapErr || "Map key set nahi hai."}<br/>
+          <span style={{fontSize:11.5, color:T.t4}}>KML import phir bhi chalega — list neeche dikhegi.</span>
+        </div>
+      ) : (
+        <div style={{position:"relative"}}>
+          {/* Draw toolbar — our own, because Maps removed DrawingManager */}
+          <div style={{display:"flex", gap:7, alignItems:"center", flexWrap:"wrap",
+            padding:"8px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surface}}>
+            {!mode && (<>
+              <SecBtn label="Pipeline line draw karo" Icon={IcMapPin} onClick={()=>startMode("line")}/>
+              <SecBtn label="Structure pin lagao" Icon={IcMapPin} onClick={()=>startMode("point")}/>
+              <span style={{fontSize:11, color:T.t4}}>Line = pipeline · Pin = UGR / pump house / HDD</span>
+            </>)}
+            {mode === "point" && (<>
+              <span style={{fontSize:12, fontWeight:700, color:T.ind}}>Map par jahan structure hai wahan click karo</span>
+              <SecBtn label="Cancel" onClick={stopMode}/>
+            </>)}
+            {mode === "line" && (<>
+              <span style={{fontSize:12, fontWeight:700, color:T.ind}}>
+                Road ke saath click karte jao — {draftPts.length} point
+              </span>
+              <SecBtn label="Ek point wapas" onClick={undoPoint} disabled={!draftPts.length}/>
+              <PrimBtn label="Line poori hui" Icon={IcChk} onClick={finishLine} disabled={draftPts.length < 2}/>
+              <SecBtn label="Cancel" onClick={()=>{ clearDraft(); stopMode(); }}/>
+              <span style={{fontSize:11, color:T.t4}}>Point ko drag karke theek bhi kar sakte ho</span>
+            </>)}
+          </div>
+          <div ref={mapDiv} style={{width:"100%", height:430, background:T.surfaceB}}/>
+          {!mapReady && <div style={{position:"absolute", inset:0, display:"flex", alignItems:"center",
+            justifyContent:"center", fontSize:12.5, color:T.t3}}>Map load ho raha hai…</div>}
+        </div>
+      )}
+    </Panel>
+
+    {/* Naya drawn feature — naam + type + site */}
+    {pending && (
+      <Modal title={pending.kind==="line" ? "Nayi pipeline line" : "Naya structure"} Icon={IcMapPin} width={560}
+        sub={pending.kind==="line" ? `${pending.coords.length} point draw huye` : "Map par lagaya gaya pin"}
+        onClose={()=>setPending(null)}
+        footer={<>
+          <SecBtn label="Hatao" onClick={()=>setPending(null)}/>
+          <PrimBtn label={busy?"Save ho raha hai...":"Save"} Icon={IcChk} onClick={savePending} disabled={busy}/>
+        </>}>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
+          <Field label="Site *">
+            <SelIn value={pending.project_id} onChange={v=>setPending(p=>({...p, project_id:v}))}
+              ph="Site chuno" options={sites.map(s=>({v:s.id, l:s.name}))}/>
+          </Field>
+          <Field label="Type">
+            <SelIn value={pending.atype} onChange={v=>setPending(p=>({...p, atype:v}))}
+              options={(pending.kind==="line"?LINE_TYPES:POINT_TYPES).map(t=>({v:t.v, l:t.l}))}/>
+          </Field>
+          <Field label="Naam" full>
+            <TxtIn value={pending.name} onChange={v=>setPending(p=>({...p, name:v}))}
+              ph={pending.kind==="line" ? "e.g. Sec-25 | CH 0–500" : "e.g. UGR Sec-25"}/>
+          </Field>
+        </div>
+        <div style={{fontSize:11.5, color:T.t4, marginTop:10}}>
+          Naam me hissa likhoge (CH 0–500) to aage segment-wise progress dikhana aasan ho jayega.
+        </div>
+      </Modal>
+    )}
+
+    {/* Alignment list */}
+    <Panel>
+      <PHead title="Alignments" sub={summary ? `${fmtKm(summary.total_length_m)} · ${summary.total_points} structure` : undefined}/>
+      {loading && <Loading text="Alignment load ho raha hai..."/>}
+      {!loading && !items.length && (
+        <Empty Icon={IcMapPin} text="Abhi koi alignment nahi."
+          sub="Map par line draw karo, ya department ki KML import karo."/>
+      )}
+      {!loading && !!items.length && (
+        <div style={{padding:"4px 0"}}>
+          {items.map(it=>(
+            <div key={it.id} style={{display:"flex", alignItems:"center", gap:10, padding:"9px 14px",
+              borderBottom:`1px solid ${T.b1}`}}>
+              <div style={{width:10, height:10, borderRadius:it.kind==="line"?2:"50%", flexShrink:0,
+                background: it.kind==="line" ? lineColour(it.atype) : T.blu}}/>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{fontSize:12.5, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{it.name}</div>
+                <div style={{fontSize:11, color:T.t4}}>
+                  {it.project_name || "site nahi"} · {alignLabel(it.kind, it.atype)}
+                  {it.source==="kml" && it.source_file ? ` · ${it.source_file}` : ""}
+                </div>
+              </div>
+              {it.kind==="line" && (
+                <div style={{fontSize:12.5, fontWeight:700, color:T.t2, fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap"}}>{fmtKm(it.length_m)}</div>
+              )}
+              <button onClick={()=>del(it)} title="Delete"
+                style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
+                  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
+                <IcTrash size={12} color={T.red}/>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  </>);
+}
+
 // ── MB DRAFT (month-end) ────────────────────────────────────────────
 // Site teams write meters daily in mobile DPRs against a BOQ item. This pulls
 // that diary for a period, summed site × item, so the admin cross-checks it
@@ -4217,6 +4595,7 @@ const DETAIL_TABS = [
   {id:"boq",         label:"BOQ",         Icon:IcTable},
   {id:"measure",     label:"Measurements",Icon:IcTable,  minStage:"execution"},
   {id:"rabills",     label:"RA Bills",    Icon:IcRupee,  minStage:"execution"},
+  {id:"map",         label:"Map",         Icon:IcMapPin, minStage:"execution"},
   {id:"sites",       label:"Sites",       Icon:IcSite,   minStage:"execution"},
   {id:"instruments", label:"Instruments", Icon:IcBank},
   {id:"documents",   label:"Documents",   Icon:IcDoc},
@@ -4628,6 +5007,11 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
         <RaBillsTab tenderId={tenderId} tender={data} bills={bills} loading={billsLoading}
           boqSummary={(boq && boq.summary) || null}
           reload={()=>{ loadBills(); load(); }}/>
+      )}
+
+      {/* ══ MAP ══ */}
+      {tab==="map" && (
+        <MapTab tenderId={tenderId} sites={projects}/>
       )}
 
       {/* ══ SITES ══ */}
