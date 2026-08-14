@@ -3122,6 +3122,27 @@ const POINT_TYPES = [
   {v:"other",      l:"Other"},
 ];
 const lineColour = (t) => (LINE_TYPES.find(x=>x.v===t) || LINE_TYPES[4]).c;
+const DONE_COLOUR = "#059669";   // laid — same green the rest of the app uses
+
+// Split a drawn path at `metres` from its start, so the laid part can be drawn
+// in green over the part still to do. Walks the vertices, then interpolates
+// inside the segment where the distance runs out — otherwise the colour would
+// only ever change at a vertex, which on a 500 m stretch is a visible lie.
+function splitPathAt(g, coords, metres) {
+  const pts = (coords || []).map(c => new g.maps.LatLng(c.lat, c.lng));
+  if (pts.length < 2 || !(metres > 0)) return { done: [], rest: pts };
+  const sph = g.maps.geometry.spherical;
+  const done = [pts[0]];
+  let left = metres;
+  for (let i = 1; i < pts.length; i++) {
+    const seg = sph.computeDistanceBetween(pts[i - 1], pts[i]);
+    if (left >= seg) { done.push(pts[i]); left -= seg; continue; }
+    const cut = sph.interpolate(pts[i - 1], pts[i], seg > 0 ? left / seg : 0);
+    done.push(cut);
+    return { done, rest: [cut, ...pts.slice(i)] };
+  }
+  return { done, rest: [] };   // whole line laid
+}
 const alignLabel = (kind, t) => ((kind==="point"?POINT_TYPES:LINE_TYPES).find(x=>x.v===t)?.l) || t;
 const fmtKm = (m) => Number(m||0) >= 1000
   ? (Number(m)/1000).toLocaleString("en-IN",{maximumFractionDigits:2}) + " km"
@@ -3144,6 +3165,7 @@ function MapTab({tenderId, sites}) {
 
   const [items, setItems]     = useState([]);
   const [summary, setSummary] = useState(null);
+  const [progress, setProgress] = useState(null);   // MB ke metre, line-wise
   const [loading, setLoading] = useState(true);
   const [mapReady, setMapReady] = useState(false);
   const [mapErr, setMapErr]   = useState("");
@@ -3157,14 +3179,16 @@ function MapTab({tenderId, sites}) {
   useEffect(()=>{ sitesRef.current = sites; }, [sites]);
 
   const load = useCallback(async () => {
-    const [a, s] = await Promise.all([
+    const [a, s, pr] = await Promise.all([
       api.get(`/tenders/${tenderId}/alignments${fSite?`?project_id=${fSite}`:""}`),
       api.get(`/tenders/${tenderId}/alignments-summary`),
+      api.get(`/tenders/${tenderId}/alignments-progress`),
     ]);
     setLoading(false);
     if (a?.success) setItems(Array.isArray(a.data)?a.data:[]);
     else toast.error(a?.message || "Alignment load nahi hua");
     if (s?.success) setSummary(s.data);
+    if (pr?.success) setProgress(pr.data);
   }, [tenderId, fSite, toast]);
   useEffect(()=>{ load(); }, [load]);
 
@@ -3192,16 +3216,29 @@ function MapTab({tenderId, sites}) {
             project_id: fSiteRef.current || (sitesRef.current.length===1 ? sitesRef.current[0].id : "") });
           return;
         }
-        setDraftPts(prev=>{
-          const next = [...prev, pt];
-          if (!draftRef.current) {
-            draftRef.current = new g.maps.Polyline({ path: next, strokeColor:"#DC2626",
-              strokeWeight:4, strokeOpacity:0.95, editable:true, map: mapRef.current });
-          } else {
-            draftRef.current.setPath(next);
-          }
-          return next;
-        });
+        // Read the CURRENT path off the overlay, not from React state: the
+        // line is editable, so a dragged vertex lives only on the overlay.
+        // Appending to stale state used to snap corrected points back to
+        // where they were first clicked.
+        const live = draftRef.current
+          ? draftRef.current.getPath().getArray().map(p=>({lat:p.lat(), lng:p.lng()}))
+          : [];
+        const next = [...live, pt];
+        if (!draftRef.current) {
+          draftRef.current = new g.maps.Polyline({ path: next, strokeColor:"#DC2626",
+            strokeWeight:4, strokeOpacity:0.95, editable:true, map: mapRef.current });
+          // Keep the point counter honest when the user drags or right-click
+          // deletes a vertex — the overlay stays the single source of truth.
+          const sync = () => {
+            const p = draftRef.current ? draftRef.current.getPath().getArray() : [];
+            setDraftPts(p.map(x=>({lat:x.lat(), lng:x.lng()})));
+          };
+          const path = draftRef.current.getPath();
+          ["insert_at","set_at","remove_at"].forEach(ev=>g.maps.event.addListener(path, ev, sync));
+        } else {
+          draftRef.current.setPath(next);
+        }
+        setDraftPts(next);
       });
       setMapReady(true);
     }).catch(e=>{ if (!dead) setMapErr(e.message || "Map load nahi hua"); });
@@ -3217,16 +3254,31 @@ function MapTab({tenderId, sites}) {
     shapesRef.current = [];
     const bounds = new g.maps.LatLngBounds();
     let any = false;
+    const progByLine = {};
+    (progress?.lines || []).forEach(l => { progByLine[l.id] = l.done_m; });
 
     for (const it of items) {
       const coords = it.geometry || [];
       if (!coords.length) continue;
       any = true;
       if (it.kind === "line") {
+        // Whole line in its type colour, then the laid part painted green on
+        // top — so "kitna baaki" is the part that still has its own colour.
+        const doneM = Number(progByLine[it.id] ?? 0);
         const pl = new g.maps.Polyline({ path: coords, strokeColor: lineColour(it.atype),
           strokeWeight: 4, strokeOpacity: 0.9, map: mapRef.current });
-        pl.addListener("click", ()=>toast.info?.(`${it.name} · ${fmtKm(it.length_m)}`));
+        pl.addListener("click", ()=>toast.info?.(
+          doneM > 0 ? `${it.name} · ${fmtKm(doneM)} / ${fmtKm(it.length_m)} ho gaya`
+                    : `${it.name} · ${fmtKm(it.length_m)}`));
         shapesRef.current.push(pl);
+        if (doneM > 0 && g.maps.geometry?.spherical) {
+          const { done } = splitPathAt(g, coords, doneM);
+          if (done.length >= 2) {
+            const dl = new g.maps.Polyline({ path: done, strokeColor: DONE_COLOUR,
+              strokeWeight: 6, strokeOpacity: 0.95, zIndex: 2, map: mapRef.current });
+            shapesRef.current.push(dl);
+          }
+        }
         coords.forEach(c=>bounds.extend(c));
       } else {
         const mk = new g.maps.Marker({ position: coords[0], map: mapRef.current, title: it.name,
@@ -3236,7 +3288,7 @@ function MapTab({tenderId, sites}) {
       }
     }
     if (any) mapRef.current.fitBounds(bounds);
-  }, [items, mapReady, toast]);
+  }, [items, progress, mapReady, toast]);
 
   // ── Drawing controls ──────────────────────────────────────────
   const clearDraft = useCallback(()=>{
@@ -3253,14 +3305,16 @@ function MapTab({tenderId, sites}) {
     if (mapRef.current) mapRef.current.setOptions({ draggableCursor: null });
   }, []);
   const undoPoint = () => {
-    setDraftPts(prev=>{
-      const next = prev.slice(0, -1);
-      if (draftRef.current) {
-        if (next.length) draftRef.current.setPath(next);
-        else { draftRef.current.setMap(null); draftRef.current = null; }
-      }
-      return next;
-    });
+    // Same rule as adding: the overlay holds the truth, including drags.
+    const live = draftRef.current
+      ? draftRef.current.getPath().getArray().map(p=>({lat:p.lat(), lng:p.lng()}))
+      : draftPts;
+    const next = live.slice(0, -1);
+    if (draftRef.current) {
+      if (next.length) draftRef.current.setPath(next);
+      else { draftRef.current.setMap(null); draftRef.current = null; }
+    }
+    setDraftPts(next);
   };
   const finishLine = () => {
     // The user may have dragged vertices after placing them, so take the
@@ -3335,6 +3389,7 @@ function MapTab({tenderId, sites}) {
         <div style={{display:"flex", gap:9, flexWrap:"wrap", padding:"10px 14px",
           borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
           {[["Drawn length", fmtKm(summary.total_length_m), T.ind],
+            ...(progress ? [["Ho gaya (MB se)", `${fmtKm(progress.total_done_m)} · ${progress.total_pct}%`, T.grn]] : []),
             ["Structures", String(summary.total_points), T.blu],
             ["BOQ (RMT items)", summary.boq_running_qty ? fmtKm(summary.boq_running_qty) : "—", T.t2],
             ...(drawnVsBoq !== null ? [["Farak", (drawnVsBoq>0?"+":"") + fmtKm(Math.abs(drawnVsBoq)),
@@ -3348,6 +3403,11 @@ function MapTab({tenderId, sites}) {
           {drawnVsBoq !== null && Math.abs(drawnVsBoq) > Math.max(500, summary.boq_running_qty*0.05) && (
             <div style={{alignSelf:"center", fontSize:11.5, color:T.amb, maxWidth:280}}>
               Drawn aur BOQ me farak hai — alignment adhoori ho sakti hai (ya BOQ me non-pipeline RMT items hain).
+            </div>
+          )}
+          {!!progress?.unmapped_m && (
+            <div style={{alignSelf:"center", fontSize:11.5, color:T.amb, maxWidth:300}}>
+              MB me {fmtKm(progress.unmapped_m)} aisa kaam hai jiske liye line draw hi nahi hui — utni pipeline map par add karo.
             </div>
           )}
         </div>
@@ -3440,9 +3500,20 @@ function MapTab({tenderId, sites}) {
                   {it.source==="kml" && it.source_file ? ` · ${it.source_file}` : ""}
                 </div>
               </div>
-              {it.kind==="line" && (
-                <div style={{fontSize:12.5, fontWeight:700, color:T.t2, fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap"}}>{fmtKm(it.length_m)}</div>
-              )}
+              {it.kind==="line" && (()=>{
+                const p = (progress?.lines || []).find(x=>x.id===it.id);
+                return (
+                  <div style={{textAlign:"right", whiteSpace:"nowrap", minWidth:96}}>
+                    <div style={{fontSize:12.5, fontWeight:700, color:T.t2, fontVariantNumeric:"tabular-nums"}}>{fmtKm(it.length_m)}</div>
+                    {p && p.done_m > 0 && (<>
+                      <div style={{height:4, width:88, background:T.b1, borderRadius:2, overflow:"hidden", marginTop:3, marginLeft:"auto"}}>
+                        <div style={{height:"100%", width:`${Math.min(100, p.pct)}%`, background:T.grn}}/>
+                      </div>
+                      <div style={{fontSize:10, color:T.grn, fontWeight:600, marginTop:2}}>{fmtKm(p.done_m)} · {p.pct}%</div>
+                    </>)}
+                  </div>
+                );
+              })()}
               <button onClick={()=>del(it)} title="Delete"
                 style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
                   cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
