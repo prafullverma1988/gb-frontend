@@ -17,7 +17,7 @@
 // Self-contained (own theme/icons/helpers), same as WarehouseModule/FuelModule.
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useMemo } from "react";
-import api from "../config/api";
+import api, { API_BASE, getToken } from "../config/api";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -27,6 +27,7 @@ const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) =
 const IcTruck  = (p) => <Ic {...p} d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z" />;
 const IcBell   = (p) => <Ic {...p} d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />;
 const IcSpark  = (p) => <Ic {...p} d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3z" />;
+const IcChart  = (p) => <Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />;
 const IcDoc    = (p) => <Ic {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M9 13h6M9 17h6" />;
 const IcGauge  = (p) => <Ic {...p} d="M12 20a8 8 0 100-16 8 8 0 000 16zM12 12l3.5-3.5M12 20v2M4 12H2M22 12h-2" />;
 const IcDrop   = (p) => <Ic {...p} d="M12 2.7s6 6.3 6 10.3a6 6 0 01-12 0c0-4 6-10.3 6-10.3z" />;
@@ -2007,6 +2008,421 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
 // ══════════════════════════════════════════════════════════════════
 // MODULE
 // ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// REPORTS — Usage Register aur Log Sheet
+//
+// Har report ki ek hi shakl: upar filter, neeche table, aur export ke teen
+// button. Button WAHI filter bhejte hain jo screen par lage hain, isliye
+// download hamesha utna hi hota hai jitna user dekh raha tha.
+//
+// Ye helpers is module ke apne hain (Fuel ke apne alag) — module
+// independence ka wahi niyam jo baaki module follow karte hain.
+// ══════════════════════════════════════════════════════════════════
+
+const qs = (params) => Object.entries(params || {})
+  .filter(([, v]) => v !== "" && v != null)
+  .map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+
+// Filter ka naam file ke naam me — Downloads me teen "report.pdf" padi hon to
+// koi nahi bata sakta kaunsi kis cheez ki hai.
+const slug = (s) => String(s || "").replace(/[^\w]+/g, "-").replace(/^-|-$/g, "").slice(0, 28);
+
+async function fetchReportPdf(path, params) {
+  const res = await fetch(`${API_BASE}${path}?${qs(params)}`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) {
+    let msg = `PDF nahi bana (${res.status})`;
+    try { const j = await res.json(); if (j?.message) msg = j.message; } catch (e) { /* binary/HTML */ }
+    throw new Error(msg);
+  }
+  return res.blob();
+}
+
+const saveBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+};
+
+const exportExcel = async (rows, columns, filename, sheet = "Report") => {
+  // Lazy import — xlsx bhaari hai aur Machinery khulte hi iski zaroorat nahi
+  // (yahi tarika import wizard bhi use karta hai).
+  const XLSX = await import("xlsx");
+  const aoa = [columns.map((c) => c.label),
+    ...rows.map((r) => columns.map((c) => (c.excel ? c.excel(r) : r[c.key] ?? "")))];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = columns.map((c) => ({ wch: c.w || 14 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheet);
+  XLSX.writeFile(wb, filename.replace(/\.pdf$/, "") + ".xlsx");
+};
+
+// WhatsApp par PDF: jahan browser file share kar sakta hai (mobile) wahan wahi
+// file jaati hai. Desktop Chrome file share nahi karta — wahan PDF download
+// hoti hai aur WhatsApp khul jaata hai, taaki user khud attach kar le.
+// Chup-chaap sirf link bhejna galat hota: link kholne ke liye login chahiye.
+async function sharePdf(blob, filename, caption) {
+  const file = new File([blob], filename, { type: "application/pdf" });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: filename, text: caption }); return "shared"; }
+    catch (e) { if (e?.name === "AbortError") return "cancelled"; }
+  }
+  saveBlob(blob, filename);
+  window.open(`https://wa.me/?text=${encodeURIComponent(caption)}`, "_blank", "noopener");
+  return "downloaded";
+}
+
+const IcSheet = (p) => <Ic {...p} d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18" />;
+const IcFile  = (p) => <Ic {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M8 13h8M8 17h5" />;
+const IcWa    = (p) => <Ic {...p} d="M21 11.5a8.4 8.4 0 01-12.5 7.3L3 20.5l1.8-5.3A8.4 8.4 0 1121 11.5z" />;
+
+const RFilterBar = ({ children, chips, onClear }) => (
+  <div style={{ background: T.surfaceB || "#F8F9FB", border: `1px solid ${T.b1}`, borderRadius: 9, padding: "10px 12px", display: "grid", gap: 9 }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>{children}</div>
+    {chips.length > 0 && (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", borderTop: `1px solid ${T.b1}`, paddingTop: 8 }}>
+        <span style={{ fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".4px" }}>Lage hue filter</span>
+        {chips.map((c, i) => (
+          <span key={i} style={{ background: T.indL, color: T.ind, border: `1px solid ${T.indM || T.b1}`, borderRadius: 20, padding: "2px 9px", fontSize: 10.5, fontWeight: 600 }}>
+            {c.k}: {c.v}
+          </span>
+        ))}
+        <span onClick={onClear} style={{ fontSize: 10.5, color: T.t3, cursor: "pointer", textDecoration: "underline", marginLeft: 4 }}>sab hatao</span>
+      </div>
+    )}
+  </div>
+);
+
+const RLbl = ({ children }) => (
+  <div style={{ fontSize: 9.5, color: T.t4, marginBottom: 3, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px" }}>{children}</div>
+);
+
+const RSel = ({ label, value, onChange, options, w = 150, placeholder = "Sab" }) => (
+  <div>
+    <RLbl>{label}</RLbl>
+    <select value={value} onChange={(e) => onChange(e.target.value)}
+      style={{ ...inp, width: w, padding: "6px 8px", fontSize: 11.5 }}>
+      <option value="">{placeholder}</option>
+      {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+    </select>
+  </div>
+);
+
+const RInp = ({ label, value, onChange, w = 130, type = "text", ph }) => (
+  <div>
+    <RLbl>{label}</RLbl>
+    <input type={type} value={value} placeholder={ph} onChange={(e) => onChange(e.target.value)}
+      style={{ ...inp, width: w, padding: "6px 8px", fontSize: 11.5 }} />
+  </div>
+);
+
+// PDF server par banti hai aur usme 2-3 second lagte hain — isliye button chup
+// nahi rehta, "ban rahi..." dikhata hai.
+function ExportBar({ rows, columns, pdfPath, params, baseName, caption, disabled, disabledWhy }) {
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState(null);
+  const empty = disabled || !rows || rows.length === 0;
+  const fname = [baseName, slug(params.from), params.to ? "to-" + slug(params.to) : "",
+    slug(params.sector)].filter(Boolean).join("-");
+
+  const run = async (kind) => {
+    setBusy(kind); setMsg(null);
+    try {
+      if (kind === "xls") {
+        await exportExcel(rows, columns, fname, baseName);
+        setMsg({ ok: true, t: "Excel ban gayi" });
+      } else {
+        const blob = await fetchReportPdf(pdfPath, params);
+        if (kind === "pdf") { saveBlob(blob, fname + ".pdf"); setMsg({ ok: true, t: "PDF ban gayi" }); }
+        else {
+          const how = await sharePdf(blob, fname + ".pdf", caption);
+          if (how === "downloaded") setMsg({ ok: true, t: "PDF download ho gayi — WhatsApp me attach kar dijiye" });
+          else if (how === "shared") setMsg({ ok: true, t: "Bhej di" });
+        }
+      }
+    } catch (e) { setMsg({ ok: false, t: e.message || "Nahi ho paya" }); }
+    setBusy("");
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+      {empty && disabledWhy && <span style={{ fontSize: 10.5, color: T.t4 }}>{disabledWhy}</span>}
+      {msg && <span style={{ fontSize: 10.5, fontWeight: 600, color: msg.ok ? T.grn : T.red }}>{msg.t}</span>}
+      <Btn size="sm" ghost icon={IcSheet} disabled={empty || !!busy} onClick={() => run("xls")}>Excel</Btn>
+      <Btn size="sm" ghost icon={IcFile} disabled={empty || !!busy} onClick={() => run("pdf")}>
+        {busy === "pdf" ? "Ban rahi..." : "PDF"}
+      </Btn>
+      <Btn size="sm" c={T.grn} icon={IcWa} disabled={empty || !!busy} onClick={() => run("wa")}>
+        {busy === "wa" ? "..." : "WhatsApp"}
+      </Btn>
+    </div>
+  );
+}
+
+// ── Report 1: USAGE REGISTER ──────────────────────────────────────
+const EMPTY_UF = { project_id: "", equipment_id: "", ownership: "", measurement_mode: "", sector: "" };
+const MODE_OPTS = [
+  { v: "hourly", l: "Ghante" }, { v: "daily", l: "Din" }, { v: "monthly", l: "Mahina" },
+  { v: "km", l: "KM" }, { v: "trip", l: "Trip" }, { v: "fixed", l: "Lump sum" },
+];
+
+function UsageRegister({ fleet, projects, from, to, onRange }) {
+  const [f, setF] = useState(EMPTY_UF);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const params = useMemo(() => ({ from, to, ...f }), [from, to, f]);
+
+  useEffect(() => {
+    let dead = false;
+    setLoading(true);
+    api.get(`/machinery/reports/usage-register?${qs(params)}`)
+      .then((r) => { if (!dead) setData(r?.success ? r.data : null); })
+      .catch(() => { if (!dead) setData(null); })
+      .finally(() => { if (!dead) setLoading(false); });
+    return () => { dead = true; };
+  }, [params]);
+
+  const rows = data?.rows || [];
+  const tot = data?.totals || {};
+  const COLS = [
+    { key: "date", label: "Date", w: 11 },
+    { key: "machine", label: "Machine", w: 22 },
+    { key: "registration_no", label: "Gadi no.", w: 14 },
+    { key: "ownership", label: "Ownership", w: 11 },
+    { key: "project", label: "Project", w: 20 },
+    { key: "sector", label: "Sector", w: 10 },
+    { key: "qty", label: "Qty", w: 9 },
+    { key: "qty_unit", label: "Unit", w: 8 },
+    { key: "meter", label: "Meter", w: 16 },
+    { key: "rate", label: "Rate", w: 10 },
+    { key: "amount", label: "Amount", w: 12, excel: (r) => (r.amount == null ? "" : Math.round(r.amount)) },
+    { key: "vendor", label: "Vendor", w: 20 },
+    { key: "operator", label: "Operator", w: 16 },
+    { key: "entered_by", label: "Kisne bhara", w: 16 },
+    { key: "remark", label: "Remark", w: 30 },
+  ];
+  const cols = "76px 1.5fr 1fr 78px 1.1fr 66px 84px 108px 74px 92px 1fr";
+
+  return (
+    <div style={{ display: "grid", gap: 11 }}>
+      <RFilterBar chips={data?.applied || []} onClear={() => setF(EMPTY_UF)}>
+        <div>
+          <RLbl>Se — Tak</RLbl>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input type="date" value={from} onChange={(e) => onRange(e.target.value, to)}
+              style={{ ...inp, width: 136, padding: "6px 9px", fontSize: 11.5 }} />
+            <span style={{ fontSize: 11, color: T.t4 }}>se</span>
+            <input type="date" value={to} onChange={(e) => onRange(from, e.target.value)}
+              style={{ ...inp, width: 136, padding: "6px 9px", fontSize: 11.5 }} />
+          </div>
+        </div>
+        <RSel label="Project" value={f.project_id} onChange={(v) => set("project_id", v)}
+          options={projects.map((x) => ({ v: x.id, l: x.name }))} />
+        <RSel label="Machine" value={f.equipment_id} onChange={(v) => set("equipment_id", v)}
+          options={fleet.map((x) => ({ v: x.id, l: x.name }))} />
+        <RSel label="Ownership" value={f.ownership} onChange={(v) => set("ownership", v)}
+          options={[{ v: "owned", l: "Apni" }, { v: "rented", l: "Kiraye ki" }]} w={120} />
+        <RSel label="Rate type" value={f.measurement_mode} onChange={(v) => set("measurement_mode", v)}
+          options={MODE_OPTS} w={120} />
+        <RInp label="Sector" value={f.sector} onChange={(v) => set("sector", v)} w={95} ph="15" />
+      </RFilterBar>
+
+      <Panel title={loading ? "Usage Register — laa rahe hain..." : `Usage Register — ${rows.length} entry`}
+        action={<ExportBar rows={rows} columns={COLS} pdfPath="/machinery/reports/usage-register.pdf"
+          params={params} baseName="usage-register"
+          caption={`Machine Usage Register${from ? ` ${from} se ${to}` : ""} — Sanchalan`} />}>
+        {!loading && rows.length === 0 && <Empty>Is filter par koi entry nahi mili.</Empty>}
+        {rows.length > 0 && (
+          <>
+            <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{tot.entries} entry</span>
+              {/* Ghante sirf ghante wali machine ke, din sirf din wali ke —
+                  alag unit ka jod ek jhooth hota. */}
+              {tot.hours > 0 && <span style={{ fontSize: 11.5, color: T.t2 }}>Ghante <b style={{ color: T.t1 }}>{fmtN(tot.hours)}</b></span>}
+              {tot.days > 0 && <span style={{ fontSize: 11.5, color: T.t2 }}>Din <b style={{ color: T.t1 }}>{fmtN(tot.days)}</b></span>}
+              <span style={{ fontSize: 11.5, color: T.t2 }}>Kul <b style={{ color: T.t1 }}>{fmtC(tot.amount)}</b></span>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 1140 }}>
+                <Row head cols={cols}>
+                  <span>Date</span><span>Machine</span><span>Project</span><span>Own</span>
+                  <span>Vendor</span><span>Sector</span>
+                  <span style={{ textAlign: "right" }}>Qty</span><span style={{ textAlign: "right" }}>Meter</span>
+                  <span style={{ textAlign: "right" }}>Rate</span><span style={{ textAlign: "right" }}>Amount</span>
+                  <span>Remark</span>
+                </Row>
+                {rows.map((r, i) => (
+                  <Row key={i} cols={cols}>
+                    <span style={{ fontSize: 11.5, color: T.t2 }}>{r.date}</span>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{r.machine}</div>
+                      {r.registration_no && <div style={{ fontSize: 10, color: T.t4 }}>{r.registration_no}</div>}
+                    </div>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{r.project || "—"}</span>
+                    <span>{r.ownership
+                      ? <Pill label={r.ownership === "Owned" ? "Apni" : "Kiraye"} c={r.ownership === "Owned" ? T.ind : T.t3} bg={r.ownership === "Owned" ? T.indL : T.sltL} />
+                      : <span style={{ fontSize: 11, color: T.t4 }}>—</span>}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{r.vendor || "—"}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{r.sector || "—"}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>
+                      {r.qty != null ? `${fmtN(r.qty)} ${r.qty_unit}` : "—"}
+                    </span>
+                    <span style={{ fontSize: 11, color: T.t4, textAlign: "right" }}>{r.meter || "—"}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{r.rate != null ? fmtN(r.rate) : "—"}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: T.t1, textAlign: "right" }}>{r.amount != null ? fmtC(r.amount) : "—"}</span>
+                    <span style={{ fontSize: 11, color: T.t3 }}>{r.remark || "—"}</span>
+                  </Row>
+                ))}
+              </div>
+            </div>
+            {tot.truncated && (
+              <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.amb, background: T.ambL }}>
+                Bahut zyada entry hain — sirf pehli 5000 dikh rahi hain. Date range chhota kijiye.
+              </div>
+            )}
+          </>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+// ── Report 2: LOG SHEET (kaagaz wali sheet) ───────────────────────
+function LogSheetReport({ fleet, from, to, onRange }) {
+  const [machineId, setMachineId] = useState("");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const params = useMemo(() => ({ equipment_id: machineId, from, to }), [machineId, from, to]);
+
+  useEffect(() => {
+    if (!machineId) { setData(null); return; }
+    let dead = false;
+    setLoading(true);
+    api.get(`/machinery/reports/log-sheet?${qs(params)}`)
+      .then((r) => { if (!dead) setData(r?.success ? r.data : null); })
+      .catch(() => { if (!dead) setData(null); })
+      .finally(() => { if (!dead) setLoading(false); });
+    return () => { dead = true; };
+  }, [params, machineId]);
+
+  const rows = data?.rows || [];
+  const tot = data?.totals || {};
+  const COLS = [
+    { key: "date", label: "Date", w: 12 },
+    { key: "party_name", label: "Party name", w: 22 },
+    { key: "start_reading", label: "Start", w: 10 },
+    { key: "stop_reading", label: "Stop", w: 10 },
+    { key: "hours", label: "Hours", w: 9 },
+    { key: "diesel", label: "Diesel", w: 9 },
+    { key: "pump_name", label: "Pump name", w: 18 },
+    { key: "sector", label: "Sector", w: 10 },
+    { key: "remark", label: "Remark", w: 34 },
+  ];
+  const cols = "82px 1.2fr 74px 74px 66px 70px 1fr 74px 1.5fr";
+  const machine = fleet.find((m) => String(m.id) === String(machineId));
+
+  return (
+    <div style={{ display: "grid", gap: 11 }}>
+      <RFilterBar chips={machine ? [{ k: "Machine", v: machine.name }, { k: "Se–Tak", v: `${from} → ${to}` }] : []}
+        onClear={() => setMachineId("")}>
+        <RSel label="Machine" value={machineId} onChange={setMachineId}
+          options={fleet.map((x) => ({ v: x.id, l: x.name }))} w={230} placeholder="Machine chuniye" />
+        <div>
+          <RLbl>Se — Tak</RLbl>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input type="date" value={from} onChange={(e) => onRange(e.target.value, to)}
+              style={{ ...inp, width: 136, padding: "6px 9px", fontSize: 11.5 }} />
+            <span style={{ fontSize: 11, color: T.t4 }}>se</span>
+            <input type="date" value={to} onChange={(e) => onRange(from, e.target.value)}
+              style={{ ...inp, width: 136, padding: "6px 9px", fontSize: 11.5 }} />
+          </div>
+        </div>
+      </RFilterBar>
+
+      <Panel
+        title={machine ? `${machine.name} — Log Sheet` : "Log Sheet"}
+        action={<ExportBar rows={rows} columns={COLS} pdfPath="/machinery/reports/log-sheet.pdf"
+          params={params} baseName={`log-sheet-${slug(machine?.name)}`}
+          disabled={!machineId} disabledWhy={!machineId ? "Pehle machine chuniye" : ""}
+          caption={`${machine?.name || "Machine"} log sheet ${from} se ${to} — Sanchalan`} />}>
+
+        {!machineId && <Empty>Upar se ek machine chuniye — us machine ka har din ka hisaab yahan aayega.</Empty>}
+        {machineId && loading && <Empty>Laa rahe hain...</Empty>}
+        {machineId && !loading && rows.length > 0 && (
+          <>
+            <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>Kaam ke din <b style={{ color: T.t1 }}>{tot.work_days} / {tot.total_days}</b></span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>Ghante <b style={{ color: T.t1 }}>{fmtN(tot.hours)}</b></span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>Diesel <b style={{ color: T.t1 }}>{fmtN(tot.diesel)} L</b></span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>
+                {/* 0 ghante par L/hr banta hi nahi — wahan "infinite mileage"
+                    dikhane se behtar hai khaali chhodna. */}
+                L/hr <b style={{ color: T.t1 }}>{tot.litres_per_hour == null ? "—" : tot.litres_per_hour}</b>
+              </span>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 980 }}>
+                <Row head cols={cols}>
+                  <span>Date</span><span>Party name</span>
+                  <span style={{ textAlign: "right" }}>Start</span><span style={{ textAlign: "right" }}>Stop</span>
+                  <span style={{ textAlign: "right" }}>Hours</span><span style={{ textAlign: "right" }}>Diesel</span>
+                  <span>Pump name</span><span>Sector</span><span>Remark</span>
+                </Row>
+                {rows.map((r, i) => (
+                  <Row key={i} cols={cols}>
+                    <span style={{ fontSize: 11.5, color: r.worked ? T.t2 : T.t4 }}>{r.date}</span>
+                    <span style={{ fontSize: 11.5, color: r.worked ? T.t2 : T.t4 }}>{r.party_name || "—"}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{r.start_reading ?? "—"}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{r.stop_reading ?? "—"}</span>
+                    <span style={{ fontSize: 12, fontWeight: r.hours ? 700 : 400, color: r.hours ? T.t1 : T.t4, textAlign: "right" }}>{r.hours || 0}</span>
+                    <span style={{ fontSize: 12, fontWeight: r.diesel ? 600 : 400, color: r.diesel ? T.t1 : T.t4, textAlign: "right" }}>{r.diesel || 0}</span>
+                    <span style={{ fontSize: 11, color: T.t3 }}>{r.pump_name || "—"}</span>
+                    <span style={{ fontSize: 11, color: T.t3 }}>{r.sector || "—"}</span>
+                    <span style={{ fontSize: 11, color: r.worked ? T.t3 : T.t4 }}>{r.remark || (r.worked ? "—" : "NO WORK")}</span>
+                  </Row>
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
+              Har din ki row hai — kaam na hua ho to bhi. Diesel me pump aur barrel dono ginte hain;
+              barrel wale par pump ki jagah "STOCK DIESEL" likha aata hai.
+            </div>
+          </>
+        )}
+        {machineId && !loading && rows.length === 0 && (
+          <Empty>Is duration me is machine ka koi din darj nahi.</Empty>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function ReportsTab({ fleet, projects, from, to, onRange }) {
+  const [sub, setSub] = useState("usage");
+  const SUBS = [
+    { id: "usage", l: "Usage Register" },
+    { id: "log", l: "Log Sheet" },
+  ];
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {SUBS.map((s) => (
+          <button key={s.id} type="button" onClick={() => setSub(s.id)}
+            style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${sub === s.id ? T.ind : T.b1}`, background: sub === s.id ? T.ind : T.surface, color: sub === s.id ? "white" : T.t2, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+            {s.l}
+          </button>
+        ))}
+      </div>
+      {sub === "usage" && <UsageRegister fleet={fleet} projects={projects} from={from} to={to} onRange={onRange} />}
+      {sub === "log" && <LogSheetReport fleet={fleet} from={from} to={to} onRange={onRange} />}
+    </div>
+  );
+}
+
 function MachineryModule() {
   const [tab, setTab] = useState("fleet");
   const [loading, setLoading] = useState(true);
@@ -2020,18 +2436,27 @@ function MachineryModule() {
   const [importOpen, setImportOpen] = useState(false);
   const [econ, setEcon] = useState(null);
   const [health, setHealth] = useState(null);
+  const [projects, setProjects] = useState([]);
+
+  // Reports ka apna date range — Fleet/Reminders par date ka koi matlab nahi,
+  // aur report kholte hi poora itihaas maangna bhaari padta hai.
+  const repMonthStart = new Date(); repMonthStart.setDate(1);
+  const [repFrom, setRepFrom] = useState(repMonthStart.toLocaleDateString("en-CA"));
+  const [repTo, setRepTo] = useState(new Date().toLocaleDateString("en-CA"));
 
   // silent = background refresh. Spinner sirf pehli baar; warna machine detail
   // khuli ho to wo unmount ho kar apna tab bhool jaata hai.
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
-    const [f, d, g, p, ec, he] = await Promise.all([
+    const [f, d, g, p, ec, he, pr] = await Promise.all([
       api.get("/machinery/fleet").catch(() => null),
       api.get("/machinery/due").catch(() => null),
       api.get("/machinery/reports/gaps").catch(() => null),
       api.get("/finance/parties").catch(() => null),
       api.get("/machinery/reports/cost").catch(() => null),
       api.get("/machinery/reports/health").catch(() => null),
+      // Sirf Reports ke project filter ke liye — baaki tab ko iski zaroorat nahi.
+      api.get("/projects").catch(() => null),
     ]);
     setFleet(f?.success ? f.data || [] : []);
     setDue(d?.success ? d.data || [] : []);
@@ -2039,6 +2464,7 @@ function MachineryModule() {
     setParties(p?.success ? p.data || [] : []);
     setEcon(ec?.success ? ec.data : null);
     setHealth(he?.success ? he.data : null);
+    setProjects(pr?.success ? pr.data || [] : []);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -2072,6 +2498,7 @@ function MachineryModule() {
     { id: "fleet", l: "Fleet", I: IcTruck },
     { id: "due", l: "Reminders", I: IcBell, badge: active.length || null },
     { id: "insights", l: "Insights", I: IcSpark },
+    { id: "reports", l: "Reports", I: IcChart },
   ];
 
   if (loading) return (
@@ -2103,6 +2530,11 @@ function MachineryModule() {
                 </button>
               ))}
             </div>
+
+            {tab === "reports" && (
+              <ReportsTab fleet={fleet} projects={projects} from={repFrom} to={repTo}
+                onRange={(f, t2) => { setRepFrom(f); setRepTo(t2); }} />
+            )}
 
             {tab === "fleet" && (
               <Panel title="Fleet" action={

@@ -51,6 +51,7 @@ function TabEquipment({ projectId }) {
     hours_or_days: "", rate_used: "", trip_charge: "", lump_amount: "",
     settlement_side: "company", vendor_id: "", subcon_id: "",
     fuel_qty: "", fuel_cost: "", fuel_vendor_id: "", operator_name: "", meter_start: "", meter_end: "",
+    sector: "", remark: "",
   };
   const [logForm, setLogForm] = useState(emptyLog);
   const [logSaving, setLogSaving] = useState(false);
@@ -154,6 +155,8 @@ function TabEquipment({ projectId }) {
     if (logForm.fuel_cost !== "") body.fuel_cost = parseFloat(logForm.fuel_cost) || 0;
     if (logForm.fuel_vendor_id) body.fuel_vendor_id = parseInt(logForm.fuel_vendor_id, 10);
     if (logForm.operator_name) body.operator_name = logForm.operator_name;
+    if (logForm.sector) body.sector = logForm.sector;
+    if (logForm.remark) body.remark = logForm.remark;
     if (logForm.meter_start !== "") body.meter_start = parseFloat(logForm.meter_start) || 0;
     if (logForm.meter_end !== "") body.meter_end = parseFloat(logForm.meter_end) || 0;
 
@@ -700,6 +703,20 @@ function TabEquipment({ projectId }) {
                     <input value={logForm.meter_start} onChange={e => updLog("meter_start", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="start" style={inp} />
                     <input value={logForm.meter_end} onChange={e => updLog("meter_end", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="end" style={inp} />
                   </div>
+                </div>
+                {/* Sector aur Remark — kaagaz wali log sheet ke wahi do khaane.
+                    Project se kaam nahi chalta: EK project me kai sector hote
+                    hain, aur poori sheet unhi par tiki hoti hai. Bina in do ke
+                    Log Sheet aur Usage Register me ye column khaali rehte the. */}
+                <div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Sector</div>
+                  <input value={logForm.sector} onChange={e => updLog("sector", e.target.value)}
+                    placeholder='e.g. 15, "15 & 12", Kosa Road' style={inp} />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Remark — kya kaam hua</div>
+                  <input value={logForm.remark} onChange={e => updLog("remark", e.target.value)}
+                    placeholder="e.g. SEC.15 BC soil excavation & loading (30 trip)" style={inp} />
                 </div>
               </div>
               {logErr && (

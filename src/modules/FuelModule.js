@@ -14,7 +14,8 @@
 // Cross-check tab is deliberately absent — that is E3.
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useMemo } from "react";
-import api from "../config/api";
+import * as XLSX from "xlsx";
+import api, { API_BASE, getToken } from "../config/api";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -32,6 +33,9 @@ const IcAlert = (p) => <Ic {...p} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 
 const IcRuler = (p) => <Ic {...p} d="M2 12h20M6 9v6M10 9v6M14 9v6M18 9v6" />;
 const IcTrash = (p) => <Ic {...p} d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />;
 const IcCamera = (p) => <Ic {...p} d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2zM12 17a4 4 0 100-8 4 4 0 000 8z" />;
+const IcSheet = (p) => <Ic {...p} d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18" />;
+const IcFile  = (p) => <Ic {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M8 13h8M8 17h5" />;
+const IcWa    = (p) => <Ic {...p} d="M21 11.5a8.4 8.4 0 01-12.5 7.3L3 20.5l1.8-5.3A8.4 8.4 0 1121 11.5z" />;
 
 // ── THEME ─────────────────────────────────────────────────────────
 // Indigo accent, hairlines and whitespace. Colour is a status signal only.
@@ -101,6 +105,70 @@ const isFuelVendor = (p) => {
     .toLowerCase().split(",").map((s) => s.trim());
   return FUEL_VENDOR_ROLES.some((r) => bag.includes(r));
 };
+
+// ── REPORT EXPORT ─────────────────────────────────────────────────
+// Teeno button (Excel / PDF / WhatsApp) WAHI filter bhejte hain jo screen par
+// lage hain. Isliye download hamesha utna hi hota hai jitna user dekh raha
+// tha — "poori list samajh kar bhej di" wali galti yahan ho hi nahi sakti.
+//
+// Excel client par banti hai (xlsx pehle se hai), par PDF hamesha SERVER par:
+// WhatsApp bhejne ke liye ek asli file chahiye, aur mobile+web ko alag-alag
+// banate to dono kabhi ek jaise na dikhte.
+//
+// Ye helpers is module ke apne hain (Machinery ke apne alag) — module
+// independence ka wahi niyam jo baaki module follow karte hain.
+const qs = (params) => Object.entries(params || {})
+  .filter(([, v]) => v !== "" && v != null)
+  .map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+
+// Filter ka naam file ke naam me — Downloads folder me teen "report.pdf"
+// padi hon to koi nahi bata sakta kaunsi kis cheez ki hai.
+const slug = (s) => String(s || "").replace(/[^\w]+/g, "-").replace(/^-|-$/g, "").slice(0, 28);
+
+async function fetchReportPdf(path, params) {
+  const res = await fetch(`${API_BASE}${path}?${qs(params)}`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) {
+    let msg = `PDF nahi bana (${res.status})`;
+    try { const j = await res.json(); if (j?.message) msg = j.message; } catch (e) { /* HTML/binary error */ }
+    throw new Error(msg);
+  }
+  return res.blob();
+}
+
+const saveBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+};
+
+const exportExcel = (rows, columns, filename, sheet = "Report") => {
+  const aoa = [columns.map((c) => c.label),
+    ...rows.map((r) => columns.map((c) => (c.excel ? c.excel(r) : r[c.key] ?? "")))];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = columns.map((c) => ({ wch: c.w || 14 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheet);
+  XLSX.writeFile(wb, filename.replace(/\.pdf$/, "") + ".xlsx");
+};
+
+// WhatsApp par PDF: jahan browser file share kar sakta hai (mobile) wahan wahi
+// file jaati hai. Desktop Chrome file share nahi karta — wahan PDF download
+// karke WhatsApp khol dete hain, taaki user use khud attach kar le. Chup-chaap
+// sirf link bhej dena galat hota: link kholne ke liye login chahiye.
+async function sharePdf(blob, filename, caption) {
+  const file = new File([blob], filename, { type: "application/pdf" });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: filename, text: caption }); return "shared"; }
+    catch (e) { if (e?.name === "AbortError") return "cancelled"; }
+  }
+  saveBlob(blob, filename);
+  window.open(`https://wa.me/?text=${encodeURIComponent(caption)}`, "_blank", "noopener");
+  return "downloaded";
+}
 
 // ── SHARED BITS ───────────────────────────────────────────────────
 const StatCard = ({ label, value, sub, color, icon: Icon }) => (
@@ -950,64 +1018,238 @@ function VendorTab({ vendorRows, from, to, onRange }) {
   );
 }
 
-function ReportsTab({ byEquipment, byProject, from, to, onRange }) {
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <Panel title="Machine-wise consumption" action={<DateRange from={from} to={to} onRange={onRange} />}>
-        {byEquipment.length === 0 && <Empty>Is duration me kisi machine ka diesel record nahi hua.</Empty>}
-        {byEquipment.length > 0 && (
-          <>
-            <Row head cols="1.6fr 90px 90px 90px 90px 90px 110px">
-              <span>Machine</span><span>Seedha</span><span>Barrel se</span><span>Kul litres</span>
-              <span>Ghante</span><span>Norm</span><span style={{ textAlign: "right" }}>Variance</span>
-            </Row>
-            {byEquipment.map((e) => (
-              <Row key={e.equipment_id} cols="1.6fr 90px 90px 90px 90px 90px 110px">
-                <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{e.equipment_name || `#${e.equipment_id}`}</div>
-                  <div style={{ fontSize: 10.5, color: T.t4 }}>{fmtC(e.amount)}</div>
-                </div>
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtL(e.direct_litres)}</span>
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtL(e.issued_litres)}</span>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{fmtL(e.litres)}</span>
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{e.hours ? fmtN(e.hours) : "—"}</span>
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{e.norm_litres != null ? fmtL(e.norm_litres) : "—"}</span>
-                <span style={{ textAlign: "right" }}>
-                  {e.norm_missing
-                    ? <span style={{ fontSize: 10.5, color: T.t4 }}>norm set nahi</span>
-                    : e.variance_litres == null
-                      ? <span style={{ fontSize: 10.5, color: T.t4 }}>—</span>
-                      : <Pill
-                          label={`${e.variance_litres > 0 ? "+" : ""}${fmtN(e.variance_litres)} L${e.variance_pct != null ? ` (${e.variance_pct > 0 ? "+" : ""}${fmtN(e.variance_pct)}%)` : ""}`}
-                          c={e.variance_litres > 0 ? T.red : T.grn}
-                          bg={e.variance_litres > 0 ? T.redL : T.grnL} />}
-                </span>
-              </Row>
-            ))}
-            <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-              Norm = Machinery me set "Fuel norm (L/hr)" × us duration ke ghante. Sirf ghante wali machine par lagta hai.
-            </div>
-          </>
-        )}
-      </Panel>
+// ══════════════════════════════════════════════════════════════════
+// REPORTS
+//
+// Har report ki ek hi shakl hai: upar filter ki patti, neeche table, aur
+// export ke teen button. Button WAHI filter bhejte hain jo patti par lage
+// hain — screen, Excel aur PDF teeno hamesha ek hi baat kehte hain.
+// ══════════════════════════════════════════════════════════════════
 
-      <Panel title="Project-wise diesel kharcha">
-        {byProject.length === 0 && <Empty>Koi data nahi.</Empty>}
-        {byProject.length > 0 && (
+// Chuni hui cheezein chip ban kar dikhti hain — "kitna data dekh rahe ho" ye
+// hamesha saamne rehna chahiye, warna aadhi list poori samajh li jaati hai.
+const FilterBar = ({ children, chips, onClear }) => (
+  <div style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 9, padding: "10px 12px", display: "grid", gap: 9 }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>{children}</div>
+    {chips.length > 0 && (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", borderTop: `1px solid ${T.b1}`, paddingTop: 8 }}>
+        <span style={{ fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".4px" }}>Lage hue filter</span>
+        {chips.map((c, i) => (
+          <span key={i} style={{ background: T.indL, color: T.ind, border: `1px solid ${T.indM}`, borderRadius: 20, padding: "2px 9px", fontSize: 10.5, fontWeight: 600 }}>
+            {c.k}: {c.v}
+          </span>
+        ))}
+        <span onClick={onClear} style={{ fontSize: 10.5, color: T.t3, cursor: "pointer", textDecoration: "underline", marginLeft: 4 }}>sab hatao</span>
+      </div>
+    )}
+  </div>
+);
+
+const FLbl = ({ children }) => (
+  <div style={{ fontSize: 9.5, color: T.t4, marginBottom: 3, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px" }}>{children}</div>
+);
+
+const FSel = ({ label, value, onChange, options, w = 150, placeholder = "Sab" }) => (
+  <div>
+    <FLbl>{label}</FLbl>
+    <select value={value} onChange={(e) => onChange(e.target.value)}
+      style={{ ...inp, width: w, padding: "6px 8px", fontSize: 11.5 }}>
+      <option value="">{placeholder}</option>
+      {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+    </select>
+  </div>
+);
+
+const FInp = ({ label, value, onChange, w = 130, ph }) => (
+  <div>
+    <FLbl>{label}</FLbl>
+    <input type="text" value={value} placeholder={ph} onChange={(e) => onChange(e.target.value)}
+      style={{ ...inp, width: w, padding: "6px 8px", fontSize: 11.5 }} />
+  </div>
+);
+
+// Export ke teen button. Busy aur error yahin dikhte hain — PDF server par
+// banti hai aur usme 2-3 second lagte hain, isliye chup rehna galat hota.
+function ExportBar({ rows, columns, pdfPath, params, baseName, caption, note }) {
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState(null);
+  const empty = !rows || rows.length === 0;
+  const fname = [baseName, slug(params.from), params.to ? "to-" + slug(params.to) : "",
+    slug(params.sector), slug(params.flow)].filter(Boolean).join("-");
+
+  const run = async (kind) => {
+    setBusy(kind); setMsg(null);
+    try {
+      if (kind === "xls") {
+        exportExcel(rows, columns, fname, baseName);
+        setMsg({ ok: true, t: "Excel ban gayi" });
+      } else {
+        const blob = await fetchReportPdf(pdfPath, params);
+        if (kind === "pdf") { saveBlob(blob, fname + ".pdf"); setMsg({ ok: true, t: "PDF ban gayi" }); }
+        else {
+          const how = await sharePdf(blob, fname + ".pdf", caption);
+          if (how === "downloaded") setMsg({ ok: true, t: "PDF download ho gayi — WhatsApp me attach kar dijiye" });
+          else if (how === "shared") setMsg({ ok: true, t: "Bhej di" });
+        }
+      }
+    } catch (e) { setMsg({ ok: false, t: e.message || "Nahi ho paya" }); }
+    setBusy("");
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+      {note && <span style={{ fontSize: 10.5, color: T.t4 }}>{note}</span>}
+      {msg && <span style={{ fontSize: 10.5, fontWeight: 600, color: msg.ok ? T.grn : T.red }}>{msg.t}</span>}
+      <Btn size="sm" ghost icon={IcSheet} disabled={empty || !!busy} onClick={() => run("xls")}>Excel</Btn>
+      {pdfPath && (
+        <Btn size="sm" ghost icon={IcFile} disabled={empty || !!busy} onClick={() => run("pdf")}>
+          {busy === "pdf" ? "Ban rahi..." : "PDF"}
+        </Btn>
+      )}
+      {pdfPath && (
+        <Btn size="sm" c={T.grn} icon={IcWa} disabled={empty || !!busy} onClick={() => run("wa")}>
+          {busy === "wa" ? "..." : "WhatsApp"}
+        </Btn>
+      )}
+    </div>
+  );
+}
+
+// ── Report 1: DIESEL REGISTER ─────────────────────────────────────
+const FLOW_OPTS = [
+  { v: "pump_to_machine", l: "Pump → Machine" },
+  { v: "pump_to_barrel", l: "Pump → Barrel" },
+  { v: "barrel_to_machine", l: "Barrel → Machine" },
+];
+const KIND_STYLE = {
+  pump_to_machine: { l: "Pump → Machine", c: T.blu, bg: T.bluL },
+  pump_to_barrel: { l: "Pump → Barrel", c: T.slt, bg: T.sltL },
+  barrel_to_machine: { l: "Barrel → Machine", c: T.ind, bg: T.indL },
+};
+const EMPTY_REG_F = { project_id: "", equipment_id: "", vendor_id: "", store_id: "", sector: "", flow: "", flagged: "" };
+
+function DieselRegister({ projects, equipment, vendors, stores, from, to, onRange }) {
+  const [f, setF] = useState(EMPTY_REG_F);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const params = useMemo(() => ({ from, to, ...f }), [from, to, f]);
+
+  useEffect(() => {
+    let dead = false;
+    setLoading(true);
+    api.get(`/fuel/reports/diesel-register?${qs(params)}`)
+      .then((r) => { if (!dead) setData(r?.success ? r.data : null); })
+      .catch(() => { if (!dead) setData(null); })
+      .finally(() => { if (!dead) setLoading(false); });
+    return () => { dead = true; };
+  }, [params]);
+
+  const rows = data?.rows || [];
+  const tot = data?.totals || {};
+  const chips = data?.applied || [];
+
+  const COLS = [
+    { key: "date", label: "Date", w: 11 },
+    { key: "kind", label: "Kahan se", w: 16, excel: (r) => KIND_STYLE[r.kind]?.l || r.kind },
+    { key: "target", label: "Machine / Barrel", w: 20, excel: (r) => r.machine || r.barrel || "" },
+    { key: "from", label: "Pump / Barrel", w: 18 },
+    { key: "project", label: "Project", w: 18 },
+    { key: "sector", label: "Sector", w: 10 },
+    { key: "purpose", label: "Kis kaam ke liye", w: 24 },
+    { key: "litres", label: "Litre", w: 9 },
+    { key: "rate", label: "Rate", w: 9 },
+    { key: "amount", label: "Amount", w: 12, excel: (r) => Math.round(r.amount) },
+    { key: "slip_no", label: "Parchi", w: 12 },
+    { key: "flag", label: "Farq", w: 14, excel: (r) => (r.flag === "mismatch" ? "PARCHI SE FARQ" : "") },
+    { key: "entered_by", label: "Kisne bhara", w: 16 },
+  ];
+  const cols = "78px 110px 1.3fr 1.1fr 1fr 66px 1.2fr 62px 58px 82px 92px";
+
+  return (
+    <div style={{ display: "grid", gap: 11 }}>
+      <FilterBar chips={chips} onClear={() => setF(EMPTY_REG_F)}>
+        <div><FLbl>Se — Tak</FLbl><DateRange from={from} to={to} onRange={onRange} /></div>
+        <FSel label="Project" value={f.project_id} onChange={(v) => set("project_id", v)}
+          options={projects.map((x) => ({ v: x.id, l: x.name }))} />
+        <FSel label="Machine" value={f.equipment_id} onChange={(v) => set("equipment_id", v)}
+          options={equipment.map((x) => ({ v: x.id, l: x.name }))} />
+        <FSel label="Pump" value={f.vendor_id} onChange={(v) => set("vendor_id", v)}
+          options={vendors.map((x) => ({ v: x.id, l: x.name }))} w={140} />
+        <FSel label="Barrel" value={f.store_id} onChange={(v) => set("store_id", v)}
+          options={stores.map((x) => ({ v: x.id, l: x.name }))} w={140} />
+        <FSel label="Kahan se" value={f.flow} onChange={(v) => set("flow", v)} options={FLOW_OPTS} w={145} />
+        <FInp label="Sector" value={f.sector} onChange={(v) => set("sector", v)} w={95} ph="15" />
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.t2, cursor: "pointer", paddingBottom: 6 }}>
+          <input type="checkbox" checked={f.flagged === "1"}
+            onChange={(e) => set("flagged", e.target.checked ? "1" : "")} />
+          Sirf parchi-farq wali
+        </label>
+      </FilterBar>
+
+      <Panel
+        title={loading ? "Diesel Register — laa rahe hain..." : `Diesel Register — ${rows.length} entry`}
+        action={<ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/diesel-register.pdf"
+          params={params} baseName="diesel-register"
+          caption={`Diesel Register${from ? ` ${from} se ${to}` : ""} — Sanchalan`} />}>
+
+        {!loading && rows.length === 0 && <Empty>Is filter par koi entry nahi mili.</Empty>}
+        {rows.length > 0 && (
           <>
-            <Row head cols="2fr 100px 110px 120px">
-              <span>Project</span><span>Fills</span><span>Litres</span><span style={{ textAlign: "right" }}>Amount</span>
-            </Row>
-            {byProject.map((p) => (
-              <Row key={p.project_id || "none"} cols="2fr 100px 110px 120px">
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{p.project_name}</span>
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{p.entries}</span>
-                <span style={{ fontSize: 12, color: T.t2 }}>{fmtL(p.litres)}</span>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(p.amount)}</span>
-              </Row>
-            ))}
+            <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>
+                Khareeda <b style={{ color: T.t1 }}>{fmtL(tot.bought_litres)}</b> · {fmtC(tot.bought_amount)}
+              </span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>
+                Machine me gaya <b style={{ color: T.t1 }}>{fmtL(tot.into_machine_litres)}</b>
+              </span>
+              {tot.flagged > 0 && (
+                <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>{tot.flagged} entry parchi se alag</span>
+              )}
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 1160 }}>
+                <Row head cols={cols}>
+                  <span>Date</span><span>Kahan se</span><span>Machine / Barrel</span><span>Pump / Barrel</span>
+                  <span>Project</span><span>Sector</span><span>Kis kaam ke liye</span>
+                  <span style={{ textAlign: "right" }}>Litre</span><span style={{ textAlign: "right" }}>Rate</span>
+                  <span style={{ textAlign: "right" }}>Amount</span><span>Kisne bhara</span>
+                </Row>
+                {rows.map((r) => {
+                  const k = KIND_STYLE[r.kind] || {};
+                  return (
+                    <Row key={r.kind + r.source_id} cols={cols}>
+                      <span style={{ fontSize: 11.5, color: T.t2 }}>{r.date}</span>
+                      <span><Pill label={k.l} c={k.c} bg={k.bg} /></span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>
+                        {r.machine || r.barrel}
+                        {r.flag === "mismatch" && (
+                          <span title={r.flag_note || ""} style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, color: T.red, background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 4, padding: "1px 5px" }}>PARCHI SE FARQ</span>
+                        )}
+                      </span>
+                      <span style={{ fontSize: 11.5, color: T.t3 }}>{r.from}</span>
+                      <span style={{ fontSize: 11.5, color: T.t3 }}>{r.project || "—"}</span>
+                      <span style={{ fontSize: 11.5, color: T.t3 }}>{r.sector || "—"}</span>
+                      <span style={{ fontSize: 11.5, color: T.t2 }}>
+                        {r.purpose || <span style={{ color: T.t4 }}>likha nahi</span>}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtN(r.litres)}</span>
+                      <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{fmtN(r.rate)}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: T.t1, textAlign: "right" }}>{fmtC(r.amount)}</span>
+                      <span style={{ fontSize: 11, color: T.t4 }}>{r.entered_by || "—"}</span>
+                    </Row>
+                  );
+                })}
+              </div>
+            </div>
+            {tot.truncated && (
+              <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.amb, background: T.ambL }}>
+                Bahut zyada entry hain — sirf pehli 5000 dikh rahi hain. Date range chhota kijiye.
+              </div>
+            )}
             <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-              Sirf kharid ginti hai — barrel se nikaala diesel pehle hi ginaa ja chuka hota hai.
+              "Khareeda" aur "machine me gaya" alag isliye hain ki barrel me bhara diesel baad me
+              nikalta hai — dono jodne par wahi diesel do baar gin jaata.
             </div>
           </>
         )}
@@ -1015,6 +1257,208 @@ function ReportsTab({ byEquipment, byProject, from, to, onRange }) {
     </div>
   );
 }
+
+// ── Report 2: FUEL EFFICIENCY ─────────────────────────────────────
+function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
+  const [projectId, setProjectId] = useState("");
+  const [rows, setRows] = useState(byEquipment);
+  const params = useMemo(() => ({ from, to, project_id: projectId }), [from, to, projectId]);
+
+  useEffect(() => {
+    // Bina project ke wahi data jo module pehle hi laa chuka hai — dobara
+    // maangna sirf tab jab project chuna gaya ho.
+    if (!projectId) { setRows(byEquipment); return; }
+    let dead = false;
+    api.get(`/fuel/reports/by-equipment?${qs(params)}`)
+      .then((r) => { if (!dead) setRows(r?.success ? r.data || [] : []); })
+      .catch(() => { if (!dead) setRows([]); });
+    return () => { dead = true; };
+  }, [params, projectId, byEquipment]);
+
+  const withNorm = rows.filter((e) => e.variance_amount != null);
+  const totalVar = withNorm.reduce((a, e) => a + e.variance_amount, 0);
+  const noDiesel = rows.filter((e) => e.hours > 0 && e.litres === 0);
+
+  const COLS = [
+    { key: "equipment_name", label: "Machine", w: 22 },
+    { key: "ownership", label: "Ownership", w: 11 },
+    { key: "hours", label: "Ghante", w: 9 },
+    { key: "active_days", label: "Din", w: 7 },
+    { key: "norm_litres", label: "Norm L", w: 10, excel: (r) => (r.norm_litres == null ? "" : r.norm_litres) },
+    { key: "litres", label: "Asli L", w: 10 },
+    { key: "actual_per_hour", label: "Asli L/hr", w: 10, excel: (r) => r.actual_per_hour ?? "" },
+    { key: "fuel_per_hour", label: "Norm L/hr", w: 10, excel: (r) => r.fuel_per_hour ?? "" },
+    { key: "variance_litres", label: "Farq L", w: 9, excel: (r) => r.variance_litres ?? "" },
+    { key: "variance_pct", label: "Farq %", w: 9, excel: (r) => r.variance_pct ?? "" },
+    { key: "variance_amount", label: "Farq Rs", w: 11, excel: (r) => (r.variance_amount == null ? "" : Math.round(r.variance_amount)) },
+    { key: "amount", label: "Diesel Rs", w: 12, excel: (r) => Math.round(r.amount) },
+    { key: "note", label: "Note", w: 30, excel: (r) => (r.norm_missing ? "Norm set nahi — farq nikal hi nahi sakta"
+      : (r.hours > 0 && r.litres === 0 ? "Chali par diesel darj nahi" : "")) },
+  ];
+  const cols = "1.5fr 74px 68px 50px 72px 72px 98px 72px 74px 100px";
+
+  return (
+    <div style={{ display: "grid", gap: 11 }}>
+      <FilterBar
+        chips={projectId ? [{ k: "Project", v: projects.find((p) => String(p.id) === String(projectId))?.name || projectId }] : []}
+        onClear={() => setProjectId("")}>
+        <div><FLbl>Se — Tak</FLbl><DateRange from={from} to={to} onRange={onRange} /></div>
+        <FSel label="Project" value={projectId} onChange={setProjectId}
+          options={projects.map((x) => ({ v: x.id, l: x.name }))} />
+      </FilterBar>
+
+      {(withNorm.length > 0 || noDiesel.length > 0) && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {withNorm.length > 0 && (
+            <div style={{ flex: 1, minWidth: 250, padding: "11px 14px", background: totalVar > 0 ? T.redL : T.grnL, border: `1px solid ${totalVar > 0 ? T.redM : T.grnM}`, borderRadius: 8 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px" }}>Norm se farq — rupaye me</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: totalVar > 0 ? T.red : T.grn, marginTop: 3 }}>
+                {totalVar > 0 ? "+" : "−"}{fmtC(Math.abs(totalVar))}
+              </div>
+              <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>{withNorm.length} machine ka hisaab</div>
+            </div>
+          )}
+          {noDiesel.length > 0 && (
+            <div style={{ flex: 1, minWidth: 250, padding: "11px 14px", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 8 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px" }}>Chali, par diesel darj nahi</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: T.amb, marginTop: 3 }}>{noDiesel.length} machine</div>
+              <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>
+                {noDiesel.slice(0, 3).map((m) => m.equipment_name).join(", ")}{noDiesel.length > 3 ? "…" : ""}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <Panel title={`Fuel Efficiency — ${rows.length} machine`}
+        action={<ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/efficiency.pdf"
+          params={params} baseName="fuel-efficiency"
+          caption={`Fuel Efficiency${from ? ` ${from} se ${to}` : ""} — Sanchalan`} />}>
+        {rows.length === 0 && <Empty>Is duration me kisi machine ka diesel ya ghante record nahi hue.</Empty>}
+        {rows.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 1010 }}>
+              <Row head cols={cols}>
+                <span>Machine</span><span>Own</span>
+                <span style={{ textAlign: "right" }}>Ghante</span><span style={{ textAlign: "right" }}>Din</span>
+                <span style={{ textAlign: "right" }}>Norm L</span><span style={{ textAlign: "right" }}>Asli L</span>
+                <span style={{ textAlign: "right" }}>L/hr asli / norm</span>
+                <span style={{ textAlign: "right" }}>Farq L</span><span style={{ textAlign: "right" }}>Farq %</span>
+                <span style={{ textAlign: "right" }}>Farq ₹</span>
+              </Row>
+              {rows.map((e) => {
+                const over = e.variance_litres > 0;
+                return (
+                  <Row key={e.equipment_id} cols={cols}>
+                    <div>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{e.equipment_name || `#${e.equipment_id}`}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4 }}>
+                        {fmtC(e.amount)}
+                        {e.norm_missing && <span style={{ color: T.amb }}> · norm set nahi</span>}
+                        {e.hours > 0 && e.litres === 0 && <span style={{ color: T.amb }}> · chali par diesel darj nahi</span>}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11, color: T.t3 }}>{e.ownership || "—"}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{e.hours ? fmtN(e.hours) : "—"}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{e.active_days || "—"}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{e.norm_litres != null ? fmtN(e.norm_litres) : "—"}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtN(e.litres)}</span>
+                    <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>
+                      {e.actual_per_hour != null ? fmtN(e.actual_per_hour) : "—"}
+                      {e.fuel_per_hour ? <span style={{ color: T.t4 }}> / {fmtN(e.fuel_per_hour)}</span> : null}
+                    </span>
+                    <span style={{ fontSize: 11.5, textAlign: "right", fontWeight: 600, color: e.variance_litres == null ? T.t4 : over ? T.red : T.grn }}>
+                      {e.variance_litres == null ? "—" : `${over ? "+" : ""}${fmtN(e.variance_litres)}`}
+                    </span>
+                    <span style={{ fontSize: 11.5, textAlign: "right", fontWeight: 600, color: e.variance_pct == null ? T.t4 : over ? T.red : T.grn }}>
+                      {e.variance_pct == null ? "—" : `${over ? "+" : ""}${fmtN(e.variance_pct)}%`}
+                    </span>
+                    <span style={{ textAlign: "right" }}>
+                      {e.variance_amount == null
+                        ? <span style={{ fontSize: 10.5, color: T.t4 }}>—</span>
+                        : <Pill label={`${over ? "+" : "−"}${fmtC(Math.abs(e.variance_amount))}`}
+                            c={over ? T.red : T.grn} bg={over ? T.redL : T.grnL} />}
+                    </span>
+                  </Row>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
+          Norm = machine ka "Fuel norm (L/hr)" × us duration ke ghante. Farq ₹ usi machine ke apne
+          diesel ke average rate par. Jiska norm set nahi uska farq khaali rehta hai — wahan 0 likhna
+          "sab theek hai" ka jhoota matlab de deta.
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+// ── Report 3: PROJECT-WISE ────────────────────────────────────────
+function ProjectSpend({ byProject }) {
+  const COLS = [
+    { key: "project_name", label: "Project", w: 26 },
+    { key: "entries", label: "Fills", w: 9 },
+    { key: "litres", label: "Litres", w: 11 },
+    { key: "amount", label: "Amount", w: 13, excel: (r) => Math.round(r.amount) },
+  ];
+  return (
+    <Panel title="Project-wise diesel kharcha"
+      action={<ExportBar rows={byProject} columns={COLS} params={{}} baseName="project-diesel"
+        note="PDF ke liye Diesel Register" />}>
+      {byProject.length === 0 && <Empty>Koi data nahi.</Empty>}
+      {byProject.length > 0 && (
+        <>
+          <Row head cols="2fr 100px 110px 120px">
+            <span>Project</span><span>Fills</span><span>Litres</span><span style={{ textAlign: "right" }}>Amount</span>
+          </Row>
+          {byProject.map((p) => (
+            <Row key={p.project_id || "none"} cols="2fr 100px 110px 120px">
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{p.project_name}</span>
+              <span style={{ fontSize: 11.5, color: T.t3 }}>{p.entries}</span>
+              <span style={{ fontSize: 12, color: T.t2 }}>{fmtL(p.litres)}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(p.amount)}</span>
+            </Row>
+          ))}
+          <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
+            Sirf kharid ginti hai — barrel se nikaala diesel pehle hi ginaa ja chuka hota hai.
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function ReportsTab({ byEquipment, byProject, from, to, onRange, projects, equipment, vendors, stores }) {
+  const [sub, setSub] = useState("register");
+  const SUBS = [
+    { id: "register", l: "Diesel Register" },
+    { id: "eff", l: "Fuel Efficiency" },
+    { id: "project", l: "Project-wise" },
+  ];
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {SUBS.map((s) => (
+          <button key={s.id} type="button" onClick={() => setSub(s.id)}
+            style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${sub === s.id ? T.ind : T.b1}`, background: sub === s.id ? T.ind : T.surface, color: sub === s.id ? "white" : T.t2, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+            {s.l}
+          </button>
+        ))}
+      </div>
+      {sub === "register" && (
+        <DieselRegister projects={projects} equipment={equipment} vendors={vendors} stores={stores}
+          from={from} to={to} onRange={onRange} />
+      )}
+      {sub === "eff" && (
+        <EfficiencyReport byEquipment={byEquipment} from={from} to={to} onRange={onRange} projects={projects} />
+      )}
+      {sub === "project" && <ProjectSpend byProject={byProject} />}
+    </div>
+  );
+}
+
 
 // Cross-check compares a manual entry against a sensor reading or a physical
 // dip. The sensor side does not exist yet — telematics is E3 — so this tab
@@ -1316,7 +1760,8 @@ function FuelModule() {
         )}
         {tab === "reports" && (
           <ReportsTab byEquipment={byEquipment} byProject={byProject} from={from} to={to}
-            onRange={(f, t2) => { setFrom(f); setTo(t2); }} />
+            onRange={(f, t2) => { setFrom(f); setTo(t2); }}
+            projects={projects} equipment={equipment} vendors={vendors} stores={stores} />
         )}
       </div>
 
