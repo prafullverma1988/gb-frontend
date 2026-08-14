@@ -2401,9 +2401,189 @@ function LogSheetReport({ fleet, from, to, onRange }) {
   );
 }
 
+// ── Report 3: FLEET SUMMARY ───────────────────────────────────────
+// "Kaunsi machine par dhyan dena hai" ka jawab ek row me. Ye jawab aaj Fleet
+// tab (kaagaz + meter), Insights (Rs/hr) aur Reminders me bata hua hai —
+// yahan sab ek saath aata hai, aur wahi PDF/Excel me jaata hai.
+const EMPTY_FS = { ownership: "", status: "", attention: "" };
+const STATUS_OPTS = [
+  { v: "Available", l: "Available" },
+  { v: "In Use", l: "In Use" },
+  { v: "Under Repair", l: "Under Repair" },
+  { v: "Idle", l: "Idle" },
+];
+
+function FleetSummary({ from, to, onRange }) {
+  const [f, setF] = useState(EMPTY_FS);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const params = useMemo(() => ({ from, to, ...f }), [from, to, f]);
+
+  useEffect(() => {
+    let dead = false;
+    setLoading(true);
+    api.get(`/machinery/reports/fleet-summary?${qs(params)}`)
+      .then((r) => { if (!dead) setData(r?.success ? r.data : null); })
+      .catch(() => { if (!dead) setData(null); })
+      .finally(() => { if (!dead) setLoading(false); });
+    return () => { dead = true; };
+  }, [params]);
+
+  const rows = data?.rows || [];
+  const tot = data?.totals || {};
+
+  const COLS = [
+    { key: "machine", label: "Machine", w: 22 },
+    { key: "registration_no", label: "Gadi no.", w: 14 },
+    { key: "ownership", label: "Ownership", w: 11 },
+    { key: "vendor", label: "Vendor", w: 20 },
+    { key: "status", label: "Status", w: 13 },
+    { key: "meter_value", label: "Meter", w: 11, excel: (r) => r.meter_value ?? "" },
+    { key: "meter_unit", label: "Unit", w: 8 },
+    { key: "run", label: "Chali", w: 10, excel: (r) => r.run ?? "" },
+    { key: "litres", label: "Diesel L", w: 10 },
+    { key: "fuel_amount", label: "Diesel Rs", w: 12, excel: (r) => Math.round(r.fuel_amount) },
+    { key: "service_amount", label: "Service Rs", w: 12, excel: (r) => Math.round(r.service_amount) },
+    { key: "hire_paid", label: "Kiraya Rs", w: 12, excel: (r) => Math.round(r.hire_paid) },
+    { key: "total_cost", label: "Kul Rs", w: 12, excel: (r) => Math.round(r.total_cost) },
+    { key: "cost_per_unit", label: "Rs/unit", w: 11, excel: (r) => r.cost_per_unit ?? "" },
+    { key: "recovery", label: "Recovery Rs", w: 12, excel: (r) => (r.recovery == null ? "" : Math.round(r.recovery)) },
+    { key: "breakdowns", label: "Breakdown", w: 10 },
+    { key: "doc_text", label: "Kaagaz", w: 26 },
+    { key: "why", label: "Note", w: 30,
+      excel: (r) => (r.cost_per_unit == null ? (r.run_reason || "Rs/unit nikal nahi saka") : "") },
+  ];
+  const cols = "1.5fr 84px 1fr 88px 78px 80px 84px 84px 86px 1.1fr";
+
+  return (
+    <div style={{ display: "grid", gap: 11 }}>
+      <RFilterBar chips={data?.applied || []} onClear={() => setF(EMPTY_FS)}>
+        <div>
+          <RLbl>Se — Tak</RLbl>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input type="date" value={from} onChange={(e) => onRange(e.target.value, to)}
+              style={{ ...inp, width: 136, padding: "6px 9px", fontSize: 11.5 }} />
+            <span style={{ fontSize: 11, color: T.t4 }}>se</span>
+            <input type="date" value={to} onChange={(e) => onRange(from, e.target.value)}
+              style={{ ...inp, width: 136, padding: "6px 9px", fontSize: 11.5 }} />
+          </div>
+        </div>
+        <RSel label="Ownership" value={f.ownership} onChange={(v) => set("ownership", v)}
+          options={[{ v: "owned", l: "Apni" }, { v: "rented", l: "Kiraye ki" }]} w={120} />
+        <RSel label="Status" value={f.status} onChange={(v) => set("status", v)} options={STATUS_OPTS} w={140} />
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.t2, cursor: "pointer", paddingBottom: 6 }}>
+          <input type="checkbox" checked={f.attention === "1"}
+            onChange={(e) => set("attention", e.target.checked ? "1" : "")} />
+          Sirf dhyan dene layak
+        </label>
+      </RFilterBar>
+
+      <Panel title={loading ? "Fleet Summary — laa rahe hain..." : `Fleet Summary — ${rows.length} machine`}
+        action={<ExportBar rows={rows} columns={COLS} pdfPath="/machinery/reports/fleet-summary.pdf"
+          params={params} baseName="fleet-summary"
+          caption={`Fleet Summary${from ? ` ${from} se ${to}` : ""} — Sanchalan`} />}>
+        {!loading && rows.length === 0 && <Empty>Is filter par koi machine nahi mili.</Empty>}
+        {rows.length > 0 && (
+          <>
+            <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>
+                {tot.machines} machine <span style={{ color: T.t4 }}>(apni {tot.owned} · kiraye {tot.rented})</span>
+              </span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>Kul kharcha <b style={{ color: T.t1 }}>{fmtC(tot.total_cost)}</b></span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>Diesel {fmtN(tot.litres)} L</span>
+              {tot.docs_due > 0 && (
+                <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>{tot.docs_due} ka kaagaz 30 din me</span>
+              )}
+              {/* Adhoorapan chhupana nahi — report kis had tak bharosemand hai
+                  ye padhne wale ko pata hona chahiye. */}
+              {tot.no_rate > 0 && (
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{tot.no_rate} ka Rs/unit nikal nahi saka</span>
+              )}
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 1120 }}>
+                <Row head cols={cols}>
+                  <span>Machine</span><span>Own</span><span>Status / Vendor</span>
+                  <span style={{ textAlign: "right" }}>Meter</span><span style={{ textAlign: "right" }}>Chali</span>
+                  <span style={{ textAlign: "right" }}>Diesel</span><span style={{ textAlign: "right" }}>Service</span>
+                  <span style={{ textAlign: "right" }}>Kul</span><span style={{ textAlign: "right" }}>Rs/unit</span>
+                  <span>Kaagaz</span>
+                </Row>
+                {rows.map((r) => {
+                  const docBad = r.doc_days != null && r.doc_days < 0;
+                  const docSoon = r.doc_days != null && r.doc_days >= 0 && r.doc_days <= 30;
+                  return (
+                    <Row key={r.equipment_id} cols={cols}>
+                      <div>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{r.machine}</div>
+                        <div style={{ fontSize: 10.5, color: T.t4 }}>
+                          {r.registration_no || r.machine_type || "—"}
+                          {r.breakdowns > 0 && <span style={{ color: T.red }}> · {r.breakdowns} breakdown</span>}
+                        </div>
+                      </div>
+                      <span><Pill label={r.owned ? "Apni" : "Kiraye"} c={r.owned ? T.ind : T.t3} bg={r.owned ? T.indL : T.sltL} /></span>
+                      <span style={{ fontSize: 11, color: T.t3 }}>
+                        {r.status === "Under Repair"
+                          ? <Pill label="Under Repair" c={T.red} bg={T.redL} />
+                          : (r.status || "—")}
+                        {r.vendor && <div style={{ fontSize: 10, color: T.t4, marginTop: 2 }}>{r.vendor}</div>}
+                      </span>
+                      <span style={{ fontSize: 11.5, textAlign: "right", color: r.meter_age_days > 30 ? T.amb : T.t3 }}>
+                        {r.meter_value != null ? fmtN(r.meter_value) : "—"}
+                        {r.meter_age_days != null && r.meter_age_days > 30 && (
+                          <div style={{ fontSize: 9.5 }}>{r.meter_age_days} din purani</div>
+                        )}
+                      </span>
+                      <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>
+                        {r.run != null ? fmtN(r.run) + (r.run_unit ? " " + r.run_unit : "") : "—"}
+                      </span>
+                      <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>
+                        {r.litres ? fmtN(r.litres) + " L" : "—"}
+                        {r.fuel_amount ? <div style={{ fontSize: 10, color: T.t4 }}>{fmtC(r.fuel_amount)}</div> : null}
+                      </span>
+                      <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>
+                        {r.service_amount ? fmtC(r.service_amount) : "—"}
+                      </span>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(r.total_cost)}</span>
+                      <span style={{ textAlign: "right" }}>
+                        {r.cost_per_unit == null
+                          ? <span title={r.run_reason || ""} style={{ fontSize: 10, color: T.t4 }}>nikla nahi</span>
+                          : <>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{fmtN(r.cost_per_unit)}</div>
+                              {r.recovery_per_unit != null && (
+                                <div style={{ fontSize: 9.5, color: r.covers_cost ? T.grn : T.red }}>
+                                  vasooli {fmtN(r.recovery_per_unit)}
+                                </div>
+                              )}
+                            </>}
+                      </span>
+                      <span style={{ fontSize: 11 }}>
+                        {docBad ? <Pill label={r.doc_text} c={T.red} bg={T.redL} />
+                          : docSoon ? <Pill label={r.doc_text} c={T.amb} bg={T.ambL} />
+                          : <span style={{ color: T.t3 }}>{r.doc_text}</span>}
+                      </span>
+                    </Row>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
+              Kharcha = apni machine par diesel + service + kaagaz; kiraye wali par jo kiraya sach me
+              diya (+ diesel agar hamara ho). Charge-out isme nahi — wo "vasooli" me alag dikhta hai.
+              Jiska Rs/unit nikal nahi saka wahan "nikla nahi" likha hai, 0 nahi.
+            </div>
+          </>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
 function ReportsTab({ fleet, projects, from, to, onRange }) {
-  const [sub, setSub] = useState("usage");
+  const [sub, setSub] = useState("summary");
   const SUBS = [
+    { id: "summary", l: "Fleet Summary" },
     { id: "usage", l: "Usage Register" },
     { id: "log", l: "Log Sheet" },
   ];
@@ -2417,6 +2597,7 @@ function ReportsTab({ fleet, projects, from, to, onRange }) {
           </button>
         ))}
       </div>
+      {sub === "summary" && <FleetSummary from={from} to={to} onRange={onRange} />}
       {sub === "usage" && <UsageRegister fleet={fleet} projects={projects} from={from} to={to} onRange={onRange} />}
       {sub === "log" && <LogSheetReport fleet={fleet} from={from} to={to} onRange={onRange} />}
     </div>

@@ -1430,11 +1430,249 @@ function ProjectSpend({ byProject }) {
   );
 }
 
+// ── Report 4: BARREL REGISTER ─────────────────────────────────────
+// Do shakl: har drum ki ek row, aur kisi ek drum ka poora aana-jaana.
+// Ledger me dipstick apni alag row banti hai aur balance NAHI hilati —
+// dipstick drum ko dekhta hai, diesel hilata nahi.
+const EMPTY_BF = { project_id: "", location: "", low: "" };
+
+function BarrelRegister({ projects }) {
+  const [f, setF] = useState(EMPTY_BF);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState("");
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const params = useMemo(() => ({ ...f }), [f]);
+
+  useEffect(() => {
+    let dead = false;
+    setLoading(true);
+    api.get(`/fuel/reports/barrel-register?${qs(params)}`)
+      .then((r) => { if (!dead) setData(r?.success ? r.data : null); })
+      .catch(() => { if (!dead) setData(null); })
+      .finally(() => { if (!dead) setLoading(false); });
+    return () => { dead = true; };
+  }, [params]);
+
+  const rows = data?.rows || [];
+  const tot = data?.totals || {};
+
+  const COLS = [
+    { key: "barrel", label: "Barrel", w: 22 },
+    { key: "where", label: "Kahan", w: 20 },
+    { key: "location", label: "Jagah", w: 18 },
+    { key: "capacity_l", label: "Capacity L", w: 11 },
+    { key: "litres_in", label: "Aaya L", w: 10 },
+    { key: "litres_out", label: "Gaya L", w: 10 },
+    { key: "litres", label: "Bacha L", w: 10 },
+    { key: "fill_pct", label: "Bhara %", w: 9, excel: (r) => r.fill_pct ?? "" },
+    { key: "avg_rate", label: "Avg rate", w: 10, excel: (r) => r.avg_rate ?? "" },
+    { key: "value", label: "Value Rs", w: 12, excel: (r) => Math.round(r.value) },
+    { key: "fills", label: "Fills", w: 8 },
+    { key: "issues", label: "Issues", w: 8 },
+    { key: "last_move", label: "Aakhri harkat", w: 14 },
+    { key: "last_check", label: "Aakhri dipstick", w: 14, excel: (r) => r.last_check || "kabhi nahi" },
+    { key: "last_variance_l", label: "Dipstick farq L", w: 14, excel: (r) => r.last_variance_l ?? "" },
+  ];
+  const cols = "1.4fr 1.2fr 84px 80px 80px 86px 74px 92px 1fr 118px";
+
+  return (
+    <div style={{ display: "grid", gap: 11 }}>
+      <FilterBar chips={data?.applied || []} onClear={() => setF(EMPTY_BF)}>
+        <FSel label="Project" value={f.project_id} onChange={(v) => set("project_id", v)}
+          options={projects.map((x) => ({ v: x.id, l: x.name }))} />
+        <FSel label="Kahan" value={f.location} onChange={(v) => set("location", v)}
+          options={[{ v: "warehouse", l: "Sirf warehouse" }, { v: "project", l: "Sirf project ke" }]} w={150} />
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.t2, cursor: "pointer", paddingBottom: 6 }}>
+          <input type="checkbox" checked={f.low === "1"}
+            onChange={(e) => set("low", e.target.checked ? "1" : "")} />
+          Sirf kam stock wale
+        </label>
+      </FilterBar>
+
+      <Panel title={loading ? "Barrel Register — laa rahe hain..." : `Barrel Register — ${rows.length} barrel`}
+        action={<ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/barrel-register.pdf"
+          params={params} baseName="barrel-register" caption="Barrel Register — Sanchalan" />}>
+        {!loading && rows.length === 0 && <Empty>Is filter par koi barrel nahi mila.</Empty>}
+        {rows.length > 0 && (
+          <>
+            <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>Abhi bacha <b style={{ color: T.t1 }}>{fmtL(tot.litres)}</b> · {fmtC(tot.value)}</span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>Aaya {fmtL(tot.litres_in)} · Gaya {fmtL(tot.litres_out)}</span>
+              {tot.below_reorder > 0 && (
+                <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>{tot.below_reorder} barrel me stock kam</span>
+              )}
+              {tot.never_checked > 0 && (
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{tot.never_checked} par kabhi dipstick nahi hua</span>
+              )}
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 1080 }}>
+                <Row head cols={cols}>
+                  <span>Barrel</span><span>Kahan</span>
+                  <span style={{ textAlign: "right" }}>Aaya L</span><span style={{ textAlign: "right" }}>Gaya L</span>
+                  <span style={{ textAlign: "right" }}>Bacha L</span><span style={{ textAlign: "right" }}>Bhara</span>
+                  <span style={{ textAlign: "right" }}>Value</span><span>Aakhri harkat</span><span>Aakhri dipstick</span>
+                </Row>
+                {rows.map((r) => (
+                  <Row key={r.store_id} cols={cols} onClick={() => setOpenId(String(r.store_id))}>
+                    <div>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{r.barrel}</div>
+                      {r.capacity_l ? <div style={{ fontSize: 10.5, color: T.t4 }}>{fmtL(r.capacity_l)} ka</div> : null}
+                    </div>
+                    <span>
+                      <Pill label={r.is_warehouse ? "Warehouse" : r.where}
+                        c={r.is_warehouse ? T.slt : T.ind} bg={r.is_warehouse ? T.sltL : T.indL} />
+                      {r.location && <div style={{ fontSize: 10, color: T.t4, marginTop: 2 }}>{r.location}</div>}
+                    </span>
+                    <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{fmtN(r.litres_in)}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{fmtN(r.litres_out)}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, textAlign: "right", color: r.below_reorder ? T.amb : T.t1 }}>
+                      {fmtN(r.litres)}
+                    </span>
+                    <span style={{ fontSize: 11.5, textAlign: "right", color: r.below_reorder ? T.amb : T.t3 }}>
+                      {r.fill_pct != null ? r.fill_pct + "%" : "—"}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: T.t1, textAlign: "right" }}>{fmtC(r.value)}</span>
+                    <span style={{ fontSize: 11, color: T.t3 }}>
+                      {r.last_move || "kabhi nahi"}
+                      {r.idle_days != null && r.idle_days > 30 && (
+                        <span style={{ color: T.amb }}> · {r.idle_days} din se chhua nahi</span>
+                      )}
+                    </span>
+                    <span style={{ fontSize: 11 }}>
+                      {r.last_check
+                        ? <span style={{ color: T.t3 }}>
+                            {r.last_check} · farq{" "}
+                            <b style={{ color: Math.abs(r.last_variance_l) > 0 ? T.red : T.grn }}>
+                              {r.last_variance_l > 0 ? "+" : ""}{fmtN(r.last_variance_l)} L
+                            </b>
+                          </span>
+                        : <span style={{ color: T.t4 }}>kabhi nahi hua</span>}
+                    </span>
+                  </Row>
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
+              Kisi barrel par click karein — uska poora aana-jaana neeche khul jayega. Dipstick ka farq
+              stock me joda nahi jaata: dipstick drum ko dekhta hai, diesel hilata nahi.
+            </div>
+          </>
+        )}
+      </Panel>
+
+      {openId && <BarrelLedgerPanel storeId={openId} onClose={() => setOpenId("")} />}
+    </div>
+  );
+}
+
+function BarrelLedgerPanel({ storeId, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const params = useMemo(() => ({ store_id: storeId }), [storeId]);
+
+  useEffect(() => {
+    let dead = false;
+    setLoading(true);
+    api.get(`/fuel/reports/barrel-ledger?${qs(params)}`)
+      .then((r) => { if (!dead) setData(r?.success ? r.data : null); })
+      .catch(() => { if (!dead) setData(null); })
+      .finally(() => { if (!dead) setLoading(false); });
+    return () => { dead = true; };
+  }, [params]);
+
+  const rows = data?.rows || [];
+  const tot = data?.totals || {};
+  const COLS = [
+    { key: "date", label: "Date", w: 12 },
+    { key: "kind_label", label: "Kya hua", w: 10 },
+    { key: "party", label: "Kis se / kisme", w: 22 },
+    { key: "in_l", label: "Aaya L", w: 10, excel: (r) => r.in_l ?? "" },
+    { key: "out_l", label: "Gaya L", w: 10, excel: (r) => r.out_l ?? "" },
+    { key: "rate", label: "Rate", w: 9, excel: (r) => r.rate ?? "" },
+    { key: "amount", label: "Amount", w: 12, excel: (r) => (r.amount == null ? "" : Math.round(r.amount)) },
+    { key: "balance_l", label: "Bacha L", w: 10 },
+    { key: "variance_l", label: "Dipstick farq L", w: 14, excel: (r) => r.variance_l ?? "" },
+    { key: "slip_no", label: "Parchi", w: 12 },
+    { key: "by_name", label: "Kisne", w: 16 },
+  ];
+  const cols = "78px 78px 1.4fr 72px 72px 62px 92px 78px 1fr";
+  const KC = { purchase: { c: T.grn, bg: T.grnL }, issue: { c: T.blu, bg: T.bluL }, check: { c: T.slt, bg: T.sltL } };
+
+  return (
+    <Panel
+      title={data ? `${data.store.name} — poora aana-jaana` : "Barrel ledger"}
+      action={
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/barrel-ledger.pdf"
+            params={params} baseName={`barrel-${slug(data?.store?.name)}`}
+            caption={`${data?.store?.name || "Barrel"} ka register — Sanchalan`} />
+          <Btn size="sm" ghost onClick={onClose}>Band karein</Btn>
+        </div>}>
+      {loading && <Empty>Laa rahe hain...</Empty>}
+      {!loading && rows.length === 0 && <Empty>Is barrel me abhi koi entry nahi.</Empty>}
+      {rows.length > 0 && (
+        <>
+          <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11.5, color: T.t2 }}>Aaya <b style={{ color: T.t1 }}>{fmtL(tot.litres_in)}</b></span>
+            <span style={{ fontSize: 11.5, color: T.t2 }}>Gaya <b style={{ color: T.t1 }}>{fmtL(tot.litres_out)}</b></span>
+            <span style={{ fontSize: 11.5, color: T.t2 }}>Bacha <b style={{ color: T.t1 }}>{fmtL(tot.closing_l)}</b></span>
+            {tot.checks > 0 && <span style={{ fontSize: 11.5, color: T.t3 }}>{tot.checks} dipstick</span>}
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 940 }}>
+              <Row head cols={cols}>
+                <span>Date</span><span>Kya hua</span><span>Kis se / kisme</span>
+                <span style={{ textAlign: "right" }}>Aaya</span><span style={{ textAlign: "right" }}>Gaya</span>
+                <span style={{ textAlign: "right" }}>Rate</span><span style={{ textAlign: "right" }}>Amount</span>
+                <span style={{ textAlign: "right" }}>Bacha</span><span>Note</span>
+              </Row>
+              {rows.map((r, i) => {
+                const k = KC[r.kind] || {};
+                return (
+                  <Row key={i} cols={cols}>
+                    <span style={{ fontSize: 11.5, color: T.t2 }}>{r.date}</span>
+                    <span><Pill label={r.kind_label} c={k.c} bg={k.bg} /></span>
+                    <span style={{ fontSize: 11.5, color: T.t2 }}>{r.party}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: r.in_l ? T.grn : T.t4, textAlign: "right" }}>
+                      {r.in_l != null ? fmtN(r.in_l) : "—"}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: r.out_l ? T.blu : T.t4, textAlign: "right" }}>
+                      {r.out_l != null ? fmtN(r.out_l) : "—"}
+                    </span>
+                    <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{r.rate != null ? fmtN(r.rate) : "—"}</span>
+                    <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>{r.amount != null ? fmtC(r.amount) : "—"}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtN(r.balance_l)}</span>
+                    <span style={{ fontSize: 10.5, color: T.t3 }}>
+                      {r.kind === "check"
+                        ? <>physical {fmtN(r.physical_l)} vs kitaab {fmtN(r.book_l)} ={" "}
+                            <b style={{ color: r.variance_l === 0 ? T.grn : T.red }}>
+                              {r.variance_l > 0 ? "+" : ""}{fmtN(r.variance_l)} L
+                            </b></>
+                        : [r.slip_no ? "slip " + r.slip_no : "", r.payment !== "—" ? r.payment : "", r.by_name]
+                            .filter(Boolean).join(" · ")}
+                    </span>
+                  </Row>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
+            "Bacha" wala column dipstick par nahi badalta — farq bataya jaata hai, chup-chaap khapaya nahi.
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
 function ReportsTab({ byEquipment, byProject, from, to, onRange, projects, equipment, vendors, stores }) {
   const [sub, setSub] = useState("register");
   const SUBS = [
     { id: "register", l: "Diesel Register" },
     { id: "eff", l: "Fuel Efficiency" },
+    { id: "barrel", l: "Barrel Register" },
     { id: "project", l: "Project-wise" },
   ];
   return (
@@ -1454,6 +1692,7 @@ function ReportsTab({ byEquipment, byProject, from, to, onRange, projects, equip
       {sub === "eff" && (
         <EfficiencyReport byEquipment={byEquipment} from={from} to={to} onRange={onRange} projects={projects} />
       )}
+      {sub === "barrel" && <BarrelRegister projects={projects} />}
       {sub === "project" && <ProjectSpend byProject={byProject} />}
     </div>
   );
