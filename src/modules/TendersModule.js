@@ -3078,6 +3078,122 @@ function MeasurementModal({tenderId, sites, boqItems, edit, onClose, onDone}) {
   );
 }
 
+// ── MB DRAFT (month-end) ────────────────────────────────────────────
+// Site teams write meters daily in mobile DPRs against a BOQ item. This pulls
+// that diary for a period, summed site × item, so the admin cross-checks it
+// once and commits verified rows into the MB. DPR stays the raw record; the MB
+// rows are what RA billing reads — one truth, entered once.
+function MBDraftModal({tenderId, onClose, onDone}) {
+  const toast = useToast();
+  const monthStart = () => { const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0,10); };
+  const today = () => new Date().toISOString().slice(0,10);
+  const [from, setFrom]   = useState(monthStart());
+  const [to, setTo]       = useState(today());
+  const [mdate, setMdate] = useState(today());
+  const [mbRef, setMbRef] = useState("");
+  const [rows, setRows]   = useState(null);   // null = abhi load nahi hua
+  const [scanned, setScanned] = useState(0);
+  const [busy, setBusy]   = useState(false);
+
+  const fetchDraft = async () => {
+    if (!from || !to) { toast.error("Period chuno"); return; }
+    setBusy(true);
+    const res = await api.get(`/tenders/${tenderId}/mb-draft?from=${from}&to=${to}`);
+    setBusy(false);
+    if (!res?.success) { toast.error(res?.message || "Draft nahi bana"); return; }
+    const list = (res.data?.rows || []).map(r => ({...r, take: r.dpr_qty, include: true}));
+    setRows(list); setScanned(res.data?.dprs_scanned || 0);
+    if (!list.length) toast.info?.("Is period me DPR se koi BOQ-linked kaam nahi mila");
+  };
+
+  const setRow = (i,k,v) => setRows(p=>p.map((r,idx)=>idx===i?{...r,[k]:v}:r));
+  const chosen = (rows||[]).filter(r=>r.include && Number(r.take)>0);
+  const commit = async () => {
+    if (!chosen.length) { toast.error("Kam se kam ek row chuno"); return; }
+    if (!mdate) { toast.error("MB date chuno"); return; }
+    setBusy(true);
+    const res = await api.post(`/tenders/${tenderId}/mb-commit`, {
+      mdate, mb_ref: mbRef || null,
+      rows: chosen.map(r=>({ project_id:r.project_id, boq_item_id:r.boq_item_id, qty:Number(r.take),
+        remarks: Number(r.take)!==Number(r.dpr_qty) ? `DPR ${r.dpr_qty}, verified ${r.take}` : null })),
+    });
+    setBusy(false);
+    if (!res?.success) { toast.error(res?.message || "Commit nahi hua"); return; }
+    toast.success(`${res.data.inserted} MB entry ban gayi`);
+    onDone();
+  };
+
+  const th = {fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:".3px", padding:"7px 8px", textAlign:"left", borderBottom:`1px solid ${T.b1}`, whiteSpace:"nowrap"};
+  const td = {fontSize:12, color:T.t2, padding:"7px 8px", borderBottom:`1px solid ${T.b1}`};
+
+  return (
+    <Modal title="MB Draft — DPR se" Icon={IcTable} width={900}
+      sub="Site ki daily DPR entries ka jod — cross-check karke MB me daalo"
+      onClose={onClose}
+      footer={<>
+        <SecBtn label="Cancel" onClick={onClose}/>
+        <PrimBtn label={busy ? "Ruko..." : `${chosen.length} row MB me daalo`} Icon={IcChk}
+          onClick={commit} disabled={busy || !chosen.length}/>
+      </>}>
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1.2fr auto", gap:11, alignItems:"end", marginBottom:13}}>
+        <Field label="Period se"><TxtIn type="date" value={from} onChange={setFrom}/></Field>
+        <Field label="Period tak"><TxtIn type="date" value={to} onChange={setTo}/></Field>
+        <Field label="MB date *"><TxtIn type="date" value={mdate} onChange={setMdate}/></Field>
+        <Field label="MB ref (page no.)"><TxtIn value={mbRef} onChange={setMbRef} ph="MB-01 / Pg-12"/></Field>
+        <SecBtn label={busy?"...":"Draft banao"} onClick={fetchDraft} disabled={busy}/>
+      </div>
+
+      {rows === null && (
+        <div style={{padding:"22px 12px", textAlign:"center", fontSize:12.5, color:T.t3}}>
+          Period chuno aur <b>Draft banao</b> dabao — DPR se site-wise, item-wise jod aa jayega.
+        </div>
+      )}
+      {rows && !rows.length && (
+        <div style={{padding:"18px 12px", textAlign:"center", fontSize:12.5, color:T.t3}}>
+          Is period me BOQ-item se juda koi DPR kaam nahi mila. ({scanned} DPR dekhe gaye)<br/>
+          <span style={{fontSize:11.5, color:T.t4}}>Site team DPR me "BOQ item" chunegi tabhi yahan aayega.</span>
+        </div>
+      )}
+      {!!rows?.length && (<>
+        <div style={{fontSize:11.5, color:T.t4, marginBottom:7}}>{scanned} DPR se {rows.length} line · qty edit kar sakte ho, jo verify na ho uska tick hata do</div>
+        <div style={{border:`1px solid ${T.b1}`, borderRadius:9, overflow:"hidden", maxHeight:340, overflowY:"auto"}}>
+          <table style={{width:"100%", borderCollapse:"collapse"}}>
+            <thead style={{position:"sticky", top:0, background:T.surfaceB, zIndex:1}}>
+              <tr><th style={{...th,width:34}}></th><th style={th}>Site</th><th style={th}>Item</th>
+                <th style={th}>Description</th><th style={{...th,textAlign:"right"}}>DPR qty</th>
+                <th style={{...th,textAlign:"right"}}>MB me lo</th><th style={{...th,textAlign:"right"}}>Is period me pehle se</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r,i)=>{
+                const dup = Number(r.measured_in_period) > 0;
+                return (
+                  <tr key={i} style={{background: r.include ? "transparent" : T.surfaceB}}>
+                    <td style={td}><input type="checkbox" checked={r.include} onChange={e=>setRow(i,"include",e.target.checked)}/></td>
+                    <td style={{...td, fontWeight:600, color:T.t1, whiteSpace:"nowrap"}}>{r.project_name}</td>
+                    <td style={{...td, whiteSpace:"nowrap"}}>{r.item_no}</td>
+                    <td style={{...td, maxWidth:250, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}} title={r.description}>{r.description}</td>
+                    <td style={{...td, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{fmtQty(r.dpr_qty)} <span style={{color:T.t4,fontSize:10.5}}>{r.unit}</span>
+                      <div style={{fontSize:10, color:T.t4}}>{r.dpr_days} din</div></td>
+                    <td style={{...td, textAlign:"right"}}>
+                      <input type="number" value={r.take} onChange={e=>setRow(i,"take",e.target.value)} disabled={!r.include}
+                        style={{...inputStyle, width:96, textAlign:"right", padding:"5px 7px",
+                          borderColor: Number(r.take)!==Number(r.dpr_qty) ? T.amb : T.b1}}/>
+                    </td>
+                    <td style={{...td, textAlign:"right", color: dup ? T.amb : T.t4, fontWeight: dup?700:400}}>
+                      {dup ? `${fmtQty(r.measured_in_period)} ${r.unit||""}` : "—"}
+                      {dup && <div style={{fontSize:10}}>dobara na ho</div>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </>)}
+    </Modal>
+  );
+}
+
 // ── MEASUREMENTS TAB ────────────────────────────────────────────────
 function MeasurementsTab({tenderId, sites, boqItems, bills}) {
   const toast = useToast();
@@ -3086,6 +3202,7 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
   const [fSite, setFSite]     = useState("");
   const [fItem, setFItem]     = useState("");
   const [modal, setModal]     = useState(null);   // {} = naya, {edit} = edit
+  const [draftOpen, setDraftOpen] = useState(false);
 
   const lockDate = lockDateOf(bills);
 
@@ -3125,7 +3242,10 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
   return (<>
     <Panel style={{marginBottom:11}}>
       <PHead title="Measurements (MB)" sub={rows.length ? `${rows.length} entry` : undefined}
-        action={<PrimBtn label="Nayi Measurement" Icon={IcAdd} onClick={()=>setModal({})}/>}/>
+        action={<div style={{display:"flex", gap:8}}>
+          <SecBtn label="MB Draft (DPR se)" Icon={IcTable} onClick={()=>setDraftOpen(true)}/>
+          <PrimBtn label="Nayi Measurement" Icon={IcAdd} onClick={()=>setModal({})}/>
+        </div>}/>
 
       {/* Filters */}
       <div style={{padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB,
@@ -3230,6 +3350,11 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
     {modal && (
       <MeasurementModal tenderId={tenderId} sites={sites} boqItems={boqItems} edit={modal.edit}
         onClose={()=>setModal(null)} onDone={()=>{ setModal(null); load(); }}/>
+    )}
+
+    {draftOpen && (
+      <MBDraftModal tenderId={tenderId}
+        onClose={()=>setDraftOpen(false)} onDone={()=>{ setDraftOpen(false); load(); }}/>
     )}
   </>);
 }
