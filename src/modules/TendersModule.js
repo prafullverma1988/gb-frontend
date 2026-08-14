@@ -459,19 +459,26 @@ function NewTenderModal({onClose, onCreated}) {
   const [addParty, setAddParty] = useState(false);
 
   const isWon = form.status === "won";
+  // Bid-stage ki info sirf tab compulsory jab tender abhi bid hi kar rahe ho.
+  const bidReq = !isWon;
 
   const goNext = () => {
     setErr("");
     if (!form.tender_no.trim()) return setErr("Tender number zaroori hai");
     if (!form.title.trim())     return setErr("Tender ka title zaroori hai");
-    // Bid-stage ki info naya tender banate waqt hi bhar lo — baad me yaad
-    // nahi rehti. Pata na ho to amount me 0 daalo, baad me Edit se sudhaar do.
+    // NIT date hamesha zaroori — tender ki pehchaan wahi se banti hai.
     if (!form.nit_date)             return setErr("NIT date zaroori hai");
-    if (!form.submission_date)      return setErr("Bid submission date zaroori hai");
-    if (!form.bid_submission_type)  return setErr("Bid submission type chuno (Online / Offline)");
-    if (form.estimated_cost === "") return setErr("Estimated cost zaroori hai — pata na ho to 0 daalo");
-    if (form.emd_amount === "")     return setErr("EMD amount zaroori hai — pata na ho to 0 daalo");
-    if (form.tender_fee === "")     return setErr("Tender fee zaroori hai — pata na ho to 0 daalo");
+    // Baaki bid-stage ki info sirf BIDDING par compulsory hai. Won tender
+    // aksar purana record hota hai (jeet chuke kaam ko system me daal rahe
+    // ho) — tab bid ki details haath me hoti hi nahi, kaam ki cheez contract
+    // value aur agreement hai. Baad me Edit se bhar sakte ho.
+    if (!isWon) {
+      if (!form.submission_date)      return setErr("Bid submission date zaroori hai");
+      if (!form.bid_submission_type)  return setErr("Bid submission type chuno (Online / Offline)");
+      if (form.estimated_cost === "") return setErr("Estimated cost zaroori hai — pata na ho to 0 daalo");
+      if (form.emd_amount === "")     return setErr("EMD amount zaroori hai — pata na ho to 0 daalo");
+      if (form.tender_fee === "")     return setErr("Tender fee zaroori hai — pata na ho to 0 daalo");
+    }
     if (isWon) { setStep(2); return; }
     submit();
   };
@@ -567,9 +574,9 @@ function NewTenderModal({onClose, onCreated}) {
           </Field>
 
           <Field label="NIT Date *"><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
-          <Field label="Bid Submission Date *"><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
+          <Field label={`Bid Submission Date${bidReq ? " *" : ""}`}><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
           <Field label="Techno-Commercial Date"><TxtIn type="date" value={form.techno_commercial_date} onChange={v=>set("techno_commercial_date",v)}/></Field>
-          <Field label="Bid Submission Type *">
+          <Field label={`Bid Submission Type${bidReq ? " *" : ""}`}>
             <SelIn value={form.bid_submission_type} onChange={v=>set("bid_submission_type",v)}
               options={BID_SUBMISSION_TYPES} ph="Chuno..."/>
           </Field>
@@ -584,10 +591,11 @@ function NewTenderModal({onClose, onCreated}) {
               placeholder="e.g. Clause 5.2 — SD 10%, completion 12 months, LD 0.5%/week"/>
           </Field>
 
-          <Field label="Estimated Cost (₹) *" hint="Pata na ho to 0 — baad me Edit se sudhaar lena.">
+          <Field label={`Estimated Cost (₹)${bidReq ? " *" : ""}`}
+            hint={bidReq ? "Pata na ho to 0 — baad me Edit se sudhaar lena." : "Won tender me optional — baad me bhar sakte ho."}>
             <TxtIn type="number" value={form.estimated_cost} onChange={v=>set("estimated_cost",v)} ph="0"/></Field>
-          <Field label="EMD Amount (₹) *"><TxtIn type="number" value={form.emd_amount} onChange={v=>set("emd_amount",v)} ph="0"/></Field>
-          <Field label="Tender Fee (₹) *"><TxtIn type="number" value={form.tender_fee} onChange={v=>set("tender_fee",v)} ph="0"/></Field>
+          <Field label={`EMD Amount (₹)${bidReq ? " *" : ""}`}><TxtIn type="number" value={form.emd_amount} onChange={v=>set("emd_amount",v)} ph="0"/></Field>
+          <Field label={`Tender Fee (₹)${bidReq ? " *" : ""}`}><TxtIn type="number" value={form.tender_fee} onChange={v=>set("tender_fee",v)} ph="0"/></Field>
         </div>
       )}
 
@@ -3563,7 +3571,8 @@ function MBDraftModal({tenderId, onClose, onDone}) {
     setBusy(true);
     const res = await api.post(`/tenders/${tenderId}/mb-commit`, {
       mdate, mb_ref: mbRef || null,
-      rows: chosen.map(r=>({ project_id:r.project_id, boq_item_id:r.boq_item_id, qty:Number(r.take),
+      rows: chosen.map(r=>({ project_id:r.project_id, boq_item_id:r.boq_item_id,
+        alignment_id: r.alignment_id || null, qty:Number(r.take),
         remarks: Number(r.take)!==Number(r.dpr_qty) ? `DPR ${r.dpr_qty}, verified ${r.take}` : null })),
     });
     setBusy(false);
@@ -3620,7 +3629,16 @@ function MBDraftModal({tenderId, onClose, onDone}) {
                     <td style={td}><input type="checkbox" checked={r.include} onChange={e=>setRow(i,"include",e.target.checked)}/></td>
                     <td style={{...td, fontWeight:600, color:T.t1, whiteSpace:"nowrap"}}>{r.project_name}</td>
                     <td style={{...td, whiteSpace:"nowrap"}}>{r.item_no}</td>
-                    <td style={{...td, maxWidth:250, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}} title={r.description}>{r.description}</td>
+                    <td style={{...td, maxWidth:250}}>
+                      <div style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}} title={r.description}>{r.description}</div>
+                      {/* Site ne GPS se batayi hui stretch — MB me bhi wahi jaati hai,
+                          taaki map par theek usi hisse par rang chadhe. */}
+                      {r.alignment_name && (
+                        <div style={{fontSize:10.5, color:T.ind, marginTop:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                          ↳ {r.alignment_name}
+                        </div>
+                      )}
+                    </td>
                     <td style={{...td, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{fmtQty(r.dpr_qty)} <span style={{color:T.t4,fontSize:10.5}}>{r.unit}</span>
                       <div style={{fontSize:10, color:T.t4}}>{r.dpr_days} din</div></td>
                     <td style={{...td, textAlign:"right"}}>

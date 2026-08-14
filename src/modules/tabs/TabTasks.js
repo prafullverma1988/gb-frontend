@@ -4830,3 +4830,6 @@ function CascadePreviewModal({data,applying,onClose,onApply}){
 }
 
 export default TabTasks;
+// TabEstimate ka link-drawer isi form se naya task banata hai — tab-split ke
+// waqt import chhoot gaya tha aur "Create Task" par ReferenceError crash hota.
+export { PTAddTask };

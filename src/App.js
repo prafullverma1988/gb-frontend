@@ -1736,7 +1736,12 @@ function ProjectsWrapper({deepLink,onDeepLinkDone}){
 
 
 // ── APP ───────────────────────────────────────────────────────────────
-export default function App(){
+// Public-route gate ALAG component me hai, App se pehle. App ke andar ye
+// early returns the aur uske 25 hooks unke BAAD aate the — rules-of-hooks
+// violation. Path render ke beech badalta nahi isliye kabhi crash nahi hua,
+// par hook-order ka bharosa path par tikana hi galat hai. Gate hook-free
+// hai, saare hooks App me hain — dono apne aap me sahi.
+export default function AppGate(){
   // Public route — 3D client preview (no login needed)
   // Wrapped in AppErrorBoundary so a failed lazy chunk shows the recover
   // UI instead of a white screen.
@@ -1747,6 +1752,10 @@ export default function App(){
   if(window.location.pathname.startsWith("/d/")){
     return <AppErrorBoundary><Suspense fallback={<ModuleLoader/>}><PublicDrawingPage/></Suspense></AppErrorBoundary>;
   }
+  return <App/>;
+}
+
+function App(){
 
   const [user,setUser]=useState(()=>getUser());
   const [companies,setCompanies]=useState(()=>getCompanies());

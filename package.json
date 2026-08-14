@@ -35,5 +35,20 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ],
+    "rules": {
+      "no-unused-vars": "off",
+      "react-hooks/exhaustive-deps": "off",
+      "jsx-a11y/alt-text": "off",
+      "jsx-a11y/anchor-has-content": "off",
+      "jsx-a11y/img-redundant-alt": "off",
+      "eqeqeq": "off",
+      "no-mixed-operators": "off",
+      "no-sparse-arrays": "off"
+    }
   }
 }

@@ -4,6 +4,7 @@ import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import EstimateBuilderModal from "../EstimateBuilderModal";
 import { T, localYMD } from "../shared/tokens";
+import { PTAddTask } from "./TabTasks";
 
 function TabEstimate({ project }) {
   const projectId = project?.id;

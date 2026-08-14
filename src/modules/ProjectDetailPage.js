@@ -12,6 +12,9 @@ import MaterialLedgerDrawer from "../components/MaterialLedgerDrawer";
 import uploadManager from "../utils/uploadManager";
 import EstimateBuilderModal from "./EstimateBuilderModal";
 import MOMModule from "./MOMModule";
+import MapPicker from "../components/MapPicker";
+import { T, fmt, fmtN, localYMD, PROJ, STATUS_S, STAGES, STAGE_S } from "./shared/tokens";
+import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabIc } from "./shared/ui";
 
 // ── "Waiting on" label ─────────────────────────────────────────────────────
 // Backend /approvals/pending bhejta hai: _waitingOn (role label, escalation ke
@@ -33,9 +36,6 @@ const escalationNote = (it) =>
   it && it._escalated && it._escalatedFrom
     ? `is project me koi ${it._escalatedFrom} nahi — isliye ${it._waitingOn || "Admin"} ke paas`
     : null;
-import MapPicker from "../components/MapPicker";
-import { T, fmt, fmtN, localYMD, PROJ, STATUS_S, STAGES, STAGE_S } from "./shared/tokens";
-import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabIc } from "./shared/ui";
 
 // ── TAB CODE-SPLITTING — each tab chunk loads on first open ──────────
 const TabEstimate    = lazy(() => import("./tabs/TabEstimate"));
