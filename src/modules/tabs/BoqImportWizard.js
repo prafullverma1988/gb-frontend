@@ -229,6 +229,22 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
 
   // ── Inline edit → debounced PATCH ─────────────────────────────────────
   const pending = useRef({});
+  // Ask the LLM for short task names. The suggestion is saved server-side and
+  // pulled back into the table, where every name stays editable — so a bad
+  // suggestion costs one keystroke, not a wrong task.
+  const [naming, setNaming] = useState(false);
+  const suggestNames = async () => {
+    if (!staged?.import_id || naming) return;
+    setNaming(true);
+    const r = await api.post(`/boq/imports/${staged.import_id}/suggest-names`, {});
+    setNaming(false);
+    if (!r?.success) { flash(r?.message || "Naam nahi ban paye", "error"); return; }
+    const byId = {};
+    (r.data?.items || []).forEach((x) => { byId[x.id] = x.short_name; });
+    setStaged((s) => s && ({ ...s, items: s.items.map((it) => ({ ...it, short_name: byId[it.id] ?? it.short_name })) }));
+    flash(`${r.data?.named || 0} naam ban gaye — dekh lo, badal bhi sakte ho`);
+  };
+
   const editRow = (itemId, field, value) => {
     setStaged((s) => s && ({
       ...s,
@@ -493,11 +509,24 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                 </div>
               </div>
 
+              {/* Short task names — AI suggests, you decide */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+                <button onClick={suggestNames} disabled={naming}
+                  style={{ height: 32, padding: "0 13px", borderRadius: 7, border: `1px solid ${T.ind}33`,
+                    background: T.indL, color: T.ind, fontSize: 12, fontWeight: 700,
+                    cursor: naming ? "default" : "pointer", fontFamily: "inherit" }}>
+                  {naming ? "AI naam bana raha hai…" : "AI se chhote task naam banao"}
+                </button>
+                <span style={{ fontSize: 11.5, color: T.t4 }}>
+                  BOQ ka pura description task ke naam me bahut lamba padta hai. AI chhota naam sujhata hai — aap badal sakte ho.
+                </span>
+              </div>
+
               {/* Rows */}
               <div style={{ border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden", background: T.surface }}>
                 <div style={{ overflowX: "auto", maxHeight: 340 }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead style={{ position: "sticky", top: 0, zIndex: 1 }}><tr>{["#", "SOR", "Description", "Unit", "Qty", "Rate", "Amount", "Warning"].map((h, i) => <th key={i} style={{ ...th, textAlign: i >= 4 && i <= 6 ? "right" : "left" }}>{h}</th>)}</tr></thead>
+                    <thead style={{ position: "sticky", top: 0, zIndex: 1 }}><tr>{["#", "SOR", "Task ka naam", "Description", "Unit", "Qty", "Rate", "Amount", "Warning"].map((h, i) => <th key={i} style={{ ...th, textAlign: i >= 5 && i <= 7 ? "right" : "left" }}>{h}</th>)}</tr></thead>
                     <tbody>
                       {staged.items.map((it) => {
                         const warns = typeof it.warnings_json === "string" ? JSON.parse(it.warnings_json || "[]") : (it.warnings_json || []);
@@ -505,7 +534,19 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                           <tr key={it.id}>
                             <td style={{ ...td, color: T.t4 }}>{it.row_no}</td>
                             <td style={td}>{it.sor_code || "—"}</td>
-                            <td style={{ ...td, paddingLeft: it.is_continuation ? 22 : 9 }}>{it.is_continuation ? "↳ " : ""}{it.description}</td>
+                            {/* The name the task will actually carry. Blank = the
+                                full description is used, exactly as before. */}
+                            <td style={td}>
+                              <input value={it.short_name ?? ""} onChange={(e) => editRow(it.id, "short_name", e.target.value)}
+                                placeholder="(description use hoga)"
+                                style={{ ...inp, padding: "4px 6px", width: 170,
+                                  color: it.short_name ? T.t1 : T.t4, borderColor: it.short_name ? T.ind : T.b1 }} />
+                            </td>
+                            <td style={{ ...td, paddingLeft: it.is_continuation ? 22 : 9, maxWidth: 320 }}>
+                              <div style={{ maxHeight: 34, overflow: "hidden", color: T.t3, fontSize: 11.5 }}>
+                                {it.is_continuation ? "↳ " : ""}{it.description}
+                              </div>
+                            </td>
                             <td style={td}><input value={it.unit ?? it.unit_raw ?? ""} onChange={(e) => editRow(it.id, "unit", e.target.value)} style={{ ...inp, padding: "4px 6px", width: 70 }} /></td>
                             <td style={{ ...td, textAlign: "right" }}><input value={it.qty} onChange={(e) => editRow(it.id, "qty", e.target.value)} style={{ ...inp, padding: "4px 6px", width: 74, textAlign: "right" }} /></td>
                             <td style={{ ...td, textAlign: "right" }}><input value={it.rate} onChange={(e) => editRow(it.id, "rate", e.target.value)} style={{ ...inp, padding: "4px 6px", width: 84, textAlign: "right" }} /></td>
