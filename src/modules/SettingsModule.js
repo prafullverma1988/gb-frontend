@@ -2926,12 +2926,77 @@ function CompanyPractices() {
   );
 }
 
+// ── OTHER SETTINGS ────────────────────────────────────────────────
+// Functional switches that change how the app behaves — kept apart from
+// Company Practices, which are free-text answers feeding the support bot.
+// The catalogue lives on the server; this screen only renders what it sends,
+// so adding a switch later needs no change here.
+function OtherSettings() {
+  const [prefs, setPrefs]   = useState([]);
+  const [loading, setLoad]  = useState(true);
+  const [saving, setSaving] = useState("");
+  const [toast, setToast]   = useState(null);
+  const flash = (m, t = "ok") => { setToast({ m, t }); setTimeout(() => setToast(null), 2400); };
+
+  useEffect(() => {
+    api.get("/settings/prefs").then(r => {
+      setPrefs(r?.success && Array.isArray(r.data) ? r.data : []);
+    }).finally(() => setLoad(false));
+  }, []);
+
+  const save = async (key, value) => {
+    setPrefs(p => p.map(x => x.key === key ? { ...x, value, is_default: false } : x));
+    setSaving(key);
+    const r = await api.put("/settings/prefs", { [key]: value });
+    setSaving("");
+    if (!r?.success) { flash(r?.message || "Save nahi hua", "error"); return; }
+    flash("Setting save ho gayi");
+  };
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "#6B7280", fontSize: 13 }}>Loading…</div>;
+
+  return (
+    <div style={{ maxWidth: 760 }}>
+      {toast && (
+        <div style={{ position: "fixed", top: 18, right: 22, zIndex: 9999, padding: "10px 16px", borderRadius: 9,
+          fontSize: 13, fontWeight: 600, background: toast.t === "error" ? "#FEF2F2" : "#ECFDF5",
+          color: toast.t === "error" ? "#DC2626" : "#059669",
+          border: `1px solid ${toast.t === "error" ? "#FECACA" : "#A7F3D0"}` }}>{toast.m}</div>
+      )}
+      {!prefs.length && (
+        <div style={{ padding: 30, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Abhi koi setting nahi.</div>
+      )}
+      {prefs.map(p => (
+        <div key={p.key} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{p.label}</div>
+          {p.hint && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4, lineHeight: 1.55 }}>{p.hint}</div>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+            {(p.options || []).map(o => {
+              const on = p.value === o.v;
+              return (
+                <label key={o.v} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 12px",
+                  borderRadius: 9, cursor: "pointer",
+                  border: `1.5px solid ${on ? "#4B45C4" : "#E5E7EB"}`, background: on ? "#EEF0FB" : "#fff" }}>
+                  <input type="radio" name={p.key} checked={on} onChange={() => save(p.key, o.v)}
+                    disabled={saving === p.key} style={{ marginTop: 2, accentColor: "#4B45C4" }}/>
+                  <span style={{ fontSize: 13, color: on ? "#111827" : "#374151", fontWeight: on ? 600 : 400 }}>{o.l}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const settingsSections = [
   { id: "profile",       label: "My Profile",           Icon: IcUsers,     Comp: MyProfile,              section: "ACCOUNT" },
   { id: "company",       label: "Company Profile",      Icon: IcBuilding,  Comp: CompanySettings,        section: "GENERAL" },
   { id: "roles",         label: "Roles & Access",       Icon: IcShield,    Comp: RolesAccess,            section: null },
   { id: "approval",      label: "Multi-Level Approval", Icon: IcLayers,    Comp: ApprovalSettings,       section: null },
   { id: "practices",     label: "Company Practices",    Icon: IcClipboard, Comp: CompanyPractices,       section: null },
+  { id: "other",         label: "Other Settings",       Icon: IcLayers,    Comp: OtherSettings,          section: null },
   { id: "backdate",      label: "Back-Date Control",    Icon: IcCalendar,  Comp: BackDateControl,        section: null },
   { id: "attendance",    label: "Attendance Settings",  Icon: IcCalendar,  Comp: AttendanceSettings,     section: null },
   { id: "locations",     label: "Office & Warehouse",   Icon: IcBuilding,  Comp: LocationsSettings,      section: null },
@@ -2956,6 +3021,7 @@ export default function SettingsModule({ initialSection = "company" } = {}) {
     company: "Manage your company profile and regional settings", roles: "Configure user roles, permissions and project access",
     approval: "Set up multi-level approval workflows", backdate: "Control back-dated entry permissions",
     practices: "Aapki company ka apna tareeka — Sahayak inhi jawabon se madad karta hai",
+    other: "Task progress qty me le ya % me — aur aisi hi app-behaviour settings",
     attendance: "Configure attendance mode and payment cycle for each labour type",
     appearance: "Choose layout style and other visual preferences",
     bank: "Manage bank accounts and payment methods", material: "Configure material stock and inventory rules",
