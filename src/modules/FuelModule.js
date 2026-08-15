@@ -580,12 +580,14 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
             ₹/hr = kharcha ÷ chali, aur "chali" ke liye do reading chahiye —
             diesel har hafte bharta hai, yahi sabse pakka mauka hai. */}
         {path !== "pump_store" && (
-          <Field label="Machine ka meter reading *"
+          <Field
+            label={machine?.meter_unit === "km"
+              ? "Machine ka apna ODOMETER (km) *" : "Machine ka apna HOUR-METER *"}
             hint={f.meter_missing ? "Wajah ke saath chhoot mil jayegi, par report me alag dikhega."
-              : "Isi se machine ka ₹/hr banta hai."}>
+              : "Machine ke apne meter ka number — pump wali machine ka NAHI. Bharne se pehle ya baad, dono barabar (machine to band khadi hai)."}>
             {!f.meter_missing && (
               <input value={f.meter_reading || ""} inputMode="decimal"
-                placeholder={machine?.meter_unit === "km" ? "odometer (km)" : "hour-meter"}
+                placeholder={machine?.meter_unit === "km" ? "gaadi ka odometer, e.g. 84,210" : "machine ka hour-meter, e.g. 4,318"}
                 onChange={(e) => upd("meter_reading", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
             )}
             <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: f.meter_missing ? 0 : 7, fontSize: 12, color: T.t2, cursor: "pointer" }}>
