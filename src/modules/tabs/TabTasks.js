@@ -1434,9 +1434,13 @@ function TabTasks({ projectId, isAdmin }) {
         onCommitted={async()=>{ apiCache.invalidate("tasks"); apiCache.invalidate("projects"); await refetchTasks(); }}/>}
 
       {/* Edit Task drawer */}
-      {editTask&&<PTEditTask task={editTask} allTasks={allFlat} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
+      {editTask&&<PTEditTask task={editTask} allTasks={allFlat} projectId={projectId} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
         const orig = editTask;
-        await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress, base_start:u.baseStart, base_end:u.baseEnd, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen });
+        const r = await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress, base_start:u.baseStart, base_end:u.baseEnd, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen,
+          // "" clears the link; undefined would leave it untouched.
+          boq_item_id: u.boqItemId ?? "", alignment_id: u.alignId ?? "" });
+        // A rejected link (wrong tender / wrong site) comes back as a message.
+        if (r && r.success === false && r.message) window.toast?.error(r.message);
         setEditTask(null);
         // Progress or duration moved → every ancestor's rolled-up number moved
         // with it, so patching this one node in the tree isn't enough.
@@ -4524,8 +4528,26 @@ function PTOverrideModal({task,onClose,onSaved}){
   </>);
 }
 
-function PTEditTask({task,allTasks,onClose,onSave}){
+function PTEditTask({task,allTasks,projectId,onClose,onSave}){
   const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignee:task.assignee,status:task.status,progress:task.progress,baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+1:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
+  // Tender links. A task made by hand ("Pipe line laying") carries no BOQ item,
+  // so its daily quantity has nowhere to go. Linking it once here is what puts
+  // that work into the measurement book and on the map — after which the
+  // supervisor still only types a number.
+  const [boqOpts,setBoqOpts]=useState([]);
+  const [lineOpts,setLineOpts]=useState([]);
+  const [boqItemId,setBoqItemId]=useState(task.boq_item_id||"");
+  const [alignId,setAlignId]=useState(task.alignment_id||"");
+  useEffect(()=>{
+    if(!projectId) return;
+    let dead=false;
+    api.get("/tenders/by-project/"+projectId+"/boq")
+      .then(r=>{ if(!dead && r?.success) setBoqOpts(r.data?.items||[]); }).catch(()=>{});
+    api.get("/tenders/by-project/"+projectId+"/alignments")
+      .then(r=>{ if(!dead && r?.success) setLineOpts(r.data?.alignments||[]); }).catch(()=>{});
+    return ()=>{dead=true;};
+  },[projectId]);
+
   const [showDhyan,setShowDhyan]=useState(!!task.dhyanRakhen);
   const [depSrch,setDepSrch]=useState("");
   const upd=(k)=>(e)=>setForm(p=>({...p,[k]:e.target.type==="range"?Number(e.target.value):e.target.value}));
@@ -4589,6 +4611,34 @@ function PTEditTask({task,allTasks,onClose,onSave}){
             <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginTop:4}}><div style={{height:"100%",width:`${form.progress}%`,background:Number(form.progress)===100?T.grn:T.blu,borderRadius:2,transition:"width .3s"}}/></div>
           </>)}
         </div>
+        {/* Tender links — only for a site that belongs to a tender */}
+        {!!boqOpts.length && (
+          <div style={{marginBottom:12, padding:"11px 12px", borderRadius:8, background:T.indL, border:`1px solid ${T.ind}22`}}>
+            <div style={{fontSize:9.5,fontWeight:700,color:T.ind,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Tender se jodo (bill aur map ke liye)</div>
+            <div style={{marginBottom:8}}>
+              <label style={{fontSize:10.5,color:T.t3,display:"block",marginBottom:3}}>BOQ item</label>
+              <select value={boqItemId} onChange={e=>setBoqItemId(e.target.value)}
+                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:boqItemId?T.t1:T.t4,background:T.surface,outline:"none",fontFamily:"inherit"}}>
+                <option value="">— nahi juda —</option>
+                {boqOpts.map(b=>(<option key={b.id} value={b.id}>{b.item_no} · {String(b.description||"").slice(0,50)} ({b.unit})</option>))}
+              </select>
+            </div>
+            {!!lineOpts.length && (
+              <div>
+                <label style={{fontSize:10.5,color:T.t3,display:"block",marginBottom:3}}>Pipeline line (optional)</label>
+                <select value={alignId} onChange={e=>setAlignId(e.target.value)}
+                  style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:alignId?T.t1:T.t4,background:T.surface,outline:"none",fontFamily:"inherit"}}>
+                  <option value="">— koi nahi —</option>
+                  {lineOpts.map(a=>(<option key={a.id} value={a.id}>{a.name}</option>))}
+                </select>
+              </div>
+            )}
+            <div style={{fontSize:10.5,color:T.t4,marginTop:7,lineHeight:1.5}}>
+              Judne ke baad is task par darj kiya gaya kaam MB Draft me apne aap aayega, aur chuni hui line map par green hogi. Scope quantity Budget tab me set hoti hai.
+            </div>
+          </div>
+        )}
+
         {/* Dates + Duration (bidirectional) */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 0.8fr",gap:9,marginBottom:5}}>
           <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Baseline Start</label>
@@ -4667,6 +4717,7 @@ function PTEditTask({task,allTasks,onClose,onSave}){
       <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:7,flexShrink:0}}>
         <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
         <button onClick={()=>onSave(task.id,{...form,dhyanRakhen:showDhyan?form.dhyanRakhen:null,
+            boqItemId, alignId,
             ...(isSummary?{progress:undefined,status:undefined}:{progress:Number(form.progress)})})}
           style={{flex:2,padding:"9px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>Save Changes</button>
       </div>
