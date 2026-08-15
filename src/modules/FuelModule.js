@@ -1667,12 +1667,265 @@ function BarrelLedgerPanel({ storeId, onClose }) {
   );
 }
 
+// ── Report 5: PUMP REGISTER ───────────────────────────────────────
+// Kaagaz wala pump register. Pump par click karne se uska poora register
+// khulta hai — chalte hue jod ke saath, kyunki mahine ke aakhir me pump ka
+// apna bill isi ke saamne rakh kar tick kiya jaata hai.
+//
+// Sirf KHARID yahan aati hai — barrel se nikaasi ka pump se lena-dena nahi.
+const EMPTY_PF = { project_id: "", payment_mode: "", flagged: "" };
+
+function PumpRegister({ projects, from, to, onRange }) {
+  const [f, setF] = useState(EMPTY_PF);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState("");
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const params = useMemo(() => ({ from, to, ...f }), [from, to, f]);
+
+  useEffect(() => {
+    let dead = false;
+    setLoading(true);
+    api.get(`/fuel/reports/pump-register?${qs(params)}`)
+      .then((r) => { if (!dead) setData(r?.success ? r.data : null); })
+      .catch(() => { if (!dead) setData(null); })
+      .finally(() => { if (!dead) setLoading(false); });
+    return () => { dead = true; };
+  }, [params]);
+
+  const rows = data?.rows || [];
+  const tot = data?.totals || {};
+
+  const COLS = [
+    { key: "pump", label: "Pump", w: 24 },
+    { key: "fills", label: "Fills", w: 8 },
+    { key: "litres", label: "Litre", w: 11 },
+    { key: "avg_rate", label: "Avg rate", w: 10, excel: (r) => r.avg_rate ?? "" },
+    { key: "rate_min", label: "Rate kam", w: 10 },
+    { key: "rate_max", label: "Rate zyada", w: 10 },
+    { key: "cash_amount", label: "Cash Rs", w: 12, excel: (r) => Math.round(r.cash_amount) },
+    { key: "credit_amount", label: "Udhaar Rs", w: 12, excel: (r) => Math.round(r.credit_amount) },
+    { key: "unpaid_amount", label: "Baaki Rs", w: 12, excel: (r) => Math.round(r.unpaid_amount) },
+    { key: "amount", label: "Kul Rs", w: 13, excel: (r) => Math.round(r.amount) },
+    { key: "first_at", label: "Pehli fill", w: 12 },
+    { key: "last_at", label: "Aakhri fill", w: 12 },
+    { key: "flagged", label: "Parchi se farq", w: 13 },
+    { key: "no_slip", label: "Bina parchi", w: 12 },
+  ];
+  const cols = "1.5fr 62px 84px 92px 110px 96px 100px 104px 1fr";
+
+  return (
+    <div style={{ display: "grid", gap: 11 }}>
+      <FilterBar chips={data?.applied || []} onClear={() => setF(EMPTY_PF)}>
+        <div><FLbl>Se — Tak</FLbl><DateRange from={from} to={to} onRange={onRange} /></div>
+        <FSel label="Project" value={f.project_id} onChange={(v) => set("project_id", v)}
+          options={projects.map((x) => ({ v: x.id, l: x.name }))} />
+        <FSel label="Payment" value={f.payment_mode} onChange={(v) => set("payment_mode", v)}
+          options={[{ v: "cash", l: "Cash" }, { v: "credit", l: "Udhaar" }]} w={120} />
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.t2, cursor: "pointer", paddingBottom: 6 }}>
+          <input type="checkbox" checked={f.flagged === "1"}
+            onChange={(e) => set("flagged", e.target.checked ? "1" : "")} />
+          Sirf parchi-farq wale pump
+        </label>
+      </FilterBar>
+
+      <Panel title={loading ? "Pump Register — laa rahe hain..." : `Pump Register — ${rows.length} pump`}
+        action={<ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/pump-register.pdf"
+          params={params} baseName="pump-register"
+          caption={`Pump Register${from ? ` ${from} se ${to}` : ""} — Sanchalan`} />}>
+        {!loading && rows.length === 0 && <Empty>Is filter par kisi pump se kharid nahi mili.</Empty>}
+        {rows.length > 0 && (
+          <>
+            <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>
+                {tot.fills} fills · <b style={{ color: T.t1 }}>{fmtL(tot.litres)}</b> · {fmtC(tot.amount)}
+              </span>
+              {tot.avg_rate != null && (
+                <span style={{ fontSize: 11.5, color: T.t2 }}>Average rate <b style={{ color: T.t1 }}>₹{fmtN(tot.avg_rate)}</b></span>
+              )}
+              {tot.unpaid_amount > 0 && (
+                <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>Baaki {fmtC(tot.unpaid_amount)}</span>
+              )}
+              {tot.flagged > 0 && (
+                <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>{tot.flagged} parchi entry se alag</span>
+              )}
+              {tot.no_slip > 0 && (
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{tot.no_slip} bina parchi</span>
+              )}
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 1080 }}>
+                <Row head cols={cols}>
+                  <span>Pump</span><span style={{ textAlign: "right" }}>Fills</span>
+                  <span style={{ textAlign: "right" }}>Litre</span><span style={{ textAlign: "right" }}>Avg rate</span>
+                  <span style={{ textAlign: "right" }}>Cash / Udhaar</span><span style={{ textAlign: "right" }}>Baaki</span>
+                  <span style={{ textAlign: "right" }}>Kul</span><span>Kab se kab tak</span><span>Note</span>
+                </Row>
+                {rows.map((r) => (
+                  <Row key={r.vendor_party_id} cols={cols} onClick={() => setOpenId(String(r.vendor_party_id))}>
+                    <div>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{r.pump}</div>
+                      {/* Ek hi pump ka bhaav duration me kitna hila — ye khud
+                          ek sawaal hai, isliye naam ke neeche hi dikhta hai. */}
+                      {r.rate_spread > 0 && (
+                        <div style={{ fontSize: 10.5, color: T.t4 }}>rate ₹{fmtN(r.rate_min)}–{fmtN(r.rate_max)}</div>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{r.fills}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtN(r.litres)}</span>
+                    <span style={{ fontSize: 12, color: T.t2, textAlign: "right" }}>
+                      {r.avg_rate != null ? "₹" + fmtN(r.avg_rate) : "—"}
+                    </span>
+                    <span style={{ fontSize: 11, color: T.t3, textAlign: "right" }}>
+                      {fmtC(r.cash_amount)} <span style={{ color: T.t4 }}>/</span> {fmtC(r.credit_amount)}
+                    </span>
+                    <span style={{ textAlign: "right" }}>
+                      {r.unpaid_amount > 0
+                        ? <Pill label={fmtC(r.unpaid_amount)} c={T.amb} bg={T.ambL} />
+                        : <span style={{ fontSize: 11, color: T.grn }}>sab settle</span>}
+                    </span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(r.amount)}</span>
+                    <span style={{ fontSize: 11, color: T.t3 }}>
+                      {r.first_at}{r.last_at !== r.first_at ? ` se ${r.last_at}` : ""}
+                    </span>
+                    <span style={{ fontSize: 11 }}>
+                      {r.flagged > 0 && <Pill label={`${r.flagged} parchi se alag`} c={T.red} bg={T.redL} />}
+                      {r.no_slip > 0 && (
+                        <span style={{ color: T.t4, marginLeft: r.flagged ? 6 : 0 }}>{r.no_slip} bina parchi</span>
+                      )}
+                      {!r.flagged && !r.no_slip && <span style={{ color: T.t4 }}>—</span>}
+                    </span>
+                  </Row>
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
+              Kisi pump par click karein — uska poora register khul jayega, chalte hue jod ke saath.
+              Sirf kharid ginti hai; barrel se nikaasi ka pump ke bill se lena-dena nahi.
+            </div>
+          </>
+        )}
+      </Panel>
+
+      {openId && <PumpLedgerPanel vendorId={openId} from={from} to={to} onClose={() => setOpenId("")} />}
+    </div>
+  );
+}
+
+function PumpLedgerPanel({ vendorId, from, to, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const params = useMemo(() => ({ vendor_id: vendorId, from, to }), [vendorId, from, to]);
+
+  useEffect(() => {
+    let dead = false;
+    setLoading(true);
+    api.get(`/fuel/reports/pump-ledger?${qs(params)}`)
+      .then((r) => { if (!dead) setData(r?.success ? r.data : null); })
+      .catch(() => { if (!dead) setData(null); })
+      .finally(() => { if (!dead) setLoading(false); });
+    return () => { dead = true; };
+  }, [params]);
+
+  const rows = data?.rows || [];
+  const tot = data?.totals || {};
+  const COLS = [
+    { key: "date", label: "Date", w: 12 },
+    { key: "slip_no", label: "Parchi", w: 13 },
+    { key: "to", label: "Kisme dala", w: 22 },
+    { key: "project", label: "Project", w: 20 },
+    { key: "litres", label: "Litre", w: 9 },
+    { key: "rate", label: "Rate", w: 9 },
+    { key: "amount", label: "Amount", w: 12, excel: (r) => Math.round(r.amount) },
+    { key: "payment", label: "Payment", w: 10 },
+    { key: "status", label: "Status", w: 9 },
+    { key: "run_litres", label: "Ab tak L", w: 11 },
+    { key: "run_amount", label: "Ab tak Rs", w: 13, excel: (r) => Math.round(r.run_amount) },
+    { key: "flag", label: "Parchi se farq", w: 16,
+      excel: (r) => (r.flag === "mismatch" ? `parchi ${r.slip_read_litres ?? "?"} L / entry ${r.litres} L` : "") },
+    { key: "entered_by", label: "Kisne bhara", w: 16 },
+  ];
+  const cols = "76px 88px 1.3fr 1fr 62px 56px 84px 76px 82px 96px";
+
+  return (
+    <Panel
+      title={data ? `${data.pump.name} — poora register` : "Pump register"}
+      action={
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/pump-ledger.pdf"
+            params={params} baseName={`pump-${slug(data?.pump?.name)}`}
+            caption={`${data?.pump?.name || "Pump"} ka register — Sanchalan`} />
+          <Btn size="sm" ghost onClick={onClose}>Band karein</Btn>
+        </div>}>
+      {loading && <Empty>Laa rahe hain...</Empty>}
+      {!loading && rows.length === 0 && <Empty>Is duration me is pump se koi kharid nahi.</Empty>}
+      {rows.length > 0 && (
+        <>
+          <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11.5, color: T.t2 }}>{tot.fills} fills · <b style={{ color: T.t1 }}>{fmtL(tot.litres)}</b> · {fmtC(tot.amount)}</span>
+            {tot.avg_rate != null && <span style={{ fontSize: 11.5, color: T.t2 }}>Average ₹{fmtN(tot.avg_rate)}</span>}
+            {tot.unpaid_amount > 0 && <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>Baaki {fmtC(tot.unpaid_amount)}</span>}
+            {tot.flagged > 0 && <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>{tot.flagged} parchi se alag</span>}
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 1040 }}>
+              <Row head cols={cols}>
+                <span>Date</span><span>Parchi</span><span>Kisme dala</span><span>Project</span>
+                <span style={{ textAlign: "right" }}>Litre</span><span style={{ textAlign: "right" }}>Rate</span>
+                <span style={{ textAlign: "right" }}>Amount</span><span>Payment</span>
+                <span style={{ textAlign: "right" }}>Ab tak L</span><span style={{ textAlign: "right" }}>Ab tak ₹</span>
+              </Row>
+              {rows.map((r) => (
+                <Row key={r.purchase_id} cols={cols}>
+                  <span style={{ fontSize: 11.5, color: T.t2 }}>{r.date}</span>
+                  <span style={{ fontSize: 11.5, color: r.slip_no ? T.t2 : T.t4 }}>
+                    {r.slip_no || "bina parchi"}
+                    {r.flag === "mismatch" && (
+                      <div title={r.flag_note || ""} style={{ fontSize: 9, fontWeight: 800, color: T.red }}>
+                        parchi {r.slip_read_litres != null ? fmtN(r.slip_read_litres) + " L" : "alag"}
+                      </div>
+                    )}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>
+                    {r.to}
+                    {r.to_kind === "barrel" && <span style={{ fontSize: 10, color: T.t4 }}> (barrel)</span>}
+                  </span>
+                  <span style={{ fontSize: 11.5, color: T.t3 }}>{r.project || "—"}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.t1, textAlign: "right" }}>{fmtN(r.litres)}</span>
+                  <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{fmtN(r.rate)}</span>
+                  <span style={{ fontSize: 12, color: T.t1, textAlign: "right" }}>{fmtC(r.amount)}</span>
+                  <span style={{ fontSize: 11 }}>
+                    <Pill label={r.payment} c={r.payment === "Cash" ? T.grn : T.slt}
+                      bg={r.payment === "Cash" ? T.grnL : T.sltL} />
+                    {r.status === "Baaki" && (
+                      <span style={{ fontSize: 9.5, color: T.amb, fontWeight: 700, marginLeft: 4 }}>BAAKI</span>
+                    )}
+                  </span>
+                  {/* Chalta hua jod — bill milaate waqt sawaal "ab tak kitna
+                      hua" hota hai, "kul kitna hua" nahi. */}
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: T.t2, textAlign: "right" }}>{fmtN(r.run_litres)}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(r.run_amount)}</span>
+                </Row>
+              ))}
+            </div>
+          </div>
+          <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
+            "Ab tak" wale khaane pump ke bill se milaane ke liye hain — har row par us tareekh tak
+            ka jod. Aakhri row ka jod hi kul jod hota hai.
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
 function ReportsTab({ byEquipment, byProject, from, to, onRange, projects, equipment, vendors, stores }) {
   const [sub, setSub] = useState("register");
   const SUBS = [
     { id: "register", l: "Diesel Register" },
     { id: "eff", l: "Fuel Efficiency" },
     { id: "barrel", l: "Barrel Register" },
+    { id: "pump", l: "Pump Register" },
     { id: "project", l: "Project-wise" },
   ];
   return (
@@ -1693,6 +1946,7 @@ function ReportsTab({ byEquipment, byProject, from, to, onRange, projects, equip
         <EfficiencyReport byEquipment={byEquipment} from={from} to={to} onRange={onRange} projects={projects} />
       )}
       {sub === "barrel" && <BarrelRegister projects={projects} />}
+      {sub === "pump" && <PumpRegister projects={projects} from={from} to={to} onRange={onRange} />}
       {sub === "project" && <ProjectSpend byProject={byProject} />}
     </div>
   );
