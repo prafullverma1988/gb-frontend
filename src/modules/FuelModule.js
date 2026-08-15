@@ -323,6 +323,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
   const amount = Math.round(litres * rate * 100) / 100;
 
   const store = stores.find((s) => String(s.id) === String(f.store_id));
+  const machine = equipment.find((e) => String(e.id) === String(f.equipment_id));
   const isIssue = path === "store_machine";
 
   // Barrel do jagah ho sakta hai: warehouse me, ya kisi project par. Pehle wo
@@ -394,6 +395,27 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
     if (isIssue && store && litres > Number(store.litres) + 0.001) {
       setError(`${store.name} me sirf ${fmtL(store.litres)} hai`); return;
     }
+    // Meter lazmi hai jab diesel machine me ja raha ho. Server bhi yahi rokta
+    // hai — yahan sirf isliye ki site par error server ja kar aane se pehle hi
+    // dikh jaye.
+    if (path !== "pump_store") {
+      if (!f.meter_missing && !f.meter_reading) {
+        setError("Machine ka meter reading daalein. Meter kharab ya hai hi nahi, to \"Meter nahi de sakta\" chunein."); return;
+      }
+      if (f.meter_missing && !f.meter_missing_reason) {
+        setError("Meter na dene ki wajah chunein"); return;
+      }
+    }
+    // Meter lazmi jab diesel machine me ja raha ho. Server par bhi yahi rok
+    // hai — ye sirf site par ek round-trip bachati hai.
+    if (path !== "pump_store") {
+      if (!f.meter_missing && !f.meter_reading) {
+        setError('Machine ka meter reading bharein. Meter kharab ya hai hi nahi, to "Meter nahi de sakta" tick karein.'); return;
+      }
+      if (f.meter_missing && !f.meter_missing_reason) {
+        setError("Meter na dene ki wajah chunein"); return;
+      }
+    }
 
     setBusy(true);
     try {
@@ -408,6 +430,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           litres,
           issued_at: toSqlDateTime(f.filled_at),
           meter_reading: f.meter_reading ? parseFloat(f.meter_reading) : null,
+          meter_missing_reason: f.meter_missing ? (f.meter_missing_reason || null) : null,
           photo_url: f.photo_url || null,
           note: f.note || null,
         });
@@ -424,6 +447,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           slip_photo_url: f.photo_url || null,
           slip_read: slipRead || null,
           meter_reading: f.meter_reading ? parseFloat(f.meter_reading) : null,
+          meter_missing_reason: f.meter_missing ? (f.meter_missing_reason || null) : null,
           payment_mode: f.payment_mode || "credit",
           note: f.note || null,
         });
@@ -551,10 +575,35 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           <input type="datetime-local" value={f.filled_at || ""} onChange={(e) => upd("filled_at", e.target.value)} style={inp} />
         </Field>
 
-        <Field label="Meter reading (optional)">
-          <input value={f.meter_reading || ""} inputMode="decimal" placeholder="hour-meter / km"
-            onChange={(e) => upd("meter_reading", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
-        </Field>
+        {/* Meter tabhi maanga jaata hai jab diesel MACHINE me ja raha ho.
+            Barrel bharne par koi machine hai hi nahi. Ye lazmi isliye hai ki
+            ₹/hr = kharcha ÷ chali, aur "chali" ke liye do reading chahiye —
+            diesel har hafte bharta hai, yahi sabse pakka mauka hai. */}
+        {path !== "pump_store" && (
+          <Field label="Machine ka meter reading *"
+            hint={f.meter_missing ? "Wajah ke saath chhoot mil jayegi, par report me alag dikhega."
+              : "Isi se machine ka ₹/hr banta hai."}>
+            {!f.meter_missing && (
+              <input value={f.meter_reading || ""} inputMode="decimal"
+                placeholder={machine?.meter_unit === "km" ? "odometer (km)" : "hour-meter"}
+                onChange={(e) => upd("meter_reading", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
+            )}
+            <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: f.meter_missing ? 0 : 7, fontSize: 12, color: T.t2, cursor: "pointer" }}>
+              <input type="checkbox" checked={!!f.meter_missing}
+                onChange={(e) => { upd("meter_missing", e.target.checked); if (e.target.checked) upd("meter_reading", ""); }} />
+              Meter nahi de sakta
+            </label>
+            {f.meter_missing && (
+              <select value={f.meter_missing_reason || ""} onChange={(e) => upd("meter_missing_reason", e.target.value)}
+                style={{ ...inp, marginTop: 7 }}>
+                <option value="">— wajah chunein —</option>
+                <option value="meter_kharab">Meter kharab hai</option>
+                <option value="meter_nahi">Machine par meter hai hi nahi</option>
+                <option value="padha_nahi_gaya">Us waqt padha nahi ja saka</option>
+              </select>
+            )}
+          </Field>
+        )}
 
         {!isIssue && (
           <>
