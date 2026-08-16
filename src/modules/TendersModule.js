@@ -3550,6 +3550,7 @@ function MBDraftModal({tenderId, onClose, onDone}) {
   const [mbRef, setMbRef] = useState("");
   const [rows, setRows]   = useState(null);   // null = abhi load nahi hua
   const [scanned, setScanned] = useState(0);
+  const [warn, setWarn] = useState("");
   const [busy, setBusy]   = useState(false);
 
   const fetchDraft = async () => {
@@ -3560,7 +3561,11 @@ function MBDraftModal({tenderId, onClose, onDone}) {
     if (!res?.success) { toast.error(res?.message || "Draft nahi bana"); return; }
     const list = (res.data?.rows || []).map(r => ({...r, take: r.dpr_qty, include: true}));
     setRows(list); setScanned(res.data?.dprs_scanned || 0);
-    if (!list.length) toast.info?.("Is period me DPR se koi BOQ-linked kaam nahi mila");
+    setWarn(res.data?.warning || "");
+    // Server padh nahi paaya to draft adhoora hai — chup mat raho, warna
+    // adhoora draft poora dikhta hai aur bill kam ban jaata hai.
+    if (res.data?.warning) toast.error(res.data.warning);
+    else if (!list.length) toast.info?.("Is period me DPR se koi BOQ-linked kaam nahi mila");
   };
 
   const setRow = (i,k,v) => setRows(p=>p.map((r,idx)=>idx===i?{...r,[k]:v}:r));
@@ -3609,7 +3614,12 @@ function MBDraftModal({tenderId, onClose, onDone}) {
       {rows && !rows.length && (
         <div style={{padding:"18px 12px", textAlign:"center", fontSize:12.5, color:T.t3}}>
           Is period me BOQ-item se juda koi DPR kaam nahi mila. ({scanned} DPR dekhe gaye)<br/>
-          <span style={{fontSize:11.5, color:T.t4}}>Site team DPR me "BOQ item" chunegi tabhi yahan aayega.</span>
+          <span style={{fontSize:11.5, color:T.t4}}>Jis task par kaam likha gaya wo BOQ item se juda hoga tabhi yahan aayega — task edit me "Tender se jodo".</span>
+        </div>
+      )}
+      {!!warn && (
+        <div style={{background:"#FEF2F2", border:"1px solid #FCA5A5", color:"#991B1B", borderRadius:8, padding:"8px 11px", fontSize:11.5, marginBottom:9, lineHeight:1.5}}>
+          ⚠ {warn}
         </div>
       )}
       {!!rows?.length && (<>
