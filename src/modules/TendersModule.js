@@ -1165,7 +1165,19 @@ function InstrumentActionModal({tenderId, inst, action, onClose, onDone}) {
     ref: "",
     mode: action === "refund" ? "online" : "",
     remarks: "",
+    account_id: "",
   });
+  // Forfeit par Finance me expense banti hai — kis account se paisa gaya, wo
+  // chun sakte ho. Release/refund par koi entry nahi banti, to list bhi nahi.
+  const [accounts, setAccounts] = useState([]);
+  useEffect(()=>{
+    if (action !== "forfeit") return;
+    let dead = false;
+    api.get("/finance/accounts").then(r=>{
+      if (!dead && r?.success && Array.isArray(r.data)) setAccounts(r.data);
+    }).catch(()=>{});
+    return ()=>{ dead = true; };
+  }, [action]);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const isForfeit = action === "forfeit";
@@ -1189,6 +1201,7 @@ function InstrumentActionModal({tenderId, inst, action, onClose, onDone}) {
       action_ref: form.ref.trim() || null,
       action_mode: form.mode || null,
       action_remarks: form.remarks.trim() || null,
+      ...(isForfeit && form.account_id ? {account_id: Number(form.account_id)} : {}),
     });
     setBusy(false);
     if (!res?.success) { setErr(res?.message || "Action nahi hua"); return; }
@@ -1225,8 +1238,9 @@ function InstrumentActionModal({tenderId, inst, action, onClose, onDone}) {
           borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:13,
           display:"flex", gap:8, alignItems:"flex-start"}}>
           <IcWarn size={14} color={T.red}/>
-          <span><b style={{color:T.red}}>Ye paisa wapas nahi aayega.</b> Forfeit ek hi baar hota hai —
-            uske baad status badla nahi ja sakta.</span>
+          <span><b style={{color:T.red}}>Ye paisa wapas nahi aayega.</b> Finance me isi amount ki
+            <b> EMD Forfeit</b> expense entry ban jayegi. Galti ho to admin Undo kar sakta hai —
+            tab wo entry bhi hat jayegi.</span>
         </div>
       )}
 
@@ -1244,6 +1258,13 @@ function InstrumentActionModal({tenderId, inst, action, onClose, onDone}) {
         {action === "refund" && (
           <Field label="Kaise wapas aaya" full>
             <SelIn value={form.mode} onChange={v=>set("mode",v)} options={INSTRUMENT_MODES} ph="Chuno..."/>
+          </Field>
+        )}
+        {isForfeit && (
+          <Field label="Kis account se gaya" full
+            hint="Finance me is amount ki expense entry banegi — account chuno to usi ka balance ghatega.">
+            <SelIn value={form.account_id} onChange={v=>set("account_id",v)} ph="Account chuno (optional)..."
+              options={accounts.map(a=>({v:String(a.id), l:a.name}))}/>
           </Field>
         )}
         <Field label={isForfeit ? "Wajah *" : "Remarks"} full

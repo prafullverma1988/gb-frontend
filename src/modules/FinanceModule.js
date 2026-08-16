@@ -104,6 +104,9 @@ const isVendorType=(type)=>{
 // CR the party = we owe them more. Running balance = Σ(sign·amount) = the
 // backend's signed live_balance (>0 = they owe us). Keeps the ledger drawer,
 // the party card and the bot in exact agreement.
+// emd_forfeit yahan JAAN-BOOJH KAR nahi hai — EMD ka jama hona party ledger
+// me likha hi nahi jata, to zabt hone par leg daalne se department ka jhootha
+// balance ban jayega (poori wajah utils/partyBalance.js me).
 const LEDGER_PLUS  = new Set(["sales_invoice","ra_bill","payment","party_payment","settle_out","material_return","contra"]);
 const LEDGER_MINUS = new Set(["material_purchase","subcon_expense","site_expense","receipt","settle_in"]);
 const ledgerSign = (rawType) => {
@@ -186,7 +189,7 @@ const WALLET_TXNS=[];
 
 const PARTIES=[];
 const PARTY_TXNS={};
-const TXN_TYPE_META={"Payment In":{color:C.g,bg:C.gl},"Payment Out":{color:C.r,bg:C.rl},"Material Purchase":{color:C.p,bg:C.bl},"Site Expense":{color:C.o,bg:C.ol},"Party Payment":{color:C.pur,bg:C.purl},"Sub-Con Expense":{color:C.teal,bg:C.tealL},"Material Return":{color:C.a,bg:"#FFF8E1"},"Sales Invoice":{color:C.g,bg:C.gl},"RA Bill":{color:C.g,bg:C.gl},"Unbilled Material":{color:C.pink,bg:C.pinkL},"Wallet Payment":{color:"#00695C",bg:"#E0F2F1"},"Wallet Top-up":{color:C.p,bg:C.bl},"Settlement":{color:C.ind,bg:C.indL}};
+const TXN_TYPE_META={"Payment In":{color:C.g,bg:C.gl},"Payment Out":{color:C.r,bg:C.rl},"Material Purchase":{color:C.p,bg:C.bl},"Site Expense":{color:C.o,bg:C.ol},"Party Payment":{color:C.pur,bg:C.purl},"Sub-Con Expense":{color:C.teal,bg:C.tealL},"Material Return":{color:C.a,bg:"#FFF8E1"},"Sales Invoice":{color:C.g,bg:C.gl},"RA Bill":{color:C.g,bg:C.gl},"EMD Forfeit":{color:C.r,bg:C.rl},"Unbilled Material":{color:C.pink,bg:C.pinkL},"Wallet Payment":{color:"#00695C",bg:"#E0F2F1"},"Wallet Top-up":{color:C.p,bg:C.bl},"Settlement":{color:C.ind,bg:C.indL}};
 const TRANSACTIONS_DATA=[];
 const UNBILLED_PARTIES=[];
 const PAY_REQS_DATA=[];
@@ -3556,7 +3559,7 @@ function FinanceModule(){
     "receipt":"Payment In","payment":"Payment Out",
     "material_purchase":"Material Purchase","site_expense":"Site Expense",
     "party_payment":"Party Payment","subcon_expense":"Sub-Con Expense",
-    "material_return":"Material Return","sales_invoice":"Sales Invoice","ra_bill":"RA Bill",
+    "material_return":"Material Return","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit",
     "unbilled_material":"Unbilled Material","wallet_payment":"Wallet Payment",
     "wallet_topup":"Wallet Top-up","bank_transfer":"Bank Transfer",
     "settle_in":"Settlement","settle_out":"Settlement",
@@ -4059,7 +4062,7 @@ function FinanceModule(){
   };
   const downloadLedgerPDF=(party)=>{
     const rows=getLedgerRows(party);
-    const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
+    const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
     const rowsHTML=rows.map(t=>{
       const typeLabel=TYPE_LABELS[t.txnType]||t.type||t.txnType||"Transaction";
       const proj=t.project||t.project_name||"";
@@ -4627,7 +4630,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
               // Each row keeps its TRUE running balance (computed on the full,
               // chronological ledger) — filtering only hides rows, so the
               // Balance column and Closing Balance stay accounting-correct.
-              const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
+              const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
               const labelOf=(txn)=>LEDGER_TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
               const projOf=(txn)=>txn.project||txn.project_name||"";
               const ledgerTypeOpts=Array.from(new Set(ledgerRows.map(labelOf))).sort();
@@ -4752,7 +4755,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           return(<>
                           {/* Type label from txnType */}
                           {(()=>{
-                            const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
+                            const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
                             const typeLabel=TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
                             const siteLabel=txn.project||txn.project_name||"";
                             // ONLY user-typed note. `sub` (= auto-generated description
@@ -4985,6 +4988,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   "Sub-Con Expense":{label:"Sub-Con",       color:T.red,  bg:T.redL,  dir:"out"},
                   "Sales Invoice": {label:"Sales Invoice",  color:T.grn,  bg:T.grnL,  dir:"in"},
                   "RA Bill":       {label:"RA Bill",        color:T.grn,  bg:T.grnL,  dir:"in"},
+                  "EMD Forfeit":   {label:"EMD Forfeit",    color:T.red,  bg:T.redL,  dir:"out"},
                   "Bank Transfer": {label:"Bank Transfer",  color:T.t3,   bg:T.b1,    dir:"transfer"},
                   "Wallet Payment":{label:"Wallet Out",     color:T.red,  bg:T.redL,  dir:"out"},
                   "Wallet Top-up": {label:"Wallet Top-up",  color:T.slt,  bg:T.sltL,  dir:"internal"},
