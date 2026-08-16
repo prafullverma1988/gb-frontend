@@ -3556,6 +3556,76 @@ function MapTab({tenderId, sites}) {
   </>);
 }
 
+// ── PHOTO SE JAANCH (4A) ────────────────────────────────────────────
+// Site ki photo aaj tak sirf padi rehti thi. Ab MB banate waqt wo padhi jaati
+// hai aur row par ek ishara lag jaata hai. Ishara BAS ishara hai — na qty
+// badalti hai, na tick hatta hai, na commit rukta hai. Faisla PM ka hi.
+const PC_STYLE = {
+  dikha:        { bg:"#ECFDF5", bd:"#6EE7B7", fg:"#065F46", icon:"✓" },
+  nahi_dikha:   { bg:"#FEF2F2", bd:"#FCA5A5", fg:"#991B1B", icon:"✕" },
+  saaf_nahi:    { bg:"#FFFBEB", bd:"#FCD34D", fg:"#92400E", icon:"?" },
+  photo_nahi:   { bg:"#F8FAFC", bd:"#CBD5E1", fg:"#475569", icon:"○" },
+  kam_photo:    { bg:"#FFFBEB", bd:"#FCD34D", fg:"#92400E", icon:"!" },
+  sirf_ginti:   { bg:"#EFF6FF", bd:"#93C5FD", fg:"#1E40AF", icon:"i" },
+};
+
+function PhotoCheckCell({row, tenderId, from, to, onDone}) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const c = row.photo_check;
+
+  const run = async (force) => {
+    setBusy(true);
+    const res = await api.post(`/tenders/${tenderId}/photo-check`, {
+      project_id: row.project_id, boq_item_id: row.boq_item_id,
+      alignment_id: row.alignment_id || null,
+      from, to, days: row.dpr_days, qty: row.dpr_qty, force: !!force,
+    });
+    setBusy(false);
+    if (!res?.success) { toast.error(res?.message || "Jaanch nahi ho payi"); return; }
+    onDone(res.data);
+    // AI na chala ho to chhupao mat — warna PM ko lagega jaanch poori hui.
+    if (!res.data.ai_ran && res.data.ai_reason) toast.info?.(res.data.ai_reason);
+  };
+
+  if (!c) {
+    return (
+      <button onClick={()=>run(false)} disabled={busy}
+        style={{fontSize:10.5, padding:"4px 8px", borderRadius:6, cursor:busy?"default":"pointer",
+          border:`1px solid ${T.b1}`, background:T.surface, color:T.t3, fontFamily:"inherit", whiteSpace:"nowrap"}}>
+        {busy ? "dekh raha…" : "Photo se jaanch"}
+      </button>
+    );
+  }
+  const s = PC_STYLE[c.verdict] || PC_STYLE.sirf_ginti;
+  return (
+    <div>
+      <button onClick={()=>setOpen(o=>!o)} title={c.note || ""}
+        style={{fontSize:10.5, fontWeight:700, padding:"4px 8px", borderRadius:6, cursor:"pointer",
+          border:`1px solid ${s.bd}`, background:s.bg, color:s.fg, fontFamily:"inherit", whiteSpace:"nowrap"}}>
+        {s.icon} {c.label}
+      </button>
+      {open && (
+        <div style={{marginTop:5, fontSize:10.5, color:T.t3, lineHeight:1.5, maxWidth:200}}>
+          {c.note && <div>{c.note}</div>}
+          {!!c.kya_dikha?.length && (
+            <div style={{marginTop:3, color:T.t4}}>Photo me: {c.kya_dikha.join(", ")}</div>
+          )}
+          <div style={{marginTop:3, color:T.t4}}>
+            {c.coverage?.total ?? 0} photo{c.coverage?.skipped ? ` · ${c.coverage.skipped} nahi dekhi` : ""}
+          </div>
+          <button onClick={()=>run(true)} disabled={busy}
+            style={{marginTop:4, fontSize:10, padding:"3px 7px", borderRadius:5, cursor:"pointer",
+              border:`1px solid ${T.b1}`, background:T.surface, color:T.t3, fontFamily:"inherit"}}>
+            {busy ? "…" : "Dobara jaancho"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── MB DRAFT (month-end) ────────────────────────────────────────────
 // Site teams write meters daily in mobile DPRs against a BOQ item. This pulls
 // that diary for a period, summed site × item, so the admin cross-checks it
@@ -3650,7 +3720,8 @@ function MBDraftModal({tenderId, onClose, onDone}) {
             <thead style={{position:"sticky", top:0, background:T.surfaceB, zIndex:1}}>
               <tr><th style={{...th,width:34}}></th><th style={th}>Site</th><th style={th}>Item</th>
                 <th style={th}>Description</th><th style={{...th,textAlign:"right"}}>DPR qty</th>
-                <th style={{...th,textAlign:"right"}}>MB me lo</th><th style={{...th,textAlign:"right"}}>Is period me pehle se</th></tr>
+                <th style={{...th,textAlign:"right"}}>MB me lo</th><th style={{...th,textAlign:"right"}}>Is period me pehle se</th>
+                <th style={{...th,width:132}}>Photo se jaanch</th></tr>
             </thead>
             <tbody>
               {rows.map((r,i)=>{
@@ -3680,6 +3751,12 @@ function MBDraftModal({tenderId, onClose, onDone}) {
                     <td style={{...td, textAlign:"right", color: dup ? T.amb : T.t4, fontWeight: dup?700:400}}>
                       {dup ? `${fmtQty(r.measured_in_period)} ${r.unit||""}` : "—"}
                       {dup && <div style={{fontSize:10}}>dobara na ho</div>}
+                    </td>
+                    {/* AI sirf ishara deta hai. Row ka tick, qty aur commit —
+                        teeno aadmi ke haath me hi rehte hain. */}
+                    <td style={td}>
+                      <PhotoCheckCell row={r} tenderId={tenderId} from={from} to={to}
+                        onDone={c=>setRow(i,"photo_check",c)}/>
                     </td>
                   </tr>
                 );
