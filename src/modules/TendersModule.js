@@ -3415,30 +3415,35 @@ function MapTab({tenderId, sites}) {
 
       {/* Sanity strip — drawn vs what the BOQ tendered */}
       {summary && (
-        <div style={{display:"flex", gap:9, flexWrap:"wrap", padding:"10px 14px",
-          borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
-          {[["Drawn length", fmtKm(summary.total_length_m), T.ind],
-            ...(progress ? [["Ho gaya (MB se)", `${fmtKm(progress.total_done_m)} · ${progress.total_pct}%`, T.grn]] : []),
-            ["Structures", String(summary.total_points), T.blu],
-            ["BOQ (RMT items)", summary.boq_running_qty ? fmtKm(summary.boq_running_qty) : "—", T.t2],
-            ...(drawnVsBoq !== null ? [["Farak", (drawnVsBoq>0?"+":"") + fmtKm(Math.abs(drawnVsBoq)),
-              Math.abs(drawnVsBoq) > Math.max(500, summary.boq_running_qty*0.05) ? T.amb : T.grn]] : []),
-          ].map(([l,v,c],i)=>(
-            <div key={i} style={{border:`1px solid ${T.b1}`, borderRadius:8, padding:"7px 12px", background:T.surface, minWidth:118}}>
-              <div style={{fontSize:15, fontWeight:800, color:c, fontVariantNumeric:"tabular-nums"}}>{v}</div>
-              <div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".3px", marginTop:2}}>{l}</div>
-            </div>
-          ))}
-          {drawnVsBoq !== null && Math.abs(drawnVsBoq) > Math.max(500, summary.boq_running_qty*0.05) && (
-            <div style={{alignSelf:"center", fontSize:11.5, color:T.amb, maxWidth:280}}>
-              Drawn aur BOQ me farak hai — alignment adhoori ho sakti hai (ya BOQ me non-pipeline RMT items hain).
-            </div>
-          )}
-          {!!progress?.unmapped_m && (
-            <div style={{alignSelf:"center", fontSize:11.5, color:T.amb, maxWidth:300}}>
-              MB me {fmtKm(progress.unmapped_m)} aisa kaam hai jiske liye line draw hi nahi hui — utni pipeline map par add karo.
-            </div>
-          )}
+        // Pehle ye paanch alag-alag dabbe the aur uske bagal me do lambi
+        // chetavni — teen line ghere leti thi aur map ke liye jagah kha jaati
+        // thi. Ab ek hi patti: ankde bade par tang, chetavni neeche ek line me.
+        <div style={{padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
+          <div style={{display:"flex", gap:0, flexWrap:"wrap", alignItems:"baseline"}}>
+            {[["Drawn", fmtKm(summary.total_length_m), T.ind],
+              ...(progress ? [["Ho gaya (MB se)", `${fmtKm(progress.total_done_m)} · ${progress.total_pct}%`, T.grn]] : []),
+              ["Structures", String(summary.total_points), T.blu],
+              ["BOQ (RMT)", summary.boq_running_qty ? fmtKm(summary.boq_running_qty) : "—", T.t2],
+              ...(drawnVsBoq !== null ? [["Farak", (drawnVsBoq>0?"+":"") + fmtKm(Math.abs(drawnVsBoq)),
+                Math.abs(drawnVsBoq) > Math.max(500, summary.boq_running_qty*0.05) ? T.amb : T.grn]] : []),
+            ].map(([l,v,c],i)=>(
+              <div key={i} style={{display:"flex", alignItems:"baseline", gap:6, padding:"0 14px",
+                borderLeft: i ? `1px solid ${T.b1}` : "none"}}>
+                <span style={{fontSize:15, fontWeight:800, color:c, fontVariantNumeric:"tabular-nums"}}>{v}</span>
+                <span style={{fontSize:10.5, color:T.t4}}>{l}</span>
+              </div>
+            ))}
+          </div>
+          {(() => {
+            const w = [];
+            if (drawnVsBoq !== null && Math.abs(drawnVsBoq) > Math.max(500, summary.boq_running_qty*0.05))
+              w.push("Drawn aur BOQ me farak hai — alignment adhoori ho sakti hai (ya BOQ me non-pipeline RMT items hain).");
+            if (progress?.unmapped_m)
+              w.push(`MB me ${fmtKm(progress.unmapped_m)} aisa kaam hai jiske liye line draw hi nahi hui.`);
+            return w.length ? (
+              <div style={{marginTop:6, fontSize:11, color:T.amb, lineHeight:1.5}}>⚠ {w.join(" · ")}</div>
+            ) : null;
+          })()}
         </div>
       )}
 
@@ -3608,12 +3613,11 @@ function MbCheckMark({verdict, loc}) {
   );
 }
 
-function PhotoCheckCell({row, tenderId, from, to, onDone}) {
+// Jaanch chalane ka kaam ek hi jagah — cell aur detail dono isko use karte
+// hain, taaki "Dobara jaancho" aur pehli jaanch me koi farak na rahe.
+function usePhotoCheck({row, tenderId, from, to, onDone}) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
-  const c = row.photo_check;
-
   const run = async (force) => {
     setBusy(true);
     const res = await api.post(`/tenders/${tenderId}/photo-check`, {
@@ -3627,11 +3631,21 @@ function PhotoCheckCell({row, tenderId, from, to, onDone}) {
     // AI na chala ho to chhupao mat — warna PM ko lagega jaanch poori hui.
     if (!res.data.ai_ran && res.data.ai_reason) toast.info?.(res.data.ai_reason);
   };
+  return { busy, run };
+}
+
+// Cell me sirf ishara — do chhoti lines, bas. Pehle poori detail yahin
+// khulti thi aur column 130px chauda hai, to AI ka do-line ka note aath
+// line me toot kar row ko teen guna lamba kar deta tha. Detail ab row ke
+// NEECHE poori chaudai me khulti hai, jahan padhne ki jagah hai.
+function PhotoCheckCell({row, tenderId, from, to, onDone, open, onToggle}) {
+  const { busy, run } = usePhotoCheck({row, tenderId, from, to, onDone});
+  const c = row.photo_check;
 
   if (!c) {
     return (
       <button onClick={()=>run(false)} disabled={busy}
-        style={{fontSize:10.5, padding:"4px 8px", borderRadius:6, cursor:busy?"default":"pointer",
+        style={{fontSize:10.5, padding:"4px 9px", borderRadius:6, cursor:busy?"default":"pointer",
           border:`1px solid ${T.b1}`, background:T.surface, color:T.t3, fontFamily:"inherit", whiteSpace:"nowrap"}}>
         {busy ? "dekh raha…" : "Photo se jaanch"}
       </button>
@@ -3640,50 +3654,63 @@ function PhotoCheckCell({row, tenderId, from, to, onDone}) {
   const s = PC_STYLE[c.verdict] || PC_STYLE.sirf_ginti;
   const L = c.location ? (LOC_STYLE[c.location.flag] || null) : null;
   return (
-    <div>
-      <button onClick={()=>setOpen(o=>!o)} title={c.note || ""}
-        style={{fontSize:10.5, fontWeight:700, padding:"4px 8px", borderRadius:6, cursor:"pointer",
-          border:`1px solid ${s.bd}`, background:s.bg, color:s.fg, fontFamily:"inherit", whiteSpace:"nowrap"}}>
-        {s.icon} {c.label}
-      </button>
+    <button onClick={onToggle} title="Detail dekho"
+      style={{display:"flex", flexDirection:"column", alignItems:"flex-start", gap:2,
+        padding:"4px 8px", borderRadius:6, cursor:"pointer", width:"100%",
+        border:`1px solid ${open ? s.fg : s.bd}`, background:s.bg, fontFamily:"inherit", textAlign:"left"}}>
+      <span style={{fontSize:10.5, fontWeight:700, color:s.fg, whiteSpace:"nowrap"}}>{s.icon} {c.label}</span>
       {/* Jagah wali baat AI wale ishare se ALAG dikhti hai — dono alag
           sawaal hain aur PM ko pata rehna chahiye kaunsa kis se aaya. */}
       {L && L.icon && (
-        <div style={{marginTop:3, fontSize:10, color:L.fg, lineHeight:1.4, maxWidth:170}}
-             title={c.location.note || ""}>
-          {L.icon} {L.text || c.location.note}
+        <span style={{fontSize:9.5, color:L.fg, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%"}}>
+          {L.icon} {L.text || (c.location.flag === "doosri_line" ? "Doosri line par" : "Jagah dekho")}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// Row ke neeche khulne wala detail — poori chaudai, isliye tasveer bayen aur
+// padhne wali baat dayen, dono ek nazar me.
+function PhotoCheckDetail({row, tenderId, from, to, onDone}) {
+  const { busy, run } = usePhotoCheck({row, tenderId, from, to, onDone});
+  const c = row.photo_check;
+  if (!c) return null;
+  const cov = c.coverage || {};
+  const bits = [
+    `${cov.total ?? 0} photo`,
+    cov.skipped ? `${cov.skipped} nahi dekhi` : null,
+    row.dpr_days ? `${row.dpr_days} din ka kaam` : null,
+  ].filter(Boolean);
+
+  return (
+    <div style={{display:"flex", gap:14, alignItems:"flex-start", padding:"10px 12px",
+      background:T.surfaceB, borderLeft:`3px solid ${(PC_STYLE[c.verdict]||PC_STYLE.sirf_ginti).fg}`, borderRadius:7}}>
+      {!!c.photos?.length && (
+        <div style={{display:"flex", gap:5, flexShrink:0}}>
+          {c.photos.slice(0,5).map(p=>(
+            <a key={p.id} href={p.url} target="_blank" rel="noreferrer" title={p.taken_on||"Poori photo kholo"}>
+              <img src={thumb(p.url)} alt="" loading="lazy"
+                style={{width:58, height:58, objectFit:"cover", borderRadius:5,
+                  border:`1px solid ${T.b1}`, display:"block"}}/>
+            </a>
+          ))}
         </div>
       )}
-      {open && (
-        <div style={{marginTop:5, fontSize:10.5, color:T.t3, lineHeight:1.5, maxWidth:200}}>
-          {c.note && <div>{c.note}</div>}
-          {c.location?.note && <div style={{marginTop:2}}>{c.location.note}</div>}
-          {!!c.kya_dikha?.length && (
-            <div style={{marginTop:3, color:T.t4}}>Photo me: {c.kya_dikha.join(", ")}</div>
-          )}
-          {/* Wahi photos jo jaanchi gayin. Faisla PM ka hai — to use tasveer
-              dikhni bhi chahiye, warna wo sirf AI ke shabd par bharosa karega.
-              Click par poori photo naye tab me. */}
-          {!!c.photos?.length && (
-            <div style={{display:"flex", gap:4, flexWrap:"wrap", marginTop:5}}>
-              {c.photos.slice(0,6).map(p=>(
-                <a key={p.id} href={p.url} target="_blank" rel="noreferrer" title={p.taken_on||""}>
-                  <img src={thumb(p.url)} alt="" loading="lazy"
-                    style={{width:38, height:38, objectFit:"cover", borderRadius:4, border:`1px solid ${T.b1}`, display:"block"}}/>
-                </a>
-              ))}
-            </div>
-          )}
-          <div style={{marginTop:3, color:T.t4}}>
-            {c.coverage?.total ?? 0} photo{c.coverage?.skipped ? ` · ${c.coverage.skipped} nahi dekhi` : ""}
+      <div style={{flex:1, minWidth:0, fontSize:11.5, color:T.t2, lineHeight:1.55}}>
+        {c.note && <div>{c.note}</div>}
+        {!!c.kya_dikha?.length && (
+          <div style={{marginTop:3, color:T.t3}}>
+            <span style={{color:T.t4}}>Photo me: </span>{c.kya_dikha.join(" · ")}
           </div>
-          <button onClick={()=>run(true)} disabled={busy}
-            style={{marginTop:4, fontSize:10, padding:"3px 7px", borderRadius:5, cursor:"pointer",
-              border:`1px solid ${T.b1}`, background:T.surface, color:T.t3, fontFamily:"inherit"}}>
-            {busy ? "…" : "Dobara jaancho"}
-          </button>
-        </div>
-      )}
+        )}
+        <div style={{marginTop:5, fontSize:10.5, color:T.t4}}>{bits.join(" · ")}</div>
+      </div>
+      <button onClick={()=>run(true)} disabled={busy}
+        style={{flexShrink:0, fontSize:10.5, padding:"5px 10px", borderRadius:6, cursor:busy?"default":"pointer",
+          border:`1px solid ${T.b1}`, background:T.surface, color:T.t3, fontFamily:"inherit", whiteSpace:"nowrap"}}>
+        {busy ? "…" : "Dobara jaancho"}
+      </button>
     </div>
   );
 }
@@ -3704,6 +3731,7 @@ function MBDraftModal({tenderId, onClose, onDone}) {
   const [rows, setRows]   = useState(null);   // null = abhi load nahi hua
   const [scanned, setScanned] = useState(0);
   const [warn, setWarn] = useState("");
+  const [openRow, setOpenRow] = useState(null);   // jaanch ki detail kis row ki khuli hai
   const [busy, setBusy]   = useState(false);
 
   const fetchDraft = async () => {
@@ -3788,7 +3816,7 @@ function MBDraftModal({tenderId, onClose, onDone}) {
             <tbody>
               {rows.map((r,i)=>{
                 const dup = Number(r.measured_in_period) > 0;
-                return (
+                return [
                   <tr key={i} style={{background: r.include ? "transparent" : T.surfaceB}}>
                     <td style={td}><input type="checkbox" checked={r.include} onChange={e=>setRow(i,"include",e.target.checked)}/></td>
                     <td style={{...td, fontWeight:600, color:T.t1, whiteSpace:"nowrap"}}>{r.project_name}</td>
@@ -3818,10 +3846,19 @@ function MBDraftModal({tenderId, onClose, onDone}) {
                         teeno aadmi ke haath me hi rehte hain. */}
                     <td style={td}>
                       <PhotoCheckCell row={r} tenderId={tenderId} from={from} to={to}
-                        onDone={c=>setRow(i,"photo_check",c)}/>
+                        onDone={c=>setRow(i,"photo_check",c)}
+                        open={openRow===i} onToggle={()=>setOpenRow(o=>o===i?null:i)}/>
                     </td>
-                  </tr>
-                );
+                  </tr>,
+                  openRow===i && r.photo_check && (
+                    <tr key={i+"-d"}>
+                      <td colSpan={8} style={{padding:"0 10px 9px 10px", background: r.include?"transparent":T.surfaceB}}>
+                        <PhotoCheckDetail row={r} tenderId={tenderId} from={from} to={to}
+                          onDone={c=>setRow(i,"photo_check",c)}/>
+                      </td>
+                    </tr>
+                  ),
+                ];
               })}
             </tbody>
           </table>
