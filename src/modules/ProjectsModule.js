@@ -843,6 +843,9 @@ const mapProject=(p)=>({
   id:p.id, name:p.name, client:p.client_name||"", city:p.city||"",
   type:TYPE_MAP[p.type]||p.type||"Residential",
   progress:p.progress_pct||0,
+  // Overview ka "Pipeline (MB se)" tile isi se jaanta hai ki site tender
+  // wali hai — mapping me chhoot gaya to tile kabhi banta hi nahi.
+  tender_id:p.tender_id||null,
   status:STATUS_MAP[p.status]||p.status||"Not Started",
   boq:parseFloat(p.boq_value)||0,
   expense:parseFloat(p.total_expense)||0,
