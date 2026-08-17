@@ -3220,9 +3220,13 @@ function MapTab({tenderId, sites}) {
   const [draftPts, setDraftPts] = useState([]);   // line ke abhi tak ke points
   const [panel, setPanel]     = useState(null);   // stretch dashboard {loading, data}
   const [photosOn, setPhotosOn] = useState(false);
+  const [sugg, setSugg]       = useState([]);     // search ke suggestions
   const photoMarkersRef = useRef([]);
   const infoWinRef = useRef(null);
   const searchBoxRef = useRef(null);
+  const suggTimerRef = useRef(null);
+  const acSvcRef = useRef(null);       // Places AutocompleteService (key par ho to)
+  const placesSvcRef = useRef(null);   // PlacesService — place_id se coords
 
   // C — stretch par click → uska dashboard. Ek hi call me sab.
   const openStretch = useCallback(async (aid) => {
@@ -3278,6 +3282,65 @@ function MapTab({tenderId, sites}) {
       viaOSM().then((ok) => { if (!ok) toast.error("Jagah nahi mili — naam thoda badal kar likho"); });
     }
   }, [toast]);
+
+  // Suggestions — Google-type dropdown. Places key par ho to Google se
+  // (mantralaya jaise naam wahi jaanta hai), warna OSM se (sector/colony ke
+  // liye kaafi). Nominatim ki 1-req/sec policy ke liye debounce zaroori hai.
+  const fetchSugg = useCallback((text) => {
+    if (suggTimerRef.current) clearTimeout(suggTimerRef.current);
+    if (!text || text.trim().length < 3) { setSugg([]); return; }
+    suggTimerRef.current = setTimeout(() => {
+      const q = text.trim();
+      const viaOSMSugg = async () => {
+        try {
+          const r = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=in&q=${encodeURIComponent(q)}`,
+            { headers: { Accept: "application/json" } });
+          const j = await r.json();
+          setSugg((Array.isArray(j) ? j : []).map((x) => ({
+            label: x.display_name, lat: Number(x.lat), lng: Number(x.lon), bbox: x.boundingbox })));
+        } catch (_) { setSugg([]); }
+      };
+      const ac = acSvcRef.current;
+      if (ac) {
+        try {
+          const opts = { input: q, componentRestrictions: { country: "in" } };
+          try { const b = mapRef.current && mapRef.current.getBounds(); if (b) opts.bounds = b; } catch (_) {}
+          ac.getPlacePredictions(opts, (preds, status) => {
+            if (status === "OK" && preds && preds.length) {
+              setSugg(preds.slice(0, 5).map((p) => ({ label: p.description, place_id: p.place_id })));
+            } else viaOSMSugg();
+          });
+          return;
+        } catch (_) {}
+      }
+      viaOSMSugg();
+    }, 450);
+  }, []);
+
+  const pickSugg = useCallback((s) => {
+    setSugg([]);
+    if (searchBoxRef.current) searchBoxRef.current.value = s.label;
+    const g = window.google;
+    if (s.place_id && placesSvcRef.current && g) {
+      // Places se hi coords — iske liye Geocoding API ki zaroorat NAHI.
+      placesSvcRef.current.getDetails({ placeId: s.place_id, fields: ["geometry"] }, (res, st) => {
+        if (st === "OK" && res && res.geometry) {
+          if (res.geometry.viewport) mapRef.current.fitBounds(res.geometry.viewport);
+          else { mapRef.current.setCenter(res.geometry.location); mapRef.current.setZoom(16); }
+        } else doSearch(s.label);
+      });
+      return;
+    }
+    if (Number.isFinite(s.lat) && Number.isFinite(s.lng)) {
+      if (s.bbox && s.bbox.length === 4 && g) {
+        mapRef.current.fitBounds(new g.maps.LatLngBounds(
+          { lat: Number(s.bbox[0]), lng: Number(s.bbox[2]) }, { lat: Number(s.bbox[1]), lng: Number(s.bbox[3]) }));
+      } else { mapRef.current.setCenter({ lat: s.lat, lng: s.lng }); mapRef.current.setZoom(16); }
+      return;
+    }
+    doSearch(s.label);
+  }, [doSearch]);
 
   // E — photo layer: geo wali photos map par, hover par popup.
   useEffect(() => {
@@ -3381,6 +3444,14 @@ function MapTab({tenderId, sites}) {
         }
         setDraftPts(next);
       });
+      // Places available ho (key par enable) to Google-type suggestions;
+      // constructor hi phat jaye to chup-chaap OSM par (dono try/catch me).
+      try {
+        if (g.maps.places) {
+          acSvcRef.current = new g.maps.places.AutocompleteService();
+          placesSvcRef.current = new g.maps.places.PlacesService(mapRef.current);
+        }
+      } catch (_) {}
       setMapReady(true);
     }).catch(e=>{ if (!dead) setMapErr(e.message || "Map load nahi hua"); });
     return ()=>{ dead = true; };
@@ -3599,12 +3670,39 @@ function MapTab({tenderId, sites}) {
                   color: photosOn ? "#6D28D9" : T.t2, fontWeight: photosOn ? 700 : 400}}>
                 📷 Photos {photosOn ? "on" : ""}
               </button>
-              {/* F — jagah ka search: likho aur Enter */}
-              <input ref={searchBoxRef} placeholder="Jagah dhoondo — e.g. Atal Nagar Sector 5"
-                onKeyDown={e=>{ if (e.key === "Enter") doSearch(e.target.value.trim()); }}
-                style={{flex:"1 1 190px", minWidth:170, maxWidth:280, padding:"7px 11px", borderRadius:7,
-                  border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface,
-                  outline:"none", fontFamily:"inherit"}}/>
+              {/* F — jagah ka search: type karte hi suggestions (Google mile
+                  to Google, warna OSM), Enter par pehla; click par wahi */}
+              <div style={{position:"relative", flex:"1 1 190px", minWidth:170, maxWidth:280}}>
+                <input ref={searchBoxRef} placeholder="Jagah dhoondo — e.g. Atal Nagar Sector 5"
+                  onChange={e=>fetchSugg(e.target.value)}
+                  onBlur={()=>setTimeout(()=>setSugg([]), 200)}
+                  onKeyDown={e=>{
+                    if (e.key === "Escape") { setSugg([]); return; }
+                    if (e.key === "Enter") {
+                      if (sugg.length) pickSugg(sugg[0]);
+                      else doSearch(e.target.value.trim());
+                    }
+                  }}
+                  style={{width:"100%", boxSizing:"border-box", padding:"7px 11px", borderRadius:7,
+                    border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface,
+                    outline:"none", fontFamily:"inherit"}}/>
+                {!!sugg.length && (
+                  <div style={{position:"absolute", top:"calc(100% + 3px)", left:0, right:0, zIndex:30,
+                    background:T.surface, border:`1px solid ${T.b1}`, borderRadius:8,
+                    boxShadow:"0 8px 24px rgba(15,23,42,.14)", overflow:"hidden"}}>
+                    {sugg.map((s,i)=>(
+                      <div key={i} onMouseDown={e=>{ e.preventDefault(); pickSugg(s); }}
+                        style={{padding:"7px 10px", fontSize:11.5, color:T.t2, cursor:"pointer",
+                          borderTop: i ? `1px solid ${T.b1}` : "none", lineHeight:1.35,
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                        onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
+                        📍 {s.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <span style={{fontSize:11, color:T.t4}}>Line = pipeline · Pin = UGR / pump house / HDD · Line par click = stretch ka dashboard</span>
             </>)}
             {mode === "point" && (<>
