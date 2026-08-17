@@ -3581,6 +3581,33 @@ const LOC_STYLE = {
   geo_nahi:    { fg:null,      icon:null, text:null },
 };
 
+// Thumbnail ke liye Cloudinary se chhoti photo mangwao — poori 3-4 MB wali
+// nahi. Sirf apne host par chhedte hain; kisi aur URL ko waise hi rehne dete
+// hain. (Backend ka shrinkForModel bhi yahi karta hai, LLM ke liye.)
+const thumb = (url) => {
+  const s = String(url || "");
+  if (!/^https:\/\/res\.cloudinary\.com\//.test(s)) return s;
+  if (s.includes("/upload/c_fill,")) return s;
+  return s.replace(/\/upload\/(?!v?\d*[a-z]_)/, "/upload/c_fill,w_120,h_120,q_auto,f_auto/");
+};
+
+// Committed measurement par chhota nishaan — sirf tab dikhta hai jab us waqt
+// jaanch chali thi. Chup nishaan jaan-boojh kar hai: purani saari entries par
+// kuch nahi tha, aur un par ghanti bajana bekaar shor hai.
+function MbCheckMark({verdict, loc}) {
+  const s = PC_STYLE[verdict];
+  if (!s) return null;
+  const shak = verdict === "nahi_dikha" || verdict === "saaf_nahi"
+    || loc === "doosri_line" || loc === "door";
+  const label = shak ? "Jaanch me shak tha, phir bhi MB me liya gaya" : "Photo jaanch: " + verdict;
+  return (
+    <span title={label} style={{marginLeft:5, fontSize:9.5, fontWeight:700, cursor:"help",
+      color: shak ? "#991B1B" : s.fg}}>
+      {shak ? "⚠" : s.icon}
+    </span>
+  );
+}
+
 function PhotoCheckCell({row, tenderId, from, to, onDone}) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -3633,6 +3660,19 @@ function PhotoCheckCell({row, tenderId, from, to, onDone}) {
           {c.location?.note && <div style={{marginTop:2}}>{c.location.note}</div>}
           {!!c.kya_dikha?.length && (
             <div style={{marginTop:3, color:T.t4}}>Photo me: {c.kya_dikha.join(", ")}</div>
+          )}
+          {/* Wahi photos jo jaanchi gayin. Faisla PM ka hai — to use tasveer
+              dikhni bhi chahiye, warna wo sirf AI ke shabd par bharosa karega.
+              Click par poori photo naye tab me. */}
+          {!!c.photos?.length && (
+            <div style={{display:"flex", gap:4, flexWrap:"wrap", marginTop:5}}>
+              {c.photos.slice(0,6).map(p=>(
+                <a key={p.id} href={p.url} target="_blank" rel="noreferrer" title={p.taken_on||""}>
+                  <img src={thumb(p.url)} alt="" loading="lazy"
+                    style={{width:38, height:38, objectFit:"cover", borderRadius:4, border:`1px solid ${T.b1}`, display:"block"}}/>
+                </a>
+              ))}
+            </div>
           )}
           <div style={{marginTop:3, color:T.t4}}>
             {c.coverage?.total ?? 0} photo{c.coverage?.skipped ? ` · ${c.coverage.skipped} nahi dekhi` : ""}
@@ -3900,7 +3940,13 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
               <span style={{fontSize:12, color:T.t1, fontWeight:600, textAlign:"right",
                 fontVariantNumeric:"tabular-nums"}}>{fmtQty(m.qty)} <span style={{fontSize:10, color:T.t4}}>{m.unit||""}</span></span>
               <span style={{fontSize:11, color:T.t3, overflow:"hidden", textOverflow:"ellipsis",
-                whiteSpace:"nowrap"}}>{m.created_by_name || "--"}</span>
+                whiteSpace:"nowrap"}}>
+                {m.created_by_name || "--"}
+                {/* Commit ke waqt photo-jaanch kya keh rahi thi. Ye rok nahi
+                    thi aur ab bhi nahi hai — sirf nishaan, taaki baad me
+                    dikhe ki jaanch ne kya kaha aur aadmi ne kya kiya. */}
+                {m.photo_verdict && <MbCheckMark verdict={m.photo_verdict} loc={m.photo_loc_flag}/>}
+              </span>
               <div style={{display:"flex", gap:4, justifyContent:"flex-end"}}>
                 {locked ? (
                   <span title={LOCK_MSG} style={{fontSize:10, color:T.amb, cursor:"help", fontWeight:600}}>Locked</span>
