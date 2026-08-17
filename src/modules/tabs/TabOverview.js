@@ -94,7 +94,22 @@ function TabOverview({proj, onRequestPayment}) {
   const [mBucket, setMBucket] = useState("Last week");
   const [mView, setMView] = useState(-1);        // index into the visible list
   const [pnl, setPnl]     = useState(null); // accrual P&L for this project (shared /finance/project-pnl formula)
+  const [pipe, setPipe]   = useState(null); // tender site: is site ki pipeline ka MB-progress
   const [loading, setLoading] = useState(true);
+
+  // Tender se judi site par ek extra sach: pipeline kitni bichhi (MB se) —
+  // paisa isi ankde par tay hota hai, task % par nahi. Tender na ho to ye
+  // effect chup-chaap kuch nahi karta.
+  useEffect(()=>{
+    let dead = false;
+    if (!proj?.tender_id || !proj?.id) { setPipe(null); return; }
+    api.get(`/tenders/${proj.tender_id}/alignments-progress`).then(r=>{
+      if (dead || !r?.success) return;
+      const s = r.data?.by_site?.[proj.id];
+      if (s && s.length_m > 0) setPipe(s);
+    }).catch(()=>{});
+    return ()=>{ dead = true; };
+  }, [proj?.tender_id, proj?.id]);
 
   useEffect(()=>{
     const pid = proj?.id;
@@ -228,8 +243,12 @@ function TabOverview({proj, onRequestPayment}) {
       {/* ══════════════════ OPERATIONS & TEAM ══════════════════ */}
       {view==="operations" && (<>
         {/* KPI row */}
-        <div style={{display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10}}>
+        <div style={{display:"grid", gridTemplateColumns:`repeat(${pipe?7:6},1fr)`, gap:10}}>
           <Stat label="Progress"      value={`${proj?.progress||0}%`}   note="Physical completion" color={T.blu}/>
+          {/* Tender site: MB wala sach alag tile me — bill isi se banta hai */}
+          {pipe && <Stat label="Pipeline (MB se)" value={`${pipe.pct||0}%`}
+            note={`${pipe.done_m>=1000?(pipe.done_m/1000).toFixed(2)+" km":Math.round(pipe.done_m)+" m"} / ${pipe.length_m>=1000?(pipe.length_m/1000).toFixed(2)+" km":Math.round(pipe.length_m)+" m"}`}
+            color={T.ind}/>}
           <Stat label="Days Left"     value={daysLeft}                  note={daysNote}            color={T.pur}/>
           <Stat label="Open Tasks"    value={String(ops.open.length)}   note={`${ops.ongoing.length} in progress`} color={T.amb}/>
           <Stat label="Team On Site"  value={String(team.length)}       note="Workforce assigned"  color={T.grn}/>
