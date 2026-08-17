@@ -3832,7 +3832,16 @@ function MBDraftModal({tenderId, onClose, onDone}) {
                       )}
                     </td>
                     <td style={{...td, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{fmtQty(r.dpr_qty)} <span style={{color:T.t4,fontSize:10.5}}>{r.unit}</span>
-                      <div style={{fontSize:10, color:T.t4}}>{r.dpr_days} din</div></td>
+                      <div style={{fontSize:10, color:T.t4}}>{r.dpr_days} din</div>
+                      {/* Kitna kaam us din ki geo-photo ke saath likha gaya.
+                          Rok nahi — PM ke saamne sach, faisla uska. */}
+                      {r.verified_qty != null && Number(r.dpr_qty) > 0 && (
+                        Number(r.verified_qty) >= Number(r.dpr_qty)
+                          ? <div style={{fontSize:10, color:"#059669", fontWeight:700}}>✓ poora geo-verified</div>
+                          : Number(r.verified_qty) > 0
+                            ? <div style={{fontSize:10, color:"#B45309", fontWeight:700}}>✓ {fmtQty(r.verified_qty)} verified</div>
+                            : <div style={{fontSize:10, color:"#B91C1C", fontWeight:700}}>geo-verify 0</div>
+                      )}</td>
                     <td style={{...td, textAlign:"right"}}>
                       <input type="number" value={r.take} onChange={e=>setRow(i,"take",e.target.value)} disabled={!r.include}
                         style={{...inputStyle, width:96, textAlign:"right", padding:"5px 7px",
