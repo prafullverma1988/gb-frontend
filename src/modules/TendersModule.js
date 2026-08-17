@@ -3569,6 +3569,18 @@ const PC_STYLE = {
   sirf_ginti:   { bg:"#EFF6FF", bd:"#93C5FD", fg:"#1E40AF", icon:"i" },
 };
 
+// 4B — photo kahan khinchi gayi. Ye AI nahi, ganit hai (GPS vs khinchi hui
+// line), isliye alag dikhta hai. "geo_nahi" jaan-boojh kar chup rehta hai:
+// purani saari photos par location hai hi nahi, uspar roz ghanti bajana
+// matlab ghanti ka matlab hi khatam kar dena.
+const LOC_STYLE = {
+  theek:       { fg:"#065F46", icon:"📍", text:"Photo isi line par" },
+  doosri_line: { fg:"#991B1B", icon:"⚠", text:null },
+  door:        { fg:"#991B1B", icon:"⚠", text:null },
+  kuch_door:   { fg:"#92400E", icon:"⚠", text:null },
+  geo_nahi:    { fg:null,      icon:null, text:null },
+};
+
 function PhotoCheckCell({row, tenderId, from, to, onDone}) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -3599,6 +3611,7 @@ function PhotoCheckCell({row, tenderId, from, to, onDone}) {
     );
   }
   const s = PC_STYLE[c.verdict] || PC_STYLE.sirf_ginti;
+  const L = c.location ? (LOC_STYLE[c.location.flag] || null) : null;
   return (
     <div>
       <button onClick={()=>setOpen(o=>!o)} title={c.note || ""}
@@ -3606,9 +3619,18 @@ function PhotoCheckCell({row, tenderId, from, to, onDone}) {
           border:`1px solid ${s.bd}`, background:s.bg, color:s.fg, fontFamily:"inherit", whiteSpace:"nowrap"}}>
         {s.icon} {c.label}
       </button>
+      {/* Jagah wali baat AI wale ishare se ALAG dikhti hai — dono alag
+          sawaal hain aur PM ko pata rehna chahiye kaunsa kis se aaya. */}
+      {L && L.icon && (
+        <div style={{marginTop:3, fontSize:10, color:L.fg, lineHeight:1.4, maxWidth:170}}
+             title={c.location.note || ""}>
+          {L.icon} {L.text || c.location.note}
+        </div>
+      )}
       {open && (
         <div style={{marginTop:5, fontSize:10.5, color:T.t3, lineHeight:1.5, maxWidth:200}}>
           {c.note && <div>{c.note}</div>}
+          {c.location?.note && <div style={{marginTop:2}}>{c.location.note}</div>}
           {!!c.kya_dikha?.length && (
             <div style={{marginTop:3, color:T.t4}}>Photo me: {c.kya_dikha.join(", ")}</div>
           )}
