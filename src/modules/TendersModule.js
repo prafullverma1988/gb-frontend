@@ -3128,7 +3128,9 @@ function loadGoogleMaps(apiKey) {
     const s = document.createElement("script");
     // Only `geometry` — Google removed DrawingManager in Maps JS 3.65, so the
     // drawing below is our own click-to-add-vertex handler on the map.
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=${cb}&libraries=geometry`;
+    // places sirf search-box ke liye — key par enable na ho to Autocomplete
+    // banega hi nahi aur hum Geocoder par gir jaate hain; map waise hi chalta.
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=${cb}&libraries=geometry,places`;
     s.async = true; s.defer = true;
     s.onerror = () => { _gmapsPromise = null; reject(new Error("Google Maps load nahi hua")); };
     document.head.appendChild(s);
@@ -3176,6 +3178,19 @@ const alignLabel = (kind, t) => ((kind==="point"?POINT_TYPES:LINE_TYPES).find(x=
 const fmtKm = (m) => Number(m||0) >= 1000
   ? (Number(m)/1000).toLocaleString("en-IN",{maximumFractionDigits:2}) + " km"
   : Math.round(Number(m||0)) + " m";
+// Draw karte waqt har click par lambai — server wali haversine hi, client par.
+// Google ka spherical bhi hai, par ye draftPts (plain objects) par seedha
+// chalta hai, LatLng banane ka chakkar nahi.
+function pathLenM(pts) {
+  let m = 0;
+  for (let i = 1; i < (pts||[]).length; i++) {
+    const a = pts[i-1], b = pts[i], R = 6371000, rad = (x)=>x*Math.PI/180;
+    const dLat = rad(b.lat-a.lat), dLng = rad(b.lng-a.lng);
+    const h = Math.sin(dLat/2)**2 + Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLng/2)**2;
+    m += 2*R*Math.asin(Math.sqrt(h));
+  }
+  return m;
+}
 
 function MapTab({tenderId, sites}) {
   const toast = useToast();
@@ -3203,6 +3218,74 @@ function MapTab({tenderId, sites}) {
   const [busy, setBusy]       = useState(false);
   const [mode, setMode]       = useState(null);   // null | "line" | "point"
   const [draftPts, setDraftPts] = useState([]);   // line ke abhi tak ke points
+  const [panel, setPanel]     = useState(null);   // stretch dashboard {loading, data}
+  const [photosOn, setPhotosOn] = useState(false);
+  const photoMarkersRef = useRef([]);
+  const infoWinRef = useRef(null);
+  const searchBoxRef = useRef(null);
+
+  // C — stretch par click → uska dashboard. Ek hi call me sab.
+  const openStretch = useCallback(async (aid) => {
+    setPanel({ loading: true });
+    const r = await api.get(`/tenders/${tenderId}/alignments/${aid}/summary`);
+    if (!r?.success) { setPanel(null); toast.error(r?.message || "Stretch load nahi hua"); return; }
+    setPanel({ loading: false, data: r.data });
+  }, [tenderId, toast]);
+
+  // F — jagah ka search. Places mile to autocomplete; na mile to Geocoder;
+  // wo bhi na chale to saaf message. Map kabhi nahi tootta.
+  const doSearch = useCallback((text) => {
+    const g = window.google;
+    if (!g || !mapRef.current || !text) return;
+    try {
+      new g.maps.Geocoder().geocode({ address: text, region: "in" }, (results, status) => {
+        if (status === "OK" && results && results[0]) {
+          const r = results[0];
+          if (r.geometry.viewport) mapRef.current.fitBounds(r.geometry.viewport);
+          else { mapRef.current.setCenter(r.geometry.location); mapRef.current.setZoom(16); }
+        } else {
+          toast.error("Jagah nahi mili — naam thoda badal kar likho");
+        }
+      });
+    } catch (e) { toast.error("Search abhi chalu nahi hai (Maps key par Geocoding enable nahi)"); }
+  }, [toast]);
+
+  // E — photo layer: geo wali photos map par, hover par popup.
+  useEffect(() => {
+    const g = window.google;
+    photoMarkersRef.current.forEach(m => m.setMap(null));
+    photoMarkersRef.current = [];
+    if (!photosOn || !mapReady || !g || !mapRef.current) return;
+    let dead = false;
+    (async () => {
+      const r = await api.get(`/tenders/${tenderId}/photo-markers${fSite?`?project_id=${fSite}`:""}`);
+      if (dead || !r?.success) return;
+      if (!infoWinRef.current) infoWinRef.current = new g.maps.InfoWindow({ disableAutoPan: true });
+      const iw = infoWinRef.current;
+      for (const p of (r.data || [])) {
+        const mk = new g.maps.Marker({
+          position: { lat: Number(p.lat), lng: Number(p.lng) }, map: mapRef.current,
+          zIndex: 5,
+          icon: { path: g.maps.SymbolPath.CIRCLE, scale: 7, fillColor: "#7C3AED",
+            fillOpacity: 0.95, strokeColor: "#fff", strokeWeight: 2 },
+        });
+        // Google-photos jaisa: pointer le jaao, tasveer khul jaye.
+        mk.addListener("mouseover", () => {
+          iw.setContent(
+            `<div style="max-width:170px;font-family:inherit">
+               <img src="${thumb(p.url).replace(/w_120,h_120/, "w_320,h_200")}" style="width:160px;height:100px;object-fit:cover;border-radius:6px;display:block"/>
+               <div style="font-size:11px;margin-top:4px;color:#334155">${(p.task_name||"").slice(0,40)}</div>
+               <div style="font-size:10px;color:#94A3B8">${p.taken_on ? String(p.taken_on).slice(0,10) : ""}</div>
+             </div>`);
+          iw.open({ map: mapRef.current, anchor: mk });
+        });
+        mk.addListener("mouseout", () => iw.close());
+        mk.addListener("click", () => window.open(p.url, "_blank", "noreferrer"));
+        photoMarkersRef.current.push(mk);
+      }
+    })();
+    return () => { dead = true; };
+  }, [photosOn, mapReady, tenderId, fSite]);
 
   useEffect(()=>{ fSiteRef.current = fSite; }, [fSite]);
   useEffect(()=>{ sitesRef.current = sites; }, [sites]);
@@ -3284,7 +3367,7 @@ function MapTab({tenderId, sites}) {
     const bounds = new g.maps.LatLngBounds();
     let any = false;
     const progByLine = {};
-    (progress?.lines || []).forEach(l => { progByLine[l.id] = l.done_m; });
+    (progress?.lines || []).forEach(l => { progByLine[l.id] = l; });
 
     for (const it of items) {
       const coords = it.geometry || [];
@@ -3293,19 +3376,38 @@ function MapTab({tenderId, sites}) {
       if (it.kind === "line") {
         // Whole line in its type colour, then the laid part painted green on
         // top — so "kitna baaki" is the part that still has its own colour.
-        const doneM = Number(progByLine[it.id] ?? 0);
+        const pr = progByLine[it.id] || {};
+        const doneM = Number(pr.done_m ?? 0);
+        const taskM = Number(pr.task_m ?? 0);
         const pl = new g.maps.Polyline({ path: coords, strokeColor: lineColour(it.atype),
           strokeWeight: 4, strokeOpacity: 0.9, map: mapRef.current });
-        pl.addListener("click", ()=>toast.info?.(
-          doneM > 0 ? `${it.name} · ${fmtKm(doneM)} / ${fmtKm(it.length_m)} ho gaya`
-                    : `${it.name} · ${fmtKm(it.length_m)}`));
+        // Click = stretch ka dashboard. (Pehle sirf ek toast tha.)
+        pl.addListener("click", ()=>openStretch(it.id));
         shapesRef.current.push(pl);
-        if (doneM > 0 && g.maps.geometry?.spherical) {
-          const { done } = splitPathAt(g, coords, doneM);
-          if (done.length >= 2) {
-            const dl = new g.maps.Polyline({ path: done, strokeColor: DONE_COLOUR,
-              strokeWeight: 6, strokeOpacity: 0.95, zIndex: 2, map: mapRef.current });
-            shapesRef.current.push(dl);
+        if (g.maps.geometry?.spherical) {
+          // Pakka (MB) — solid green.
+          if (doneM > 0) {
+            const { done } = splitPathAt(g, coords, doneM);
+            if (done.length >= 2) {
+              const dl = new g.maps.Polyline({ path: done, strokeColor: DONE_COLOUR,
+                strokeWeight: 6, strokeOpacity: 0.95, zIndex: 2, map: mapRef.current });
+              dl.addListener("click", ()=>openStretch(it.id));
+              shapesRef.current.push(dl);
+            }
+          }
+          // Kachcha (task par likha, MB se aage) — dotted green. Do sach
+          // alag-alag: bill jitna solid, site ki taaza khabar jitni dotted.
+          if (taskM > doneM) {
+            const { done: uptoTask } = splitPathAt(g, coords, taskM);
+            const { rest: kachchaSeg } = splitPathAt(g, uptoTask.map(p=>({lat:p.lat(), lng:p.lng()})), doneM);
+            if (kachchaSeg.length >= 2) {
+              const kl = new g.maps.Polyline({ path: kachchaSeg, strokeOpacity: 0, zIndex: 2,
+                icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 0.9, strokeColor: DONE_COLOUR, scale: 3 },
+                  offset: "0", repeat: "14px" }],
+                map: mapRef.current });
+              kl.addListener("click", ()=>openStretch(it.id));
+              shapesRef.current.push(kl);
+            }
           }
         }
         coords.forEach(c=>bounds.extend(c));
@@ -3317,7 +3419,7 @@ function MapTab({tenderId, sites}) {
       }
     }
     if (any) mapRef.current.fitBounds(bounds);
-  }, [items, progress, mapReady, toast]);
+  }, [items, progress, mapReady, toast, openStretch]);
 
   // ── Drawing controls ──────────────────────────────────────────
   const clearDraft = useCallback(()=>{
@@ -3460,7 +3562,21 @@ function MapTab({tenderId, sites}) {
             {!mode && (<>
               <SecBtn label="Pipeline line draw karo" Icon={IcMapPin} onClick={()=>startMode("line")}/>
               <SecBtn label="Structure pin lagao" Icon={IcMapPin} onClick={()=>startMode("point")}/>
-              <span style={{fontSize:11, color:T.t4}}>Line = pipeline · Pin = UGR / pump house / HDD</span>
+              {/* E — photo layer ka switch */}
+              <button onClick={()=>setPhotosOn(o=>!o)}
+                style={{fontSize:12, padding:"7px 12px", borderRadius:7, cursor:"pointer", fontFamily:"inherit",
+                  border:`1px solid ${photosOn ? "#7C3AED" : T.b1}`,
+                  background: photosOn ? "#F5F3FF" : T.surface,
+                  color: photosOn ? "#6D28D9" : T.t2, fontWeight: photosOn ? 700 : 400}}>
+                📷 Photos {photosOn ? "on" : ""}
+              </button>
+              {/* F — jagah ka search: likho aur Enter */}
+              <input ref={searchBoxRef} placeholder="Jagah dhoondo — e.g. Atal Nagar Sector 5"
+                onKeyDown={e=>{ if (e.key === "Enter") doSearch(e.target.value.trim()); }}
+                style={{flex:"1 1 190px", minWidth:170, maxWidth:280, padding:"7px 11px", borderRadius:7,
+                  border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface,
+                  outline:"none", fontFamily:"inherit"}}/>
+              <span style={{fontSize:11, color:T.t4}}>Line = pipeline · Pin = UGR / pump house / HDD · Line par click = stretch ka dashboard</span>
             </>)}
             {mode === "point" && (<>
               <span style={{fontSize:12, fontWeight:700, color:T.ind}}>Map par jahan structure hai wahan click karo</span>
@@ -3469,6 +3585,11 @@ function MapTab({tenderId, sites}) {
             {mode === "line" && (<>
               <span style={{fontSize:12, fontWeight:700, color:T.ind}}>
                 Road ke saath click karte jao — {draftPts.length} point
+                {/* F — har click/drag par chalti hui lambai, poori hone ka
+                    intezaar nahi. BOQ se milaana yahin ho jaata hai. */}
+                {draftPts.length >= 2 && (
+                  <span style={{marginLeft:7, color:"#059669"}}>· {fmtKm(pathLenM(draftPts))}</span>
+                )}
               </span>
               <SecBtn label="Ek point wapas" onClick={undoPoint} disabled={!draftPts.length}/>
               <PrimBtn label="Line poori hui" Icon={IcChk} onClick={finishLine} disabled={draftPts.length < 2}/>
@@ -3479,6 +3600,99 @@ function MapTab({tenderId, sites}) {
           <div ref={mapDiv} style={{width:"100%", height:430, background:T.surfaceB}}/>
           {!mapReady && <div style={{position:"absolute", inset:0, display:"flex", alignItems:"center",
             justifyContent:"center", fontSize:12.5, color:T.t3}}>Map load ho raha hai…</div>}
+
+          {/* C — stretch ka dashboard: line par click karte hi yahan khulta
+              hai. PM ko map chhode bina poori kahani — kitna pakka, kitna
+              kachcha, kaun se task, photos, issues, aakhri MB entries. */}
+          {panel && (
+            <div style={{position:"absolute", top:54, right:10, width:300, maxHeight:360, overflowY:"auto",
+              background:T.surface, border:`1px solid ${T.b1}`, borderRadius:11, zIndex:5,
+              boxShadow:"0 8px 28px rgba(15,23,42,.16)", padding:"12px 13px"}}>
+              {panel.loading ? (
+                <div style={{fontSize:12, color:T.t3, textAlign:"center", padding:"18px 0"}}>Stretch load ho raha hai…</div>
+              ) : (() => { const d = panel.data; return (<>
+                <div style={{display:"flex", alignItems:"flex-start", gap:8}}>
+                  <div style={{flex:1, minWidth:0}}>
+                    <div style={{fontSize:13, fontWeight:800, color:T.t1, lineHeight:1.3}}>{d.name}</div>
+                    <div style={{fontSize:10.5, color:T.t4, marginTop:1}}>
+                      {d.project_name} · {alignLabel(d.kind, d.atype)} · {fmtKm(d.length_m)}
+                    </div>
+                  </div>
+                  <button onClick={()=>setPanel(null)} style={{border:"none", background:"none", cursor:"pointer",
+                    fontSize:15, color:T.t4, lineHeight:1, padding:2}}>✕</button>
+                </div>
+
+                {/* Teen sach ek bar me: pakka solid, kachcha halka, baaki khaali */}
+                {d.length_m > 0 && (
+                  <div style={{marginTop:9}}>
+                    <div style={{height:9, borderRadius:5, background:T.surfaceB, overflow:"hidden", display:"flex"}}>
+                      <div style={{width:`${Math.min(100, d.pakka_m/d.length_m*100)}%`, background:"#059669"}}/>
+                      <div style={{width:`${Math.max(0, Math.min(100, (Math.min(d.kachcha_m, d.length_m)-d.pakka_m)/d.length_m*100))}%`,
+                        background:"#6EE7B7"}}/>
+                    </div>
+                    <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"3px 10px", marginTop:7, fontSize:11}}>
+                      <span style={{color:T.t3}}>Pakka (MB se)</span><b style={{color:"#059669", textAlign:"right"}}>{fmtKm(d.pakka_m)}</b>
+                      <span style={{color:T.t3}}>Task par likha</span><b style={{color:T.t1, textAlign:"right"}}>{fmtKm(d.kachcha_m)}</b>
+                      <span style={{color:T.t3}}>Geo-verified</span>
+                      <b style={{color: d.verified_m >= d.kachcha_m && d.kachcha_m > 0 ? "#059669" : "#B45309", textAlign:"right"}}>{fmtKm(d.verified_m)}</b>
+                      <span style={{color:T.t3}}>Baaki</span><b style={{color:T.t1, textAlign:"right"}}>{fmtKm(d.baaki_m)}</b>
+                    </div>
+                  </div>
+                )}
+
+                {!!d.tasks?.length && (<>
+                  <div style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>Tasks</div>
+                  {d.tasks.slice(0,5).map(t=>(
+                    <div key={t.id} style={{display:"flex", justifyContent:"space-between", gap:8, fontSize:11.5, padding:"2px 0"}}>
+                      <span style={{color:T.t2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{t.name}</span>
+                      <b style={{color:T.ind}}>{Number(t.progress||0)}%</b>
+                    </div>
+                  ))}
+                </>)}
+
+                {!!d.photos?.length && (<>
+                  <div style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>
+                    Photos {d.photo_total > d.photos.length ? `(${d.photo_total})` : ""}
+                  </div>
+                  <div style={{display:"flex", gap:4, flexWrap:"wrap"}}>
+                    {d.photos.slice(0,8).map(p=>(
+                      <a key={p.id} href={p.url} target="_blank" rel="noreferrer" title={p.taken_on||""}>
+                        <img src={thumb(p.url)} alt="" loading="lazy"
+                          style={{width:44, height:44, objectFit:"cover", borderRadius:5, border:`1px solid ${T.b1}`, display:"block"}}/>
+                      </a>
+                    ))}
+                  </div>
+                </>)}
+
+                {!!d.issues?.length && (<>
+                  <div style={{fontSize:9.5, fontWeight:700, color:"#B91C1C", textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>Khule issues</div>
+                  {d.issues.slice(0,4).map(i=>(
+                    <div key={i.id} style={{fontSize:11, color:T.t2, padding:"2px 0"}}>⚠ {i.title}</div>
+                  ))}
+                </>)}
+
+                {!!d.measurements?.length && (<>
+                  <div style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>Aakhri MB entries</div>
+                  {d.measurements.slice(0,4).map(m=>(
+                    <div key={m.id} style={{display:"flex", justifyContent:"space-between", gap:8, fontSize:11, padding:"2px 0"}}>
+                      <span style={{color:T.t3}}>{String(m.mdate).slice(0,10)}{m.mb_ref ? ` · ${m.mb_ref}` : ""}</span>
+                      <span style={{color:T.t1, fontWeight:600}}>
+                        {fmtQty(m.qty)} {m.unit||""}
+                        {m.photo_verdict && <MbCheckMark verdict={m.photo_verdict} loc={m.photo_loc_flag}/>}
+                      </span>
+                    </div>
+                  ))}
+                </>)}
+
+                {!d.tasks?.length && !d.photos?.length && (
+                  <div style={{fontSize:11, color:T.t4, marginTop:9, lineHeight:1.5}}>
+                    Is stretch se abhi koi task juda nahi. Task edit me "Tender se jodo" se jodo —
+                    phir uska kaam, photos aur progress yahan dikhega.
+                  </div>
+                )}
+              </>); })()}
+            </div>
+          )}
         </div>
       )}
     </Panel>
