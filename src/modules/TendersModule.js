@@ -3232,22 +3232,51 @@ function MapTab({tenderId, sites}) {
     setPanel({ loading: false, data: r.data });
   }, [tenderId, toast]);
 
-  // F — jagah ka search. Places mile to autocomplete; na mile to Geocoder;
-  // wo bhi na chale to saaf message. Map kabhi nahi tootta.
+  // F — jagah ka search. Google Geocoder pehle; wo na chale (Geocoding API
+  // key par enable nahi — prod par yahi nikla: har search "jagah nahi mili"
+  // ban raha tha kyunki REQUEST_DENIED bhi usi message me dab jaata tha) to
+  // OpenStreetMap ka Nominatim — bina kisi GCP setting ke chalta hai. Map
+  // kabhi nahi tootta; dono fail hon tabhi message.
   const doSearch = useCallback((text) => {
     const g = window.google;
     if (!g || !mapRef.current || !text) return;
+
+    const viaOSM = async () => {
+      try {
+        const r = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=in&q=${encodeURIComponent(text)}`,
+          { headers: { Accept: "application/json" } });
+        const j = await r.json();
+        if (Array.isArray(j) && j[0]) {
+          const b = j[0].boundingbox; // [latMin, latMax, lonMin, lonMax] strings
+          if (b && b.length === 4) {
+            mapRef.current.fitBounds(new g.maps.LatLngBounds(
+              { lat: Number(b[0]), lng: Number(b[2]) }, { lat: Number(b[1]), lng: Number(b[3]) }));
+          } else {
+            mapRef.current.setCenter({ lat: Number(j[0].lat), lng: Number(j[0].lon) });
+            mapRef.current.setZoom(16);
+          }
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    };
+
     try {
-      new g.maps.Geocoder().geocode({ address: text, region: "in" }, (results, status) => {
+      new g.maps.Geocoder().geocode({ address: text, region: "in" }, async (results, status) => {
         if (status === "OK" && results && results[0]) {
           const r = results[0];
           if (r.geometry.viewport) mapRef.current.fitBounds(r.geometry.viewport);
           else { mapRef.current.setCenter(r.geometry.location); mapRef.current.setZoom(16); }
-        } else {
-          toast.error("Jagah nahi mili — naam thoda badal kar likho");
+          return;
         }
+        // ZERO_RESULTS par bhi OSM try karo — naam ke hijje wahan aksar mil
+        // jaate hain (sector/colony ke desi naam OSM me achhe hain).
+        if (!(await viaOSM())) toast.error("Jagah nahi mili — naam thoda badal kar likho");
       });
-    } catch (e) { toast.error("Search abhi chalu nahi hai (Maps key par Geocoding enable nahi)"); }
+    } catch (e) {
+      viaOSM().then((ok) => { if (!ok) toast.error("Jagah nahi mili — naam thoda badal kar likho"); });
+    }
   }, [toast]);
 
   // E — photo layer: geo wali photos map par, hover par popup.
