@@ -2578,6 +2578,10 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
   const [edit, setEdit] = useState(null);   // {id, name, wtype}
+  // Tick pehle sirf screen par — Save dabane par hi likha jaata hai. Pehle
+  // har click turant save hota tha aur galti ka tick bhi ankda badal deta
+  // tha (Prafull ne pakda: SH-1/2/9 tick hue to km 24.56 ho gaya).
+  const [pendingMap, setPendingMap] = useState({});   // pkgId → true/false
 
   const load = useCallback(async () => {
     const r = await api.get(`/tenders/${tenderId}/boq/packages`);
@@ -2590,12 +2594,27 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
     const r = await api.post(`/tenders/${tenderId}/boq/packages/auto`, {});
     setBusy(false);
     if (!r?.success) { toast.error(r?.message || "Packages nahi bane"); return; }
-    toast.success(r.message); setData(r.data); onChanged?.();
+    toast.success(r.message); setData(r.data); setPendingMap({}); onChanged?.();
   };
   const save = async (id, patch) => {
     const r = await api.put(`/tenders/${tenderId}/boq/packages/${id}`, patch);
     if (!r?.success) { toast.error(r?.message || "Save nahi hua"); return; }
     setData(r.data); setEdit(null); onChanged?.();
+  };
+
+  const dirtyIds = Object.keys(pendingMap);
+  const saveMapChanges = async () => {
+    setBusy(true);
+    let ok = 0, lastData = null;
+    for (const id of dirtyIds) {
+      const r = await api.put(`/tenders/${tenderId}/boq/packages/${id}`, { map_count: pendingMap[id] });
+      if (r?.success) { ok++; lastData = r.data; }
+      else toast.error(r?.message || "Ek package save nahi hua");
+    }
+    setBusy(false);
+    if (lastData) setData(lastData);
+    setPendingMap({});
+    if (ok) { toast.success(`${ok} package save hue — map ka ankda ab naya hai`); onChanged?.(); }
   };
   const del = async (p) => {
     if (!await window.confirmAsync(`"${p.name}" package hataayein? Items BOQ me rahenge, bas bina package ke ho jayenge.`)) return;
@@ -2605,7 +2624,8 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
   };
 
   const pkgs = data?.packages || [];
-  const mapKm = pkgs.filter(p=>p.map_count).reduce((s,p)=>
+  // Wahi niyam jo server par hai: km sirf linear packages se.
+  const mapKm = pkgs.filter(p=>p.map_count && ["pipeline","road","drain"].includes(p.wtype)).reduce((s,p)=>
     s + (p.units||[]).filter(u=>["RMT","RM","MTR","M","METER","METRE","RFT","FT"].includes(String(u.unit).toUpperCase()))
       .reduce((x,u)=>x+u.qty,0), 0);
 
@@ -2639,15 +2659,37 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
                   {p.items} item{(p.units||[]).slice(0,3).map(u=>` · ${fmtKmOrQty(u.unit,u.qty)}`).join("")}
                 </div>
               </div>
-              {/* Map me gino — yahi wo switch hai jisse "BOQ (RMT)" ka ankda
-                  banta hai. Pipeline par default on, baaki par off. */}
-              <label title="Map ke km me ye kaam ginega?"
-                style={{display:"flex", alignItems:"center", gap:5, fontSize:10.5,
-                  color:p.map_count?"#059669":T.t4, cursor:canEdit?"pointer":"default", whiteSpace:"nowrap"}}>
-                <input type="checkbox" checked={p.map_count} disabled={!canEdit}
-                  onChange={e=>save(p.id, {map_count:e.target.checked})}/>
-                map me gino
-              </label>
+              {/* Map me gino — sirf LAMBAI wale kaam par (pipeline/road/drain).
+                  Structure/electrical map par PIN se dikhte hain — unka
+                  metre-unit saman (water-stop, cable) km me kabhi nahi ginta,
+                  isliye unpar switch hai hi nahi. Tick pehle local, Save par
+                  hi save. */}
+              {["pipeline","road","drain"].includes(p.wtype) ? (
+                (()=>{ const cur = p.id in pendingMap ? pendingMap[p.id] : !!p.map_count;
+                  const changed = p.id in pendingMap && pendingMap[p.id] !== !!p.map_count;
+                  return (
+                    <label title="Map ke km me ye kaam ginega? (Save dabane par lagta hai)"
+                      style={{display:"flex", alignItems:"center", gap:5, fontSize:10.5,
+                        color:cur?"#059669":T.t4, cursor:canEdit?"pointer":"default", whiteSpace:"nowrap",
+                        background: changed ? "#FEF9C3" : "transparent", padding:"2px 5px", borderRadius:5}}>
+                      <input type="checkbox" checked={cur} disabled={!canEdit}
+                        onChange={e=>{
+                          const v = e.target.checked;
+                          setPendingMap(m=>{
+                            const n = {...m};
+                            if (v === !!p.map_count) delete n[p.id]; else n[p.id] = v;
+                            return n;
+                          });
+                        }}/>
+                      map me gino{changed ? " *" : ""}
+                    </label>
+                  ); })()
+              ) : (
+                <span title={'Structure/electrical map par "Structure pin lagao" se dikhte hain — km me nahi ginte'}
+                  style={{fontSize:10, color:T.t4, whiteSpace:"nowrap"}}>
+                  {p.wtype === "electrical" ? "km me nahi ginta" : "map par pin se"}
+                </span>
+              )}
               {canEdit && (<>
                 <button onClick={()=>setEdit({id:p.id, name:p.name, wtype:p.wtype})}
                   style={{border:"none", background:"none", cursor:"pointer", fontSize:11, color:T.ind}}>edit</button>
@@ -2659,6 +2701,16 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
           {!!data.unassigned && (
             <div style={{padding:"8px 14px", fontSize:11, color:T.amb}}>
               ⚠ {data.unassigned} item abhi kisi package me nahi — wo map ke ankde me nahi ginte aur site plan me bhi nahi aayenge.
+            </div>
+          )}
+          {!!dirtyIds.length && (
+            <div style={{display:"flex", alignItems:"center", gap:10, padding:"9px 14px",
+              background:"#FEFCE8", borderTop:`1px solid #FDE68A`}}>
+              <span style={{flex:1, fontSize:11.5, color:"#92400E"}}>
+                {dirtyIds.length} badlav abhi save nahi hue — map ka ankda Save ke baad hi badlega.
+              </span>
+              <SecBtn label="Wapas" onClick={()=>setPendingMap({})}/>
+              <PrimBtn label={busy?"...":"Save"} Icon={IcChk} onClick={saveMapChanges} disabled={busy}/>
             </div>
           )}
         </div>
@@ -2828,12 +2880,23 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
                   </div>
                   {ch && Object.keys(ch).length > 0 && (
                     <div style={{fontSize:11, color:T.t3, marginTop:2, lineHeight:1.6}}>
-                      {Object.entries(ch).map(([k,v])=>(
-                        <span key={k} style={{marginRight:10}}>
-                          {k}: <b style={{color:T.t4}}>{String(v.from ?? "--")}</b>
-                          {" → "}<b style={{color:T.t1}}>{String(v.to ?? "--")}</b>
-                        </span>
-                      ))}
+                      {/* Item-edit ki value {from,to} hoti hai; package ke log
+                          seedhi value likhte hain (package_id: null bhi aa
+                          sakta hai — "package se hataya"). Dono shape sambhalo,
+                          warna poora Tenders tab hi gir jaata hai. */}
+                      {Object.entries(ch).map(([k,v])=>{
+                        const isFT = v && typeof v === "object" && ("from" in v || "to" in v);
+                        return (
+                          <span key={k} style={{marginRight:10}}>
+                            {k}: {isFT ? (<>
+                              <b style={{color:T.t4}}>{String(v.from ?? "--")}</b>
+                              {" → "}<b style={{color:T.t1}}>{String(v.to ?? "--")}</b>
+                            </>) : (
+                              <b style={{color:T.t1}}>{v === null || v === undefined ? "--" : String(v)}</b>
+                            )}
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                   {l.reason && (
