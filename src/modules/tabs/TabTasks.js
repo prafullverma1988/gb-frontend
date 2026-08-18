@@ -4,6 +4,7 @@ import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import LibrarySelect from "../../components/LibrarySelect";
 import BoqImportWizard from "./BoqImportWizard";
+import TenderPlanWizard from "./TenderPlanWizard";
 import { T } from "../shared/tokens";
 
 // ─── SKELETON LOADER ─────────────────────────────────────────────
@@ -146,6 +147,18 @@ function TabTasks({ projectId, isAdmin }) {
   const [showBaselineHistory, setShowBaselineHistory] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showBoqWizard, setShowBoqWizard] = useState(false);
+  // Tender wali site par hi "Tender se plan lao" dikhta hai. Ek hi call se
+  // dono pata chal jaate hain — tender juda hai ya nahi, aur package hain
+  // ya nahi (endpoint tender na hone par {tender_id:null} deta hai).
+  const [tenderPlan, setTenderPlan] = useState(null);   // {tender_id, packages}
+  const [showTenderPlan, setShowTenderPlan] = useState(false);
+  useEffect(()=>{
+    let dead = false;
+    api.get(`/tasks/project/${projectId}/tender-packages`).then(r=>{
+      if (!dead && r?.success) setTenderPlan(r.data);
+    }).catch(()=>{});
+    return ()=>{ dead = true; };
+  }, [projectId]);
 
   const toggleShowBaseline = () => {
     setShowBaseline(v => { const n=!v; try { localStorage.setItem("gb_show_baseline_cols", n?"1":"0"); } catch(e){} return n; });
@@ -1014,6 +1027,12 @@ function TabTasks({ projectId, isAdmin }) {
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 17V7h6v10M4 21h16M6 21V5a2 2 0 012-2h8a2 2 0 012 2v16"/></svg>
           Import BOQ
         </button>}
+        {isAdmin&&!!tenderPlan?.packages?.length&&<button onClick={()=>setShowTenderPlan(true)}
+          title="Tender ke work package se is site ka task plan banao"
+          style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.ind}`,background:T.indL,fontSize:12,fontWeight:700,color:T.ind,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 7h18M3 12h18M3 17h10"/></svg>
+          Tender se plan lao
+        </button>}
         {isAdmin&&<button onClick={()=>setShowTemplatePicker(true)}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:"linear-gradient(135deg,#EC4899,#BE185D)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
           📋 Load Template
@@ -1432,6 +1451,13 @@ function TabTasks({ projectId, isAdmin }) {
       {showBoqWizard&&<BoqImportWizard projectId={projectId} existingTasks={allFlat}
         onClose={()=>setShowBoqWizard(false)}
         onCommitted={async()=>{ apiCache.invalidate("tasks"); apiCache.invalidate("projects"); await refetchTasks(); }}/>}
+
+      {/* Tender ke package se site ka task plan */}
+      {showTenderPlan&&<TenderPlanWizard projectId={projectId}
+        onClose={()=>setShowTenderPlan(false)}
+        onDone={async(msg)=>{ apiCache.invalidate("tasks"); apiCache.invalidate("projects"); await refetchTasks();
+          api.get(`/tasks/project/${projectId}/tender-packages`).then(r=>{ if(r?.success) setTenderPlan(r.data); }).catch(()=>{});
+          if (msg) window.toast?.success?.(msg); }}/>}
 
       {/* Edit Task drawer */}
       {editTask&&<PTEditTask task={editTask} allTasks={allFlat} projectId={projectId} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{

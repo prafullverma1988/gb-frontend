@@ -2554,6 +2554,137 @@ function RevertImportModal({tenderId, imp, onClose, onDone}) {
 // ════════════════════════════════════════════════════════════════════
 // BOQ TAB
 // ════════════════════════════════════════════════════════════════════
+// ── Work packages ───────────────────────────────────────────────────
+// BOQ ek file me kai tarah ka kaam rakhti hai. Package wahi baant hai —
+// aur usi se tay hota hai ki map ke km me kya ginega, aur site par kis
+// cheez ka task-plan banega.
+const WTYPE_LABEL = {
+  pipeline: "Pipeline", structure: "Structure", road: "Road",
+  drain: "Drain", electrical: "Electrical", other: "Anya",
+};
+const WTYPE_COLOUR = {
+  pipeline: "#1D4ED8", structure: "#7C3AED", road: "#B45309",
+  drain: "#0E7490", electrical: "#BE123C", other: "#475569",
+};
+const fmtKmOrQty = (u, q) => {
+  const RUN = ["RMT","RM","MTR","M","METER","METRE","RFT","FT"];
+  if (RUN.includes(String(u||"").toUpperCase()) && q >= 1000)
+    return (q/1000).toLocaleString("en-IN",{maximumFractionDigits:2}) + " km";
+  return fmtQty(q) + " " + (u||"");
+};
+
+function PackagesPanel({tenderId, canEdit, items, onChanged}) {
+  const toast = useToast();
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [edit, setEdit] = useState(null);   // {id, name, wtype}
+
+  const load = useCallback(async () => {
+    const r = await api.get(`/tenders/${tenderId}/boq/packages`);
+    if (r?.success) setData(r.data);
+  }, [tenderId]);
+  useEffect(()=>{ load(); }, [load]);
+
+  const auto = async () => {
+    setBusy(true);
+    const r = await api.post(`/tenders/${tenderId}/boq/packages/auto`, {});
+    setBusy(false);
+    if (!r?.success) { toast.error(r?.message || "Packages nahi bane"); return; }
+    toast.success(r.message); setData(r.data); onChanged?.();
+  };
+  const save = async (id, patch) => {
+    const r = await api.put(`/tenders/${tenderId}/boq/packages/${id}`, patch);
+    if (!r?.success) { toast.error(r?.message || "Save nahi hua"); return; }
+    setData(r.data); setEdit(null); onChanged?.();
+  };
+  const del = async (p) => {
+    if (!await window.confirmAsync(`"${p.name}" package hataayein? Items BOQ me rahenge, bas bina package ke ho jayenge.`)) return;
+    const r = await api.del(`/tenders/${tenderId}/boq/packages/${p.id}`);
+    if (!r?.success) { toast.error(r?.message || "Delete nahi hua"); return; }
+    toast.success("Package hat gaya"); setData(r.data); onChanged?.();
+  };
+
+  const pkgs = data?.packages || [];
+  const mapKm = pkgs.filter(p=>p.map_count).reduce((s,p)=>
+    s + (p.units||[]).filter(u=>["RMT","RM","MTR","M","METER","METRE","RFT","FT"].includes(String(u.unit).toUpperCase()))
+      .reduce((x,u)=>x+u.qty,0), 0);
+
+  return (
+    <Panel style={{marginBottom:11}}>
+      <PHead title="Work Packages"
+        sub={pkgs.length ? `${pkgs.length} package · map me ${fmtKm(mapKm)}${data.unassigned?` · ${data.unassigned} item bina package`:""}`
+                         : "BOQ ko kaam ke hisaab se baanto — map ka ankda aur site ka plan isi se banta hai"}
+        action={canEdit && <SecBtn label={busy?"...":(pkgs.length?"Naye item baanto":"Packages banao (sub-head se)")}
+          Icon={IcChk} onClick={auto} disabled={busy}/>}/>
+
+      {!pkgs.length ? (
+        <div style={{padding:"16px 14px", fontSize:12, color:T.t3, lineHeight:1.6}}>
+          BOQ me pipeline bhi hoti hai, UGR structure bhi, road aur electrical bhi — par sabka unit metre
+          ho sakta hai. Package banaye bina map har metre-wale item ko pipeline maan leta hai.
+          <br/><b>"Packages banao"</b> dabao — BOQ ke Sub Head se apne aap bant jayega, phir aap sudhar sakte ho.
+        </div>
+      ) : (
+        <div style={{padding:"2px 0"}}>
+          {pkgs.map(p=>(
+            <div key={p.id} style={{display:"flex", alignItems:"center", gap:10, padding:"9px 14px",
+              borderBottom:`1px solid ${T.b1}`}}>
+              <span style={{fontSize:9.5, fontWeight:800, padding:"3px 7px", borderRadius:5,
+                color:WTYPE_COLOUR[p.wtype]||T.t3, background:T.surfaceB, whiteSpace:"nowrap"}}>
+                {WTYPE_LABEL[p.wtype]||p.wtype}
+              </span>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{fontSize:12.5, color:T.t1, fontWeight:600, overflow:"hidden",
+                  textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{p.name}</div>
+                <div style={{fontSize:10.5, color:T.t4, marginTop:1}}>
+                  {p.items} item{(p.units||[]).slice(0,3).map(u=>` · ${fmtKmOrQty(u.unit,u.qty)}`).join("")}
+                </div>
+              </div>
+              {/* Map me gino — yahi wo switch hai jisse "BOQ (RMT)" ka ankda
+                  banta hai. Pipeline par default on, baaki par off. */}
+              <label title="Map ke km me ye kaam ginega?"
+                style={{display:"flex", alignItems:"center", gap:5, fontSize:10.5,
+                  color:p.map_count?"#059669":T.t4, cursor:canEdit?"pointer":"default", whiteSpace:"nowrap"}}>
+                <input type="checkbox" checked={p.map_count} disabled={!canEdit}
+                  onChange={e=>save(p.id, {map_count:e.target.checked})}/>
+                map me gino
+              </label>
+              {canEdit && (<>
+                <button onClick={()=>setEdit({id:p.id, name:p.name, wtype:p.wtype})}
+                  style={{border:"none", background:"none", cursor:"pointer", fontSize:11, color:T.ind}}>edit</button>
+                <button onClick={()=>del(p)}
+                  style={{border:"none", background:"none", cursor:"pointer", fontSize:11, color:T.red}}>hatao</button>
+              </>)}
+            </div>
+          ))}
+          {!!data.unassigned && (
+            <div style={{padding:"8px 14px", fontSize:11, color:T.amb}}>
+              ⚠ {data.unassigned} item abhi kisi package me nahi — wo map ke ankde me nahi ginte aur site plan me bhi nahi aayenge.
+            </div>
+          )}
+        </div>
+      )}
+
+      {edit && (
+        <Modal title="Package" Icon={IcChk} width={460} onClose={()=>setEdit(null)}
+          footer={<><SecBtn label="Cancel" onClick={()=>setEdit(null)}/>
+            <PrimBtn label="Save" Icon={IcChk} onClick={()=>save(edit.id, {name:edit.name, wtype:edit.wtype})}/></>}>
+          <Field label="Naam" full><TxtIn value={edit.name} onChange={v=>setEdit(e=>({...e,name:v}))}/></Field>
+          <div style={{marginTop:11}}>
+            <Field label="Kaam ka type">
+              <SelIn value={edit.wtype} onChange={v=>setEdit(e=>({...e,wtype:v}))}
+                options={Object.entries(WTYPE_LABEL).map(([v,l])=>({v,l}))}/>
+            </Field>
+          </div>
+          <div style={{fontSize:11, color:T.t4, marginTop:10, lineHeight:1.55}}>
+            Type se tay hota hai ki site par is package ka plan kaise banega. "map me gino" alag switch hai —
+            usse tay hota hai ki map ka km ka ankda isme se banega ya nahi.
+          </div>
+        </Modal>
+      )}
+    </Panel>
+  );
+}
+
 function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
   const toast = useToast();
   const [search, setSearch]   = useState("");
@@ -2747,6 +2878,9 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
         </div>
       </Panel>
     )}
+
+    {/* Work packages — BOQ aur zameen ke kaam ke beech ka pul */}
+    {!!items.length && <PackagesPanel tenderId={tenderId} canEdit={canEdit} items={items} onChanged={reload}/>}
 
     {/* Items */}
     <Panel>
@@ -3636,10 +3770,24 @@ function MapTab({tenderId, sites}) {
               </div>
             ))}
           </div>
+          {/* Ankda kahan se aaya — chupaya kuch nahi. Package na bane hon to
+              saaf kaho ki har metre-wala item gina ja raha hai (wahi galti
+              jisse 54.82 km dikha tha jabki pipeline 20.53 km thi). */}
+          {summary.boq_running_qty > 0 && (
+            <div style={{marginTop:5, fontSize:10.5, color:T.t4}}>
+              {summary.boq_from_packages
+                ? <>BOQ ka ankda {summary.boq_counted_items} item se · {fmtKm(summary.boq_other_qty)} chhoda gaya
+                    ({summary.boq_other_items} item — jinke package par "map me gino" band hai)</>
+                : <>⚠ Packages nahi bane — abhi har metre-wala item gina ja raha hai (electrical cable, plumbing sab).
+                    BOQ tab me "Packages banao" se sahi ankda milega.</>}
+            </div>
+          )}
           {(() => {
             const w = [];
             if (drawnVsBoq !== null && Math.abs(drawnVsBoq) > Math.max(500, summary.boq_running_qty*0.05))
-              w.push("Drawn aur BOQ me farak hai — alignment adhoori ho sakti hai (ya BOQ me non-pipeline RMT items hain).");
+              w.push(summary.boq_from_packages
+                ? "Drawn aur BOQ me farak hai — alignment adhoori ho sakti hai."
+                : "Drawn aur BOQ me farak hai — alignment adhoori ho sakti hai (ya BOQ me non-pipeline RMT items hain).");
             if (progress?.unmapped_m)
               w.push(`MB me ${fmtKm(progress.unmapped_m)} aisa kaam hai jiske liye line draw hi nahi hui.`);
             return w.length ? (
