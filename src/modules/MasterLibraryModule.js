@@ -324,6 +324,30 @@ function parseCSV(text) {
   return { headers, rows };
 }
 
+// Convert a 2D sheet array (from an .xlsx/.xls) into the SAME { headers, rows }
+// shape parseCSV returns, so the preview + import UI works unchanged. Header row
+// = the one with the most filled cells (Excel files often start with a title /
+// logo row). All cell values are stringified so downstream .trim() calls hold.
+function aoaToParsed(aoa) {
+  const grid = (aoa || []).filter(r => Array.isArray(r) && r.some(c => String(c ?? "").trim()));
+  if (!grid.length) return { headers: [], rows: [] };
+  let headerIdx = 0, bestN = -1;
+  for (let i = 0; i < Math.min(grid.length, 10); i++) {
+    const n = grid[i].filter(c => String(c ?? "").trim()).length;
+    if (n > bestN) { bestN = n; headerIdx = i; }
+  }
+  const headers = (grid[headerIdx] || []).map(h =>
+    String(h ?? "").replace(/^﻿/, "").replace(/ \*/g, "").trim()
+  );
+  const rows = [];
+  for (let i = headerIdx + 1; i < grid.length; i++) {
+    const r = grid[i] || [];
+    const vals = headers.map((_, idx) => String(r[idx] ?? "").trim());
+    if (vals.some(v => v)) rows.push(Object.fromEntries(headers.map((h, idx) => [h, vals[idx] || ""])));
+  }
+  return { headers, rows };
+}
+
 // ─── IMPORT / EXPORT MODAL ───────────────────────────────────────────
 function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, currentData, onImport }) {
   const [file, setFile] = useState(null);
@@ -334,19 +358,27 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
 
   const resetAll = () => { setFile(null); setPreview(null); setResult(null); setStep(1); };
 
-  const handleFile = (e) => {
+  const handleFile = async (e) => {
     const f = e.target.files[0];
     if (!f) return;
     setFile(f);
     setResult(null);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const parsed = parseCSV(ev.target.result);
-        setPreview(parsed);
-      } catch { setPreview(null); }
-    };
-    reader.readAsText(f);
+    const ext = (f.name.split(".").pop() || "").toLowerCase();
+    try {
+      if (ext === "xlsx" || ext === "xls") {
+        // .xlsx / .xls is a binary ZIP — must be parsed with SheetJS, never
+        // read as text (that yields raw ZIP bytes: docProps/…, xl/worksheets/…).
+        const XLSX = await import("xlsx");
+        const buf = await f.arrayBuffer();
+        const wb = XLSX.read(new Uint8Array(buf), { type: "array", cellFormula: false, cellText: true, cellDates: false });
+        if (!wb.SheetNames.length) { setPreview(null); return; }
+        const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false, defval: "" });
+        setPreview(aoaToParsed(aoa));
+      } else {
+        const text = await f.text();
+        setPreview(parseCSV(text));
+      }
+    } catch { setPreview(null); }
   };
 
   const doImport = async () => {
@@ -561,7 +593,7 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
               {/* Upload area */}
               <div style={{ border: `2px dashed ${file ? T.green : T.border}`, borderRadius: 12, padding: "32px 20px", textAlign: "center", marginBottom: 16, background: file ? T.greenSoft + "44" : "white", transition: "all 0.2s", cursor: "pointer", position: "relative" }}
                 onClick={() => document.getElementById("csv-upload-input")?.click()}>
-                <input id="csv-upload-input" type="file" accept=".csv,.txt" onChange={handleFile} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
+                <input id="csv-upload-input" type="file" accept=".csv,.txt,.xlsx,.xls" onChange={handleFile} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
                 {file ? (
                   <div>
                     <IcCheck size={30} color={T.green} />
@@ -571,8 +603,8 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                 ) : (
                   <div>
                     <IcUpload size={30} color={T.textLight} />
-                    <div style={{ fontSize: 15, fontWeight: 600, color: T.textMid, marginTop: 8 }}>Click to upload your CSV file</div>
-                    <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>Supports .csv files — UTF-8 encoding recommended</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: T.textMid, marginTop: 8 }}>Click to upload your file</div>
+                    <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>Supports .xlsx, .xls and .csv files</div>
                   </div>
                 )}
               </div>
