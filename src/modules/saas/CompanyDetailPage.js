@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { API, tok, apiFetch, T, fmtDate, fmtDateTime, fmtNum, fmtMoney, DOMAIN_LABELS,
          IcBuilding, IcUsers, IcPuzzle, IcX, IcChk, IcDownload, IcShield,
-         IcActivity, IcDollar, IcEdit, IcClip, IcChevL, IcFolder, IcLock } from "./tokens";
+         IcActivity, IcDollar, IcEdit, IcClip, IcChevL, IcFolder, IcLock, IcPlus } from "./tokens";
 import { Toast, Toggle, StatCard, Badge, Btn, InputField, SelectField, EmptyState, TableHeader } from "./ui";
 import { BundleView, TicketBadge, fmtTicketTime } from "../shared/TicketBundle";
 
@@ -318,6 +318,87 @@ function ModAccessRow({ m, saving, onToggle }) {
 // ════════════════════════════════════════════════════════════════════════
 // TAB 6: DATA EXPORT (NEW)
 // ════════════════════════════════════════════════════════════════════════
+const ADD_USER_ROLES = [
+  { value: "admin",           label: "Admin" },
+  { value: "project_manager", label: "Project Manager" },
+  { value: "supervisor",      label: "Supervisor" },
+  { value: "accountant",      label: "Accountant" },
+  { value: "viewer",          label: "Viewer" },
+];
+
+// ── ADD A USER TO THIS COMPANY ────────────────────────────────────────
+// The starter password is fixed (Welcome@123 + must_change_password), the same
+// handshake company creation uses, so it is shown once here and never again.
+function AddUserModal({ companyId, companyName, onClose, onSaved, setToast }) {
+  const [f, setF] = useState({ name:"", phone:"", email:"", role:"supervisor" });
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(null);
+  const set = (k) => (v) => setF(p => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    if (!f.name.trim()) return setToast({ msg:"Naam zaroori hai", type:"error" });
+    if (!/^[6-9]\d{9}$/.test(f.phone.trim()))
+      return setToast({ msg:"Mobile 10-digit hona chahiye — yahi login id hai", type:"error" });
+    setSaving(true);
+    const res = await apiFetch("/saas-admin/companies/" + companyId + "/users", { method:"POST", body: f });
+    setSaving(false);
+    // Do NOT refresh the parent yet: its loading state would unmount this
+    // modal before the one-time password could be read. Same trap as company
+    // creation — the refresh moves to the Done button.
+    if (res.success) setDone(res.data);
+    else setToast({ msg: res.message || "User add nahi hua", type:"error" });
+  };
+
+  if (done) {
+    return (
+      <>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:500, backdropFilter:"blur(3px)" }}/>
+        <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:420, background:T.surface, borderRadius:16, zIndex:501, boxShadow:"0 24px 64px rgba(0,0,0,0.3)", overflow:"hidden" }}>
+          <div style={{ padding:"18px 22px", background:"linear-gradient(135deg, #059669, #10B981)", textAlign:"center" }}>
+            <div style={{ fontSize:16.5, fontWeight:800, color:"white" }}>{done.name} add ho gaya</div>
+            <div style={{ fontSize:11.5, color:"rgba(255,255,255,0.75)", marginTop:3 }}>{companyName}</div>
+          </div>
+          <div style={{ padding:"20px 22px" }}>
+            <div style={{ background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:10, padding:"15px 17px", marginBottom:15 }}>
+              <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:4 }}>Login Mobile</div>
+              <div style={{ fontSize:16, fontWeight:800, color:T.blu, fontFamily:"monospace" }}>{done.credentials.mobile}</div>
+              <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", margin:"12px 0 4px" }}>Password</div>
+              <div style={{ fontSize:17, fontWeight:800, color:T.t1, fontFamily:"monospace", background:T.ambL, padding:"7px 11px", borderRadius:6, border:`1px solid ${T.ambM}` }}>{done.credentials.password}</div>
+              <div style={{ fontSize:10.5, color:T.t4, marginTop:6 }}>Pehli login par badalna padega.</div>
+            </div>
+            <Btn style={{ width:"100%", justifyContent:"center" }} onClick={() => { onSaved(); onClose(); }}>Done</Btn>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:500, backdropFilter:"blur(3px)" }}/>
+      <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:430, background:T.surface, borderRadius:16, zIndex:501, boxShadow:"0 24px 64px rgba(0,0,0,0.3)", overflow:"hidden" }}>
+        <div style={{ padding:"16px 22px", borderBottom:`1px solid ${T.b1}` }}>
+          <div style={{ fontSize:14.5, fontWeight:700, color:T.t1 }}>Naya user</div>
+          <div style={{ fontSize:11.5, color:T.t3, marginTop:2 }}>{companyName}</div>
+        </div>
+        <div style={{ padding:"18px 22px", display:"flex", flexDirection:"column", gap:13 }}>
+          <InputField label="Naam" value={f.name} onChange={set("name")} placeholder="jaise: Ramesh Kumar" required/>
+          <InputField label="Mobile (login id)" value={f.phone} onChange={set("phone")} placeholder="10 digit" required/>
+          <InputField label="Email (optional)" value={f.email} onChange={set("email")} placeholder="name@company.com"/>
+          <SelectField label="Role" value={f.role} onChange={set("role")} options={ADD_USER_ROLES}/>
+          <div style={{ fontSize:10.5, color:T.t4, lineHeight:1.45 }}>
+            Password apne aap banega aur next screen par ek baar dikhega. Ye seat customer ke licence me se jayegi.
+          </div>
+        </div>
+        <div style={{ padding:"13px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", justifyContent:"flex-end", gap:9 }}>
+          <Btn variant="outline" onClick={onClose} disabled={saving}>Rehne do</Btn>
+          <Btn onClick={save} disabled={saving}>{saving ? "Ruko..." : "Add karo"}</Btn>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function CompanyDetailPage({ companyId, onBack }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -327,6 +408,7 @@ function CompanyDetailPage({ companyId, onBack }) {
   const [noteType, setNoteType] = useState("note");
   const [savingNote, setSavingNote] = useState(false);
   const [editUser, setEditUser] = useState(null);       // user row being edited
+  const [showAddUser, setShowAddUser] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
   const [newCreds, setNewCreds] = useState(null);       // {name,mobile,email,password} after reset
   const [resettingId, setResettingId] = useState(null);
@@ -589,6 +671,15 @@ function CompanyDetailPage({ companyId, onBack }) {
       {/* TAB 3: Users — edit / reset-password per user */}
       {tab === "users" && (
         <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          {/* Adding a user lives here so support can do it without asking the
+              company admin — previously a user could only be born with its
+              company, and the workaround was handing out the admin login. */}
+          <div style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <span style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>Users ({users.length})</span>
+            <Btn onClick={() => setShowAddUser(true)} style={{ padding:"5px 11px", fontSize:11.5 }}>
+              <IcPlus size={11}/> Add User
+            </Btn>
+          </div>
           <TableHeader columns={["Name / Mobile","Email","Role","Last Login","Status","Actions"]} gridCols="1.5fr 1.7fr 1fr 0.9fr 84px 88px"/>
           {users.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No users</div>}
           {users.map((u, i) => (
@@ -750,6 +841,7 @@ function CompanyDetailPage({ companyId, onBack }) {
       )}
 
       {/* Edit User Modal */}
+      {showAddUser && <AddUserModal companyId={companyId} companyName={company.name} onClose={() => setShowAddUser(false)} onSaved={load} setToast={setToast}/>}
       {editUser && (
         <>
           <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
