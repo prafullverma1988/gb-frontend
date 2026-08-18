@@ -3817,6 +3817,7 @@ function FinanceModule(){
           status:t.status||"approved",
           txnType:t.type||"",
           paidBy:t.paid_by||null,
+          walletSpend:t.wallet_spend===1||t.wallet_spend===true,
           items:t.line_items||null,
           sourceKind:t.source_kind||null,
           refId:t.ref_id||null,
@@ -4021,7 +4022,10 @@ function FinanceModule(){
     // and the bot exactly. Old per-party-type string/note heuristic (inverted
     // for clients, blind to settlements) is gone.
     const remapped=txns.map(t=>{
-      const sign=ledgerSign(t.txnType||t.type||"");
+      // A staff's wallet spend (money paid out of their wallet) always reduces
+      // what the staff holds / increases what we owe them → CR (−1), whatever
+      // the underlying txn type is.
+      const sign=t.walletSpend ? -1 : ledgerSign(t.txnType||t.type||"");
       return {...t, ledSign:sign, dr:sign>0}; // dr kept for row tint / legacy reads
     });
 
