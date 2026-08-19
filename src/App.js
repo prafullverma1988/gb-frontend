@@ -1819,6 +1819,25 @@ function App(){
   useEffect(()=>{
     fetch(API_BASE + "/health").catch(()=>{});
   },[]);
+  // Profile rename → update the sidebar immediately. Settings renders without
+  // access to setUser, so MyProfile announces the change and we merge it here.
+  // The 60s /auth/permissions poll would also correct it, but waiting up to a
+  // minute after pressing Save reads as a bug.
+  useEffect(()=>{
+    const onProfileUpdated=(e)=>{
+      const d=(e&&e.detail)||{};
+      if(!d.name) return;
+      setUser(u=>{
+        const updated={...u, name:d.name,
+          ...(d.phone!==undefined?{phone:d.phone}:{}),
+          ...(d.designation!==undefined?{designation:d.designation}:{})};
+        try{ localStorage.setItem("gb_user", JSON.stringify(updated)); }catch(_){}
+        return updated;
+      });
+    };
+    window.addEventListener("sanchalan:profile-updated", onProfileUpdated);
+    return ()=>window.removeEventListener("sanchalan:profile-updated", onProfileUpdated);
+  },[]);
 
   // Diagnostic ring buffers (utils/diag.js). Collects console errors, failed
   // API calls and the screens visited — in memory only. Nothing is ever sent
@@ -1876,11 +1895,16 @@ function App(){
         // "admin" against the live role, not the stale cached one.
         const effectiveRole = liveRole || user?.role;
         const permsChanged = res.module_permissions && effectiveRole!=="admin";
-        if(res.success && (roleChanged || projectsChanged || permsChanged)){
+        // Live profile identity — a rename done in Settings > My Profile (here
+        // or on another device) otherwise stayed stale in the sidebar until a
+        // full page reload, because the cached user is only read at boot.
+        const nameChanged = res.name && res.name !== user?.name;
+        if(res.success && (roleChanged || projectsChanged || permsChanged || nameChanged)){
           const updated={...user,
             ...(roleChanged ? { role: liveRole } : {}),
             ...(projectsChanged ? { projects: liveProjects } : {}),
             ...(permsChanged ? { module_permissions: res.module_permissions } : {}),
+            ...(nameChanged ? { name: res.name, phone: res.phone, designation: res.designation } : {}),
           };
           setUser(updated);
           try{ localStorage.setItem("gb_user", JSON.stringify(updated)); }catch(_){}

@@ -2764,6 +2764,14 @@ function MyProfile() {
           localStorage.setItem("gb_user", JSON.stringify({ ...u, name: form.name.trim(), phone: form.phone, designation: form.designation }));
           if (localStorage.getItem("gb_user_name") !== null) localStorage.setItem("gb_user_name", form.name.trim());
         } catch (e) { /* */ }
+        // localStorage alone is not enough — the sidebar renders from App state,
+        // which is only seeded from storage at boot. Announce the change so the
+        // header/sidebar update without a reload.
+        try {
+          window.dispatchEvent(new CustomEvent("sanchalan:profile-updated", {
+            detail: { name: form.name.trim(), phone: form.phone, designation: form.designation },
+          }));
+        } catch (e) { /* */ }
         setTimeout(() => setMsg(""), 2500);
       } else setMsg(r.message || "Update failed");
     } catch (e) { setMsg(e.message || "Network error"); }
