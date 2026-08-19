@@ -2653,7 +2653,10 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
   const [ai, setAi] = useState(null);        // {loading} | {groups, warnings, picked:{idx:true}}
   const aiSuggest = async () => {
     setAi({ loading: true });
-    const r = await api.post(`/tenders/${tenderId}/boq/packages/ai-suggest`, {});
+    // 294 item = kai LLM batch. Default 15s timeout me ye kabhi poora
+    // nahi hota — Prafull ko prod par "Request timed out" mila tha. Isliye
+    // is ek call ko 3 minute diye hain (server batch parallel chalata hai).
+    const r = await api.post(`/tenders/${tenderId}/boq/packages/ai-suggest`, {}, { timeoutMs: 180000 });
     if (!r?.success) { setAi(null); toast.error(r?.message || "AI se sujhaav nahi mila"); return; }
     const groups = r.data.groups || [];
     if (!groups.length) { setAi(null); toast.info?.(r.message || "Sujhaane ko kuch nahi mila"); return; }
@@ -2707,7 +2710,7 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
           {/* Flat BOQ (bina Sub Head) ya bache hue items ke liye — AI padh
               kar groups SUJHATA hai, lagta review ke baad hi hai. */}
           {(!pkgs.length || data?.unassigned > 0) && (
-            <SecBtn label={ai?.loading ? "AI padh raha…" : "AI se baanto"}
+            <SecBtn label={ai?.loading ? "AI padh raha… (1-2 min)" : "AI se baanto"}
               onClick={aiSuggest} disabled={!!ai?.loading || busy}/>
           )}
           <SecBtn label={busy?"...":(pkgs.length?"Naye item baanto":"Packages banao (sub-head se)")}
@@ -3455,6 +3458,10 @@ const LINE_TYPES  = [
   {v:"gravity", l:"Gravity",     c:"#2563EB"},
   {v:"inlet",   l:"Inlet",       c:"#059669"},
   {v:"outlet",  l:"Outlet",      c:"#D97706"},
+  // Ratna wale ne drain/road bhi map par utaare — apna type milna chahiye,
+  // warna sab "other" me dab jaate hain aur filter ka matlab nahi rehta.
+  {v:"drain",   l:"Drain line",  c:"#0E7490"},
+  {v:"road",    l:"Road",        c:"#92400E"},
   {v:"other",   l:"Other",       c:"#6B7280"},
 ];
 const POINT_TYPES = [
@@ -3464,7 +3471,7 @@ const POINT_TYPES = [
   {v:"valve",      l:"Valve chamber"},
   {v:"other",      l:"Other"},
 ];
-const lineColour = (t) => (LINE_TYPES.find(x=>x.v===t) || LINE_TYPES[4]).c;
+const lineColour = (t) => (LINE_TYPES.find(x=>x.v===t) || LINE_TYPES[LINE_TYPES.length-1]).c;
 const DONE_COLOUR = "#059669";   // laid — same green the rest of the app uses
 
 // Split a drawn path at `metres` from its start, so the laid part can be drawn
@@ -3526,6 +3533,9 @@ function MapTab({tenderId, sites}) {
   const [mapReady, setMapReady] = useState(false);
   const [mapErr, setMapErr]   = useState("");
   const [fSite, setFSite]     = useState("");
+  // F1 — kaunse type dikhein. Khali Set = sab dikhao (default). Ratna ke
+  // tender me 37 line + 10 pin hain; bina filter ke sab ek dher lagta hai.
+  const [hidden, setHidden]   = useState(()=>new Set());
   const [pending, setPending] = useState(null);   // {kind, coords} — abhi drawn, save baaki
   const [busy, setBusy]       = useState(false);
   const [mode, setMode]       = useState(null);   // null | "line" | "point"
@@ -3785,6 +3795,9 @@ function MapTab({tenderId, sites}) {
     for (const it of items) {
       const coords = it.geometry || [];
       if (!coords.length) continue;
+      // F1 — chhupa hua type map par bhi nahi aata (aur bounds me bhi nahi,
+      // taaki "sirf drain" chunne par map unhi par zoom ho jaye).
+      if (hidden.has(it.kind === "line" ? it.atype : "__pins")) continue;
       any = true;
       if (it.kind === "line") {
         // Whole line in its type colour, then the laid part painted green on
@@ -3832,7 +3845,7 @@ function MapTab({tenderId, sites}) {
       }
     }
     if (any) mapRef.current.fitBounds(bounds);
-  }, [items, progress, mapReady, toast, openStretch]);
+  }, [items, progress, mapReady, toast, openStretch, hidden]);
 
   // ── Drawing controls ──────────────────────────────────────────
   const clearDraft = useCallback(()=>{
@@ -4058,6 +4071,48 @@ function MapTab({tenderId, sites}) {
               <span style={{fontSize:11, color:T.t4}}>Point ko drag karke theek bhi kar sakte ho</span>
             </>)}
           </div>
+
+          {/* F1 — type ke chips. Rang wahi jo map par line ka hai, isliye ye
+              legend bhi hai aur filter bhi. Ginti dikhti hai taaki "gravity
+              kitni hai" ke liye list khangalni na pade. */}
+          {!mode && !!items.length && (()=>{
+            const cnt = {}; let pins = 0;
+            items.forEach(it=>{ if (it.kind === "line") cnt[it.atype] = (cnt[it.atype]||0)+1; else pins++; });
+            const chips = LINE_TYPES.filter(t=>cnt[t.v]).map(t=>({key:t.v, label:t.l, n:cnt[t.v], c:t.c}));
+            if (pins) chips.push({key:"__pins", label:"Structures", n:pins, c:"#4338CA"});
+            if (chips.length < 2) return null;   // ek hi type hai to filter bekaar
+            const anyHidden = hidden.size > 0;
+            return (
+              <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center",
+                padding:"7px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
+                <span style={{fontSize:10.5, color:T.t4, marginRight:2}}>Dikhao:</span>
+                {chips.map(c=>{
+                  const on = !hidden.has(c.key);
+                  return (
+                    <button key={c.key} onClick={()=>setHidden(h=>{
+                      const n = new Set(h); n.has(c.key) ? n.delete(c.key) : n.add(c.key); return n; })}
+                      style={{display:"flex", alignItems:"center", gap:5, fontSize:11, cursor:"pointer",
+                        padding:"3px 9px", borderRadius:20, fontFamily:"inherit",
+                        border:`1px solid ${on ? c.c : T.b1}`,
+                        background: on ? c.c + "14" : T.surface,
+                        color: on ? c.c : T.t4, fontWeight: on ? 700 : 400,
+                        opacity: on ? 1 : .75, textDecoration: on ? "none" : "line-through"}}>
+                      <span style={{width:8, height:8, borderRadius:"50%", background:on?c.c:T.b2, flexShrink:0}}/>
+                      {c.label} <span style={{fontWeight:400, opacity:.75}}>{c.n}</span>
+                    </button>
+                  );
+                })}
+                {anyHidden && (
+                  <button onClick={()=>setHidden(new Set())}
+                    style={{fontSize:10.5, padding:"3px 9px", borderRadius:20, cursor:"pointer",
+                      border:`1px solid ${T.b1}`, background:T.surface, color:T.ind, fontFamily:"inherit"}}>
+                    sab dikhao
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+
           <div ref={mapDiv} style={{width:"100%", height:430, background:T.surfaceB}}/>
           {!mapReady && <div style={{position:"absolute", inset:0, display:"flex", alignItems:"center",
             justifyContent:"center", fontSize:12.5, color:T.t3}}>Map load ho raha hai…</div>}
