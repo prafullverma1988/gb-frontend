@@ -93,6 +93,9 @@ function TabOverview({proj, onRequestPayment}) {
   const [media, setMedia] = useState(null);      // null = loading
   const [mBucket, setMBucket] = useState("Last week");
   const [mView, setMView] = useState(-1);        // index into the visible list
+  // Hatane ka haq server tay karta hai (admin/PM, ya apni daali hui cheez).
+  // Client sirf button chhupata hai — asli rok backend par hai.
+  const [mCan, setMCan] = useState(false);
   const [pnl, setPnl]     = useState(null); // accrual P&L for this project (shared /finance/project-pnl formula)
   const [pipe, setPipe]   = useState(null); // tender site: is site ki pipeline ka MB-progress
   const [loading, setLoading] = useState(true);
@@ -137,12 +140,24 @@ function TabOverview({proj, onRequestPayment}) {
     // Separate from the Promise.all above so a slow media list never holds up
     // the KPI row.
     api.get(`/projects/${pid}/media?type=all`)
-      .then(r=>{ if(alive) setMedia(r?.success && Array.isArray(r.data) ? r.data : []); })
+      .then(r=>{ if(alive){ setMedia(r?.success && Array.isArray(r.data) ? r.data : []); setMCan(!!r?.can_remove); } })
       .catch(()=>{ if(alive) setMedia([]); });
     return ()=>{ alive=false; };
   },[proj?.id]);
 
   /* ── Site media helpers ── */
+  // "Hatao" = archive (is_active=0), mitana nahi. Site ki photo saboot hoti
+  // hai — Files tab ke Archive me padi rehti hai aur wapas aa sakti hai.
+  const archiveMedia = async (ref) => {
+    if(!ref) return;
+    const ask = window.confirmAsync || (async (msg) => window.confirm(msg));
+    if(!await ask("Ye photo hata dein? Files tab ke Archive me chali jayegi, mitegi nahi.")) return;
+    const r = await api.del(`/projects/${proj.id}/media/${ref}`);
+    if(!r?.success){ window.alert(r?.message || "Hataya nahi ja saka"); return; }
+    setMView(-1);
+    setMedia(list => (list||[]).filter(x => (x.ref||x.id) !== ref));
+  };
+
   const isVid = (m) => m.kind==="video" || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(m.url||"");
   const bucketOf = (d)=>{
     const dt=new Date(d); if(isNaN(dt)) return "Older";
@@ -409,6 +424,12 @@ function TabOverview({proj, onRequestPayment}) {
                         background:"linear-gradient(transparent, rgba(0,0,0,.75))", color:"white", fontSize:9.5,
                         whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{m.task_name}</div>
                     )}
+                    {mCan && (
+                      <button onClick={(e)=>{e.stopPropagation(); archiveMedia(m.ref||m.id);}} title="Hatao (archive)"
+                        style={{position:"absolute", top:5, right:5, width:21, height:21, borderRadius:"50%",
+                          border:"none", background:"rgba(15,23,42,.62)", color:"white", fontSize:11, fontWeight:700,
+                          lineHeight:"21px", padding:0, cursor:"pointer", fontFamily:"inherit"}}>✕</button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -417,7 +438,8 @@ function TabOverview({proj, onRequestPayment}) {
         </Panel>
 
         {mView>=0 && mediaShown[mView] && (
-          <MediaLightbox items={mediaShown} index={mView} onIndex={setMView} onClose={()=>setMView(-1)} isVid={isVid}/>
+          <MediaLightbox items={mediaShown} index={mView} onIndex={setMView} onClose={()=>setMView(-1)} isVid={isVid}
+            onRemove={mCan ? archiveMedia : null}/>
         )}
       </>)}
 
@@ -564,7 +586,7 @@ function TabOverview({proj, onRequestPayment}) {
    a bar spacing or a level mark, so this zooms properly: scroll wheel to
    scale around the pointer, drag to pan once zoomed, arrow keys to move
    between shots, Esc to close. */
-function MediaLightbox({items, index, onIndex, onClose, isVid}){
+function MediaLightbox({items, index, onIndex, onClose, isVid, onRemove}){
   const m = items[index];
   const [z, setZ] = useState(1);
   const [off, setOff] = useState({x:0,y:0});
@@ -623,6 +645,9 @@ function MediaLightbox({items, index, onIndex, onClose, isVid}){
             <span style={{fontSize:11.5, color:"rgba(255,255,255,.6)"}}>{z.toFixed(1)}×</span>
             <button onClick={()=>{setZ(1);setOff({x:0,y:0});}} style={lbBtn}>Reset</button>
           </>
+        )}
+        {onRemove && (
+          <button onClick={()=>onRemove(m.ref||m.id)} style={{...lbBtn, background:"rgba(220,38,38,.85)"}}>Hatao</button>
         )}
         <button onClick={onClose} style={lbBtn}>Band</button>
       </div>

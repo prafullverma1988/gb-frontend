@@ -51,6 +51,9 @@ const TabTransaction = lazy(() => import("./tabs/TabTransaction"));
 const TabTodo        = lazy(() => import("./tabs/TabTodo"));
 const TabEquipment   = lazy(() => import("./tabs/TabEquipment"));
 const TabFiles       = lazy(() => import("./tabs/TabFiles"));
+// Solar ka Files tab (Aadhaar/PAN/ITR ka checklist) construction site par
+// bekaar hai — wahan site ke apne kaagaz aur photo dikhne chahiye.
+const TabProjectFiles= lazy(() => import("./tabs/TabProjectFiles"));
 const TabSite        = lazy(() => import("./tabs/TabSite"));
 const TabMOM         = lazy(() => import("./tabs/TabMOM"));
 const TabSuryaGhar   = lazy(() => import("./tabs/TabSolar").then(m => ({ default: m.TabSuryaGhar })));
@@ -836,7 +839,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     material:    <TabMaterial project={project}/>,
     subcon:      <TabSubcon projectId={project.id} project={project}/>,
     equipment:   <TabEquipment projectId={project.id}/>,
-    files:       <TabFiles projectId={project.id}/>,
+    files:       isSolar ? <TabFiles projectId={project.id}/> : <TabProjectFiles projectId={project.id}/>,
     site:        <TabSite project={project} isAdmin={isAdmin}/>,
     mom:         <TabMOM project={project}/>,
     // ── Solar EPC tabs ──
