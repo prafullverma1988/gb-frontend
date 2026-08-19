@@ -2652,7 +2652,10 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
   const [ai, setAi] = useState(null);        // {loading} | {groups, warnings, picked:{idx:true}}
   const aiSuggest = async () => {
     setAi({ loading: true });
-    const r = await api.post(`/tenders/${tenderId}/boq/packages/ai-suggest`, {});
+    // 294 item = kai LLM batch. Default 15s timeout me ye kabhi poora
+    // nahi hota — Prafull ko prod par "Request timed out" mila tha. Isliye
+    // is ek call ko 3 minute diye hain (server batch parallel chalata hai).
+    const r = await api.post(`/tenders/${tenderId}/boq/packages/ai-suggest`, {}, { timeoutMs: 180000 });
     if (!r?.success) { setAi(null); toast.error(r?.message || "AI se sujhaav nahi mila"); return; }
     const groups = r.data.groups || [];
     if (!groups.length) { setAi(null); toast.info?.(r.message || "Sujhaane ko kuch nahi mila"); return; }
@@ -2706,7 +2709,7 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
           {/* Flat BOQ (bina Sub Head) ya bache hue items ke liye — AI padh
               kar groups SUJHATA hai, lagta review ke baad hi hai. */}
           {(!pkgs.length || data?.unassigned > 0) && (
-            <SecBtn label={ai?.loading ? "AI padh raha…" : "AI se baanto"}
+            <SecBtn label={ai?.loading ? "AI padh raha… (1-2 min)" : "AI se baanto"}
               onClick={aiSuggest} disabled={!!ai?.loading || busy}/>
           )}
           <SecBtn label={busy?"...":(pkgs.length?"Naye item baanto":"Packages banao (sub-head se)")}
