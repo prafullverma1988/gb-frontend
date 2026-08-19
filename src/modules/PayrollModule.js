@@ -4428,7 +4428,7 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
   const remove=async(w)=>{
     if(!await window.confirmAsync(`Remove worker "${w.name}"?`)) return;
     try{
-      const res=await api.delete(`/payroll/workers/${w.id}`);
+      const res=await api.del(`/payroll/workers/${w.id}`);
       if(res.success) setWorkers(p=>p.filter(x=>x.id!==w.id));
     }catch(e){ alert(e.message); }
   };
