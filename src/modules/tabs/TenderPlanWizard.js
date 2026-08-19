@@ -62,7 +62,12 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
       ...it,
       take: !it.already,
       name: shortName(it.description) || it.item_no || "Item",
-      qty: Math.max(0, it.qty - it.planned_elsewhere),
+      // B3 — sheet me har site ka apna qty column tha to wahi default
+      // (poori tender qty nahi). Warna purana bartav: kul me se jo kahin
+      // aur plan ho chuka wo ghata kar.
+      qty: it.site_qty != null
+        ? it.site_qty
+        : Math.max(0, it.qty - it.planned_elsewhere),
       alignment_id: "",
     })));
   };
@@ -183,6 +188,9 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
                       <div style={{ fontSize: 10, color: T.t4, marginTop: 2 }}>
                         BOQ {fmtQty(r.qty_total ?? r.qty + r.planned_elsewhere)} {r.unit}
                         {r.planned_elsewhere > 0 && ` · ${fmtQty(r.planned_elsewhere)} kahin aur`}
+                        {r.site_qty != null && (
+                          <span style={{ color: "#059669", fontWeight: 700 }}> · is site ka hissa</span>
+                        )}
                       </div>
                     </td>
                     {!!aligns.length && (

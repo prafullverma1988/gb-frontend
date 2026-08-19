@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import LibrarySelect from "../../components/LibrarySelect";
 import BoqImportWizard from "./BoqImportWizard";
 import TenderPlanWizard from "./TenderPlanWizard";
+import MapPlanWizard from "./MapPlanWizard";
 import { T } from "../shared/tokens";
 
 // ─── SKELETON LOADER ─────────────────────────────────────────────
@@ -152,13 +153,18 @@ function TabTasks({ projectId, isAdmin }) {
   // ya nahi (endpoint tender na hone par {tender_id:null} deta hai).
   const [tenderPlan, setTenderPlan] = useState(null);   // {tender_id, packages}
   const [showTenderPlan, setShowTenderPlan] = useState(false);
-  useEffect(()=>{
-    let dead = false;
+  // F2 — map par jo lines/pins pehle se padi hain, unhi se task tree.
+  const [mapPlan, setMapPlan] = useState(null);         // {groups, total_lines, total_points}
+  const [showMapPlan, setShowMapPlan] = useState(false);
+  const loadPlans = useCallback(()=>{
     api.get(`/tasks/project/${projectId}/tender-packages`).then(r=>{
-      if (!dead && r?.success) setTenderPlan(r.data);
+      if (r?.success) setTenderPlan(r.data);
     }).catch(()=>{});
-    return ()=>{ dead = true; };
+    api.get(`/tasks/project/${projectId}/map-plan`).then(r=>{
+      if (r?.success) setMapPlan(r.data);
+    }).catch(()=>{});
   }, [projectId]);
+  useEffect(()=>{ loadPlans(); }, [loadPlans]);
 
   const toggleShowBaseline = () => {
     setShowBaseline(v => { const n=!v; try { localStorage.setItem("gb_show_baseline_cols", n?"1":"0"); } catch(e){} return n; });
@@ -1033,6 +1039,12 @@ function TabTasks({ projectId, isAdmin }) {
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 7h18M3 12h18M3 17h10"/></svg>
           Tender se plan lao
         </button>}
+        {isAdmin&&!!mapPlan?.groups?.length&&<button onClick={()=>setShowMapPlan(true)}
+          title="Map par khinchi lines aur structures se poora task tree banao"
+          style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid #0E7490`,background:"#ECFEFF",fontSize:12,fontWeight:700,color:"#0E7490",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 20l-5.4 1.8a1 1 0 01-1.3-1V6.2a1 1 0 01.7-.9L9 3m0 17l6-2m-6 2V3m6 15l5.4 1.8a1 1 0 001.3-1V4.8a1 1 0 00-.7-.9L15 2m0 16V2m-6 1l6-1"/></svg>
+          Map se plan lao
+        </button>}
         {isAdmin&&<button onClick={()=>setShowTemplatePicker(true)}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:"linear-gradient(135deg,#EC4899,#BE185D)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
           📋 Load Template
@@ -1456,7 +1468,13 @@ function TabTasks({ projectId, isAdmin }) {
       {showTenderPlan&&<TenderPlanWizard projectId={projectId}
         onClose={()=>setShowTenderPlan(false)}
         onDone={async(msg)=>{ apiCache.invalidate("tasks"); apiCache.invalidate("projects"); await refetchTasks();
-          api.get(`/tasks/project/${projectId}/tender-packages`).then(r=>{ if(r?.success) setTenderPlan(r.data); }).catch(()=>{});
+          loadPlans();
+          if (msg) window.toast?.success?.(msg); }}/>}
+
+      {showMapPlan&&<MapPlanWizard projectId={projectId}
+        onClose={()=>setShowMapPlan(false)}
+        onDone={async(msg)=>{ apiCache.invalidate("tasks"); apiCache.invalidate("projects"); await refetchTasks();
+          loadPlans();
           if (msg) window.toast?.success?.(msg); }}/>}
 
       {/* Edit Task drawer */}
