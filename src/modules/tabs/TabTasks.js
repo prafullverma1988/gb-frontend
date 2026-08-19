@@ -657,6 +657,11 @@ function TabTasks({ projectId, isAdmin }) {
               )}
               <span style={{fontSize:10,fontWeight:600,color:t.progress===100?"#10B981":t.progress>0?"#3B82F6":"#94A3B8",flexShrink:0,minWidth:24,textAlign:"right"}}>{t.progress}%</span>
             </div>
+            {Number(t.scope_qty)>0&&(
+              <div style={{fontSize:8.5,color:"#94A3B8",textAlign:"right",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>
+                {Math.round(Number(t.done_qty)||0)}/{Math.round(Number(t.scope_qty))}{t.unit?" "+t.unit:""}
+              </div>
+            )}
           </div>
 
           {/* Start — click opens date picker (locked → read-only) */}
@@ -1296,6 +1301,11 @@ function TabTasks({ projectId, isAdmin }) {
                                 width:`${t.progress||0}%`,transition:"width .3s"}}/>
                             </div>
                             <span style={{fontSize:10,color:T.t4,flexShrink:0,minWidth:24,textAlign:"right"}}>{t.progress||0}%</span>
+                            {Number(t.scope_qty)>0&&(
+                              <span style={{fontSize:8.5,color:T.t4,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>
+                                {Math.round(Number(t.done_qty)||0)}/{Math.round(Number(t.scope_qty))}{t.unit?" "+t.unit:""}
+                              </span>
+                            )}
                           </div>
                           <div style={{padding:"0 5px",fontSize:11,color:T.t2}}>{fmtD(t.baseStart)}</div>
                           <div style={{padding:"0 5px",fontSize:11,color:T.t2}}>{fmtD(t.baseEnd)}</div>
@@ -1485,10 +1495,17 @@ function TabTasks({ projectId, isAdmin }) {
           boq_item_id: u.boqItemId ?? "", alignment_id: u.alignId ?? "" });
         // A rejected link (wrong tender / wrong site) comes back as a message.
         if (r && r.success === false && r.message) window.toast?.error(r.message);
+        // Scope/unit budget-PATCH se jaate hain — tasks PUT inhe leta hi nahi.
+        // Scope badla to completion ka MODE hi badla (qty ↔ %), isliye refetch.
+        const scopeChanged = String(u.scopeQty ?? "") !== String(orig.scope_qty ?? "") || String(u.unit || "") !== String(orig.unit || "");
+        if (scopeChanged) {
+          const pr = await api.patch("/budget/task/"+id, { scope_qty: u.scopeQty === "" || u.scopeQty == null ? null : Number(u.scopeQty), unit: u.unit || null });
+          if (pr && pr.success === false && pr.message) window.toast?.error(pr.message);
+        }
         setEditTask(null);
         // Progress or duration moved → every ancestor's rolled-up number moved
         // with it, so patching this one node in the tree isn't enough.
-        if (u.progress !== undefined || u.duration !== orig.duration) await refetchTasks();
+        if (u.progress !== undefined || u.duration !== orig.duration || scopeChanged) await refetchTasks();
         else setTasks(updateInTree(tasks,id,{...u, delay_reason:u.delayReason||null, delay_note:u.delayNote||null}));
         // P2e: if the dates moved AND other tasks depend on this one, offer to
         // cascade the shift. The task itself is already saved above; the
@@ -3170,6 +3187,144 @@ function TaskIssueChat({issueId}){
   );
 }
 
+/* ── QTY-PROGRESS — scope wale task par % nahi, QTY likhi jaati hai ──
+   Prafull (2026-08-20): "completion wahi qty me mark hoga by typing, % nahi.
+   Jisme qty input hua usme qty dikhegi, nahi to default %."
+
+   Mobile par ye pehle se hai (TaskDetailScreen ka saveQty); web ab wahi
+   raasta pakadta hai: entry /budget/task/:id/progress me jaati hai, % aur
+   status server par done÷scope se nikalta hai (recomputeActuals), aur us
+   din ki photos apne aap entry se jud jaati hain (A2). Neeche har entry ka
+   geo-tag aur AI ka teen-cheez byora (qty + photo + note) bhi dikhta hai —
+   AI sirf batata hai, rokta kuch nahi. */
+function QtyProgressBox({task,meIsPriv,onProgress}){
+  const scope=Number(task.scope_qty)||0;
+  const unit=task.unit||"";
+  const [entries,setEntries]=useState(null);   // null = load ho raha
+  const [qty,setQty]=useState("");
+  const [note,setNote]=useState("");
+  const [saving,setSaving]=useState(false);
+  const [aiBusy,setAiBusy]=useState(null);     // entry id jiska AI chal raha
+  const load=useCallback(async()=>{
+    const r=await api.get("/budget/task/"+task.id);
+    setEntries(r?.success?(r.data?.progress||[]):[]);
+  },[task.id]);
+  useEffect(()=>{load();},[load]);
+
+  const done=(entries||[]).reduce((s,e)=>s+Number(e.done_qty||0),0);
+  const pct=scope>0?Math.min(100,Math.round(done/scope*100)):0;
+  const push=(nd)=>{const p=scope>0?Math.min(100,Math.round(nd/scope*100)):0;
+    onProgress(p,{done_qty:nd,progress:p,status:p>=100?"Completed":p>0?"Ongoing":"Not Started"});};
+
+  const save=async()=>{
+    const q=Number(qty);
+    if(!(q>0)||saving)return;
+    setSaving(true);
+    const r=await api.post("/budget/task/"+task.id+"/progress",
+      {report_date:new Date().toISOString().split("T")[0],done_qty:q,remarks:note.trim()||"Web se darj"});
+    setSaving(false);
+    if(!r?.success){window.alert(r?.message||"Save nahi hua");return;}
+    setQty("");setNote("");
+    push(done+q);
+    load();
+  };
+  const del=async(e)=>{
+    const ask=window.confirmAsync||(async(m)=>window.confirm(m));
+    if(!await ask(`${e.done_qty} ${unit} ki entry (${new Date(e.report_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}) hatayein? % apne aap peeche jayega.`))return;
+    const r=await api.del("/budget/progress/"+e.id);
+    if(!r?.success){window.alert(r?.message||"Hata nahi saki");return;}
+    push(done-Number(e.done_qty||0));
+    load();
+  };
+  const aiCheck=async(e)=>{
+    setAiBusy(e.id);
+    const r=await api.post("/budget/progress/"+e.id+"/ai-check",{},{timeoutMs:90000});
+    setAiBusy(null);
+    if(!r?.success){window.alert(r?.message||"Jaanch nahi chali");return;}
+    setEntries(p=>(p||[]).map(x=>x.id===e.id?{...x,_ai:r.data}:x));
+  };
+  const aiOf=(e)=>{
+    if(e._ai)return e._ai;
+    try{const mj=typeof e.measure_json==="string"?JSON.parse(e.measure_json):e.measure_json;return mj?.ai||null;}
+    catch(_){return null;}
+  };
+  const GEO={verified:{t:"✓ line par",c:"#059669",bg:"#ECFDF5"},off_line:{t:"⚠ line se hat kar",c:"#B45309",bg:"#FFFBEB"},
+    no_geo:{t:"jagah darj nahi",c:"#64748B",bg:"#F1F5F9"},no_photo:{t:"photo nahi",c:"#94A3B8",bg:"#F8FAFC"}};
+
+  return(<div>
+    {/* done/scope — asli number bade akshar me, % uska saaya */}
+    <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:6}}>
+      <span style={{fontSize:22,fontWeight:800,color:pct>=100?"#10B981":"#2563EB"}}>{Math.round(done*100)/100}</span>
+      <span style={{fontSize:13,color:"#64748B",fontWeight:600}}>/ {Math.round(scope*100)/100} {unit}</span>
+      <span style={{marginLeft:"auto",fontSize:11,color:"#94A3B8"}}>% khud nikalta hai — done ÷ scope</span>
+    </div>
+    <div style={{height:8,background:"#E2E8F0",borderRadius:4,overflow:"hidden",marginBottom:12}}>
+      <div style={{height:"100%",width:pct+"%",background:pct>=100?"#10B981":"#2563EB",borderRadius:4,transition:"width .3s"}}/>
+    </div>
+
+    {/* Aaj ka kaam */}
+    <div style={{display:"flex",gap:7,marginBottom:8}}>
+      <input type="number" min="0" step="any" value={qty} onChange={e=>setQty(e.target.value)}
+        placeholder={"Aaj kitna hua? ("+unit+")"}
+        style={{flex:"0 0 150px",padding:"10px 11px",borderRadius:8,border:"1.5px solid #CBD5E1",fontSize:14,fontWeight:700,
+          color:"#1E293B",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+      <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note — kya kaam hua (AI isse milata hai)"
+        onKeyDown={e=>{if(e.key==="Enter")save();}}
+        style={{flex:1,padding:"10px 11px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:12.5,
+          color:"#1E293B",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+      <button onClick={save} disabled={saving||!(Number(qty)>0)}
+        style={{padding:"10px 16px",borderRadius:8,border:"none",background:Number(qty)>0?"#2563EB":"#CBD5E1",color:"white",
+          fontSize:13,fontWeight:700,cursor:Number(qty)>0?"pointer":"default",fontFamily:"inherit"}}>
+        {saving?"…":"Darj karo"}
+      </button>
+    </div>
+    <div style={{fontSize:10.5,color:"#94A3B8",marginBottom:12,lineHeight:1.5}}>
+      Us din ki photos entry se apne aap jud jaati hain; AI teeno (qty + photo + note) ko dekh kar
+      neeche batata hai kahan aur kya kaam dikha. Faisla aapka hi hai.
+    </div>
+
+    {/* Entries */}
+    {entries===null&&<div style={{fontSize:11.5,color:"#94A3B8",padding:"8px 0"}}>Entries aa rahi hain…</div>}
+    {entries!==null&&!entries.length&&<div style={{fontSize:11.5,color:"#94A3B8",padding:"8px 0"}}>Abhi koi entry nahi — pehli aaj hi likho.</div>}
+    {(entries||[]).map(e=>{
+      const g=GEO[e.geo_flag]||null;
+      const ai=aiOf(e);
+      return(
+        <div key={e.id} style={{border:"1px solid #E2E8F0",borderRadius:9,padding:"8px 11px",marginBottom:6,background:"#FAFBFC"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <span style={{fontSize:11,color:"#64748B",fontWeight:600}}>
+              {new Date(e.report_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}
+            </span>
+            <span style={{fontSize:12.5,fontWeight:800,color:"#1E293B"}}>+{Number(e.done_qty)} {unit}</span>
+            {g&&<span style={{fontSize:9.5,fontWeight:700,color:g.c,background:g.bg,padding:"1px 7px",borderRadius:12}}>{g.t}{e.geo_flag==="verified"&&e.geo_m!=null?" · "+e.geo_m+" m":""}</span>}
+            {Number(e.photo_n)>0&&<span style={{fontSize:10,color:"#64748B"}}>📷 {e.photo_n}</span>}
+            <span style={{flex:1}}/>
+            {Number(e.photo_n)>0&&(
+              <button onClick={()=>aiCheck(e)} disabled={aiBusy===e.id}
+                style={{fontSize:10,padding:"2px 9px",borderRadius:12,border:"1px solid #C7D2FE",background:"#EEF2FF",
+                  color:"#4B45C4",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                {aiBusy===e.id?"jaanch chal rahi…":ai?"AI dobara":"✨ AI jaanch"}
+              </button>
+            )}
+            <button onClick={()=>del(e)} title="Entry hatao"
+              style={{border:"none",background:"none",cursor:"pointer",color:"#94A3B8",fontSize:13,padding:"0 2px",fontFamily:"inherit"}}>×</button>
+          </div>
+          {e.remarks&&e.remarks!=="Web se darj"&&e.remarks!=="Site se darj"&&(
+            <div style={{fontSize:10.5,color:"#64748B",marginTop:3}}>"{e.remarks}"</div>)}
+          {ai&&(
+            <div style={{marginTop:6,padding:"7px 9px",borderRadius:7,fontSize:11,lineHeight:1.55,
+              background:ai.flags?.length?"#FFFBEB":"#F0FDF4",
+              border:"1px solid "+(ai.flags?.length?"#FDE68A":"#BBF7D0"),
+              color:ai.flags?.length?"#92400E":"#166534"}}>
+              🤖 {ai.summary}
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </div>);
+}
+
 function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   // ── Scrollspy: active nav section ───────────────────────────────────
   const [activeSection,setActiveSection]=useState("progress");
@@ -3192,6 +3347,8 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   // it read-only instead of offering a slider that the backend would reject.
   const childCount=(allTasks||[]).filter(t=>Number(t.parent_id)===Number(task.id)).length||(task.children?.length||0);
   const isSummary=childCount>0;
+  // Scope wala leaf: % ki jagah qty likhi jaati hai (mobile jaisa hi).
+  const hasScope=!isSummary&&Number(task.scope_qty)>0;
 
   // Materials
   const [materials,setMaterials]=useState([]);
@@ -3491,7 +3648,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   Yeh parent task hai — progress {childCount} sub-task{childCount===1?"":"s"} se auto-calculate hota hai (duration-weighted). Manual value ke liye task list me row par right-click → Override Progress.
                 </div>
               )}
-            </>):(<>
+            </>):hasScope?(
+              <QtyProgressBox task={task} meIsPriv={meIsPriv}
+                onProgress={(p,extra)=>{setProg(p);onUpdate(task.id,extra);}}/>
+            ):(<>
               <input type="range" min={0} max={100} step={5} value={prog} onChange={e=>setProg(Number(e.target.value))}
                 style={{width:"100%",accentColor:"#2563EB",cursor:"pointer",height:8}}/>
               <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
@@ -3508,8 +3668,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               <div style={{fontSize:11,color:"#64748B"}}>{prog===0?"Not started yet":prog===100?"Task complete!":"In progress"}</div>
             </div>
           </div>
-          {/* Quick % buttons + save — leaf tasks only; a summary row's number is derived */}
-          {!isSummary&&<>
+          {/* Quick % buttons + save — sirf bina-scope leaf par; qty task apni
+              entry se chalta hai aur summary ka number derived hai */}
+          {!isSummary&&!hasScope&&<>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
               {[0,25,50,75,100].map(p=>(
                 <button key={p} onClick={()=>setProg(p)}
@@ -4573,7 +4734,7 @@ function PTOverrideModal({task,onClose,onSaved}){
 }
 
 function PTEditTask({task,allTasks,projectId,onClose,onSave}){
-  const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignee:task.assignee,status:task.status,progress:task.progress,baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+1:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
+  const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignee:task.assignee,status:task.status,progress:task.progress,unit:task.unit||"",scopeQty:task.scope_qty??"",baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+1:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
   // Tender links. A task made by hand ("Pipe line laying") carries no BOQ item,
   // so its daily quantity has nowhere to go. Linking it once here is what puts
   // that work into the measurement book and on the map — after which the
@@ -4655,6 +4816,18 @@ function PTEditTask({task,allTasks,projectId,onClose,onSave}){
             <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginTop:4}}><div style={{height:"100%",width:`${form.progress}%`,background:Number(form.progress)===100?T.grn:T.blu,borderRadius:2,transition:"width .3s"}}/></div>
           </>)}
         </div>
+        {/* Scope qty — "task edit ka aakhiri faisla user ka". Scope likh do to
+            completion qty me hoga (% khud niklega); hata do to wapas % par. */}
+        {!isSummary&&(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 110px",gap:9,marginBottom:10}}>
+            <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Scope qty (khali = % mode)</label>
+              <input type="number" min="0" step="any" value={form.scopeQty} onChange={upd("scopeQty")} placeholder="jaise 963"
+                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+            <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Unit</label>
+              <input value={form.unit} onChange={upd("unit")} placeholder="RMT"
+                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+          </div>
+        )}
         {/* Tender links — only for a site that belongs to a tender */}
         {!!boqOpts.length && (
           <div style={{marginBottom:12, padding:"11px 12px", borderRadius:8, background:T.indL, border:`1px solid ${T.ind}22`}}>
