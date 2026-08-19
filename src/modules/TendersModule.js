@@ -1830,6 +1830,37 @@ const autoMapCols = (headerCells) => {
 // hi aage ka hissa (asli NRDA/PWD BOQ ka pattern — ek item ki spec 3-4
 // row me phaili hoti hai). Use pichhli row ki description me jod dete
 // hain, alag item nahi banate.
+// Kaunsi sheet BOQ hai? Header me item/description/unit/qty/rate jaisi
+// columns + neeche kitni qty-rate wali data rows — dono ka score. L×B×H
+// wali measurement-detail sheets (No./L/B/H/D) yahin chhant jaati hain:
+// unme rate column nahi hota. Sirf padhta hai, kuch badalta nahi.
+function scoreBoqSheets(book) {
+  const HEAD = [/item|s\.?\s*no/i, /desc/i, /unit/i, /qty|quant/i, /rate/i];
+  const out = [];
+  for (const name of book.SheetNames) {
+    try {
+      const aoa = XLSX.utils.sheet_to_json(book.Sheets[name], { header: 1, raw: true });
+      if (!aoa.length) { out.push({ name, score: 0, rows: 0 }); continue; }
+      let headHits = 0;
+      for (let r = 0; r < Math.min(8, aoa.length); r++) {
+        const cells = (aoa[r] || []).map((c) => String(c ?? ""));
+        const hits = HEAD.filter((re) => cells.some((c) => re.test(c))).length;
+        if (hits > headHits) headHits = hits;
+      }
+      // data rows: description-jaisa text + koi number
+      let dataRows = 0;
+      for (const r of aoa) {
+        if (!r) continue;
+        const hasText = r.some((c) => typeof c === "string" && c.trim().length > 25);
+        const hasNum = r.some((c) => typeof c === "number" && c > 0);
+        if (hasText && hasNum) dataRows++;
+      }
+      out.push({ name, score: headHits * 100 + Math.min(99, dataRows), rows: dataRows });
+    } catch (_) { out.push({ name, score: 0, rows: 0 }); }
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
+
 const parseBoqRows = (aoa, headerRow, mapping) => {
   const dataRows = aoa.slice(headerRow + 1);
   const get = (row, key) => (mapping[key] != null ? row[mapping[key]] : "");
@@ -2079,6 +2110,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
   const [fileName, setFileName] = useState("");
   const [wb, setWb]             = useState(null);
   const [sheetName, setSheetName] = useState("");
+  const [sheetScores, setSheetScores] = useState([]);   // [{name, score, rows}]
   const [aoa, setAoa]           = useState([]);
   // Step 2
   const [headerRow, setHeaderRow] = useState(0);
@@ -2115,7 +2147,13 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
       if (!book.SheetNames.length) { setErr("File me koi sheet nahi mili"); return; }
       setFileName(f.name);
       setWb(book);
-      loadSheet(book, book.SheetNames[0]);
+      // Department ke estimate workbook me 200 tak sheets hoti hain (ROAD5,
+      // DRAIN-Jhanjh, L×B×H detail...) — pehli sheet utha lena andhera teer
+      // hai. Har sheet ko BOQ-jaisi hone ka score do, sabse achhi khud chuno.
+      const scores = scoreBoqSheets(book);
+      setSheetScores(scores);
+      const best = scores.length ? scores[0].name : book.SheetNames[0];
+      loadSheet(book, best);
     } catch (_) {
       setErr("File padhne me dikkat — sahi .xlsx / .xls file chuno");
     }
@@ -2239,10 +2277,17 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
 
         {wb && wb.SheetNames.length > 1 && (
           <div style={{marginTop:14}}>
-            <Field label="Sheet chuno">
+            <Field label={`Sheet chuno (${wb.SheetNames.length} hain)`}>
               <SelIn value={sheetName} onChange={v=>loadSheet(wb, v)}
-                options={wb.SheetNames.map(n=>({v:n, l:n}))}/>
+                options={(sheetScores.length ? sheetScores : wb.SheetNames.map(n=>({name:n,score:0,rows:0})))
+                  .map(s=>({v:s.name, l:`${s.name}${s.score>=400?" ✓ BOQ jaisi":s.rows===0?" (khaali)":""}`}))}/>
             </Field>
+            {sheetScores.length > 0 && sheetScores[0].score >= 400 && sheetName === sheetScores[0].name && (
+              <div style={{fontSize:11, color:"#059669", marginTop:5}}>
+                ✓ "{sheetScores[0].name}" sabse BOQ-jaisi lagi (header + {sheetScores[0].rows} data rows) — galat lage to upar se badal do.
+                Baaki sheets me zyada-tar L×B×H measurement detail hoti hai, wo import nahi karni chahiye.
+              </div>
+            )}
           </div>
         )}
 
@@ -2602,6 +2647,29 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
     setData(r.data); setEdit(null); onChanged?.();
   };
 
+  // B1 — AI se baanto: sujhaav alag call, lagana alag. Beech me AADMI ka
+  // review — wahi Save-first usool jo map-tick par abhi laga hai.
+  const [ai, setAi] = useState(null);        // {loading} | {groups, warnings, picked:{idx:true}}
+  const aiSuggest = async () => {
+    setAi({ loading: true });
+    const r = await api.post(`/tenders/${tenderId}/boq/packages/ai-suggest`, {});
+    if (!r?.success) { setAi(null); toast.error(r?.message || "AI se sujhaav nahi mila"); return; }
+    const groups = r.data.groups || [];
+    if (!groups.length) { setAi(null); toast.info?.(r.message || "Sujhaane ko kuch nahi mila"); return; }
+    setAi({ groups, warnings: r.data.warnings || [], picked: Object.fromEntries(groups.map((_, i) => [i, true])) });
+  };
+  const aiApply = async () => {
+    const chosen = ai.groups.filter((_, i) => ai.picked[i]);
+    if (!chosen.length) { toast.error("Kam se kam ek group chuno"); return; }
+    setBusy(true);
+    const r = await api.post(`/tenders/${tenderId}/boq/packages/ai-apply`, {
+      groups: chosen.map(g => ({ name: g.name, wtype: g.wtype, item_ids: g.item_ids })),
+    });
+    setBusy(false);
+    if (!r?.success) { toast.error(r?.message || "Lag nahi paya"); return; }
+    toast.success(r.message); setAi(null); setData(r.data); onChanged?.();
+  };
+
   const dirtyIds = Object.keys(pendingMap);
   const saveMapChanges = async () => {
     setBusy(true);
@@ -2634,8 +2702,16 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
       <PHead title="Work Packages"
         sub={pkgs.length ? `${pkgs.length} package · map me ${fmtKm(mapKm)}${data.unassigned?` · ${data.unassigned} item bina package`:""}`
                          : "BOQ ko kaam ke hisaab se baanto — map ka ankda aur site ka plan isi se banta hai"}
-        action={canEdit && <SecBtn label={busy?"...":(pkgs.length?"Naye item baanto":"Packages banao (sub-head se)")}
-          Icon={IcChk} onClick={auto} disabled={busy}/>}/>
+        action={canEdit && <div style={{display:"flex", gap:7}}>
+          {/* Flat BOQ (bina Sub Head) ya bache hue items ke liye — AI padh
+              kar groups SUJHATA hai, lagta review ke baad hi hai. */}
+          {(!pkgs.length || data?.unassigned > 0) && (
+            <SecBtn label={ai?.loading ? "AI padh raha…" : "AI se baanto"}
+              onClick={aiSuggest} disabled={!!ai?.loading || busy}/>
+          )}
+          <SecBtn label={busy?"...":(pkgs.length?"Naye item baanto":"Packages banao (sub-head se)")}
+            Icon={IcChk} onClick={auto} disabled={busy}/>
+        </div>}/>
 
       {!pkgs.length ? (
         <div style={{padding:"16px 14px", fontSize:12, color:T.t3, lineHeight:1.6}}>
@@ -2714,6 +2790,44 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
             </div>
           )}
         </div>
+      )}
+
+      {ai && !ai.loading && (
+        <Modal title="AI ka sujhaav — packages" Icon={IcChk} width={620}
+          sub="Ye sirf sujhaav hai — jo group theek lage wahi rakho, baaki untick. Lagega Save par hi."
+          onClose={()=>setAi(null)}
+          footer={<>
+            <SecBtn label="Cancel" onClick={()=>setAi(null)}/>
+            <PrimBtn label={busy?"...":"In packages me baanto"} Icon={IcChk} onClick={aiApply} disabled={busy}/>
+          </>}>
+          {!!ai.warnings.length && (
+            <div style={{background:"#FFFBEB", border:"1px solid #FCD34D", borderRadius:7,
+              padding:"8px 11px", fontSize:11.5, color:"#92400E", marginBottom:11, lineHeight:1.6}}>
+              {ai.warnings.map((w,i)=><div key={i}>⚠ {w}</div>)}
+            </div>
+          )}
+          <div style={{maxHeight:340, overflowY:"auto"}}>
+            {ai.groups.map((g,i)=>(
+              <label key={i} style={{display:"flex", gap:10, alignItems:"flex-start", padding:"8px 4px",
+                borderBottom:`1px solid ${T.b1}`, cursor:"pointer"}}>
+                <input type="checkbox" checked={!!ai.picked[i]} style={{marginTop:3}}
+                  onChange={e=>setAi(a=>({...a, picked:{...a.picked, [i]:e.target.checked}}))}/>
+                <span style={{fontSize:9.5, fontWeight:800, padding:"3px 7px", borderRadius:5, marginTop:1,
+                  color:WTYPE_COLOUR[g.wtype]||T.t3, background:T.surfaceB, whiteSpace:"nowrap"}}>
+                  {WTYPE_LABEL[g.wtype]||g.wtype}
+                </span>
+                <span style={{flex:1, minWidth:0}}>
+                  <div style={{fontSize:12.5, fontWeight:600, color:T.t1}}>{g.name} <span style={{color:T.t4, fontWeight:400}}>· {g.items} item</span></div>
+                  {(g.sample||[]).map((s,j)=><div key={j} style={{fontSize:10.5, color:T.t4, overflow:"hidden",
+                    textOverflow:"ellipsis", whiteSpace:"nowrap"}}>— {s}</div>)}
+                </span>
+              </label>
+            ))}
+          </div>
+          <div style={{fontSize:10.5, color:T.t4, marginTop:9, lineHeight:1.5}}>
+            Type baad me bhi badal sakte ho (edit se), items idhar-udhar bhi. AI qty/rate ko kabhi nahi chhoota.
+          </div>
+        </Modal>
       )}
 
       {edit && (
