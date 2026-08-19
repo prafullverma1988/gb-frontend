@@ -27,6 +27,7 @@ const CLOUD = "https://api.cloudinary.com/v1_1/dd632nqfm/image/upload";
 const PRESET = "gb_buildcon_drawings";
 
 const SRC_LABEL = { exif: "photo ke EXIF se", stamp: "photo par chhapi patti se", "diya hua": "aapke diye hue ankde se" };
+const fmtD = (m) => (m >= 1000 ? (m / 1000).toFixed(2) + " km" : m + " m");
 
 export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
   const [file, setFile] = useState(null);
@@ -57,9 +58,11 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
       if (!r?.success) { setErr(r?.message || "Jagah nahi mili"); return; }
       if (!r.data.found) { setErr(r.data.reason || "Is photo me location nahi mili"); return; }
       setRes(r.data);
-      // Sabse paas wali pehle se chuni — par sirf tab jab uspar task ho.
-      const first = (r.data.matches || []).find((m) => m.task);
-      if (first) setPick(first);
+      // Pehle se SIRF tab chunte hain jab sabse paas wali line par HI task ho.
+      // Pehle "jis par bhi task ho" wali chun leti thi — 19 Aug ko isi wajah se
+      // 6 m wali line chhod kar photo 201 m door wali line par chipak gayi thi.
+      const nearest = (r.data.matches || [])[0];
+      if (nearest && nearest.task) setPick(nearest);
     } catch (e) { setBusy(""); setErr(e.message || "Kuch galat hua"); }
   };
 
@@ -124,7 +127,7 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
               <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase",
                 letterSpacing: ".4px", margin: "12px 0 5px" }}>Sabse paas</div>
 
-              {(res.matches || []).map((m) => {
+              {(res.matches || []).map((m, i) => {
                 const on = pick?.alignment_id === m.alignment_id;
                 return (
                   <button key={m.alignment_id} onClick={() => m.task && setPick(m)} disabled={!m.task}
@@ -134,7 +137,9 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
                       cursor: m.task ? "pointer" : "default", opacity: m.task ? 1 : 0.65 }}>
                     <span style={{ fontSize: 12.5, fontWeight: 800, color: m.distance_m <= 200 ? "#059669" : T.t3,
                       minWidth: 58, fontVariantNumeric: "tabular-nums" }}>
-                      {m.distance_m >= 1000 ? (m.distance_m / 1000).toFixed(2) + " km" : m.distance_m + " m"}
+                      {fmtD(m.distance_m)}
+                      {i === 0 && <span style={{ display: "block", fontSize: 8.5, fontWeight: 700,
+                        color: "#059669", letterSpacing: ".3px" }}>SABSE PAAS</span>}
                     </span>
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ display: "block", fontSize: 12.5, color: T.t1, fontWeight: 600,
@@ -147,6 +152,17 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
                   </button>
                 );
               })}
+
+              {pick && (res.matches || [])[0] && pick.alignment_id !== res.matches[0].alignment_id && (
+                <div style={{ marginTop: 4, background: "#FFFBEB", border: "1px solid #FCD34D",
+                  color: "#92400E", borderRadius: 8, padding: "9px 12px", fontSize: 11.5, lineHeight: 1.6 }}>
+                  ⚠ Ye sabse paas wali line <b>nahi</b> hai — photo isse <b>{fmtD(pick.distance_m)}</b> door hai.
+                  Sabse paas <b>{res.matches[0].name}</b> ({fmtD(res.matches[0].distance_m)}) hai
+                  {res.matches[0].task
+                    ? "."
+                    : ", par us par abhi koi task nahi — pehle Tasks tab me “Map se plan lao” chalao."}
+                </div>
+              )}
 
               {!(res.matches || []).some((m) => m.task) && (
                 <div style={{ fontSize: 11.5, color: T.amb, lineHeight: 1.6, marginTop: 4 }}>
