@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { Pill, FilterTabs } from "../shared/ui";
+import DinKaByoraModal from "./DinKaByoraModal";
 
 // ── Site / DPR tab — read-only viewer for mobile-submitted DPRs ──
 // DPRs are submitted from the mobile app (with photos/GPS); the web
@@ -13,6 +14,10 @@ function TabSite({ project, isAdmin }) {
   const [selId, setSelId]       = useState(null);
   const [view, setView]         = useState("overview");
   const [approving, setApproving] = useState(false);
+  // Din ka byora (Sahayak a) — DPR ho ya na ho, din ke nishaan (qty,
+  // photo, issue, GRN, haaziri) to hote hi hain; isliye button khali
+  // haalat me bhi dikhta hai.
+  const [byora, setByora] = useState(false);
 
   const load = () => {
     if (!projectId) return;
@@ -64,6 +69,14 @@ function TabSite({ project, isAdmin }) {
         Daily Progress Report site se <b>mobile app</b> se submit hota hai (photos + labour + work done ke saath).
         Submit hote hi yahan dikhega.
       </div>
+      <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
+      <button onClick={() => setByora(true)}
+        style={{ padding: "7px 14px", borderRadius: 7, border: `1.5px solid ${T.ind}`, background: T.indL,
+          color: T.ind, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+        📋 Din ka byora
+      </button>
+      </div>
+      {byora && <DinKaByoraModal projectId={projectId} onClose={() => setByora(false)} />}
     </div>
   );
 
@@ -81,6 +94,11 @@ function TabSite({ project, isAdmin }) {
           options={reports.map(e => ({ id: e.id, label: fmtDate(e.report_date) }))}
           active={selId}
           onChange={id => { setSelId(id); setView("overview"); }} />
+      <button onClick={() => setByora(true)}
+        style={{ padding: "7px 14px", borderRadius: 7, border: `1.5px solid ${T.ind}`, background: T.indL,
+          color: T.ind, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+        📋 Din ka byora
+      </button>
         {selDPR && (
           selDPR.approved_at
             ? <Pill label={`✓ Approved${selDPR.approved_by_name ? " — " + selDPR.approved_by_name : ""}`} c={T.grn} bg={T.grnL} border={T.grnM} />
@@ -92,6 +110,8 @@ function TabSite({ project, isAdmin }) {
               : <Pill label="Approval pending" c={T.amb} bg={T.ambL} border={T.ambM} />
         )}
       </div>
+
+      {byora && <DinKaByoraModal projectId={projectId} onClose={() => setByora(false)} />}
 
       {!selDPR ? null : (<>
       {/* KPI tiles */}

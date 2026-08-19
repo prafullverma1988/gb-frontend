@@ -6,6 +6,7 @@ import LibrarySelect from "../../components/LibrarySelect";
 import BoqImportWizard from "./BoqImportWizard";
 import TenderPlanWizard from "./TenderPlanWizard";
 import MapPlanWizard from "./MapPlanWizard";
+import KalKaPlanModal from "./KalKaPlanModal";
 import { T } from "../shared/tokens";
 
 // ─── SKELETON LOADER ─────────────────────────────────────────────
@@ -156,6 +157,7 @@ function TabTasks({ projectId, isAdmin }) {
   // F2 — map par jo lines/pins pehle se padi hain, unhi se task tree.
   const [mapPlan, setMapPlan] = useState(null);         // {groups, total_lines, total_points}
   const [showMapPlan, setShowMapPlan] = useState(false);
+  const [showKalPlan, setShowKalPlan] = useState(false);
   const loadPlans = useCallback(()=>{
     api.get(`/tasks/project/${projectId}/tender-packages`).then(r=>{
       if (r?.success) setTenderPlan(r.data);
@@ -1050,6 +1052,11 @@ function TabTasks({ projectId, isAdmin }) {
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 20l-5.4 1.8a1 1 0 01-1.3-1V6.2a1 1 0 01.7-.9L9 3m0 17l6-2m-6 2V3m6 15l5.4 1.8a1 1 0 001.3-1V4.8a1 1 0 00-.7-.9L15 2m0 16V2m-6 1l6-1"/></svg>
           Map se plan lao
         </button>}
+        <button onClick={()=>setShowKalPlan(true)}
+          title="Raftar + schedule + rukavat se agle din ka kaam-sujhaav — ganit se, faisla aapka"
+          style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid #B45309`,background:"#FFFBEB",fontSize:12,fontWeight:700,color:"#B45309",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+          🌅 Kal ka plan
+        </button>
         {isAdmin&&<button onClick={()=>setShowTemplatePicker(true)}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:"linear-gradient(135deg,#EC4899,#BE185D)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
           📋 Load Template
@@ -1481,6 +1488,7 @@ function TabTasks({ projectId, isAdmin }) {
           loadPlans();
           if (msg) window.toast?.success?.(msg); }}/>}
 
+      {showKalPlan&&<KalKaPlanModal projectId={projectId} onClose={()=>setShowKalPlan(false)}/>}
       {showMapPlan&&<MapPlanWizard projectId={projectId}
         onClose={()=>setShowMapPlan(false)}
         onDone={async(msg)=>{ apiCache.invalidate("tasks"); apiCache.invalidate("projects"); await refetchTasks();
@@ -3197,7 +3205,7 @@ function TaskIssueChat({issueId}){
    din ki photos apne aap entry se jud jaati hain (A2). Neeche har entry ka
    geo-tag aur AI ka teen-cheez byora (qty + photo + note) bhi dikhta hai —
    AI sirf batata hai, rokta kuch nahi. */
-function QtyProgressBox({task,meIsPriv,onProgress}){
+function QtyProgressBox({task,meIsPriv,onProgress,projectId}){
   const scope=Number(task.scope_qty)||0;
   const unit=task.unit||"";
   const [entries,setEntries]=useState(null);   // null = load ho raha
@@ -3205,6 +3213,13 @@ function QtyProgressBox({task,meIsPriv,onProgress}){
   const [note,setNote]=useState("");
   const [saving,setSaving]=useState(false);
   const [aiBusy,setAiBusy]=useState(null);     // entry id jiska AI chal raha
+  // Bolkar entry (Sahayak d) — supervisor bolta hai, AI task+qty SUJHATA
+  // hai, save phir bhi "Darj karo" se hi (faisla aadmi ka).
+  const [recOn,setRecOn]=useState(false);
+  const [vBusy,setVBusy]=useState(false);
+  const [vSug,setVSug]=useState(null);          // voice ka sujhaav
+  const [repDate,setRepDate]=useState(null);    // "kal" bola ho to wahi date
+  const recRef=useRef(null);
   const load=useCallback(async()=>{
     const r=await api.get("/budget/task/"+task.id);
     setEntries(r?.success?(r.data?.progress||[]):[]);
@@ -3221,10 +3236,10 @@ function QtyProgressBox({task,meIsPriv,onProgress}){
     if(!(q>0)||saving)return;
     setSaving(true);
     const r=await api.post("/budget/task/"+task.id+"/progress",
-      {report_date:new Date().toISOString().split("T")[0],done_qty:q,remarks:note.trim()||"Web se darj"});
+      {report_date:repDate||new Date().toISOString().split("T")[0],done_qty:q,remarks:note.trim()||"Web se darj"});
     setSaving(false);
     if(!r?.success){window.alert(r?.message||"Save nahi hua");return;}
-    setQty("");setNote("");
+    setQty("");setNote("");setVSug(null);setRepDate(null);
     push(done+q);
     load();
   };
@@ -3242,6 +3257,36 @@ function QtyProgressBox({task,meIsPriv,onProgress}){
     setAiBusy(null);
     if(!r?.success){window.alert(r?.message||"Jaanch nahi chali");return;}
     setEntries(p=>(p||[]).map(x=>x.id===e.id?{...x,_ai:r.data}:x));
+  };
+  const micToggle=async()=>{
+    if(recOn){ try{recRef.current?.stop();}catch(_){} return; }
+    if(!navigator.mediaDevices?.getUserMedia){ window.alert("Is browser me mic nahi chalta"); return; }
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      const mr=new MediaRecorder(stream);
+      const chunks=[];
+      mr.ondataavailable=(e)=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+      mr.onstop=async()=>{
+        stream.getTracks().forEach(t=>t.stop());
+        setRecOn(false);
+        const blob=new Blob(chunks,{type:mr.mimeType||"audio/webm"});
+        if(blob.size<1500){ return; }              // bas chhua tha — kuch bola nahi
+        const b64=await new Promise((res)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(blob); });
+        setVBusy(true); setVSug(null);
+        const r=await api.post("/tasks/project/"+projectId+"/voice-entry",
+          {audio_base64:b64,mime_type:blob.type},{timeoutMs:120000});
+        setVBusy(false);
+        if(!r?.success){ window.alert(r?.message||"Sun nahi paya — dobara bolo"); return; }
+        const d=r.data; setVSug(d);
+        // Sujhaav isi task ka ho to form bhar do; save phir bhi aadmi dabata hai.
+        if(d.found&&d.task&&Number(d.task.id)===Number(task.id)){
+          if(d.qty)setQty(String(d.qty));
+          if(d.note)setNote(d.note);
+          setRepDate(d.din==="kal"?d.report_date:null);
+        }
+      };
+      mr.start(); recRef.current=mr; setRecOn(true);
+    }catch(_){ window.alert("Mic nahi mila — browser ko ijazat do"); }
   };
   const aiOf=(e)=>{
     if(e._ai)return e._ai;
@@ -3272,12 +3317,34 @@ function QtyProgressBox({task,meIsPriv,onProgress}){
         onKeyDown={e=>{if(e.key==="Enter")save();}}
         style={{flex:1,padding:"10px 11px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:12.5,
           color:"#1E293B",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+      <button onClick={micToggle} disabled={vBusy} title={recOn?"Rok kar bhejo":"Bolkar entry — task, qty, note bol do"}
+        style={{padding:"10px 13px",borderRadius:8,border:`1.5px solid ${recOn?"#DC2626":"#C7D2FE"}`,
+          background:recOn?"#FEF2F2":"#EEF2FF",fontSize:14,cursor:"pointer",fontFamily:"inherit",
+          animation:recOn?"pulse 1s infinite":"none"}}>
+        {vBusy?"…":recOn?"⏹":"🎤"}
+      </button>
       <button onClick={save} disabled={saving||!(Number(qty)>0)}
         style={{padding:"10px 16px",borderRadius:8,border:"none",background:Number(qty)>0?"#2563EB":"#CBD5E1",color:"white",
           fontSize:13,fontWeight:700,cursor:Number(qty)>0?"pointer":"default",fontFamily:"inherit"}}>
         {saving?"…":"Darj karo"}
       </button>
     </div>
+    {recOn&&<div style={{fontSize:11,color:"#DC2626",marginBottom:8}}>🔴 Bol rahe ho… ⏹ dabate hi Sahayak sunega.</div>}
+    {vBusy&&<div style={{fontSize:11,color:"#4B45C4",marginBottom:8}}>Sahayak sun raha hai…</div>}
+    {vSug&&(
+      <div style={{marginBottom:10,padding:"8px 11px",borderRadius:8,fontSize:11.5,lineHeight:1.6,
+        background:vSug.found&&vSug.task&&Number(vSug.task.id)===Number(task.id)?"#F0FDF4":"#FFFBEB",
+        border:"1px solid "+(vSug.found&&vSug.task&&Number(vSug.task.id)===Number(task.id)?"#BBF7D0":"#FDE68A"),
+        color:vSug.found&&vSug.task&&Number(vSug.task.id)===Number(task.id)?"#166534":"#92400E"}}>
+        <b>Suna:</b> "{vSug.transcript}"
+        {vSug.found?(
+          vSug.task?(Number(vSug.task.id)===Number(task.id)
+            ?<> — form bhar diya{vSug.din==="kal"?" (entry KAL ki jayegi)":""}. Dekh kar <b>Darj karo</b> dabao.</>
+            :<> — ye <b>"{vSug.task.name}"</b> ka kaam lag raha hai{vSug.qty?` (${vSug.qty} ${vSug.task.unit||""})`:""}, is task ka nahi. Us task ko khol kar darj karo.</>)
+          :<> — kaunsa task hai samajh nahi aaya. Qty haath se likh do.</>
+        ):<> — {vSug.reason||"samajh nahi aaya."}</>}
+      </div>
+    )}
     <div style={{fontSize:10.5,color:"#94A3B8",marginBottom:12,lineHeight:1.5}}>
       Us din ki photos entry se apne aap jud jaati hain; AI teeno (qty + photo + note) ko dekh kar
       neeche batata hai kahan aur kya kaam dikha. Faisla aapka hi hai.
@@ -3649,7 +3716,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 </div>
               )}
             </>):hasScope?(
-              <QtyProgressBox task={task} meIsPriv={meIsPriv}
+              <QtyProgressBox task={task} meIsPriv={meIsPriv} projectId={projectId}
                 onProgress={(p,extra)=>{setProg(p);onUpdate(task.id,extra);}}/>
             ):(<>
               <input type="range" min={0} max={100} step={5} value={prog} onChange={e=>setProg(Number(e.target.value))}

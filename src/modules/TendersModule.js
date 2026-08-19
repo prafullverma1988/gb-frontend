@@ -4621,6 +4621,9 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
   const [fItem, setFItem]     = useState("");
   const [modal, setModal]     = useState(null);   // {} = naya, {edit} = edit
   const [draftOpen, setDraftOpen] = useState(false);
+  // AI-jaanch ka jod (Sahayak c) — committed rows par lagi muhrein +
+  // taaza checks ki ginti. Sirf ginti hai, LLM yahan nahi chalta.
+  const [score, setScore] = useState(null);
 
   const lockDate = lockDateOf(bills);
 
@@ -4634,6 +4637,9 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
     setRows(Array.isArray(res.data) ? res.data : []);
   }, [tenderId, fSite, fItem, toast]);
   useEffect(()=>{ load(); }, [load]);
+  useEffect(()=>{
+    api.get(`/tenders/${tenderId}/check-score`).then(r=>{ if(r?.success) setScore(r.data); }).catch(()=>{});
+  }, [tenderId]);
 
   const del = async (m) => {
     if (!await window.confirmAsync(`${fmtDate(m.mdate)} ki entry (${fmtQty(m.qty)} ${m.unit||""}) hataayein?`)) return;
@@ -4684,6 +4690,30 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
           </div>
         )}
       </div>
+
+      {/* ── AI-jaanch ka jod — kitni rows par photo/GPS ki muhar hai ── */}
+      {score && (score.committed.rows > 0 || score.checks.total > 0) && (
+        <div style={{padding:"8px 14px", borderBottom:`1px solid ${T.b1}`, display:"flex", gap:6,
+          flexWrap:"wrap", alignItems:"center"}}>
+          <span style={{fontSize:10, fontWeight:800, color:T.t4, textTransform:"uppercase", letterSpacing:".5px"}}>
+            AI jaanch
+          </span>
+          {[
+            {n:score.committed.thik, l:"photo se pushti", c:"#047857", bg:T.grnL},
+            {n:score.committed.dekhne_layak, l:"dekhne layak", c:"#B45309", bg:T.ambL},
+            {n:score.committed.photo_nahi, l:"photo hi nahi", c:"#B91C1C", bg:T.redL},
+            {n:score.committed.loc_theek, l:"GPS line par", c:"#1D4ED8", bg:T.bluL},
+            {n:score.committed.loc_doosri_line, l:"GPS doosri line", c:"#B91C1C", bg:T.redL},
+            {n:score.committed.bina_jaanch, l:"bina jaanch (purani)", c:T.t3, bg:T.sltL},
+          ].filter(x=>x.n>0).map(x=>(
+            <span key={x.l} style={{fontSize:10.5, fontWeight:700, color:x.c, background:x.bg,
+              padding:"2px 9px", borderRadius:12}}>{x.n} {x.l}</span>
+          ))}
+          <span style={{marginLeft:"auto", fontSize:10, color:T.t4}}>
+            {score.committed.rows} committed rows{score.checks.ai_ran ? ` · ${score.checks.ai_ran} par AI chala` : ""}
+          </span>
+        </div>
+      )}
 
       {loading && <Loading text="Measurements load ho rahe hain..."/>}
 
