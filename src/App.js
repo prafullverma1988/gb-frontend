@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback, lazy, Suspense, Fragment } fr
 import api, { getUser, getToken, getCompanies, clearAuth, saveAuth, API_BASE } from "./config/api";
 import { initDiag, recordScreen } from "./utils/diag";
 import apiCache from "./utils/apiCache";
-import EChart from "./components/EChart";
 import UploadToast from "./components/UploadToast";
 import { ToastProvider } from "./components/Toast";
 import { ConfirmProvider } from "./components/ConfirmDialog";
@@ -19,6 +18,16 @@ function lazyWithPreload(key, fn) {
   Comp.preload = load;
   return Comp;
 }
+
+// EChart pehle static import tha → poora echarts (~450KB) main bundle me
+// ghus kar first paint slow karta tha. Ab lazy: dashboard render hote hi
+// chunk fetch hota hai; tab tak same-height khali box (no layout jump).
+const EChartInner = lazyWithPreload("echart", () => import("./components/EChart"));
+const EChart = (props) => (
+  <Suspense fallback={<div style={{ height: props.height || 160 }} />}>
+    <EChartInner {...props} />
+  </Suspense>
+);
 
 const FinanceModule      = lazyWithPreload("finance",      () => import("./modules/FinanceModule"));
 const ProcurementModule  = lazyWithPreload("procurement",  () => import("./modules/ProcurementModule"));

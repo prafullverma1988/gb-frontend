@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import * as XLSX from "xlsx";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 
@@ -82,19 +81,22 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
     if (!f) return;
     setFileName(f.name);
     try {
+      // xlsx sirf file parse par chahiye — dynamic import se tab-chunk halka rehta hai.
+      const XLSX = await import("xlsx");
       const buf = await f.arrayBuffer();
       // Cached formula values only — never enable raw formula evaluation.
       const book = XLSX.read(new Uint8Array(buf), { type: "array" });
       setWb(book);
       const first = book.SheetNames[0];
-      loadSheet(book, first);
+      await loadSheet(book, first);
     } catch (err) {
       flash("File padhne me dikkat — sahi Excel/CSV file chunein", "error");
     }
     e.target.value = "";
   };
 
-  const loadSheet = (book, name) => {
+  const loadSheet = async (book, name) => {
+    const XLSX = await import("xlsx");
     const ws = book.Sheets[name];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "", blankrows: true });
     setSheetName(name);

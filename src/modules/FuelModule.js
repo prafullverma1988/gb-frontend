@@ -14,7 +14,6 @@
 // Cross-check tab is deliberately absent — that is E3.
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useMemo } from "react";
-import * as XLSX from "xlsx";
 import api, { API_BASE, getToken } from "../config/api";
 
 // ── ICONS ─────────────────────────────────────────────────────────
@@ -145,14 +144,21 @@ const saveBlob = (blob, filename) => {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 };
 
-const exportExcel = (rows, columns, filename, sheet = "Report") => {
-  const aoa = [columns.map((c) => c.label),
-    ...rows.map((r) => columns.map((c) => (c.excel ? c.excel(r) : r[c.key] ?? "")))];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = columns.map((c) => ({ wch: c.w || 14 }));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheet);
-  XLSX.writeFile(wb, filename.replace(/\.pdf$/, "") + ".xlsx");
+const exportExcel = async (rows, columns, filename, sheet = "Report") => {
+  // xlsx sirf export par chahiye — dynamic import se module chunk halka rehta hai
+  // (MasterLibrary/Machinery wala hi pattern).
+  try {
+    const XLSX = await import("xlsx");
+    const aoa = [columns.map((c) => c.label),
+      ...rows.map((r) => columns.map((c) => (c.excel ? c.excel(r) : r[c.key] ?? "")))];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = columns.map((c) => ({ wch: c.w || 14 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheet);
+    XLSX.writeFile(wb, filename.replace(/\.pdf$/, "") + ".xlsx");
+  } catch (err) {
+    console.warn("Excel export failed:", err?.message);
+  }
 };
 
 // WhatsApp par PDF: jahan browser file share kar sakta hai (mobile) wahan wahi
