@@ -151,7 +151,9 @@ export default function PaymentRequestDrawer({
   // Load parties (filtered by type)
   useEffect(() => {
     if (!open) return;
-    api.get("/parties").then(r => {
+    // "/parties" mount backend me hai hi nahi — sahi route /finance/parties hai
+    // (pehle galat path se dropdown hamesha khali rehta tha).
+    api.get("/finance/parties").then(r => {
       if (r.success && Array.isArray(r.data)) setParties(r.data);
     }).catch(()=>{});
   }, [open]);

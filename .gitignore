@@ -19,3 +19,6 @@ android/app/debug/
 *.jks
 *.keystore
 key.properties
+
+# ── Local agent log ──
+.claude-frontend.log
