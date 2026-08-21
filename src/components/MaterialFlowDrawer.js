@@ -448,7 +448,15 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                       ["Received On",    fmtDate(grn.received_date)],
                       ["Received By",    receivedByName],
                       ["Type",           grn.grn_type || "Full"],
-                      ...items.map(it => [it.description || "Item", `${it.received_qty} ${it.unit}`]),
+                      ...items.map(it => {
+                        const q = Number(it.received_qty) || 0, r = Number(it.rate) || 0;
+                        const val = Number(it.amount) || q * r;
+                        // Priced line → show what it cost; qty-only line stays as-is.
+                        return [it.description || "Item",
+                          r > 0 ? `${it.received_qty} ${it.unit} × ₹${r} = ₹${val.toLocaleString("en-IN")}`
+                                : `${it.received_qty} ${it.unit}`];
+                      }),
+                      ...(grn.remark ? [["Note", grn.remark]] : []),
                     ]}
                     photos={grnPhotos}
                   />

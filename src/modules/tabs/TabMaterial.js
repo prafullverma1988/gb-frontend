@@ -294,7 +294,10 @@ function TabMaterial({ project }) {
                 by: g.received_by || (isAutoBill ? "Finance" : "Site"),
                 date: g.received_date ? new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
                 vendor: g.vendor_name || null,
-                amt: 0,
+                // Value of what was received. GRN lines carry rate/amount for
+                // priced receipts (site-expense purchase, direct warehouse receipt);
+                // procurement GRNs that only record quantity stay 0.
+                amt: Number(item.amount) || (Number(item.rate) || 0) * (Number(item.received_qty) || 0),
                 // "Direct" badge: only when NO MR exists for this material AND not an Auto-Bill.
                 // Auto-Bill rows get a separate "via Bill" badge below.
                 isDirect: !hasMatchingMr && !isAutoBill,
