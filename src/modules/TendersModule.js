@@ -3473,6 +3473,52 @@ const POINT_TYPES = [
   {v:"other",      l:"Other"},
 ];
 const lineColour = (t) => (LINE_TYPES.find(x=>x.v===t) || LINE_TYPES[LINE_TYPES.length-1]).c;
+
+// Line ko bagal me khiskao — wahi ganit jo backend ke utils/lineOffset me
+// hai (naali server par banti hai; yahan sirf road ka footprint dikhane ke
+// liye chahiye, isliye chhota roop). Local metre-frame me kaam karta hai.
+const M_LAT = 111320;
+function offsetPathJS(coords, dist, side){
+  const cl=[];
+  for(const p of coords||[]){
+    const lat=Number(p?.lat), lng=Number(p?.lng);
+    if(!Number.isFinite(lat)||!Number.isFinite(lng)) continue;
+    const L=cl[cl.length-1];
+    if(L && Math.abs(L.lat-lat)<1e-9 && Math.abs(L.lng-lng)<1e-9) continue;
+    cl.push({lat,lng});
+  }
+  if(cl.length<2 || !(Math.abs(dist)>0)) return [];
+  const lat0=cl.reduce((s,p)=>s+p.lat,0)/cl.length;
+  const kx=M_LAT*Math.cos(lat0*Math.PI/180);
+  const xy=cl.map(p=>({x:p.lng*kx, y:p.lat*M_LAT}));
+  const d=Math.abs(dist)*(side==="right"?-1:1);
+  const nrm=v=>{const L=Math.hypot(v.x,v.y); return L?{x:v.x/L,y:v.y/L}:{x:0,y:0};};
+  const segN=[];
+  for(let i=0;i+1<xy.length;i++){
+    const dir=nrm({x:xy[i+1].x-xy[i].x, y:xy[i+1].y-xy[i].y});
+    segN.push({x:-dir.y, y:dir.x});
+  }
+  return xy.map((p,i)=>{
+    const a=segN[i-1], b=segN[i];
+    let n;
+    if(!a) n=b; else if(!b) n=a;
+    else{
+      const s=nrm({x:a.x+b.x, y:a.y+b.y});
+      const c=s.x*a.x+s.y*a.y;
+      const k=c>0.2?1/c:5;
+      n={x:s.x*k, y:s.y*k};
+    }
+    return {lat:(p.y+n.y*d)/M_LAT, lng:(p.x+n.x*d)/kx};
+  });
+}
+// Sadak ka asli footprint — dono kinare jod kar band aakriti
+function corridorJS(coords, widthM){
+  const w=Number(widthM);
+  if(!(w>0)) return [];
+  const l=offsetPathJS(coords,w/2,"left"), r=offsetPathJS(coords,w/2,"right");
+  if(l.length<2||r.length<2) return [];
+  return [...l, ...r.slice().reverse()];
+}
 const DONE_COLOUR = "#059669";   // laid — same green the rest of the app uses
 
 // Split a drawn path at `metres` from its start, so the laid part can be drawn
@@ -3806,6 +3852,19 @@ function MapTab({tenderId, sites}) {
         const pr = progByLine[it.id] || {};
         const doneM = Number(pr.done_m ?? 0);
         const taskM = Number(pr.task_m ?? 0);
+        // Chaudai pata ho to sadak ka ASLI footprint bhi — patli lakeer 10 m
+        // ki ROW ka ehsaas nahi deti, aur naali kahan padegi ye bhi tabhi
+        // samajh aata hai. Zoom badalne par apne aap sahi naapti hai kyunki
+        // ye asli lat/lng ki aakriti hai, pixel ki moti lakeer nahi.
+        if (Number(it.width_m) > 0) {
+          const foot = corridorJS(coords, Number(it.width_m));
+          if (foot.length >= 3) {
+            const poly = new g.maps.Polygon({ paths: foot, strokeColor: lineColour(it.atype),
+              strokeOpacity: 0.35, strokeWeight: 1, fillColor: lineColour(it.atype),
+              fillOpacity: 0.14, clickable: false, map: mapRef.current });
+            shapesRef.current.push(poly);
+          }
+        }
         const pl = new g.maps.Polyline({ path: coords, strokeColor: lineColour(it.atype),
           strokeWeight: 4, strokeOpacity: 0.9, map: mapRef.current });
         // Click = stretch ka dashboard. (Pehle sirf ek toast tha.)
@@ -3895,10 +3954,14 @@ function MapTab({tenderId, sites}) {
     const res = await api.post(`/tenders/${tenderId}/alignments`, {
       project_id: Number(pending.project_id), name: pending.name || undefined,
       kind: pending.kind, atype: pending.atype, geometry: pending.coords,
+      width_m: Number(pending.width_m) > 0 ? Number(pending.width_m) : undefined,
+      drain_side: pending.drain_side || undefined,
+      drain_offset_m: pending.drain_side && pending.drain_offset_m !== "" && pending.drain_offset_m != null
+        ? Number(pending.drain_offset_m) : undefined,
     });
     setBusy(false);
     if (!res?.success) { toast.error(res?.message || "Save nahi hua"); return; }
-    toast.success(pending.kind==="line" ? `Line save hui — ${fmtKm(res.data.length_m)}` : "Point save hua");
+    toast.success(res.message || (pending.kind==="line" ? `Line save hui — ${fmtKm(res.data.length_m)}` : "Point save hua"));
     setPending(null); clearDraft(); load();
   };
 
@@ -4241,7 +4304,53 @@ function MapTab({tenderId, sites}) {
             <TxtIn value={pending.name} onChange={v=>setPending(p=>({...p, name:v}))}
               ph={pending.kind==="line" ? "e.g. Sec-25 | CH 0–500" : "e.g. UGR Sec-25"}/>
           </Field>
+          {/* Chaudai — sadak ki ROW, ya bade pipe ka daayra. Sadak ki
+              chaudai har jagah alag hoti hai, aur naali usi se nikalti hai. */}
+          {pending.kind==="line" && (
+            <Field label={pending.atype==="road" ? "Chaudai / ROW (m)" : "Chaudai / daayra (m)"}>
+              <TxtIn value={pending.width_m} onChange={v=>setPending(p=>({...p, width_m:v}))}
+                ph={pending.atype==="road" ? "e.g. 10" : "e.g. 1.2"}/>
+            </Field>
+          )}
         </div>
+
+        {/* Sadak ke saath naali — ek hi lakeer se dono ban jaayein */}
+        {pending.kind==="line" && Number(pending.width_m) > 0 && (
+          <div style={{marginTop:12, padding:"10px 12px", borderRadius:9,
+            background:T.surfaceB, border:`1px solid ${T.b1}`}}>
+            <div style={{fontSize:11.5, color:T.t2, fontWeight:600, marginBottom:7}}>
+              Iske saath naali (drain) bhi mark kar dein?
+            </div>
+            <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center"}}>
+              {[["","Nahi"],["both","Dono taraf"],["left","Sirf bayan"],["right","Sirf dayan"]].map(([v,l])=>(
+                <button key={v||"no"} onClick={()=>setPending(p=>({...p, drain_side:v}))}
+                  style={{fontSize:11.5, padding:"4px 11px", borderRadius:20, cursor:"pointer", fontFamily:"inherit",
+                    border:`1px solid ${(pending.drain_side||"")===v ? T.ind : T.b1}`,
+                    background:(pending.drain_side||"")===v ? T.indL : T.surface,
+                    color:(pending.drain_side||"")===v ? T.ind : T.t3,
+                    fontWeight:(pending.drain_side||"")===v ? 700 : 400}}>{l}</button>
+              ))}
+              {!!pending.drain_side && (
+                <span style={{display:"inline-flex", alignItems:"center", gap:6, marginLeft:4}}>
+                  <span style={{fontSize:11, color:T.t4}}>kinare se</span>
+                  <input value={pending.drain_offset_m ?? ""} onChange={e=>setPending(p=>({...p, drain_offset_m:e.target.value}))}
+                    placeholder="0.5"
+                    style={{width:54, padding:"4px 7px", borderRadius:6, border:`1px solid ${T.b1}`,
+                      fontSize:11.5, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit"}}/>
+                  <span style={{fontSize:11, color:T.t4}}>m</span>
+                </span>
+              )}
+            </div>
+            {!!pending.drain_side && (
+              <div style={{fontSize:10.5, color:T.t4, marginTop:7, lineHeight:1.5}}>
+                Naali sadak ki beech-lakeer se {((Number(pending.width_m)||0)/2 + (Number(pending.drain_offset_m)||0.5)).toFixed(2)} m
+                {pending.drain_side==="both" ? " dono taraf" : pending.drain_side==="left" ? " bayan taraf" : " dayan taraf"} banegi —
+                asli line ki tarah, jise baad me khiska ya mita sakte ho.
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{fontSize:11.5, color:T.t4, marginTop:10}}>
           Naam me hissa likhoge (CH 0–500) to aage segment-wise progress dikhana aasan ho jayega.
         </div>
