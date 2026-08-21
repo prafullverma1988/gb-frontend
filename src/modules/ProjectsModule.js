@@ -846,6 +846,15 @@ const mapProject=(p)=>({
   // Overview ka "Pipeline (MB se)" tile isi se jaanta hai ki site tender
   // wali hai — mapping me chhoot gaya to tile kabhi banta hi nahi.
   tender_id:p.tender_id||null,
+  // Tender ka naam bhi saath rakhte hain: ek hi tender ki kai site hoti
+  // hain (Sendh, Jhanjh, Riko…), aur card par sirf site ka naam dekh kar
+  // yaad nahi aata ki kaam kis tender ka hai.
+  tender_no:p.tender_no||"",
+  tender_title:p.tender_title||"",
+  // Kahin number bolne me chalta hai ("nit/4577"), kahin title ("UGR and
+  // Pipeline") — dono jodkar rakhte hain aur jagah kam ho to ... ho jaata
+  // hai; poora naam tooltip me rehta hai.
+  tender_label:[p.tender_no,p.tender_title].filter(Boolean).join(" · "),
   status:STATUS_MAP[p.status]||p.status||"Not Started",
   boq:parseFloat(p.boq_value)||0,
   expense:parseFloat(p.total_expense)||0,
@@ -3546,6 +3555,16 @@ function ProjectsPage({onSelectProject}){
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12.5,fontWeight:700,color:T.t1,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
                       <div style={{fontSize:10.5,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.client}</div>
+                      {!!p.tender_label&&(
+                        <div title={"Tender: "+p.tender_label}
+                          style={{display:"inline-flex",alignItems:"center",gap:4,marginTop:3,maxWidth:"100%",
+                            background:T.indL,border:`1px solid ${T.ind}33`,borderRadius:20,padding:"1px 7px"}}>
+                          <span style={{fontSize:8.5,fontWeight:800,color:T.ind,letterSpacing:".3px",flexShrink:0}}>TENDER</span>
+                          <span style={{fontSize:9.5,color:T.ind,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            {p.tender_label}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <Pill label={p.status} c={sm.c} bg={sm.bg}/>
                     {/* 3-dot menu */}
@@ -3630,7 +3649,14 @@ function ProjectsPage({onSelectProject}){
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <div style={{paddingRight:12,paddingTop:3,paddingBottom:3}}>
                   <div style={{fontSize:12.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
-                  <div style={{fontSize:10.5,color:T.t4}}>{p.client}</div>
+                  <div style={{fontSize:10.5,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                    {p.client}
+                    {!!p.tender_label&&(
+                      <span title={"Tender: "+p.tender_label} style={{color:T.ind,fontWeight:600}}>
+                        {p.client?" · ":""}📄 {p.tender_label}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <span style={{fontSize:12,color:T.t2}}>{p.city}</span>
                 <span style={{fontSize:12,color:T.t2}}>{p.pm}</span>

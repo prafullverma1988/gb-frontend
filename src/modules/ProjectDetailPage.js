@@ -1013,6 +1013,13 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
                 {[[project.client,"Client"],[project.city,"City"],[project.type,"Type"],[`PM: ${project.pm}`,"PM"],[`${project.start} – ${project.end}`,""]].map(([v,l],i)=>(
                   <span key={i} style={{fontSize:11.5, color:"rgba(255,255,255,.45)"}}>{v}</span>
                 ))}
+                {/* Kis tender ki site hai — ek tender ki kai sites hoti hain,
+                    aur MB/RA bill usi tender par bante hain. */}
+                {!!(project._raw?.tender_no||project._raw?.tender_title)&&(
+                  <span style={{fontSize:11.5, color:"#C7D2FE", fontWeight:600}}>
+                    📄 Tender: {[project._raw?.tender_no,project._raw?.tender_title].filter(Boolean).join(" · ")}
+                  </span>
+                )}
               </div>
             </div>
             {/* Financial chips */}
