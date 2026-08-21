@@ -3190,6 +3190,9 @@ function ProjectsPage({onSelectProject}){
   const dSearch=useDebounce(search,250);
   const [filterCity,setFilterCity]=useState("All");
   const [filterStatus,setFilterStatus]=useState("All");
+  // Ek tender par kai site hoti hain (Sendh, Jhanjh, Riko…) aur bill tender
+  // par bante hain — isliye "is tender ki saari site" ek nazar me chahiye.
+  const [filterTender,setFilterTender]=useState("All");   // tender_id (string) ya "All"
   const [hideCompleted,setHideCompleted]=useState(true);
   const [sortBy,setSortBy]=useState("Default");
   const [page,setPage]=useState(1); const PER_PAGE=20;
@@ -3335,6 +3338,12 @@ function ProjectsPage({onSelectProject}){
   },[]);
 
   const cities=["All",...new Set(allProjects.map(p=>p.city))];
+  // Sirf wahi tender jinki koi site hai — khali dropdown kisi kaam ka nahi.
+  const tenderOpts=(()=>{
+    const m=new Map();
+    allProjects.forEach(p=>{ if(p.tender_id&&!m.has(String(p.tender_id))) m.set(String(p.tender_id),p.tender_label||("Tender #"+p.tender_id)); });
+    return [...m.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+  })();
   const progClr=pct=>pct===100?T.grn:pct>60?T.blu:pct>30?T.amb:T.red;
 
   const filtered=allProjects.filter(p=>{
@@ -3343,20 +3352,31 @@ function ProjectsPage({onSelectProject}){
     if(hideCompleted&&p.status==="Completed") return false;
     if(filterCity!=="All"&&p.city!==filterCity) return false;
     if(filterStatus!=="All"&&p.status!==filterStatus) return false;
+    if(filterTender!=="All"&&String(p.tender_id||"")!==filterTender) return false;
     if(dSearch&&!p.name.toLowerCase().includes(dSearch.toLowerCase())&&!p.client.toLowerCase().includes(dSearch.toLowerCase())) return false;
     return true;
-  }).sort((a,b)=>sortBy==="A→Z"?a.name.localeCompare(b.name):sortBy==="End"?(a.end||"").localeCompare(b.end||""):sortBy==="↓%"?b.progress-a.progress:sortBy==="↑%"?a.progress-b.progress:0);
+  }).sort((a,b)=>{
+    // "Tender" sort: ek tender ki saari site aas-paas aa jaati hain (bina
+    // tender wali sabse neeche), aur andar naam se kram.
+    if(sortBy==="Tender"){
+      const ta=a.tender_label||"\uffff", tb=b.tender_label||"\uffff";
+      return ta.localeCompare(tb)||a.name.localeCompare(b.name);
+    }
+    return sortBy==="A→Z"?a.name.localeCompare(b.name):sortBy==="End"?(a.end||"").localeCompare(b.end||""):sortBy==="↓%"?b.progress-a.progress:sortBy==="↑%"?a.progress-b.progress:0;
+  });
 
   // Reset page when filters change
-  useEffect(()=>{setPage(1);},[dSearch,filterCity,filterStatus,hideCompleted,sortBy]);
+  useEffect(()=>{setPage(1);},[dSearch,filterCity,filterStatus,filterTender,hideCompleted,sortBy]);
 
   const totalPages=Math.ceil(filtered.length/PER_PAGE);
   const paginated=filtered.slice((page-1)*PER_PAGE, page*PER_PAGE);
 
   // CSV Export
   const exportCSV = () => {
-    const headers = ["Name","Client","City","Status","Progress","Start","End"];
-    const rows = filtered.map(p => [p.name, p.client, p.city, p.status, p.progress+"%", p.start||"", p.end||""]);
+    // Tender bhi — ab list tender-wise dekhi jaati hai, to export me bhi
+    // wahi kram/jaankari honi chahiye jo screen par thi.
+    const headers = ["Name","Tender","Client","City","Status","Progress","Start","End"];
+    const rows = filtered.map(p => [p.name, p.tender_label||"", p.client, p.city, p.status, p.progress+"%", p.start||"", p.end||""]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], {type:"text/csv"});
     const url = URL.createObjectURL(blob);
@@ -3483,10 +3503,23 @@ function ProjectsPage({onSelectProject}){
           <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcDown size={11} color={T.t4}/></div>
         </div>
 
+        {/* Tender — tabhi jab kisi site par tender juda ho */}
+        {!!tenderOpts.length&&(
+        <div style={{position:"relative"}}>
+          <select value={filterTender} onChange={e=>setFilterTender(e.target.value)}
+            title="Ek tender ki saari site ek saath"
+            style={{height:32,padding:"0 24px 0 9px",borderRadius:6,border:`1.5px solid ${filterTender!=="All"?T.ind:T.b1}`,background:filterTender!=="All"?T.indL:T.surfaceB,fontSize:12,color:filterTender!=="All"?T.ind:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:filterTender!=="All"?600:400,minWidth:110,maxWidth:190,appearance:"none",WebkitAppearance:"none"}}>
+            <option value="All">All Tenders</option>
+            {tenderOpts.map(([id,label])=><option key={id} value={id}>{label}</option>)}
+          </select>
+          <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcDown size={11} color={T.t4}/></div>
+        </div>
+        )}
+
         {/* Sort */}
         <div style={{display:"flex",alignItems:"center",gap:3}}>
           <span style={{fontSize:10.5,color:T.t4}}>Sort:</span>
-          {["Default","A→Z","End","↓%","↑%"].map(s=>(
+          {["Default","A→Z","End","↓%","↑%",...(tenderOpts.length?["Tender"]:[])].map(s=>(
             <button key={s} onClick={()=>setSortBy(s)}
               style={{height:32,padding:"0 8px",borderRadius:6,border:`1.5px solid ${sortBy===s?T.blu:T.b1}`,background:sortBy===s?T.bluL:T.surfaceB,fontSize:11.5,fontWeight:sortBy===s?700:400,color:sortBy===s?T.blu:T.t3,cursor:"pointer",transition:"all .12s"}}>
               {s}
@@ -3522,6 +3555,45 @@ function ProjectsPage({onSelectProject}){
         </button>}
       </div>
 
+      {/* Tender chuna ho to uski saari site ka jod — ek nazar me. Bill
+          tender par banta hai, isliye BOQ/kharcha ka tender-level jod hi
+          asli sawal hota hai ("is tender par ab tak kitna laga?"). */}
+      {filterTender!=="All"&&(()=>{
+        const label=(tenderOpts.find(([id])=>id===filterTender)||[,""])[1];
+        const boq=filtered.reduce((s,p)=>s+(p.boq||0),0);
+        const spent=filtered.reduce((s,p)=>s+(p.expense||0),0);
+        const done=filtered.filter(p=>p.status==="Completed").length;
+        // Progress ka SEEDHA average jhooth bolta hai: ek ₹8.5Cr ki site
+        // aur ek ₹29L ki site barabar gin li jaati hain. Bill tender par
+        // banta hai, aur BOQ hi site ka wazan hai — isliye BOQ se taula.
+        // Kisi site par BOQ na ho to seedha average hi imandari hai.
+        const wsum=filtered.reduce((s,p)=>s+(p.boq||0),0);
+        const avg=!filtered.length?0
+          : wsum>0 ? Math.round(filtered.reduce((s,p)=>s+(p.progress||0)*(p.boq||0),0)/wsum)
+          : Math.round(filtered.reduce((s,p)=>s+(p.progress||0),0)/filtered.length);
+        return (
+          <div style={{background:T.indL,border:`1px solid ${T.ind}33`,borderRadius:9,
+            padding:"9px 13px",marginBottom:9,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:9,fontWeight:800,color:T.ind,letterSpacing:".4px"}}>TENDER</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={label}>{label}</div>
+            </div>
+            {[["Sites",`${filtered.length}${done?` · ${done} poori`:""}`],
+              [wsum>0?"Progress (BOQ-wise)":"Progress",avg+"%"],["BOQ","₹"+fmt(boq)],["Kharcha","₹"+fmt(spent)]].map(([l,v])=>(
+              <div key={l} style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{l}</div>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{v}</div>
+              </div>
+            ))}
+            <button onClick={()=>setFilterTender("All")}
+              style={{height:28,padding:"0 11px",borderRadius:6,border:`1px solid ${T.ind}44`,background:T.surface,
+                color:T.ind,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+              Sab sites
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Results hint */}
       <div style={{fontSize:10.5,color:T.t4,marginBottom:9,display:"flex",alignItems:"center",gap:7}}>
         <span>{filtered.length} projects shown</span>
@@ -3556,9 +3628,10 @@ function ProjectsPage({onSelectProject}){
                       <div style={{fontSize:12.5,fontWeight:700,color:T.t1,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
                       <div style={{fontSize:10.5,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.client}</div>
                       {!!p.tender_label&&(
-                        <div title={"Tender: "+p.tender_label}
+                        <div onClick={e=>{e.stopPropagation();setFilterTender(String(p.tender_id));}}
+                          title={"Tender: "+p.tender_label+" — is tender ki saari site dekhne ke liye click karo"}
                           style={{display:"inline-flex",alignItems:"center",gap:4,marginTop:3,maxWidth:"100%",
-                            background:T.indL,border:`1px solid ${T.ind}33`,borderRadius:20,padding:"1px 7px"}}>
+                            background:T.indL,border:`1px solid ${T.ind}33`,borderRadius:20,padding:"1px 7px",cursor:"pointer"}}>
                           <span style={{fontSize:8.5,fontWeight:800,color:T.ind,letterSpacing:".3px",flexShrink:0}}>TENDER</span>
                           <span style={{fontSize:9.5,color:T.ind,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                             {p.tender_label}
@@ -3652,7 +3725,9 @@ function ProjectsPage({onSelectProject}){
                   <div style={{fontSize:10.5,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                     {p.client}
                     {!!p.tender_label&&(
-                      <span title={"Tender: "+p.tender_label} style={{color:T.ind,fontWeight:600}}>
+                      <span onClick={e=>{e.stopPropagation();setFilterTender(String(p.tender_id));}}
+                        title={"Tender: "+p.tender_label+" — is tender ki saari site"}
+                        style={{color:T.ind,fontWeight:600,cursor:"pointer"}}>
                         {p.client?" · ":""}📄 {p.tender_label}
                       </span>
                     )}
