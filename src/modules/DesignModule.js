@@ -982,7 +982,7 @@ export default function DesignModule() {
                 Client Phone {phone?"(auto-filled)":"(enter manually)"}
               </label>
               <input value={phone} onChange={e=>setPhone(e.target.value)}
-                placeholder={loadingContact?"Loading…":"e.g. 919981641230 (with country code)"}
+                placeholder={loadingContact?"Loading…":"e.g. 919876543210 (with country code)"}
                 style={{width:"100%",padding:"9px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               <div style={{fontSize:10.5,color:T.t4,marginTop:4}}>Country code zaroori (e.g. 91 for India). Khali rakho to WhatsApp web me contact pick kar sakte ho.</div>
             </div>

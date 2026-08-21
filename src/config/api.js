@@ -121,70 +121,22 @@ api.put   = (endpoint, body, opts)  => api(endpoint, { method:"PUT",   body:JSON
 api.patch = (endpoint, body, opts)  => api(endpoint, { method:"PATCH", body:JSON.stringify(body), ...(opts||{}) });
 api.del   = (endpoint, body, opts)  => api(endpoint, body !== undefined ? { method:"DELETE", body:JSON.stringify(body), ...(opts||{}) } : { method:"DELETE", ...(opts||{}) });
 
-// Legacy email+password login — kept for backwards compatibility
-api.login = async (email, password) => {
-  const res  = await fetch(`${API_BASE}/auth/login`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({email,password}) });
-  const data = await res.json();
-  if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
-  return data;
-};
-
-// ═══════════════════════════════════════════════════════════════
-// MOCK AUTH MODE — off (backend routes are live)
-// Flip back to true only if gb-backend is rolled back to a build
-// without /auth/login/password or /auth/otp/* endpoints.
-// ═══════════════════════════════════════════════════════════════
-const MOCK_AUTH = false;
-const MOBILE_TO_EMAIL = {
-  "9981641230": "admin@gbbuildcon.com",
-  // add more mobile → email mappings here as needed
-};
-const MOCK_ADMIN_PASSWORD = "Admin@123"; // used only for OTP-verified login
-let _mockOtp = null;
-let _mockOtpMobile = null;
-
 // ── Mobile + Password ────────────────────────────────────────
 api.loginPassword = async (mobile, password) => {
-  if (MOCK_AUTH) {
-    const email = MOBILE_TO_EMAIL[mobile];
-    if (!email) return { success: false, message: "Mobile number not registered" };
-    return await api.login(email, password);
-  }
   const res  = await fetch(`${API_BASE}/auth/login/password`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,password}) });
   const data = await res.json();
   if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
   return data;
 };
 
-// ── Mobile + OTP: request OTP (client-side in mock mode) ─────
+// ── Mobile + OTP: request OTP ────────────────────────────────
 api.requestOtp = async (mobile) => {
-  if (MOCK_AUTH) {
-    if (!/^[6-9]\d{9}$/.test(mobile)) return { success: false, message: "Enter a valid 10-digit mobile number" };
-    if (!MOBILE_TO_EMAIL[mobile])     return { success: false, message: "Mobile number not registered" };
-    _mockOtpMobile = mobile;
-    _mockOtp = String(Math.floor(1000 + Math.random() * 9000));
-    console.log("🧪 [MOCK OTP] for", mobile, "is", _mockOtp);
-    return { success: true, message: "OTP generated", dev_otp: _mockOtp, expires_in: 600 };
-  }
   const res  = await fetch(`${API_BASE}/auth/otp/request`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile}) });
   return await res.json();
 };
 
 // ── Mobile + OTP: verify OTP & login ─────────────────────────
 api.loginOtp = async (mobile, otp, accessToken) => {
-  if (MOCK_AUTH) {
-    if (mobile !== _mockOtpMobile || !_mockOtp) {
-      return { success: false, message: "Please request a new OTP" };
-    }
-    if (String(otp) !== _mockOtp) {
-      return { success: false, message: "Invalid OTP" };
-    }
-    _mockOtp = null;
-    _mockOtpMobile = null;
-    const email = MOBILE_TO_EMAIL[mobile];
-    if (!email) return { success: false, message: "Mobile number not registered" };
-    return await api.login(email, MOCK_ADMIN_PASSWORD);
-  }
   const res  = await fetch(`${API_BASE}/auth/login/otp`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,otp,accessToken}) });
   const data = await res.json();
   if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
