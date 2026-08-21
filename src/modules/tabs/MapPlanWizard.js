@@ -44,6 +44,13 @@ export default function MapPlanWizard({ projectId, onClose, onDone }) {
   const [err, setErr] = useState("");
   const [openStage, setOpenStage] = useState(null);   // "gi:ci" — stage list khuli
   const [aiBusy, setAiBusy] = useState(null);         // "gi:ci" — AI sujhaav aa raha
+  // Line par stages ab default me bhare aate hain. Kisi PM ko sirf line-
+  // level task chahiye (37 line × 6 stage = 222 task bahut ho jaate hain),
+  // isliye ek hi switch se sab lines ke stages hata/laga sakte ho.
+  const lineStagesOn = groups.some((g) => g.kind === "line" && g.children.some((c) => (c.stages || []).length));
+  const toggleLineStages = () => setGroups((gs) => gs.map((g) => g.kind !== "line" ? g : ({
+    ...g, children: g.children.map((c) => ({ ...c,
+      stages: lineStagesOn ? [] : [...(c.stage_template || [])] })) })));
 
   const load = useCallback(async () => {
     const r = await api.get(`/tasks/project/${projectId}/map-plan`);
@@ -118,6 +125,14 @@ export default function MapPlanWizard({ projectId, onClose, onDone }) {
             Naam aur lambai map se aati hai — lambai badal sakte ho, stage jodh sakte ho.
             Pehle se bane task ko tick karoge to sirf uspar scope likhega, naya nahi banega.
           </div>
+          {groups.some((g) => g.kind === "line") && (
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={lineStagesOn} onChange={toggleLineStages} />
+              <span style={{ fontSize: 11.5, color: T.t2 }}>
+                Har line ke andar <b>stages</b> (khudai · laying · testing…) — hata doge to ek line = ek task
+              </span>
+            </label>
+          )}
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px" }}>
