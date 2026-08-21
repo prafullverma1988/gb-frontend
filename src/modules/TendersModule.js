@@ -3469,6 +3469,7 @@ const POINT_TYPES = [
   {v:"pump_house", l:"Pump House"},
   {v:"hdd",        l:"HDD crossing"},
   {v:"valve",      l:"Valve chamber"},
+  {v:"culvert",    l:"Culvert"},
   {v:"other",      l:"Other"},
 ];
 const lineColour = (t) => (LINE_TYPES.find(x=>x.v===t) || LINE_TYPES[LINE_TYPES.length-1]).c;
