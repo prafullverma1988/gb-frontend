@@ -1035,6 +1035,10 @@ function TabEstimate({ project }) {
       duration: dur,
       dependencies: form.dependencies || [],
       dhyan_rakhen: form.dhyanRakhen || null,
+      // Wahi form Tasks tab se aata hai — usme qty ka khaana hai, to
+      // bhara hua qty yahan se bhi jaana chahiye (warna field jhooth bolta).
+      scope_qty: Number(form.scopeQty) > 0 ? Number(form.scopeQty) : null,
+      unit: form.unit || null,
     }).catch(e => ({ success:false, message:e.message }));
     if (!r?.success) { alert(r?.message || "Task create failed"); return; }
     setShowCreateTaskFor(false);

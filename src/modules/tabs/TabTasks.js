@@ -1579,7 +1579,12 @@ function TabTasks({ projectId, isAdmin }) {
           duration: form.duration || 0,
           dependencies: form.dependencies || [],
           dhyan_rakhen: form.dhyanRakhen || null,
+          scope_qty: Number(form.scopeQty) > 0 ? Number(form.scopeQty) : null,
+          unit: form.unit || null,
         });
+        // Parent ka scope neeche khisak gaya ho to chupchaap mat karo —
+        // user ko dikhna chahiye ki upar wale task se qty hat gayi.
+        if (res.success && res.data && res.data.scope_note) window.toast?.success?.(res.data.scope_note);
         if (res.success) {
           // Reload tasks from backend
           const r2 = await api.get("/tasks?project_id=" + projectId);
@@ -5011,7 +5016,21 @@ function PTEditTask({task,allTasks,projectId,onClose,onSave}){
 
 // ── PT Add Task ───────────────────────────────────────────────────
 function PTAddTask({parent,allTasks,onClose,onSave}){
-  const [form,setForm]=useState({name:"",category:"Civil",tag:"",assignee:"",baseStart:"",baseEnd:"",duration:0,dependencies:[],dhyanRakhen:""});
+  // ── Sub-task par qty ────────────────────────────────────────
+  // Stretch ki qty hi shuruaati sujhav hai: "sec 30 me 780 m" hai to uske
+  // har stage (excavation, laying…) me bhi 780 m — user ghata-badha sakta
+  // hai. Agar parent par qty nahi bachi (pehle hi neeche khisak chuki hai)
+  // to kisi bhai-behen stage se utha lete hain.
+  const _sibQty=((parent&&parent.children)||[]).find(c=>Number(c.scope_qty)>0);
+  const _pHas=Number(parent&&parent.scope_qty)>0;
+  const _pQty=_pHas?Number(parent.scope_qty):(_sibQty?Number(_sibQty.scope_qty):0);
+  const _pUnit=_pHas?(parent.unit||""):((_sibQty&&_sibQty.unit)||(parent&&parent.unit)||"");
+  // Parent par qty darj ho chuki ho to scope neeche nahi khisak sakta —
+  // purani entries bina scope wale task se lagi reh jaatin. Backend bhi
+  // rokta hai; yahan field hi band rakhte hain taaki pata rahe kyun.
+  const _pLocked=_pHas&&Number(parent&&parent.done_qty)>0;
+  const _pMoves=_pHas&&!_pLocked;
+  const [form,setForm]=useState({name:"",category:"Civil",tag:"",assignee:"",baseStart:"",baseEnd:"",duration:0,dependencies:[],dhyanRakhen:"",scopeQty:_pQty?String(_pQty):"",unit:_pUnit||""});
   const [showDhyan,setShowDhyan]=useState(false);
   const [depSrch,setDepSrch]=useState("");
   const upd=(k)=>(e)=>setForm(p=>({...p,[k]:e.target.value}));
@@ -5051,6 +5070,23 @@ function PTAddTask({parent,allTasks,onClose,onSave}){
       <div style={{flex:1,overflowY:"auto",padding:"13px 16px"}}>
         <div style={{marginBottom:10}}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Task Name *</label>
           <input value={form.name} onChange={upd("name")} placeholder="e.g. RCC Foundation Casting" style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/></div>
+        {/* ── Qty (kitna kaam) — isi se aage task update me qty bhari jayegi ── */}
+        <div style={{marginBottom:10,padding:"9px 11px",background:_pLocked?"#FEF2F2":T.bluL,border:`1px solid ${_pLocked?"#FECACA":T.bluM}`,borderRadius:7}}>
+          <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:9}}>
+            <div><label style={{fontSize:9.5,fontWeight:600,color:_pLocked?"#B91C1C":T.blu,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Qty — kitna kaam</label>
+              <input type="number" min={0} step="any" value={form.scopeQty} disabled={_pLocked} onChange={upd("scopeQty")} placeholder={_pQty?String(_pQty):"e.g. 780"}
+                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${_pLocked?"#FECACA":T.bluM}`,fontSize:13,fontWeight:700,color:_pLocked?T.t4:T.blu,background:_pLocked?T.surfaceB:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+            <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Unit</label>
+              <input list="pt-unit-list" value={form.unit} disabled={_pLocked} onChange={upd("unit")} placeholder="RMT"
+                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:_pLocked?T.surfaceB:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              <datalist id="pt-unit-list">{["RMT","CUM","SQM","NOS","MT","KG","LTR","QTL"].map(u=><option key={u} value={u}/>)}</datalist></div>
+          </div>
+          {_pLocked
+            ? <div style={{fontSize:10.5,color:"#B91C1C",marginTop:6,lineHeight:1.45}}>Upar wale task par pehle se <b>{parent.done_qty} {parent.unit||""}</b> darj ho chuki hai — ab qty neeche nahi le ja sakte. Pehle wo entries dekh lo.</div>
+            : _pMoves&&Number(form.scopeQty)>0
+              ? <div style={{fontSize:10.5,color:"#92400E",marginTop:6,lineHeight:1.45,background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:5,padding:"5px 8px"}}>Upar wale task ki qty (<b>{_pQty} {_pUnit}</b>) yahan aa jayegi — wo ab apne stages ka <b>jod</b> ban jayega. Qty hamesha sabse neeche wale task par hi rehti hai, warna kaam do baar gina jaata.</div>
+              : <div style={{fontSize:10.5,color:T.t4,marginTop:6,lineHeight:1.45}}>Qty bhar doge to task update me "kitna hua" likh sakoge — % apne aap nikal jayega. Khali chhodoge to ye task sirf naam ka rahega.</div>}
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
           {[{l:"Category",k:"category",type:"select",opts:["Civil","Electrical","Plumbing","Finishing","Custom"]},{l:"Tag",k:"tag",type:"input",ph:"e.g. critical"},{l:"Assigned To",k:"assignee",type:"select",opts:TEAM_PT}].map(f=>(
             <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
