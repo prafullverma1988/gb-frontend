@@ -16,7 +16,7 @@
 //
 // Self-contained (own theme/icons/helpers), same as WarehouseModule/FuelModule.
 // ══════════════════════════════════════════════════════════════════════
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api, { API_BASE, getToken } from "../config/api";
 
 // ── ICONS ─────────────────────────────────────────────────────────
@@ -36,6 +36,7 @@ const IcClock  = (p) => <Ic {...p} d="M12 22a10 10 0 100-20 10 10 0 000 20zM12 7
 const IcAdd    = (p) => <Ic {...p} d="M12 5v14M5 12h14" />;
 const IcX      = (p) => <Ic {...p} d="M18 6L6 18M6 6l12 12" />;
 const IcAlert  = (p) => <Ic {...p} d="M10.3 3.9L1.8 18a2 2 0 001.7 3h16.9a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0zM12 9v4M12 17h.01" />;
+const IcSignal = (p) => <Ic {...p} d="M5 12.55a11 11 0 0114.08 0M8.53 15.5a6 6 0 016.95 0M12 19h.01" />;
 
 // ── THEME ─────────────────────────────────────────────────────────
 const T = {
@@ -352,7 +353,7 @@ const KEY_DOCS = [
   { k: "puc", l: "PUC" },
 ];
 
-function MachineForm({ open, onClose, onSaved, machine, parties }) {
+function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
   const editing = !!machine;
   const [f, setF] = useState({});
   const [docs, setDocs] = useState({});
@@ -373,8 +374,11 @@ function MachineForm({ open, onClose, onSaved, machine, parties }) {
     } : {
       ownership: "owned", measurement_mode: "hourly", meter_unit: "hours",
       fuel_responsibility: "rent_included", opening_read_at: todayStr(),
+      // GPS tab ke "Nayi machine banao" se aaya hua naam/gadi no. — sirf
+      // pehle se bhara hua, aadmi badal sakta hai.
+      ...(seed || {}),
     });
-  }, [open, machine]);
+  }, [open, machine, seed]);
 
   const owned = String(f.ownership || "").toLowerCase() === "owned";
   const fuelOurs = owned || f.fuel_responsibility === "company";
@@ -545,8 +549,9 @@ function MachineForm({ open, onClose, onSaved, machine, parties }) {
       {tab === "tele" && (
         <>
           <Notice>
-            Abhi ye sirf <b>record</b> hai — koi API call nahi hoti. Vendor tay hone par yahin
-            se jud jayega, dobara sab bharna nahi padega.
+            Ye machine ka apna record hai (laga hai ya nahi, device/IMEI). Vendor ka API ab{" "}
+            <b>account level</b> par judta hai — Machinery ke <b>GPS tab</b> se; wahi se unit
+            is machine se jodi jaati hai aur data apne aap aata hai.
           </Notice>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="GPS / telematics laga hai?" span={2}>
@@ -1684,23 +1689,26 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
   const [svcOpen, setSvcOpen] = useState(false);
   const [svcEdit, setSvcEdit] = useState(null);   // khuli service jise band karna hai
   const [svcTemplates, setSvcTemplates] = useState([]);
+  const [gps, setGps] = useState(null);
 
   // silent = form-save ke baad ka refresh. Spinner sirf pehli baar — warna har
   // save par poori detail blank ho kar apna tab bhool jaati hai.
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
-    const [a, b, c, d, e] = await Promise.all([
+    const [a, b, c, d, e, g] = await Promise.all([
       api.get("/machinery/fleet/" + id).catch(() => null),
       api.get("/machinery/fleet/" + id + "/timeline").catch(() => null),
       api.get("/machinery/service?equipment_id=" + id).catch(() => null),
       api.get("/machinery/fleet/" + id + "/service-due").catch(() => null),
       api.get("/machinery/templates?equipment_id=" + id).catch(() => null),
+      api.get("/telematics/machine/" + id).catch(() => null),
     ]);
     setM(a?.success ? a.data : null);
     setTimeline(b?.success ? b.data || [] : []);
     setServices(c?.success ? c.data || [] : []);
     setSvcDue(d?.success ? d.data : null);
     setSvcTemplates(e?.success ? e.data || [] : []);
+    setGps(g?.success ? g.data : null);
     setLoading(false);
   }, [id]);
   useEffect(() => { load(); }, [load]);
@@ -1735,6 +1743,10 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
     { id: "fuel", l: "Fuel" },
     { id: "usage", l: "Usage" },
     { id: "docs", l: "Documents" },
+    // GPS tab sirf judi hui machine par — bina jod ke dikha kar "khaali
+    // khaana jo kabhi nahi bharega" nahi dena (wahi niyam jo rented ke
+    // service tab par laga hai). Jodna Machinery ke GPS tab se hota hai.
+    ...(gps && gps.linked ? [{ id: "gps", l: "GPS" }] : []),
   ];
 
   // Owned se rented par jaate waqt purana tab gayab ho sakta hai — tab khaali
@@ -1992,6 +2004,75 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
             </>
           )}
         </Panel>
+      )}
+
+      {activeTab === "gps" && gps && gps.linked && (
+        <>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+            <div style={{ background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 10, padding: "9px 13px", fontSize: 11.5, color: T.t2, display: "flex", alignItems: "center", gap: 7 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 4, background: gps.unit.health === "green" ? T.grn : gps.unit.health === "amber" ? T.amb : T.red, display: "inline-block" }} />
+              <b>{gps.unit.unit_name}</b>
+              <span style={{ color: T.t4 }}>· aakhri data {gps.unit.last_data_at ? fmtD(gps.unit.last_data_at) : "kabhi nahi"}</span>
+            </div>
+            {gps.unit.has_fls ? (
+              <div style={{ background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 10, padding: "9px 13px", fontSize: 11.5 }}>
+                Sensor kharcha <b>{gps.lph != null ? `${fmtN(gps.lph)} L/hr` : "—"}</b>
+                {gps.norm_lph != null && gps.lph != null && (
+                  <span style={{ marginLeft: 6, color: gps.lph > gps.norm_lph * 1.15 ? T.red : T.grn, fontWeight: 700 }}>
+                    (norm {fmtN(gps.norm_lph)})
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div style={{ background: T.sltL, borderRadius: 10, padding: "9px 13px", fontSize: 11.5, color: T.t3 }}>
+                Is unit par fuel sensor nahi — sirf engine hours / km milte hain
+              </div>
+            )}
+          </div>
+
+          <Panel title="Roz ka sensor data — pichhle 14 din" style={{ marginBottom: 14 }}>
+            {gps.daily.length === 0 && <Empty>Abhi koi din ka data nahi aaya.</Empty>}
+            {gps.daily.length > 0 && (
+              <>
+                <Row head cols="100px 1fr 1fr 1fr 1fr 1fr">
+                  <span>Din</span><span>Engine</span><span>Chali (km)</span><span>Diesel piya</span><span>Bhara</span><span>Drop</span>
+                </Row>
+                {gps.daily.map((d) => (
+                  <Row key={d.day} cols="100px 1fr 1fr 1fr 1fr 1fr">
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(d.day)}</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 12 }}>{d.engine_sec > 0 ? `${Math.floor(d.engine_sec / 3600)}:${String(Math.floor((d.engine_sec % 3600) / 60)).padStart(2, "0")} hrs` : "—"}</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 12 }}>{Number(d.mileage_km) > 0 ? fmtN(d.mileage_km) : "—"}</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 12 }}>{Number(d.consumed_l) > 0 ? fmtN(d.consumed_l) + " L" : "—"}</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 12, color: Number(d.filled_l) > 0 ? T.grn : T.t2 }}>{Number(d.filled_l) > 0 ? "+" + fmtN(d.filled_l) + " L" : "—"}</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 12, color: Number(d.theft_l) > 0 ? T.red : T.t2 }}>{Number(d.theft_l) > 0 ? "−" + fmtN(d.theft_l) + " L" : "—"}</span>
+                  </Row>
+                ))}
+              </>
+            )}
+          </Panel>
+
+          <Panel title="Fuel events — bharna aur drop">
+            {gps.events.length === 0 && <Empty>Is duration me koi fill/drop nahi.</Empty>}
+            {gps.events.map((ev) => (
+              <Row key={ev.id} cols="130px 90px 1fr 1.2fr">
+                <span style={{ fontSize: 11, color: T.t3 }}>{String(ev.event_time).replace("T", " ").slice(0, 16)}</span>
+                <span>{ev.event_type === "fill"
+                  ? <Pill label={"+" + fmtN(ev.litres) + " L"} c={T.grn} bg={T.grnL} />
+                  : <Pill label={"−" + fmtN(ev.litres) + " L"} c={T.red} bg={T.redL} />}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{ev.location_text || "—"}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>
+                  {ev.event_type === "fill"
+                    ? (ev.matched_fuel_entry_id ? "Fuel entry se mila" : "Entry nahi mili — Cross-check me hai")
+                    : ev.review_status === "ok" ? "Jaanch ho chuki — theek tha" : "Jaanch baaki (Fuel → Cross-check)"}
+                </span>
+              </Row>
+            ))}
+            <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
+              Drop = engine band tha aur tank ka level tezi se gira. Ye sensor ka andaza hai — tanker se
+              doosri machine me diesel dena bhi aise hi dikhta hai. Faisla Fuel → Cross-check me hota hai.
+            </div>
+          </Panel>
+        </>
       )}
 
       <DocForm open={docOpen} onClose={() => setDocOpen(false)} machine={m}
@@ -2604,6 +2685,357 @@ function ReportsTab({ fleet, projects, from, to, onRange }) {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════
+// GPS TAB — telematics register aur machine se jod
+//
+// Do register hain: equipment_master (aadmi bharta hai) aur telematics_unit
+// (vendor sync khud bharta hai). Ye tab dono ko MILATA hai — jod kabhi apne
+// aap nahi hoti, har jod ka button aadmi dabata hai. Matcher sirf sujhav
+// deta hai; Ratna ke asli data me number-same-naam-alag (KRISHNA HYDRA =
+// "Thakur Crane5578") aur naam-same-number-alag (VIRENDRA JCB3DX vs 4536)
+// dono nikle the — isliye bharosa button par nahi, aadmi par hai.
+// ══════════════════════════════════════════════════════════════════
+
+function TeleConfigForm({ existing, onSaved, onCancel }) {
+  const [f, setF] = useState(() => ({
+    base_url: existing?.base_url || "https://",
+    resource_id: existing?.resource_id || "",
+    api_token: "",
+    groups: existing?.groups?.length ? existing.groups : [{ objectId: "", label: "" }],
+  }));
+  const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [error, setError] = useState("");
+  const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const updGroup = (i, k, v) => setF((p) => {
+    const groups = p.groups.map((g, j) => (j === i ? { ...g, [k]: v } : g));
+    return { ...p, groups };
+  });
+
+  const body = () => ({
+    base_url: f.base_url.trim(),
+    resource_id: f.resource_id.trim(),
+    api_token: f.api_token.trim() || undefined,
+    groups: f.groups.filter((g) => String(g.objectId).trim()),
+  });
+
+  const test = async () => {
+    setTesting(true); setError(""); setTestResult(null);
+    const r = await api.post("/telematics/config/test", body());
+    setTesting(false);
+    if (!r || r.success === false) { setError(r?.message || "Vendor se jawab nahi mila"); return; }
+    setTestResult(r.data);
+  };
+
+  const save = async () => {
+    setBusy(true); setError("");
+    const r = await api.post("/telematics/config", body());
+    setBusy(false);
+    if (!r || r.success === false) { setError(r?.message || "Save nahi hua"); return; }
+    onSaved();
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label="API base URL" span={2} hint="Vendor ke diye URL ka shuru ka hissa — /getReport se pehle tak">
+          <input value={f.base_url} onChange={(e) => upd("base_url", e.target.value)} placeholder="https://api.vendor.in:5000" style={inp} />
+        </Field>
+        <Field label="API token" span={2}
+          hint={existing?.api_token_set
+            ? `Abhi set hai (${existing.api_token_masked}). Badalna ho tabhi naya daalein — khaali chhodne par purana bana rahega.`
+            : "Vendor ke URL me token=... wala lamba hissa. Ye kabhi wapas screen par nahi dikhega."}>
+          <input type="password" autoComplete="new-password" value={f.api_token}
+            onChange={(e) => upd("api_token", e.target.value)}
+            placeholder={existing?.api_token_set ? "badalna ho to naya token" : ""} style={inp} />
+        </Field>
+        <Field label="Resource ID" hint="URL me resourceId=... wala number">
+          <input value={f.resource_id} onChange={(e) => upd("resource_id", e.target.value)} style={inp} />
+        </Field>
+      </div>
+
+      <Field label="Groups — vendor panel ke unit-group (URL me objectId)"
+        hint='Har group ka objectId aur apna naam, jaise 30434668 → "Truck"'>
+        <div style={{ display: "grid", gap: 7 }}>
+          {f.groups.map((g, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 34px", gap: 7 }}>
+              <input value={g.objectId} onChange={(e) => updGroup(i, "objectId", e.target.value)} placeholder="objectId" style={inp} />
+              <input value={g.label || ""} onChange={(e) => updGroup(i, "label", e.target.value)} placeholder="naam (Truck / Machine)" style={inp} />
+              <button type="button" onClick={() => upd("groups", f.groups.filter((_, j) => j !== i))}
+                disabled={f.groups.length <= 1}
+                style={{ border: `1.5px solid ${T.b1}`, background: T.surface, borderRadius: 8, cursor: f.groups.length <= 1 ? "not-allowed" : "pointer", color: T.t3 }}>×</button>
+            </div>
+          ))}
+          <div><Btn size="sm" ghost icon={IcAdd} onClick={() => upd("groups", [...f.groups, { objectId: "", label: "" }])}>Group</Btn></div>
+        </div>
+      </Field>
+
+      {error && <div style={{ fontSize: 12, color: T.red, fontWeight: 600 }}>{error}</div>}
+
+      {testResult && (
+        <div style={{ border: `1px solid ${T.grnL}`, background: T.grnL, borderRadius: 10, padding: "10px 13px", fontSize: 11.5, color: T.grn }}>
+          <b>Vendor se jawab mila ({testResult.day} ka din):</b>
+          {testResult.groups.map((g) => (
+            <div key={g.group} style={{ marginTop: 5, color: T.t2 }}>
+              <b>{g.group}</b> — {g.units.length} unit: {g.units.map((u) => u.name).join(", ") || "koi nahi"}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        {onCancel && <Btn ghost onClick={onCancel}>Cancel</Btn>}
+        <Btn ghost onClick={test} disabled={testing}>{testing ? "Pooch rahe hain..." : "Test karo"}</Btn>
+        <Btn onClick={save} disabled={busy}>{busy ? "Save..." : "Save"}</Btn>
+      </div>
+    </div>
+  );
+}
+
+function TelematicsTab({ data, onReload, onNewMachine }) {
+  const [configOpen, setConfigOpen] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  // Har pending unit ke liye chuni hui machine + "gadi no. bhar do" ka tick.
+  const [choice, setChoice] = useState({});
+  const [fillReg, setFillReg] = useState({});
+  const [syncing, setSyncing] = useState(false);
+  const syncMarkRef = useRef(null);
+
+  // Sync khatam hone ka pata last_sync_at badalne se chalta hai — service
+  // use sirf aakhri me likhti hai. Tab tak har 20 sec me chupchaap reload.
+  useEffect(() => {
+    if (!syncing) return;
+    const mark = (data && data.account && data.account.last_sync_at) || null;
+    if (mark !== syncMarkRef.current) { setSyncing(false); return; }
+    const t = setTimeout(() => onReload && onReload(true), 20000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncing, data]);
+
+  if (!data) return <Empty>Loading...</Empty>;
+
+  if (!data.account) {
+    return (
+      <Panel title="GPS / telematics vendor jodo">
+        <div style={{ padding: 16 }}>
+          <Notice>
+            Vendor (jaise Technoton) ka API yahan judta hai. Uske baad har raat ka engine hours,
+            diesel aur fuel events apne aap aayenge, aur unki gadiyan neeche list me dikh kar
+            machine se jodi ja sakengi. Vendor ke bheje URL me hi token, resourceId aur objectId
+            (group) likhe hote hain.
+          </Notice>
+          <TeleConfigForm existing={null} onSaved={() => onReload && onReload(true)} />
+        </div>
+      </Panel>
+    );
+  }
+
+  const acc = data.account;
+  const pending = data.pending || [];
+  const linked = data.linked || [];
+  const ignored = data.ignored || [];
+  const noUnit = (data.no_unit || []).slice().sort((a, b) => {
+    const w = { red: 0, amber: 1, grey: 2 };
+    return w[a.flag] - w[b.flag];
+  });
+  const machines = data.machines || [];
+  const machineById = Object.fromEntries(machines.map((m) => [m.id, m]));
+
+  const doSync = async () => {
+    const r = await api.post("/telematics/sync", {});
+    if (!r || r.success === false) { window.alert(r?.message || "Sync shuru nahi hua"); return; }
+    if (r.data && r.data.started === false) { window.alert(r.data.message); return; }
+    syncMarkRef.current = acc.last_sync_at || null;
+    setSyncing(true);
+  };
+
+  const link = async (u) => {
+    const eqId = Number(choice[u.id] != null ? choice[u.id] : (u.top ? u.top.equipment_id : 0));
+    if (!eqId) { window.alert("Pehle machine chuno"); return; }
+    const m = machineById[eqId];
+    const canFillReg = !!(u.derived_reg_no && m && !String(m.registration_no || "").trim());
+    setBusyId(u.id);
+    const r = await api.post(`/telematics/units/${u.id}/link`, {
+      equipment_id: eqId,
+      fill_registration: canFillReg && fillReg[u.id] !== false,
+    });
+    setBusyId(null);
+    if (!r || r.success === false) { window.alert(r?.message || "Jod nahi paya"); return; }
+    onReload && onReload(true);
+  };
+
+  const act = async (u, action) => {
+    setBusyId(u.id);
+    const r = await api.post(`/telematics/units/${u.id}/${action}`, {});
+    setBusyId(null);
+    if (!r || r.success === false) { window.alert(r?.message || "Nahi hua"); return; }
+    onReload && onReload(true);
+  };
+
+  const unlink = async (u) => {
+    if (!window.confirm(`"${u.unit_name}" ko "${u.machine_name}" se kholna hai?\n\nIska sensor data machine se hat jayega (data khota nahi — dobara jodne par wapas mil jaata hai).`)) return;
+    await act(u, "unlink");
+  };
+
+  const healthDot = (h) => (
+    <span style={{ width: 8, height: 8, borderRadius: 4, display: "inline-block", flexShrink: 0, background: h === "green" ? T.grn : h === "amber" ? T.amb : T.red }} />
+  );
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      {/* ── header: sync ka haal ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 11.5, color: T.t3, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <Pill label={acc.vendor || "vendor"} c={T.ind} bg={T.indL} />
+          {acc.last_sync_status === "error"
+            ? <span style={{ color: T.red, fontWeight: 600 }}>Aakhri sync FAIL — {acc.last_error || "vendor se jawab nahi"}</span>
+            : acc.last_sync_at
+              ? <span>Aakhri sync {fmtD(acc.last_sync_at)} · har raat apne aap chalta hai</span>
+              : <span>Abhi pehla sync hona baaki hai</span>}
+        </div>
+        <div style={{ display: "flex", gap: 7 }}>
+          <Btn size="sm" ghost onClick={() => setConfigOpen(true)}>Settings</Btn>
+          <Btn size="sm" onClick={doSync} disabled={syncing}>{syncing ? "Sync chal raha hai..." : "Sync now"}</Btn>
+        </div>
+      </div>
+      {syncing && (
+        <Notice>Vendor se data aa raha hai — 1-2 minute lagte hain (unka server ek waqt me ek hi report deta hai). Screen apne aap taaza ho jayegi.</Notice>
+      )}
+
+      {/* ── jodna baaki ── */}
+      <Panel title={`Jodna baaki — vendor ki ${pending.length} unit kisi machine se judi nahi`}>
+        {pending.length === 0 && <Empty>Sab units judi hui hain. Nayi unit vendor panel me aate hi yahan khud dikh jayegi.</Empty>}
+        {pending.map((u) => {
+          const selId = choice[u.id] != null ? choice[u.id] : (u.top ? u.top.equipment_id : "");
+          const selMachine = machineById[Number(selId)];
+          const canFillReg = !!(u.derived_reg_no && selMachine && !String(selMachine.registration_no || "").trim());
+          return (
+            <div key={u.id} style={{ padding: "12px 15px", borderBottom: `1px solid ${T.b1}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 7 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+                  {u.unit_name}
+                  {u.group_label && <Pill label={u.group_label} c={T.slt} bg={T.sltL} />}
+                  {!!u.has_fls && <Pill label="Fuel sensor" c={T.ind} bg={T.indL} />}
+                </div>
+                <div style={{ fontSize: 10.5, color: T.t4 }}>
+                  {u.last_data_at ? `aakhri data ${fmtD(u.last_data_at)}` : "data abhi nahi aaya"}
+                </div>
+              </div>
+
+              {u.top ? (
+                <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 8 }}>
+                  Sujhav: <b style={{ color: T.t1 }}>{u.top.name}</b>
+                  {u.top.registration_no ? ` (${u.top.registration_no})` : ""} — {u.top.why} · bharosa {u.top.confidence}%
+                  {u.top.conflict && <span style={{ color: T.amb, fontWeight: 600 }}> · ⚠ {u.top.conflict}</span>}
+                  {u.ambiguous && <span style={{ color: T.amb, fontWeight: 600 }}> · do machine barabar milti hain — khud chuno</span>}
+                </div>
+              ) : (
+                <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 8 }}>
+                  Koi milti-julti machine nahi mili — list se chuno ya nayi banao.
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+                <select value={selId} onChange={(e) => setChoice((p) => ({ ...p, [u.id]: e.target.value }))}
+                  style={{ ...inp, width: 320 }}>
+                  <option value="">— machine chuno —</option>
+                  {machines.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}{m.registration_no ? ` (${m.registration_no})` : ""}
+                    </option>
+                  ))}
+                </select>
+                <Btn size="sm" onClick={() => link(u)} disabled={busyId === u.id || !selId}>
+                  {busyId === u.id ? "..." : "Jodo"}
+                </Btn>
+                <Btn size="sm" ghost onClick={() => onNewMachine && onNewMachine(u)}>Nayi machine banao</Btn>
+                <Btn size="sm" ghost onClick={() => act(u, "ignore")} disabled={busyId === u.id}>Hamari nahi hai</Btn>
+              </div>
+
+              {canFillReg && (
+                <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11.5, color: T.t2, marginTop: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={fillReg[u.id] !== false}
+                    onChange={(e) => setFillReg((p) => ({ ...p, [u.id]: e.target.checked }))} />
+                  Machine ka gadi no. khaali hai — sensor wala <b>{u.derived_reg_no}</b> bhar do
+                </label>
+              )}
+            </div>
+          );
+        })}
+      </Panel>
+
+      {/* ── jude hue ── */}
+      <Panel title={`Jude hue (${linked.length})`}>
+        {linked.length === 0 && <Empty>Abhi koi unit judi nahi. Upar "Jodna baaki" se shuru karo.</Empty>}
+        {linked.length > 0 && (
+          <>
+            <Row head cols="16px 1.4fr 1.4fr 130px 90px">
+              <span></span><span>Vendor unit</span><span>Machine</span><span>Aakhri data</span><span></span>
+            </Row>
+            {linked.map((u) => (
+              <Row key={u.id} cols="16px 1.4fr 1.4fr 130px 90px">
+                {healthDot(u.health)}
+                <span style={{ fontSize: 12, color: T.t2 }}>{u.unit_name}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{u.machine_name}
+                  {u.machine_reg ? <span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> · {u.machine_reg}</span> : null}</span>
+                <span style={{ fontSize: 11.5, color: u.health === "red" ? T.red : T.t3 }}>
+                  {u.last_data_at ? fmtD(u.last_data_at) : "kabhi nahi"}
+                  {u.health === "red" && " · sensor chup hai"}
+                </span>
+                <span style={{ textAlign: "right" }}>
+                  <Btn size="sm" ghost onClick={() => unlink(u)} disabled={busyId === u.id}>Kholo</Btn>
+                </span>
+              </Row>
+            ))}
+          </>
+        )}
+      </Panel>
+
+      {/* ── GPS nahi hai ── */}
+      <Panel title={`Machines bina GPS unit ke (${noUnit.length})`}>
+        {noUnit.length === 0 && <Empty>Har machine kisi na kisi unit se judi hai.</Empty>}
+        {noUnit.map((m) => (
+          <Row key={m.id} cols="1.6fr 1fr 1.4fr">
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: m.flag === "grey" ? T.t3 : T.t1 }}>
+              {m.name}{m.registration_no ? <span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> · {m.registration_no}</span> : null}
+            </span>
+            <span>
+              {m.flag === "red" && <Pill label="GPS haan, unit nahi" c={T.red} bg={T.redL} />}
+              {m.flag === "amber" && <Pill label="GPS ka jawab nahi bhara" c={T.amb} bg={T.ambL} />}
+              {m.flag === "grey" && <Pill label="GPS nahi hai" c={T.t3} bg={T.sltL} />}
+            </span>
+            <span style={{ fontSize: 11, color: T.t4 }}>
+              {m.flag === "red" && "Master kehta hai GPS laga hai par vendor me unit nahi mili — vendor/config check karo"}
+              {m.flag === "amber" && "Machine kholkar Telematics me haan/nahi bharo — khaali jawab bhi kami ginti hai"}
+              {m.flag === "grey" && "Theek hai — is machine par GPS hai hi nahi"}
+            </span>
+          </Row>
+        ))}
+      </Panel>
+
+      {ignored.length > 0 && (
+        <Panel title={`Hamari nahi (${ignored.length})`}>
+          {ignored.map((u) => (
+            <Row key={u.id} cols="1.6fr 130px">
+              <span style={{ fontSize: 12, color: T.t3 }}>{u.unit_name}</span>
+              <span style={{ textAlign: "right" }}>
+                <Btn size="sm" ghost onClick={() => act(u, "restore")}>Wapas lao</Btn>
+              </span>
+            </Row>
+          ))}
+        </Panel>
+      )}
+
+      <Modal open={configOpen} onClose={() => setConfigOpen(false)} title="Telematics settings" width={640}>
+        <TeleConfigForm existing={acc}
+          onSaved={() => { setConfigOpen(false); onReload && onReload(true); }}
+          onCancel={() => setConfigOpen(false)} />
+      </Modal>
+    </div>
+  );
+}
+
 function MachineryModule() {
   const [tab, setTab] = useState("fleet");
   const [loading, setLoading] = useState(true);
@@ -2618,6 +3050,9 @@ function MachineryModule() {
   const [econ, setEcon] = useState(null);
   const [health, setHealth] = useState(null);
   const [projects, setProjects] = useState([]);
+  const [tele, setTele] = useState(null);
+  // "Nayi machine banao" (GPS tab) se aaya naam/gadi no. — form me pehle se bhara.
+  const [formSeed, setFormSeed] = useState(null);
 
   // Reports ka apna date range — Fleet/Reminders par date ka koi matlab nahi,
   // aur report kholte hi poora itihaas maangna bhaari padta hai.
@@ -2629,7 +3064,7 @@ function MachineryModule() {
   // khuli ho to wo unmount ho kar apna tab bhool jaata hai.
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
-    const [f, d, g, p, ec, he, pr] = await Promise.all([
+    const [f, d, g, p, ec, he, pr, te] = await Promise.all([
       api.get("/machinery/fleet").catch(() => null),
       api.get("/machinery/due").catch(() => null),
       api.get("/machinery/reports/gaps").catch(() => null),
@@ -2638,6 +3073,7 @@ function MachineryModule() {
       api.get("/machinery/reports/health").catch(() => null),
       // Sirf Reports ke project filter ke liye — baaki tab ko iski zaroorat nahi.
       api.get("/projects").catch(() => null),
+      api.get("/telematics/overview").catch(() => null),
     ]);
     setFleet(f?.success ? f.data || [] : []);
     setDue(d?.success ? d.data || [] : []);
@@ -2646,6 +3082,7 @@ function MachineryModule() {
     setEcon(ec?.success ? ec.data : null);
     setHealth(he?.success ? he.data : null);
     setProjects(pr?.success ? pr.data || [] : []);
+    setTele(te?.success ? te.data : null);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -2678,6 +3115,9 @@ function MachineryModule() {
   const TABS = [
     { id: "fleet", l: "Fleet", I: IcTruck },
     { id: "due", l: "Reminders", I: IcBell, badge: active.length || null },
+    // Badge = kitni vendor units abhi kisi machine se judi nahi — wahi is
+    // tab ka asli kaam hai. Account hi na ho to badge ka koi matlab nahi.
+    { id: "gps", l: "GPS", I: IcSignal, badge: (tele && tele.account && tele.pending.length) || null },
     { id: "insights", l: "Insights", I: IcSpark },
     { id: "reports", l: "Reports", I: IcChart },
   ];
@@ -2715,6 +3155,21 @@ function MachineryModule() {
             {tab === "reports" && (
               <ReportsTab fleet={fleet} projects={projects} from={repFrom} to={repTo}
                 onRange={(f, t2) => { setRepFrom(f); setRepTo(t2); }} />
+            )}
+
+            {tab === "gps" && (
+              <TelematicsTab data={tele} onReload={load}
+                onNewMachine={(u) => {
+                  // Naam me se vendor ka tenant-prefix (RKU_ jaisa) hata kar
+                  // seed banta hai — baaki form aadmi khud bharega.
+                  setEditMachine(null);
+                  setFormSeed({
+                    name: String(u.unit_name || "").replace(/^[A-Z]{2,5}[_\-\s]+/i, "").replace(/_/g, " ").trim(),
+                    registration_no: u.derived_reg_no || "",
+                    telematics_enabled: 1,
+                  });
+                  setFormOpen(true);
+                }} />
             )}
 
             {tab === "fleet" && (
@@ -2834,8 +3289,8 @@ function MachineryModule() {
 
       <ImportWizard open={importOpen} onClose={() => setImportOpen(false)} onDone={() => load(true)} />
 
-      <MachineForm open={formOpen} machine={editMachine} parties={parties}
-        onClose={() => { setFormOpen(false); setEditMachine(null); }}
+      <MachineForm open={formOpen} machine={editMachine} parties={parties} seed={formSeed}
+        onClose={() => { setFormOpen(false); setEditMachine(null); setFormSeed(null); }}
         onSaved={() => load(true)} />
     </div>
   );

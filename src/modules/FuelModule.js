@@ -2011,15 +2011,16 @@ function ReportsTab({ byEquipment, byProject, from, to, onRange, projects, equip
 
 
 // Cross-check compares a manual entry against a sensor reading or a physical
-// dip. The sensor side does not exist yet — telematics is E3 — so this tab
-// states its shape and which checks are genuinely live, and invents nothing
-// to fill the space.
-function CrossCheckTab({ stores, byEquipment, purchases }) {
+// dip. Sensor side telematics se aata hai (/fuel/sensor-checks) — GPS/fuel
+// sensor jud'ne ke baad hi; tab tak wo checks "Baaki hai" dikhte hain aur
+// khaali jagah bharne ko kuch gadha nahi jaata.
+function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
   // Jin entries par parchi padhi gayi thi aur ankde nahi mile — yahi wo
   // "Flagged entries" hai jo ab tak khaali rehti thi.
   const flagged = (purchases || []).filter((p) => p.slip_flag === "mismatch");
   const withStock = stores.filter((s) => Number(s.litres) > 0);
   const noNormCount = byEquipment.filter((e) => e.norm_missing).length;
+  const sensorOn = !!(sensor && sensor.enabled);
   const CheckRow = ({ name, live, note }) => (
     <Row cols="1.6fr 110px 1.4fr">
       <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{name}</span>
@@ -2029,6 +2030,21 @@ function CrossCheckTab({ stores, byEquipment, purchases }) {
       <span style={{ fontSize: 11.5, color: T.t3 }}>{note}</span>
     </Row>
   );
+
+  // Sensor fill jinme dikkat hai — entry mili hi nahi, ya litre 15% se zyada
+  // alag. "ok" wali rows ginti me hain par list me nahi; theek cheez ki
+  // lambi list me hi asli dikkat kho jaati hai.
+  const fills = sensorOn ? sensor.fills || [] : [];
+  const fillIssues = fills.filter((f) => f.status !== "ok");
+  const noSensor = sensorOn ? sensor.entries_without_sensor || [] : [];
+  const drops = sensorOn ? (sensor.drops || []).filter((d) => d.review_status !== "ok") : [];
+
+  const review = async (id) => {
+    const r = await api.post(`/telematics/events/${id}/review`, { status: "ok" });
+    if (r && r.success === false) { window.alert(r.message || "Nahi hua"); return; }
+    onReload && onReload();
+  };
+
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={{ padding: "11px 14px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 8, fontSize: 12, color: T.ind, lineHeight: 1.55 }}>
@@ -2041,11 +2057,76 @@ function CrossCheckTab({ stores, byEquipment, purchases }) {
           note={`${withStock.length} drum me stock hai — Barrel Stock tab se "Dipstick"`} />
         <CheckRow name="Norm vs actual (litre/ghanta)" live
           note={"Reports tab me variance" + (noNormCount > 0 ? ` · ${noNormCount} machine ka norm baaki` : "")} />
-        <CheckRow name="Fill vs sensor (level jump)"
-          note="Machine par sensor lagne ke baad" />
-        <CheckRow name="Raat ka fuel drop"
-          note="Sensor ke bina pata nahi chalta" />
+        <CheckRow name="Fill vs sensor (level jump)" live={sensorOn}
+          note={sensorOn ? `${sensor.fls_machines} machine par fuel sensor juda hai` : "Machinery → GPS se unit jodne ke baad"} />
+        <CheckRow name="Raat ka fuel drop" live={sensorOn}
+          note={sensorOn ? "Sensor ke drop events neeche" : "Sensor ke bina pata nahi chalta"} />
       </Panel>
+
+      {sensorOn && (
+        <Panel title={`Sensor fill vs entry — pichhle 30 din (${fills.length} fill, ${fillIssues.length} me dikkat)`}>
+          {fillIssues.length === 0 && noSensor.length === 0 ? (
+            <Empty>Sensor ke har fill ki entry mil gayi, litre bhi tolerance me.<br />
+              <span style={{ fontSize: 11.5 }}>Jaanch chal rahi hai — farq aate hi yahan dikhega.</span></Empty>
+          ) : (
+            <>
+              {fillIssues.map((f) => (
+                <Row key={f.id} cols="120px 1.4fr 1fr 1.2fr">
+                  <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(f.time)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{f.machine}
+                    {f.location ? <span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> · {f.location}</span> : null}</span>
+                  <span style={{ fontSize: 11.5, fontFamily: "monospace" }}>
+                    sensor {fmtL(f.sensor_l)}{f.entry_l != null ? ` · entry ${fmtL(f.entry_l)}` : ""}
+                  </span>
+                  {f.status === "no_entry" ? (
+                    <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>Diesel gaya, entry nahi mili</span>
+                  ) : (
+                    <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>Farq {fmtL(Math.abs((f.entry_l || 0) - (f.sensor_l || 0)))} ({f.delta_pct}%)</span>
+                  )}
+                </Row>
+              ))}
+              {noSensor.map((e) => (
+                <Row key={e.kind + e.id} cols="120px 1.4fr 1fr 1.2fr">
+                  <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(e.at)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{e.machine}</span>
+                  <span style={{ fontSize: 11.5, fontFamily: "monospace" }}>entry {fmtL(e.litres)}</span>
+                  <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>Entry hai, sensor ne fill nahi dekha</span>
+                </Row>
+              ))}
+              <div style={{ fontSize: 11, color: T.t4, padding: "9px 14px" }}>
+                "Entry nahi mili" ka matlab chori nahi — entry der se bhi aati hai (36 ghante tak khud jud
+                jaati hai). Baaki farq par entry karne wale se poochhiye.
+              </div>
+            </>
+          )}
+        </Panel>
+      )}
+
+      {sensorOn && (
+        <Panel title={`Fuel drop — engine band tha aur level gira (${drops.length})`}>
+          {drops.length === 0 ? (
+            <Empty>Koi bina-jaancha drop nahi.</Empty>
+          ) : (
+            <>
+              {drops.map((d) => (
+                <Row key={d.id} cols="120px 1.4fr 90px 1fr 110px">
+                  <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(d.time)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{d.machine}</span>
+                  <span style={{ fontSize: 12, fontFamily: "monospace", color: T.red, fontWeight: 700 }}>−{fmtL(d.litres)}</span>
+                  <span style={{ fontSize: 11, color: T.t3 }}>{d.location || "—"}</span>
+                  <span style={{ textAlign: "right" }}>
+                    <Btn size="sm" ghost onClick={() => review(d.id)}>Theek tha</Btn>
+                  </span>
+                </Row>
+              ))}
+              <div style={{ fontSize: 11, color: T.t4, padding: "9px 14px" }}>
+                Drop = sensor ka andaza, chori ka faisla nahi — tanker se machine me diesel utarna bhi
+                aise hi dikhta hai. Jaanch ke baad sahi laga to "Theek tha" dabaiye; wo dobara nahi aayega.
+              </div>
+            </>
+          )}
+        </Panel>
+      )}
 
       {/* Parchi vs entry — ab ye khaali nahi rehta. Jis entry par AI ne parchi
           padhi thi aur ankde nahi mile, wo yahan khud aa jaati hai. */}
@@ -2160,6 +2241,7 @@ function FuelModule() {
   const [byEquipment, setByEquipment] = useState([]);
   const [byProject, setByProject] = useState([]);
   const [byVendor, setByVendor] = useState([]);
+  const [sensor, setSensor] = useState(null);
 
   const [refuelOpen, setRefuelOpen] = useState(false);
   const [ledgerStore, setLedgerStore] = useState(null);
@@ -2170,14 +2252,16 @@ function FuelModule() {
   const [to, setTo] = useState(todayStr());
 
   const loadCore = useCallback(async () => {
-    const [s, p, i] = await Promise.all([
+    const [s, p, i, sc] = await Promise.all([
       api.get("/fuel/stores").catch(() => null),
       api.get("/fuel/purchases").catch(() => null),
       api.get("/fuel/issues").catch(() => null),
+      api.get("/fuel/sensor-checks").catch(() => null),
     ]);
     setStores(s?.success ? s.data || [] : []);
     setPurchases(p?.success ? p.data || [] : []);
     setIssues(i?.success ? i.data || [] : []);
+    setSensor(sc?.success ? sc.data : null);
   }, []);
 
   const loadReports = useCallback(async () => {
@@ -2306,7 +2390,7 @@ function FuelModule() {
             onRange={(f, t2) => { setFrom(f); setTo(t2); }} />
         )}
         {tab === "cc" && (
-          <CrossCheckTab stores={stores} byEquipment={byEquipment} purchases={purchases} />
+          <CrossCheckTab stores={stores} byEquipment={byEquipment} purchases={purchases} sensor={sensor} onReload={loadCore} />
         )}
         {tab === "reports" && (
           <ReportsTab byEquipment={byEquipment} byProject={byProject} from={from} to={to}
