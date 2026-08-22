@@ -1072,15 +1072,20 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [allocAuto,setAllocAuto]=useState(true);
   const [allocPick,setAllocPick]=useState({});          // target_id → typed amount (manual mode)
   const isPaymentMade = type==="Payment Made";
+  const isPaymentReceived = type==="Payment Received";
+  // A payment settles what we OWE (vendor bills / staff reimbursements); a
+  // receipt settles what they owe US (client invoices). Same picker, both ways.
+  const allocEnabled = isPaymentMade || isPaymentReceived;
+  const allocSide = isPaymentReceived ? "receivable" : "payable";
   const payPartyObj = useMemo(()=>(dbParties||[]).find(p=>(p.name||"").toLowerCase().trim()===String(party||"").toLowerCase().trim()),[dbParties,party]);
   useEffect(()=>{
-    if(!(isPaymentMade && payPartyObj?.id)){ setOutstanding([]); setAllocPick({}); return; }
+    if(!(allocEnabled && payPartyObj?.id)){ setOutstanding([]); setAllocPick({}); return; }
     let alive=true;
-    api.get(`/finance/parties/${payPartyObj.id}/outstanding`)
+    api.get(`/finance/parties/${payPartyObj.id}/outstanding?side=${allocSide}`)
       .then(r=>{ if(alive&&r?.success) setOutstanding(r.data?.items||[]); })
       .catch(()=>{ if(alive) setOutstanding([]); });
     return ()=>{alive=false;};
-  },[isPaymentMade,payPartyObj?.id]);
+  },[allocEnabled,allocSide,payPartyObj?.id]);
   // Auto-FIFO preview: how much of `payAmt` lands on each outstanding bill.
   const allocPreview = useMemo(()=>{
     const amt=Number(payAmt)||0;
@@ -1561,7 +1566,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         settles_pr_id:   settlesRef?.kind==="pr"  ?settlesRef.id:null,
         // Payment allocation — which outstanding bills this payment settles.
         // Explicit list from the picker (auto-FIFO preview or manual amounts).
-        ...(isPaymentMade && outstanding.length ? {
+        ...(allocEnabled && outstanding.length ? {
           allocations: outstanding
             .map(it=>({ target_type: it.target_type, target_id: it.target_id, amount: allocPreview.map[it.target_id]||0 }))
             .filter(a=>a.amount>0.005),
@@ -2164,11 +2169,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           {/* ════════════════════════════════════════════════════
               PAYMENT ALLOCATION — settle this payment against outstanding bills
           ════════════════════════════════════════════════════ */}
-          {isPaymentMade && outstanding.length>0 && (
+          {allocEnabled && outstanding.length>0 && (
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:12,overflow:"hidden"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
                 <span style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
-                  Kis bill ke against — {party} ke {outstanding.length} outstanding
+                  {isPaymentReceived?"Kis invoice ke against":"Kis bill ke against"} — {party} ke {outstanding.length} outstanding
                 </span>
                 <div style={{display:"flex",gap:4,background:T.b1+"55",borderRadius:6,padding:2}}>
                   {[["auto","Auto (FIFO)"],["manual","Manual"]].map(([m,l])=>(
