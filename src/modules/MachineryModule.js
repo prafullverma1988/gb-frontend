@@ -2034,17 +2034,22 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
             {gps.daily.length === 0 && <Empty>Abhi koi din ka data nahi aaya.</Empty>}
             {gps.daily.length > 0 && (
               <>
-                <Row head cols="100px 1fr 1fr 1fr 1fr 1fr">
-                  <span>Din</span><span>Engine</span><span>Chali (km)</span><span>Diesel piya</span><span>Bhara</span><span>Drop</span>
+                <Row head cols="100px 1fr 1fr 1fr 1fr 1fr 1.4fr">
+                  <span>Din</span><span>Engine</span><span>Chali (km)</span><span>Diesel piya</span><span>Bhara</span><span>Drop</span><span>Kahan</span>
                 </Row>
                 {gps.daily.map((d) => (
-                  <Row key={d.day} cols="100px 1fr 1fr 1fr 1fr 1fr">
+                  <Row key={d.day} cols="100px 1fr 1fr 1fr 1fr 1fr 1.4fr">
                     <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(d.day)}</span>
                     <span style={{ fontFamily: "monospace", fontSize: 12 }}>{d.engine_sec > 0 ? `${Math.floor(d.engine_sec / 3600)}:${String(Math.floor((d.engine_sec % 3600) / 60)).padStart(2, "0")} hrs` : "—"}</span>
                     <span style={{ fontFamily: "monospace", fontSize: 12 }}>{Number(d.mileage_km) > 0 ? fmtN(d.mileage_km) : "—"}</span>
                     <span style={{ fontFamily: "monospace", fontSize: 12 }}>{Number(d.consumed_l) > 0 ? fmtN(d.consumed_l) + " L" : "—"}</span>
                     <span style={{ fontFamily: "monospace", fontSize: 12, color: Number(d.filled_l) > 0 ? T.grn : T.t2 }}>{Number(d.filled_l) > 0 ? "+" + fmtN(d.filled_l) + " L" : "—"}</span>
                     <span style={{ fontFamily: "monospace", fontSize: 12, color: Number(d.theft_l) > 0 ? T.red : T.t2 }}>{Number(d.theft_l) > 0 ? "−" + fmtN(d.theft_l) + " L" : "—"}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      title={d.trip_from && d.trip_to && d.trip_from !== d.trip_to ? `${d.trip_from} → ${d.trip_to}` : undefined}>
+                      {d.park_location || d.trip_to || "—"}
+                      {d.trip_from && d.trip_to && d.trip_from !== d.trip_to && <span style={{ color: T.t4 }}> · chali {d.trip_from} → {d.trip_to}</span>}
+                    </span>
                   </Row>
                 ))}
               </>
@@ -2793,6 +2798,257 @@ function TeleConfigForm({ existing, onSaved, onCancel }) {
   );
 }
 
+// ── Google Maps loader (module ki apni copy — self-contained convention).
+// window.google pehle se ho (LiveTeamView ne load kiya ho) to wahi use hota
+// hai; do baar script kabhi nahi judti.
+let _gmapsTeleP = null;
+function loadGmapsTele(apiKey) {
+  if (window.google && window.google.maps) return Promise.resolve(window.google);
+  if (_gmapsTeleP) return _gmapsTeleP;
+  _gmapsTeleP = new Promise((resolve, reject) => {
+    const cb = "__gmapsTele_" + Math.random().toString(36).slice(2);
+    window[cb] = () => { delete window[cb]; resolve(window.google); };
+    const s = document.createElement("script");
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=${cb}`;
+    s.async = true; s.defer = true;
+    s.onerror = () => { _gmapsTeleP = null; reject(new Error("Maps load nahi hua")); };
+    document.head.appendChild(s);
+  });
+  return _gmapsTeleP;
+}
+
+const TELE_PIN = "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z";
+
+// Fleet ka naksha — har machine ka AAKHRI SYNC TAK ka parking coordinate.
+// "Live" ka dawa jaan-bujh kar nahi: vendor ke paas live-position endpoint
+// hai hi nahi (docs/integrations/technoton-telematics-api.md), aur jhootha
+// "live" label pehli hi baar galat jagah dikhne par poore map ka bharosa
+// kha jaata. Machine par click → uska 14-din ka raasta (din-ba-din parking).
+function TeleMap({ dash, height = 540 }) {
+  const boxRef = useRef(null);
+  const mapRef = useRef(null);
+  const markersRef = useRef([]);
+  const infoRef = useRef(null);
+  const trailRef = useRef(null);
+  const didFitRef = useRef(false);
+  const [status, setStatus] = useState("loading");
+  const [selId, setSelId] = useState(null);
+  const apiKey = process.env.REACT_APP_GOOGLE_MAPS_KEY;
+
+  const points = ((dash && dash.machines) || []).filter((m) => m.last && m.last.lat != null);
+
+  useEffect(() => {
+    if (!apiKey) { setStatus("nokey"); return; }
+    let dead = false;
+    loadGmapsTele(apiKey).then((g) => {
+      if (dead || !boxRef.current) return;
+      if (!mapRef.current) {
+        mapRef.current = new g.maps.Map(boxRef.current, {
+          center: { lat: 21.2, lng: 81.6 }, zoom: 9,
+          mapTypeControl: true, streetViewControl: false, fullscreenControl: true,
+        });
+        infoRef.current = new g.maps.InfoWindow();
+      }
+      setStatus("ok");
+    }).catch(() => { if (!dead) setStatus("err"); });
+    return () => { dead = true; };
+  }, [apiKey]);
+
+  // Markers — machines badalne par naye sire se. Ek hi site par khadi 6-7
+  // machines ke pin ek doosre par na gir jayein isliye ~8m ka deterministic
+  // pankha (fan-out) — sirf dikhane ke liye, asli coordinate info me hai.
+  useEffect(() => {
+    if (status !== "ok" || !mapRef.current) return;
+    const g = window.google;
+    for (const m of markersRef.current) m.setMap(null);
+    markersRef.current = [];
+
+    points.forEach((m, i) => {
+      const color = m.health === "green" ? "#1E8E5A" : m.health === "amber" ? "#B27A0A" : "#C43A45";
+      const marker = new g.maps.Marker({
+        map: mapRef.current,
+        position: { lat: Number(m.last.lat) + (i % 4) * 0.00008, lng: Number(m.last.lng) + Math.floor(i / 4) * 0.00008 },
+        title: m.machine_name || m.unit_name,
+        icon: {
+          path: TELE_PIN, fillColor: color, fillOpacity: 1,
+          strokeColor: "#FFFFFF", strokeWeight: 2, scale: 1.6,
+          anchor: new g.maps.Point(12, 22),
+        },
+      });
+      marker.addListener("click", () => {
+        const y = m.yday;
+        infoRef.current.setContent(
+          `<div style="font:12px 'Segoe UI',sans-serif;min-width:190px">
+             <div style="font-weight:700">${m.machine_name || m.unit_name}</div>
+             ${m.machine_reg ? `<div style="color:#6B7280">${m.machine_reg}</div>` : ""}
+             <div style="margin-top:4px">${m.last.location || "—"}</div>
+             <div style="color:#6B7280">${m.last.data_at ? "data " + String(m.last.data_at).slice(0, 10) + " tak" : "data nahi aaya"}</div>
+             ${y ? `<div style="margin-top:4px">Kal: ${Math.floor(y.engine_sec / 3600)}:${String(Math.floor((y.engine_sec % 3600) / 60)).padStart(2, "0")} hrs · ${Math.round(y.consumed_l * 10) / 10} L</div>` : ""}
+             ${m.linked ? "" : `<div style="margin-top:4px;color:#B27A0A;font-weight:600">Machine se judi nahi — GPS → Jodna baaki</div>`}
+           </div>`);
+        infoRef.current.open(mapRef.current, marker);
+        setSelId(m.linked && m.equipment_id ? m.equipment_id : null);
+      });
+      markersRef.current.push(marker);
+    });
+
+    if (!didFitRef.current && points.length) {
+      const b = new g.maps.LatLngBounds();
+      points.forEach((m) => b.extend({ lat: Number(m.last.lat), lng: Number(m.last.lng) }));
+      mapRef.current.fitBounds(b, 60);
+      didFitRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, dash]);
+
+  // Chuni hui machine ka 14-din ka raasta — din-ba-din parking points ki line.
+  useEffect(() => {
+    if (status !== "ok" || !mapRef.current) return;
+    if (trailRef.current) { trailRef.current.setMap(null); trailRef.current = null; }
+    if (!selId) return;
+    let dead = false;
+    api.get(`/telematics/machine/${selId}?days=14`).then((r) => {
+      if (dead || !r || !r.success || !r.data.linked) return;
+      const pts = (r.data.daily || [])
+        .filter((d) => d.park_lat != null)
+        .map((d) => ({ lat: Number(d.park_lat), lng: Number(d.park_lng) }))
+        .reverse();
+      if (pts.length < 2) return;
+      const g = window.google;
+      trailRef.current = new g.maps.Polyline({
+        map: mapRef.current, path: pts,
+        strokeColor: "#4B45C4", strokeOpacity: 0.75, strokeWeight: 3,
+        icons: [{ icon: { path: g.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.2, strokeColor: "#4B45C4" }, offset: "100%" }],
+      });
+    }).catch(() => {});
+    return () => { dead = true; };
+  }, [selId, status]);
+
+  if (status === "nokey") return <Empty>Map ke liye REACT_APP_GOOGLE_MAPS_KEY chahiye — deploy config me set hota hai.</Empty>;
+  if (status === "err") return <Empty>Google Maps load nahi hua — internet/key check karo.</Empty>;
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: 11, color: T.t3, marginBottom: 8 }}>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: T.grn, marginRight: 4 }} />24 ghante me data</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: T.amb, marginRight: 4 }} />2-3 din purana</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: T.red, marginRight: 4 }} />sensor chup</span>
+        <span style={{ color: T.t4 }}>· Jagah = aakhri sync tak ki parking · pin par click → 14 din ka raasta</span>
+      </div>
+      <div ref={boxRef} style={{ height, borderRadius: 12, border: `1.5px solid ${T.b1}`, overflow: "hidden" }} />
+      {points.length === 0 && <Empty>Abhi kisi unit ke coordinates nahi aaye — pehla sync hone do.</Empty>}
+    </div>
+  );
+}
+
+// Dashboard — fleet ka roz ka saar + flags. Ankde /telematics/dashboard se,
+// wahi jo Sahayak ka machine_gps tool padhta hai — screen aur bot kabhi alag
+// number nahi bolenge.
+function TeleDash({ dash, onAction }) {
+  if (!dash) return <Empty>Loading...</Empty>;
+  const t = dash.tiles || {};
+  const machines = (dash.machines || []).slice().sort((a, b) => {
+    if (a.linked !== b.linked) return a.linked ? -1 : 1;
+    return ((b.yday && b.yday.engine_sec) || 0) - ((a.yday && a.yday.engine_sec) || 0);
+  });
+  const hhmm = (sec) => {
+    const s = Number(sec) || 0;
+    return s ? Math.floor(s / 3600) + ":" + String(Math.floor((s % 3600) / 60)).padStart(2, "0") : "—";
+  };
+  const review = async (id) => {
+    const r = await api.post(`/telematics/events/${id}/review`, { status: "ok" });
+    if (r && r.success === false) { window.alert(r.message || "Nahi hua"); return; }
+    onAction && onAction();
+  };
+  const dot = (h) => (
+    <span style={{ width: 8, height: 8, borderRadius: 4, display: "inline-block", background: h === "green" ? T.grn : h === "amber" ? T.amb : T.red }} />
+  );
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
+        <StatCard label="Kal ka kaam" value={hhmm(t.engine_sec_yday) + " hrs"}
+          sub={`${fmtN(t.diesel_yday)} L diesel (sensor)`} color={T.ind} icon={IcClock} />
+        <StatCard label="Sensors" value={`${t.online || 0}/${t.units || 0} online`}
+          sub={t.silent ? `${t.silent} chup — dekhna padega` : `${t.linked || 0} machine se jude`}
+          color={t.silent ? T.red : T.grn} icon={IcSignal} />
+        <StatCard label="Fuel drop bina jaanch" value={t.drops_pending || 0}
+          sub="engine band tha, level gira" color={t.drops_pending ? T.red : T.grn} icon={IcDrop} />
+        <StatCard label="Fill bina entry" value={t.fills_no_entry || 0}
+          sub="36 ghante nikal gaye, entry nahi" color={t.fills_no_entry ? T.amb : T.grn} icon={IcAlert} />
+      </div>
+
+      <Panel title="Fleet — kal ka kaam aur 7 din ka hisaab">
+        <Row head cols="16px 1.5fr 90px 90px 110px 90px 1.3fr">
+          <span></span><span>Machine</span><span>Kal chali</span><span>Diesel kal</span>
+          <span>L/hr (7d)</span><span>Fill / Drop</span><span>Jagah</span>
+        </Row>
+        {machines.map((m) => {
+          const over = m.lph7 != null && m.norm_lph != null && m.lph7 > m.norm_lph * 1.15;
+          return (
+            <Row key={m.unit_id} cols="16px 1.5fr 90px 90px 110px 90px 1.3fr">
+              {dot(m.health)}
+              <span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: m.linked ? T.t1 : T.t3 }}>
+                  {m.machine_name || m.unit_name}
+                </span>
+                {!m.linked && <span style={{ fontSize: 10, color: T.amb, fontWeight: 700 }}> · judi nahi</span>}
+                {!!m.has_fls && m.linked && <span style={{ fontSize: 10, color: T.t4 }}> · fuel sensor</span>}
+              </span>
+              <span style={{ fontFamily: "monospace", fontSize: 12 }}>{m.yday ? hhmm(m.yday.engine_sec) : "—"}</span>
+              <span style={{ fontFamily: "monospace", fontSize: 12 }}>{m.yday && m.yday.consumed_l > 0 ? fmtN(m.yday.consumed_l) + " L" : "—"}</span>
+              <span style={{ fontFamily: "monospace", fontSize: 12, color: over ? T.red : T.t2 }}>
+                {m.lph7 != null ? fmtN(m.lph7) : "—"}{m.norm_lph != null ? ` / ${fmtN(m.norm_lph)}` : ""}
+                {over && " ⚠"}
+              </span>
+              <span style={{ fontSize: 11.5 }}>{m.fills7 || 0} / <span style={{ color: m.drops7 ? T.red : T.t2 }}>{m.drops7 || 0}</span></span>
+              <span style={{ fontSize: 11.5, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {m.last.location || "—"}
+                {m.last.data_at && <span style={{ color: T.t4 }}> · {fmtD(m.last.data_at)}</span>}
+              </span>
+            </Row>
+          );
+        })}
+        <div style={{ padding: "8px 15px", fontSize: 10.5, color: T.t4 }}>
+          L/hr sirf un dinon se jinme engine 30 min se zyada chala — 10 minute wale din ka litre/ghanta shor hota hai, hisaab nahi.
+        </div>
+      </Panel>
+
+      {(dash.flags.drops.length > 0 || dash.flags.fills_no_entry.length > 0 || dash.flags.silent.length > 0) && (
+        <Panel title="Dhyan dene layak">
+          {dash.flags.drops.map((d) => (
+            <Row key={"d" + d.id} cols="110px 1.4fr 90px 1fr 100px">
+              <span style={{ fontSize: 11, color: T.t3 }}>{String(d.event_time).replace("T", " ").slice(5, 16)}</span>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>{d.machine_name || d.unit_name}<span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> · fuel drop</span></span>
+              <span style={{ fontFamily: "monospace", fontSize: 12, color: T.red, fontWeight: 700 }}>−{fmtN(d.litres)} L</span>
+              <span style={{ fontSize: 11, color: T.t3 }}>{d.location_text || "—"}</span>
+              <span style={{ textAlign: "right" }}><Btn size="sm" ghost onClick={() => review(d.id)}>Theek tha</Btn></span>
+            </Row>
+          ))}
+          {dash.flags.fills_no_entry.map((f) => (
+            <Row key={"f" + f.id} cols="110px 1.4fr 90px 1fr 100px">
+              <span style={{ fontSize: 11, color: T.t3 }}>{String(f.event_time).replace("T", " ").slice(5, 16)}</span>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>{f.machine_name || f.unit_name}<span style={{ fontWeight: 400, color: T.amb, fontSize: 10.5 }}> · diesel bhara, entry nahi</span></span>
+              <span style={{ fontFamily: "monospace", fontSize: 12 }}>{fmtN(f.litres)} L</span>
+              <span style={{ fontSize: 11, color: T.t3 }}>Fuel module me entry karwao</span>
+              <span></span>
+            </Row>
+          ))}
+          {dash.flags.silent.map((s, i) => (
+            <Row key={"s" + i} cols="110px 1.4fr 90px 1fr 100px">
+              <span></span>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>{s.machine_name || s.unit_name}<span style={{ fontWeight: 400, color: T.red, fontSize: 10.5 }}> · sensor chup hai</span></span>
+              <span></span>
+              <span style={{ fontSize: 11, color: T.t3 }}>aakhri data {s.last_data_at ? fmtD(s.last_data_at) : "kabhi nahi"} — vendor se poochho</span>
+              <span></span>
+            </Row>
+          ))}
+        </Panel>
+      )}
+    </div>
+  );
+}
+
 function TelematicsTab({ data, onReload, onNewMachine }) {
   const [configOpen, setConfigOpen] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -2800,14 +3056,27 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
   const [choice, setChoice] = useState({});
   const [fillReg, setFillReg] = useState({});
   const [syncing, setSyncing] = useState(false);
+  const [sub, setSub] = useState("dash");
+  const [dash, setDash] = useState(null);
   const syncMarkRef = useRef(null);
+
+  const hasAccount = !!(data && data.account);
+  const loadDash = useCallback(async () => {
+    const r = await api.get("/telematics/dashboard").catch(() => null);
+    setDash(r && r.success ? r.data : null);
+  }, []);
+  useEffect(() => { if (hasAccount) loadDash(); }, [hasAccount, loadDash]);
+
+  // Jod/unlink/review ke baad dono taaza — parent ka overview (jod list) aur
+  // apna dashboard (ankde) ek hi kadam me.
+  const reloadAll = useCallback(() => { onReload && onReload(true); loadDash(); }, [onReload, loadDash]);
 
   // Sync khatam hone ka pata last_sync_at badalne se chalta hai — service
   // use sirf aakhri me likhti hai. Tab tak har 20 sec me chupchaap reload.
   useEffect(() => {
     if (!syncing) return;
     const mark = (data && data.account && data.account.last_sync_at) || null;
-    if (mark !== syncMarkRef.current) { setSyncing(false); return; }
+    if (mark !== syncMarkRef.current) { setSyncing(false); loadDash(); return; }
     const t = setTimeout(() => onReload && onReload(true), 20000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2862,7 +3131,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
     });
     setBusyId(null);
     if (!r || r.success === false) { window.alert(r?.message || "Jod nahi paya"); return; }
-    onReload && onReload(true);
+    reloadAll();
   };
 
   const act = async (u, action) => {
@@ -2870,7 +3139,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
     const r = await api.post(`/telematics/units/${u.id}/${action}`, {});
     setBusyId(null);
     if (!r || r.success === false) { window.alert(r?.message || "Nahi hua"); return; }
-    onReload && onReload(true);
+    reloadAll();
   };
 
   const unlink = async (u) => {
@@ -2903,6 +3172,30 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
         <Notice>Vendor se data aa raha hai — 1-2 minute lagte hain (unka server ek waqt me ek hi report deta hai). Screen apne aap taaza ho jayegi.</Notice>
       )}
 
+      {/* ── sub-views: Dashboard | Map | Jod ── */}
+      <div style={{ display: "flex", gap: 6 }}>
+        {[
+          { id: "dash", l: "Dashboard" },
+          { id: "map", l: "Map" },
+          { id: "jod", l: "Jodna baaki", badge: pending.length || null },
+        ].map((x) => (
+          <button key={x.id} type="button" onClick={() => setSub(x.id)}
+            style={{
+              padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+              border: `1.5px solid ${sub === x.id ? T.ind : T.b1}`, borderRadius: 8,
+              background: sub === x.id ? T.indL : T.surface, color: sub === x.id ? T.ind : T.t3,
+              display: "inline-flex", alignItems: "center", gap: 6,
+            }}>
+            {x.l}
+            {x.badge > 0 && <span style={{ fontSize: 10, background: T.redL, color: T.red, borderRadius: 8, padding: "1px 6px", fontWeight: 700 }}>{x.badge}</span>}
+          </button>
+        ))}
+      </div>
+
+      {sub === "dash" && <TeleDash dash={dash} onAction={reloadAll} />}
+      {sub === "map" && <TeleMap dash={dash} />}
+
+      {sub === "jod" && (<>
       {/* ── jodna baaki ── */}
       <Panel title={`Jodna baaki — vendor ki ${pending.length} unit kisi machine se judi nahi`}>
         {pending.length === 0 && <Empty>Sab units judi hui hain. Nayi unit vendor panel me aate hi yahan khud dikh jayegi.</Empty>}
@@ -3026,6 +3319,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
           ))}
         </Panel>
       )}
+      </>)}
 
       <Modal open={configOpen} onClose={() => setConfigOpen(false)} title="Telematics settings" width={640}>
         <TeleConfigForm existing={acc}
