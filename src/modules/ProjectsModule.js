@@ -1422,8 +1422,19 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
     );
     window.open(`https://wa.me/?text=${msg}`,"_blank");
   };
+  // Maal approval se aage nikal chuka hai? (site ne bina approve hue hi
+  // order/receive mark kar diya). Approver ko ye dikhna zaroori hai — wo
+  // ab ho chuke kaam par mohar laga raha hai, aage ke kaam par nahi.
+  const _ahead = (stage==="Requested"&&mr.mat_status&&mr.mat_status!=="Pending")
+    ? ({Ordered:"order ho chuka hai",Received:"maal aa chuka hai",PartialReceived:"maal thoda aa chuka hai",Used:"maal lag bhi chuka hai"}[mr.mat_status]||("maal "+mr.mat_status+" hai"))
+    : null;
   return(
     <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden",borderLeft:"4px solid "+sc.c}}>
+      {_ahead&&(
+        <div style={{background:"#FEF3C7",borderBottom:"1px solid #FDE68A",padding:"5px 12px",fontSize:10.5,color:"#92400E",lineHeight:1.45}}>
+          <b>Dhyan do:</b> approval abhi baaki hai par {_ahead} — site ne pehle hi aage badha diya tha.
+        </div>
+      )}
       <div style={{padding:"11px 13px 8px"}}>
         {/* Top row: name + qty + status */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:4}}>
@@ -2058,14 +2069,24 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   const walletItems = mode==="approvals" ? (data.wallet||[]) : [];
 
   // ── MR filtered list (site + material search) ──
+  //
+  // "Requests" ka matlab hai APPROVAL abhi baaki hai — aur wo sirf mr_status
+  // batata hai. Pehle yahan server ka `stage` dekha jaata tha, par `stage`
+  // maal ki position hai (Ordered/Received) aur wo approval ko dhak deta tha:
+  // bina approve hue MR ko site ne "Ordered" mark kar diya to drawer me wo
+  // Requests se gayab ho jaata tha — Procurement page 7 pending dikhata aur
+  // ye drawer 0, aur PM us par approve kar hi nahi paata tha.
+  // Ab dono baatein alag: approval baaki = Requests, warna maal wala stage.
+  const mrAwaitingAppr = m => m.mr_status==="Pending"||m.mr_status==="Requested";
+  const mrAtStage = (m,s) => s==="Requested" ? mrAwaitingAppr(m) : (!mrAwaitingAppr(m)&&m.stage===s);
   const mrSiteList = ["All",...Array.from(new Set(data.mrs.map(m=>m.project_name||"—").filter(Boolean)))];
   const mrFiltered = s => data.mrs.filter(m=>{
-    if(m.stage!==s) return false;
+    if(!mrAtStage(m,s)) return false;
     if(mrSite!=="All"&&(m.project_name||"—")!==mrSite) return false;
     if(mrSearch&&!m.item_name.toLowerCase().includes(mrSearch.toLowerCase())) return false;
     return true;
   });
-  const mrByStage  = s => data.mrs.filter(m=>m.stage===s); // unfiltered count for badge
+  const mrByStage  = s => data.mrs.filter(m=>mrAtStage(m,s)); // unfiltered count for badge
 
   // ── PO splits ──
   // POs awaiting sign-off carry approval_status='Draft' (ProcurementModule's
