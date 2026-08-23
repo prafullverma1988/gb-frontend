@@ -7,6 +7,7 @@ import MaterialFlowDrawer from "../../components/MaterialFlowDrawer";
 import MRDetailDrawer from "../../components/MRDetailDrawer";
 import MaterialTransferTab from "../../components/MaterialTransferTab";
 import MaterialLedgerDrawer from "../../components/MaterialLedgerDrawer";
+import GrnIssueBlock from "../../components/GrnIssueBlock";
 import { T, fmtN, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
 
@@ -188,6 +189,10 @@ function TabMaterial({ project }) {
   const [directGlobal, setDirectGlobal] = useState({ vendor: "", challan: "", date: new Date().toLocaleDateString('en-CA'), received_by: "" });
   const [directRows, setDirectRows] = useState([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
   const [grnPhotos, setGrnPhotos] = useState([]);
+  // Problems spotted while unloading. Ordered tab = per material (each MR
+  // becomes its own GRN); Direct tab = one list for the whole delivery.
+  const [rowIssues, setRowIssues] = useState({});
+  const [directIssues, setDirectIssues] = useState([]);
   // Company-level GRN photo policy — true = at least one photo mandatory
   const [grnPhotoRequired, setGrnPhotoRequired] = useState(false);
   useEffect(() => {
@@ -545,8 +550,13 @@ function TabMaterial({ project }) {
           // Dual-unit billing basis (weighbridge weight), if the switch is on.
           alt_qty:  dual?.altOn && Number(dual.alt_qty) > 0 ? parseFloat(dual.alt_qty) : null,
           alt_unit: dual?.altOn && Number(dual.alt_qty) > 0 && dual.alt_unit ? dual.alt_unit : null,
+          // Problems seen on this material — land on the GRN this call creates.
+          issues: (rowIssues[mr.id] || []).length ? rowIssues[mr.id] : null,
         });
-        if (res.success) { setGrnDone(p => [...p, mr.id]); okCount += 1; }
+        if (res.success) {
+          setGrnDone(p => [...p, mr.id]); okCount += 1;
+          setRowIssues(p => { const n = { ...p }; delete n[mr.id]; return n; });
+        }
         else failures.push(`${mr.item_name}: ${res.message||"failed"}`);
       } catch (e) { failures.push(`${mr.item_name}: ${e.message}`); }
     }
@@ -593,6 +603,7 @@ function TabMaterial({ project }) {
         received_by: directGlobal.received_by || meUser?.name || null,
         received_date: directGlobal.date || new Date().toISOString().split("T")[0],
         photo_urls: grnPhotos.length ? grnPhotos : null,
+        issues: directIssues.length ? directIssues : null,
         items: validRows.map(r => ({
           po_item_id: null,
           description: r.item_name,
@@ -609,6 +620,7 @@ function TabMaterial({ project }) {
         setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags"}]);
         setDirectGlobal({vendor:"", challan:"", date: new Date().toLocaleDateString('en-CA'), received_by:""});
         setGrnPhotos([]);
+        setDirectIssues([]);
         // Reload MRs + direct GRNs + ledger + inventory
         loadMRs();
         // Reload ledger + inventory
@@ -1380,6 +1392,14 @@ function TabMaterial({ project }) {
                                         <DualUnitToggle units={UNITS_MR} primaryUnit={mr.unit} itemName={mr.item_name} qty={row.received_qty}
                                           value={row.dual} onChange={d=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],dual:d}}))}/>
                                       )}
+                                      {/* Har MR ka apna GRN banta hai, isliye issue bhi per-material */}
+                                      {recv>0&&(
+                                        <div style={{gridColumn:"1 / -1",marginTop:6}}>
+                                          <GrnIssueBlock compact title={(mr.item_name||"Is material")+" me problem?"}
+                                            value={rowIssues[mr.id]||[]}
+                                            onChange={v=>setRowIssues(p=>({...p,[mr.id]:v}))}/>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -1491,6 +1511,10 @@ function TabMaterial({ project }) {
                     style={{width:"100%",padding:"9px",borderRadius:7,border:"1.5px dashed "+T.bluM,background:"transparent",color:T.blu,fontSize:12,cursor:"pointer",marginTop:6,fontWeight:600,fontFamily:"inherit"}}>
                     + Add Another Item
                   </button>
+                  {/* Ek hi GRN banta hai is tab me, to issue poori delivery par */}
+                  <div style={{marginTop:12}}>
+                    <GrnIssueBlock value={directIssues} onChange={setDirectIssues}/>
+                  </div>
                 </div>
               )}
 
@@ -1711,6 +1735,12 @@ function TabMaterial({ project }) {
                         <div>
                           <span style={{fontSize:13,fontWeight:700,color:isOpen?"white":T.t1}}>{mat.material_name}</span>
                           <span style={{fontSize:10.5,color:isOpen?"rgba(255,255,255,0.5)":T.t4,marginLeft:8}}>{mat.unit} · {mat.receipts?.length||0} GRN · {mat.usage?.length||0} used entries</span>
+                          {Number(mat.open_issues)>0&&(
+                            <span title="Is material ki kisi delivery me open issue hai"
+                              style={{fontSize:10,fontWeight:700,color:T.red,background:T.redL,border:"1px solid "+T.redM,borderRadius:10,padding:"1px 8px",marginLeft:8}}>
+                              ⚠ {mat.open_issues}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div style={{display:"flex",gap:20,alignItems:"center"}}>
@@ -1845,7 +1875,15 @@ function TabMaterial({ project }) {
                               {/* Remark/Task */}
                               <div style={{fontSize:12,color:T.t1}}>
                                 {isGRN
-                                  ? <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.grnL,color:T.grn,fontWeight:600}}>GRN Received</span>
+                                  ? <>
+                                      <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.grnL,color:T.grn,fontWeight:600}}>GRN Received</span>
+                                      {Number(row.open_issues)>0&&(
+                                        <span title="Is delivery me open issue hai — kholne ke liye click karo"
+                                          style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.redL,color:T.red,fontWeight:700,marginLeft:6,border:"1px solid "+T.redM}}>
+                                          ⚠ {row.open_issues} issue
+                                        </span>
+                                      )}
+                                    </>
                                   : <span>{row.task_name?<span style={{fontSize:10,color:T.t4,marginRight:4}}>{row.task_no}</span>:""}{row.task_name||""}{row.remark?<span style={{color:T.t3}}>{row.task_name?" · ":""}{row.remark}</span>:<span style={{color:T.t4,fontSize:10}}>{!row.task_name?"Project level":""}</span>}</span>
                                 }
                               </div>

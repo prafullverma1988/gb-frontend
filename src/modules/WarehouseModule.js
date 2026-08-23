@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
+import GrnIssueBlock from "../components/GrnIssueBlock";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -387,7 +388,7 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
       const pending=Math.max(0,Number(it.qty||0)-Number(it.received_qty||0));
       items[it.id]={received_qty:pending,rate:Number(it.rate||0)};
     });
-    return {challan:"",date:today(),items};
+    return {challan:"",date:today(),items,issues:[]};
   };
   const updDraft=(mr,patch)=>setDrafts(p=>({...p,[mr.id]:{...getDraft(mr),...patch}}));
   const updItem=(mr,itemId,patch)=>{
@@ -406,6 +407,7 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
     setSavingMR(p=>({...p,[mr.id]:true}));
     const res=await api.post(`/warehouse/mr/${mr.id}/grn`,{
       challan:d.challan.trim(),vendor:mr.vendor||null,items,
+      issues:(d.issues||[]).length?d.issues:null,
     });
     setSavingMR(p=>({...p,[mr.id]:false}));
     if(res.success){
@@ -493,6 +495,7 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
   // Tab 3: Direct GRN state (no prior MR) — material from Library, challan required
   const [dirF,setDirF]=useState({date:today(),vendor:"",po_no:"",challan:"",remark:""});
   const [dirItems,setDirItems]=useState([{lib_id:null,name:"",unit:"",qty:"",rate:""}]);
+  const [dirIssues,setDirIssues]=useState([]);
   const [dirSaving,setDirSaving]=useState(false);
   const dirLibOpts=library.map(m=>({id:m.id,name:`${m.name}${m.unit?` · ${m.unit}`:""}`}));
   const findDirLib=(id)=>library.find(l=>String(l.id)===String(id));
@@ -547,10 +550,11 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
       challan:dirF.challan.trim(),
       remark:dirF.remark.trim()||null,
       items:cleanItems,
+      issues:dirIssues.length?dirIssues:null,
     });
     setDirSaving(false);
     submitDirectRef.current=false;
-    if(res.success){onSaved&&onSaved(res.data);onClose();}
+    if(res.success){setDirIssues([]);onSaved&&onSaved(res.data);onClose();}
     else alert(res.message||"Direct GRN save failed");
   };
 
@@ -666,6 +670,9 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
                       <div style={{fontSize:10.5,color:T.amb,fontWeight:600,marginTop:6,padding:"5px 8px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:5}}>
                         ⚠️ Receive Qty mandatory hai — vendor ne kitna actual diya wo fill karo (full delivery par ordered qty pre-filled hai)
                       </div>
+                      <div style={{marginTop:8}}>
+                        <GrnIssueBlock value={d.issues||[]} onChange={v=>updDraft(mr,{issues:v})}/>
+                      </div>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:9,borderTop:`1px dashed ${T.b1}`}}>
                         <span style={{fontSize:12,color:T.t3}}>Total: <b style={{color:T.grn,fontSize:13}}>₹{fmtN(draftTotal)}</b></span>
                         <Btn onClick={()=>submitMR(mr)} disabled={isSaving} c={T.grn} icon={IcIn} size="sm">{isSaving?"Saving...":"Record GRN & Update Stock"}</Btn>
@@ -745,6 +752,9 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
           </button>
           <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
             💡 Material library se aata hai aur unit locked rahega — change karne ke liye Library → Materials me edit karein. Rate auto-fill last purchase se.
+          </div>
+          <div style={{marginTop:12}}>
+            <GrnIssueBlock value={dirIssues} onChange={setDirIssues}/>
           </div>
         </div>
       )}
