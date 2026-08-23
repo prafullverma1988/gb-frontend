@@ -1877,7 +1877,11 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     setAutoInvLoading(null);
   };
 
-  const load=async()=>{
+  // force=true → 30 s wala snapshot chhod kar seedha server se lao.
+  // "↻ Refresh" ka matlab hi yahi hai; pehle wo bhi wahi cache padh leta
+  // tha, isliye Settings me approval role badalne ke baad button dabane par
+  // bhi kuch nahi badalta tha (server ka apna 15 s cache alag se upar).
+  const load=async(force=false)=>{
     // Stale-while-revalidate: if we have a cached snapshot for this
     // mode, paint it INSTANTLY (no spinner), then silently refresh in
     // the background. Cache TTL is 30 s so the data is at most that
@@ -1885,7 +1889,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     // apiCache.invalidate("approval-drawer") below so cache is
     // dropped immediately on user action.
     const cacheKey = "approval-drawer:" + mode;
-    const cached = apiCache.get(cacheKey);
+    if (force) apiCache.invalidate("approval-drawer");
+    const cached = force ? null : apiCache.get(cacheKey);
     if (cached) {
       setData(cached);
       setLoading(false);  // skip the spinner — show stale data instantly
@@ -2884,7 +2889,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
           <div style={{fontSize:15,fontWeight:700,color:"white"}}>{drawerTitle}</div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <button onClick={load} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:10.5,padding:"3px 9px",borderRadius:5}}>↻ Refresh</button>
+            <button onClick={()=>load(true)} disabled={loading} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:loading?"default":"pointer",color:loading?"rgba(255,255,255,0.35)":"rgba(255,255,255,0.7)",fontSize:10.5,padding:"3px 9px",borderRadius:5}}>{loading?"↻ …":"↻ Refresh"}</button>
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",padding:4}}><IcX size={15}/></button>
           </div>
         </div>
