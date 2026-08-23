@@ -1984,19 +1984,36 @@ function ProcurementModule(){
     setRFQs(prev=>prev.map(r=>{if(r.id!==rfqId)return r;const nv=[...r.vendors];nv[vi]={...nv[vi],status:"Submitted",rates:rates.map(rt=>({rate:Number(rt.rate)||null,remarks:rt.remark}))};return{...r,vendors:nv};}));
     setPunchTarget(null);setPunchVendorIdx(null);
   };
+  // Server ka jawab padhna ZAROORI hai. Pehle ye teeno seedha screen par
+  // maan lete the ki ho gaya — server "aapka turn nahi" keh kar mana kar de
+  // to bhi row Approved dikhne lagti thi aur tab Approved par chhalaang laga
+  // deti thi. Wahin se "Order" ka button milta tha, aur MR bina approval ke
+  // Ordered/Received ho jaata tha (ratna khanij ke 7 MR isi tarah bane;
+  // MR-5 to reject hone ke baad bhi order ho gaya). Ab mana hone par kuch
+  // nahi badalta aur server ki wajah screen par dikhti hai.
+  const _apiFail=(r,fallback)=>{
+    if(r&&r.success===false){ window.alert(r.message||fallback); return true; }
+    return false;
+  };
   const saveApproveMR=async(id,qty,note)=>{
-    await api.patch("/procurement/mrs/"+id+"/approve",{action:"Approved",approved_qty:qty});
+    const r=await api.patch("/procurement/mrs/"+id+"/approve",{action:"Approved",approved_qty:qty})
+      .catch(e=>({success:false,message:e?.message||"Approve fail"}));
+    if(_apiFail(r,"Approve nahi hua")) return;
     setMRs(p=>p.map(m=>m.id===id?{...m,mrStatus:"Approved",approvedQty:qty}:m));
     setApproveTgt(null);
     setMrTab("Approved");
   };
   const saveRejectMR=async(id,reason)=>{
-    await api.patch("/procurement/mrs/"+id+"/approve",{action:"Rejected",rejected_reason:reason});
+    const r=await api.patch("/procurement/mrs/"+id+"/approve",{action:"Rejected",rejected_reason:reason})
+      .catch(e=>({success:false,message:e?.message||"Reject fail"}));
+    if(_apiFail(r,"Reject nahi hua")) return;
     setMRs(p=>p.map(m=>m.id===id?{...m,mrStatus:"Rejected",rejectedReason:reason}:m));
     setRejectTgt(null);
   };
   const saveMarkReceived=async(id,rQty,challan)=>{
-    const res=await api.patch("/procurement/mrs/"+id+"/mark-received",{challan_no:challan,received_qty:rQty});
+    const res=await api.patch("/procurement/mrs/"+id+"/mark-received",{challan_no:challan,received_qty:rQty})
+      .catch(e=>({success:false,message:e?.message||"Receive fail"}));
+    if(_apiFail(res,"Received mark nahi hua")) return;
     const newStatus=res.is_partial?"PartialReceived":"Received";
     setMRs(p=>p.map(m=>m.id===id?{...m,matStatus:newStatus,receivedQty:rQty,challan}:m));
     setMarkRecvTgt(null);
@@ -2043,9 +2060,20 @@ function ProcurementModule(){
   };
   const saveBulkOrder=async(medium,vendor,delivery,items)=>{
     if(medium==="manual"){
-      await Promise.all(items.map(m=>api.patch("/procurement/mrs/"+m.id+"/mark-ordered",{vendor,expected_delivery:delivery,order_type:"Manual"})));
-      setMRs(p=>p.map(m=>items.find(i=>i.id===m.id)?{...m,matStatus:"Ordered",vendor,expectedDelivery:delivery}:m));
-      setMrTab("Ordered");
+      // Server ab bina approval wale MR par order rokta hai — jo ruk gaye
+      // unhe Ordered dikhana jhooth hoga, isliye sirf jo sach me hue wahi.
+      const done=[],failed=[];
+      for(const m of items){
+        const r=await api.patch("/procurement/mrs/"+m.id+"/mark-ordered",{vendor,expected_delivery:delivery,order_type:"Manual"})
+          .catch(e=>({success:false,message:e?.message||"Order fail"}));
+        if(r&&r.success===false) failed.push((m.mrNum||("MR-"+m.id))+" "+(m.item||"")+": "+(r.message||"order nahi hua"));
+        else done.push(m.id);
+      }
+      if(failed.length) window.alert((done.length?done.length+" order ho gaye. ":"")+"Ye nahi hue —\n"+failed.join("\n"));
+      if(done.length){
+        setMRs(p=>p.map(m=>done.includes(m.id)?{...m,matStatus:"Ordered",vendor,expectedDelivery:delivery}:m));
+        setMrTab("Ordered");
+      }
     } else if(medium==="po"){
       setCreatePOPrefill(items);
       setShowCreatePO(true);
