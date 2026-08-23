@@ -1383,6 +1383,14 @@ const MR_STAGE_COLORS={
 //   _escalated / _escalatedFrom  agar level apne-aap upar gaya (project me wo role hai hi nahi)
 // Sirf role dikhana kaafi nahi tha — admin ko pata hi nahi chalta tha ki
 // rukka kis par hai, aur kyun uske paas aaya.
+// "project_manager" → "Project Manager". Backend pending_role pehle se
+// saaf bhejta hai; ye sirf workflow settings se aaye kachche slug ke liye hai.
+const rolesLabel=(v)=>{
+  let arr=v;
+  if(typeof v==="string"){ try{ arr=JSON.parse(v); }catch(_){ arr=[v]; } }
+  if(!Array.isArray(arr)) arr=arr?[arr]:[];
+  return arr.map(r=>String(r).replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase())).join(" / ");
+};
 const waitingText=(it)=>{
   if(!it) return null;
   const role=it._waitingOn||it.pending_role||"";
@@ -1915,8 +1923,15 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           // back to the legacy admin gate while a workflow is active).
           api.get("/approvals/workflows").catch(()=>({success:false})),
         ]);
-        const wfOn={};
-        if(wfRes.success&&Array.isArray(wfRes.data)) wfRes.data.forEach(w=>{wfOn[w.module]=!!w.enabled;});
+        const wfOn={},wfRole={};
+        if(wfRes.success&&Array.isArray(wfRes.data)) wfRes.data.forEach(w=>{
+          wfOn[w.module]=!!w.enabled;
+          // L1 ke role bhi rakho — engine ne abhi is item ko pakda na ho to
+          // kam se kam "kaun approve karega" naam se bata sakein, "approver"
+          // jaisa khokhla shabd nahi.
+          const l1=(w.levels||[]).find(l=>Number(l.level_order)===1)||(w.levels||[])[0];
+          if(l1) wfRole[w.module]=rolesLabel(l1.allowed_roles||l1.role);
+        });
         const next = {
           mrs:    mrRes.success  ? mrRes.data   : [],
           pos:    poRes.success  ? poRes.data   : [],
@@ -1924,7 +1939,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           grns:   grnRes.success ? grnRes.data  : [],
           transfers: trRes.success ? trRes.data  : [],
           finance:[], centralized: apRes.success ? (apRes.data||[]) : [],
-          wfOn,
+          wfOn, wfRole,
         };
         setData(next);
         apiCache.set(cacheKey, next, 30000);
@@ -2097,7 +2112,13 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // POs awaiting sign-off carry approval_status='Draft' (ProcurementModule's
   // vocabulary) — legacy rows may use 'Pending'/NULL. Without 'Draft' here the
   // engine counted them in the tile while the drawer hid them (tile≠drawer).
-  const pendingPOs  = data.pos.filter(p=>!p.approval_status||p.approval_status==="Pending"||p.approval_status==="Draft");
+  // Cancel/close ho chuka PO kabhi "approval ka intezar" nahi karta — uska
+  // approval_status 'Draft' hi pada rehta hai, isliye wo drawer me hamesha
+  // ke liye khada dikhta tha (engine use kabhi track nahi karta, isliye uspar
+  // koi approver bhi nahi hota tha). Backend ka self-heal ye baat pehle se
+  // jaanta hai; screen ab uske saath hai.
+  const poDead = p => ["Cancelled","Closed"].includes(p.po_status||p.poStatus);
+  const pendingPOs  = data.pos.filter(p=>!poDead(p)&&(!p.approval_status||p.approval_status==="Pending"||p.approval_status==="Draft"));
   const approvedPOs = data.pos.filter(p=>p.approval_status==="Approved");
 
   // ── Warehouse splits ──
@@ -2140,6 +2161,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // (Approved/Ordered/Delivered, approved POs) always show everything.
   const mrScoped=(s)=>mrFiltered(s).filter(m=>apprScope==="all"||s!=="Requested"||canActOnMr(m.id));
   const pendingPOsScoped=apprScope==="all"?pendingPOs:pendingPOs.filter(p=>canActOnPo(p.id));
+  // Engine ne is item ko abhi tracked nahi kiya (ya karega hi nahi) to bhi
+  // "Waiting on approver" likhna kuch nahi batata. Aise me Settings me
+  // likha L1 ka role dikhate hain — "Waiting on Project Manager / Admin".
+  const waitFor=(mod,it)=>waitingText(it)||(data.wfRole&&data.wfRole[mod])||"approver";
 
   // ── My/All toggle badge counts ──
   // Material sources (MR/PO) belong to the Materials drawer — exclude them from
@@ -3026,7 +3051,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                   msg={mrStage==="Requested"?(apprScope==="my"?"Koi MR aapke approval ke liye nahi!":"Koi pending request nahi!"):"Koi "+mrStage.toLowerCase()+" MR nahi!"}
                   sub={(mrSite!=="All"||mrSearch)?"Filter change karke dekhein":apprScope==="my"&&mrStage==="Requested"?"\"All\" pe switch karke poori list dekhein":"Is stage mein koi item nahi"}/>
               :mrScoped(mrStage).map(mr=><MRFlowCard key={mr.id} mr={mr} stage={mrStage}
-                  waitingOn={!canActOnMr(mr.id)?(waitingText(mrWaitMap.get(String(mr.id)))||"approver"):null}
+                  waitingOn={!canActOnMr(mr.id)?waitFor("Material Request",mrWaitMap.get(String(mr.id))):null}
                   waitingNote={!canActOnMr(mr.id)?escalationNote(mrWaitMap.get(String(mr.id))):null}
                   onApprove={canActOnMr(mr.id)?approveMR:null} onReject={canActOnMr(mr.id)?rejectMR:null} acting={acting} rejectId={rejectId} setRejectId={setRejectId}
                   rejectNote={rejectNote} setRejectNote={setRejectNote}
@@ -3077,7 +3102,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
               :(poView==="pending"?pendingPOsScoped:approvedPOs).map(po=>(
                 <POApprovalCard key={po.id} po={po} approved={poView==="approved"} acting={acting}
                   canAct={canActOnPo(po.id)}
-                  waitingOn={poView==="pending"&&!canActOnPo(po.id)?(waitingText(poWaitMap.get(String(po.id)))||"approver"):null}
+                  waitingOn={poView==="pending"&&!canActOnPo(po.id)?waitFor("Purchase Order (PO)",poWaitMap.get(String(po.id))):null}
                   waitingNote={poView==="pending"&&!canActOnPo(po.id)?escalationNote(poWaitMap.get(String(po.id))):null}
                   onApprove={async()=>{
                     setActing(p=>({...p,["po"+po.id]:"approving"}));
