@@ -8,6 +8,7 @@ import MRDetailDrawer from "../../components/MRDetailDrawer";
 import MaterialTransferTab from "../../components/MaterialTransferTab";
 import MaterialLedgerDrawer from "../../components/MaterialLedgerDrawer";
 import GrnIssueBlock from "../../components/GrnIssueBlock";
+import { loadPhotoPolicy, policyFor, fileInputProps } from "../../utils/photoPolicy";
 import { T, fmtN, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
 
@@ -193,13 +194,30 @@ function TabMaterial({ project }) {
   // becomes its own GRN); Direct tab = one list for the whole delivery.
   const [rowIssues, setRowIssues] = useState({});
   const [directIssues, setDirectIssues] = useState([]);
-  // Company-level GRN photo policy — true = at least one photo mandatory
-  const [grnPhotoRequired, setGrnPhotoRequired] = useState(false);
-  useEffect(() => {
-    api.get("/settings/company").then(r => {
-      if (r?.success && r.data) setGrnPhotoRequired(Number(r.data.grn_photo_required) === 1);
-    }).catch(() => {});
-  }, []);
+  // Company ki photo policy (Settings → Photo Settings). Is tab me teen
+  // alag jagah photo lagti hai aur teeno ki apni setting hai:
+  //   grn               — vendor se maal receive
+  //   material_issue    — warehouse se aaya maal receive
+  //   material_transfer — doosri site se aaya maal receive
+  const [photoPol, setPhotoPol] = useState(null);
+  useEffect(() => { loadPhotoPolicy().then(setPhotoPol); }, []);
+  const polFor = (key) => policyFor(photoPol, key);
+  // Photo ka box GRN/issue/transfer teeno ke liye ek hi hai, isliye uska
+  // "required" nishaan sabse sakht setting par chalta hai — jo bhi flow
+  // abhi khula ho, user ko pehle hi pata chal jaata hai ki photo maangi
+  // jaayegi, submit par 400 khaane ke baad nahi.
+  const grnPhotoRequired = ["grn", "material_issue", "material_transfer"]
+    .some(k => polFor(k).mode === "required");
+  const grnPhotoCameraOnly = ["grn", "material_issue", "material_transfer"]
+    .some(k => polFor(k).source === "camera");
+  // Submit se pehle ki rok. true = ruk jao. Server par bhi wahi check hai
+  // (utils/photoPolicy.js) — yahan sirf isliye ki user ko form bharne ke
+  // baad 400 na mile.
+  const photoBlocked = (key, label) => {
+    if (polFor(key).mode !== "required" || grnPhotos.length > 0) return false;
+    alert(`Company setting: ${label} ke saath kam se kam ek photo lagani zaroori hai.`);
+    return true;
+  };
   // (Add-new-vendor flow now handled inside <LibrarySelect type="supplier"/>)
   const [grnSaving, setGrnSaving] = useState(false);
   const [grnDone, setGrnDone] = useState([]);
@@ -429,10 +447,7 @@ function TabMaterial({ project }) {
   }, [showGRN, projectId, loadPendingTransfers, loadPendingIssues]);
 
   const handleReceiveTransfer = async (tr) => {
-    if (grnPhotoRequired && grnPhotos.length === 0) {
-      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
-      return;
-    }
+    if (photoBlocked("material_transfer", "Stock transfer receive")) return;
     setTrReceiving(true);
     try {
       const items = (tr.items || []).map(it => ({
@@ -453,10 +468,7 @@ function TabMaterial({ project }) {
   };
 
   const handleReceiveIssue = async (iss) => {
-    if (grnPhotoRequired && grnPhotos.length === 0) {
-      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
-      return;
-    }
+    if (photoBlocked("material_issue", "Material issue receive")) return;
     setIssueReceiving(true);
     try {
       const items = (iss.items || []).map(it => ({
@@ -480,10 +492,7 @@ function TabMaterial({ project }) {
   const handleReceiveMR = async (mrId) => {
     const row = grnRows[mrId] || {};
     if (!row.challan) { alert("Challan number required"); return; }
-    if (grnPhotoRequired && grnPhotos.length === 0) {
-      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
-      return;
-    }
+    if (photoBlocked("grn", "Maal receive (GRN)")) return;
     setGrnSaving(true);
     try {
       const mr = orderedMRs.find(m => m.id === mrId);
@@ -524,10 +533,7 @@ function TabMaterial({ project }) {
   const handleReceiveVendor = async (vendor) => {
     const meta = vendorReceive[vendor] || {};
     if (!meta.challan || !meta.challan.trim()) { alert("Challan number required"); return; }
-    if (grnPhotoRequired && grnPhotos.length === 0) {
-      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
-      return;
-    }
+    if (photoBlocked("grn", "Maal receive (GRN)")) return;
     const targetMRs = orderedMRs.filter(mr =>
       (mr.linked_vendor || "— Unassigned —") === vendor &&
       !grnDone.includes(mr.id) &&
@@ -588,10 +594,7 @@ function TabMaterial({ project }) {
     if (!directGlobal.challan) { alert("Challan number daalo"); return; }
     const validRows = directRows.filter(r => r.item_name && Number(r.qty) > 0);
     if (!validRows.length) { alert("Kam se kam ek material + qty required hai"); return; }
-    if (grnPhotoRequired && grnPhotos.length === 0) {
-      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
-      return;
-    }
+    if (photoBlocked("grn", "Maal receive (GRN)")) return;
     setGrnSaving(true);
     try {
       const res = await api.post("/procurement/grns", {
@@ -1542,7 +1545,8 @@ function TabMaterial({ project }) {
                     onMouseLeave={e=>e.currentTarget.style.borderColor=T.b2}>
                     <span style={{fontSize:18}}>📷</span>
                     <span style={{fontSize:10,color:T.t4,fontWeight:600}}>Add</span>
-                    <input type="file" accept="image/*" capture="environment" multiple style={{display:"none"}}
+                    <input {...fileInputProps({ source: grnPhotoCameraOnly ? "camera" : "both" }, { multiple: true })}
+                      style={{display:"none"}}
                       onChange={e=>{
                         const files=Array.from(e.target.files||[]);
                         files.forEach(file=>{
@@ -1556,7 +1560,11 @@ function TabMaterial({ project }) {
                       }}/>
                   </label>
                 </div>
-                <div style={{marginTop:5,fontSize:10,color:T.t4}}>Camera opens on mobile · Multi-select supported</div>
+                <div style={{marginTop:5,fontSize:10,color:T.t4}}>
+                  {grnPhotoCameraOnly
+                    ? "Company setting: sirf live camera — mobile par gallery nahi khulegi"
+                    : "Camera opens on mobile · Multi-select supported"}
+                </div>
               </div>
 
             </div>{/* end scroll body */}
