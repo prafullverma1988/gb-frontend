@@ -5,6 +5,7 @@ import { Credit } from "../components/Credit";
 import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
+import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -1413,23 +1414,33 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
     const d=new Date(); d.setDate(d.getDate()+3);
     return d.toISOString().slice(0,10);
   });
+  // Site par maal kise dena hai — vendor ko yahi naam/number jaate hain.
+  const [contacts,setContacts]=useState([]);
   // (Add-new-vendor flow now handled inside <LibrarySelect type="supplier"/>)
   const sc=MR_STAGE_COLORS[stage]||MR_STAGE_COLORS.Requested;
   const act=acting[mr.id];
   const isReject=rejectId===mr.id;
   const fmtDate=d=>{if(!d)return"—";const dt=new Date(d);return dt.toLocaleDateString("en-IN",{day:"numeric",month:"short"});};
-  const onWhatsApp=()=>{
-    const msg=encodeURIComponent(
-      `*Material Order Request*\n\n`+
-      `Item: ${mr.item_name}\n`+
-      `Qty: ${mr.quantity} ${mr.unit}\n`+
-      `Project: ${mr.project_name||"—"}\n`+
-      `MR No: ${mr.mr_number||"—"}\n`+
-      (mr.required_date?`Required by: ${fmtDate(mr.required_date)}\n`:"")+
-      (mr.notes?`Notes: ${mr.notes}\n`:"")
-    );
-    window.open(`https://wa.me/?text=${msg}`,"_blank");
-  };
+  // WhatsApp order = wahi manual order, bas bhejne ka zariya WhatsApp hai.
+  // Pehle ye button seedha wa.me khol deta tha — vendor ko na receiving
+  // person ka number jaata tha aur na MR "Ordered" hoti thi. Ab dono ek hi
+  // form se hote hain (mobile OrderSheet jaisa), isliye message me contact
+  // bhi jaata hai aur stage bhi sach bolta hai.
+  const buildWaMsg=()=>encodeURIComponent(
+    `*Material Order Request*\n\n`+
+    `Item: ${mr.item_name}\n`+
+    `Qty: ${mr.quantity} ${mr.unit}\n`+
+    `Project: ${mr.project_name||"—"}\n`+
+    `MR No: ${mr.mr_number||"—"}\n`+
+    (manualDelivery?`Required by: ${fmtDate(manualDelivery)}\n`:(mr.required_date?`Required by: ${fmtDate(mr.required_date)}\n`:""))+
+    (mr.notes?`Notes: ${mr.notes}\n`:"")+
+    (contacts.length
+      ? `\nReceiving contact at site:\n`+contacts.map(c=>`• ${c.name}${(c.designation||c.role)?` (${c.designation||c.role})`:""} — ${c.phone}`).join("\n")+"\n"
+      : "")
+  );
+  // Vendor + delivery + kam se kam ek receiving contact — teeno ke bina
+  // server order maanta hi nahi, isliye button pehle hi band rakhte hain.
+  const canOrder = !act && !!manualVendor.trim() && !!manualDelivery && hasReceivingContact(contacts);
   // Maal approval se aage nikal chuka hai? (site ne bina approve hue hi
   // order/receive mark kar diya). Approver ko ye dikhna zaroori hai — wo
   // ab ho chuke kaam par mohar laga raha hai, aage ke kaam par nahi.
@@ -1520,12 +1531,33 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
                     style={{width:"100%",padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               </div>
+              <div style={{marginBottom:7}}>
+                <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3}}>Receiving Person *</label>
+                <div style={{fontSize:9.5,color:T.t4,marginBottom:5,lineHeight:1.4}}>
+                  Maal site par aane par vendor kise call karega — naam aur number order ke saath jayega.
+                </div>
+                <ReceivingContacts theme={T} compact projectIds={[mr.project_id]}
+                  value={contacts} onChange={setContacts}/>
+              </div>
               <div style={{display:"flex",gap:5}}>
                 <button onClick={()=>{setShowManual(false);setManualVendor("");}} disabled={!!act}
                   style={{flex:1,padding:"6px",borderRadius:5,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,cursor:"pointer"}}>Cancel</button>
-                <button onClick={()=>onMarkOrdered(mr.id, manualVendor.trim(), manualDelivery)}
-                  disabled={!!act || !manualVendor.trim() || !manualDelivery}
-                  style={{flex:2,padding:"6px",borderRadius:5,background:(!manualVendor.trim()||!manualDelivery||act)?"#9CA3AF":T.blu,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:(!manualVendor.trim()||!manualDelivery||act)?"not-allowed":"pointer"}}>
+                <button onClick={async()=>{
+                    // Order pehle server par, message baad me — mana ho jaye
+                    // to vendor ko jhootha message na chala jaye.
+                    const ok=await onMarkOrdered(mr.id, manualVendor.trim(), manualDelivery, contacts, "WhatsApp");
+                    if(ok) window.open(`https://wa.me/?text=${buildWaMsg()}`,"_blank");
+                  }}
+                  disabled={!canOrder}
+                  title="MR Ordered mark hogi aur WhatsApp message khulega"
+                  style={{flex:2,padding:"6px",borderRadius:5,background:canOrder?"#25D366":"#9CA3AF",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:canOrder?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="white"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                  {act==="ordering"?"Saving...":"WhatsApp par bhejo"}
+                </button>
+                <button onClick={()=>onMarkOrdered(mr.id, manualVendor.trim(), manualDelivery, contacts, "Manual")}
+                  disabled={!canOrder}
+                  title="Order call par ho chuka hai — sirf mark karo"
+                  style={{flex:2,padding:"6px",borderRadius:5,background:canOrder?T.blu:"#9CA3AF",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:canOrder?"pointer":"not-allowed"}}>
                   {act==="ordering"?"Saving...":"✓ Mark as Ordered"}
                 </button>
               </div>
@@ -1536,7 +1568,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
                 style={{flex:1,padding:"9px",borderRadius:7,background:T.bluL||"#EFF6FF",border:`1px solid ${T.bluM||"#BFDBFE"}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 📋 Manual Order
               </button>
-              <button onClick={onWhatsApp}
+              <button onClick={()=>setShowManual(true)}
                 style={{flex:1,padding:"9px",borderRadius:7,background:"#25D366",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 <svg width={13} height={13} viewBox="0 0 24 24" fill="white"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
                 WhatsApp
@@ -3055,18 +3087,22 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                   waitingNote={!canActOnMr(mr.id)?escalationNote(mrWaitMap.get(String(mr.id))):null}
                   onApprove={canActOnMr(mr.id)?approveMR:null} onReject={canActOnMr(mr.id)?rejectMR:null} acting={acting} rejectId={rejectId} setRejectId={setRejectId}
                   rejectNote={rejectNote} setRejectNote={setRejectNote}
-                  onMarkOrdered={async(id, vendor, expected_delivery)=>{
+                  onMarkOrdered={async(id, vendor, expected_delivery, receiving_contacts=[], order_type="Manual")=>{
                     setActing(p=>({...p,[id]:"ordering"}));
                     try{
                       const res=await api.patch("/procurement/mrs/"+id+"/mark-ordered",{
                         vendor: vendor||null,
                         expected_delivery: expected_delivery||null,
-                        order_type: "Manual",
+                        order_type,
+                        receiving_contacts,
                       });
                       if(res.success===false) throw new Error(res.message||"Failed");
-                      setData(p=>({...p,mrs:p.mrs.map(m=>m.id===id?{...m,stage:"Ordered",mat_status:"Ordered",linked_vendor:vendor||m.linked_vendor,expected_delivery:expected_delivery||m.expected_delivery}:m)}));
+                      setData(p=>({...p,mrs:p.mrs.map(m=>m.id===id?{...m,stage:"Ordered",mat_status:"Ordered",linked_vendor:vendor||m.linked_vendor,expected_delivery:expected_delivery||m.expected_delivery,receiving_contacts}:m)}));
+                      setActing(p=>({...p,[id]:null}));
+                      return true;
                     }catch(e){alert("Mark as ordered failed: "+e.message);}
                     setActing(p=>({...p,[id]:null}));
+                    return false;
                   }}
                   vendorList={vendorList}
                   onVendorAdded={(v)=>setVendorList(prev=>[...prev, v].sort((a,b)=>(a.name||"").localeCompare(b.name||"")))}

@@ -5,6 +5,18 @@ import LibrarySelect from "../components/LibrarySelect";
 import MRDetailDrawer from "../components/MRDetailDrawer";
 import CompanyTransfersTab from "../components/CompanyTransfersTab";
 import GrnIssueBlock from "../components/GrnIssueBlock";
+import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
+
+// Vendor ko jaane wale message ka contacts wala hissa — WhatsApp / Email /
+// PO share, sab ek hi shakl me bhejein. Backend ka contactsWaBlock isi ka
+// jodidaar hai (manual order ka whatsapp_text wahan banta hai).
+const contactsText=(list)=>{
+  const l=Array.isArray(list)?list:[];
+  if(!l.length) return "";
+  return "\nReceiving contact at site:\n"+l.map(c=>
+    `• ${c.name}${(c.designation||c.role)?` (${c.designation||c.role})`:""} — ${c.phone}`
+  ).join("\n")+"\n";
+};
 
 // ── ICONS ─────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -242,6 +254,12 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
   const [vendor,setVendor]=useState("");
   const [delivery,setDelivery]=useState("");
   const [waMsg,setWaMsg]=useState("");
+  // Site par maal kise dena hai — manual order me PO banta hi nahi, isliye
+  // ye list yahin pakki hoti hai. PO waale raaste me Create PO modal poochta
+  // hai, RFQ me abhi order hota hi nahi.
+  const [contacts,setContacts]=useState([]);
+  // Bulk order kai projects ki MR le sakta hai — team un sabki milti hai.
+  const contactProjectIds=items.map(m=>m.project_id).filter(Boolean);
   // RFQ medium — multiple vendors invited to quote + optional bid end date
   const [rfqVendors,setRfqVendors]=useState([]);
   const [rfqVendorPick,setRfqVendorPick]=useState("");
@@ -352,7 +370,7 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
       const remaining = Math.max(0, Number(i.approvedQty||i.qty) - taken);
       return remaining>0 ? `• ${i.item} — ${remaining} ${i.unit} (${i.project})` : null;
     }).filter(Boolean).join("\n");
-    return `Order\n${lines}\nDelivery by: ${delivery||"TBD"}\nPlease confirm. — Admin`;
+    return `Order\n${lines}\nDelivery by: ${delivery||"TBD"}\n${contactsText(contacts)}\nPlease confirm. — Admin`;
   };
 
   // Items still needing a vendor order — i.e. requested qty exceeds what
@@ -526,7 +544,13 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
             <Fld label="Expected Delivery" required>
               <Inp type="date" value={delivery} onChange={e=>setDelivery(e.target.value)}/>
             </Fld>
-            {vendor&&delivery&&(
+            <Fld label="Receiving Person" required>
+              <div style={{fontSize:10.5,color:T.t4,marginBottom:6,lineHeight:1.45}}>
+                Site par maal pahunchne par vendor kise call karega — naam aur number order ke saath jaayega.
+              </div>
+              <ReceivingContacts projectIds={contactProjectIds} value={contacts} onChange={setContacts} theme={T}/>
+            </Fld>
+            {vendor&&delivery&&hasReceivingContact(contacts)&&(
               <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,padding:"10px 12px"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                   <span style={{fontSize:11,fontWeight:600,color:T.grn}}>WhatsApp Template</span>
@@ -550,8 +574,8 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
           <span style={{flex:1}}/>
         ) : (
           <Btn
-            onClick={()=>onSave(medium,medium==="rfq"?rfqVendors:vendor,delivery,items)}
-            disabled={!medium||(medium==="manual"&&(!vendor||!delivery))||(medium==="rfq"&&rfqVendors.length===0)}
+            onClick={()=>onSave(medium,medium==="rfq"?rfqVendors:vendor,delivery,items,contacts)}
+            disabled={!medium||(medium==="manual"&&(!vendor||!delivery||!hasReceivingContact(contacts)))||(medium==="rfq"&&rfqVendors.length===0)}
             color={medium==="po"?T.blu:medium==="rfq"?T.pur:T.grn}
             full
             icon={medium==="po"?<IcPO size={14} color="white"/>:medium==="rfq"?<IcRFQ size={14} color="white"/>:<IcWA size={14} color="white"/>}>
@@ -693,6 +717,7 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
               orderStatus:fresh.order_status||po.orderStatus||"NotOrdered",
               sentAt:fresh.sent_to_vendor_at||po.sentAt,
               sentVia:fresh.sent_via||po.sentVia,
+              receivingContacts:Array.isArray(fresh.receiving_contacts)?fresh.receiving_contacts:(po.receivingContacts||[]),
               date: fresh.created_at?new Date(fresh.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):po.date,
               items:(fresh.items||[]).map(it=>({
                 id:it.id, desc:it.description, hsn:it.hsn_code||"—",
@@ -761,6 +786,22 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
               </div>
             ))}
           </div>
+          {/* Receiving persons — vendor ko yahi number diye gaye hain, isliye
+              site team ko bhi saamne dikhna chahiye ki call kis par aayegi. */}
+          {(d.receivingContacts||[]).length>0&&(
+            <div style={{padding:"7px 11px",borderTop:"1px solid "+T.b1}}>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:4}}>Receiving Person</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {(d.receivingContacts||[]).map((c,i)=>(
+                  <span key={i} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 9px",borderRadius:13,background:T.bluL,border:`1px solid ${T.bluM}`,fontSize:11,color:T.blu}}>
+                    <b>{c.name}</b>
+                    <a href={`tel:${c.phone}`} style={{color:T.blu,textDecoration:"none",fontVariantNumeric:"tabular-nums"}}>{c.phone}</a>
+                    {(c.designation||c.role)&&<span style={{fontSize:9.5,opacity:.7}}>· {c.designation||c.role}</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           {d.reviewNote&&(d.approval==="Revision"||d.approval==="Rejected")&&(
             <div style={{padding:"7px 11px",borderTop:"1px solid "+T.b1,background:d.approval==="Rejected"?T.redL:"#EFF6FF"}}>
               <span style={{fontSize:9.5,fontWeight:700,color:d.approval==="Rejected"?T.red:"#1D4ED8",textTransform:"uppercase",letterSpacing:".3px"}}>{d.approval==="Rejected"?"❌ Rejected":"↻ Revision requested"}</span>
@@ -1174,6 +1215,9 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
           }))
         :[{desc:"",hsn:"",qty:"",unit:"",rate:"",total:"",_t:[],_d:"total",project_id:null,project_name:"",delivery_site:"",linked_mr_id:null}]
   });
+  // Site par maal kise dena hai — PO ke saath vendor tak jaata hai. Edit
+  // mode me purani list wapas dikhti hai taki dobara na bharni pade.
+  const [contacts,setContacts]=useState(editPo?.receivingContacts||[]);
   const [matLib,setMatLib]=useState([]);
   const reloadMatLib=()=>api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{});
   useEffect(()=>{ reloadMatLib(); },[]);
@@ -1362,6 +1406,20 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
           </Fld>
         </div>
 
+        {/* ── Section 2b: Receiving persons ─────────────────────────
+            PO par site ka pata to hota hai, par gaadi pahunchne par driver
+            kise call kare — wo yahan se jaata hai. Multi-site PO me team
+            har line ke project ki milti hai. */}
+        <div style={{marginBottom:16}}>
+          <Fld label="Receiving Person" required>
+            <div style={{fontSize:10.5,color:T.t4,marginBottom:6,lineHeight:1.45}}>
+              Maal site par aane par vendor kise call karega — naam aur number PO ke saath vendor tak jaayega.
+            </div>
+            <ReceivingContacts theme={T} value={contacts} onChange={setContacts}
+              projectIds={[form.projectId,...form.items.map(it=>it.project_id)].filter(Boolean)}/>
+          </Fld>
+        </div>
+
         {/* ── Section 3: Items ──────────────────────────────────────── */}
         <div style={{padding:"11px 13px",background:T.surfaceB,borderRadius:9,border:`1px solid ${T.b1}`,marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
@@ -1484,7 +1542,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
         <Btn onClick={async()=>{
-          if(!form.vendor||!form.project)return;
+          if(!form.vendor||!form.project||!hasReceivingContact(contacts))return;
           // Hard guard — prevents double-fire even before re-render
           if(submittingRef.current) return;
           submittingRef.current = true;
@@ -1508,10 +1566,11 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
             })),
             linkedMR:"—",delivery:form.delivery||"TBD",
             notes:form.notes||"",
+            receivingContacts:contacts,
           };
           try { await onSave(newPO); }
           finally { submittingRef.current = false; setSubmitting(false); }
-        }} disabled={!form.vendor||!form.project||submitting} color={T.blu} full icon={<IcPO size={14} color="white"/>}>{submitting?(isEdit?"Saving…":"Creating…"):(isEdit?"💾 Save & Resubmit":"Create PO (Draft)")}</Btn>
+        }} disabled={!form.vendor||!form.project||!hasReceivingContact(contacts)||submitting} color={T.blu} full icon={<IcPO size={14} color="white"/>}>{submitting?(isEdit?"Saving…":"Creating…"):(isEdit?"💾 Save & Resubmit":"Create PO (Draft)")}</Btn>
       </MFoot>
     </Modal>
   );
@@ -1531,7 +1590,9 @@ function SendToVendorModal({po,onClose,onSent}){
     ? "http://localhost:3000" : "https://gbuildcon.in";
   const poLink = `${baseUrl}/po-view/${po.id}`;
   const itemSummary = (po.items||[]).map(it=>`${it.desc||"Item"} - ${it.qty}${it.unit?` ${it.unit}`:""} @ ₹${it.rate}`).join("\n");
-  const waMsg = `*Purchase Order ${po.poNum||"PO-"+po.id}*\nFrom: GB Buildcon\nProject: ${po.project}\nDelivery: ${po.deliverySite||po.project}\nExp Date: ${po.delivery||"TBD"}\n\nItems:\n${itemSummary}\n\nTotal: ₹${(po.amount||0).toLocaleString("en-IN")}\n\nView/confirm: ${poLink}`;
+  // Receiving contacts message me isliye ki vendor ka driver site pahunch kar
+  // seedha call kar sake — yahi is poore feature ka asli output hai.
+  const waMsg = `*Purchase Order ${po.poNum||"PO-"+po.id}*\nFrom: GB Buildcon\nProject: ${po.project}\nDelivery: ${po.deliverySite||po.project}\nExp Date: ${po.delivery||"TBD"}\n${contactsText(po.receivingContacts)}\nItems:\n${itemSummary}\n\nTotal: ₹${(po.amount||0).toLocaleString("en-IN")}\n\nView/confirm: ${poLink}`;
   const emailSubj = `Purchase Order ${po.poNum||"PO-"+po.id} — GB Buildcon`;
   const emailBody = waMsg.replace(/\*/g,"");
 
@@ -1576,6 +1637,12 @@ function SendToVendorModal({po,onClose,onSent}){
             <div><span style={{color:T.t4}}>Items: </span><b style={{color:T.t1}}>{(po.items||[]).length}</b></div>
             <div><span style={{color:T.t4}}>Total: </span><b style={{color:T.t1}}>₹{(po.amount||0).toLocaleString("en-IN")}</b></div>
             <div style={{gridColumn:"1 / 3"}}><span style={{color:T.t4}}>Delivery: </span><b style={{color:T.t1}}>{po.deliverySite}</b> · <span style={{color:T.t4}}>by</span> <b style={{color:T.t1}}>{po.delivery||"TBD"}</b></div>
+            <div style={{gridColumn:"1 / 3"}}>
+              <span style={{color:T.t4}}>Receiving: </span>
+              {(po.receivingContacts||[]).length
+                ? <b style={{color:T.t1}}>{(po.receivingContacts||[]).map(c=>`${c.name} (${c.phone})`).join(", ")}</b>
+                : <span style={{color:T.amb}}>koi contact nahi — Edit karke jodo</span>}
+            </div>
           </div>
         </div>
         {/* Channel buttons */}
@@ -1702,6 +1769,11 @@ function ProcurementModule(){
     delivery:p.expected_delivery?fmtDate(p.expected_delivery):"—",
     deliveryRaw:p.expected_delivery?String(p.expected_delivery).split("T")[0]:"",
     linked_mr_ids:p.linked_mr_ids?JSON.parse(p.linked_mr_ids||"[]"):[],
+    // Backend already array bhejta hai; purane cached response par string bhi
+    // aa sakti hai, isliye dono sambhaal lete hain.
+    receivingContacts:Array.isArray(p.receiving_contacts)
+      ? p.receiving_contacts
+      : (()=>{try{const x=JSON.parse(p.receiving_contacts||"[]");return Array.isArray(x)?x:[];}catch(_){return [];}})(),
     items:(p.items||[]).map(it=>({
       id:it.id, desc:it.description, hsn:it.hsn_code||"—",
       qty:parseFloat(it.quantity)||0, unit:it.unit,
@@ -2060,13 +2132,13 @@ function ProcurementModule(){
     }catch(e){ alert("GRN error: "+e.message); return; }
     setGrnTarget(null);
   };
-  const saveBulkOrder=async(medium,vendor,delivery,items)=>{
+  const saveBulkOrder=async(medium,vendor,delivery,items,contacts=[])=>{
     if(medium==="manual"){
       // Server ab bina approval wale MR par order rokta hai — jo ruk gaye
       // unhe Ordered dikhana jhooth hoga, isliye sirf jo sach me hue wahi.
       const done=[],failed=[];
       for(const m of items){
-        const r=await api.patch("/procurement/mrs/"+m.id+"/mark-ordered",{vendor,expected_delivery:delivery,order_type:"Manual"})
+        const r=await api.patch("/procurement/mrs/"+m.id+"/mark-ordered",{vendor,expected_delivery:delivery,order_type:"Manual",receiving_contacts:contacts})
           .catch(e=>({success:false,message:e?.message||"Order fail"}));
         if(r&&r.success===false) failed.push((m.mrNum||("MR-"+m.id))+" "+(m.item||"")+": "+(r.message||"order nahi hua"));
         else done.push(m.id);
@@ -2749,6 +2821,7 @@ function ProcurementModule(){
               linked_mr_id: it.linked_mr_id||null,
             })),
             notes: newPO.notes||"",
+            receiving_contacts: newPO.receivingContacts||[],
           });
           if (!res.success) { alert(res.message||"Update failed"); return; }
           // If was in Revision, flip to Draft + re-submit for approval
@@ -2784,6 +2857,7 @@ function ProcurementModule(){
           linked_mr_ids,
           items: newPO.items.map(it=>({description:it.desc,hsn_code:it.hsn,quantity:it.qty,unit:it.unit,rate:it.rate})),
           notes: newPO.notes||"",
+          receiving_contacts: newPO.receivingContacts||[],
         });
         if(res.success){
           // Submit for approval
@@ -2799,7 +2873,11 @@ function ProcurementModule(){
           // PO created as Draft — MRs stay in Approved tab until admin approves PO
           setPOs(prev=>[mapPO(res.data),...prev]);
         } else {
-          setPOs(prev=>[newPO,...prev]);
+          // Server ne mana kiya (vendor/receiving contact/validation) — us PO
+          // ko list me daalna jhooth hoga. Wajah dikhao aur modal khula rakho
+          // taki user wahin theek kar sake.
+          alert(res.message||"PO create failed");
+          return;
         }
         setShowCreatePO(false);
         setCreatePOPrefill(null);
