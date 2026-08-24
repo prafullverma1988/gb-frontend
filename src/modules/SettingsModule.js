@@ -1,5 +1,6 @@
 import { useState, useEffect, Fragment } from "react";
 import api from "../config/api";
+import { clearPhotoPolicyCache } from "../utils/photoPolicy";
 import MapPicker from "../components/MapPicker";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
@@ -16,6 +17,7 @@ const IcLayers     = (p) => <Icon {...p} d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 
 const IcCalendar   = (p) => <Icon {...p} d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zM16 2v4M8 2v4M3 10h18" />;
 const IcBank       = (p) => <Icon {...p} d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" />;
 const IcBox        = (p) => <Icon {...p} d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />;
+const IcCamera     = (p) => <Icon {...p} d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2zM12 17a4 4 0 100-8 4 4 0 000 8z" />;
 const IcDollar     = (p) => <Icon {...p} d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />;
 const IcBell       = (p) => <Icon {...p} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />;
 const IcHash       = (p) => <Icon {...p} d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18" />;
@@ -2425,16 +2427,11 @@ function UIPreferences() {
 // ═══════════════════════════════════════════════════════════════════════
 function WarehouseSettings() {
   const [whProcMode, setWhProcMode] = useState("direct"); // direct | via_procurement
-  const [grnPhotoReq, setGrnPhotoReq] = useState(false);
   const [mrFlow, setMrFlow] = useState("procurement_driven"); // procurement_driven | warehouse_driven
   const [holdTtl, setHoldTtl] = useState(2);
-  // Photo policy — one place for "where is a photo required, and what rides
-  // with it". Defaults match the backend so an unsaved form never flips them.
-  const [photoPolicy, setPhotoPolicy] = useState({
-    issue_photo_required: false, expense_photo_required: false,
-    photo_geo_required: true, photo_date_stamp: true, photo_gallery_allowed: true,
-    attendance_photo_required: false,
-  });
+  // Photo policy yahan se nikal gayi — ab apna Photo Settings tab hai,
+  // jahan har jagah ke teen control (zaroori / camera-only / location)
+  // ek saath hain.
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
@@ -2443,16 +2440,6 @@ function WarehouseSettings() {
     api.get("/settings/company").then(r => {
       if (r?.success && r.data) {
         setWhProcMode(r.data.warehouse_procurement_mode || "direct");
-        setGrnPhotoReq(r.data.grn_photo_required === 1 || r.data.grn_photo_required === true);
-        const on = (v, dflt) => (v === undefined || v === null ? dflt : Number(v) === 1);
-        setPhotoPolicy({
-          issue_photo_required:   on(r.data.issue_photo_required, false),
-          expense_photo_required: on(r.data.expense_photo_required, false),
-          photo_geo_required:     on(r.data.photo_geo_required, true),
-          photo_date_stamp:       on(r.data.photo_date_stamp, true),
-          photo_gallery_allowed:  on(r.data.photo_gallery_allowed, true),
-          attendance_photo_required: on(r.data.attendance_photo_required, false),
-        });
         setMrFlow(r.data.mr_fulfillment_mode || "procurement_driven");
         setHoldTtl(Number(r.data.mr_soft_hold_ttl_days) || 2);
       }
@@ -2464,10 +2451,8 @@ function WarehouseSettings() {
     try {
       await api.put("/settings/company", {
         warehouse_procurement_mode: whProcMode,
-        grn_photo_required: grnPhotoReq,
         mr_fulfillment_mode: mrFlow,
         mr_soft_hold_ttl_days: holdTtl,
-        ...photoPolicy,
       });
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 1800);
@@ -2504,50 +2489,6 @@ function WarehouseSettings() {
             </label>
           ))}
         </div>
-      </SectionCard>
-
-      <SectionCard title="Photo Policy"
-        desc="Kahan photo lagana zaroori hai, aur har photo ke saath kya record ho. Ye poori company par lagu hota hai.">
-        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
-          label="📷 GRN ke saath photo compulsory"
-          desc="ON: material receive karte waqt kam se kam ek photo (challan ya material) lagani hogi, warna GRN save nahi hoga. OFF: photo laga sakte ho par zaroori nahi."
-          value={grnPhotoReq} onChange={setGrnPhotoReq} />
-
-        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
-          label="⚠️ Issue ke saath photo compulsory"
-          desc="ON: site issue raise karte waqt problem ki photo lagani hogi. Photo se issue samajhne aur theek karne me kaafi farak padta hai."
-          value={photoPolicy.issue_photo_required}
-          onChange={v => setPhotoPolicy(p => ({ ...p, issue_photo_required: v }))} />
-
-        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
-          label="💰 Site expense ke saath photo compulsory"
-          desc="ON: wallet se site kharch darj karte waqt bill/receipt ki photo lagani hogi."
-          value={photoPolicy.expense_photo_required}
-          onChange={v => setPhotoPolicy(p => ({ ...p, expense_photo_required: v }))} />
-
-        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
-          label="👷 Attendance ke saath photo compulsory"
-          desc="ON: hazri save karne se pehle kam se kam ek photo lagani hogi. Labour alag-alag gang me kaam karti hai to ek se zyada photo bhi laga sakte ho — photo poore group ki hoti hai, har mazdoor ki alag nahi."
-          value={photoPolicy.attendance_photo_required}
-          onChange={v => setPhotoPolicy(p => ({ ...p, attendance_photo_required: v }))} />
-
-        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
-          label="📍 Photo ke saath location record karo"
-          desc="ON: photo ke saath GPS location (lat/lng) save hoti hai — baad me pata rehta hai photo site ke kis hisse me li gayi thi. Address nahi, sirf coordinates."
-          value={photoPolicy.photo_geo_required}
-          onChange={v => setPhotoPolicy(p => ({ ...p, photo_geo_required: v }))} />
-
-        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
-          label="🕒 Photo par date-time dikhao"
-          desc="ON: gallery aur viewer me har photo ke saath kab li gayi thi wo dikhta hai."
-          value={photoPolicy.photo_date_stamp}
-          onChange={v => setPhotoPolicy(p => ({ ...p, photo_date_stamp: v }))} />
-
-        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
-          label="🖼 Gallery se photo upload allow karo"
-          desc="OFF karne par sirf LIVE camera chalega — purani ya kisi aur ki photo gallery se nahi lag sakti. Ye backdating rokne ka control hai, isliye baaki settings se alag rakha gaya hai."
-          value={photoPolicy.photo_gallery_allowed}
-          onChange={v => setPhotoPolicy(p => ({ ...p, photo_gallery_allowed: v }))} />
       </SectionCard>
 
       <SectionCard title="MR Fulfillment Flow"
@@ -2606,10 +2547,9 @@ function WalletSettings() {
     { key: "service",   label: "Service",       desc: "Machine ki service / repair ka bill" },
     { key: "transfer",  label: "Wallet transfer", desc: "Ek staff wallet se doosre wallet me" },
   ];
+  // Sirf dikhane ke liye — badalna Photo Settings tab se hota hai.
   const [policy, setPolicy] = useState({ site_exp: "required", party_pay: "required", salary: "optional", petrol: "optional", fuel: "required", service: "required", transfer: "optional" });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [savedTick, setSavedTick] = useState(false);
 
   // ── Per-role × per-category auto-approve limits (mobile wallet) ──
   const LIMIT_ROLES = [
@@ -2646,36 +2586,30 @@ function WalletSettings() {
     setLimSaving(false);
   };
 
-  const save = async () => {
-    setSaving(true);
-    try {
-      const body = {};
-      CATS.forEach(c => { body[c.key] = policy[c.key] === "required" ? "required" : "optional"; });
-      await api.put("/wallets/photo-policy", body);
-      setSavedTick(true);
-      setTimeout(() => setSavedTick(false), 1800);
-    } catch (e) { window.alert(e?.message || "Save failed"); }
-    setSaving(false);
-  };
-
   if (loading) return <div style={{ padding: 30, fontSize: 13, color: T.textLight }}>Loading…</div>;
 
   return (
     <div>
+      {/* Photo policy ab yahan nahi hai — poori company ki ek hi jagah
+          Settings → Photo Settings. Ye card sirf abhi ka haal batata hai
+          taaki koi purani jagah dhoondhta na reh jaaye. */}
       <SectionCard title="Photo required for approval"
-        desc="Kis wallet category me approve karne se pehle photo zaroori hai. ON = photo upload hone tak admin approve nahi kar sakta."
-        action={
-          <button onClick={save} disabled={saving}
-            style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
-            {savedTick ? "✓ Saved" : saving ? "Saving..." : "Save"}
-          </button>
-        }>
+        desc='Ye ab "Photo Settings" tab me chala gaya hai — "Paisa" heading ke neeche. Wahan har category ko photo-zaroori ke saath camera-only aur location ka control bhi milta hai.'>
         {CATS.map(c => (
-          <ToggleRow key={c.key} icon={<IcShield size={17} color={T.blue} />}
-            label={c.label + (policy[c.key] === "required" ? " — Photo required" : " — Photo optional")}
-            desc={c.desc}
-            value={policy[c.key] === "required"}
-            onChange={(v) => setPolicy(p => ({ ...p, [c.key]: v ? "required" : "optional" }))} />
+          <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 0", borderBottom: `1px solid ${T.borderLight}` }}>
+            <div style={{ width: 36, height: 36, borderRadius: 8, background: T.blueSoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <IcShield size={17} color={T.blue} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>{c.label}</div>
+              <div style={{ fontSize: 12, color: T.textLight, marginTop: 2 }}>{c.desc}</div>
+            </div>
+            <span style={{ fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 20,
+              background: policy[c.key] === "required" ? T.amberSoft : T.borderLight,
+              color: policy[c.key] === "required" ? T.amber : T.textLight }}>
+              {policy[c.key] === "required" ? "Zaroori" : policy[c.key] === "off" ? "Band" : "Marzi"}
+            </span>
+          </div>
         ))}
       </SectionCard>
 
@@ -2722,6 +2656,161 @@ function WalletSettings() {
           Admin / Super Admin hamesha unlimited (sab auto-approve) — inhe set karne ki zaroorat nahi.
         </div>
       </SectionCard>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHOTO SETTINGS — poori company ki photo policy, ek jagah
+// ═══════════════════════════════════════════════════════════════════════
+// Pehle ye teen sawaal teen alag tabs me bikhre the (Warehouse me GRN +
+// hazri + issue, Wallet me paise wali categories) aur zyadatar toggle
+// kahin lagta hi nahi tha. Ab har photo-wali jagah ki ek row, aur har
+// row me wahi teen jawab jo backend maanta hai:
+//   mode   Band / Marzi / Zaroori
+//   source Camera + Gallery / Sirf camera
+//   geo    location saath me ya nahi
+//
+// Rows ki list SERVER se aati hai (GET /settings/photo → locations), isliye
+// backend me nayi jagah jodne par yahan kuch badalna nahi padta.
+function PhotoSettings() {
+  const [locations, setLocations] = useState([]);
+  const [settings, setSettings] = useState({});
+  const [dirty, setDirty] = useState({});        // sirf badli hui keys bhejte hain
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
+
+  useEffect(() => {
+    api.get("/settings/photo").then(r => {
+      if (r?.success && r.data) {
+        setLocations(r.data.locations || []);
+        setSettings(r.data.settings || {});
+      }
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const patch = (key, field, value) => {
+    setSettings(s => ({ ...s, [key]: { ...s[key], [field]: value } }));
+    setDirty(d => ({ ...d, [key]: true }));
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const body = {};
+      Object.keys(dirty).forEach(k => { if (settings[k]) body[k] = settings[k]; });
+      const r = await api.put("/settings/photo", { settings: body });
+      clearPhotoPolicyCache();   // baaki screens agli baar taaza policy padhein
+      if (r?.success && r.data?.settings) setSettings(r.data.settings);
+      setDirty({});
+      setSavedTick(true);
+      setTimeout(() => setSavedTick(false), 1800);
+    } catch (e) { window.alert(e?.message || "Save failed"); }
+    setSaving(false);
+  };
+
+  if (loading) return <div style={{ padding: 30, fontSize: 13, color: T.textLight }}>Loading…</div>;
+
+  const changed = Object.keys(dirty).length;
+  const groups = [];
+  locations.forEach(l => {
+    const g = groups.find(x => x.name === l.group);
+    if (g) g.rows.push(l); else groups.push({ name: l.group, rows: [l] });
+  });
+
+  const SaveBtn = (
+    <button onClick={save} disabled={saving || !changed}
+      style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : (changed ? `linear-gradient(135deg, ${T.blue}, ${T.blueMid})` : T.border), color: changed || savedTick ? "white" : T.textLight, fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : (changed ? "pointer" : "default"), opacity: saving ? 0.7 : 1 }}>
+      {savedTick ? "✓ Saved" : saving ? "Saving..." : changed ? `Save (${changed})` : "Save"}
+    </button>
+  );
+
+  return (
+    <div>
+      <SectionCard
+        title="Photo Settings"
+        desc="Har jagah ke liye teen faisle: photo lagani zaroori hai ya nahi, gallery se lag sakti hai ya sirf live camera se, aur photo ke saath location darj ho ya nahi. Ye poori company par lagu hote hain."
+        action={SaveBtn}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", paddingTop: 4 }}>
+          {[
+            { t: "Band", d: "Photo ka option hi nahi dikhega." },
+            { t: "Marzi", d: "Option dikhega, lagana zaroori nahi." },
+            { t: "Zaroori", d: "Bina photo ke entry save nahi hogi." },
+          ].map(x => (
+            <div key={x.t} style={{ flex: "1 1 200px", padding: "10px 12px", borderRadius: 8, background: T.bg, border: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text }}>{x.t}</div>
+              <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 2, lineHeight: 1.45 }}>{x.d}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 8, background: T.amberSoft, border: `1px solid ${T.amber}22`, fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
+          <b>Sirf camera</b> chunne par gallery ka button gayab ho jaata hai — purani ya kisi aur ki bheji hui photo nahi lag sakti. Backdating rokne ka yahi control hai.
+          <br />
+          <b>Location</b> ON hone par app photo ke saath GPS maangta hai. Site par signal na mile to photo phir bhi lag jaati hai, bas location khali reh jaati hai — kaam kabhi rukta nahi.
+        </div>
+      </SectionCard>
+
+      {groups.map(g => (
+        <SectionCard key={g.name} title={g.name} action={SaveBtn}>
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 620 }}>
+              <div style={{ display: "flex", gap: 12, padding: "0 0 8px", borderBottom: `1px solid ${T.borderLight}` }}>
+                <div style={{ flex: "1 1 220px", fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: ".5px" }}>Jagah</div>
+                <div style={{ width: 186, fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: ".5px" }}>Photo</div>
+                <div style={{ width: 168, fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: ".5px" }}>Kahan se</div>
+                <div style={{ width: 86, fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: ".5px" }}>Location</div>
+              </div>
+              {g.rows.map(l => {
+                const s = settings[l.key] || { mode: "optional", source: "both", geo: true };
+                const off = s.mode === "off";
+                return (
+                  <div key={l.key} style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 0", borderBottom: `1px solid ${T.borderLight}` }}>
+                    <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: off ? T.textLight : T.text }}>{l.label}</div>
+                      {l.hint && <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 2, lineHeight: 1.45 }}>{l.hint}</div>}
+                    </div>
+                    <Segmented width={186} value={s.mode} disabled={false}
+                      options={[
+                        { v: "off", l: "Band" },
+                        { v: "optional", l: "Marzi" },
+                        { v: "required", l: "Zaroori", tone: T.amber },
+                      ]}
+                      onChange={v => patch(l.key, "mode", v)} />
+                    <Segmented width={168} value={s.source} disabled={off}
+                      options={[
+                        { v: "both", l: "Gallery bhi" },
+                        { v: "camera", l: "Sirf camera", tone: T.amber },
+                      ]}
+                      onChange={v => patch(l.key, "source", v)} />
+                    <div style={{ width: 86, display: "flex", justifyContent: "flex-start", opacity: off ? 0.4 : 1, pointerEvents: off ? "none" : "auto" }}>
+                      <Toggle value={!!s.geo} onChange={v => patch(l.key, "geo", v)} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </SectionCard>
+      ))}
+    </div>
+  );
+}
+
+// Chhota segmented control — do ya teen vikalp, ek hi patti me.
+function Segmented({ value, options, onChange, width, disabled }) {
+  return (
+    <div style={{ width, display: "flex", borderRadius: 7, border: `1px solid ${T.border}`, overflow: "hidden", opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? "none" : "auto", flexShrink: 0 }}>
+      {options.map((o, i) => {
+        const on = value === o.v;
+        const tone = o.tone || T.blue;
+        return (
+          <button key={o.v} onClick={() => onChange(o.v)} type="button"
+            style={{ flex: 1, padding: "7px 4px", border: "none", borderRight: i === options.length - 1 ? "none" : `1px solid ${T.border}`, background: on ? tone : "white", color: on ? "white" : T.textMid, fontSize: 11.5, fontWeight: on ? 700 : 500, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+            {o.l}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -3006,6 +3095,7 @@ const settingsSections = [
   { id: "practices",     label: "Company Practices",    Icon: IcClipboard, Comp: CompanyPractices,       section: null },
   { id: "other",         label: "Other Settings",       Icon: IcLayers,    Comp: OtherSettings,          section: null },
   { id: "backdate",      label: "Back-Date Control",    Icon: IcCalendar,  Comp: BackDateControl,        section: null },
+  { id: "photo",         label: "Photo Settings",       Icon: IcCamera,    Comp: PhotoSettings,          section: null },
   { id: "attendance",    label: "Attendance Settings",  Icon: IcCalendar,  Comp: AttendanceSettings,     section: null },
   { id: "locations",     label: "Office & Warehouse",   Icon: IcBuilding,  Comp: LocationsSettings,      section: null },
   { id: "appearance",    label: "Appearance",           Icon: IcLayout,    Comp: UIPreferences,          section: "PERSONALIZATION" },

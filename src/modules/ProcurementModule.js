@@ -4,6 +4,7 @@ import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
 import MRDetailDrawer from "../components/MRDetailDrawer";
 import CompanyTransfersTab from "../components/CompanyTransfersTab";
+import GrnIssueBlock from "../components/GrnIssueBlock";
 
 // ── ICONS ─────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -602,7 +603,10 @@ function MarkReceivedModal({mr,onSave,onClose}){
 function GRNModal({po,onClose,onSave}){
   const [challan,setChallan]=useState("");
   const [vendorOverride,setVendorOverride]=useState(po.vendor||"");
-  const [rows,setRows]=useState(po.items.map(it=>({qty:String(it.qty),quality:"Good",remark:""})));
+  const [rows,setRows]=useState(po.items.map(it=>({qty:String(it.qty),remark:""})));
+  // Problem seen while unloading — goes to grn_issues with the GRN, so the
+  // material's flow drawer shows it afterwards.
+  const [issues,setIssues]=useState([]);
   const isPartial=rows.some((r,i)=>parseFloat(r.qty)<po.items[i].qty);
   const effectiveVendor = (po.vendor && String(po.vendor).trim()) || vendorOverride.trim();
   const canSubmit = !!challan.trim() && !!effectiveVendor;
@@ -630,17 +634,12 @@ function GRNModal({po,onClose,onSave}){
         {po.items.map((it,i)=>(
           <div key={i} style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:10}}>
             <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:10}}>{it.desc} <span style={{fontSize:11,color:T.t4,fontWeight:400}}>({it.qty} {it.unit} ordered)</span></div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10}}>
               <div>
                 <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Qty Received</label>
                 <input type="number" value={rows[i].qty} onChange={e=>{const r=[...rows];r[i]={...r[i],qty:e.target.value};setRows(r);}} max={it.qty}
                   style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 {parseFloat(rows[i].qty)<it.qty&&parseFloat(rows[i].qty)>0&&<div style={{fontSize:9.5,color:T.amb,marginTop:3}}>Partial — {it.qty-parseFloat(rows[i].qty)} pending</div>}
-              </div>
-              <div>
-                <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Quality</label>
-                <SearchSelect value={rows[i].quality} options={["Good","Partial","Rejected"]}
-                  onChange={v=>{const r=[...rows];r[i]={...r[i],quality:v};setRows(r);}} placeholder="Quality"/>
               </div>
               <div>
                 <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Remark</label>
@@ -650,14 +649,15 @@ function GRNModal({po,onClose,onSave}){
             </div>
           </div>
         ))}
-        {isPartial&&<div style={{padding:"9px 12px",background:T.ambL,borderRadius:7,border:`1px solid ${T.ambM}`,display:"flex",alignItems:"center",gap:8}}>
+        {isPartial&&<div style={{padding:"9px 12px",background:T.ambL,borderRadius:7,border:`1px solid ${T.ambM}`,display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
           <IcAlert size={14} color={T.amb}/>
           <span style={{fontSize:11.5,color:T.amb,fontWeight:500}}>Partial GRN — PO stays open for remaining delivery</span>
         </div>}
+        <GrnIssueBlock value={issues} onChange={setIssues}/>
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
-        <Btn onClick={()=>onSave(po.id,challan,rows,effectiveVendor)} disabled={!canSubmit} color={T.grn} full icon={<IcGRN size={14} color="white"/>}>
+        <Btn onClick={()=>onSave(po.id,challan,rows,effectiveVendor,issues)} disabled={!canSubmit} color={T.grn} full icon={<IcGRN size={14} color="white"/>}>
           {isPartial?"Confirm Partial GRN":"Confirm Full GRN"}
         </Btn>
       </MFoot>
@@ -2031,7 +2031,7 @@ function ProcurementModule(){
       setMRs(p=>p.map(x=>x.id===m.id?{...x,mrStatus:"Closed",closed_reason:reason.trim()}:x));
     }catch(e){ window.alert(e?.message||"Network error"); }
   };
-  const saveGRN=async(poId,challan,rows,vendorOverride)=>{
+  const saveGRN=async(poId,challan,rows,vendorOverride,issues)=>{
     const po=pos.find(p=>p.id===poId);
     const vendor = (vendorOverride && vendorOverride.trim()) || po?.vendor || "";
     if(!vendor){alert("Vendor name compulsory hai");return;}
@@ -2049,7 +2049,9 @@ function ProcurementModule(){
           ordered_qty:  po?.items?.[i]?.qty      || parseFloat(r.qty)||0,
           received_qty: parseFloat(r.qty)        || 0,
           unit:         r.unit || po?.items?.[i]?.unit || "",
+          remark:       (r.remark||"").trim()    || null,
         })).filter(it=>it.received_qty>0),
+        issues: (issues||[]).length ? issues : null,
       };
       const res = await api.post("/procurement/grns", grnPayload);
       if(!res.success) { alert("GRN save failed: "+(res.message||"Unknown error")); return; }

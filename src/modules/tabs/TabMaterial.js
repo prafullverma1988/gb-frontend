@@ -7,6 +7,8 @@ import MaterialFlowDrawer from "../../components/MaterialFlowDrawer";
 import MRDetailDrawer from "../../components/MRDetailDrawer";
 import MaterialTransferTab from "../../components/MaterialTransferTab";
 import MaterialLedgerDrawer from "../../components/MaterialLedgerDrawer";
+import GrnIssueBlock from "../../components/GrnIssueBlock";
+import { loadPhotoPolicy, policyFor, fileInputProps } from "../../utils/photoPolicy";
 import { T, fmtN, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
 
@@ -188,13 +190,34 @@ function TabMaterial({ project }) {
   const [directGlobal, setDirectGlobal] = useState({ vendor: "", challan: "", date: new Date().toLocaleDateString('en-CA'), received_by: "" });
   const [directRows, setDirectRows] = useState([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
   const [grnPhotos, setGrnPhotos] = useState([]);
-  // Company-level GRN photo policy — true = at least one photo mandatory
-  const [grnPhotoRequired, setGrnPhotoRequired] = useState(false);
-  useEffect(() => {
-    api.get("/settings/company").then(r => {
-      if (r?.success && r.data) setGrnPhotoRequired(Number(r.data.grn_photo_required) === 1);
-    }).catch(() => {});
-  }, []);
+  // Problems spotted while unloading. Ordered tab = per material (each MR
+  // becomes its own GRN); Direct tab = one list for the whole delivery.
+  const [rowIssues, setRowIssues] = useState({});
+  const [directIssues, setDirectIssues] = useState([]);
+  // Company ki photo policy (Settings → Photo Settings). Is tab me teen
+  // alag jagah photo lagti hai aur teeno ki apni setting hai:
+  //   grn               — vendor se maal receive
+  //   material_issue    — warehouse se aaya maal receive
+  //   material_transfer — doosri site se aaya maal receive
+  const [photoPol, setPhotoPol] = useState(null);
+  useEffect(() => { loadPhotoPolicy().then(setPhotoPol); }, []);
+  const polFor = (key) => policyFor(photoPol, key);
+  // Photo ka box GRN/issue/transfer teeno ke liye ek hi hai, isliye uska
+  // "required" nishaan sabse sakht setting par chalta hai — jo bhi flow
+  // abhi khula ho, user ko pehle hi pata chal jaata hai ki photo maangi
+  // jaayegi, submit par 400 khaane ke baad nahi.
+  const grnPhotoRequired = ["grn", "material_issue", "material_transfer"]
+    .some(k => polFor(k).mode === "required");
+  const grnPhotoCameraOnly = ["grn", "material_issue", "material_transfer"]
+    .some(k => polFor(k).source === "camera");
+  // Submit se pehle ki rok. true = ruk jao. Server par bhi wahi check hai
+  // (utils/photoPolicy.js) — yahan sirf isliye ki user ko form bharne ke
+  // baad 400 na mile.
+  const photoBlocked = (key, label) => {
+    if (polFor(key).mode !== "required" || grnPhotos.length > 0) return false;
+    alert(`Company setting: ${label} ke saath kam se kam ek photo lagani zaroori hai.`);
+    return true;
+  };
   // (Add-new-vendor flow now handled inside <LibrarySelect type="supplier"/>)
   const [grnSaving, setGrnSaving] = useState(false);
   const [grnDone, setGrnDone] = useState([]);
@@ -424,10 +447,7 @@ function TabMaterial({ project }) {
   }, [showGRN, projectId, loadPendingTransfers, loadPendingIssues]);
 
   const handleReceiveTransfer = async (tr) => {
-    if (grnPhotoRequired && grnPhotos.length === 0) {
-      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
-      return;
-    }
+    if (photoBlocked("material_transfer", "Stock transfer receive")) return;
     setTrReceiving(true);
     try {
       const items = (tr.items || []).map(it => ({
@@ -448,10 +468,7 @@ function TabMaterial({ project }) {
   };
 
   const handleReceiveIssue = async (iss) => {
-    if (grnPhotoRequired && grnPhotos.length === 0) {
-      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
-      return;
-    }
+    if (photoBlocked("material_issue", "Material issue receive")) return;
     setIssueReceiving(true);
     try {
       const items = (iss.items || []).map(it => ({
@@ -475,10 +492,7 @@ function TabMaterial({ project }) {
   const handleReceiveMR = async (mrId) => {
     const row = grnRows[mrId] || {};
     if (!row.challan) { alert("Challan number required"); return; }
-    if (grnPhotoRequired && grnPhotos.length === 0) {
-      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
-      return;
-    }
+    if (photoBlocked("grn", "Maal receive (GRN)")) return;
     setGrnSaving(true);
     try {
       const mr = orderedMRs.find(m => m.id === mrId);
@@ -519,10 +533,7 @@ function TabMaterial({ project }) {
   const handleReceiveVendor = async (vendor) => {
     const meta = vendorReceive[vendor] || {};
     if (!meta.challan || !meta.challan.trim()) { alert("Challan number required"); return; }
-    if (grnPhotoRequired && grnPhotos.length === 0) {
-      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
-      return;
-    }
+    if (photoBlocked("grn", "Maal receive (GRN)")) return;
     const targetMRs = orderedMRs.filter(mr =>
       (mr.linked_vendor || "— Unassigned —") === vendor &&
       !grnDone.includes(mr.id) &&
@@ -545,8 +556,13 @@ function TabMaterial({ project }) {
           // Dual-unit billing basis (weighbridge weight), if the switch is on.
           alt_qty:  dual?.altOn && Number(dual.alt_qty) > 0 ? parseFloat(dual.alt_qty) : null,
           alt_unit: dual?.altOn && Number(dual.alt_qty) > 0 && dual.alt_unit ? dual.alt_unit : null,
+          // Problems seen on this material — land on the GRN this call creates.
+          issues: (rowIssues[mr.id] || []).length ? rowIssues[mr.id] : null,
         });
-        if (res.success) { setGrnDone(p => [...p, mr.id]); okCount += 1; }
+        if (res.success) {
+          setGrnDone(p => [...p, mr.id]); okCount += 1;
+          setRowIssues(p => { const n = { ...p }; delete n[mr.id]; return n; });
+        }
         else failures.push(`${mr.item_name}: ${res.message||"failed"}`);
       } catch (e) { failures.push(`${mr.item_name}: ${e.message}`); }
     }
@@ -578,10 +594,7 @@ function TabMaterial({ project }) {
     if (!directGlobal.challan) { alert("Challan number daalo"); return; }
     const validRows = directRows.filter(r => r.item_name && Number(r.qty) > 0);
     if (!validRows.length) { alert("Kam se kam ek material + qty required hai"); return; }
-    if (grnPhotoRequired && grnPhotos.length === 0) {
-      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
-      return;
-    }
+    if (photoBlocked("grn", "Maal receive (GRN)")) return;
     setGrnSaving(true);
     try {
       const res = await api.post("/procurement/grns", {
@@ -593,6 +606,7 @@ function TabMaterial({ project }) {
         received_by: directGlobal.received_by || meUser?.name || null,
         received_date: directGlobal.date || new Date().toISOString().split("T")[0],
         photo_urls: grnPhotos.length ? grnPhotos : null,
+        issues: directIssues.length ? directIssues : null,
         items: validRows.map(r => ({
           po_item_id: null,
           description: r.item_name,
@@ -609,6 +623,7 @@ function TabMaterial({ project }) {
         setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags"}]);
         setDirectGlobal({vendor:"", challan:"", date: new Date().toLocaleDateString('en-CA'), received_by:""});
         setGrnPhotos([]);
+        setDirectIssues([]);
         // Reload MRs + direct GRNs + ledger + inventory
         loadMRs();
         // Reload ledger + inventory
@@ -1380,6 +1395,14 @@ function TabMaterial({ project }) {
                                         <DualUnitToggle units={UNITS_MR} primaryUnit={mr.unit} itemName={mr.item_name} qty={row.received_qty}
                                           value={row.dual} onChange={d=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],dual:d}}))}/>
                                       )}
+                                      {/* Har MR ka apna GRN banta hai, isliye issue bhi per-material */}
+                                      {recv>0&&(
+                                        <div style={{gridColumn:"1 / -1",marginTop:6}}>
+                                          <GrnIssueBlock compact title={(mr.item_name||"Is material")+" me problem?"}
+                                            value={rowIssues[mr.id]||[]}
+                                            onChange={v=>setRowIssues(p=>({...p,[mr.id]:v}))}/>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -1491,6 +1514,10 @@ function TabMaterial({ project }) {
                     style={{width:"100%",padding:"9px",borderRadius:7,border:"1.5px dashed "+T.bluM,background:"transparent",color:T.blu,fontSize:12,cursor:"pointer",marginTop:6,fontWeight:600,fontFamily:"inherit"}}>
                     + Add Another Item
                   </button>
+                  {/* Ek hi GRN banta hai is tab me, to issue poori delivery par */}
+                  <div style={{marginTop:12}}>
+                    <GrnIssueBlock value={directIssues} onChange={setDirectIssues}/>
+                  </div>
                 </div>
               )}
 
@@ -1518,7 +1545,8 @@ function TabMaterial({ project }) {
                     onMouseLeave={e=>e.currentTarget.style.borderColor=T.b2}>
                     <span style={{fontSize:18}}>📷</span>
                     <span style={{fontSize:10,color:T.t4,fontWeight:600}}>Add</span>
-                    <input type="file" accept="image/*" capture="environment" multiple style={{display:"none"}}
+                    <input {...fileInputProps({ source: grnPhotoCameraOnly ? "camera" : "both" }, { multiple: true })}
+                      style={{display:"none"}}
                       onChange={e=>{
                         const files=Array.from(e.target.files||[]);
                         files.forEach(file=>{
@@ -1532,7 +1560,11 @@ function TabMaterial({ project }) {
                       }}/>
                   </label>
                 </div>
-                <div style={{marginTop:5,fontSize:10,color:T.t4}}>Camera opens on mobile · Multi-select supported</div>
+                <div style={{marginTop:5,fontSize:10,color:T.t4}}>
+                  {grnPhotoCameraOnly
+                    ? "Company setting: sirf live camera — mobile par gallery nahi khulegi"
+                    : "Camera opens on mobile · Multi-select supported"}
+                </div>
               </div>
 
             </div>{/* end scroll body */}
@@ -1711,6 +1743,12 @@ function TabMaterial({ project }) {
                         <div>
                           <span style={{fontSize:13,fontWeight:700,color:isOpen?"white":T.t1}}>{mat.material_name}</span>
                           <span style={{fontSize:10.5,color:isOpen?"rgba(255,255,255,0.5)":T.t4,marginLeft:8}}>{mat.unit} · {mat.receipts?.length||0} GRN · {mat.usage?.length||0} used entries</span>
+                          {Number(mat.open_issues)>0&&(
+                            <span title="Is material ki kisi delivery me open issue hai"
+                              style={{fontSize:10,fontWeight:700,color:T.red,background:T.redL,border:"1px solid "+T.redM,borderRadius:10,padding:"1px 8px",marginLeft:8}}>
+                              ⚠ {mat.open_issues}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div style={{display:"flex",gap:20,alignItems:"center"}}>
@@ -1845,7 +1883,15 @@ function TabMaterial({ project }) {
                               {/* Remark/Task */}
                               <div style={{fontSize:12,color:T.t1}}>
                                 {isGRN
-                                  ? <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.grnL,color:T.grn,fontWeight:600}}>GRN Received</span>
+                                  ? <>
+                                      <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.grnL,color:T.grn,fontWeight:600}}>GRN Received</span>
+                                      {Number(row.open_issues)>0&&(
+                                        <span title="Is delivery me open issue hai — kholne ke liye click karo"
+                                          style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.redL,color:T.red,fontWeight:700,marginLeft:6,border:"1px solid "+T.redM}}>
+                                          ⚠ {row.open_issues} issue
+                                        </span>
+                                      )}
+                                    </>
                                   : <span>{row.task_name?<span style={{fontSize:10,color:T.t4,marginRight:4}}>{row.task_no}</span>:""}{row.task_name||""}{row.remark?<span style={{color:T.t3}}>{row.task_name?" · ":""}{row.remark}</span>:<span style={{color:T.t4,fontSize:10}}>{!row.task_name?"Project level":""}</span>}</span>
                                 }
                               </div>

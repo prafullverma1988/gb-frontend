@@ -100,6 +100,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
         _t: "grn", date: r.received_date, ref: r.grn_number || "GRN",
         party: r.vendor_name || "—", sub: r.challan_no ? `Challan ${r.challan_no}` : "",
         by: r.received_by || "", qty: Number(r.qty) || 0, grn_id: r.grn_id,
+        open_issues: Number(r.open_issues) || 0,
       })),
       ...(material?.usage || []).map(u => ({
         _t: "used", date: u.used_date, ref: u.task_no || "USE",
@@ -253,6 +254,12 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
                         <div style={{ fontSize: 9.5, color: T.t4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                           <span style={{ fontFamily: "monospace", color: isGRN ? T.grn : T.amb, fontWeight: 700 }}>{e.ref}</span>
                           {e.sub ? ` · ${e.sub}` : ""}{e.by ? ` · ${e.by}` : ""}
+                          {e.open_issues > 0 && (
+                            <span title="Is delivery me open issue hai — row kholo"
+                              style={{ marginLeft: 5, fontSize: 9, fontWeight: 700, color: T.red, background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 8, padding: "0 5px" }}>
+                              ⚠ {e.open_issues}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div style={{ fontSize: 12, fontWeight: 800, color: isGRN ? T.grn : T.b2, textAlign: "right" }}>{isGRN ? e.qty : "—"}</div>
