@@ -222,7 +222,13 @@ function TabParty({ projectId, projectName }) {
   // Per-party project-scoped data
   const partyRows = useMemo(() => {
     return allParties.map(p => {
-      const myTxns = projTxns.filter(t => Number(t.party_id) === Number(p.id));
+      // A staff is a party to this project through their WALLET too: money they
+      // paid out for it (paid_via_staff_id) belongs on their ledger, exactly as
+      // the company-level party account already does. Without this a staff who
+      // bought material for the project never appears here at all.
+      const myTxns = projTxns.filter(t =>
+        Number(t.party_id) === Number(p.id) ||
+        (p.is_staff === 1 && Number(t.paid_via_staff_id) === Number(p.id) && Number(t.party_id) !== Number(p.id)));
       if (myTxns.length === 0) return null; // skip parties with no activity on this project
       const isVendor = isVendorType(p.type);
       // Sort chronologically OLDEST first so running balance accumulates
@@ -251,7 +257,13 @@ function TabParty({ projectId, projectName }) {
         // receipt (payer paid on our behalf). Normalise before the DR/CR test.
         const eff = type === "settle_out" ? "party_payment"
                   : type === "settle_in"  ? "receipt" : type;
+        // Money that left THIS staff's wallet for the project — we owe them for it,
+        // so CR regardless of the underlying expense type.
+        const walletSpend = p.is_staff === 1
+          && Number(t.paid_via_staff_id) === Number(p.id)
+          && Number(t.party_id) !== Number(p.id);
         let isCR;
+        if (walletSpend) isCR = true; else
         if (isVendor) {
           // payment / party_payment = DR (we paid); bills = CR (we owe).
           // material_return = vendor credit note → reduces our payable, DR-side.

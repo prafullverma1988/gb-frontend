@@ -72,7 +72,12 @@ function TabTransaction({projectId, projectName}) {
       setTransactions(projTxns.map(mapTxn));
       // Only parties that have at least 1 transaction on this project
       // (same logic as TabParty). Fallback to all parties if project has no txns yet.
-      const projPartyIds = new Set(projTxns.map(t=>Number(t.party_id)).filter(Boolean));
+      // Staff who spent from their wallet on this project are parties to it as
+      // well — key off paid_via_staff_id, not just party_id.
+      const projPartyIds = new Set([
+        ...projTxns.map(t=>Number(t.party_id)),
+        ...projTxns.map(t=>Number(t.paid_via_staff_id)),
+      ].filter(Boolean));
       setTxnParties(projPartyIds.size > 0 ? allP.filter(p=>projPartyIds.has(Number(p.id))) : allP);
       if(aRes?.success&&Array.isArray(aRes.data))   setTxnAccounts(aRes.data);
       if(prRes?.success&&Array.isArray(prRes.data)) setTxnProjects(prRes.data.map(p=>p.name));
