@@ -14,6 +14,7 @@
 // ════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import PhotoLocateModal from "./tabs/PhotoLocateModal";
+import TenderAiPlan from "./tabs/TenderAiPlan";
 import * as XLSX from "xlsx";
 import api, { getUser } from "../config/api";
 import { useToast } from "../components/Toast";
@@ -5779,6 +5780,9 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
 const DETAIL_TABS = [
   {id:"overview",    label:"Overview",    Icon:IcGavel},
   {id:"boq",         label:"BOQ",         Icon:IcTable},
+  // AI Plan jeetne ke baad khulta hai — planning pehle bhi ho sakti hai,
+  // par execute (sites banna) server par execution+ se hi hota hai.
+  {id:"aiplan",      label:"AI Plan",     Icon:IcTable,  minStage:"won"},
   {id:"measure",     label:"Measurements",Icon:IcTable,  minStage:"execution"},
   {id:"rabills",     label:"RA Bills",    Icon:IcRupee,  minStage:"execution"},
   {id:"map",         label:"Map",         Icon:IcMapPin, minStage:"execution"},
@@ -6198,6 +6202,11 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
       {/* ══ MAP ══ */}
       {tab==="map" && (
         <MapTab tenderId={tenderId} sites={projects}/>
+      )}
+
+      {/* ══ AI PLAN — workbook se site/task plan, AI ke saath ══ */}
+      {tab==="aiplan" && (
+        <TenderAiPlan tenderId={tenderId} onOpenProject={onOpenProject}/>
       )}
 
       {/* ══ SITES ══ */}
