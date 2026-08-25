@@ -427,6 +427,34 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
             </div>
           )}
 
+          {/* Delivery issues finance ne is bill par flag kiye the — 6 mahine
+              baad bhi pata rahe ki deduction kis wajah se hua tha. */}
+          {!editing && Array.isArray(txn.grn_issues) && txn.grn_issues.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.red, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>
+                ⚠ Delivery Issues ({txn.grn_issues.length})
+              </div>
+              <div style={{ background: T.redL, border: `1px solid ${T.redM}`, borderLeft: `3px solid ${T.red}`, borderRadius: 8, padding: "9px 11px" }}>
+                <div style={{ fontSize: 10.5, color: T.t3, marginBottom: 7 }}>
+                  Maal receive karte waqt site ne ye problem darj ki thi — bill par deduction ka faisla isi par hua.
+                </div>
+                {txn.grn_issues.map((iss, i) => (
+                  <div key={iss.id || i}
+                    style={{ display: "flex", alignItems: "flex-start", gap: 7, background: T.surface, border: `1px solid ${T.redM}`, borderRadius: 6, padding: "7px 8px", marginBottom: i < txn.grn_issues.length - 1 ? 5 : 0 }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 8, background: iss.status === "Resolved" ? T.t3 : T.red, color: "white", flexShrink: 0, marginTop: 1 }}>{iss.issue_type}</span>
+                    <span style={{ fontSize: 11.5, color: T.t1, flex: 1, wordBreak: "break-word" }}>
+                      {iss.note || "—"}
+                      <span style={{ color: T.t4, fontSize: 10 }}> · {iss.raised_by_name || "—"}</span>
+                    </span>
+                    {iss.photo_url && (
+                      <a href={iss.photo_url} target="_blank" rel="noreferrer" title="Photo proof" style={{ flexShrink: 0, textDecoration: "none", fontSize: 12 }}>📎</a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Activity Log — full kisne kya kab kiya trail from audit_logs */}
           {txn.id && (
             <div style={{ marginTop: 12 }}>

@@ -1037,6 +1037,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const _today = new Date().toISOString().slice(0,10);
   const [billDate,setBillDate]=useState(_today);
   const [delivDate,setDelivDate]=useState(prefillGRN?.deliveryDate||_today);
+  // Delivery issues jo is bill ke GRNs par khule hain. Default sab TICKED —
+  // jo problem hum pakadne ki koshish kar rahe hain wahi ye hai ki issue
+  // chhoot jaaye; chhupane ke liye finance ko jaanbujh kar untick karna pade.
+  const grnIssueList = prefillGRN?.issues || [];
+  const [flaggedIssues,setFlaggedIssues]=useState(()=>new Set(grnIssueList.map(i=>i.id)));
   // prefillGRN = {grnId, grnNumber, vendor, deliveryDate, project, items:[{name,qty,unit,head}]}
   const [party,setParty]=useState(prefillGRN?.vendor||preParty||"");
   // Project default: bills / GRN-prefilled forms keep project-level (their
@@ -1601,6 +1606,9 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           payload.force_duplicate = true;
           payload.force_reason    = prefillGRN.forceReason || "";
         }
+        // Jo delivery issues finance ne bill par dikhane ke liye ticked
+        // chhode — backend inhe is txn se jod deta hai.
+        if(grnIssueList.length) payload.flagged_issue_ids=[...flaggedIssues];
       }
 
       // Line items for material/subcon/invoice
@@ -2259,6 +2267,50 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   {selectedGRNId&&(
                     <span style={{fontSize:10.5,fontWeight:700,color:T.grn,padding:"3px 8px",background:T.grnL,borderRadius:12,border:`1px solid ${T.grnM}`}}>✓ Linked</span>
                   )}
+                </div>
+              )}
+              {/* Delivery issues — site ne receive karte waqt darj kiye the.
+                  Rate bharne se PEHLE dikhte hain taki deduction ka faisla
+                  ho sake. Ticked = bill par dikhega, untick = nahi. */}
+              {grnIssueList.length>0&&(
+                <div style={{margin:"0 0 10px",padding:"10px 12px",background:T.redL,border:`1px solid ${T.redM}`,borderLeft:`3px solid ${T.red}`,borderRadius:7}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
+                    <span style={{fontSize:13}}>⚠️</span>
+                    <span style={{fontSize:11.5,fontWeight:700,color:T.red}}>
+                      Is delivery me {grnIssueList.length} issue tha — bill par dikhana hai?
+                    </span>
+                    <div style={{flex:1}}/>
+                    <span style={{fontSize:10,color:T.t3}}>
+                      {flaggedIssues.size} of {grnIssueList.length} ticked
+                    </span>
+                  </div>
+                  <div style={{fontSize:10.5,color:T.t3,marginBottom:8}}>
+                    Ticked issue bill ke saath judega — baad me bill kholne par dikhega ki deduction kis wajah se hua. Untick karoge to issue GRN par khula rahega, bas is bill par nahi aayega.
+                  </div>
+                  {grnIssueList.map(iss=>{
+                    const on=flaggedIssues.has(iss.id);
+                    return(
+                      <label key={iss.id}
+                        style={{display:"flex",alignItems:"flex-start",gap:8,padding:"7px 9px",marginBottom:5,background:on?T.surface:"transparent",border:`1px solid ${on?T.redM:T.b1}`,borderRadius:6,cursor:"pointer"}}>
+                        <input type="checkbox" checked={on}
+                          onChange={()=>setFlaggedIssues(prev=>{
+                            const next=new Set(prev);
+                            if(next.has(iss.id)) next.delete(iss.id); else next.add(iss.id);
+                            return next;
+                          })}
+                          style={{cursor:"pointer",width:14,height:14,accentColor:T.red,marginTop:2,flexShrink:0}}/>
+                        <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:8,background:T.red,color:"white",flexShrink:0,marginTop:1}}>{iss.issue_type}</span>
+                        <span style={{fontSize:11.5,color:T.t1,flex:1,wordBreak:"break-word"}}>
+                          {iss.note||"—"}
+                          <span style={{color:T.t4,fontSize:10}}> · {iss.raised_by_name||"—"}</span>
+                        </span>
+                        {iss.photo_url&&(
+                          <a href={iss.photo_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}
+                            title="Photo proof kholo" style={{flexShrink:0,textDecoration:"none",fontSize:12}}>📎</a>
+                        )}
+                      </label>
+                    );
+                  })}
                 </div>
               )}
               <div style={{display:"grid",gridTemplateColumns:colTpl,padding:"9px 12px",background:T.sb,gap:7,borderBottom:`2px solid ${T.sbH}`}}>
@@ -3651,6 +3703,9 @@ function FinanceModule(){
       // Backend GET /finance/transactions now returns line_items[] for bill-type txns.
       items:t.items||t.line_items||null,
       grn_id:t.grn_id||null,
+      // Delivery issues jo finance ne is bill par flag kiye — detail drawer
+      // inhe "⚠ Delivery Issues" section me dikhata hai.
+      grn_issues:t.grn_issues||null,
       // Wallet-origin spend (staff paid from their imprest wallet). The cash
       // already left the company at TOP-UP time, so these rows must NOT hit
       // the company Cash Book / Day Book again (double-count).
@@ -5774,13 +5829,18 @@ Status: ${ledgerRow.status||"unpaid"}`;
             const groups={};
             filtered.forEach(g=>{
               const v=(g.vendor_name||"— Unknown Vendor —").trim()||"— Unknown Vendor —";
-              if(!groups[v]) groups[v]={vendor:v,grns:[],items:[],hasOrphan:false};
+              if(!groups[v]) groups[v]={vendor:v,grns:[],items:[],hasOrphan:false,issues:[]};
               groups[v].grns.push(g);
               if(g.has_orphan_vendor_bills) groups[v].hasOrphan=true;
+              // Site ne receive karte waqt jo problem darj ki thi — bill se
+              // pehle dikhni chahiye, warna deduction ka mauka nikal jaata hai.
+              const grnIssues=g.open_issues||[];
+              if(grnIssues.length) groups[v].issues.push(...grnIssues);
               (g.items||[]).forEach((it,idx)=>{
                 groups[v].items.push({
                   key:`${g.id}-${idx}`,
                   grn:g,
+                  issues:grnIssues,
                   name:it.description||"—",
                   qty:parseFloat(it.received_qty)||0,
                   unit:it.unit||"",
@@ -5812,7 +5872,15 @@ Status: ${ledgerRow.status||"unpaid"}`;
               const primary=picked[0].grn;
               const uniqueGrnIds=[...new Set(picked.map(p=>p.grn.id))];
               const uniqueChallans=[...new Set(picked.map(p=>p.challan).filter(Boolean))];
+              // Sirf un GRNs ke issue jo is bill me aa rahe hain. Ek GRN ke
+              // do item tick ho to issue do baar na aaye, isliye id se unique.
+              const seenIssue=new Set();
+              const pickedIssues=picked.flatMap(p=>p.issues||[]).filter(i=>{
+                if(seenIssue.has(i.id)) return false;
+                seenIssue.add(i.id); return true;
+              });
               return {
+                issues:pickedIssues,
                 grnNumber:primary.grn_number,
                 grnId:primary.id,
                 grnIds:uniqueGrnIds,
@@ -5890,6 +5958,15 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           <span>⚠ Is vendor ke kuch bills already bina GRN-link ke hain — Fin Activity me check karo, duplicate na ban jaaye</span>
                         </div>
                       )}
+                      {grp.issues.length>0&&(
+                        <div style={{padding:"6px 14px",background:T.redL,borderBottom:`1px solid ${T.redM}`,fontSize:10.5,color:T.red,fontWeight:600,display:"flex",alignItems:"flex-start",gap:6}}>
+                          <span style={{flexShrink:0}}>⚠</span>
+                          <span>
+                            Is vendor ki delivery me {grp.issues.length} open issue hai — bill banate waqt deduction ka faisla lo.
+                            {" "}{[...new Set(grp.issues.map(i=>i.issue_type))].join(" / ")}
+                          </span>
+                        </div>
+                      )}
                       {/* Vendor row */}
                       <div onClick={()=>setExpandedVendor(isOpen?null:grp.vendor)}
                         style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",transition:"background 0.1s"}}
@@ -5904,6 +5981,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                             {[...new Set(grp.grns.map(g=>g.project_name).filter(Boolean))].length>2?", …":""}
                           </div>
                         </div>
+                        {grp.issues.length>0&&(
+                          <span title="Is vendor ki delivery me open issue hai"
+                            style={{fontSize:10.5,color:T.red,fontWeight:700,background:T.redL,padding:"3px 9px",borderRadius:20,border:`1px solid ${T.redM}`,whiteSpace:"nowrap"}}>
+                            ⚠ {grp.issues.length} issue
+                          </span>
+                        )}
                         {selectedInGrp>0&&(
                           <span style={{fontSize:10.5,color:T.blu,fontWeight:700,background:T.bluL,padding:"3px 9px",borderRadius:20,border:`1px solid ${T.bluM}`}}>
                             ✓ {selectedInGrp} ticked
@@ -5949,7 +6032,15 @@ Status: ${ledgerRow.status||"unpaid"}`;
                                     setSelectedUBItems(next);
                                   }}
                                   style={{cursor:"pointer",width:14,height:14,accentColor:T.blu}}/>
-                                <span style={{fontSize:12,color:T.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name}</span>
+                                <span style={{fontSize:12,color:T.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                  {it.name}
+                                  {(it.issues||[]).length>0&&(
+                                    <span title={(it.issues||[]).map(i=>`${i.issue_type}: ${i.note||""}`).join("\n")}
+                                      style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:8,padding:"1px 6px"}}>
+                                      ⚠ {it.issues.length}
+                                    </span>
+                                  )}
+                                </span>
                                 <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.project}</span>
                                 <span style={{fontSize:11,color:T.blu,fontFamily:"monospace",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.grnNumber}</span>
                                 <span style={{fontSize:11.5,color:T.t2,fontWeight:700,textAlign:"right"}}>{it.qty}</span>
