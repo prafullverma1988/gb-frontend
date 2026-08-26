@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import api from "../config/api";
 import LiveLocationMap from "./LiveLocationMap";
+import { Rich, t } from "../i18n";
 
 // ── THEME (copy of subset used here, keeps file self-contained) ──
 const T = {
@@ -31,9 +32,9 @@ function Avatar({ name, size = 30 }) {
 
 function StatusDot({ status }) {
   const map = {
-    active:   { c:T.grn, label:"Active",   pulse:true },
-    idle:     { c:T.amb, label:"Idle",     pulse:false },
-    off_duty: { c:T.t4,  label:"Off duty", pulse:false },
+    active:   { c:T.grn, label:t("common.active"),   pulse:true },
+    idle:     { c:T.amb, label:t("common.idle"),     pulse:false },
+    off_duty: { c:T.t4,  label:t("live_team.off_duty"), pulse:false },
   };
   const s = map[status] || map.off_duty;
   return (
@@ -49,8 +50,8 @@ function StatusDot({ status }) {
 }
 
 function lastSeenText(min) {
-  if (min == null) return "Location pending";
-  if (min < 1) return "Just now";
+  if (min == null) return t("live_team.location_pending");
+  if (min < 1) return t("live_location_map.just_now");
   if (min < 60) return `${min} min ago`;
   const h = Math.floor(min / 60);
   if (h < 24) {
@@ -183,17 +184,17 @@ export default function LiveTeamView() {
       <div style={{ display:"flex",alignItems:"center",justifyContent:"center",padding:60,color:T.t4 }}>
         <div>
           <div style={{ width:24,height:24,border:`3px solid ${T.b1}`,borderTopColor:T.blu,borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 10px" }}/>
-          Loading live locations…
+         {t("live_team.loading_live_locations")}
         </div>
       </div>
     );
   }
 
   const SUMMARY_TILES = [
-    { l:"Punched In", v:summary.punchedIn, c:T.blu },
-    { l:"Active",     v:summary.active,    c:T.grn },
-    { l:"Idle",       v:summary.idle,      c:T.amb },
-    { l:"Out of fence", v:summary.outFence, c:summary.outFence > 0 ? T.red : T.t4 },
+    { l:t("live_team.punched_in"), v:summary.punchedIn, c:T.blu },
+    { l:t("common.active"),     v:summary.active,    c:T.grn },
+    { l:t("common.idle"),       v:summary.idle,      c:T.amb },
+    { l:t("live_team.out_of_fence"), v:summary.outFence, c:summary.outFence > 0 ? T.red : T.t4 },
   ];
 
   return (
@@ -216,7 +217,7 @@ export default function LiveTeamView() {
         {/* Header */}
         <div style={{ padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between" }}>
           <div>
-            <div style={{ fontSize:13,fontWeight:700,color:T.t1 }}>Live Team</div>
+            <div style={{ fontSize:13,fontWeight:700,color:T.t1 }}>{t("live_team.live_team")}</div>
             <div style={{ fontSize:10.5,color:T.t4,marginTop:2 }}>
               {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}` : "—"}
               {error && <span style={{ color:T.red,marginLeft:6 }}>· {error}</span>}
@@ -225,17 +226,17 @@ export default function LiveTeamView() {
           <button onClick={loadLive} disabled={refreshing}
             style={{ padding:"5px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surfaceB,color:T.t2,fontSize:11,fontWeight:600,cursor:refreshing?"default":"pointer",opacity:refreshing?0.7:1,display:"flex",alignItems:"center",gap:5 }}>
             <span style={{ width:11,height:11,border:`2px solid ${T.b2}`,borderTopColor:T.blu,borderRadius:"50%",display:"inline-block",animation:refreshing?"spin 0.7s linear infinite":"none" }}/>
-            {refreshing ? "Refreshing" : "Refresh"}
+            {refreshing ? t("live_team.refreshing") : t("common.refresh")}
           </button>
         </div>
 
         {/* City filter */}
         {cities.length > 0 && (
           <div style={{ padding:"8px 12px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:7 }}>
-            <span style={{ fontSize:10.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px" }}>City</span>
+            <span style={{ fontSize:10.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px" }}>{t("common.city")}</span>
             <select value={cityFilter} onChange={e => setCityFilter(e.target.value)}
               style={{ flex:1,height:28,padding:"0 8px",borderRadius:6,border:`1.5px solid ${cityFilter!=="all"?T.blu:T.b1}`,background:cityFilter!=="all"?T.bluL:T.surface,fontSize:12,color:cityFilter!=="all"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit" }}>
-              <option value="all">All cities</option>
+              <option value="all">{t("live_team.all_cities")}</option>
               {cities.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
@@ -244,10 +245,10 @@ export default function LiveTeamView() {
         {/* Filter chips */}
         <div style={{ padding:"8px 12px",borderBottom:`1px solid ${T.b1}`,display:"flex",gap:5,flexWrap:"wrap" }}>
           {[
-            { id:"all",      l:"All",      c:T.slt },
-            { id:"active",   l:"Active",   c:T.grn },
-            { id:"idle",     l:"Idle",     c:T.amb },
-            { id:"off_duty", l:"Off duty", c:T.t4  },
+            { id:"all",      l:t("common.all"),      c:T.slt },
+            { id:"active",   l:t("common.active"),   c:T.grn },
+            { id:"idle",     l:t("common.idle"),     c:T.amb },
+            { id:"off_duty", l:t("live_team.off_duty"), c:T.t4  },
           ].map(f => {
             const isOn = statusFilter === f.id;
             return (
@@ -270,8 +271,8 @@ export default function LiveTeamView() {
           {filtered.length === 0 && (
             <div style={{ padding:"40px 16px",textAlign:"center",color:T.t4,fontSize:12 }}>
               {members.length === 0
-                ? "No one is punched in right now. Staff appear here once they punch in from the mobile app."
-                : "No members match this filter."}
+                ? t("live_team.no_one_is_punched_in_right")
+                : t("live_team.no_members_match_this_filter")}
             </div>
           )}
           {filtered.map(m => {
@@ -297,8 +298,8 @@ export default function LiveTeamView() {
                   </div>
                   <div style={{ fontSize:11,color:T.t3,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
                     {m.live_status === "off_duty"
-                      ? "Off duty"
-                      : (m.project_name || m.designation || "No project")}
+                      ? t("live_team.off_duty")
+                      : (m.project_name || m.designation || t("live_team.no_project"))}
                     {m.city && <span style={{ color:T.t4 }}> · {m.city}</span>}
                   </div>
                   <div style={{ fontSize:10,color:T.t4,marginTop:2,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" }}>
@@ -312,7 +313,7 @@ export default function LiveTeamView() {
                     )}
                     {m.out_of_fence ? (
                       <span style={{ color:T.red,fontWeight:700,background:T.redL,padding:"1px 6px",borderRadius:10,border:`1px solid ${T.red}33` }}>
-                        Out of fence
+                       {t("live_team.out_of_fence")}
                       </span>
                     ) : null}
                   </div>
@@ -340,13 +341,10 @@ export default function LiveTeamView() {
             display:"flex",alignItems:"center",justifyContent:"space-between",
             fontSize:11.5,color:T.t2,
           }}>
-            <span>
-              Showing trail for <b>{members.find(m=>m.user_id===selectedId)?.name}</b>
-              {trail.length > 0 ? ` · ${trail.length} pings` : " · no pings yet"}
-            </span>
+            <span><Rich k="live_team.showing_trail_for_name_trail" params={{ name: members.find(m=>m.user_id===selectedId)?.name, trail: trail.length > 0 ? ` · ${trail.length} pings` : " · no pings yet" }} /></span>
             <button onClick={() => setSelectedId(null)}
               style={{ background:"none",border:"none",color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer" }}>
-              Clear selection
+             {t("live_team.clear_selection")}
             </button>
           </div>
         )}

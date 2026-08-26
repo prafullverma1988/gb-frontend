@@ -4,6 +4,7 @@
 // bundle, so the rendering lives here rather than being copied. A bundle
 // displayed two different ways is a bundle that gets misread.
 import { T } from "./tokens";
+import { t } from "../../i18n";
 
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
@@ -37,8 +38,8 @@ export function BundleView({ meta, url, accent = T.blu }) {
 
   return (
     <div style={{ border: `1px solid ${T.b1}`, background: T.surfaceB, borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 7 }}>
-      <div style={{ fontSize: 11.5, fontWeight: 700, color: T.t2 }}>Diagnostic bundle</div>
-      {!d && meta && <div style={{ fontSize: 11, color: T.t4 }}>Bundle padha nahi ja saka.</div>}
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: T.t2 }}>{t("ticket_bundle.diagnostic_bundle")}</div>
+      {!d && meta && <div style={{ fontSize: 11, color: T.t4 }}>{t("ticket_bundle.bundle_padha_nahi_ja_saka")}</div>}
       {d && (
         <>
           {row("App", `${d.app_version || "—"} · ${d.online === false ? "offline" : "online"}`)}
@@ -46,13 +47,13 @@ export function BundleView({ meta, url, accent = T.blu }) {
           {d.user_agent && row("Device", d.user_agent)}
           {row("Screens", (d.screens || []).map((s) => s.name).join(" → ") || "—")}
           <div>
-            <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 3 }}>Failed calls ({(d.failed_calls || []).length})</div>
+            <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 3 }}>{t("ticket_bundle.failed_calls_d", { d: (d.failed_calls || []).length })}</div>
             {(d.failed_calls || []).map((c, i) => (
               <div key={i} style={{ fontSize: 11, color: T.t2, fontFamily: "ui-monospace, monospace" }}>{c.status} {c.method} {c.path}</div>
             ))}
           </div>
           <div>
-            <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 3 }}>Errors ({(d.errors || []).length})</div>
+            <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 3 }}>{t("ticket_bundle.errors_d", { d: (d.errors || []).length })}</div>
             {(d.errors || []).map((e, i) => (
               <div key={i} style={{ fontSize: 11, color: T.t2, wordBreak: "break-word" }}>{e.msg}</div>
             ))}
@@ -61,7 +62,7 @@ export function BundleView({ meta, url, accent = T.blu }) {
       )}
       {url && (
         <a href={url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: accent, textDecoration: "none" }}>
-          <IcImage size={13} color={accent} />Screenshot kholein
+          <IcImage size={13} color={accent} />{t("ticket_bundle.screenshot_kholein")}
         </a>
       )}
     </div>

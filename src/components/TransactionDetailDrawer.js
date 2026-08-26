@@ -19,6 +19,7 @@
 import { useState, useEffect } from "react";
 import api from "../config/api";
 import ActivityLog from "./ActivityLog";
+import { t } from "../i18n";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -32,18 +33,18 @@ const T = {
 };
 
 const TYPE_META = {
-  receipt:           { label: "Payment In",     c: T.grn, bg: T.grnL, in: true  },
-  payment:           { label: "Payment Out",    c: T.red, bg: T.redL, in: false },
-  material_purchase: { label: "Material Bill",  c: T.red, bg: T.redL, in: false },
-  site_expense:      { label: "Site Expense",   c: T.red, bg: T.redL, in: false },
-  party_payment:     { label: "Party Payment",  c: T.red, bg: T.redL, in: false },
-  subcon_expense:    { label: "Sub-Con Bill",   c: T.red, bg: T.redL, in: false },
-  bank_transfer:     { label: "Bank Transfer",  c: T.t3,  bg: T.b1,   in: null  },
-  sales_invoice:     { label: "Sales Invoice",  c: T.grn, bg: T.grnL, in: true  },
-  material_return:   { label: "Material Return", c: T.grn, bg: T.grnL, in: true },
-  unbilled_material: { label: "Unbilled",       c: T.pur, bg: T.purL, in: false },
-  wallet_payment:    { label: "Wallet Out",     c: T.red, bg: T.redL, in: false },
-  wallet_topup:      { label: "Wallet Top-up",  c: T.t3,  bg: T.b1,   in: null  },
+  receipt:           { get label() { return t("transaction_detail.payment_in"); },     c: T.grn, bg: T.grnL, in: true  },
+  payment:           { get label() { return t("transaction_detail.payment_out"); },    c: T.red, bg: T.redL, in: false },
+  material_purchase: { get label() { return t("transaction_detail.material_bill"); },  c: T.red, bg: T.redL, in: false },
+  site_expense:      { get label() { return t("payment_request.site_expense"); },   c: T.red, bg: T.redL, in: false },
+  party_payment:     { get label() { return t("transaction_detail.party_payment"); },  c: T.red, bg: T.redL, in: false },
+  subcon_expense:    { get label() { return t("transaction_detail.sub_con_bill"); },   c: T.red, bg: T.redL, in: false },
+  bank_transfer:     { get label() { return t("transaction_detail.bank_transfer"); },  c: T.t3,  bg: T.b1,   in: null  },
+  sales_invoice:     { get label() { return t("transaction_detail.sales_invoice"); },  c: T.grn, bg: T.grnL, in: true  },
+  material_return:   { get label() { return t("transaction_detail.material_return"); }, c: T.grn, bg: T.grnL, in: true },
+  unbilled_material: { get label() { return t("transaction_detail.unbilled"); },       c: T.pur, bg: T.purL, in: false },
+  wallet_payment:    { get label() { return t("transaction_detail.wallet_out"); },     c: T.red, bg: T.redL, in: false },
+  wallet_topup:      { get label() { return t("transaction_detail.wallet_top_up"); },  c: T.t3,  bg: T.b1,   in: null  },
 };
 
 const fmtN = (n) => {
@@ -173,7 +174,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
       if (res?.success === false) {
         // Ghost row (deleted in another tab/session) — refresh + close
         if (/not found/i.test(res.message || "")) {
-          setErr("Yeh transaction ab exist nahi karti (kisi aur tab me delete ho gayi). List refresh ho rahi hai.");
+          setErr(t("transaction_detail.yeh_transaction_ab_exist_nahi_karti"));
           setSaving(false);
           setTimeout(() => { onChanged && onChanged(); onClose && onClose(); }, 1400);
           return;
@@ -184,7 +185,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
       onChanged && onChanged();
     } catch (e) {
       if (/404|not found/i.test(e?.message || "")) {
-        setErr("Yeh transaction ab exist nahi karti — list refresh ho rahi hai.");
+        setErr(t("transaction_detail.yeh_transaction_ab_exist_nahi_karti_2"));
         setSaving(false);
         setTimeout(() => { onChanged && onChanged(); onClose && onClose(); }, 1400);
         return;
@@ -241,9 +242,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         <div style={{ background: "#0D1B2A", padding: "16px 20px", color: "#fff", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3, fontWeight: 600, letterSpacing: ".4px", textTransform: "uppercase" }}>
-                {meta.label} · TXN-{txn.id}
-              </div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3, fontWeight: 600, letterSpacing: ".4px", textTransform: "uppercase" }}>{t("transaction_detail.label_txn_id", { label: meta.label, id: txn.id })}</div>
               <div style={{ fontSize: 22, fontWeight: 800, color: amtColor, letterSpacing: "-.5px" }}>
                 {amtSign}₹{Math.round(txn.amount).toLocaleString("en-IN")}
               </div>
@@ -272,14 +271,14 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                 <button onClick={() => onDownloadInvoice(txn)}
                   style={{ flex: 1, padding: "9px", borderRadius: 8, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                   <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                  Download PDF
+                 {t("transaction_detail.download_pdf")}
                 </button>
               )}
               {onShareInvoice && (
                 <button onClick={() => onShareInvoice(txn)}
                   style={{ flex: 1, padding: "9px", borderRadius: 8, background: T.grnL, border: `1px solid ${T.grnM}`, color: T.grn, fontSize: 12.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                   <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
-                  Share
+                 {t("transaction_detail.share")}
                 </button>
               )}
             </div>
@@ -288,14 +287,14 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
           {/* Top tile: amount status, dates */}
           {!editing && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-              <Tile label="Date"     value={fmtDate(txn.date)}/>
-              <Tile label="Status"   value={txn.status || "—"} c={txn.status === "paid" ? T.grn : T.amb}/>
-              <Tile label="Party"    value={txn.party_name || txn.party || "—"}/>
-              <Tile label="Project"  value={txn.project_name || txn.project || "—"}/>
-              {hasDueDate && txn.due_date && <Tile label="Payment Due" value={fmtDate(txn.due_date)} c={T.amb}/>}
-              {txn.reference_no && <Tile label="Reference" value={txn.reference_no}/>}
-              {txn.account_name && <Tile label="Account" value={txn.account_name}/>}
-              {txn.to_account_name && <Tile label="To Account" value={txn.to_account_name}/>}
+              <Tile label={t("common.date")}     value={fmtDate(txn.date)}/>
+              <Tile label={t("common.status")}   value={txn.status || "—"} c={txn.status === "paid" ? T.grn : T.amb}/>
+              <Tile label={t("common.party")}    value={txn.party_name || txn.party || "—"}/>
+              <Tile label={t("common.project")}  value={txn.project_name || txn.project || "—"}/>
+              {hasDueDate && txn.due_date && <Tile label={t("transaction_detail.payment_due")} value={fmtDate(txn.due_date)} c={T.amb}/>}
+              {txn.reference_no && <Tile label={t("transaction_detail.reference")} value={txn.reference_no}/>}
+              {txn.account_name && <Tile label={t("transaction_detail.account")} value={txn.account_name}/>}
+              {txn.to_account_name && <Tile label={t("transaction_detail.to_account")} value={txn.to_account_name}/>}
             </div>
           )}
 
@@ -306,11 +305,11 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                 <>
                   {txn.status === "paid" && (
                     <div style={{ padding: "8px 11px", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 6, color: T.amb, fontSize: 11.5, lineHeight: 1.4 }}>
-                      ⚠ Yeh bill already <b>paid</b> hai. Items badalne se amount change hoga aur linked payment se mismatch ho sakta hai — zaroori ho tabhi badlein.
+                     {t("transaction_detail.yeh_bill_already")} <b>paid</b> {t("transaction_detail.hai_items_badalne_se_amount_change")}
                     </div>
                   )}
                   <div>
-                    <label style={lblStyle}>Line Items {txn.grn_locked && <span style={{ fontWeight: 600, color: T.t4 }}>· 🔒 GRN rows locked (rate editable)</span>}</label>
+                    <label style={lblStyle}>{t("transaction_detail.line_items")} {txn.grn_locked && <span style={{ fontWeight: 600, color: T.t4 }}>{t("transaction_detail.grn_rows_locked_rate_editable")}</span>}</label>
                     <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 54px 46px 66px 24px", gap: 5, padding: "6px 8px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}` }}>
                         {["Material", "Qty", "UOM", "Rate", ""].map((h, i) => (
@@ -320,8 +319,8 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                       {editItems.map((it, i) => (
                         <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 54px 46px 66px 24px", gap: 5, padding: "5px 8px", borderBottom: `1px solid ${T.b1}`, alignItems: "center" }}>
                           {it._locked
-                            ? <span title="GRN se locked" style={{ fontSize: 11.5, color: T.t1, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🔒 {it.item || "—"}</span>
-                            : <input value={it.item} onChange={e => updItem(i, "item", e.target.value)} placeholder="Material" style={miniInp()}/>}
+                            ? <span title={t("transaction_detail.grn_se_locked")} style={{ fontSize: 11.5, color: T.t1, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🔒 {it.item || "—"}</span>
+                            : <input value={it.item} onChange={e => updItem(i, "item", e.target.value)} placeholder={t("common.material")} style={miniInp()}/>}
                           {it._locked
                             ? <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>{it.qty || 0}</span>
                             : <input type="number" value={it.qty} onChange={e => updItem(i, "qty", e.target.value)} placeholder="0" style={miniInp("right")}/>}
@@ -329,19 +328,19 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                           <input type="number" value={it.rate} onChange={e => updItem(i, "rate", e.target.value)} placeholder="0" style={miniInp("right")}/>
                           {it._locked
                             ? <span style={{ color: T.b2, textAlign: "center", fontSize: 11 }}>🔒</span>
-                            : <button onClick={() => delItem(i)} title="Remove" style={{ background: "none", border: "none", color: T.red, cursor: "pointer", fontSize: 15, padding: 0, lineHeight: 1 }}>×</button>}
+                            : <button onClick={() => delItem(i)} title={t("common.remove")} style={{ background: "none", border: "none", color: T.red, cursor: "pointer", fontSize: 15, padding: 0, lineHeight: 1 }}>×</button>}
                         </div>
                       ))}
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 9px", background: T.bluL }}>
-                        <button onClick={addItem} style={{ background: "none", border: `1px dashed ${T.b2}`, color: T.blu, borderRadius: 5, fontSize: 11, fontWeight: 700, padding: "3px 10px", cursor: "pointer" }}>+ Add Item</button>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: T.blu }}>Total ₹{Math.round(editItemsTotal).toLocaleString("en-IN")}</span>
+                        <button onClick={addItem} style={{ background: "none", border: `1px dashed ${T.b2}`, color: T.blu, borderRadius: 5, fontSize: 11, fontWeight: 700, padding: "3px 10px", cursor: "pointer" }}>{t("common.add_item")}</button>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: T.blu }}>{t("transaction_detail.total_math", { Math: Math.round(editItemsTotal).toLocaleString("en-IN") })}</span>
                       </div>
                     </div>
-                    <div style={{ fontSize: 10, color: T.t4, marginTop: 4 }}>Amount rows se auto-calculate hota hai.</div>
+                    <div style={{ fontSize: 10, color: T.t4, marginTop: 4 }}>{t("transaction_detail.amount_rows_se_auto_calculate_hota")}</div>
                   </div>
                 </>
               ) : (
-                <Field label="Amount *" type="number" value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))}/>
+                <Field label={t("transaction_detail.amount")} type="number" value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))}/>
               )}
               {/* Date row: bills get two-column "Bill Date + Due Date";
                   cash events get a single "Transaction Date". The
@@ -349,17 +348,17 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                   bills/invoices. */}
               {hasDueDate ? (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  <Field label="Bill Date" type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))}/>
-                  <Field label="Payment Due Date" type="date" value={form.due_date} onChange={v => setForm(p => ({ ...p, due_date: v }))}/>
+                  <Field label={t("common.bill_date")} type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))}/>
+                  <Field label={t("transaction_detail.payment_due_date")} type="date" value={form.due_date} onChange={v => setForm(p => ({ ...p, due_date: v }))}/>
                 </div>
               ) : (
-                <Field label="Transaction Date" type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))}/>
+                <Field label={t("transaction_detail.transaction_date")} type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))}/>
               )}
-              <Field label="Party" value={form.party_name} onChange={v => setForm(p => ({ ...p, party_name: v }))}/>
-              <Field label="Project" value={form.project_name} onChange={v => setForm(p => ({ ...p, project_name: v }))}/>
-              <Field label="Reference No." value={form.reference_no} onChange={v => setForm(p => ({ ...p, reference_no: v }))}/>
+              <Field label={t("common.party")} value={form.party_name} onChange={v => setForm(p => ({ ...p, party_name: v }))}/>
+              <Field label={t("common.project")} value={form.project_name} onChange={v => setForm(p => ({ ...p, project_name: v }))}/>
+              <Field label={t("common.reference_no")} value={form.reference_no} onChange={v => setForm(p => ({ ...p, reference_no: v }))}/>
               <div>
-                <label style={lblStyle}>Status</label>
+                <label style={lblStyle}>{t("common.status")}</label>
                 <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} style={inpStyle}>
                   <option value="paid">paid</option>
                   <option value="unpaid">unpaid</option>
@@ -367,14 +366,14 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                   <option value="pending">pending</option>
                 </select>
               </div>
-              <Field label="Note" value={form.note} onChange={v => setForm(p => ({ ...p, note: v }))}/>
+              <Field label={t("common.note")} value={form.note} onChange={v => setForm(p => ({ ...p, note: v }))}/>
             </div>
           )}
 
           {/* Note (read-only mode) */}
           {!editing && (txn.note || txn.description) && (
             <div style={{ padding: "10px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, marginBottom: 14 }}>
-              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>Note / Description</div>
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>{t("transaction_detail.note_description")}</div>
               <div style={{ fontSize: 12.5, color: T.t1, lineHeight: 1.5 }}>{txn.note || txn.description}</div>
             </div>
           )}
@@ -382,7 +381,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
           {/* Line items */}
           {!editing && isBill && items.length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>Line Items</div>
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("common.line_items")}</div>
               <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 60px 80px 90px", padding: "7px 10px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}`, gap: 5 }}>
                   {["Material", "Qty", "Unit", "Rate", "Amount"].map((h, i) => (
@@ -409,7 +408,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                         animation: isHighlighted ? "highlightPulse 1.6s ease-out" : "none",
                       }}>
                       <span style={{ fontSize: 12, color: T.t1, fontWeight: isHighlighted ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {isHighlighted && <span style={{ fontSize: 9, fontWeight: 700, color: T.amb, marginRight: 5 }}>👈 YOU CLICKED</span>}
+                        {isHighlighted && <span style={{ fontSize: 9, fontWeight: 700, color: T.amb, marginRight: 5 }}>{t("transaction_detail.you_clicked")}</span>}
                         {itemName || "—"}
                       </span>
                       <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>{it.qty || it.quantity || "—"}</span>
@@ -431,12 +430,10 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               baad bhi pata rahe ki deduction kis wajah se hua tha. */}
           {!editing && Array.isArray(txn.grn_issues) && txn.grn_issues.length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.red, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>
-                ⚠ Delivery Issues ({txn.grn_issues.length})
-              </div>
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.red, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("transaction_detail.delivery_issues_txn", { txn: txn.grn_issues.length })}</div>
               <div style={{ background: T.redL, border: `1px solid ${T.redM}`, borderLeft: `3px solid ${T.red}`, borderRadius: 8, padding: "9px 11px" }}>
                 <div style={{ fontSize: 10.5, color: T.t3, marginBottom: 7 }}>
-                  Maal receive karte waqt site ne ye problem darj ki thi — bill par deduction ka faisla isi par hua.
+                 {t("transaction_detail.maal_receive_karte_waqt_site_ne")}
                 </div>
                 {txn.grn_issues.map((iss, i) => (
                   <div key={iss.id || i}
@@ -447,7 +444,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                       <span style={{ color: T.t4, fontSize: 10 }}> · {iss.raised_by_name || "—"}</span>
                     </span>
                     {iss.photo_url && (
-                      <a href={iss.photo_url} target="_blank" rel="noreferrer" title="Photo proof" style={{ flexShrink: 0, textDecoration: "none", fontSize: 12 }}>📎</a>
+                      <a href={iss.photo_url} target="_blank" rel="noreferrer" title={t("transaction_detail.photo_proof")} style={{ flexShrink: 0, textDecoration: "none", fontSize: 12 }}>📎</a>
                     )}
                   </div>
                 ))}
@@ -469,23 +466,23 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
             <>
               <button onClick={() => setEditing(false)} disabled={saving}
                 style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, color: T.t3, fontSize: 12, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={handleSave} disabled={saving}
                 style={{ flex: 2, padding: "9px", borderRadius: 7, background: saving ? "#9CA3AF" : T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>
-                {saving ? "Saving..." : "✓ Save Changes"}
+                {saving ? t("common.saving") : t("mrdetail.save_changes")}
               </button>
             </>
           ) : (
             <>
               <button onClick={handleDelete} disabled={deleting}
                 style={{ padding: "9px 14px", borderRadius: 7, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12, fontWeight: 700, cursor: deleting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-                {deleting ? "Deleting..." : "🗑 Delete"}
+                {deleting ? t("common.deleting") : t("transaction_detail.delete")}
               </button>
               <div style={{ flex: 1 }}/>
               <button onClick={() => setEditing(true)}
                 style={{ padding: "9px 18px", borderRadius: 7, background: T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-                ✏ Edit
+               {t("common.edit")}
               </button>
             </>
           )}

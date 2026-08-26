@@ -15,6 +15,7 @@
 //   title     — override the heading text
 import React, { useState } from "react";
 import uploadManager from "../utils/uploadManager";
+import { t } from "../i18n";
 
 const T = {
   surface: "#FFFFFF",
@@ -65,14 +66,14 @@ export default function GrnIssueBlock({ value, onChange, compact = false, title 
         {!open && (
           <button type="button" onClick={() => setOpen(true)}
             style={{ padding: "3px 10px", borderRadius: 5, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-            {issues.length ? "+ Aur issue" : "+ Issue"}
+            {issues.length ? t("grn_issue.aur_issue") : t("grn_issue.issue")}
           </button>
         )}
       </div>
 
       {!open && issues.length === 0 && !compact && (
         <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4, paddingLeft: 20 }}>
-          Sab theek hai to kuch mat karo — issue GRN ke saath hi log ho jayega aur baad me material ke andar dikhega.
+         {t("grn_issue.sab_theek_hai_to_kuch_mat")}
         </div>
       )}
 
@@ -83,8 +84,8 @@ export default function GrnIssueBlock({ value, onChange, compact = false, title 
             <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 7, background: T.surface, border: `1px solid ${T.redM}`, borderRadius: 6, padding: "6px 8px" }}>
               <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, background: T.red, color: "white", flexShrink: 0, marginTop: 1 }}>{iss.issue_type}</span>
               <span style={{ fontSize: 11, color: T.t1, flex: 1, wordBreak: "break-word" }}>{iss.note}</span>
-              {iss.photo_url && <span title="Photo attached" style={{ fontSize: 11, flexShrink: 0 }}>📎</span>}
-              <button type="button" onClick={() => remove(i)} title="Hatao"
+              {iss.photo_url && <span title={t("grn_issue.photo_attached")} style={{ fontSize: 11, flexShrink: 0 }}>📎</span>}
+              <button type="button" onClick={() => remove(i)} title={t("common.hatao")}
                 style={{ width: 18, height: 18, borderRadius: 4, background: "none", border: "none", color: T.t4, fontSize: 13, cursor: "pointer", lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
             </div>
           ))}
@@ -103,7 +104,7 @@ export default function GrnIssueBlock({ value, onChange, compact = false, title 
             ))}
           </div>
           <textarea value={note} onChange={e => setNote(e.target.value)} autoFocus rows={2}
-            placeholder="Kya problem hai? (compulsory) — e.g. 40 bags me se 6 bheege hue the"
+            placeholder={t("grn_issue.kya_problem_hai_compulsory_e_g")}
             style={{ width: "100%", padding: "7px 9px", borderRadius: 6, border: `1px solid ${T.b1}`, fontSize: 11.5, resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", outline: "none", color: T.t1 }} />
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
             {photo ? (
@@ -128,17 +129,17 @@ export default function GrnIssueBlock({ value, onChange, compact = false, title 
               </label>
             )}
             <span style={{ fontSize: 10, color: T.t4, flex: 1 }}>
-              {photo ? "Photo lag gayi — proof of problem" : "Photo optional, par damage/quality me proof kaam aata hai"}
+              {photo ? t("grn_issue.photo_lag_gayi_proof_of_problem") : t("grn_issue.photo_optional_par_damage_quality_me")}
             </span>
           </div>
           <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
             <button type="button" onClick={reset}
               style={{ flex: 1, padding: "6px", borderRadius: 5, background: "white", border: `1px solid ${T.b1}`, color: T.t3, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-              Cancel
+             {t("common.cancel")}
             </button>
             <button type="button" onClick={add} disabled={!note.trim()}
               style={{ flex: 2, padding: "6px", borderRadius: 5, background: note.trim() ? T.red : "#9CA3AF", border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: note.trim() ? "pointer" : "not-allowed", fontFamily: "inherit" }}>
-              ⚠ Issue add karo
+             {t("grn_issue.issue_add_karo")}
             </button>
           </div>
         </div>

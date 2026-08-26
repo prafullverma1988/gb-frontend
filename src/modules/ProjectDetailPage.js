@@ -15,6 +15,7 @@ import MOMModule from "./MOMModule";
 import MapPicker from "../components/MapPicker";
 import { T, fmt, fmtN, localYMD, PROJ, STATUS_S, STAGES, STAGE_S } from "./shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabIc } from "./shared/ui";
+import { t } from "../i18n";
 
 // ── "Waiting on" label ─────────────────────────────────────────────────────
 // Backend /approvals/pending bhejta hai: _waitingOn (role label, escalation ke
@@ -168,37 +169,37 @@ const IcSolarInst = (p) => <TabIc {...p} d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 
 const IcSubsidy   = (p) => <TabIc {...p} d="M19 5L5 19M6.5 6.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM17.5 14.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>;
 
 const TABS = [
-  {id:"overview",   label:"Overview",    key:"o", Icon:IcOverview},
-  {id:"design",     label:"Design",      key:"d", Icon:IcDesign},
-  {id:"estimate",   label:"Estimate",    key:"e", Icon:IcEstimate},
-  {id:"budget",     label:"Budget",      key:"g", Icon:IcEstimate},
-  {id:"party",      label:"Party",       key:"p", Icon:IcParty},
-  {id:"transaction",label:"Fin Activity", key:"t", Icon:IcTrans},
-  {id:"todo",       label:"To Do",       key:"k", Icon:IcTodo},
-  {id:"task",       label:"Tasks",       key:"j", Icon:IcTask},
-  {id:"attendance", label:"Attendance",  key:"a", Icon:IcAttend},
-  {id:"material",   label:"Material",    key:"m", Icon:IcMaterial},
-  {id:"subcon",     label:"Subcon",      key:"b", Icon:IcSubcon},
-  {id:"equipment",  label:"Equipment",   key:"q", Icon:IcEquip},
-  {id:"files",      label:"Files",       key:"i", Icon:IcFiles},
-  {id:"site",       label:"Site / DPR",  key:"y", Icon:IcSite},
+  {id:"overview",   get label() { return t("project_detail.overview"); },    key:"o", Icon:IcOverview},
+  {id:"design",     get label() { return t("common.design"); },      key:"d", Icon:IcDesign},
+  {id:"estimate",   get label() { return t("project_detail.estimate"); },    key:"e", Icon:IcEstimate},
+  {id:"budget",     get label() { return t("project_detail.budget"); },      key:"g", Icon:IcEstimate},
+  {id:"party",      get label() { return t("project_detail.party"); },       key:"p", Icon:IcParty},
+  {id:"transaction",get label() { return t("project_detail.fin_activity"); }, key:"t", Icon:IcTrans},
+  {id:"todo",       get label() { return t("project_detail.to_do"); },       key:"k", Icon:IcTodo},
+  {id:"task",       get label() { return t("common.tasks"); },       key:"j", Icon:IcTask},
+  {id:"attendance", get label() { return t("project_detail.attendance"); },  key:"a", Icon:IcAttend},
+  {id:"material",   get label() { return t("common.material"); },    key:"m", Icon:IcMaterial},
+  {id:"subcon",     get label() { return t("project_detail.subcon"); },      key:"b", Icon:IcSubcon},
+  {id:"equipment",  get label() { return t("project_detail.equipment"); },   key:"q", Icon:IcEquip},
+  {id:"files",      get label() { return t("project_detail.files"); },       key:"i", Icon:IcFiles},
+  {id:"site",       get label() { return t("project_detail.site_dpr"); },  key:"y", Icon:IcSite},
   {id:"mom",        label:"MOM",         key:"n", Icon:IcMOM},
 ];
 
 // ── SOLAR EPC TABS (only for project_type = 'solar_epc') ──────────
 const SOLAR_TABS = [
-  {id:"overview",      label:"Overview",        key:"o", Icon:IcOverview},
-  {id:"solar_stages",  label:"Surya Ghar",      key:"s", Icon:IcSolar},
-  {id:"solar_boq",     label:"BOQ / Quotation", key:"e", Icon:IcEstimate},
-  {id:"solar_install", label:"Installation",    key:"i", Icon:IcSolarInst},
-  {id:"solar_subsidy", label:"Subsidy",         key:"u", Icon:IcSubsidy},
-  {id:"material",      label:"Material",        key:"m", Icon:IcMaterial},
-  {id:"transaction",   label:"Finance",         key:"t", Icon:IcTrans},
-  {id:"design",        label:"Design",          key:"d", Icon:IcDesign},
-  {id:"party",         label:"Party",           key:"p", Icon:IcParty},
-  {id:"todo",          label:"To Do",           key:"k", Icon:IcTodo},
-  {id:"task",          label:"Tasks",           key:"j", Icon:IcTask},
-  {id:"files",         label:"Files",           key:"f", Icon:IcFiles},
+  {id:"overview",      get label() { return t("project_detail.overview"); },        key:"o", Icon:IcOverview},
+  {id:"solar_stages",  get label() { return t("project_detail.surya_ghar"); },      key:"s", Icon:IcSolar},
+  {id:"solar_boq",     get label() { return t("project_detail.boq_quotation"); }, key:"e", Icon:IcEstimate},
+  {id:"solar_install", get label() { return t("project_detail.installation"); },    key:"i", Icon:IcSolarInst},
+  {id:"solar_subsidy", get label() { return t("project_detail.subsidy"); },         key:"u", Icon:IcSubsidy},
+  {id:"material",      get label() { return t("common.material"); },        key:"m", Icon:IcMaterial},
+  {id:"transaction",   get label() { return t("common.finance"); },         key:"t", Icon:IcTrans},
+  {id:"design",        get label() { return t("common.design"); },          key:"d", Icon:IcDesign},
+  {id:"party",         get label() { return t("project_detail.party"); },           key:"p", Icon:IcParty},
+  {id:"todo",          get label() { return t("project_detail.to_do"); },           key:"k", Icon:IcTodo},
+  {id:"task",          get label() { return t("common.tasks"); },           key:"j", Icon:IcTask},
+  {id:"files",         get label() { return t("project_detail.files"); },           key:"f", Icon:IcFiles},
 ];
 
 // ── ProjectSwitcher — clickable project name in the top breadcrumb ──
@@ -270,7 +271,7 @@ function ProjectSwitcher({ current, onSwitch }) {
 
   return (
     <>
-      <button ref={btnRef} onClick={onToggle} title="Switch project"
+      <button ref={btnRef} onClick={onToggle} title={t("project_detail.switch_project")}
         style={{
           display:"inline-flex", alignItems:"center", gap:5, flexShrink:0,
           padding:"4px 9px 4px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,.12)",
@@ -297,13 +298,13 @@ function ProjectSwitcher({ current, onSwitch }) {
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search project or client..."
+              placeholder={t("project_detail.search_project_or_client")}
               style={{width:"100%", padding:"7px 10px", borderRadius:6, border:"1.5px solid #E5E7EB", fontSize:12.5, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}/>
           </div>
-          {loading && <div style={{padding:"18px 14px", textAlign:"center", fontSize:12, color:"#94A3B8"}}>Loading projects...</div>}
+          {loading && <div style={{padding:"18px 14px", textAlign:"center", fontSize:12, color:"#94A3B8"}}>{t("common.loading_projects")}</div>}
           {!loading && filtered.length === 0 && (
             <div style={{padding:"22px 14px", textAlign:"center", fontSize:12.5, color:"#64748B"}}>
-              {search ? "No projects match." : "No other projects."}
+              {search ? t("project_detail.no_projects_match") : t("project_detail.no_other_projects")}
             </div>
           )}
           {!loading && filtered.map(p => (
@@ -372,11 +373,11 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
   // because this one lives in a narrow right-hand drawer.
   const [sec, setSec] = useState("basic");
   const SECS = [
-    { id:"basic",   label:"Basic Info" },
-    { id:"team",    label:"Team & Roles" },
-    { id:"client",  label:"Client Access" },
-    { id:"status",  label:"Status & Dates" },
-    { id:"geo",     label:"Geo-Location" },
+    { id:"basic",   label:t("project_detail.basic_info") },
+    { id:"team",    label:t("project_detail.team_roles") },
+    { id:"client",  label:t("project_detail.client_access") },
+    { id:"status",  label:t("project_detail.status_dates") },
+    { id:"geo",     label:t("project_detail.geo_location") },
   ];
 
   // ── Client Access ────────────────────────────────────────────
@@ -414,14 +415,14 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
     else setCErr((r && r.message) || "Add nahi hua");
   };
   const removeClient = async (uid) => {
-    if (!window.confirm("Is client ka access hata dein?")) return;
+    if (!window.confirm(t("project_detail.is_client_ka_access_hata_dein"))) return;
     await api.del("/client/projects/" + project.id + "/clients/" + uid);
     loadClients();
   };
   // The old password cannot be looked up — it was never stored readably — so
   // "forgot it" is only ever solved by issuing a new one.
   const resetPw = async (uid) => {
-    if (!window.confirm("Naya password banayein? Purana password band ho jayega.")) return;
+    if (!window.confirm(t("project_detail.naya_password_banayein_purana_password_band"))) return;
     setCErr("");
     const r = await api.post("/client/projects/" + project.id + "/clients/" + uid + "/reset-password", {});
     if (r && r.success) setNewPw({ phone: r.data.phone, password: r.password });
@@ -442,7 +443,7 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
   // ── Save project details ──
   const saveDetails = async () => {
     if (savingRef.current) return;
-    if (!form.name.trim()) { setMsg("Project name required"); return; }
+    if (!form.name.trim()) { setMsg(t("project_detail.project_name_required")); return; }
     savingRef.current = true; setSaving(true); setMsg("");
     try {
       const body = {
@@ -457,7 +458,7 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
       };
       if (form.cityId) body.cityId = Number(form.cityId);
       const r = await api.put("/projects/" + project.id, body);
-      if (r.success) { setMsg("✓ Project details saved"); setTimeout(()=>setMsg(""), 3500); }
+      if (r.success) { setMsg(t("project_detail.project_details_saved")); setTimeout(()=>setMsg(""), 3500); }
       else setMsg(r.message || "Save failed");
     } catch (e) { setMsg(e.message || "Network error"); }
     savingRef.current = false; setSaving(false);
@@ -522,17 +523,17 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
       {/* ── BASIC INFO ── */}
       {sec==="basic"&&(
       <div style={card}>
-        <div style={sectionTitle}>📋 Project Details</div>
-        <div style={{ marginBottom:10 }}><label style={L}>Project Name *</label><input value={form.name} onChange={upd("name")} style={I}/></div>
-        <div style={{ marginBottom:10 }}><label style={L}>City</label>
+        <div style={sectionTitle}>{t("project_detail.project_details")}</div>
+        <div style={{ marginBottom:10 }}><label style={L}>{t("common.project_name")}</label><input value={form.name} onChange={upd("name")} style={I}/></div>
+        <div style={{ marginBottom:10 }}><label style={L}>{t("common.city")}</label>
           <select value={form.cityId} onChange={upd("cityId")} style={{ ...I, cursor:"pointer" }}>
-            <option value="">{project.city || "Select city…"}</option>
+            <option value="">{project.city || t("project_detail.select_city")}</option>
             {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-          <div><label style={L}>BOQ Value (₹)</label><input type="number" value={form.boq_value} onChange={upd("boq_value")} placeholder="0" style={I}/></div>
-          <div><label style={L}>Contract Value (₹)</label><input type="number" value={form.contract_value} onChange={upd("contract_value")} placeholder="0" style={I}/></div>
+          <div><label style={L}>{t("project_detail.boq_value")}</label><input type="number" value={form.boq_value} onChange={upd("boq_value")} placeholder="0" style={I}/></div>
+          <div><label style={L}>{t("project_detail.contract_value")}</label><input type="number" value={form.contract_value} onChange={upd("contract_value")} placeholder="0" style={I}/></div>
         </div>
       </div>
       )}
@@ -540,15 +541,15 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
       {/* ── STATUS & DATES ── */}
       {sec==="status"&&(
       <div style={card}>
-        <div style={sectionTitle}>📅 Status & Dates</div>
-        <div style={{ marginBottom:10 }}><label style={L}>Status</label>
+        <div style={sectionTitle}>{t("project_detail.status_dates_2")}</div>
+        <div style={{ marginBottom:10 }}><label style={L}>{t("common.status")}</label>
           <select value={form.status} onChange={upd("status")} style={{ ...I, cursor:"pointer" }}>
             {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-          <div><label style={L}>Start Date</label><input type="date" value={form.start_date} onChange={upd("start_date")} style={I}/></div>
-          <div><label style={L}>End Date</label><input type="date" value={form.end_date} onChange={upd("end_date")} style={I}/></div>
+          <div><label style={L}>{t("common.start_date")}</label><input type="date" value={form.start_date} onChange={upd("start_date")} style={I}/></div>
+          <div><label style={L}>{t("common.end_date")}</label><input type="date" value={form.end_date} onChange={upd("end_date")} style={I}/></div>
         </div>
       </div>
       )}
@@ -556,10 +557,10 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
       {/* ── TEAM & ROLES ── */}
       {sec==="team"&&(
       <div style={card}>
-        <div style={sectionTitle}>👷 Team & Roles</div>
+        <div style={sectionTitle}>{t("project_detail.team_roles_2")}</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-          <div><label style={L}>Project Manager</label><input value={form.pm_name} onChange={upd("pm_name")} placeholder="PM name" style={I}/></div>
-          <div><label style={L}>Site Supervisor</label><input value={form.site_supervisor} onChange={upd("site_supervisor")} placeholder="Supervisor" style={I}/></div>
+          <div><label style={L}>{t("project_detail.project_manager")}</label><input value={form.pm_name} onChange={upd("pm_name")} placeholder={t("project_detail.pm_name")} style={I}/></div>
+          <div><label style={L}>{t("project_detail.site_supervisor")}</label><input value={form.site_supervisor} onChange={upd("site_supervisor")} placeholder={t("project_detail.supervisor")} style={I}/></div>
         </div>
       </div>
       )}
@@ -567,24 +568,23 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
       {/* ── CLIENT (metadata + login live in the same tab) ── */}
       {sec==="client"&&(<>
       <div style={card}>
-        <div style={sectionTitle}>👤 Client</div>
-        <div style={{ marginBottom:10 }}><label style={L}>Client Name</label><input value={form.client_name} onChange={upd("client_name")} style={I}/></div>
+        <div style={sectionTitle}>{t("project_detail.client")}</div>
+        <div style={{ marginBottom:10 }}><label style={L}>{t("project_detail.client_name")}</label><input value={form.client_name} onChange={upd("client_name")} style={I}/></div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
-          <div><label style={L}>Phone</label><input value={form.client_phone} onChange={upd("client_phone")} style={I}/></div>
-          <div><label style={L}>Email</label><input value={form.client_email} onChange={upd("client_email")} style={I}/></div>
+          <div><label style={L}>{t("common.phone")}</label><input value={form.client_phone} onChange={upd("client_phone")} style={I}/></div>
+          <div><label style={L}>{t("common.email")}</label><input value={form.client_email} onChange={upd("client_email")} style={I}/></div>
         </div>
-        <div style={{ marginBottom:10 }}><label style={L}>Site Address</label><input value={form.site_address} onChange={upd("site_address")} placeholder="Full site address" style={I}/></div>
-        <div><label style={L}>Notes / Description</label><textarea value={form.description} onChange={upd("description")} rows={2} style={{ ...I, resize:"vertical" }}/></div>
+        <div style={{ marginBottom:10 }}><label style={L}>{t("project_detail.site_address")}</label><input value={form.site_address} onChange={upd("site_address")} placeholder={t("project_detail.full_site_address")} style={I}/></div>
+        <div><label style={L}>{t("project_detail.notes_description")}</label><textarea value={form.description} onChange={upd("description")} rows={2} style={{ ...I, resize:"vertical" }}/></div>
       </div>
 
       {/* ── CLIENT ACCESS (login, not just metadata) ── */}
       {isAdmin && (
         <div style={{ ...card, borderColor:T.bluM, background:T.bluL }}>
-          <div style={sectionTitle}>🔑 Client Access (app login)</div>
+          <div style={sectionTitle}>{t("project_detail.client_access_app_login")}</div>
           <div style={{ fontSize:11, color:T.t3, marginBottom:12, lineHeight:1.5 }}>
-            Upar wala "Client" sirf record hai. Yahan jode gaye client <b>mobile app me apne number se login</b> karke
-            <b> sirf</b> is project ka progress, site photos aur apni billing dekh sakte hain. Cost, budget, staff,
-            procurement — kuch bhi unhe nahi dikhta. Ek client ko kai projects se joda ja sakta hai.
+           {t("project_detail.upar_wala_client_sirf_record_hai")} <b>{t("project_detail.mobile_app_me_apne_number_se")}</b> karke
+            <b> sirf</b> {t("project_detail.is_project_ka_progress_site_photos")}
           </div>
 
           {clients.length > 0 && (
@@ -593,15 +593,15 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
                 <div key={c.user_id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 11px", borderRadius:8, border:"1px solid "+T.b1, background:T.surface }}>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{c.name}</div>
-                    <div style={{ fontSize:10.5, color:T.t4 }}>{c.phone}{c.is_active===0?" · inactive":""}</div>
+                    <div style={{ fontSize:10.5, color:T.t4 }}>{c.phone}{c.is_active===0?t("project_detail.inactive"):""}</div>
                   </div>
                   <button onClick={()=>resetPw(c.user_id)}
                     style={{ background:"none", border:"none", color:T.blu, fontSize:11.5, fontWeight:600, cursor:"pointer" }}>
-                    Naya password
+                   {t("project_detail.naya_password")}
                   </button>
                   <button onClick={()=>removeClient(c.user_id)}
                     style={{ background:"none", border:"none", color:T.red, fontSize:11.5, fontWeight:600, cursor:"pointer" }}>
-                    Hatao
+                   {t("common.hatao")}
                   </button>
                 </div>
               ))}
@@ -609,13 +609,13 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
           )}
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 150px", gap:10, marginBottom:8 }}>
-            <div><label style={L}>Client Name</label><input value={cName} onChange={e=>setCName(e.target.value)} placeholder="Client ka naam" style={I}/></div>
-            <div><label style={L}>Mobile</label><input value={cPhone} onChange={e=>setCPhone(e.target.value)} placeholder="10 digit" inputMode="numeric" style={I}/></div>
+            <div><label style={L}>{t("project_detail.client_name")}</label><input value={cName} onChange={e=>setCName(e.target.value)} placeholder={t("project_detail.client_ka_naam")} style={I}/></div>
+            <div><label style={L}>{t("payroll.mobile")}</label><input value={cPhone} onChange={e=>setCPhone(e.target.value)} placeholder={t("project_detail.10_digit")} inputMode="numeric" style={I}/></div>
           </div>
           {cErr && <div style={{ fontSize:11.5, color:T.red, fontWeight:600, marginBottom:8 }}>{cErr}</div>}
           <button onClick={addClient} disabled={cBusy}
             style={{ padding:"9px 16px", borderRadius:8, background:cBusy?T.b2:T.blu, color:"white", border:"none", fontSize:12.5, fontWeight:700, cursor:cBusy?"not-allowed":"pointer" }}>
-            {cBusy ? "Jod rahe hain…" : "+ Client jodein"}
+            {cBusy ? t("project_detail.jod_rahe_hain") : t("project_detail.client_jodein")}
           </button>
 
           {/* Shown once, right after creation — the password is not stored in
@@ -623,26 +623,25 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
           {newPw && (
             <div style={{ marginTop:12, padding:"12px 14px", borderRadius:9, background:T.grnL, border:"1px solid "+T.grn }}>
               <div style={{ fontSize:11.5, fontWeight:700, color:T.grn, marginBottom:6 }}>
-                ✓ Client jud gaya — ye login details client ko bhej dein
+               {t("project_detail.client_jud_gaya_ye_login_details")}
               </div>
               <div style={{ fontSize:12.5, color:T.t1, lineHeight:1.7 }}>
-                Mobile: <b>{newPw.phone}</b><br/>
-                Password: <b style={{ fontFamily:"monospace", fontSize:14, letterSpacing:".5px" }}>{newPw.password}</b>
+               {t("project_detail.mobile")} <b>{newPw.phone}</b><br/>
+               {t("project_detail.password")} <b style={{ fontFamily:"monospace", fontSize:14, letterSpacing:".5px" }}>{newPw.password}</b>
               </div>
               <div style={{ fontSize:10.5, color:T.t3, marginTop:7, lineHeight:1.45 }}>
-                Client OTP se bhi login kar sakta hai — ye password sirf tab kaam aata hai jab OTP na aaye.
-                <b> Ye password dobara nahi dikhega</b>, isliye abhi copy kar lein.
+               {t("project_detail.client_otp_se_bhi_login_kar")}
+                <b> {t("project_detail.ye_password_dobara_nahi_dikhega")}</b>{t("project_detail.isliye_abhi_copy_kar_lein")}
               </div>
               <button onClick={()=>{ try{ navigator.clipboard.writeText(`Sanchalan app\nMobile: ${newPw.phone}\nPassword: ${newPw.password}`); setCopied(true); setTimeout(()=>setCopied(false),2000);}catch(e){} }}
                 style={{ marginTop:9, padding:"7px 13px", borderRadius:7, border:"1px solid "+T.grn, background:T.surface, color:T.grn, fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-                {copied ? "✓ Copy ho gaya" : "Copy karein"}
+                {copied ? t("project_detail.copy_ho_gaya") : t("project_detail.copy_karein")}
               </button>
             </div>
           )}
 
           <div style={{ fontSize:10.5, color:T.t4, marginTop:8, lineHeight:1.45 }}>
-            Client isi number se app me login karega. <b>Number kisi staff ka nahi hona chahiye</b> — staff ka number
-            dene par system rok dega (client ke liye alag number lein).
+           {t("project_detail.client_isi_number_se_app_me")} <b>{t("project_detail.number_kisi_staff_ka_nahi_hona")}</b> {t("project_detail.staff_ka_number_dene_par_system")}
           </div>
         </div>
       )}
@@ -654,50 +653,49 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
       {isAdmin && sec!=="geo" && (
         <button onClick={saveDetails} disabled={saving}
           style={{ width:"100%", padding:"11px", borderRadius:8, background:saving?T.b2:T.blu, color:"white", border:"none", fontSize:13, fontWeight:700, cursor:saving?"not-allowed":"pointer", marginBottom:18 }}>
-          {saving ? "Saving…" : "💾 Save Project Details"}
+          {saving ? t("common.saving_2") : t("project_detail.save_project_details")}
         </button>
       )}
 
       {/* ── GEO-LOCATION ── */}
       {sec==="geo"&&(
       <div style={{ ...card, borderColor:T.bluM, background:T.bluL }}>
-        <div style={sectionTitle}>📍 Site Geo-Location (Geofence)</div>
+        <div style={sectionTitle}>{t("project_detail.site_geo_location_geofence")}</div>
         <div style={{ fontSize:11, color:T.t3, marginBottom:12, lineHeight:1.5 }}>
-          Is project ke site ki location set karo. Mobile punch-in is fence ke andar count hoga.
-          Har project ki apni alag location hoti hai.
+         {t("project_detail.is_project_ke_site_ki_location")}
         </div>
         {geoLoading ? (
-          <div style={{ fontSize:12, color:T.t4, padding:"8px 0" }}>Loading…</div>
+          <div style={{ fontSize:12, color:T.t4, padding:"8px 0" }}>{t("common.loading_2")}</div>
         ) : (<>
           <div style={{ display:"flex", gap:8, marginBottom:10 }}>
             <button onClick={useCurrentLocation}
               style={{ flex:1, padding:"9px", borderRadius:7, background:T.surface, border:`1.5px solid ${T.blu}`, color:T.blu, fontSize:12.5, fontWeight:700, cursor:"pointer" }}>
-              📍 Current Location
+             {t("project_detail.current_location")}
             </button>
             <button onClick={()=>setShowMap(true)}
               style={{ flex:1, padding:"9px", borderRadius:7, background:T.surface, border:`1.5px solid ${T.grn}`, color:T.grn, fontSize:12.5, fontWeight:700, cursor:"pointer" }}>
-              🗺️ Pick from Map
+             {t("project_detail.pick_from_map")}
             </button>
           </div>
           {showMap && <MapPicker initial={{lat:geo.lat, lng:geo.lng}} onClose={()=>setShowMap(false)}
             onPick={({lat,lng})=>{ setGeo(g=>({...g,lat:String(lat),lng:String(lng)})); setGeoMsg("✓ Location captured from map — Save to apply"); }}/>}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
-            <div><label style={L}>Latitude</label><input value={geo.lat} onChange={e=>setGeo(g=>({...g,lat:e.target.value}))} placeholder="e.g. 21.250000" style={I}/></div>
-            <div><label style={L}>Longitude</label><input value={geo.lng} onChange={e=>setGeo(g=>({...g,lng:e.target.value}))} placeholder="e.g. 81.630000" style={I}/></div>
+            <div><label style={L}>{t("project_detail.latitude")}</label><input value={geo.lat} onChange={e=>setGeo(g=>({...g,lat:e.target.value}))} placeholder="e.g. 21.250000" style={I}/></div>
+            <div><label style={L}>{t("project_detail.longitude")}</label><input value={geo.lng} onChange={e=>setGeo(g=>({...g,lng:e.target.value}))} placeholder="e.g. 81.630000" style={I}/></div>
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
-            <div><label style={L}>Radius (meters)</label><input type="number" value={geo.radius} onChange={e=>setGeo(g=>({...g,radius:e.target.value}))} placeholder="80" style={I}/></div>
-            <div><label style={L}>Label</label><input value={geo.label} onChange={e=>setGeo(g=>({...g,label:e.target.value}))} placeholder={project.name + " — Site"} style={I}/></div>
+            <div><label style={L}>{t("project_detail.radius_meters")}</label><input type="number" value={geo.radius} onChange={e=>setGeo(g=>({...g,radius:e.target.value}))} placeholder="80" style={I}/></div>
+            <div><label style={L}>{t("project_detail.label")}</label><input value={geo.label} onChange={e=>setGeo(g=>({...g,label:e.target.value}))} placeholder={project.name + " — Site"} style={I}/></div>
           </div>
-          {geo.id && <div style={{ fontSize:10.5, color:T.grn, marginBottom:8 }}>✓ Existing fence #{geo.id} — editing</div>}
+          {geo.id && <div style={{ fontSize:10.5, color:T.grn, marginBottom:8 }}>{t("project_detail.existing_fence_id_editing", { id: geo.id })}</div>}
           {geoMsg && <div style={{ fontSize:11.5, fontWeight:600, color:geoMsg.startsWith("✓")?T.grn:geoMsg.startsWith("📍")?T.blu:T.amb, marginBottom:8 }}>{geoMsg}</div>}
           {isAdmin && (
             <button onClick={saveGeo} disabled={geoBusy}
               style={{ width:"100%", padding:"10px", borderRadius:8, background:geoBusy?T.b2:T.grn, color:"white", border:"none", fontSize:12.5, fontWeight:700, cursor:geoBusy?"not-allowed":"pointer" }}>
-              {geoBusy ? "Saving…" : (geo.id ? "💾 Update Geo-Location" : "💾 Set Geo-Location")}
+              {geoBusy ? t("common.saving_2") : (geo.id ? t("project_detail.update_geo_location") : t("project_detail.set_geo_location"))}
             </button>
           )}
-          {!isAdmin && <div style={{ fontSize:11, color:T.t4, fontStyle:"italic" }}>Admin/PM only — set location.</div>}
+          {!isAdmin && <div style={{ fontSize:11, color:T.t4, fontStyle:"italic" }}>{t("project_detail.admin_pm_only_set_location")}</div>}
         </>)}
       </div>
       )}
@@ -821,7 +819,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
 
   const TabLoading = () => (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"60vh",color:T.t3,fontSize:13}}>
-      Loading…
+     {t("common.loading_2")}
     </div>
   );
 
@@ -868,16 +866,16 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
 
         {/* Header — hamburger toggle + company name */}
         <div style={{padding: sidebarCollapsed?"10px 0":"10px 12px", borderBottom:"1px solid rgba(255,255,255,.08)", display:"flex", alignItems:"center", justifyContent: sidebarCollapsed?"center":"flex-start", gap:10, minHeight:48}}>
-          <button onClick={toggleSidebar} title={sidebarCollapsed?"Open sidebar":"Close sidebar"}
+          <button onClick={toggleSidebar} title={sidebarCollapsed?t("project_detail.open_sidebar"):t("project_detail.close_sidebar")}
             style={{width:32, height:32, borderRadius:6, border:"none", background:"rgba(255,255,255,.06)", color:"#fff", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"background .15s"}}
             onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.14)"}
             onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.06)"}>
             <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
           </button>
           {!sidebarCollapsed && (
-            <div title={currentUser.company_name||"Company"} style={{flex:1, minWidth:0, display:"flex", flexDirection:"column", overflow:"hidden"}}>
-              <span style={{fontSize:13.5, fontWeight:700, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", letterSpacing:"-.1px"}}>{currentUser.company_name||"Company"}</span>
-              <span style={{fontSize:9.5, fontWeight:600, color:"rgba(255,255,255,.4)", textTransform:"uppercase", letterSpacing:".5px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{currentUser.role||"User"}</span>
+            <div title={currentUser.company_name||t("common.company")} style={{flex:1, minWidth:0, display:"flex", flexDirection:"column", overflow:"hidden"}}>
+              <span style={{fontSize:13.5, fontWeight:700, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", letterSpacing:"-.1px"}}>{currentUser.company_name||t("common.company")}</span>
+              <span style={{fontSize:9.5, fontWeight:600, color:"rgba(255,255,255,.4)", textTransform:"uppercase", letterSpacing:".5px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{currentUser.role||t("common.user")}</span>
             </div>
           )}
         </div>
@@ -885,12 +883,12 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
         {/* Back to projects */}
         <div style={{padding: sidebarCollapsed?"6px 0":"8px 10px"}}>
           {onBack&&(
-            <button onClick={onBack} title="All Projects (Esc)"
+            <button onClick={onBack} title={t("project_detail.all_projects_esc")}
               style={{width:"100%", display:"inline-flex", alignItems:"center", justifyContent: sidebarCollapsed?"center":"flex-start", gap:6, padding: sidebarCollapsed?"6px 0":"6px 10px", border:"1px solid rgba(255,255,255,.1)", borderRadius:6, background:"rgba(255,255,255,.04)", color:"rgba(255,255,255,.7)", fontSize:11.5, fontWeight:500, cursor:"pointer", transition:"background .15s", height:30}}
               onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.1)"}
               onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.04)"}>
               <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-              {!sidebarCollapsed && <span>Projects</span>}
+              {!sidebarCollapsed && <span>{t("common.projects")}</span>}
             </button>
           )}
         </div>
@@ -939,7 +937,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
             <span style={{fontSize:12, color:"rgba(255,255,255,.35)", fontWeight:400}}>/</span>
             <span style={{fontSize:12.5, fontWeight:600, color:"rgba(255,255,255,.85)", whiteSpace:"nowrap"}}>{currentTabLabel}</span>
             <Pill label={project.status} c={sm.c} bg="rgba(255,255,255,.1)"/>
-            {isSolar && <span style={{fontSize:9.5,fontWeight:800,color:"#FBBF24",background:"rgba(251,191,36,.12)",border:"1px solid rgba(251,191,36,.3)",borderRadius:4,padding:"2px 7px",letterSpacing:".3px"}}>☀ SOLAR</span>}
+            {isSolar && <span style={{fontSize:9.5,fontWeight:800,color:"#FBBF24",background:"rgba(251,191,36,.12)",border:"1px solid rgba(251,191,36,.3)",borderRadius:4,padding:"2px 7px",letterSpacing:".3px"}}>{t("project_detail.solar")}</span>}
           </div>
 
           {/* Right: action icon buttons */}
@@ -958,11 +956,11 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
               );
               return (<>
                 {/* Request Payment */}
-                <IconBtn title="Request Payment — for subcon, labour or expense" onClick={()=>setPaymentReq({})}>
+                <IconBtn title={t("project_detail.request_payment_for_subcon_labour_or")} onClick={()=>setPaymentReq({})}>
                   <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
                 </IconBtn>
                 {/* Site Pulse */}
-                <IconBtn title="Site Pulse — live activity feed" onClick={()=>setShowSitePulse(true)}>
+                <IconBtn title={t("project_detail.site_pulse_live_activity_feed")} onClick={()=>setShowSitePulse(true)}>
                   <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                 </IconBtn>
                 {/* Approvals */}
@@ -970,11 +968,11 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
                   <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                 </IconBtn>
                 {/* Notifications */}
-                <IconBtn title="Project Notifications" onClick={()=>setShowProjectNotifs(true)}>
+                <IconBtn title={t("project_detail.project_notifications")} onClick={()=>setShowProjectNotifs(true)}>
                   <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
                 </IconBtn>
                 {/* Project Settings */}
-                <IconBtn title="Project Settings" onClick={()=>setShowProjectSettings(true)}>
+                <IconBtn title={t("project_detail.project_settings")} onClick={()=>setShowProjectSettings(true)}>
                   <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                 </IconBtn>
               </>);
@@ -1001,7 +999,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
             {onBack&&(
               <button onClick={onBack} style={{display:"inline-flex", alignItems:"center", gap:5, padding:"5px 11px", border:"1px solid rgba(255,255,255,.15)", borderRadius:6, background:"rgba(255,255,255,.06)", color:"rgba(255,255,255,.7)", fontSize:11.5, fontWeight:500, cursor:"pointer", flexShrink:0, marginTop:3, transition:"background .15s"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.12)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.06)"}>
                 <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                All Projects
+               {t("common.all_projects")}
               </button>
             )}
             <div style={{flex:1, minWidth:0}}>
@@ -1016,19 +1014,17 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
                 {/* Kis tender ki site hai — ek tender ki kai sites hoti hain,
                     aur MB/RA bill usi tender par bante hain. */}
                 {!!(project._raw?.tender_no||project._raw?.tender_title)&&(
-                  <span style={{fontSize:11.5, color:"#C7D2FE", fontWeight:600}}>
-                    📄 Tender: {[project._raw?.tender_no,project._raw?.tender_title].filter(Boolean).join(" · ")}
-                  </span>
+                  <span style={{fontSize:11.5, color:"#C7D2FE", fontWeight:600}}>{t("project_detail.tender_project", { project: [project._raw?.tender_no,project._raw?.tender_title].filter(Boolean).join(" · ") })}</span>
                 )}
               </div>
             </div>
             {/* Financial chips */}
             <div style={{display:"flex", gap:12, flexShrink:0}}>
               {approvalCount>0&&(
-                <div onClick={()=>setShowApprovalDrawer(true)} style={{background:"rgba(217,119,6,0.15)",border:"1px solid rgba(217,119,6,0.3)",borderRadius:8,padding:"7px 13px",textAlign:"right",cursor:"pointer",transition:"background .15s"}} title="Click to view pending approvals"
+                <div onClick={()=>setShowApprovalDrawer(true)} style={{background:"rgba(217,119,6,0.15)",border:"1px solid rgba(217,119,6,0.3)",borderRadius:8,padding:"7px 13px",textAlign:"right",cursor:"pointer",transition:"background .15s"}} title={t("project_detail.click_to_view_pending_approvals")}
                   onMouseEnter={e=>e.currentTarget.style.background="rgba(217,119,6,0.28)"}
                   onMouseLeave={e=>e.currentTarget.style.background="rgba(217,119,6,0.15)"}>
-                  <div style={{fontSize:9.5,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:3}}>Approvals</div>
+                  <div style={{fontSize:9.5,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:3}}>{t("project_detail.approvals")}</div>
                   <div style={{fontSize:14,fontWeight:700,color:"#FBBF24",fontVariantNumeric:"tabular-nums"}}>{approvalCount} pending</div>
                 </div>
               )}
@@ -1042,7 +1038,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
           </div>
           {/* Progress bar */}
           <div style={{marginTop:11, display:"flex", alignItems:"center", gap:10}}>
-            <span style={{fontSize:10.5, color:"rgba(255,255,255,.3)", width:60}}>Progress</span>
+            <span style={{fontSize:10.5, color:"rgba(255,255,255,.3)", width:60}}>{t("common.progress")}</span>
             <div style={{flex:1, height:4, background:"rgba(255,255,255,.1)", borderRadius:3, overflow:"hidden"}}>
               <div style={{height:"100%", width:`${project.progress}%`, background:T.blu, borderRadius:3, transition:"width .6s"}}/>
             </div>
@@ -1054,7 +1050,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
       {/* ── TAB BAR ── */}
       <div style={{background:T.surface, borderBottom:`1px solid ${T.b1}`, display:"flex", overflowX:"auto", flexShrink:0}}>
         <style>{`* { scrollbar-width: none; } *::-webkit-scrollbar { display: none; }`}</style>
-        {isSolar&&<div style={{display:"flex",alignItems:"center",padding:"0 12px",borderRight:`1px solid ${T.b1}`,flexShrink:0}}><span style={{fontSize:9.5,fontWeight:800,color:"#E65100",background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:4,padding:"2px 7px",letterSpacing:".3px",whiteSpace:"nowrap"}}>☀ Solar EPC</span></div>}
+        {isSolar&&<div style={{display:"flex",alignItems:"center",padding:"0 12px",borderRight:`1px solid ${T.b1}`,flexShrink:0}}><span style={{fontSize:9.5,fontWeight:800,color:"#E65100",background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:4,padding:"2px 7px",letterSpacing:".3px",whiteSpace:"nowrap"}}>{t("crm.solar_epc")}</span></div>}
         {activeTabs.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             title={`${t.label}  (Ctrl+${t.key.toUpperCase()})`}
@@ -1083,7 +1079,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
             <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>{title}</div>
             {subtitle && <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{subtitle}</div>}
           </div>
-          <button onClick={onClose} title="Close"
+          <button onClick={onClose} title={t("common.close")}
             style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",padding:6,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s"}}
             onMouseEnter={el=>el.currentTarget.style.background="rgba(255,255,255,0.1)"}
             onMouseLeave={el=>el.currentTarget.style.background="none"}>
@@ -1112,27 +1108,27 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
       )}
       {/* ── SITE PULSE DRAWER ── */}
       {showSitePulse && (
-        <SimpleDrawer title="Site Pulse" subtitle={`${project.name} · live activity feed`} onClose={()=>setShowSitePulse(false)}>
+        <SimpleDrawer title={t("project_detail.site_pulse")} subtitle={`${project.name} · live activity feed`} onClose={()=>setShowSitePulse(false)}>
           <PlaceholderEmpty
             icon={<svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>}
-            title="Live activity feed coming soon"
-            desc="Real-time updates from the site — attendance check-ins, material movements, transactions, photos uploaded by team members will stream here."
+            title={t("project_detail.live_activity_feed_coming_soon")}
+            desc={t("project_detail.real_time_updates_from_the_site")}
           />
         </SimpleDrawer>
       )}
       {/* ── PROJECT NOTIFICATIONS DRAWER ── */}
       {showProjectNotifs && (
-        <SimpleDrawer title="Notifications" subtitle={`${project.name}`} onClose={()=>setShowProjectNotifs(false)}>
+        <SimpleDrawer title={t("notification_bell.notifications")} subtitle={`${project.name}`} onClose={()=>setShowProjectNotifs(false)}>
           <PlaceholderEmpty
             icon={<svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>}
-            title="No notifications yet"
-            desc="Project-specific notifications — overdue tasks, low stock alerts, pending approvals updates, mentions in chats — will appear here."
+            title={t("project_detail.no_notifications_yet")}
+            desc={t("project_detail.project_specific_notifications_overdue_tasks_low")}
           />
         </SimpleDrawer>
       )}
       {/* ── PROJECT SETTINGS DRAWER ── */}
       {showProjectSettings && (
-        <SimpleDrawer title="Project Settings" subtitle={`${project.name}`} onClose={()=>setShowProjectSettings(false)}>
+        <SimpleDrawer title={t("project_detail.project_settings")} subtitle={`${project.name}`} onClose={()=>setShowProjectSettings(false)}>
           <ProjectSettingsForm project={project} isAdmin={isAdmin} onClose={()=>setShowProjectSettings(false)}/>
         </SimpleDrawer>
       )}
@@ -1230,7 +1226,7 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
       {/* Header */}
       <div style={{ background: "#0D1B2A", padding: "14px 18px", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "white" }}>Pending Approvals</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "white" }}>{t("common.pending_approvals")}</div>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", fontSize: 18, padding: 4 }}>✕</button>
         </div>
         {/* My Approvals / All toggle — only admin/super_admin/PM (mirrors the
@@ -1238,7 +1234,7 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
             "All" = whole project queue (items waiting on others are read-only). */}
         {canSeeAll && (
           <div style={{ display: "flex", background: "rgba(255,255,255,0.08)", borderRadius: 20, padding: 3, gap: 3, marginBottom: 8 }}>
-            {[{v:"my",label:"My approvals",n:myCount},{v:"all",label:"All",n:allCount}].map(o=>(
+            {[{v:"my",label:t("project_detail.my_approvals"),n:myCount},{v:"all",label:t("common.all"),n:allCount}].map(o=>(
               <button key={o.v} onClick={()=>setScope(o.v)}
                 style={{ flex: 1, padding: "6px", border: "none", borderRadius: 20, cursor: "pointer", fontSize: 11.5, fontWeight: scope===o.v?700:500, background: scope===o.v?T.amb:"transparent", color: scope===o.v?"white":"rgba(255,255,255,0.55)", display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
                 {o.label}
@@ -1250,19 +1246,19 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span style={{ background: T.amb, color: "white", fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 20 }}>{visible.length} pending</span>
           <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.4)" }}>{projectName}</span>
-          <button onClick={load} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.1)", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", fontSize: 10.5, padding: "3px 9px", borderRadius: 5 }}>↻ Refresh</button>
+          <button onClick={load} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.1)", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", fontSize: 10.5, padding: "3px 9px", borderRadius: 5 }}>{t("common.refresh_2")}</button>
         </div>
       </div>
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 14px" }}>
         {errMsg && <div style={{ margin: "4px 0 8px", padding: "8px 12px", background: T.redL, border: "1px solid " + T.redM, borderRadius: 7, fontSize: 12, color: T.red }}>{errMsg}</div>}
-        {loading && <div style={{ textAlign: "center", padding: "40px", color: T.t4, fontSize: 13 }}>Loading approvals...</div>}
+        {loading && <div style={{ textAlign: "center", padding: "40px", color: T.t4, fontSize: 13 }}>{t("project_detail.loading_approvals")}</div>}
         {!loading && visible.length === 0 && (
           <div style={{ textAlign: "center", padding: "60px 20px" }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: T.t2 }}>{scope==="my" ? "No pending approvals!" : "Nothing pending"}</div>
-            <div style={{ fontSize: 12, color: T.t4, marginTop: 4 }}>{scope==="my" ? "All approval requests are clear" : "This project's approval queue is empty"}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.t2 }}>{scope==="my" ? t("project_detail.no_pending_approvals") : t("project_detail.nothing_pending")}</div>
+            <div style={{ fontSize: 12, color: T.t4, marginTop: 4 }}>{scope==="my" ? t("project_detail.all_approval_requests_are_clear") : t("project_detail.this_project_s_approval_queue_is")}</div>
           </div>
         )}
         {!loading && visible.map(item => {
@@ -1279,7 +1275,7 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
                     {src === "design" && item.category && <span style={{ fontSize: 9, color: T.t4 }}>{item.category} · {item.drawing_type || "2D"}</span>}
                   </div>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{item.title}</div>
-                  <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{item.project_name || "—"} · by {item.submitted_by_name}{(!src || item._request_id) ? " · L" + item.current_level + "/" + item.max_level : ""}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{t("project_detail.item_by_submitted_by_namesrc", { item: item.project_name || "—", submitted_by_name: item.submitted_by_name, src: (!src || item._request_id) ? " · L" + item.current_level + "/" + item.max_level : "" })}</div>
                 </div>
                 {item.amount > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: mc, flexShrink: 0 }}>{fmtAmt(item.amount)}</span>}
               </div>
@@ -1293,14 +1289,14 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
                       {i < item.max_level - 1 && <div style={{ width: 16, height: 2, background: done ? "#059669" : "#E5E7EB" }} />}
                     </div>;
                   })}
-                  <span style={{ fontSize: 9.5, color: T.t4, marginLeft: 4 }}>Pending: {item.pending_role || "—"}</span>
+                  <span style={{ fontSize: 9.5, color: T.t4, marginLeft: 4 }}>{t("project_detail.pending_item", { item: item.pending_role || "—" })}</span>
                 </div>
               )}
               {/* Action buttons — only when it's the viewer's turn (_canActNow).
                   In the "All" view, items waiting on someone else are read-only. */}
               {item._canActNow === false ? (
                 <div style={{ marginTop: 6, padding: "5px 10px", borderRadius: 6, background: T.amb + "14", border: "1px solid " + T.amb + "55", fontSize: 10.5, color: T.amb, fontWeight: 600, display: "flex", flexDirection: "column", gap: 2 }}>
-                  <span>⏳ Waiting on {waitingText(item) || "approver"}</span>
+                  <span>{t("project_detail.waiting_on_waitingtext", { waitingText: waitingText(item) || "approver" })}</span>
                   {escalationNote(item) && (
                     <span style={{ fontWeight: 500, opacity: 0.85, paddingLeft: 15 }}>{escalationNote(item)}</span>
                   )}
@@ -1310,18 +1306,18 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
                   {src !== "purchase_order" && (
                     <button onClick={() => handleAction(item, "reject")} disabled={!!act}
                       style={{ flex: 1, padding: "6px", borderRadius: 6, background: T.redL, border: "1px solid " + T.redM, color: T.red, fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
-                      {act === "rejecting" ? "..." : "✕ Reject"}
+                      {act === "rejecting" ? "..." : t("common.reject")}
                     </button>
                   )}
                   {src === "design" && (
                     <button onClick={() => handleAction(item, "Revision")} disabled={!!act}
                       style={{ flex: 1, padding: "6px", borderRadius: 6, background: "#DBEAFE", border: "1px solid #93C5FD", color: "#1D4ED8", fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
-                      ↻ Revision
+                     {t("design_overview.revision")}
                     </button>
                   )}
                   <button onClick={() => handleAction(item, "approve")} disabled={!!act}
                     style={{ flex: 2, padding: "6px", borderRadius: 6, background: act === "approving" ? T.b1 : T.grn, border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
-                    {act === "approving" ? "Approving..." : "✓ Approve"}
+                    {act === "approving" ? t("common.approving") : t("common.approve")}
                   </button>
                 </div>
               )}

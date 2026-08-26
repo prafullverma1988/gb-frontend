@@ -16,6 +16,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
+import { t } from "../i18n";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -29,11 +30,11 @@ const T = {
 };
 
 const STATUS_META = {
-  PendingApproval: { label: "Pending Approval", c: T.amb, bg: T.ambL, bd: T.ambM },
-  Pending:         { label: "In Transit",       c: T.blu, bg: T.bluL, bd: T.bluM },
-  Partial:         { label: "Partial Received", c: T.amb, bg: T.ambL, bd: T.ambM },
-  Completed:       { label: "Completed",        c: T.grn, bg: T.grnL, bd: T.grnM },
-  Rejected:        { label: "Rejected",         c: T.red, bg: T.redL, bd: T.redM },
+  PendingApproval: { get label() { return t("material_transfer.pending_approval"); }, c: T.amb, bg: T.ambL, bd: T.ambM },
+  Pending:         { get label() { return t("material_transfer.in_transit"); },       c: T.blu, bg: T.bluL, bd: T.bluM },
+  Partial:         { get label() { return t("material_transfer.partial_received"); }, c: T.amb, bg: T.ambL, bd: T.ambM },
+  Completed:       { get label() { return t("material_transfer.completed"); },        c: T.grn, bg: T.grnL, bd: T.grnM },
+  Rejected:        { get label() { return t("common.rejected"); },         c: T.red, bg: T.redL, bd: T.redM },
 };
 
 const fmtDate = (d) => {
@@ -70,17 +71,17 @@ export default function MaterialTransferTab({ projectId, projectName, isAdmin = 
   };
 
   const handleApprove = async (tr) => {
-    if (!await window.confirmAsync(`Approve ${tr.transfer_no}?\n\n${tr.from_project_name} se stock minus ho jayega.`)) return;
+    if (!await window.confirmAsync(t("material_transfer.approve_transfer_no_from_project_name", { transfer_no: tr.transfer_no, from_project_name: tr.from_project_name }))) return;
     doAction(tr, "approve");
   };
   const handleReject = async (tr) => {
-    const reason = await window.promptAsync(`Reject ${tr.transfer_no} — reason batao (compulsory):`);
+    const reason = await window.promptAsync(t("material_transfer.reject_transfer_no_reason_batao_compulsory", { transfer_no: tr.transfer_no }));
     if (reason == null) return;
-    if (!reason.trim()) { setErr("Reject reason compulsory hai"); return; }
+    if (!reason.trim()) { setErr(t("material_transfer.reject_reason_compulsory_hai")); return; }
     doAction(tr, "reject", { reason: reason.trim() });
   };
   const handleReceive = async (tr) => {
-    if (!await window.confirmAsync(`Receive ${tr.transfer_no}?\n\nPoora material ${projectName} ke stock me add ho jayega (GRN banega).`)) return;
+    if (!await window.confirmAsync(t("material_transfer.receive_transfer_no_poora_material_projectname", { transfer_no: tr.transfer_no, projectName }))) return;
     doAction(tr, "receive");
   };
 
@@ -89,11 +90,11 @@ export default function MaterialTransferTab({ projectId, projectName, isAdmin = 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <div style={{ fontSize: 12.5, color: T.t3, fontWeight: 600 }}>
-          {loading ? "Loading…" : `${transfers.length} transfer${transfers.length === 1 ? "" : "s"}`}
+          {loading ? t("common.loading_2") : `${transfers.length} transfer${transfers.length === 1 ? "" : "s"}`}
         </div>
         <button onClick={() => setShowNew(true)}
           style={{ padding: "8px 14px", borderRadius: 7, background: T.blu, color: "#fff", border: "none", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
-          + New Transfer
+         {t("material_transfer.new_transfer")}
         </button>
       </div>
 
@@ -106,7 +107,7 @@ export default function MaterialTransferTab({ projectId, projectName, isAdmin = 
       {/* List */}
       {!loading && transfers.length === 0 && (
         <div style={{ textAlign: "center", padding: "44px 20px", color: T.t4, fontSize: 13 }}>
-          Abhi koi transfer nahi. "+ New Transfer" se kisi aur project ko material bhejo.
+         {t("material_transfer.abhi_koi_transfer_nahi_new_transfer")}
         </div>
       )}
 
@@ -127,7 +128,7 @@ export default function MaterialTransferTab({ projectId, projectName, isAdmin = 
                   {meta.label}
                 </span>
                 <span style={{ fontSize: 9.5, fontWeight: 700, padding: "2px 7px", borderRadius: 10, background: isIncoming ? T.cynL : T.surfaceB, color: isIncoming ? T.cyn : T.t3, border: `1px solid ${isIncoming ? T.cynM : T.b1}` }}>
-                  {isIncoming ? "↓ Incoming" : "↑ Outgoing"}
+                  {isIncoming ? t("material_transfer.incoming") : t("material_transfer.outgoing")}
                 </span>
                 <div style={{ flex: 1 }}/>
                 <span style={{ fontSize: 11, color: T.t4 }}>{fmtDate(tr.date || tr.created_at)}</span>
@@ -136,12 +137,12 @@ export default function MaterialTransferTab({ projectId, projectName, isAdmin = 
               {/* From → To */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <div style={{ flex: 1, padding: "6px 9px", background: T.surfaceB, borderRadius: 6, border: `1px solid ${T.b1}` }}>
-                  <div style={{ fontSize: 8.5, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>From</div>
+                  <div style={{ fontSize: 8.5, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>{t("common.from")}</div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{tr.from_project_name || tr.from_location || "—"}</div>
                 </div>
                 <span style={{ color: T.blu, fontSize: 15 }}>→</span>
                 <div style={{ flex: 1, padding: "6px 9px", background: T.surfaceB, borderRadius: 6, border: `1px solid ${T.b1}` }}>
-                  <div style={{ fontSize: 8.5, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>To</div>
+                  <div style={{ fontSize: 8.5, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>{t("common.to")}</div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{tr.to_project_name || tr.to_location || "—"}</div>
                 </div>
               </div>
@@ -160,9 +161,7 @@ export default function MaterialTransferTab({ projectId, projectName, isAdmin = 
               </div>
 
               {tr.status === "Rejected" && tr.reject_reason && (
-                <div style={{ marginTop: 6, padding: "6px 9px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 6, fontSize: 11, color: T.red }}>
-                  Reject reason: {tr.reject_reason}
-                </div>
+                <div style={{ marginTop: 6, padding: "6px 9px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 6, fontSize: 11, color: T.red }}>{t("material_transfer.reject_reason_reject_reason", { reject_reason: tr.reject_reason })}</div>
               )}
 
               {/* Actions */}
@@ -172,18 +171,18 @@ export default function MaterialTransferTab({ projectId, projectName, isAdmin = 
                     <>
                       <button onClick={() => handleReject(tr)} disabled={busy}
                         style={{ flex: 1, padding: "7px", borderRadius: 6, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 11.5, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
-                        ✕ Reject
+                       {t("common.reject")}
                       </button>
                       <button onClick={() => handleApprove(tr)} disabled={busy}
                         style={{ flex: 2, padding: "7px", borderRadius: 6, background: busy ? "#9CA3AF" : T.grn, border: "none", color: "#fff", fontSize: 11.5, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
-                        {acting[tr.id] === "approve" ? "Approving…" : "✓ Approve"}
+                        {acting[tr.id] === "approve" ? t("material_transfer.approving") : t("common.approve")}
                       </button>
                     </>
                   )}
                   {canReceive && (
                     <button onClick={() => handleReceive(tr)} disabled={busy}
                       style={{ flex: 1, padding: "7px", borderRadius: 6, background: busy ? "#9CA3AF" : T.cyn, border: "none", color: "#fff", fontSize: 11.5, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer" }}>
-                      {acting[tr.id] === "receive" ? "Receiving…" : "📦 Receive Material"}
+                      {acting[tr.id] === "receive" ? t("material_transfer.receiving") : t("material_transfer.receive_material")}
                     </button>
                   )}
                 </div>
@@ -235,13 +234,13 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
   const handleSave = async () => {
     if (saving) return;
     setErr("");
-    if (!toProject) { setErr("Destination project select karo"); return; }
+    if (!toProject) { setErr(t("material_transfer.destination_project_select_karo")); return; }
     const validRows = rows.filter(r => r.material && Number(r.qty) > 0);
-    if (validRows.length === 0) { setErr("Kam se kam ek item add karo (qty > 0)"); return; }
+    if (validRows.length === 0) { setErr(t("material_transfer.kam_se_kam_ek_item_add")); return; }
     // Stock guard — can't transfer more than available
     for (const r of validRows) {
       if (Number(r.qty) > Number(r.available) + 0.001) {
-        setErr(`"${r.material}" me sirf ${r.available} ${r.unit} available hai — aap ${r.qty} bhej rahe ho`);
+        setErr(t("material_transfer.material_me_sirf_available_unit_available", { material: r.material, available: r.available, unit: r.unit, qty: r.qty }));
         return;
       }
     }
@@ -270,9 +269,9 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
         <div style={{ background: "#0D1B2A", padding: "13px 17px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>New Material Transfer</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{t("material_transfer.new_material_transfer")}</div>
               <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.5)", marginTop: 1 }}>
-                {isAdmin ? "Admin transfer — directly in-transit" : "Site transfer — admin approval ke baad stock minus"}
+                {isAdmin ? t("material_transfer.admin_transfer_directly_in_transit") : t("material_transfer.site_transfer_admin_approval_ke_baad")}
               </div>
             </div>
             <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 15, cursor: "pointer" }}>×</button>
@@ -289,31 +288,31 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
             <div>
-              <label style={lbl}>From Project</label>
+              <label style={lbl}>{t("material_transfer.from_project")}</label>
               <div style={{ ...inp, background: T.surfaceB, color: T.t3, display: "flex", alignItems: "center" }}>{projectName}</div>
             </div>
             <div>
-              <label style={lbl}>To Project *</label>
+              <label style={lbl}>{t("material_transfer.to_project")}</label>
               <select value={toProject} onChange={e => setToProject(e.target.value)} style={inp}>
-                <option value="">Select destination…</option>
+                <option value="">{t("material_transfer.select_destination")}</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           </div>
 
-          <label style={lbl}>Items (from {projectName}'s stock)</label>
+          <label style={lbl}>{t("material_transfer.items_from_projectname_s_stock", { projectName })}</label>
           {stock.length === 0 && (
             <div style={{ fontSize: 11.5, color: T.amb, padding: "8px 10px", background: T.ambL, borderRadius: 6, marginBottom: 8 }}>
-              Is project ke stock me kuch nahi hai — pehle material receive karo.
+             {t("material_transfer.is_project_ke_stock_me_kuch")}
             </div>
           )}
           {rows.map((r, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 80px 60px 26px", gap: 6, marginBottom: 6 }}>
               <select value={r.material} onChange={e => pickMaterial(i, e.target.value)} style={inp}>
-                <option value="">Material…</option>
+                <option value="">{t("material_transfer.material")}</option>
                 {stock.map(s => <option key={s.material_name} value={s.material_name}>{s.material_name} ({s.balance} {s.unit})</option>)}
               </select>
-              <input type="number" placeholder="Qty" value={r.qty} onChange={e => setRow(i, { qty: e.target.value })}
+              <input type="number" placeholder={t("common.qty")} value={r.qty} onChange={e => setRow(i, { qty: e.target.value })}
                 style={{ ...inp, textAlign: "right" }}/>
               <div style={{ ...inp, background: T.surfaceB, color: T.t3, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>{r.unit || "—"}</div>
               <button onClick={() => delRow(i)} style={{ border: "none", background: "none", color: T.red, fontSize: 17, cursor: "pointer", lineHeight: 1 }}>×</button>
@@ -321,13 +320,13 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
           ))}
           <button onClick={addRow}
             style={{ marginTop: 2, padding: "5px 11px", borderRadius: 6, background: T.bluL, border: `1px dashed ${T.bluM}`, color: T.blu, fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
-            + Add item
+           {t("material_transfer.add_item")}
           </button>
 
           <div style={{ marginTop: 12 }}>
-            <label style={lbl}>Notes (optional)</label>
+            <label style={lbl}>{t("common.notes_optional")}</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-              placeholder="e.g. urgent — site B pe casting hai"
+              placeholder={t("material_transfer.e_g_urgent_site_b_pe")}
               style={{ ...inp, resize: "vertical", fontFamily: "inherit" }}/>
           </div>
         </div>
@@ -336,11 +335,11 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
         <div style={{ padding: "11px 17px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", gap: 8 }}>
           <button onClick={onClose} disabled={saving}
             style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, color: T.t3, fontSize: 12.5, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}>
-            Cancel
+           {t("common.cancel")}
           </button>
           <button onClick={handleSave} disabled={saving}
             style={{ flex: 2, padding: "9px", borderRadius: 7, background: saving ? "#9CA3AF" : T.blu, border: "none", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>
-            {saving ? "Saving…" : isAdmin ? "Create Transfer" : "Submit for Approval"}
+            {saving ? t("common.saving_2") : isAdmin ? t("material_transfer.create_transfer") : t("common.submit_for_approval")}
           </button>
         </div>
       </div>

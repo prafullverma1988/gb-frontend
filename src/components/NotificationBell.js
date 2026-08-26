@@ -6,6 +6,7 @@
 // ════════════════════════════════════════════════════════════════
 import { useEffect, useState, useRef } from "react";
 import api from "../config/api";
+import { t } from "../i18n";
 
 // Self-contained palette (App.js's T/C tokens are not exported).
 const C = {
@@ -17,7 +18,7 @@ const C = {
 function timeAgo(iso) {
   if (!iso) return "";
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return "just now";
+  if (diff < 60) return t("common.just_now");
   if (diff < 3600) return Math.floor(diff / 60) + " min ago";
   if (diff < 86400) return Math.floor(diff / 3600) + " hr ago";
   return Math.floor(diff / 86400) + " day ago";
@@ -92,7 +93,7 @@ export default function NotificationBell({ onNavigate }) {
 
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
-      <button onClick={() => setOpen(o => !o)} title="Notifications"
+      <button onClick={() => setOpen(o => !o)} title={t("notification_bell.notifications")}
         style={{ background: "none", border: "none", cursor: "pointer", color: C.t3,
           padding: 7, borderRadius: 7, position: "relative", display: "flex" }}
         onMouseEnter={e => e.currentTarget.style.background = "#F1F5F9"}
@@ -118,16 +119,16 @@ export default function NotificationBell({ onNavigate }) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
             padding: "11px 14px", borderBottom: `1px solid ${C.b1}`, position: "sticky",
             top: 0, background: C.surface }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: C.t1 }}>Notifications</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.t1 }}>{t("notification_bell.notifications")}</span>
             {items.length > 0 && (
               <button onClick={handleMarkAll}
                 style={{ background: "none", border: "none", cursor: "pointer",
-                  color: C.pri, fontSize: 11, fontWeight: 600 }}>Mark all read</button>
+                  color: C.pri, fontSize: 11, fontWeight: 600 }}>{t("notification_bell.mark_all_read")}</button>
             )}
           </div>
           {items.length === 0 ? (
             <div style={{ padding: 28, textAlign: "center", color: C.t3, fontSize: 12.5 }}>
-              No new notifications
+              {t("notification_bell.no_new_notifications")}
             </div>
           ) : items.map(item => (
             <div key={item.id} onClick={() => handleItem(item)}

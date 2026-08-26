@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from "react";
 import { API_BASE } from "../config/api";
+import { t } from "../i18n";
 
 const T = {
   bg: "#0F172A",
@@ -22,7 +23,7 @@ export default function PublicDrawingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!token) { setError("Invalid link"); setLoading(false); return; }
+    if (!token) { setError(t("public_drawing.invalid_link")); setLoading(false); return; }
     fetch(`${API_BASE}/design/public/drawings/${token}`)
       .then(r => r.json())
       .then(r => {
@@ -30,13 +31,13 @@ export default function PublicDrawingPage() {
         else setError(r.message || "Not found");
         setLoading(false);
       })
-      .catch(e => { setError("Network error"); setLoading(false); });
+      .catch(e => { setError(t("common.network_error")); setLoading(false); });
   }, [token]);
 
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui, sans-serif", color: "#fff" }}>
-        Loading...
+       {t("common.loading")}
       </div>
     );
   }
@@ -46,8 +47,8 @@ export default function PublicDrawingPage() {
       <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui, sans-serif" }}>
         <div style={{ background: T.surface, borderRadius: 12, padding: "32px 28px", maxWidth: 400, textAlign: "center" }}>
           <div style={{ fontSize: 22, marginBottom: 10 }}>😕</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 6 }}>Link not available</div>
-          <div style={{ fontSize: 13, color: T.textLight, lineHeight: 1.5 }}>{error || "This drawing link is invalid or has been deactivated. Please contact the sender."}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 6 }}>{t("public_drawing.link_not_available")}</div>
+          <div style={{ fontSize: 13, color: T.textLight, lineHeight: 1.5 }}>{error || t("public_drawing.this_drawing_link_is_invalid_or")}</div>
         </div>
       </div>
     );
@@ -72,7 +73,7 @@ export default function PublicDrawingPage() {
             <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
             </svg>
-            Download
+           {t("public_drawing.download")}
           </a>
         </div>
       </div>
@@ -87,10 +88,10 @@ export default function PublicDrawingPage() {
           <div style={{ background: T.surface, borderRadius: 12, padding: "30px 28px", maxWidth: 420, textAlign: "center" }}>
             <div style={{ fontSize: 26, marginBottom: 10 }}>📄</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>{data.title}</div>
-            <div style={{ fontSize: 12, color: T.textLight, marginBottom: 16 }}>Click below to download and view</div>
+            <div style={{ fontSize: 12, color: T.textLight, marginBottom: 16 }}>{t("public_drawing.click_below_to_download_and_view")}</div>
             <a href={data.file_url} download
               style={{ display: "inline-block", padding: "10px 18px", borderRadius: 7, background: T.blu, color: "#fff", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>
-              Download File
+             {t("public_drawing.download_file")}
             </a>
           </div>
         )}
@@ -98,7 +99,7 @@ export default function PublicDrawingPage() {
 
       {/* Footer */}
       <div style={{ padding: "12px 18px", textAlign: "center", color: "rgba(255,255,255,0.35)", fontSize: 11, borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-        Shared via GB Buildcon · Construction Manager
+       {t("public_drawing.shared_via_gb_buildcon_construction_manager")}
       </div>
     </div>
   );

@@ -7,6 +7,7 @@
 //   <MapPicker initial={{lat, lng}} onPick={({lat,lng})=>...} onClose={...}/>
 
 import { useEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 
 const LEAFLET_JS  = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
@@ -94,13 +95,13 @@ export default function MapPicker({ initial, onPick, onClose }) {
           else markerRef.current = L.marker([lat, lng], { icon: L.icon(ICON), draggable: true }).addTo(map);
           setCoords({ lat, lng });
         }
-      } else alert("Location nahi mili — alag keyword try karo");
-    } catch (e) { alert("Search failed"); }
+      } else alert(t("map_picker.location_nahi_mili_alag_keyword_try"));
+    } catch (e) { alert(t("map_picker.search_failed")); }
     setSearching(false);
   };
 
   const confirm = () => {
-    if (!coords) { alert("Map pe click karke pin drop karo"); return; }
+    if (!coords) { alert(t("map_picker.map_pe_click_karke_pin_drop")); return; }
     onPick({ lat: Number(coords.lat.toFixed(6)), lng: Number(coords.lng.toFixed(6)) });
     onClose();
   };
@@ -114,31 +115,31 @@ export default function MapPicker({ initial, onPick, onClose }) {
         overflow: "hidden", fontFamily: "'Segoe UI',sans-serif" }}>
         {/* Header */}
         <div style={{ padding: "12px 16px", background: "#0D1B2A", color: "#fff", display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>🗺️ Pick Location on Map</div>
+          <div style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>{t("map_picker.pick_location_on_map")}</div>
           <button onClick={onClose} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", width: 28, height: 28, borderRadius: 6, cursor: "pointer", fontSize: 16 }}>×</button>
         </div>
         {/* Search */}
         <div style={{ padding: "10px 14px", display: "flex", gap: 8, borderBottom: "1px solid #E5E7EB" }}>
           <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && doSearch()}
-            placeholder="Search address / area (e.g. Raipur Civil Lines)…"
+            placeholder={t("map_picker.search_address_area_e_g_raipur")}
             style={{ flex: 1, padding: "8px 11px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 12.5, outline: "none", fontFamily: "inherit" }} />
           <button onClick={doSearch} disabled={searching}
             style={{ padding: "8px 16px", borderRadius: 7, background: "#2563EB", color: "#fff", border: "none", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
-            {searching ? "…" : "Search"}
+            {searching ? "…" : t("app.search")}
           </button>
         </div>
         {/* Map */}
         <div style={{ flex: 1, position: "relative" }}>
           <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
-          {!ready && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280", fontSize: 13 }}>Loading map…</div>}
+          {!ready && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280", fontSize: 13 }}>{t("live_location_map.loading_map")}</div>}
         </div>
         {/* Footer */}
         <div style={{ padding: "10px 14px", borderTop: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ flex: 1, fontSize: 12, color: "#374151" }}>
-            {coords ? <>📍 <b>{coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}</b></> : <span style={{ color: "#9CA3AF" }}>Map pe click karke ya search se pin drop karo</span>}
+            {coords ? <>📍 <b>{coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}</b></> : <span style={{ color: "#9CA3AF" }}>{t("map_picker.map_pe_click_karke_ya_search")}</span>}
           </div>
-          <button onClick={onClose} style={{ padding: "9px 16px", borderRadius: 7, background: "#F3F4F6", border: "1px solid #D1D5DB", color: "#374151", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-          <button onClick={confirm} disabled={!coords} style={{ padding: "9px 20px", borderRadius: 7, background: coords ? "#059669" : "#D1D5DB", border: "none", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: coords ? "pointer" : "not-allowed" }}>✓ Use This Location</button>
+          <button onClick={onClose} style={{ padding: "9px 16px", borderRadius: 7, background: "#F3F4F6", border: "1px solid #D1D5DB", color: "#374151", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>{t("common.cancel")}</button>
+          <button onClick={confirm} disabled={!coords} style={{ padding: "9px 20px", borderRadius: 7, background: coords ? "#059669" : "#D1D5DB", border: "none", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: coords ? "pointer" : "not-allowed" }}>{t("map_picker.use_this_location")}</button>
         </div>
       </div>
     </>

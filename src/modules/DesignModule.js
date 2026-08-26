@@ -6,6 +6,7 @@ import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
 import { Avatar, Credit, fmtTimeAgo } from "../components/Credit";
 import RevisionNoteModal from "../components/RevisionNoteModal";
+import { t } from "../i18n";
 
 // ── ICONS ────────────────────────────────────────────────────────────
 const Ic = ({d,d2,size=18,color="currentColor",sw=1.8,fill="none"}) => (
@@ -93,9 +94,9 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
 
   const upload = async () => {
     // project_id optional when linked to a request (e.g. lead-only house plan)
-    if (!form.project_id && !prefill?.linked_request_id) { setErr("Project select karo"); return; }
-    if (!form.title.trim()) { setErr("Title required"); return; }
-    if (!file) { setErr("File select karo"); return; }
+    if (!form.project_id && !prefill?.linked_request_id) { setErr(t("design.project_select_karo")); return; }
+    if (!form.title.trim()) { setErr(t("design.title_required")); return; }
+    if (!file) { setErr(t("design.file_select_karo")); return; }
 
     // Capture form values before closing modal
     const capturedForm = { ...form };
@@ -172,7 +173,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
         background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",
         zIndex:501,width:560,maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
         <div style={{background:T.sb,padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-          <div style={{fontSize:14,fontWeight:700,color:"white"}}>Upload Drawing</div>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("design.upload_drawing")}</div>
           {!uploading&&<button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>}
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
@@ -180,7 +181,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
               Request from a specific project (linked_request_id is set).
               The drawing must belong to the requesting project. */}
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Project *</label>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.project_2")}</label>
             {prefill?.linked_request_id ? (
               <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.grnM}`,background:T.grnL}}>
                 <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
@@ -189,47 +190,47 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
                 <span style={{flex:1,fontSize:13,fontWeight:700,color:T.grn,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                   {projects.find(p => String(p.id) === String(form.project_id))?.name || "—"}
                 </span>
-                <span style={{fontSize:10,color:T.grn,fontWeight:600}}>locked from request</span>
+                <span style={{fontSize:10,color:T.grn,fontWeight:600}}>{t("design.locked_from_request")}</span>
               </div>
             ) : (
               <SearchSelect value={form.project_id}
                 options={projects.map(p=>({value:p.id,label:p.name}))}
                 onChange={v=>setForm(p=>({...p,project_id:v}))}
-                placeholder="Select project..."/>
+                placeholder={t("common.select_project")}/>
             )}
           </div>
           {/* Category + Type */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Category</label>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.category")}</label>
               <SearchSelect value={form.category}
                 options={Array.from(new Set(dbCats.length>0?dbCats.map(c=>c.name):CATS))}
                 onChange={v=>setForm(p=>({...p,category:v,title:""}))}
-                placeholder="Select category..."/>
+                placeholder={t("common.select_category")}/>
             </div>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Type</label>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.type")}</label>
               <SearchSelect value={form.drawing_type}
                 options={Array.from(new Set(dbTypes.length>0?dbTypes.map(t=>t.name):TYPES))}
                 onChange={v=>setForm(p=>({...p,drawing_type:v}))}
-                placeholder="Select type..."/>
+                placeholder={t("common.select_type")}/>
             </div>
           </div>
           {/* Stage + Floor */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Stage</label>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.stage")}</label>
               <SearchSelect value={form.stage}
                 options={STAGES}
                 onChange={v=>setForm(p=>({...p,stage:v}))}
-                placeholder="Concept / Schematic / Working / GFC / As-Built"/>
+                placeholder={t("design.concept_schematic_working_gfc_as_built")}/>
             </div>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Floor</label>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("design.floor")}</label>
               <SearchSelect value={form.floor}
                 options={FLOORS}
                 onChange={v=>setForm(p=>({...p,floor:v}))}
-                placeholder="Floor / level..."/>
+                placeholder={t("design.floor_level")}/>
             </div>
           </div>
           {/* Approval Required */}
@@ -238,7 +239,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
               onChange={e=>setForm(p=>({...p,approval_required:e.target.checked}))}
               style={{width:15,height:15,cursor:"pointer"}}/>
             <label htmlFor="approvalReq" style={{flex:1,fontSize:12,color:T.t2,cursor:"pointer"}}>
-              <b>Approval Required</b> — drawing client / consultant approval ke liye send hogi
+              <b>{t("design.approval_required")}</b> {t("design.drawing_client_consultant_approval_ke_liye")}
             </label>
           </div>
           {form.approval_required && (
@@ -247,15 +248,15 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
                 <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
               </svg>
               <div style={{fontSize:11,color:T.t2,lineHeight:1.5}}>
-                Upload ke baad drawing <b>"Client Approval"</b> tab me jayegi. Site team WhatsApp se share karega, fir client ka approval lekar admin approval ke liye forward hogi.
+               {t("design.upload_ke_baad_drawing")} <b>{t("design.client_approval")}</b> {t("design.tab_me_jayegi_site_team_whatsapp")}
               </div>
             </div>
           )}
           {/* Title — searchable from library */}
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Drawing Title *</label>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("design.drawing_title")}</label>
             <input value={form.title} onChange={e=>{setForm(p=>({...p,title:e.target.value}));setTitleSearch(e.target.value);}}
-              placeholder="Search or type title..."
+              placeholder={t("design.search_or_type_title")}
               list="drawing_titles_list"
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             <datalist id="drawing_titles_list">
@@ -277,24 +278,24 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
           </div>
           {/* File */}
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>File *</label>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.file")}</label>
             <label style={{display:"block",border:"2px dashed "+(file?T.grn:T.b2),borderRadius:9,padding:"18px",textAlign:"center",background:file?T.grnL:T.surfaceB,cursor:"pointer"}}>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){setFile(e.target.files[0]);setErr("");}}}/>
               {file?<div><div style={{fontSize:13,fontWeight:700,color:T.grn}}>✓ {file.name}</div><div style={{fontSize:11,color:T.t4,marginTop:2}}>{(file.size/1024).toFixed(0)} KB</div></div>
-                :<div><div style={{fontSize:13,fontWeight:600,color:T.t2}}>📁 Choose file or drop</div><div style={{fontSize:11,color:T.t4,marginTop:2}}>PDF, PNG, JPG, DWG · Max 50MB</div></div>}
+                :<div><div style={{fontSize:13,fontWeight:600,color:T.t2}}>{t("design.choose_file_or_drop")}</div><div style={{fontSize:11,color:T.t4,marginTop:2}}>{t("design.pdf_png_jpg_dwg_max_50mb")}</div></div>}
             </label>
           </div>
           {/* Note */}
           <div>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Notes</label>
-            <textarea value={form.note} onChange={e=>setForm(p=>({...p,note:e.target.value}))} placeholder="Reviewer ke liye..." rows={2}
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.notes")}</label>
+            <textarea value={form.note} onChange={e=>setForm(p=>({...p,note:e.target.value}))} placeholder={t("design.reviewer_ke_liye")} rows={2}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
           </div>
-          {uploading&&<div style={{marginTop:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:11,color:T.t3}}>Uploading...</span><span style={{fontSize:11,fontWeight:700,color:T.blu}}>{pct}%</span></div><div style={{height:5,background:T.b1,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:T.blu,borderRadius:4,transition:"width 0.3s"}}/></div></div>}
+          {uploading&&<div style={{marginTop:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:11,color:T.t3}}>{t("common.uploading")}</span><span style={{fontSize:11,fontWeight:700,color:T.blu}}>{pct}%</span></div><div style={{height:5,background:T.b1,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:T.blu,borderRadius:4,transition:"width 0.3s"}}/></div></div>}
           {err&&<div style={{marginTop:8,padding:"7px 10px",background:T.redL,border:"1px solid "+T.redM,borderRadius:6,fontSize:12,color:T.red}}>{err}</div>}
         </div>
         <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
-          <button onClick={onClose} disabled={uploading} style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+          <button onClick={onClose} disabled={uploading} style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
           {(() => {
             // Project_id optional when this upload is satisfying a Site
             // Drawing Request — the request itself carries the link (often
@@ -304,7 +305,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
             return (
               <button onClick={upload} disabled={blocked}
                 style={{flex:2,padding:"9px",borderRadius:7,background:blocked?T.b1:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:uploading?"not-allowed":"pointer"}}>
-                {uploading?"Uploading...":"⬆ Upload Drawing"}
+                {uploading?t("common.uploading"):t("design.upload_drawing_2")}
               </button>
             );
           })()}
@@ -403,7 +404,7 @@ export default function DesignModule() {
     uploadManager.add({
       file,
       folder: "gb_buildcon/drawings",
-      label: `Revision — Drawing #${drawingId}`,
+      label: t("design.revision_drawing_drawingid", { drawingId }),
       onDone: async (url) => {
         try {
           const res = await api.post("/design/drawings/"+drawingId+"/versions", {
@@ -488,15 +489,15 @@ export default function DesignModule() {
       {/* Filters */}
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
         <div style={{position:"relative",flex:1,minWidth:160}}>
-          <input value={dSearch} onChange={e=>setDSearch(e.target.value)} placeholder="Search drawings..."
+          <input value={dSearch} onChange={e=>setDSearch(e.target.value)} placeholder={t("design.search_drawings")}
             style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
         </div>
         {[
-          {val:dProject,set:setDProject,opts:projectNames,label:"Project"},
-          {val:dCat,    set:setDCat,    opts:["All",...CATS_LIST],label:"Category"},
-          {val:dStatus, set:setDStatus, opts:["All","Pending","Approved","Revision","Rejected"],label:"Status"},
-          {val:dType,   set:setDType,   opts:["All",...TYPES_LIST],label:"Type"},
+          {val:dProject,set:setDProject,opts:projectNames,label:t("common.project")},
+          {val:dCat,    set:setDCat,    opts:["All",...CATS_LIST],label:t("common.category")},
+          {val:dStatus, set:setDStatus, opts:["All","Pending","Approved","Revision","Rejected"],label:t("common.status")},
+          {val:dType,   set:setDType,   opts:["All",...TYPES_LIST],label:t("common.type")},
         ].map(f=>(
           <div key={f.label} style={{minWidth:140}}>
             <SearchSelect value={f.val} options={f.opts.map(o=>({value:o,label:o==="All"?`All ${f.label}s`:o}))} onChange={f.set} placeholder={`All ${f.label}s`}/>
@@ -504,7 +505,7 @@ export default function DesignModule() {
         ))}
         <button onClick={()=>setShowUpload(true)}
           style={{padding:"7px 14px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
-          <IcUpload size={13} color="white"/> Upload Drawing
+          <IcUpload size={13} color="white"/> {t("design.upload_drawing")}
         </button>
       </div>
 
@@ -517,8 +518,8 @@ export default function DesignModule() {
             <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i===3?"center":"left"}}>{h}</span>
           ))}
         </div>
-        {loading&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>Loading...</div>}
-        {!loading&&filteredDrawings.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>No drawings found</div>}
+        {loading&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>{t("common.loading")}</div>}
+        {!loading&&filteredDrawings.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>{t("design.no_drawings_found")}</div>}
         {filteredDrawings.map(d=>{
           const sm=STATUS_META[d.status]||STATUS_META["Pending"];
           const isSel=selDraw?.id===d.id;
@@ -546,12 +547,12 @@ export default function DesignModule() {
                 <div style={{padding:"10px 14px",background:T.bluL,borderBottom:"1px solid "+T.bluM}}>
                   {actionErr&&<div style={{padding:"5px 9px",background:T.redL,border:"1px solid "+T.redM,borderRadius:6,fontSize:11.5,color:T.red,marginBottom:8}}>{actionErr}</div>}
                   <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
-                    {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>👁 View</a>}
-                    {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer" style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"}}>⬇ Download</a>}
-                    <button onClick={()=>setShowVer(d)} style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}><IcHist size={12}/> History</button>
-                    {d.status!=="Approved"&&<button onClick={()=>handleStatus(d.id,"Approved")} disabled={!!acting[d.id]} style={{padding:"5px 11px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Approve</button>}
-                    {d.status!=="Revision"&&<button onClick={()=>{ const r=prompt("Revision reason:"); if(r) handleStatus(d.id,"Revision",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:11,fontWeight:600,cursor:"pointer"}}>🔄 Revision</button>}
-                    {d.status!=="Rejected"&&<button onClick={()=>{ const r=prompt("Rejection reason:"); if(r) handleStatus(d.id,"Rejected",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>✕ Reject</button>}
+                    {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("common.view")}</a>}
+                    {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer" style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("design.download")}</a>}
+                    <button onClick={()=>setShowVer(d)} style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}><IcHist size={12}/> {t("common.history")}</button>
+                    {d.status!=="Approved"&&<button onClick={()=>handleStatus(d.id,"Approved")} disabled={!!acting[d.id]} style={{padding:"5px 11px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
+                    {d.status!=="Revision"&&<button onClick={()=>{ const r=prompt(t("design.revision_reason")); if(r) handleStatus(d.id,"Revision",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("design.revision")}</button>}
+                    {d.status!=="Rejected"&&<button onClick={()=>{ const r=prompt(t("design.rejection_reason")); if(r) handleStatus(d.id,"Rejected",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("common.reject")}</button>}
                   </div>
                 </div>
               )}
@@ -584,15 +585,15 @@ export default function DesignModule() {
         {/* Filters */}
         <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
           <div style={{position:"relative",flex:1,minWidth:160}}>
-            <input value={rSearch} onChange={e=>setRSearch(e.target.value)} placeholder={isHouse?"Search lead / title...":"Search requests..."}
+            <input value={rSearch} onChange={e=>setRSearch(e.target.value)} placeholder={isHouse?t("design.search_lead_title"):t("design.search_requests")}
               style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
           </div>
           {[
-            ...(isHouse ? [] : [{val:rProject,set:setRProject,opts:projectNames,label:"Project"}]),
-            {val:rCat,    set:setRCat,    opts:["All",...CATS_LIST],label:"Category"},
-            {val:rStatus, set:setRStatus, opts:["All","Pending","In Progress","Uploaded","Rejected"],label:"Status"},
-            {val:rPrio,   set:setRPrio,   opts:["All","Urgent","High","Normal","Low"],label:"Priority"},
+            ...(isHouse ? [] : [{val:rProject,set:setRProject,opts:projectNames,label:t("common.project")}]),
+            {val:rCat,    set:setRCat,    opts:["All",...CATS_LIST],label:t("common.category")},
+            {val:rStatus, set:setRStatus, opts:["All","Pending","In Progress","Uploaded","Rejected"],label:t("common.status")},
+            {val:rPrio,   set:setRPrio,   opts:["All","Urgent","High","Normal","Low"],label:t("common.priority")},
           ].map(f=>(
             <div key={f.label} style={{minWidth:140}}>
               <SearchSelect value={f.val} options={f.opts.map(o=>({value:o,label:o==="All"?`All ${f.label}s`:o}))} onChange={f.set} placeholder={`All ${f.label}s`}/>
@@ -600,10 +601,10 @@ export default function DesignModule() {
           ))}
           <button onClick={()=>setHideUploadedR(!hideUploadedR)}
             style={{padding:"6px 11px",borderRadius:7,border:"1.5px solid "+(hideUploadedR?T.b1:T.grn),background:hideUploadedR?"none":T.grnL,color:hideUploadedR?T.t4:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
-            {hideUploadedR?"Show Completed":"Hide Completed"}
+            {hideUploadedR?t("design.show_completed"):t("design.hide_completed")}
           </button>
         </div>
-        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{list.length} {isHouse?"house plans":"site drawings"} · {pending} pending</div>
+        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{list.length} {isHouse?t("design.house_plans"):t("design.site_drawings")} · {pending} pending</div>
 
         {list.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>{isHouse?"🏠":"🏗️"}</div><div style={{fontSize:13,color:T.t2}}>{emptyText}</div></div>}
 
@@ -622,12 +623,12 @@ export default function DesignModule() {
                       <span>{req.project_name||"—"}</span>
                     )}
                     <span>{req.category}</span>
-                    {req.due_date&&<span style={{color:new Date(req.due_date)<today?T.red:T.t4}}>Due: {fmtDate(req.due_date)}</span>}
+                    {req.due_date&&<span style={{color:new Date(req.due_date)<today?T.red:T.t4}}>{t("design.due_fmtdate", { fmtDate: fmtDate(req.due_date) })}</span>}
                   </div>
                   {req.description&&<div style={{fontSize:11.5,color:T.t2,marginTop:5}}>{req.description}</div>}
                   <div style={{display:"flex",gap:14,flexWrap:"wrap",marginTop:5}}>
-                    {req.requested_by&&<Credit label="Requested by" name={req.requested_by} time={req.created_at}/>}
-                    {req.assigned_to&&<Credit label="Assigned to" name={req.assigned_to}/>}
+                    {req.requested_by&&<Credit label={t("common.requested_by")} name={req.requested_by} time={req.created_at}/>}
+                    {req.assigned_to&&<Credit label={t("design.assigned_to")} name={req.assigned_to}/>}
                   </div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
@@ -639,27 +640,27 @@ export default function DesignModule() {
                 {req.status==="Pending"&&<>
                   {assignId===req.id?(
                     <div style={{display:"flex",gap:5}}>
-                      <input value={assignVal} onChange={e=>setAssignVal(e.target.value)} placeholder="Designer naam..."
+                      <input value={assignVal} onChange={e=>setAssignVal(e.target.value)} placeholder={t("design.designer_naam")}
                         style={{padding:"4px 8px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
                       <button onClick={()=>{updateReqStatus(req.id,"In Progress",assignVal);setAssignId(null);setAssignVal("");}}
-                        style={{padding:"4px 10px",borderRadius:6,background:T.blu,border:"none",color:"white",fontSize:11,fontWeight:600,cursor:"pointer"}}>Assign</button>
+                        style={{padding:"4px 10px",borderRadius:6,background:T.blu,border:"none",color:"white",fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("design.assign")}</button>
                       <button onClick={()=>setAssignId(null)} style={{padding:"4px 8px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>×</button>
                     </div>
                   ):(
                     <button onClick={()=>{setAssignId(req.id);setAssignVal(req.assigned_to||"");}}
                       style={{padding:"4px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      👤 Assign
+                     {t("design.assign_2")}
                     </button>
                   )}
                   <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);updateReqStatus(req.id,"In Progress");}}
                     style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                    ⬆ Upload Direct
+                   {t("design.upload_direct")}
                   </button>
                 </>}
                 {req.status==="In Progress"&&(
                   <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);}}
                     style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                    ⬆ Upload Drawing
+                   {t("design.upload_drawing_2")}
                   </button>
                 )}
               </div>
@@ -675,7 +676,7 @@ export default function DesignModule() {
     <div>
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
         <div style={{position:"relative",flex:1,minWidth:160}}>
-          <input value={revSearch} onChange={e=>setRevSearch(e.target.value)} placeholder="Search..."
+          <input value={revSearch} onChange={e=>setRevSearch(e.target.value)} placeholder={t("common.search")}
             style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
         </div>
@@ -684,8 +685,8 @@ export default function DesignModule() {
           {projectNames.map(p=><option key={p}>{p}</option>)}
         </select>
       </div>
-      <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{revQueue.length} drawings in revision</div>
-      {revQueue.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>✅</div><div style={{fontSize:13,color:T.t2}}>Koi revision pending nahi</div></div>}
+      <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{t("design.revqueue_drawings_in_revision", { revQueue: revQueue.length })}</div>
+      {revQueue.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>✅</div><div style={{fontSize:13,color:T.t2}}>{t("design.koi_revision_pending_nahi")}</div></div>}
       {revQueue.map(d=>{
         const latestRev = d.last_revision_comment || "";
         const isClientRev = latestRev.startsWith("[Client]") || latestRev.startsWith("[Client Feedback]");
@@ -700,7 +701,7 @@ export default function DesignModule() {
               {(d.client_note || latestRev) && (
                 <div style={{marginTop:8,padding:"7px 11px",background:isClientRev?T.bluL:T.ambL,border:`1px solid ${isClientRev?T.bluM:T.ambM}`,borderLeft:`3px solid ${isClientRev?T.blu:T.amb}`,borderRadius:6}}>
                   <div style={{fontSize:9.5,fontWeight:700,color:isClientRev?T.blu:T.amb,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>
-                    {isClientRev?"📩 Client Revision Note":"📝 Admin Note"}
+                    {isClientRev?t("design.client_revision_note"):t("design.admin_note")}
                   </div>
                   <div style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>"{(d.client_note || latestRev.replace(/^\[Client(?: Feedback)?\]\s*/,"")).trim()}"</div>
                   {revAtt.length>0&&(
@@ -712,9 +713,7 @@ export default function DesignModule() {
                             style={{display:"block",width:60,height:60,borderRadius:5,background:`url(${url}) center/cover`,border:`1px solid ${T.b1}`,cursor:"pointer"}}/>
                         ) : (
                           <a key={i} href={url} target="_blank" rel="noreferrer"
-                            style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 9px",borderRadius:5,background:T.surface,border:`1px solid ${T.b1}`,color:T.blu,fontSize:11,textDecoration:"none"}}>
-                            📎 Attachment {i+1}
-                          </a>
+                            style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 9px",borderRadius:5,background:T.surface,border:`1px solid ${T.b1}`,color:T.blu,fontSize:11,textDecoration:"none"}}>{t("design.attachment_i", { i: i+1 })}</a>
                         );
                       })}
                     </div>
@@ -722,18 +721,18 @@ export default function DesignModule() {
                 </div>
               )}
               {d.note&&!d.client_note&&!latestRev&&<div style={{fontSize:11.5,color:T.amb,marginTop:5,padding:"5px 8px",background:T.ambL,borderRadius:5}}>📝 {d.note}</div>}
-              {d.pin_count>0&&<div style={{fontSize:11,color:T.t3,marginTop:4}}>📍 {d.pin_count} revision pin(s)</div>}
+              {d.pin_count>0&&<div style={{fontSize:11,color:T.t3,marginTop:4}}>{t("design.pin_count_revision_pin_s", { pin_count: d.pin_count })}</div>}
             </div>
             <div style={{display:"flex",gap:6,flexShrink:0}}>
-              {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"4px 9px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>👁 View Current</a>}
+              {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"4px 9px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("design.view_current")}</a>}
             </div>
           </div>
           <div style={{paddingTop:8,borderTop:"1px solid "+T.b1}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>Upload Revised Version</label>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>{t("design.upload_revised_version")}</label>
             <label style={{display:"flex",alignItems:"center",gap:8,padding:"8px 11px",border:"1.5px dashed "+(revUploading[d.id]?T.blu:T.b2),borderRadius:7,cursor:revUploading[d.id]?"not-allowed":"pointer",background:revUploading[d.id]?T.bluL:T.surfaceB}}>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg" style={{display:"none"}} disabled={revUploading[d.id]}
                 onChange={e=>{if(e.target.files[0])handleNewVersion(d.id,e.target.files[0]);}}/>
-              <span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>{revUploading[d.id]?"⏳ Uploading...":"⬆ Upload New Version"}</span>
+              <span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>{revUploading[d.id]?t("design.uploading"):t("design.upload_new_version")}</span>
             </label>
           </div>
         </div>
@@ -798,8 +797,8 @@ export default function DesignModule() {
         {/* Sub-chips */}
         <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
           {[
-            { id: "PendingShare",     label: "🟡 Awaiting Share",       count: pendingShareCt, c: T.amb, bg: T.ambL, brd: T.ambM },
-            { id: "SharedWithClient", label: "🔵 Shared, awaiting reply", count: sharedCt,      c: T.blu, bg: T.bluL, brd: T.bluM },
+            { id: "PendingShare",     label: t("design.awaiting_share"),       count: pendingShareCt, c: T.amb, bg: T.ambL, brd: T.ambM },
+            { id: "SharedWithClient", label: t("design.shared_awaiting_reply"), count: sharedCt,      c: T.blu, bg: T.bluL, brd: T.bluM },
           ].map(c => (
             <button key={c.id} onClick={()=>setChip(c.id)}
               style={{padding:"7px 14px",borderRadius:8,border:`1.5px solid ${chip===c.id?c.c:T.b1}`,
@@ -817,7 +816,7 @@ export default function DesignModule() {
           <div style={{textAlign:"center",padding:"60px",color:T.t4}}>
             <div style={{fontSize:32,marginBottom:8}}>{chip==="PendingShare"?"📤":"⏳"}</div>
             <div style={{fontSize:14,fontWeight:600,color:T.t2}}>
-              {chip==="PendingShare"?"Sab share ho gaye!":"Koi drawing client se reply ka wait nahi kar rahi"}
+              {chip==="PendingShare"?t("design.sab_share_ho_gaye"):t("design.koi_drawing_client_se_reply_ka")}
             </div>
           </div>
         )}
@@ -828,19 +827,15 @@ export default function DesignModule() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
-                <div style={{fontSize:11,color:T.t4,marginTop:2}}>
-                  {d.project_name||"—"} · {d.category}{d.drawing_type?` / ${d.drawing_type}`:""} · {d.current_version||"v1"} · by {d.uploaded_by_name||"—"}
-                </div>
+                <div style={{fontSize:11,color:T.t4,marginTop:2}}>{t("design.d_categoryd2_d3_by_d4", { d: d.project_name||"—", category: d.category, d2: d.drawing_type?` / ${d.drawing_type}`:"", d3: d.current_version||"v1", d4: d.uploaded_by_name||"—" })}</div>
                 {chip==="SharedWithClient" && d.client_shared_at && (
-                  <div style={{fontSize:10.5,color:T.blu,marginTop:3}}>
-                    📤 Shared {fmtTimeAgo(d.client_shared_at)}{d.client_note?` · ${d.client_note}`:""}
-                  </div>
+                  <div style={{fontSize:10.5,color:T.blu,marginTop:3}}>{t("design.shared_fmttimeagod", { fmtTimeAgo: fmtTimeAgo(d.client_shared_at), d: d.client_note?` · ${d.client_note}`:"" })}</div>
                 )}
               </div>
               {d.file_url && (
                 <a href={d.file_url} target="_blank" rel="noreferrer"
                   style={{fontSize:11,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,padding:"3px 9px",borderRadius:6,textDecoration:"none",fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>
-                  👁 View
+                 {t("common.view")}
                 </a>
               )}
             </div>
@@ -848,29 +843,29 @@ export default function DesignModule() {
               {chip==="PendingShare" && (<>
                 <button onClick={()=>setShareFor(d)}
                   style={{padding:"6px 12px",borderRadius:6,background:"#25D366",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
-                  💬 Share on WhatsApp
+                 {t("common.share_on_whatsapp")}
                 </button>
                 <button onClick={()=>markShared(d)} disabled={acting[d.id]==="marking"}
                   style={{padding:"6px 12px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                  {acting[d.id]==="marking"?"…":"✓ Mark as Shared"}
+                  {acting[d.id]==="marking"?"…":t("common.mark_as_shared")}
                 </button>
               </>)}
               {chip==="SharedWithClient" && (<>
                 <button onClick={()=>setClientStatus(d,"Approved")} disabled={!!acting[d.id]}
                   style={{padding:"6px 12px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                  {acting[d.id]==="Approved"?"…":"✓ Client Approved"}
+                  {acting[d.id]==="Approved"?"…":t("common.client_approved")}
                 </button>
                 <button onClick={()=>setClientStatus(d,"Revision")} disabled={!!acting[d.id]}
                   style={{padding:"6px 12px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                  ↻ Revision Requested
+                 {t("lead_design.revision_requested")}
                 </button>
                 <button onClick={()=>setClientStatus(d,"Rejected")} disabled={!!acting[d.id]}
                   style={{padding:"6px 12px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                  ✗ Rejected
+                 {t("common.rejected_2")}
                 </button>
                 <button onClick={()=>setShareFor(d)}
                   style={{padding:"6px 12px",borderRadius:6,background:T.surface,border:`1px solid ${T.b2}`,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
-                  💬 Re-share
+                 {t("common.re_share")}
                 </button>
               </>)}
             </div>
@@ -921,7 +916,7 @@ export default function DesignModule() {
       window.open(url, "_blank", "noopener");
     };
     const downloadPdf = async () => {
-      if (!fileUrl) { alert("PDF link not available"); return; }
+      if (!fileUrl) { alert(t("share_drawing.pdf_link_not_available")); return; }
       setDownloading(true);
       try {
         const r = await fetch(fileUrl);
@@ -948,18 +943,18 @@ export default function DesignModule() {
           display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,0.22)"}}>
           <div style={{background:"#075E54",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderTopLeftRadius:12,borderTopRightRadius:12}}>
             <div style={{fontSize:14,fontWeight:700,color:"white",display:"flex",alignItems:"center",gap:8}}>
-              💬 Share on WhatsApp
+             {t("common.share_on_whatsapp")}
             </div>
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:18}}>×</button>
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
             {/* Share Mode toggle — Link vs PDF */}
             <div style={{marginBottom:12}}>
-              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:6}}>Share As</label>
+              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:6}}>{t("share_drawing.share_as")}</label>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                 {[
-                  {v:"link",l:"🔗 Link",sub:"Cloudinary URL in message"},
-                  {v:"pdf", l:"📄 PDF + Link",sub:"Download PDF + send link"},
+                  {v:"link",l:t("share_drawing.link"),sub:t("design.cloudinary_url_in_message")},
+                  {v:"pdf", l:t("share_drawing.pdf_link"),sub:t("share_drawing.download_pdf_send_link")},
                 ].map(o=>{
                   const sel=shareMode===o.v;
                   return(
@@ -973,22 +968,20 @@ export default function DesignModule() {
               </div>
               {shareMode==="pdf"&&(
                 <div style={{marginTop:7,padding:"6px 10px",fontSize:10.5,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,lineHeight:1.4}}>
-                  ⚠️ Link message me already hai. PDF download karke WhatsApp window me drag-drop ya 📎 attach button se file bhi lagao (WhatsApp Web auto-attach nahi karta).
+                 {t("share_drawing.link_message_me_already_hai_pdf")}
                 </div>
               )}
             </div>
             <div style={{marginBottom:12}}>
-              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>
-                Client Phone {phone?"(auto-filled)":"(enter manually)"}
-              </label>
+              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>{t("design.client_phone_phone", { phone: phone?"(auto-filled)":"(enter manually)" })}</label>
               <input value={phone} onChange={e=>setPhone(e.target.value)}
-                placeholder={loadingContact?"Loading…":"e.g. 919876543210 (with country code)"}
+                placeholder={loadingContact?t("common.loading_2"):t("share_drawing.e_g_919876543210_with_country_code")}
                 style={{width:"100%",padding:"9px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-              <div style={{fontSize:10.5,color:T.t4,marginTop:4}}>Country code zaroori (e.g. 91 for India). Khali rakho to WhatsApp web me contact pick kar sakte ho.</div>
+              <div style={{fontSize:10.5,color:T.t4,marginTop:4}}>{t("share_drawing.country_code_zaroori_e_g_91")}</div>
             </div>
             <div>
               <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>
-                Message (editable)
+               {t("share_drawing.message_editable")}
               </label>
               <textarea value={msg} onChange={e=>setMsg(e.target.value)} rows={8}
                 style={{width:"100%",padding:"10px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical",lineHeight:1.5}}/>
@@ -997,21 +990,21 @@ export default function DesignModule() {
           <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,flexShrink:0,flexWrap:"wrap"}}>
             <button onClick={onClose}
               style={{flex:"1 1 80px",padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>
-              Cancel
+             {t("common.cancel")}
             </button>
             {shareMode==="pdf"&&(
               <button onClick={downloadPdf} disabled={downloading||!fileUrl}
                 style={{flex:"1 1 130px",padding:"9px",borderRadius:7,background:"#7C3AED",border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:(downloading||!fileUrl)?"not-allowed":"pointer",opacity:(downloading||!fileUrl)?0.6:1}}>
-                {downloading?"⏳ Downloading…":"📄 Download PDF"}
+                {downloading?t("share_drawing.downloading"):t("common.download_pdf")}
               </button>
             )}
             <button onClick={openWhatsApp} disabled={!msg.trim()}
               style={{flex:"1 1 130px",padding:"9px",borderRadius:7,background:"#25D366",border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:msg.trim()?"pointer":"not-allowed",opacity:msg.trim()?1:0.6}}>
-              💬 Open WhatsApp
+             {t("share_drawing.open_whatsapp")}
             </button>
             <button onClick={onShared}
               style={{flex:"1.4 1 140px",padding:"9px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
-              ✓ Sent — Mark Shared
+             {t("share_drawing.sent_mark_shared")}
             </button>
           </div>
         </div>
@@ -1047,7 +1040,7 @@ export default function DesignModule() {
     };
 
     const revisionDrawing = async (id) => {
-      const reason = prompt("Revision reason likhiye:");
+      const reason = prompt(t("design.revision_reason_likhiye"));
       if (!reason) return;
       setAprvActing(p=>({...p,[id]:"revision"}));
       try {
@@ -1062,7 +1055,7 @@ export default function DesignModule() {
     };
 
     const rejectDrawing = async (id) => {
-      const reason = prompt("Rejection reason likhiye:");
+      const reason = prompt(t("design.rejection_reason_likhiye"));
       if (!reason) return;
       setAprvActing(p=>({...p,[id]:"rejecting"}));
       try {
@@ -1081,7 +1074,7 @@ export default function DesignModule() {
         {/* Filters */}
         <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
           <div style={{position:"relative",flex:1,minWidth:160}}>
-            <input value={aprvSearch} onChange={e=>setAprvSearch(e.target.value)} placeholder="Search drawings..."
+            <input value={aprvSearch} onChange={e=>setAprvSearch(e.target.value)} placeholder={t("design.search_drawings")}
               style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
           </div>
@@ -1095,13 +1088,13 @@ export default function DesignModule() {
           </select>
         </div>
 
-        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{pendingDrawings.length} drawings awaiting approval</div>
+        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{t("design.pendingdrawings_drawings_awaiting_approval", { pendingDrawings: pendingDrawings.length })}</div>
 
         {pendingDrawings.length===0&&(
           <div style={{textAlign:"center",padding:"60px",color:T.t4}}>
             <div style={{fontSize:32,marginBottom:8}}>✅</div>
-            <div style={{fontSize:14,fontWeight:600,color:T.t2}}>Sab clear!</div>
-            <div style={{fontSize:12,marginTop:4}}>Koi drawing pending approval mein nahi</div>
+            <div style={{fontSize:14,fontWeight:600,color:T.t2}}>{t("design.sab_clear")}</div>
+            <div style={{fontSize:12,marginTop:4}}>{t("design.koi_drawing_pending_approval_mein_nahi")}</div>
           </div>
         )}
 
@@ -1115,13 +1108,13 @@ export default function DesignModule() {
                   <span>{d.category}</span>
                   <span style={{fontFamily:"monospace"}}>{d.current_version||"v1"}</span>
                   <span>{d.drawing_type}</span>
-                  {d.uploaded_by_name&&<Credit label="Uploaded by" name={d.uploaded_by_name} time={d.created_at||d.updated_at}/>}
+                  {d.uploaded_by_name&&<Credit label={t("design.uploaded_by")} name={d.uploaded_by_name} time={d.created_at||d.updated_at}/>}
                 </div>
                 {d.note&&<div style={{fontSize:11.5,color:T.t3,marginTop:4,padding:"4px 8px",background:T.surfaceB,borderRadius:5}}>{d.note}</div>}
               </div>
               <div style={{display:"flex",gap:6}}>
                 {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer"
-                  style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>👁 View</a>}
+                  style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("common.view")}</a>}
                 {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer"
                   style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"}}>⬇</a>}
               </div>
@@ -1129,15 +1122,15 @@ export default function DesignModule() {
             <div style={{display:"flex",gap:7}}>
               <button onClick={()=>approveDrawing(d.id)} disabled={!!aprvActing[d.id]}
                 style={{padding:"6px 18px",borderRadius:7,background:aprvActing[d.id]?T.b1:T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:aprvActing[d.id]?"not-allowed":"pointer"}}>
-                {aprvActing[d.id]==="approving"?"...":"✓ Approve"}
+                {aprvActing[d.id]==="approving"?"...":t("common.approve")}
               </button>
               <button onClick={()=>revisionDrawing(d.id)} disabled={!!aprvActing[d.id]}
                 style={{padding:"6px 16px",borderRadius:7,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                🔄 Revision
+               {t("design.revision")}
               </button>
               <button onClick={()=>rejectDrawing(d.id)} disabled={!!aprvActing[d.id]}
                 style={{padding:"6px 16px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                ✕ Reject
+               {t("common.reject")}
               </button>
             </div>
           </div>
@@ -1165,7 +1158,7 @@ export default function DesignModule() {
       <div>
         <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
           <div style={{position:"relative",flex:1,minWidth:160}}>
-            <input value={histSearch} onChange={e=>setHistSearch(e.target.value)} placeholder="Search drawings..."
+            <input value={histSearch} onChange={e=>setHistSearch(e.target.value)} placeholder={t("design.search_drawings")}
               style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
           </div>
@@ -1175,11 +1168,11 @@ export default function DesignModule() {
           </select>
           <select value={histStatus} onChange={e=>setHistStatus(e.target.value)}
             style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(histStatus!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:histStatus!=="All"?T.bluL:T.surface}}>
-            {["All","Pending","Approved","Revision","Rejected"].map(s=><option key={s} value={s}>{s==="All"?"All Status":s}</option>)}
+            {["All","Pending","Approved","Revision","Rejected"].map(s=><option key={s} value={s}>{s==="All"?t("common.all_status"):s}</option>)}
           </select>
         </div>
 
-        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{histDrawings.length} drawings · latest changes first</div>
+        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{t("design.histdrawings_drawings_latest_changes_first", { histDrawings: histDrawings.length })}</div>
 
         <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"2fr 130px 110px 60px 100px 100px 70px 90px",padding:"8px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,gap:8}}>
@@ -1187,7 +1180,7 @@ export default function DesignModule() {
               <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px"}}>{h}</span>
             ))}
           </div>
-          {histDrawings.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>No drawings found</div>}
+          {histDrawings.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>{t("design.no_drawings_found")}</div>}
           {histDrawings.map(d=>{
             const sm=STATUS_META[d.status]||STATUS_META["Pending"];
             return(
@@ -1236,10 +1229,10 @@ export default function DesignModule() {
       {/* View filters: All / Overdue / Today / This Week */}
       <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
         {[
-          {id:"all",label:"All"},
+          {id:"all",label:t("common.all")},
           {id:"overdue",label:`Overdue ${overdueCt>0?"("+overdueCt+")":""}`,color:overdueCt>0?T.red:null},
-          {id:"today",label:"Today"},
-          {id:"week",label:"This Week"},
+          {id:"today",label:t("common.today")},
+          {id:"week",label:t("design.this_week")},
         ].map(v=>(
           <button key={v.id} onClick={()=>setDdView(v.id)}
             style={{padding:"5px 12px",borderRadius:20,border:"1.5px solid "+(ddView===v.id?(v.color||T.blu):T.b1),
@@ -1258,8 +1251,8 @@ export default function DesignModule() {
       <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
         {[
           {id:"all",  label:`All (${siteDueCt+houseDueCt})`,    c:T.t2,  bg:T.surfaceB, brd:T.b1},
-          {id:"site", label:`🏗️ Site Drawings (${siteDueCt})`,  c:T.blu, bg:T.bluL,     brd:T.bluM},
-          {id:"house",label:`🏠 House Plans (${houseDueCt})`,    c:T.pur, bg:T.purL,     brd:T.purM},
+          {id:"site", label:t("design.site_drawings_siteduect", { siteDueCt }),  c:T.blu, bg:T.bluL,     brd:T.bluM},
+          {id:"house",label:t("design.house_plans_houseduect", { houseDueCt }),    c:T.pur, bg:T.purL,     brd:T.purM},
         ].map(s=>(
           <button key={s.id} onClick={()=>setDdSource(s.id)}
             style={{padding:"5px 11px",borderRadius:20,border:`1.5px solid ${ddSource===s.id?s.c:s.brd}`,
@@ -1271,7 +1264,7 @@ export default function DesignModule() {
       </div>
 
       <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{dueDateItems.length} items {ddSource!=="all"&&`· ${ddSource==="site"?"Site Drawings":"House Plans"}`}</div>
-      {dueDateItems.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>📅</div><div style={{fontSize:13,color:T.t2}}>Koi due date nahi</div></div>}
+      {dueDateItems.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>📅</div><div style={{fontSize:13,color:T.t2}}>{t("design.koi_due_date_nahi")}</div></div>}
 
       {/* Table */}
       <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
@@ -1305,7 +1298,7 @@ export default function DesignModule() {
               <span style={{fontSize:11,color:T.t2}}>{r.category}</span>
               <div>
                 <div style={{fontSize:12,fontWeight:700,color:isOverdue?T.red:isToday?T.amb:T.t1}}>{fmtDate(r.due_date)}</div>
-                <div style={{fontSize:10,color:isOverdue?T.red:isToday?T.amb:T.t4}}>{isOverdue?`${Math.abs(diff)}d overdue`:isToday?"Today":`${diff}d left`}</div>
+                <div style={{fontSize:10,color:isOverdue?T.red:isToday?T.amb:T.t4}}>{isOverdue?`${Math.abs(diff)}d overdue`:isToday?t("common.today"):`${diff}d left`}</div>
               </div>
               <Pill label={r.priority} c={pm.c} bg={pm.bg}/>
               <Pill label={r.status} c={sm.c} bg={sm.bg}/>
@@ -1331,11 +1324,11 @@ export default function DesignModule() {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,zIndex:501,width:460,maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
           <div style={{background:T.sb,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-            <div style={{fontSize:13,fontWeight:700,color:"white"}}>Version History — {showVer.title}</div>
+            <div style={{fontSize:13,fontWeight:700,color:"white"}}>{t("design.version_history_title", { title: showVer.title })}</div>
             <button onClick={()=>setShowVer(null)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:18}}>×</button>
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"12px"}}>
-            {vLoad&&<div style={{textAlign:"center",padding:"30px",color:T.t4}}>Loading...</div>}
+            {vLoad&&<div style={{textAlign:"center",padding:"30px",color:T.t4}}>{t("common.loading")}</div>}
             {versions.map((v,i)=>(
               <div key={v.id} style={{display:"flex",gap:10,marginBottom:8,alignItems:"flex-start"}}>
                 <div style={{width:32,height:32,borderRadius:"50%",background:i===0?T.blu:T.b1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -1347,7 +1340,7 @@ export default function DesignModule() {
                     <span style={{fontSize:10,color:T.t4}}>{fmtDate(v.created_at)}</span>
                   </div>
                   {v.note&&<div style={{fontSize:11,color:T.t3,marginTop:3}}>{v.note}</div>}
-                  {v.file_url&&<a href={v.file_url} target="_blank" rel="noreferrer" style={{fontSize:11,color:T.blu,textDecoration:"none",marginTop:4,display:"inline-block"}}>📄 View File</a>}
+                  {v.file_url&&<a href={v.file_url} target="_blank" rel="noreferrer" style={{fontSize:11,color:T.blu,textDecoration:"none",marginTop:4,display:"inline-block"}}>{t("design.view_file")}</a>}
                 </div>
               </div>
             ))}
@@ -1369,14 +1362,14 @@ export default function DesignModule() {
   const houseOpenCt       = requests.filter(r=>isHouseRequest(r) && r.status!=="Uploaded" && r.status!=="Rejected").length;
 
   const TABS = [
-    {id:"drawings",     label:"All Drawings",   Icon:IcDraw,   count:drawings.length,         badge:drawings.length>0?"blue":null},
-    {id:"site_req",     label:"Site Drawings",  Icon:IcReq,    count:siteOpenCt,              badge:siteOpenCt>0?"amber":null},
-    {id:"house_req",    label:"House Plans",    Icon:IcReq,    count:houseOpenCt,             badge:houseOpenCt>0?"amber":null},
-    {id:"revision",     label:"Revision Queue", Icon:IcRevise, count:revisionCt,              badge:revisionCt>0?"amber":null},
-    {id:"client_aprv",  label:"Client Approval",Icon:IcReq,    count:clientAprvCt,            badge:clientAprvCt>0?"amber":null},
-    {id:"approval",     label:"Approval",       Icon:IcCheck,  count:pendingApprovalCt,       badge:pendingApprovalCt>0?"amber":null},
-    {id:"history",      label:"History",        Icon:IcHist,   count:historyCt,               badge:null},
-    {id:"duedate",      label:"Due Dates",      Icon:IcCal,    count:overdueCt,               badge:overdueCt>0?"red":null},
+    {id:"drawings",     label:t("design.all_drawings"),   Icon:IcDraw,   count:drawings.length,         badge:drawings.length>0?"blue":null},
+    {id:"site_req",     label:t("design.site_drawings_2"),  Icon:IcReq,    count:siteOpenCt,              badge:siteOpenCt>0?"amber":null},
+    {id:"house_req",    label:t("design.house_plans_2"),    Icon:IcReq,    count:houseOpenCt,             badge:houseOpenCt>0?"amber":null},
+    {id:"revision",     label:t("design.revision_queue"), Icon:IcRevise, count:revisionCt,              badge:revisionCt>0?"amber":null},
+    {id:"client_aprv",  label:t("design.client_approval_2"),Icon:IcReq,    count:clientAprvCt,            badge:clientAprvCt>0?"amber":null},
+    {id:"approval",     label:t("common.approval"),       Icon:IcCheck,  count:pendingApprovalCt,       badge:pendingApprovalCt>0?"amber":null},
+    {id:"history",      label:t("common.history"),        Icon:IcHist,   count:historyCt,               badge:null},
+    {id:"duedate",      label:t("design.due_dates"),      Icon:IcCal,    count:overdueCt,               badge:overdueCt>0?"red":null},
   ];
 
   return (
@@ -1384,16 +1377,16 @@ export default function DesignModule() {
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
         <div>
-          <div style={{fontSize:18,fontWeight:800,color:T.t1,letterSpacing:"-0.3px"}}>Design</div>
-          <div style={{fontSize:12,color:T.t4,marginTop:2}}>Drawings · Requests · Revisions · Deadlines</div>
+          <div style={{fontSize:18,fontWeight:800,color:T.t1,letterSpacing:"-0.3px"}}>{t("common.design")}</div>
+          <div style={{fontSize:12,color:T.t4,marginTop:2}}>{t("design.drawings_requests_revisions_deadlines")}</div>
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={loadAll} style={{padding:"7px 12px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-            <IcRefresh size={13}/> Refresh
+            <IcRefresh size={13}/> {t("common.refresh")}
           </button>
           <button onClick={()=>{setUploadPrefill(null);setShowUpload(true);}}
             style={{padding:"7px 16px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-            <IcUpload size={14} color="white"/> Upload Drawing
+            <IcUpload size={14} color="white"/> {t("design.upload_drawing")}
           </button>
         </div>
       </div>

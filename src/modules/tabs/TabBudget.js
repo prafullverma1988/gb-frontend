@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
+import { t, Rich } from "../../i18n";
 
 // ── Budget tab — budget at chosen nodes, earned-value tracking ──
 // Budget lives on chosen "budget nodes" (usually parent/milestone tasks).
@@ -9,10 +10,10 @@ import { T } from "../shared/tokens";
 // earned = estimate × % → vs actual (DPR) → variance. Additive.
 
 const CATS = [
-  { id: "material",  label: "Material",  c: T.blu },
-  { id: "labour",    label: "Labour",    c: T.pur },
-  { id: "machinery", label: "Machinery", c: T.amb },
-  { id: "overhead",  label: "Overhead",  c: T.slt },
+  { id: "material",  get label() { return t("common.material"); },  c: T.blu },
+  { id: "labour",    get label() { return t("budget.labour"); },    c: T.pur },
+  { id: "machinery", get label() { return t("app.machinery"); }, c: T.amb },
+  { id: "overhead",  get label() { return t("budget.overhead"); },  c: T.slt },
 ];
 const inr = (n) => { const v = Math.round(Number(n) || 0); return (v < 0 ? "-₹" : "₹") + Math.abs(v).toLocaleString("en-IN"); };
 const n2  = (n) => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString("en-IN");
@@ -108,7 +109,7 @@ export default function TabBudget({ project }) {
         dieselRate = Number(d?.last_rate || d?.base_rate || 0);
       } catch (_) {}
       setLines((p) => [...p, { category: "machinery", item_name: `Diesel — ${entry.fuelRow.name} (@${entry.fuelRow.fuel_per_hour} L/hr)`, unit: "LTR", qty_per_unit: 0, rate: dieselRate }]);
-      flash(`Diesel line add hui (${entry.fuelRow.fuel_per_hour} L/hr) — hours ke hisaab se qty bharo`);
+      flash(t("budget.diesel_line_add_hui_fuel_per", { fuel_per_hour: entry.fuelRow.fuel_per_hour }));
     }
     setPick(null);
   };
@@ -117,9 +118,9 @@ export default function TabBudget({ project }) {
   // qty_per_unit = 1/scope rakha hai taaki qty 1 bane aur amount = rate rahe.
   const addOverheadPct = () => {
     const pct = Number(ohPct);
-    if (!(pct > 0)) return flash("Pehle % daalo (jaise 5)", "error");
+    if (!(pct > 0)) return flash(t("budget.pehle_daalo_jaise_5"), "error");
     const direct = catTotal("material") + catTotal("labour") + catTotal("machinery");
-    if (!(direct > 0)) return flash("Pehle Material/Labour/Machinery lines banao — % unhi par lagta hai", "error");
+    if (!(direct > 0)) return flash(t("budget.pehle_material_labour_machinery_lines_banao"), "error");
     const amt = Math.round(direct * pct / 100);
     setLines((p) => [...p, { category: "overhead", item_name: `Overhead ${pct}% (direct cost par)`, unit: "LS", qty_per_unit: scope > 0 ? +(1 / scope).toFixed(8) : 1, rate: amt }]);
     setOhPct("");
@@ -238,14 +239,14 @@ export default function TabBudget({ project }) {
     const payload = lines.map((l) => ({ category: l.category, item_name: l.item_name, unit: l.unit, qty_per_unit: Number(l.qty_per_unit || 0), rate: Number(l.rate || 0) }));
     const ln = await api.put(`/budget/task/${sel}/lines`, { lines: payload });
     setSaving(false);
-    if (h?.success && ln?.success) { flash("Budget saved"); setSel(null); load(); }
+    if (h?.success && ln?.success) { flash(t("budget.budget_saved")); setSel(null); load(); }
     else flash((h?.message || ln?.message) || "Save failed", "error");
   };
   const removeNode = async () => {
-    if (!(await window.confirmAsync("Remove budget from this task? Estimate lines are cleared."))) return;
+    if (!(await window.confirmAsync(t("budget.remove_budget_from_this_task_estimate")))) return;
     await api.put(`/budget/task/${sel}/lines`, { lines: [] });
     await api.patch(`/budget/task/${sel}`, { is_budget_node: 0 });
-    flash("Budget removed"); setSel(null); load();
+    flash(t("budget.budget_removed")); setSel(null); load();
   };
 
   // actuals / variance — earned uses rolled-up % (from sub-tasks)
@@ -262,14 +263,14 @@ export default function TabBudget({ project }) {
   const setPLine = (idx, f, v) => setPLines((p) => p.map((l, i) => i === idx ? { ...l, [f]: v } : l));
   const pAmt = (l) => Number(l.qty || 0) * Number(l.rate || 0);
   const saveProgress = async () => {
-    if (!(Number(pDone) > 0) && !pLines.length) return flash("Enter qty done or actual lines", "error");
+    if (!(Number(pDone) > 0) && !pLines.length) return flash(t("budget.enter_qty_done_or_actual_lines"), "error");
     setPSaving(true);
     const r = await api.post(`/budget/task/${sel}/progress`, {
       report_date: pDate, done_qty: Number(pDone || 0),
       lines: pLines.map((l) => ({ category: l.category, item_name: l.item_name, unit: l.unit, qty: Number(l.qty || 0), rate: Number(l.rate || 0) })),
     });
     setPSaving(false);
-    if (r?.success) { flash("Recorded"); setPDone(""); setPLines([]); openTask(sel); load(); }
+    if (r?.success) { flash(t("budget.recorded")); setPDone(""); setPLines([]); openTask(sel); load(); }
     else flash(r?.message || "Failed", "error");
   };
   const delProgress = async (id) => { const r = await api.del(`/budget/progress/${id}`); if (r?.success) { openTask(sel); load(); } };
@@ -297,28 +298,28 @@ export default function TabBudget({ project }) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>Tasks <span style={{ fontSize: 12, fontWeight: 400, color: T.t4 }}>· {totals.budget_nodes || 0} budgeted</span></div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>{t("common.tasks")} <span style={{ fontSize: 12, fontWeight: 400, color: T.t4 }}>· {totals.budget_nodes || 0} budgeted</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <select value={levelFilter} onChange={(e) => applyLevel(e.target.value)}
             style={{ height: 32, padding: "0 10px", borderRadius: 7, border: `1.5px solid ${levelFilter !== "All" ? T.blu : T.b1}`, background: levelFilter !== "All" ? T.bluL : T.surface, color: levelFilter !== "All" ? T.blu : T.t2, fontSize: 11.5, fontWeight: levelFilter !== "All" ? 700 : 400, fontFamily: "inherit", cursor: "pointer", outline: "none" }}>
-            <option value="All">All Levels ({tasks.length})</option>
+            <option value="All">{t("budget.all_levels_tasks", { tasks: tasks.length })}</option>
             {levelMeta.map((lv) => (
-              <option key={lv.depth} value={String(lv.depth + 1)}>L{lv.depth + 1} — {lv.label}{lv.depth > 0 ? " (upto)" : ""} ({lv.cum})</option>
+              <option key={lv.depth} value={String(lv.depth + 1)}>L{lv.depth + 1} — {lv.label}{lv.depth > 0 ? t("budget.upto") : ""} ({lv.cum})</option>
             ))}
-            {levelFilter === "custom" && <option value="custom">Custom view</option>}
+            {levelFilter === "custom" && <option value="custom">{t("budget.custom_view")}</option>}
           </select>
-          <button onClick={collapseAll} title="Collapse all" style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>⊟</button>
-          <button onClick={expandAll} title="Expand all" style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>⊞</button>
-          <button onClick={load} style={{ height: 32, padding: "0 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>↻ Refresh</button>
+          <button onClick={collapseAll} title={t("budget.collapse_all")} style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>⊟</button>
+          <button onClick={expandAll} title={t("budget.expand_all")} style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>⊞</button>
+          <button onClick={load} style={{ height: 32, padding: "0 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>{t("common.refresh_2")}</button>
         </div>
       </div>
-      <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 10 }}>Set a budget on main / milestone tasks; sub-tasks below stay operational and roll their progress up.</div>
+      <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 10 }}>{t("budget.set_a_budget_on_main_milestone")}</div>
 
       {loading ? (
-        <div style={{ padding: 50, textAlign: "center", color: T.t4, fontSize: 13 }}>Loading budget…</div>
+        <div style={{ padding: 50, textAlign: "center", color: T.t4, fontSize: 13 }}>{t("budget.loading_budget")}</div>
       ) : !tasks.length ? (
         <div style={{ padding: 40, textAlign: "center", color: T.t4, fontSize: 13, background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 12 }}>
-          No tasks yet. Add tasks in the <b>Tasks</b> tab first.
+         {t("budget.no_tasks_yet_add_tasks_in")} <b>{t("common.tasks")}</b> {t("budget.tab_first")}
         </div>
       ) : (
         <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 12, overflow: "hidden" }}>
@@ -344,14 +345,14 @@ export default function TabBudget({ project }) {
                       onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                       <td style={{ ...td, paddingLeft: 10 + t._d * 18 }}>
                         {t._hasKids
-                          ? <span onClick={(e) => { e.stopPropagation(); toggleCollapse(t.id); }} title={collapsed[t.id] ? "Expand" : "Collapse"} style={{ display: "inline-block", width: 18, marginRight: 4, color: T.t2, cursor: "pointer", fontSize: 11, textAlign: "center", userSelect: "none" }}>{collapsed[t.id] ? "▶" : "▼"}</span>
+                          ? <span onClick={(e) => { e.stopPropagation(); toggleCollapse(t.id); }} title={collapsed[t.id] ? t("budget.expand") : t("common.collapse")} style={{ display: "inline-block", width: 18, marginRight: 4, color: T.t2, cursor: "pointer", fontSize: 11, textAlign: "center", userSelect: "none" }}>{collapsed[t.id] ? "▶" : "▼"}</span>
                           : <span style={{ display: "inline-block", width: 18, marginRight: 4 }} />}
                         <span style={{ color: T.t4, marginRight: 6, fontSize: 11 }}>{t.task_no}</span>
                         <span style={{ fontWeight: node ? 700 : 400, color: node ? T.t1 : T.t3 }}>{t.name}</span>
                         {collapsed[t.id] && descCount[t.id] ? <span style={{ marginLeft: 6, fontSize: 10, color: T.t4 }}>+{descCount[t.id]}</span> : null}
                         {node ? <span style={{ marginLeft: 7, fontSize: 9, color: T.blu, background: T.bluL, padding: "1px 6px", borderRadius: 10, fontWeight: 700 }}>BUDGET{t.roll_pct != null ? " · " + t.roll_pct + "%" : ""}</span>
-                          : fl.cover ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.t4 }}>↳ covered by {fl.cover.task_no}</span>
-                          : fl.hasDesc ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.amb }}>has budgeted sub-task</span>
+                          : fl.cover ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.t4 }}>{t("budget.covered_by_task_no", { task_no: fl.cover.task_no })}</span>
+                          : fl.hasDesc ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.amb }}>{t("budget.has_budgeted_sub_task")}</span>
                           : <span style={{ marginLeft: 7, fontSize: 9.5, color: T.t4 }}>operational</span>}
                       </td>
                       <td style={{ ...td, color: T.t3 }}>{node ? (t.unit || "—") : ""}</td>
@@ -360,7 +361,7 @@ export default function TabBudget({ project }) {
                       <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? inr(t.earned) : ""}</td>
                       <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? (Number(t.actual_amt) ? inr(t.actual_amt) : "—") : ""}</td>
                       <td style={{ ...td, textAlign: "right", fontWeight: 700, color: node ? (v >= 0 ? T.grn : T.red) : T.t4 }}>{node ? inr(v) : ""}</td>
-                      <td style={{ ...td, textAlign: "center" }} onClick={(e) => { e.stopPropagation(); openDrawer(); }}>{node ? <span style={{ color: T.blu, cursor: "pointer" }}>open ›</span> : canBudget ? <span style={{ fontSize: 10.5, color: T.blu, cursor: "pointer", whiteSpace: "nowrap" }}>+ budget</span> : <span style={{ fontSize: 10.5, color: T.t4 }}>—</span>}</td>
+                      <td style={{ ...td, textAlign: "center" }} onClick={(e) => { e.stopPropagation(); openDrawer(); }}>{node ? <span style={{ color: T.blu, cursor: "pointer" }}>{t("budget.open")}</span> : canBudget ? <span style={{ fontSize: 10.5, color: T.blu, cursor: "pointer", whiteSpace: "nowrap" }}>{t("budget.budget")}</span> : <span style={{ fontSize: 10.5, color: T.t4 }}>—</span>}</td>
                     </tr>
                   );
                 })}
@@ -377,28 +378,28 @@ export default function TabBudget({ project }) {
           <div style={{ position: "fixed", top: 0, right: 0, width: "min(580px,100%)", height: "100vh", background: T.surface, zIndex: 1001, boxShadow: "-8px 0 30px rgba(0,0,0,.12)", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div><div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{hdr.task_no} · {hdr.name}</div>
-                <div style={{ fontSize: 11.5, color: T.t3, marginTop: 1 }}>{selKids ? "Budget node · progress rolls up from sub-tasks" : "Task budget"}{selNode ? "" : " · not budgeted yet"}</div></div>
+                <div style={{ fontSize: 11.5, color: T.t3, marginTop: 1 }}>{selKids ? t("budget.budget_node_progress_rolls_up_from") : t("budget.task_budget")}{selNode ? "" : t("budget.not_budgeted_yet")}</div></div>
               <button onClick={() => setSel(null)} style={{ ...inp, width: "auto", cursor: "pointer", background: T.surfaceB }}>✕</button>
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
-                <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>Unit</div>
+                <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("common.unit")}</div>
                   <select value={hdr.unit || ""} onChange={(e) => setHdr({ ...hdr, unit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
                     <option value="">—</option>{units.map((u) => <option key={u.id} value={u.code}>{u.code}</option>)}</select></div>
-                <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>Scope qty</div>
+                <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("budget.scope_qty")}</div>
                   <input type="number" value={hdr.scope_qty ?? ""} onChange={(e) => setHdr({ ...hdr, scope_qty: e.target.value })} style={{ ...inp, textAlign: "right" }} /></div>
-                <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>Billing rate ₹/unit</div>
+                <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("budget.billing_rate_unit")}</div>
                   <input type="number" value={hdr.billing_rate ?? ""} onChange={(e) => setHdr({ ...hdr, billing_rate: e.target.value })} style={{ ...inp, textAlign: "right" }} /></div>
-                <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>Stage / level</div>
-                  <input value={hdr.stage || ""} onChange={(e) => setHdr({ ...hdr, stage: e.target.value })} placeholder="e.g. Plinth" style={inp} /></div>
-                <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>Stage order</div>
+                <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("budget.stage_level")}</div>
+                  <input value={hdr.stage || ""} onChange={(e) => setHdr({ ...hdr, stage: e.target.value })} placeholder={t("budget.e_g_plinth")} style={inp} /></div>
+                <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("budget.stage_order")}</div>
                   <input type="number" value={hdr.stage_order ?? ""} onChange={(e) => setHdr({ ...hdr, stage_order: e.target.value })} style={{ ...inp, textAlign: "right" }} /></div>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.t2, marginTop: 22 }}>
-                  <input type="checkbox" checked={!!hdr.non_billable_ra} onChange={(e) => setHdr({ ...hdr, non_billable_ra: e.target.checked })} /> Non-billable (RA)</label>
+                  <input type="checkbox" checked={!!hdr.non_billable_ra} onChange={(e) => setHdr({ ...hdr, non_billable_ra: e.target.checked })} /> {t("budget.non_billable_ra")}</label>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", background: T.bluL, borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12.5 }}>
-                <span style={{ color: T.blu, fontWeight: 600 }}>Scope amount (revenue)</span>
+                <span style={{ color: T.blu, fontWeight: 600 }}>{t("budget.scope_amount_revenue")}</span>
                 <span style={{ color: T.blu, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{inr(scopeAmt)}</span>
               </div>
 
@@ -431,30 +432,30 @@ export default function TabBudget({ project }) {
                           <td style={{ ...td, textAlign: "center" }}><button onClick={() => delLine(idx)} aria-label="Remove" style={{ border: "none", background: "none", color: T.t4, cursor: "pointer", fontSize: 14 }}>✕</button></td>
                         </tr>
                       ))}
-                      {!lines.some((l) => l.category === cat) && <tr><td colSpan={7} style={{ ...td, textAlign: "center", color: T.t4 }}>No {cat} lines yet.</td></tr>}
+                      {!lines.some((l) => l.category === cat) && <tr><td colSpan={7} style={{ ...td, textAlign: "center", color: T.t4 }}>{t("budget.no_cat_lines_yet", { cat })}</td></tr>}
                     </tbody>
                   </table>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, position: "relative", flexWrap: "wrap", gap: 6 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <button onClick={() => openPicker(cat)} style={{ fontSize: 12, color: T.ind, background: T.indL, border: `1px solid ${T.ind}33`, borderRadius: 7, padding: "5px 11px", cursor: "pointer", fontWeight: 700 }}>+ Library se</button>
-                      <button onClick={addLine} style={{ fontSize: 12, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>+ Khali line</button>
+                      <button onClick={() => openPicker(cat)} style={{ fontSize: 12, color: T.ind, background: T.indL, border: `1px solid ${T.ind}33`, borderRadius: 7, padding: "5px 11px", cursor: "pointer", fontWeight: 700 }}>{t("budget.library_se")}</button>
+                      <button onClick={addLine} style={{ fontSize: 12, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>{t("budget.khali_line")}</button>
                       {cat === "overhead" && (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: T.t3 }}>
                           <input type="number" value={ohPct} onChange={(e) => setOhPct(e.target.value)} placeholder="%" style={{ ...inp, width: 52, padding: "5px 7px", textAlign: "right" }} />
-                          <button onClick={addOverheadPct} title="Material + Labour + Machinery ke total par %" style={{ fontSize: 12, color: T.ind, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>% of direct cost</button>
+                          <button onClick={addOverheadPct} title={t("budget.material_labour_machinery_ke_total_par")} style={{ fontSize: 12, color: T.ind, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>{t("budget.of_direct_cost")}</button>
                         </span>
                       )}
                     </div>
-                    {selNode && <button onClick={removeNode} style={{ fontSize: 12, color: T.red, background: "none", border: "none", cursor: "pointer" }}>Remove budget</button>}
+                    {selNode && <button onClick={removeNode} style={{ fontSize: 12, color: T.red, background: "none", border: "none", cursor: "pointer" }}>{t("budget.remove_budget")}</button>}
                     {pick && (
                       <>
                         <div onClick={() => setPick(null)} style={{ position: "fixed", inset: 0, zIndex: 640 }} />
                         <div style={{ position: "absolute", left: 0, bottom: "calc(100% + 6px)", zIndex: 641, width: 340, maxHeight: 320, background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, boxShadow: "0 10px 32px rgba(0,0,0,.16)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
                           <div style={{ padding: 8, borderBottom: `1px solid ${T.b1}` }}>
-                            <input autoFocus value={pickSearch} onChange={(e) => setPickSearch(e.target.value)} placeholder="Search library…" style={inp} />
+                            <input autoFocus value={pickSearch} onChange={(e) => setPickSearch(e.target.value)} placeholder={t("budget.search_library")} style={inp} />
                           </div>
                           <div style={{ overflowY: "auto" }}>
-                            {libLoading && <div style={{ padding: 16, fontSize: 12, color: T.t4, textAlign: "center" }}>Loading…</div>}
+                            {libLoading && <div style={{ padding: 16, fontSize: 12, color: T.t4, textAlign: "center" }}>{t("common.loading_2")}</div>}
                             {!libLoading && (libCache[pick] || [])
                               .map((row) => libEntry(pick, row))
                               .filter((e) => !pickSearch || e.title.toLowerCase().includes(pickSearch.toLowerCase()))
@@ -469,9 +470,7 @@ export default function TabBudget({ project }) {
                                 </div>
                               ))}
                             {!libLoading && !(libCache[pick] || []).length && (
-                              <div style={{ padding: 16, fontSize: 12, color: T.t4, textAlign: "center" }}>
-                                Library khali hai — pehle Library module me {pick === "labour" ? "labour rates" : pick === "machinery" ? "equipment" : pick === "overhead" ? "expense heads" : "materials"} add karo.
-                              </div>
+                              <div style={{ padding: 16, fontSize: 12, color: T.t4, textAlign: "center" }}>{t("budget.library_khali_hai_pehle_library_module", { pick: pick === "labour" ? "labour rates" : pick === "machinery" ? "equipment" : pick === "overhead" ? "expense heads" : "materials" })}</div>
                             )}
                           </div>
                         </div>
@@ -484,8 +483,8 @@ export default function TabBudget({ project }) {
               {mode === "actuals" && (
                 <>
                   <div style={{ fontSize: 12, color: T.t3, marginBottom: 8 }}>
-                    {selKids ? <>Progress (rolled up from sub-tasks): <b style={{ color: T.t1 }}>{Math.round(selRoll)}%</b></>
-                             : <>Done: <b style={{ color: T.t1 }}>{n2(hdr.done_qty)} {hdr.unit}</b>{scope ? ` of ${n2(scope)} (${Math.round(frac * 100)}%)` : ""}</>}
+                    {selKids ? <>{t("budget.progress_rolled_up_from_sub_tasks")} <b style={{ color: T.t1 }}>{Math.round(selRoll)}%</b></>
+                             : <><Rich k="budget.done_n2_unit_scope" params={{ n2: n2(hdr.done_qty), unit: hdr.unit, scope: scope ? ` of ${n2(scope)} (${Math.round(frac * 100)}%)` : "" }} /></>}
                   </div>
                   <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
                     <thead><tr>{["Category", "Planned (earned)", "Actual", "Variance", ""].map((h, i) => <th key={i} style={{ ...th, textAlign: i >= 1 && i <= 3 ? "right" : "left" }}>{h}</th>)}</tr></thead>
@@ -503,7 +502,7 @@ export default function TabBudget({ project }) {
                         );
                       })}
                       <tr style={{ background: T.surfaceB, fontWeight: 700 }}>
-                        <td style={td}>Total</td>
+                        <td style={td}>{t("common.total")}</td>
                         <td style={{ ...td, textAlign: "right" }}>{inr(plannedTot)}</td>
                         <td style={{ ...td, textAlign: "right" }}>{inr(actualTot)}</td>
                         <td style={{ ...td, textAlign: "right", color: (plannedTot - actualTot) >= 0 ? T.grn : T.red }}>{inr(plannedTot - actualTot)}</td>
@@ -513,11 +512,11 @@ export default function TabBudget({ project }) {
                   </table>
 
                   <div style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 10 }}>Record actuals (DPR)</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 10 }}>{t("budget.record_actuals_dpr")}</div>
                     <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                      <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>Date</div><input type="date" value={pDate} onChange={(e) => setPDate(e.target.value)} style={inp} /></div>
-                      <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>Qty done {selKids ? "(optional)" : `(${hdr.unit || ""})`}</div><input type="number" value={pDone} onChange={(e) => setPDone(e.target.value)} style={{ ...inp, textAlign: "right" }} /></div>
-                      <button onClick={fillFromEstimate} style={{ ...inp, width: "auto", alignSelf: "flex-end", cursor: "pointer", background: T.bluL, color: T.blu, border: `1px solid ${T.bluM}`, fontWeight: 600, whiteSpace: "nowrap" }}>↺ Fill from estimate</button>
+                      <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("common.date")}</div><input type="date" value={pDate} onChange={(e) => setPDate(e.target.value)} style={inp} /></div>
+                      <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>{t("budget.qty_done_selkids", { selKids: selKids ? "(optional)" : `(${hdr.unit || ""})` })}</div><input type="number" value={pDone} onChange={(e) => setPDone(e.target.value)} style={{ ...inp, textAlign: "right" }} /></div>
+                      <button onClick={fillFromEstimate} style={{ ...inp, width: "auto", alignSelf: "flex-end", cursor: "pointer", background: T.bluL, color: T.blu, border: `1px solid ${T.bluM}`, fontWeight: 600, whiteSpace: "nowrap" }}>{t("budget.fill_from_estimate")}</button>
                     </div>
                     {pLines.length > 0 && (
                       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 8 }}>
@@ -536,17 +535,17 @@ export default function TabBudget({ project }) {
                         </tbody>
                       </table>
                     )}
-                    <button onClick={saveProgress} disabled={pSaving} style={{ width: "100%", padding: "9px", borderRadius: 8, border: "none", background: pSaving ? T.b2 : T.grn, color: "#fff", fontSize: 13, fontWeight: 700, cursor: pSaving ? "default" : "pointer", fontFamily: "inherit" }}>{pSaving ? "Saving…" : "Save actuals"}</button>
+                    <button onClick={saveProgress} disabled={pSaving} style={{ width: "100%", padding: "9px", borderRadius: 8, border: "none", background: pSaving ? T.b2 : T.grn, color: "#fff", fontSize: 13, fontWeight: 700, cursor: pSaving ? "default" : "pointer", fontFamily: "inherit" }}>{pSaving ? t("common.saving_2") : t("budget.save_actuals")}</button>
                   </div>
 
-                  <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 8 }}>History</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 8 }}>{t("common.history")}</div>
                   {progress.length ? progress.map((p) => (
                     <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: `1px solid ${T.b1}`, fontSize: 12.5 }}>
                       <span style={{ color: T.t2 }}>{p.report_date}</span>
-                      <span style={{ color: T.t1, fontWeight: 600 }}>{Number(p.done_qty) ? n2(p.done_qty) + " " + (hdr.unit || "") : "cost entry"}</span>
+                      <span style={{ color: T.t1, fontWeight: 600 }}>{Number(p.done_qty) ? n2(p.done_qty) + " " + (hdr.unit || "") : t("budget.cost_entry")}</span>
                       <span style={{ marginLeft: "auto" }}><button onClick={() => delProgress(p.id)} style={{ border: "none", background: "none", color: T.t4, cursor: "pointer", fontSize: 13 }}>✕</button></span>
                     </div>
-                  )) : <div style={{ fontSize: 12, color: T.t4 }}>No actuals recorded yet.</div>}
+                  )) : <div style={{ fontSize: 12, color: T.t4 }}>{t("budget.no_actuals_recorded_yet")}</div>}
                 </>
               )}
             </div>
@@ -554,12 +553,12 @@ export default function TabBudget({ project }) {
             <div style={{ padding: "12px 18px", borderTop: `1px solid ${T.b1}` }}>
               {mode === "plan" ? (
                 <>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}><span style={{ color: T.t3 }}>Estimate (cost)</span><span style={{ fontWeight: 700, color: T.amb }}>{inr(estimate)}</span></div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 10 }}><span style={{ color: T.t3 }}>Margin</span><span style={{ fontWeight: 800, color: (scopeAmt - estimate) >= 0 ? T.grn : T.red }}>{inr(scopeAmt - estimate)} ({scopeAmt > 0 ? Math.round((scopeAmt - estimate) / scopeAmt * 100) : 0}%)</span></div>
-                  <button onClick={saveAll} disabled={saving} style={{ width: "100%", padding: "11px", borderRadius: 9, border: "none", background: saving ? T.b2 : T.blu, color: "#fff", fontSize: 14, fontWeight: 700, cursor: saving ? "default" : "pointer", fontFamily: "inherit" }}>{saving ? "Saving…" : (selNode ? "Save budget" : "Set as budget node")}</button>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}><span style={{ color: T.t3 }}>{t("budget.estimate_cost")}</span><span style={{ fontWeight: 700, color: T.amb }}>{inr(estimate)}</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 10 }}><span style={{ color: T.t3 }}>{t("common.margin")}</span><span style={{ fontWeight: 800, color: (scopeAmt - estimate) >= 0 ? T.grn : T.red }}>{inr(scopeAmt - estimate)} ({scopeAmt > 0 ? Math.round((scopeAmt - estimate) / scopeAmt * 100) : 0}%)</span></div>
+                  <button onClick={saveAll} disabled={saving} style={{ width: "100%", padding: "11px", borderRadius: 9, border: "none", background: saving ? T.b2 : T.blu, color: "#fff", fontSize: 14, fontWeight: 700, cursor: saving ? "default" : "pointer", fontFamily: "inherit" }}>{saving ? t("common.saving_2") : (selNode ? t("budget.save_budget") : t("budget.set_as_budget_node"))}</button>
                 </>
               ) : (
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: T.t3 }}>Variance (earned − actual)</span><span style={{ fontWeight: 800, color: (plannedTot - actualTot) >= 0 ? T.grn : T.red }}>{inr(plannedTot - actualTot)}</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: T.t3 }}>{t("budget.variance_earned_actual")}</span><span style={{ fontWeight: 800, color: (plannedTot - actualTot) >= 0 ? T.grn : T.red }}>{inr(plannedTot - actualTot)}</span></div>
               )}
             </div>
           </div>

@@ -16,6 +16,7 @@
 
 import { useEffect, useState } from "react";
 import api from "../config/api";
+import { t } from "../i18n";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -30,18 +31,18 @@ const T = {
 
 // Action → icon + color mapping. Keep this lean; add as needed.
 const ACTION_META = {
-  CREATE:        { icon: "✨", color: T.grn,  bg: T.grnL,  label: "Created" },
-  UPDATE:        { icon: "✏️", color: T.blu,  bg: T.bluL,  label: "Updated" },
-  DELETE:        { icon: "🗑", color: T.red,  bg: T.redL,  label: "Deleted" },
-  APPROVE:       { icon: "✓",  color: T.blu,  bg: T.bluL,  label: "Approved" },
-  REJECT:        { icon: "✕",  color: T.red,  bg: T.redL,  label: "Rejected" },
-  "MARK-ORDERED":  { icon: "🚚", color: T.pur,  bg: T.purL,  label: "Ordered" },
-  "MARK-RECEIVED": { icon: "📦", color: T.grn,  bg: T.grnL,  label: "Received" },
-  "ISSUE-RAISED":  { icon: "⚠️", color: T.red,  bg: T.redL,  label: "Issue raised" },
-  "ISSUE-RESOLVED":{ icon: "✓",  color: T.grn,  bg: T.grnL,  label: "Issue resolved" },
-  PAYMENT:       { icon: "💰", color: T.grn,  bg: T.grnL,  label: "Payment" },
-  CLOSE:         { icon: "⊘",  color: T.amb,  bg: T.ambL,  label: "Closed" },
-  REOPEN:        { icon: "↺",  color: T.blu,  bg: T.bluL,  label: "Reopened" },
+  CREATE:        { icon: "✨", color: T.grn,  bg: T.grnL,  get label() { return t("activity_log.created"); } },
+  UPDATE:        { icon: "✏️", color: T.blu,  bg: T.bluL,  get label() { return t("activity_log.updated"); } },
+  DELETE:        { icon: "🗑", color: T.red,  bg: T.redL,  get label() { return t("activity_log.deleted"); } },
+  APPROVE:       { icon: "✓",  color: T.blu,  bg: T.bluL,  get label() { return t("common.approved"); } },
+  REJECT:        { icon: "✕",  color: T.red,  bg: T.redL,  get label() { return t("common.rejected"); } },
+  "MARK-ORDERED":  { icon: "🚚", color: T.pur,  bg: T.purL,  get label() { return t("common.ordered"); } },
+  "MARK-RECEIVED": { icon: "📦", color: T.grn,  bg: T.grnL,  get label() { return t("common.received"); } },
+  "ISSUE-RAISED":  { icon: "⚠️", color: T.red,  bg: T.redL,  get label() { return t("activity_log.issue_raised"); } },
+  "ISSUE-RESOLVED":{ icon: "✓",  color: T.grn,  bg: T.grnL,  get label() { return t("activity_log.issue_resolved"); } },
+  PAYMENT:       { icon: "💰", color: T.grn,  bg: T.grnL,  get label() { return t("activity_log.payment"); } },
+  CLOSE:         { icon: "⊘",  color: T.amb,  bg: T.ambL,  get label() { return t("common.closed"); } },
+  REOPEN:        { icon: "↺",  color: T.blu,  bg: T.bluL,  get label() { return t("activity_log.reopened"); } },
 };
 
 const fmtDateTime = (d) => {
@@ -101,7 +102,7 @@ export default function ActivityLog({ entity_type, entity_id, compact = false, d
       <button onClick={() => setOpen(o => !o)}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 7, padding: compact ? "8px 11px" : "10px 13px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
         <span style={{ width: 22, height: 22, borderRadius: "50%", background: T.b1, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>📜</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: T.t2 }}>Activity Log</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: T.t2 }}>{t("activity_log.activity_log")}</span>
         {rows != null && (
           <span style={{ fontSize: 9.5, fontWeight: 700, color: T.t3, background: T.b1, padding: "1px 6px", borderRadius: 8 }}>
             {rows.length}
@@ -113,10 +114,10 @@ export default function ActivityLog({ entity_type, entity_id, compact = false, d
 
       {open && (
         <div style={{ padding: "0 13px 11px 13px" }}>
-          {loading && <div style={{ padding: "10px 0", fontSize: 11, color: T.t4 }}>Loading activity...</div>}
+          {loading && <div style={{ padding: "10px 0", fontSize: 11, color: T.t4 }}>{t("activity_log.loading_activity")}</div>}
           {err && <div style={{ padding: "8px 10px", background: T.redL, border: `1px solid #FECACA`, borderRadius: 6, fontSize: 11, color: T.red }}>{err}</div>}
           {!loading && !err && rows && rows.length === 0 && (
-            <div style={{ padding: "10px 0", fontSize: 11, color: T.t4, fontStyle: "italic" }}>No activity recorded yet.</div>
+            <div style={{ padding: "10px 0", fontSize: 11, color: T.t4, fontStyle: "italic" }}>{t("activity_log.no_activity_recorded_yet")}</div>
           )}
           {!loading && rows && rows.length > 0 && (
             <div style={{ position: "relative", paddingLeft: 22 }}>

@@ -6,6 +6,7 @@ import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
+import { t, Rich } from "../i18n";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -81,23 +82,23 @@ const T={
 // ── NAV GROUPS ───────────────────────────────────────────────────────
 const NAV_GROUPS=[
   {section:null,items:[
-    {id:"dashboard",label:"Dashboard",Icon:IcHome},
-    {id:"projects",label:"Projects",Icon:IcProj},
+    {id:"dashboard",get label() { return t("common.dashboard"); },Icon:IcHome},
+    {id:"projects",get label() { return t("common.projects"); },Icon:IcProj},
     {id:"crm",label:"CRM",Icon:IcCRM},
     {id:"mom",label:"MOM",Icon:IcMOM},
-    {id:"team",label:"Team Schedule",Icon:IcTeam},
-    {id:"design",label:"Design",Icon:IcDes,badge:"NEW",bc:C.a},
+    {id:"team",get label() { return t("common.team_schedule"); },Icon:IcTeam},
+    {id:"design",get label() { return t("common.design"); },Icon:IcDes,badge:"NEW",bc:C.a},
   ]},
   {section:"FINANCE & OPS",items:[
-    {id:"finance",label:"Finance",Icon:IcFin},
-    {id:"procurement",label:"Procurement",Icon:IcProc,badge:11,bc:C.p},
-    {id:"warehouse",label:"Warehouse",Icon:IcWH},
-    {id:"payroll",label:"Payroll",Icon:IcPay},
+    {id:"finance",get label() { return t("common.finance"); },Icon:IcFin},
+    {id:"procurement",get label() { return t("common.procurement"); },Icon:IcProc,badge:11,bc:C.p},
+    {id:"warehouse",get label() { return t("common.warehouse"); },Icon:IcWH},
+    {id:"payroll",get label() { return t("common.payroll"); },Icon:IcPay},
   ]},
   {section:"REPORTS",items:[
-    {id:"reports",label:"Reports",Icon:IcRep},
-    {id:"library",label:"Library",Icon:IcLib},
-    {id:"settings",label:"Settings",Icon:IcSet},
+    {id:"reports",get label() { return t("common.reports"); },Icon:IcRep},
+    {id:"library",get label() { return t("common.library"); },Icon:IcLib},
+    {id:"settings",get label() { return t("common.settings"); },Icon:IcSet},
   ]},
 ];
 
@@ -193,13 +194,13 @@ function SitePulseDrawer({onClose,onSelectProject}){
   const [rejectNote,setRejectNote]=useState("");
 
   const tagMeta={
-    "progress":{c:C.g,b:C.gl,icon:"🏗️",label:"Progress"},
-    "material":{c:C.p,b:C.bl,icon:"📦",label:"Material Received"},
-    "material_request":{c:"#0891B2",b:"#ECFEFF",icon:"📋",label:"Material Request"},
-    "approval":{c:C.teal,b:C.tealL,icon:"✅",label:"Approved"},
-    "payment":{c:C.o,b:C.ol,icon:"💰",label:"Payment"},
-    "photo":{c:"#7C3AED",b:"#EDE9FE",icon:"📸",label:"Photo"},
-    "document":{c:C.p,b:C.bl,icon:"📄",label:"Document"},
+    "progress":{c:C.g,b:C.gl,icon:"🏗️",label:t("common.progress")},
+    "material":{c:C.p,b:C.bl,icon:"📦",label:t("projects.material_received")},
+    "material_request":{c:"#0891B2",b:"#ECFEFF",icon:"📋",label:t("material_flow.material_request")},
+    "approval":{c:C.teal,b:C.tealL,icon:"✅",label:t("common.approved")},
+    "payment":{c:C.o,b:C.ol,icon:"💰",label:t("common.payment")},
+    "photo":{c:"#7C3AED",b:"#EDE9FE",icon:"📸",label:t("projects.photo")},
+    "document":{c:C.p,b:C.bl,icon:"📄",label:t("machinery.document")},
   };
   const avatarColors=["#1565C0","#2E7D32","#6A1B9A","#AD1457","#E65100","#00838F","#4527A0","#C62828"];
   const getAC=(name)=>avatarColors[Math.abs([...name].reduce((a,c)=>a+c.charCodeAt(0),0))%avatarColors.length];
@@ -224,7 +225,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
     if(!d) return "";
     const diff=Date.now()-new Date(d).getTime();
     const mins=Math.floor(diff/60000);
-    if(mins<1) return "just now";
+    if(mins<1) return t("common.just_now");
     if(mins<60) return mins+"m ago";
     const hrs=Math.floor(mins/60);
     if(hrs<24) return hrs+"h ago";
@@ -278,7 +279,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
           <div style={{display:"flex",alignItems:"center",gap:7}}>
             <div style={{width:9,height:9,borderRadius:"50%",background:C.g,boxShadow:`0 0 0 3px ${C.gl}`,animation:"livePulse 1.5s infinite"}}/>
-            <span style={{fontSize:14,fontWeight:800,color:C.t}}>Site Pulse</span>
+            <span style={{fontSize:14,fontWeight:800,color:C.t}}>{t("project_detail.site_pulse")}</span>
             <span style={{background:C.r,color:"white",fontSize:8,fontWeight:800,padding:"2px 5px",borderRadius:4,letterSpacing:"0.6px"}}>LIVE</span>
             {!loading&&<span style={{fontSize:10,color:C.tl}}>{filtered.length} activities</span>}
           </div>
@@ -286,12 +287,12 @@ function SitePulseDrawer({onClose,onSelectProject}){
         </div>
         <div style={{display:"flex",gap:6}}>
           <select value={site} onChange={e=>setSite(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t}}>
-            <option value="All">All Projects</option>
+            <option value="All">{t("common.all_projects")}</option>
             {projects.map(s=><option key={s}>{s}</option>)}
           </select>
           <div style={{flex:1,position:"relative"}}>
             <button onClick={()=>setShowTypeMenu(v=>!v)} style={{width:"100%",padding:"6px 8px",borderRadius:7,border:`1.5px solid ${showTypeMenu?C.p:C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",gap:5}}>
-              <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{allSelected?"All Types":`${selTypes.length} type${selTypes.length!==1?"s":""}`}</span>
+              <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{allSelected?t("common.all_types"):`${selTypes.length} type${selTypes.length!==1?"s":""}`}</span>
               <span style={{fontSize:9,color:C.tl,flexShrink:0}}>▼</span>
             </button>
             {showTypeMenu&&(
@@ -299,8 +300,8 @@ function SitePulseDrawer({onClose,onSelectProject}){
                 <div onClick={()=>setShowTypeMenu(false)} style={{position:"fixed",inset:0,zIndex:202}}/>
                 <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,left:0,zIndex:203,background:C.w,border:`1px solid ${C.b}`,borderRadius:9,boxShadow:"0 8px 28px rgba(0,0,0,0.16)",padding:"6px",maxHeight:280,overflowY:"auto"}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 6px 6px",borderBottom:`1px solid ${C.b}`,marginBottom:4}}>
-                    <span style={{fontSize:10,fontWeight:800,color:C.tl,textTransform:"uppercase",letterSpacing:".4px"}}>Show types</span>
-                    <button onClick={resetFilter} style={{background:"none",border:"none",color:C.p,fontSize:10.5,fontWeight:700,cursor:"pointer"}}>Reset (all)</button>
+                    <span style={{fontSize:10,fontWeight:800,color:C.tl,textTransform:"uppercase",letterSpacing:".4px"}}>{t("projects.show_types")}</span>
+                    <button onClick={resetFilter} style={{background:"none",border:"none",color:C.p,fontSize:10.5,fontWeight:700,cursor:"pointer"}}>{t("projects.reset_all")}</button>
                   </div>
                   {PULSE_ALL_TYPES.map(k=>{
                     const on=selTypes.includes(k);
@@ -314,8 +315,8 @@ function SitePulseDrawer({onClose,onSelectProject}){
                       </label>
                     );
                   })}
-                  <button onClick={saveFilter} disabled={selTypes.length===0} style={{width:"100%",marginTop:5,padding:"8px",borderRadius:7,background:selTypes.length===0?C.b:C.p,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:selTypes.length===0?"not-allowed":"pointer"}}>✓ Save filter</button>
-                  {selTypes.length===0&&<div style={{fontSize:10,color:C.o,textAlign:"center",marginTop:4}}>Kam se kam ek type select karein</div>}
+                  <button onClick={saveFilter} disabled={selTypes.length===0} style={{width:"100%",marginTop:5,padding:"8px",borderRadius:7,background:selTypes.length===0?C.b:C.p,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:selTypes.length===0?"not-allowed":"pointer"}}>{t("projects.save_filter")}</button>
+                  {selTypes.length===0&&<div style={{fontSize:10,color:C.o,textAlign:"center",marginTop:4}}>{t("projects.kam_se_kam_ek_type_select")}</div>}
                 </div>
               </>
             )}
@@ -329,7 +330,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
         {pendingShown.length>0&&(
           <div style={{marginBottom:10}}>
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"2px 4px 6px"}}>
-              <span style={{fontSize:11.5,fontWeight:800,color:C.t}}>Aapke action ka intezaar</span>
+              <span style={{fontSize:11.5,fontWeight:800,color:C.t}}>{t("projects.aapke_action_ka_intezaar")}</span>
               <span style={{background:C.a,color:"white",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:10}}>{pendingShown.length}</span>
             </div>
             {actErr&&<div style={{margin:"0 2px 6px",padding:"7px 10px",background:C.rl,border:`1px solid ${C.r}44`,borderRadius:8,fontSize:11,color:C.r}}>{actErr}</div>}
@@ -342,12 +343,12 @@ function SitePulseDrawer({onClose,onSelectProject}){
                 <div key={"pend-"+id} style={{background:C.w,borderRadius:12,marginBottom:8,border:`1px solid ${C.a}55`,borderLeft:`3px solid ${C.a}`,boxShadow:"0 1px 6px rgba(0,0,0,0.06)",overflow:"hidden"}}>
                   <div style={{padding:"10px 12px 8px"}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                      <span style={{background:"#FFF8E1",color:C.a,fontSize:9,fontWeight:800,padding:"2px 7px",borderRadius:20,whiteSpace:"nowrap"}}>{it.module||"Approval"}</span>
+                      <span style={{background:"#FFF8E1",color:C.a,fontSize:9,fontWeight:800,padding:"2px 7px",borderRadius:20,whiteSpace:"nowrap"}}>{it.module||t("common.approval")}</span>
                       {it.ref_no&&<span style={{fontSize:10,color:C.tl}}>{it.ref_no}</span>}
                       <div style={{flex:1}}/>
                       {amt&&<span style={{fontSize:12.5,fontWeight:800,color:C.t}}>{amt}</span>}
                     </div>
-                    <div style={{fontSize:12.5,fontWeight:600,color:C.t,lineHeight:1.4}}>{it.title||"Approval request"}</div>
+                    <div style={{fontSize:12.5,fontWeight:600,color:C.t,lineHeight:1.4}}>{it.title||t("projects.approval_request")}</div>
                     <div style={{fontSize:10.5,color:C.tl,marginTop:2}}>
                       📍 {it.project_name||"—"}{who?` · ${who}`:""}
                     </div>
@@ -355,11 +356,11 @@ function SitePulseDrawer({onClose,onSelectProject}){
                   {rejectId===id?(
                     <div style={{padding:"0 12px 10px",display:"flex",gap:6}}>
                       <input autoFocus value={rejectNote} onChange={e=>setRejectNote(e.target.value)}
-                        placeholder="Reject ka reason..."
+                        placeholder={t("projects.reject_ka_reason")}
                         style={{flex:1,height:30,padding:"0 9px",borderRadius:7,border:`1.5px solid ${C.r}66`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
                       <button onClick={()=>decide(it,"reject",rejectNote)} disabled={!!busy}
                         style={{height:30,padding:"0 11px",borderRadius:7,border:"none",background:C.r,color:"white",fontSize:11.5,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
-                        {busy==="rejecting"?"...":"Confirm"}
+                        {busy==="rejecting"?"...":t("common.confirm")}
                       </button>
                       <button onClick={()=>{setRejectId(null);setRejectNote("");}}
                         style={{height:30,padding:"0 9px",borderRadius:7,border:`1px solid ${C.b}`,background:C.w,color:C.tl,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
@@ -368,16 +369,16 @@ function SitePulseDrawer({onClose,onSelectProject}){
                     <div style={{padding:"0 12px 10px",display:"flex",gap:6,alignItems:"center"}}>
                       <button onClick={()=>decide(it,"approve")} disabled={!!busy}
                         style={{height:30,padding:"0 14px",borderRadius:7,border:"none",background:C.g,color:"white",fontSize:11.5,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.6:1}}>
-                        {busy==="approving"?"...":"✓ Approve"}
+                        {busy==="approving"?"...":t("common.approve")}
                       </button>
                       <button onClick={()=>setRejectId(id)} disabled={!!busy}
                         style={{height:30,padding:"0 12px",borderRadius:7,border:`1.5px solid ${C.r}66`,background:C.w,color:C.r,fontSize:11.5,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit"}}>
-                        Reject
+                       {t("common.reject_2")}
                       </button>
                       <div style={{flex:1}}/>
                       <button onClick={()=>goTo(it.project_id,it.project_name,approvalTab(it))}
                         style={{height:30,padding:"0 10px",borderRadius:7,border:`1px solid ${C.b}`,background:C.w,color:C.p,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
-                        Poora dekhein →
+                       {t("projects.poora_dekhein")}
                       </button>
                     </div>
                   )}
@@ -390,13 +391,13 @@ function SitePulseDrawer({onClose,onSelectProject}){
         {loading?(
           <div style={{textAlign:"center",padding:"50px 0",color:C.tl}}>
             <div style={{width:24,height:24,border:"3px solid "+C.b,borderTopColor:C.p,borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto 12px"}}/>
-            Loading feed...
+           {t("projects.loading_feed")}
           </div>
         ):filtered.length===0?(
           <div style={{textAlign:"center",padding:"50px 0",color:C.tl,fontSize:13}}>
             <div style={{fontSize:36,marginBottom:10}}>📡</div>
-            No activities yet
-            <div style={{fontSize:11,marginTop:4,color:C.tl+"99"}}>Activities from your projects will appear here</div>
+           {t("projects.no_activities_yet")}
+            <div style={{fontSize:11,marginTop:4,color:C.tl+"99"}}>{t("projects.activities_from_your_projects_will_appear")}</div>
           </div>
         ):filtered.map((f,idx)=>{
           const tm=tagMeta[f.feed_type]||{c:C.tl,b:C.b,icon:"📌",label:f.feed_type};
@@ -433,12 +434,12 @@ function SitePulseDrawer({onClose,onSelectProject}){
               {/* Type-specific banner */}
               {!f.photo_url&&f.feed_type==="approval"&&(
                 <div style={{margin:"0 12px 6px",background:C.tealL,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.teal}`,display:"flex",gap:7,alignItems:"center"}}>
-                  <IcChk size={13} color={C.teal}/><span style={{fontSize:11.5,color:C.teal,fontWeight:500}}>{f.feed_status==="Rejected"?"Rejected":"Approved"}{amt?` — ${amt}`:""}</span>
+                  <IcChk size={13} color={C.teal}/><span style={{fontSize:11.5,color:C.teal,fontWeight:500}}>{f.feed_status==="Rejected"?t("common.rejected"):t("common.approved")}{amt?` — ${amt}`:""}</span>
                 </div>
               )}
               {!f.photo_url&&f.feed_type==="material"&&(
                 <div style={{margin:"0 12px 6px",background:C.bl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.p}`,display:"flex",gap:7,alignItems:"center"}}>
-                  <span style={{fontSize:16}}>📦</span><span style={{fontSize:11.5,color:C.p,fontWeight:500}}>Material Received{amt?` — ${amt}`:""}</span>
+                  <span style={{fontSize:16}}>📦</span><span style={{fontSize:11.5,color:C.p,fontWeight:500}}>{t("projects.material_receivedamt", { amt: amt?` — ${amt}`:"" })}</span>
                 </div>
               )}
               {!f.photo_url&&f.feed_type==="payment"&&(
@@ -448,7 +449,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
               )}
               {!f.photo_url&&f.feed_type==="progress"&&(
                 <div style={{margin:"0 12px 6px",background:C.gl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.g}`,display:"flex",gap:7,alignItems:"center"}}>
-                  <span style={{fontSize:16}}>🏗️</span><span style={{fontSize:11.5,color:C.g,fontWeight:500}}>Stage Completed</span>
+                  <span style={{fontSize:16}}>🏗️</span><span style={{fontSize:11.5,color:C.g,fontWeight:500}}>{t("projects.stage_completed")}</span>
                 </div>
               )}
               {!f.photo_url&&f.feed_type==="material_request"&&(
@@ -475,7 +476,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
       <div style={{padding:"10px 12px",background:C.w,borderTop:`1px solid ${C.b}`,borderRadius:"0 0 0 16px"}}>
         <div style={{display:"flex",gap:8,alignItems:"center",justifyContent:"center"}}>
           <div style={{width:6,height:6,borderRadius:"50%",background:C.g,animation:"livePulse 1.5s infinite"}}/>
-          <span style={{fontSize:11,color:C.tl,fontWeight:500}}>Real-time feed from all projects</span>
+          <span style={{fontSize:11,color:C.tl,fontWeight:500}}>{t("projects.real_time_feed_from_all_projects")}</span>
         </div>
       </div>
     </div>
@@ -557,11 +558,11 @@ function NewProjectModal({onClose,onCreated}){
   );
 
   const handleCreate = async () => {
-    if (!form.name.trim()) return setError("Name required");
-    if (isSolar && !form.address.trim()) return setError("Address required");
+    if (!form.name.trim()) return setError(t("master_library.name_required"));
+    if (isSolar && !form.address.trim()) return setError(t("projects.address_required"));
     // For construction projects, City + Type are mandatory (FK enforced on backend too)
-    if (!isSolar && !form.cityId) return setError("City is required");
-    if (!isSolar && !form.constructionTypeId) return setError("Construction Type is required");
+    if (!isSolar && !form.cityId) return setError(t("projects.city_is_required"));
+    if (!isSolar && !form.constructionTypeId) return setError(t("projects.construction_type_is_required"));
     setLoading(true); setError("");
     try {
       const projectName = isSolar
@@ -609,15 +610,15 @@ function NewProjectModal({onClose,onCreated}){
       onCreated(mapProject(res.data));
       onClose();
     } catch(err) {
-      setError("Server error. Try again.");
+      setError(t("projects.server_error_try_again"));
     }
     setLoading(false);
   };
 
   // ── Header config ───────────────────────────────────────────────
   const hdr = isSolar
-    ? {grad:"linear-gradient(135deg,#E65100,#FF8F00)", icon:"☀️", title:"New Solar EPC Project", sub:"Consumer details aur system info"}
-    : {grad:`linear-gradient(135deg,${T.blu},#1D4ED8)`,  icon:"🏗️", title:"New Project",           sub:"Add a new construction project"};
+    ? {grad:"linear-gradient(135deg,#E65100,#FF8F00)", icon:"☀️", title:t("projects.new_solar_epc_project"), sub:t("projects.consumer_details_aur_system_info")}
+    : {grad:`linear-gradient(135deg,${T.blu},#1D4ED8)`,  icon:"🏗️", title:t("projects.new_project"),           sub:t("projects.add_a_new_construction_project")};
 
   return (<>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:998}}/>
@@ -640,7 +641,7 @@ function NewProjectModal({onClose,onCreated}){
       {/* Module toggle — only for 'both' companies */}
       {isBoth && (
         <div style={{display:"flex",gap:6,padding:"12px 20px 0",background:T.surface}}>
-          {[{id:"construction",l:"🏗️ Construction",c:T.blu},{id:"solar_epc",l:"☀️ Solar EPC",c:"#E65100"}].map(opt=>(
+          {[{id:"construction",l:t("projects.construction"),c:T.blu},{id:"solar_epc",l:t("projects.solar_epc"),c:"#E65100"}].map(opt=>(
             <button key={opt.id} onClick={()=>{setProjType(opt.id);setStep(1);setError("");}}
               style={{flex:1,padding:"8px",borderRadius:8,border:`2px solid ${projType===opt.id?opt.c:T.b1}`,background:projType===opt.id?opt.c+"15":"white",color:projType===opt.id?opt.c:T.t3,fontSize:12.5,fontWeight:projType===opt.id?700:400,cursor:"pointer",transition:"all .15s"}}>
               {opt.l}
@@ -675,7 +676,7 @@ function NewProjectModal({onClose,onCreated}){
             {inp("Mobile Number",      "phone",        "e.g. 9876543210")}
             {inp("City",               "city",         "City")}
             {sel("System Size",        "system_kw",    ["1","2","3","4","5","6","7","8","9","10"].map(v=>({v,l:v+" kW"})))}
-            {sel("Installation Type",  "install_type", [{v:"residential",l:"Residential"},{v:"commercial",l:"Commercial"}], false)}
+            {sel("Installation Type",  "install_type", [{v:"residential",l:t("crm.residential")},{v:"commercial",l:t("crm.commercial")}], false)}
             {inp("Full Site Address *", "address",      "House no., Street, Area, District, Pin", "text", true)}
             {inp("BP Number (Ele Bill)","bp_number",    "e.g. 1008863630")}
           </div>
@@ -685,7 +686,7 @@ function NewProjectModal({onClose,onCreated}){
         {isSolar && step===2 && (
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div style={{gridColumn:"1/3",background:"#FFF8E1",borderRadius:8,padding:"9px 12px",border:"1px solid #FFD54F",fontSize:11.5,color:"#E65100"}}>
-              ℹ️ Actual documents Files tab mein upload honge. Abhi reference numbers enter karo.
+             {t("projects.actual_documents_files_tab_mein_upload")}
             </div>
             {inp("Aadhaar Number",   "aadhaar_no",   "12-digit Aadhaar")}
             {inp("PAN Number",       "pan_no",        "e.g. ABCDE1234F")}
@@ -699,32 +700,32 @@ function NewProjectModal({onClose,onCreated}){
         {!isSolar && (
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div style={{gridColumn:"1/3"}}>
-              <label style={{fontSize:10.5,fontWeight:600,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>Project Name *</label>
-              <input value={form.name} onChange={e=>setF("name",e.target.value)} placeholder="e.g. Sharma Residence"
+              <label style={{fontSize:10.5,fontWeight:600,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.project_name")}</label>
+              <input value={form.name} onChange={e=>setF("name",e.target.value)} placeholder={t("projects.e_g_sharma_residence")}
                 style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             </div>
             {inp("Client Name",  "client_name", "Client full name")}
             {/* City * — library-backed dropdown, mandatory */}
             <div>
-              <label style={{fontSize:10.5,fontWeight:600,color:form.cityId?T.t3:"#DC2626",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>City *</label>
+              <label style={{fontSize:10.5,fontWeight:600,color:form.cityId?T.t3:"#DC2626",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.city_2")}</label>
               <select value={form.cityId} onChange={e => pickCity(e.target.value)}
                 style={{width:"100%",padding:"9px 12px",borderRadius:7,
                         border:`1.5px solid ${form.cityId?T.b1:"#FCA5A5"}`,
                         background: form.cityId?T.bg:"#FEF2F2",
                         fontSize:13, color:T.t1, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}>
-                <option value="">Select city...</option>
+                <option value="">{t("crm.select_city")}</option>
                 {libCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             {/* Type * — library-backed dropdown, mandatory */}
             <div>
-              <label style={{fontSize:10.5,fontWeight:600,color:form.constructionTypeId?T.t3:"#DC2626",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>Type *</label>
+              <label style={{fontSize:10.5,fontWeight:600,color:form.constructionTypeId?T.t3:"#DC2626",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>{t("projects.type")}</label>
               <select value={form.constructionTypeId} onChange={e => pickType(e.target.value)}
                 style={{width:"100%",padding:"9px 12px",borderRadius:7,
                         border:`1.5px solid ${form.constructionTypeId?T.b1:"#FCA5A5"}`,
                         background: form.constructionTypeId?T.bg:"#FEF2F2",
                         fontSize:13, color:T.t1, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}>
-                <option value="">Select type...</option>
+                <option value="">{t("common.select_type")}</option>
                 {libCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
@@ -733,7 +734,7 @@ function NewProjectModal({onClose,onCreated}){
             {inp("End Date",     "end_date",     "", "date")}
             {(!form.cityId || !form.constructionTypeId) && (
               <div style={{gridColumn:"1/3",padding:"8px 11px",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,fontSize:11.5,color:"#991B1B"}}>
-                ⚠️ City + Type required so the Estimate Builder can match the right rate package later.
+               {t("projects.city_type_required_so_the_estimate")}
               </div>
             )}
           </div>
@@ -743,17 +744,17 @@ function NewProjectModal({onClose,onCreated}){
       {/* Footer */}
       <div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:10}}>
         {isSolar && step===2
-          ? <button onClick={()=>setStep(1)} style={{padding:"9px 16px",borderRadius:7,border:`1px solid ${T.b1}`,background:"none",fontSize:13,color:T.t2,cursor:"pointer",fontFamily:"inherit"}}>← Back</button>
-          : <button onClick={onClose} style={{padding:"9px 16px",borderRadius:7,border:`1px solid ${T.b1}`,background:"none",fontSize:13,color:T.t2,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+          ? <button onClick={()=>setStep(1)} style={{padding:"9px 16px",borderRadius:7,border:`1px solid ${T.b1}`,background:"none",fontSize:13,color:T.t2,cursor:"pointer",fontFamily:"inherit"}}>{t("common.back_2")}</button>
+          : <button onClick={onClose} style={{padding:"9px 16px",borderRadius:7,border:`1px solid ${T.b1}`,background:"none",fontSize:13,color:T.t2,cursor:"pointer",fontFamily:"inherit"}}>{t("common.cancel")}</button>
         }
         {isSolar && step===1
-          ? <button onClick={()=>{if(!form.name.trim()||!form.address.trim())return setError("Name aur address required");setError("");setStep(2);}}
+          ? <button onClick={()=>{if(!form.name.trim()||!form.address.trim())return setError(t("projects.name_aur_address_required"));setError("");setStep(2);}}
               style={{padding:"9px 22px",borderRadius:7,border:"none",background:"linear-gradient(135deg,#E65100,#FF8F00)",color:"white",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-              Next: Document Details →
+             {t("projects.next_document_details")}
             </button>
           : <button onClick={handleCreate} disabled={loading}
               style={{padding:"9px 22px",borderRadius:7,border:"none",background:loading?T.t4:isSolar?"linear-gradient(135deg,#E65100,#FF8F00)":`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:13,fontWeight:600,cursor:loading?"not-allowed":"pointer",fontFamily:"inherit"}}>
-              {loading?"Creating...":isSolar?"Create Solar Project ☀️":"Create Project"}
+              {loading?t("app.creating"):isSolar?t("projects.create_solar_project"):t("projects.create_project")}
             </button>
         }
       </div>
@@ -769,7 +770,7 @@ function DuplicateModal({project,onClose,onConfirm}){
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
   // Real duplicate: POST /projects/:id/duplicate (copies task tree, resets execution)
   const handleCreate=async()=>{
-    if(!form.name.trim()) return setError("New project name required");
+    if(!form.name.trim()) return setError(t("projects.new_project_name_required"));
     setSaving(true);setError("");
     try{
       const res=await onConfirm({name:form.name.trim(),city:form.city,boq_value:Number(form.boq)||0,start_date:form.start||null,end_date:form.end||null});
@@ -783,7 +784,7 @@ function DuplicateModal({project,onClose,onConfirm}){
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:C.w,borderRadius:16,width:500,maxWidth:"95vw",zIndex:301,boxShadow:"0 24px 70px rgba(0,0,0,0.32)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:`linear-gradient(135deg,${C.p},${C.p2})`,padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
         <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center"}}><IcCopy size={17} color="white"/></div>
-        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"white"}}>Duplicate Project</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.72)"}}>Tasks, schedule & dependencies carry over automatically</div></div>
+        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"white"}}>{t("finance.duplicate_project")}</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.72)"}}>{t("projects.tasks_schedule_dependencies_carry_over_automatically")}</div></div>
         <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"5px 7px",borderRadius:7,display:"flex"}}><IcX size={14}/></button>
       </div>
       {/* Steps */}
@@ -801,8 +802,8 @@ function DuplicateModal({project,onClose,onConfirm}){
       <div style={{padding:"16px 20px",maxHeight:340,overflowY:"auto"}}>
         {step===1&&<div>
           <div style={{background:C.bg,borderRadius:8,padding:"9px 12px",marginBottom:12,display:"flex",alignItems:"center",gap:8,border:`1px solid ${C.b}`}}>
-            <span style={{fontSize:11,color:C.tl}}>Copying from:</span><strong style={{fontSize:11.5,color:C.t,flex:1}}>{project.name}</strong>
-            <span style={{background:C.bl,color:C.p,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20}}>Template</span>
+            <span style={{fontSize:11,color:C.tl}}>{t("finance.copying_from")}</span><strong style={{fontSize:11.5,color:C.t,flex:1}}>{project.name}</strong>
+            <span style={{background:C.bl,color:C.p,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20}}>{t("finance.template")}</span>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             {[["New Project Name *",form.name,"name","text",true],["City *",form.city,"city","text",false],["BOQ Value (₹) *",form.boq,"boq","number",false],["Type",project.type,"_type","text",false],["Start Date",form.start,"start","date",false],["End Date",form.end,"end","date",false]].map(([lbl,val,key,type,full])=>(
@@ -812,23 +813,23 @@ function DuplicateModal({project,onClose,onConfirm}){
               </div>
             ))}
           </div>
-          <div style={{background:C.gl,borderRadius:8,padding:"8px 12px",fontSize:11,color:C.g,display:"flex",gap:6,marginTop:12}}><span>✅</span><span>Saare tasks, schedule & dependencies copy honge. Progress/kharcha/estimate copy NAHI hota — naya project clean shuru hota hai.</span></div>
+          <div style={{background:C.gl,borderRadius:8,padding:"8px 12px",fontSize:11,color:C.g,display:"flex",gap:6,marginTop:12}}><span>✅</span><span>{t("projects.saare_tasks_schedule_dependencies_copy_honge")}</span></div>
         </div>}
         {step===2&&(!done
           ?<div>
-            <div style={{fontSize:12,fontWeight:700,color:C.t,marginBottom:10}}>Review before creating:</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.t,marginBottom:10}}>{t("finance.review_before_creating")}</div>
             {[["Project Name",form.name],["City",form.city],["BOQ",`₹${Number(form.boq).toLocaleString("en-IN")}`],["Timeline",`${form.start||"TBD"} → ${form.end||"TBD"}`],["Initial Status","Not Started · 0%"],["Carry Over","Tasks · Schedule · Dependencies"]].map(([k,v])=>(
               <div key={k} style={{display:"flex",padding:"7px 0",borderBottom:`1px solid ${C.b}`}}><span style={{width:140,fontSize:11.5,color:C.tl,flexShrink:0}}>{k}</span><span style={{fontSize:11.5,fontWeight:600,color:C.t}}>{v}</span></div>
             ))}
             {error&&<div style={{marginTop:10,background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:7,padding:"8px 11px",fontSize:11.5,color:"#DC2626"}}>{error}</div>}
           </div>
-          :<div style={{textAlign:"center",padding:"28px 0"}}><div style={{fontSize:44,marginBottom:10}}>✅</div><div style={{fontSize:15,fontWeight:800,color:C.g}}>Project Created!</div><div style={{fontSize:12,color:C.tl,marginTop:4}}>{form.name} added{tasksCopied!=null?` · ${tasksCopied} tasks copied`:""}.</div></div>
+          :<div style={{textAlign:"center",padding:"28px 0"}}><div style={{fontSize:44,marginBottom:10}}>✅</div><div style={{fontSize:15,fontWeight:800,color:C.g}}>{t("finance.project_created")}</div><div style={{fontSize:12,color:C.tl,marginTop:4}}>{form.name} added{tasksCopied!=null?` · ${tasksCopied} tasks copied`:""}.</div></div>
         )}
       </div>
       {!done&&<div style={{padding:"12px 20px",borderTop:`1px solid ${C.b}`,display:"flex",gap:8,background:"#FAFBFF"}}>
-        {step>1&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,padding:"9px",borderRadius:8,border:`1.5px solid ${C.b}`,background:C.bg,fontSize:12,fontWeight:600,color:C.tm,cursor:"pointer"}}>← Back</button>}
+        {step>1&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,padding:"9px",borderRadius:8,border:`1.5px solid ${C.b}`,background:C.bg,fontSize:12,fontWeight:600,color:C.tm,cursor:"pointer"}}>{t("common.back_2")}</button>}
         <button disabled={saving} onClick={step<2?()=>setStep(2):handleCreate} style={{flex:2,padding:"9px",borderRadius:8,background:step===2?`linear-gradient(135deg,${C.g},#388E3C)`:`linear-gradient(135deg,${C.p},${C.p2})`,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"wait":"pointer",opacity:saving?.7:1}}>
-          {step===1?"Next: Review →":saving?"Creating...":"✓ Create Duplicate"}
+          {step===1?t("finance.next_review"):saving?t("app.creating"):t("finance.create_duplicate")}
         </button>
       </div>}
     </div>
@@ -908,14 +909,14 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
     else setCErr((r&&r.message)||"Add nahi hua");
   };
   const removeClient = async (uid) => {
-    if(!window.confirm("Is client ka access hata dein?")) return;
+    if(!window.confirm(t("project_detail.is_client_ka_access_hata_dein"))) return;
     await api.del("/client/projects/"+project.id+"/clients/"+uid);
     loadClients();
   };
   // The old password was never stored readably, so "forgot it" is only ever
   // solved by issuing a new one.
   const resetPw = async (uid) => {
-    if(!window.confirm("Naya password banayein? Purana password band ho jayega.")) return;
+    if(!window.confirm(t("project_detail.naya_password_banayein_purana_password_band"))) return;
     setCErr("");
     const r = await api.post("/client/projects/"+project.id+"/clients/"+uid+"/reset-password",{});
     if(r&&r.success) setNewPw({phone:r.data.phone,password:r.password});
@@ -943,7 +944,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   const upd = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const handleSave = async () => {
-    if(!form.name.trim()) return setError("Project name required");
+    if(!form.name.trim()) return setError(t("project_detail.project_name_required"));
     setSaving(true); setError("");
     try {
       // Reverse map display values → DB values
@@ -986,7 +987,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   const deleteMatch = deleteText.trim().toUpperCase() === "DELETE";
 
   const handleDelete = async () => {
-    if(!deleteMatch) return setError("Type DELETE to confirm");
+    if(!deleteMatch) return setError(t("projects.type_delete_to_confirm"));
     setSaving(true);
     try {
       const res = await api.del("/projects/"+project.id);
@@ -997,11 +998,11 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   };
 
   const SECTIONS = [
-    {id:"basic",  label:"Basic Info",    icon:"M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"},
-    {id:"team",   label:"Team & Roles",  icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"},
-    {id:"clients",label:"Client Access",  icon:"M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 3a4 4 0 100 8 4 4 0 000-8zM19 8v6M22 11h-6"},
-    {id:"status", label:"Status & Dates",icon:"M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"},
-    {id:"danger", label:"Danger Zone",   icon:"M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"},
+    {id:"basic",  label:t("project_detail.basic_info"),    icon:"M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"},
+    {id:"team",   label:t("project_detail.team_roles"),  icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"},
+    {id:"clients",label:t("project_detail.client_access"),  icon:"M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 3a4 4 0 100 8 4 4 0 000-8zM19 8v6M22 11h-6"},
+    {id:"status", label:t("project_detail.status_dates"),icon:"M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"},
+    {id:"danger", label:t("common.danger_zone"),   icon:"M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"},
   ];
 
   const inp = (k,ph,type="text",min,max) => (
@@ -1027,7 +1028,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
       {/* Header */}
       <div style={{background:"#0D1B2A",padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
         <div>
-          <div style={{fontSize:14,fontWeight:700,color:"white"}}>Project Settings</div>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("project_detail.project_settings")}</div>
           <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:2,maxWidth:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{project.name}</div>
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",padding:4}}>
@@ -1053,7 +1054,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
           {/* ── BASIC INFO ── */}
           {section==="basic"&&(
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>Basic Information</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>{t("projects.basic_information")}</div>
               <div>
                 {lbl("Project Name",true)}
                 {inp("name","e.g. My Residence Project")}
@@ -1082,7 +1083,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
           {/* ── TEAM & ROLES ── */}
           {section==="team"&&(
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>Team & Roles</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>{t("project_detail.team_roles")}</div>
               <div>
                 {lbl("Project Manager (PM)")}
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -1099,7 +1100,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
                   ))}
                   <div style={{marginTop:4}}>
                     {lbl("Or type custom name")}
-                    <input value={form.pm_name} onChange={e=>upd("pm_name",e.target.value)} placeholder="Type PM name..."
+                    <input value={form.pm_name} onChange={e=>upd("pm_name",e.target.value)} placeholder={t("projects.type_pm_name")}
                       style={{width:"100%",padding:"8px 11px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                   </div>
                 </div>
@@ -1111,11 +1112,9 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
           {section==="clients"&&(
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
               <div>
-                <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>Client Access</div>
+                <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>{t("project_detail.client_access")}</div>
                 <div style={{fontSize:11.5,color:T.t3,lineHeight:1.5}}>
-                  Yahan jode gaye client mobile app me apne number se login karke <b>sirf</b> is project ka
-                  progress, site photos aur apni billing dekh sakte hain. Cost, budget, staff, procurement —
-                  kuch bhi unhe nahi dikhta. Ek hi client ko kai projects se joda ja sakta hai.
+                 {t("projects.yahan_jode_gaye_client_mobile_app")} <b>sirf</b> {t("projects.is_project_ka_progress_site_photos")}
                 </div>
               </div>
 
@@ -1125,15 +1124,15 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
                     <div key={c.user_id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:8,border:"1px solid "+T.b1,background:T.surface}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:600,color:T.t1}}>{c.name}</div>
-                        <div style={{fontSize:11,color:T.t4}}>{c.phone}{c.is_active===0?" · inactive":""}</div>
+                        <div style={{fontSize:11,color:T.t4}}>{c.phone}{c.is_active===0?t("project_detail.inactive"):""}</div>
                       </div>
                       <button onClick={()=>resetPw(c.user_id)}
                         style={{background:"none",border:"none",color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-                        Naya password
+                       {t("project_detail.naya_password")}
                       </button>
                       <button onClick={()=>removeClient(c.user_id)}
                         style={{background:"none",border:"none",color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-                        Hatao
+                       {t("common.hatao")}
                       </button>
                     </div>
                   ))}
@@ -1143,34 +1142,34 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
               <div style={{borderTop:"1px solid "+T.b1,paddingTop:12}}>
                 {lbl("Naya client jodein")}
                 <div style={{display:"flex",gap:8}}>
-                  <input value={cName} onChange={e=>setCName(e.target.value)} placeholder="Client ka naam"
+                  <input value={cName} onChange={e=>setCName(e.target.value)} placeholder={t("project_detail.client_ka_naam")}
                     style={{flex:1,padding:"9px 11px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                  <input value={cPhone} onChange={e=>setCPhone(e.target.value)} placeholder="Mobile (10 digit)" inputMode="numeric"
+                  <input value={cPhone} onChange={e=>setCPhone(e.target.value)} placeholder={t("projects.mobile_10_digit")} inputMode="numeric"
                     style={{width:150,padding:"9px 11px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
                 {cErr&&<div style={{fontSize:11.5,color:T.red,marginTop:6,fontWeight:500}}>{cErr}</div>}
                 <button onClick={addClient} disabled={cBusy}
                   style={{marginTop:9,background:T.blu,color:"white",border:"none",borderRadius:8,padding:"9px 16px",fontSize:12.5,fontWeight:700,cursor:cBusy?"wait":"pointer",fontFamily:"inherit"}}>
-                  {cBusy?"Jod rahe hain…":"Client jodein"}
+                  {cBusy?t("project_detail.jod_rahe_hain"):t("projects.client_jodein")}
                 </button>
 
                 {/* Shown once — the password is not stored readably, so this
                     is the only chance to pass it on. */}
                 {newPw&&(
                   <div style={{marginTop:12,padding:"12px 14px",borderRadius:9,background:T.grnL,border:"1px solid "+T.grn}}>
-                    <div style={{fontSize:11.5,fontWeight:700,color:T.grn,marginBottom:6}}>✓ Client jud gaya — ye login details client ko bhej dein</div>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.grn,marginBottom:6}}>{t("project_detail.client_jud_gaya_ye_login_details")}</div>
                     <div style={{fontSize:12.5,color:T.t1,lineHeight:1.7}}>
-                      Mobile: <b>{newPw.phone}</b><br/>
-                      Password: <b style={{fontFamily:"monospace",fontSize:14,letterSpacing:".5px"}}>{newPw.password}</b>
+                     {t("project_detail.mobile")} <b>{newPw.phone}</b><br/>
+                     {t("project_detail.password")} <b style={{fontFamily:"monospace",fontSize:14,letterSpacing:".5px"}}>{newPw.password}</b>
                     </div>
                     <div style={{fontSize:10.5,color:T.t3,marginTop:7,lineHeight:1.45}}>
-                      Client OTP se bhi login kar sakta hai — ye password sirf tab kaam aata hai jab OTP na aaye.
-                      <b> Ye password dobara nahi dikhega</b>, isliye abhi copy kar lein.
+                     {t("project_detail.client_otp_se_bhi_login_kar")}
+                      <b> {t("project_detail.ye_password_dobara_nahi_dikhega")}</b>{t("project_detail.isliye_abhi_copy_kar_lein")}
                     </div>
                   </div>
                 )}
                 <div style={{fontSize:10.5,color:T.t4,marginTop:8,lineHeight:1.45}}>
-                  Client isi mobile number se app me login karega. Number pehle se kisi staff ka ho to system rok dega.
+                 {t("projects.client_isi_mobile_number_se_app")}
                 </div>
               </div>
             </div>
@@ -1179,7 +1178,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
           {/* ── STATUS & DATES ── */}
           {section==="status"&&(
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>Status & Timeline</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>{t("projects.status_timeline")}</div>
               <div>
                 {lbl("Project Status")}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -1219,20 +1218,20 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
           {/* ── DANGER ZONE ── */}
           {section==="danger"&&(
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.red,marginBottom:4}}>Danger Zone</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.red,marginBottom:4}}>{t("common.danger_zone")}</div>
 
               {/* Archive */}
               <div style={{background:T.ambL,border:"1px solid "+T.ambM,borderRadius:8,padding:"14px 16px"}}>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
                   <div>
-                    <div style={{fontSize:13,fontWeight:600,color:T.amb,marginBottom:4}}>Archive Project</div>
-                    <div style={{fontSize:12,color:T.t3,lineHeight:1.5}}>Project list se hat jaayega, data safe rahega. Baad mein unarchive kar sakte ho.</div>
+                    <div style={{fontSize:13,fontWeight:600,color:T.amb,marginBottom:4}}>{t("projects.archive_project")}</div>
+                    <div style={{fontSize:12,color:T.t3,lineHeight:1.5}}>{t("projects.project_list_se_hat_jaayega_data")}</div>
                   </div>
                   {!confirmArchive
-                    ?<button onClick={()=>setConfirmArchive(true)} style={{padding:"7px 14px",borderRadius:7,background:T.surface,border:"1.5px solid "+T.ambM,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>Archive</button>
+                    ?<button onClick={()=>setConfirmArchive(true)} style={{padding:"7px 14px",borderRadius:7,background:T.surface,border:"1.5px solid "+T.ambM,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>{t("projects.archive")}</button>
                     :<div style={{display:"flex",gap:6,flexShrink:0}}>
-                      <button onClick={()=>setConfirmArchive(false)} style={{padding:"7px 12px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
-                      <button onClick={handleArchive} disabled={saving} style={{padding:"7px 14px",borderRadius:7,background:T.amb,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:saving?"not-allowed":"pointer"}}>Confirm Archive</button>
+                      <button onClick={()=>setConfirmArchive(false)} style={{padding:"7px 12px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
+                      <button onClick={handleArchive} disabled={saving} style={{padding:"7px 14px",borderRadius:7,background:T.amb,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:saving?"not-allowed":"pointer"}}>{t("projects.confirm_archive")}</button>
                     </div>
                   }
                 </div>
@@ -1240,19 +1239,19 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
 
               {/* Delete */}
               <div style={{background:T.redL,border:"1px solid "+T.redM,borderRadius:8,padding:"14px 16px"}}>
-                <div style={{fontSize:13,fontWeight:600,color:T.red,marginBottom:4}}>Delete Project</div>
-                <div style={{fontSize:12,color:T.t3,lineHeight:1.5,marginBottom:12}}>Permanently delete karo. Agar transactions hain toh pehle unhe hatana hoga. Yeh action undo nahi hoga.</div>
+                <div style={{fontSize:13,fontWeight:600,color:T.red,marginBottom:4}}>{t("projects.delete_project")}</div>
+                <div style={{fontSize:12,color:T.t3,lineHeight:1.5,marginBottom:12}}>{t("projects.permanently_delete_karo_agar_transactions_hain")}</div>
                 {!confirmDelete
-                  ?<button onClick={()=>setConfirmDelete(true)} style={{padding:"7px 14px",borderRadius:7,background:T.surface,border:"1.5px solid "+T.redM,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>Delete Project</button>
+                  ?<button onClick={()=>setConfirmDelete(true)} style={{padding:"7px 14px",borderRadius:7,background:T.surface,border:"1.5px solid "+T.redM,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("projects.delete_project")}</button>
                   :<div>
-                    <div style={{fontSize:12,color:T.red,marginBottom:8}}>Confirm karne ke liye <strong>DELETE</strong> type karo:</div>
-                    <input value={deleteText} onChange={e=>setDeleteText(e.target.value)} placeholder="Type DELETE to confirm"
+                    <div style={{fontSize:12,color:T.red,marginBottom:8}}>{t("projects.confirm_karne_ke_liye")} <strong>DELETE</strong> {t("projects.type_karo")}</div>
+                    <input value={deleteText} onChange={e=>setDeleteText(e.target.value)} placeholder={t("projects.type_delete_to_confirm")}
                       style={{width:"100%",padding:"8px 11px",borderRadius:7,border:"1.5px solid "+T.redM,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:10}}/>
                     <div style={{display:"flex",gap:6}}>
-                      <button onClick={()=>{setConfirmDelete(false);setDeleteText("");}} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                      <button onClick={()=>{setConfirmDelete(false);setDeleteText("");}} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
                       <button onClick={handleDelete} disabled={saving||!deleteMatch}
                         style={{flex:2,padding:"8px",borderRadius:7,background:deleteMatch?T.red:T.b1,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:deleteMatch?"pointer":"not-allowed"}}>
-                        {saving?"Deleting...":"Permanently Delete"}
+                        {saving?t("common.deleting"):t("projects.permanently_delete")}
                       </button>
                     </div>
                   </div>
@@ -1268,11 +1267,11 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
       {/* Footer — Save / Cancel */}
       {section!=="danger"&&(
         <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
-          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:13,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:13,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
           <button onClick={handleSave} disabled={saving}
             style={{flex:2,padding:"9px",borderRadius:7,background:saving?T.b1:T.blu,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:saving?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
             <IcSave size={14} color="white"/>
-            {saving?"Saving...":"Save Changes"}
+            {saving?t("common.saving"):t("common.save_changes")}
           </button>
         </div>
       )}
@@ -1334,7 +1333,7 @@ function MRApprovalCard({mr, onApprove, onReject}){
           <div style={{fontSize:11,color:T.t4,marginTop:2}}>{mr.project_name||"—"} · {mr.quantity} {mr.unit}</div>
           {taskInfo&&<div style={{fontSize:10.5,color:T.blu,marginTop:2,fontWeight:600}}>📌 {taskInfo}</div>}
           <div style={{display:"flex",alignItems:"center",gap:8,marginTop:3,flexWrap:"wrap"}}>
-            <Credit label="By" name={mr.requested_by||"Site Team"} time={mr.created_at}/>
+            <Credit label={t("projects.by")} name={mr.requested_by||"Site Team"} time={mr.created_at}/>
             <span style={{fontSize:10.5,color:T.t4,fontFamily:"monospace"}}>{mr.mr_number}</span>
           </div>
         </div>
@@ -1344,7 +1343,7 @@ function MRApprovalCard({mr, onApprove, onReject}){
       <PhotoStrip photos={mr.photo_urls} accent={T.amb}/>
       {/* Qty edit */}
       <div style={{display:"flex",alignItems:"center",gap:6,margin:"8px 0 4px"}}>
-        <span style={{fontSize:10.5,color:T.t3}}>Approve Qty:</span>
+        <span style={{fontSize:10.5,color:T.t3}}>{t("projects.approve_qty")}</span>
         {showQtyEdit
           ?<input autoFocus type="number" value={editQty} onChange={e=>setEditQty(e.target.value)}
               style={{width:80,padding:"3px 7px",borderRadius:5,border:"1.5px solid "+T.blu,fontSize:12,fontWeight:700,textAlign:"center",outline:"none"}}/>
@@ -1352,17 +1351,17 @@ function MRApprovalCard({mr, onApprove, onReject}){
         }
         <button onClick={()=>setShowQtyEdit(s=>!s)}
           style={{fontSize:10,color:T.blu,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>
-          {showQtyEdit?"Done":"Edit Qty"}
+          {showQtyEdit?t("common.done"):t("projects.edit_qty")}
         </button>
       </div>
       <div style={{display:"flex",gap:8,marginTop:8}}>
         <button onClick={()=>onApprove(mr.id,Number(editQty)||mr.quantity)}
           style={{flex:2,padding:"7px",borderRadius:6,background:"#16A34A",color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:700}}>
-          Approve
+         {t("common.approve_2")}
         </button>
         <button onClick={()=>onReject(mr.id)}
           style={{flex:1,padding:"7px",borderRadius:6,background:"#FEE2E2",color:"#DC2626",border:"1px solid #FECACA",cursor:"pointer",fontSize:12,fontWeight:600}}>
-          Reject
+         {t("common.reject_2")}
         </button>
       </div>
     </div>
@@ -1371,11 +1370,11 @@ function MRApprovalCard({mr, onApprove, onReject}){
 
 // ── MR Flow Card (mobile-style) ───────────────────────────────────────
 const MR_STAGE_COLORS={
-  Requested:{c:T.amb,bg:T.ambL,bdr:T.ambM,label:"Pending"},
-  Approved: {c:T.grn,bg:T.grnL,bdr:T.grnM,label:"Approved"},
-  Ordered:  {c:T.blu,bg:T.bluL,bdr:T.bluM,label:"Ordered"},
-  Received: {c:"#7C3AED",bg:"#F5F3FF",bdr:"#DDD6FE",label:"Delivered"},
-  Rejected: {c:T.red,bg:T.redL,bdr:T.redM,label:"Rejected"},
+  Requested:{c:T.amb,bg:T.ambL,bdr:T.ambM,get label() { return t("procurement.pending"); }},
+  Approved: {c:T.grn,bg:T.grnL,bdr:T.grnM,get label() { return t("common.approved"); }},
+  Ordered:  {c:T.blu,bg:T.bluL,bdr:T.bluM,get label() { return t("common.ordered"); }},
+  Received: {c:"#7C3AED",bg:"#F5F3FF",bdr:"#DDD6FE",get label() { return t("projects.delivered"); }},
+  Rejected: {c:T.red,bg:T.redL,bdr:T.redM,get label() { return t("common.rejected"); }},
 };
 // ── "Waiting on" label — ek hi jagah, taki teeno card same bolein ──────────
 // Backend /approvals/pending bhejta hai:
@@ -1450,9 +1449,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
   return(
     <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden",borderLeft:"4px solid "+sc.c}}>
       {_ahead&&(
-        <div style={{background:"#FEF3C7",borderBottom:"1px solid #FDE68A",padding:"5px 12px",fontSize:10.5,color:"#92400E",lineHeight:1.45}}>
-          <b>Dhyan do:</b> approval abhi baaki hai par {_ahead} — site ne pehle hi aage badha diya tha.
-        </div>
+        <div style={{background:"#FEF3C7",borderBottom:"1px solid #FDE68A",padding:"5px 12px",fontSize:10.5,color:"#92400E",lineHeight:1.45}}><Rich k="projects.dhyan_do_approval_abhi_baaki_hai" params={{ _ahead }} /></div>
       )}
       <div style={{padding:"11px 13px 8px"}}>
         {/* Top row: name + qty + status */}
@@ -1467,8 +1464,8 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
         <div style={{fontSize:11.5,color:T.t3,marginBottom:3,fontWeight:500}}>{mr.project_name||"—"}</div>
         {/* Meta row */}
         <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:mr.notes?4:0,alignItems:"center"}}>
-          <Credit label="Requested by" name={mr.requested_by||"Site Team"} time={mr.created_at}/>
-          {mr.required_date&&<span style={{fontSize:11,color:T.t4}}>Expected {fmtDate(mr.required_date)}</span>}
+          <Credit label={t("common.requested_by")} name={mr.requested_by||"Site Team"} time={mr.created_at}/>
+          {mr.required_date&&<span style={{fontSize:11,color:T.t4}}>{t("projects.expected_fmtdate", { fmtDate: fmtDate(mr.required_date) })}</span>}
         </div>
         {mr.notes&&<div style={{fontSize:11,color:T.t3,fontStyle:"italic",marginTop:2}}>"{mr.notes}"</div>}
         {mr.mr_number&&<div style={{fontSize:10,color:T.t4,marginTop:3}}>{mr.mr_number}</div>}
@@ -1480,7 +1477,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
           <div style={{padding:"5px 10px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,display:"flex",flexDirection:"column",gap:2}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
               <span style={{fontSize:11}}>⏳</span>
-              <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{waitingOn}</b></span>
+              <span style={{fontSize:11,color:T.t3}}>{t("projects.waiting_on")} <b style={{color:T.amb}}>{waitingOn}</b></span>
             </div>
             {waitingNote&&<span style={{fontSize:10,color:T.t3,paddingLeft:17}}>{waitingNote}</span>}
           </div>
@@ -1488,26 +1485,26 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
         {stage==="Requested"&&onApprove&&(<>
           {isReject
             ?<div style={{display:"flex",flexDirection:"column",gap:5}}>
-                <input value={rejectNote} onChange={e=>setRejectNote(e.target.value)} placeholder="Reject reason..."
+                <input value={rejectNote} onChange={e=>setRejectNote(e.target.value)} placeholder={t("projects.reject_reason")}
                   style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.redM,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 <div style={{display:"flex",gap:5}}>
-                  <button onClick={()=>{setRejectId(null);setRejectNote("");}} style={{flex:1,padding:"5px",borderRadius:6,background:T.surface,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>Cancel</button>
-                  <button onClick={()=>onReject(mr.id)} style={{flex:2,padding:"5px",borderRadius:6,background:T.red,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{act==="rejecting"?"...":"Confirm Reject"}</button>
+                  <button onClick={()=>{setRejectId(null);setRejectNote("");}} style={{flex:1,padding:"5px",borderRadius:6,background:T.surface,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>{t("common.cancel")}</button>
+                  <button onClick={()=>onReject(mr.id)} style={{flex:2,padding:"5px",borderRadius:6,background:T.red,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{act==="rejecting"?"...":t("projects.confirm_reject")}</button>
                 </div>
               </div>
             :<div>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
-                <span style={{fontSize:10.5,color:T.t3,flexShrink:0}}>Approve Qty:</span>
+                <span style={{fontSize:10.5,color:T.t3,flexShrink:0}}>{t("projects.approve_qty")}</span>
                 <input type="number" value={editQty} onChange={e=>setEditQty(e.target.value)}
                   style={{width:70,padding:"3px 7px",borderRadius:5,border:"1.5px solid "+T.blu,fontSize:12,fontWeight:700,textAlign:"center",outline:"none"}}/>
                 <span style={{fontSize:11,color:T.t3}}>{mr.unit}</span>
               </div>
               <div style={{display:"flex",gap:7}}>
                 <button onClick={()=>setRejectId(mr.id)} disabled={!!act}
-                  style={{flex:1,padding:"7px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>✕ Reject</button>
+                  style={{flex:1,padding:"7px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("common.reject")}</button>
                 <button onClick={()=>onApprove(mr.id,Number(editQty)||mr.quantity)} disabled={!!act}
                   style={{flex:2,padding:"7px",borderRadius:7,background:act?"#9CA3AF":T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-                  {act==="approving"?"Approving...":"✓ Approve"}
+                  {act==="approving"?t("common.approving"):t("common.approve")}
                 </button>
               </div>
             </div>
@@ -1516,32 +1513,32 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
         {stage==="Approved"&&(
           showManual ? (
             <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,padding:"9px 11px"}}>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Manual Order</div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("procurement.manual_order")}</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
                 <div>
-                  <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3}}>Vendor *</label>
+                  <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3}}>{t("common.vendor_2")}</label>
                   <LibrarySelect type="supplier" value={manualVendor}
                     onChange={v=>setManualVendor(v||"")}
                     onAdded={onVendorAdded}
                     compact/>
                 </div>
                 <div>
-                  <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3}}>Delivery *</label>
+                  <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3}}>{t("projects.delivery")}</label>
                   <input type="date" value={manualDelivery} onChange={e=>setManualDelivery(e.target.value)}
                     style={{width:"100%",padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               </div>
               <div style={{marginBottom:7}}>
-                <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3}}>Receiving Person *</label>
+                <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3}}>{t("projects.receiving_person")}</label>
                 <div style={{fontSize:9.5,color:T.t4,marginBottom:5,lineHeight:1.4}}>
-                  Maal site par aane par vendor kise call karega — naam aur number order ke saath jayega.
+                 {t("projects.maal_site_par_aane_par_vendor")}
                 </div>
                 <ReceivingContacts theme={T} compact projectIds={[mr.project_id]}
                   value={contacts} onChange={setContacts}/>
               </div>
               <div style={{display:"flex",gap:5}}>
                 <button onClick={()=>{setShowManual(false);setManualVendor("");}} disabled={!!act}
-                  style={{flex:1,padding:"6px",borderRadius:5,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,cursor:"pointer"}}>Cancel</button>
+                  style={{flex:1,padding:"6px",borderRadius:5,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,cursor:"pointer"}}>{t("common.cancel")}</button>
                 <button onClick={async()=>{
                     // Order pehle server par, message baad me — mana ho jaye
                     // to vendor ko jhootha message na chala jaye.
@@ -1549,16 +1546,16 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
                     if(ok) window.open(`https://wa.me/?text=${buildWaMsg()}`,"_blank");
                   }}
                   disabled={!canOrder}
-                  title="MR Ordered mark hogi aur WhatsApp message khulega"
+                  title={t("projects.mr_ordered_mark_hogi_aur_whatsapp")}
                   style={{flex:2,padding:"6px",borderRadius:5,background:canOrder?"#25D366":"#9CA3AF",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:canOrder?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                   <svg width={12} height={12} viewBox="0 0 24 24" fill="white"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-                  {act==="ordering"?"Saving...":"WhatsApp par bhejo"}
+                  {act==="ordering"?t("common.saving"):t("projects.whatsapp_par_bhejo")}
                 </button>
                 <button onClick={()=>onMarkOrdered(mr.id, manualVendor.trim(), manualDelivery, contacts, "Manual")}
                   disabled={!canOrder}
-                  title="Order call par ho chuka hai — sirf mark karo"
+                  title={t("projects.order_call_par_ho_chuka_hai")}
                   style={{flex:2,padding:"6px",borderRadius:5,background:canOrder?T.blu:"#9CA3AF",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:canOrder?"pointer":"not-allowed"}}>
-                  {act==="ordering"?"Saving...":"✓ Mark as Ordered"}
+                  {act==="ordering"?t("common.saving"):t("projects.mark_as_ordered")}
                 </button>
               </div>
             </div>
@@ -1566,12 +1563,12 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
             <div style={{display:"flex",gap:6}}>
               <button onClick={()=>setShowManual(true)}
                 style={{flex:1,padding:"9px",borderRadius:7,background:T.bluL||"#EFF6FF",border:`1px solid ${T.bluM||"#BFDBFE"}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-                📋 Manual Order
+               {t("projects.manual_order")}
               </button>
               <button onClick={()=>setShowManual(true)}
                 style={{flex:1,padding:"9px",borderRadius:7,background:"#25D366",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 <svg width={13} height={13} viewBox="0 0 24 24" fill="white"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-                WhatsApp
+               {t("common.whatsapp")}
               </button>
             </div>
           )
@@ -1579,14 +1576,14 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
         {stage==="Ordered"&&(
           <button onClick={()=>onMarkReceived(mr.id)} disabled={acting[mr.id]==="receiving"}
             style={{width:"100%",padding:"9px",borderRadius:7,background:"#7C3AED",border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-            {acting[mr.id]==="receiving"?"Marking...":"✓ Mark as Delivered / Received"}
+            {acting[mr.id]==="receiving"?t("projects.marking"):t("projects.mark_as_delivered_received")}
           </button>
         )}
         {stage==="Received"&&(
-          <div style={{textAlign:"center",fontSize:12,color:T.grn,fontWeight:600}}>✓ Material delivered successfully</div>
+          <div style={{textAlign:"center",fontSize:12,color:T.grn,fontWeight:600}}>{t("projects.material_delivered_successfully")}</div>
         )}
         {stage==="Rejected"&&(
-          <div style={{textAlign:"center",fontSize:12,color:T.red,fontWeight:600}}>✕ Request rejected</div>
+          <div style={{textAlign:"center",fontSize:12,color:T.red,fontWeight:600}}>{t("projects.request_rejected")}</div>
         )}
       </div>
     </div>
@@ -1614,13 +1611,13 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true,
         {/* Header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:5}}>
           <div>
-            <div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>{po.vendor_name||"Unknown Vendor"}</div>
+            <div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>{po.vendor_name||t("projects.unknown_vendor")}</div>
             <div style={{fontSize:11,color:T.t4,marginTop:1}}>{po.po_number} · {po.project_name||"—"}</div>
           </div>
           <div style={{textAlign:"right",flexShrink:0}}>
             <div style={{fontSize:14,fontWeight:800,color:T.t1}}>{fmtAmt(po.total_amount)}</div>
             <span style={{fontSize:9.5,fontWeight:700,color:approved?T.grn:T.amb,background:approved?T.grnL:T.ambL,padding:"2px 7px",borderRadius:10,border:"1px solid "+(approved?T.grnM:T.ambM)}}>
-              {approved?"Approved":"Pending Approval"}
+              {approved?t("common.approved"):t("common.pending_approval")}
             </span>
           </div>
         </div>
@@ -1630,14 +1627,12 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true,
           <div style={{border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden",marginBottom:8}}>
             <button onClick={()=>setShowItems(s=>!s)}
               style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"7px 9px",background:T.bg,border:"none",borderBottom:showItems?"1px solid "+T.b1:"none",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>
-              <span style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
-                Materials · {po.items.length} item{po.items.length>1?"s":""}
-              </span>
+              <span style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>{t("projects.materials_po_itempo2", { po: po.items.length, po2: po.items.length>1?"s":"" })}</span>
               <span style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                 {hasZeroRate&&!showItems&&(
-                  <span style={{fontSize:8.5,fontWeight:700,color:T.red,background:T.redL,border:"1px solid "+T.redM,padding:"1px 6px",borderRadius:8,letterSpacing:".3px"}}>RATE MISSING</span>
+                  <span style={{fontSize:8.5,fontWeight:700,color:T.red,background:T.redL,border:"1px solid "+T.redM,padding:"1px 6px",borderRadius:8,letterSpacing:".3px"}}>{t("projects.rate_missing")}</span>
                 )}
-                <span style={{fontSize:10.5,fontWeight:600,color:T.t4}}>{showItems?"Hide":"View rates"}</span>
+                <span style={{fontSize:10.5,fontWeight:600,color:T.t4}}>{showItems?t("projects.hide"):t("projects.view_rates")}</span>
                 <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={3} strokeLinecap="round"
                   style={{transform:showItems?"rotate(180deg)":"none",transition:"transform .15s"}}><path d="M6 9l6 6 6-6"/></svg>
               </span>
@@ -1660,7 +1655,7 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true,
                 );
               })}
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 9px",background:T.bg,borderTop:"1px solid "+T.b1}}>
-                <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>Total</span>
+                <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.total")}</span>
                 <span style={{fontSize:12.5,fontWeight:800,color:T.t1}}>{fmtMoney(po.total_amount)}</span>
               </div>
             </>)}
@@ -1668,19 +1663,19 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true,
         )}
         {/* Meta */}
         <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-          {po.expected_delivery&&<span style={{fontSize:11,color:T.t4}}>📦 Delivery: {fmtDate(po.expected_delivery)}</span>}
-          {approved&&po.approved_at&&<span style={{fontSize:11,color:T.grn}}>✓ Approved {fmtDate(po.approved_at)}</span>}
+          {po.expected_delivery&&<span style={{fontSize:11,color:T.t4}}>{t("projects.delivery_fmtdate", { fmtDate: fmtDate(po.expected_delivery) })}</span>}
+          {approved&&po.approved_at&&<span style={{fontSize:11,color:T.grn}}>{t("projects.approved_fmtdate", { fmtDate: fmtDate(po.approved_at) })}</span>}
         </div>
       </div>
       {!approved&&canAct&&(
         <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg,display:"flex",gap:7}}>
           <button onClick={onCancel} disabled={!!act}
             style={{flex:1,padding:"7px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-            Cancel PO
+           {t("projects.cancel_po")}
           </button>
           <button onClick={onApprove} disabled={!!act}
             style={{flex:2,padding:"7px",borderRadius:7,background:act?"#9CA3AF":"#16A34A",border:"none",color:"white",fontSize:12,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-            {act==="approving"?"Approving...":"✓ Approve PO"}
+            {act==="approving"?t("common.approving"):t("projects.approve_po")}
           </button>
         </div>
       )}
@@ -1688,7 +1683,7 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true,
         <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg,display:"flex",flexDirection:"column",gap:2}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <span style={{fontSize:11}}>⏳</span>
-            <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{waitingOn}</b></span>
+            <span style={{fontSize:11,color:T.t3}}>{t("projects.waiting_on")} <b style={{color:T.amb}}>{waitingOn}</b></span>
           </div>
           {waitingNote&&<span style={{fontSize:10,color:T.t3,paddingLeft:17}}>{waitingNote}</span>}
         </div>
@@ -1706,9 +1701,9 @@ function GRNCard({grn}){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:5}}>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{grn.grn_no||`GRN-${grn.id}`}</div>
-            <div style={{fontSize:11,color:T.t4,marginTop:1}}>{grn.project_name||"Central Warehouse"} · {grn.po_no||grn.vendor||"Direct"}</div>
+            <div style={{fontSize:11,color:T.t4,marginTop:1}}>{grn.project_name||t("projects.central_warehouse")} · {grn.po_no||grn.vendor||t("projects.direct")}</div>
           </div>
-          <span style={{fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,padding:"2px 7px",borderRadius:10,border:"1px solid "+T.grnM,flexShrink:0}}>Received</span>
+          <span style={{fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,padding:"2px 7px",borderRadius:10,border:"1px solid "+T.grnM,flexShrink:0}}>{t("common.received")}</span>
         </div>
         {grn.items?.length>0
           ?grn.items.slice(0,3).map((it,i)=>(
@@ -1717,12 +1712,10 @@ function GRNCard({grn}){
                 <span style={{fontWeight:600,color:T.grn}}>{it.received_qty||it.qty||it.quantity} {it.unit}</span>
               </div>
             ))
-          :<div style={{fontSize:11.5,color:T.t3}}>Materials received on {fmtDate(grn.date||grn.created_at)}</div>
+          :<div style={{fontSize:11.5,color:T.t3}}>{t("projects.materials_received_on_fmtdate", { fmtDate: fmtDate(grn.date||grn.created_at) })}</div>
         }
-        {grn.items?.length>3&&<div style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>+{grn.items.length-3} more items</div>}
-        <div style={{fontSize:10.5,color:T.t4,marginTop:5}}>
-          By {grn.received_by_name||grn.received_by||"Warehouse"} · {fmtDate(grn.date||grn.created_at)}
-        </div>
+        {grn.items?.length>3&&<div style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>{t("projects.grn_more_items", { grn: grn.items.length-3 })}</div>}
+        <div style={{fontSize:10.5,color:T.t4,marginTop:5}}>{t("projects.by_grn_fmtdate", { grn: grn.received_by_name||grn.received_by||"Warehouse", fmtDate: fmtDate(grn.date||grn.created_at) })}</div>
       </div>
     </div>
   );
@@ -1746,8 +1739,8 @@ function WHMRCard({mr, acting, onApprove, onReject, rejectId, setRejectId, rejec
             <div style={{fontSize:11.5,color:T.t3,marginTop:1,fontWeight:500}}>{mr.project_name||"—"}</div>
           </div>
           <div style={{textAlign:"right",flexShrink:0}}>
-            <span style={{fontSize:9.5,fontWeight:700,color:sc.c,background:sc.bg,padding:"2px 8px",borderRadius:10,display:"block",marginBottom:3}}>{mr.status||"Pending"}</span>
-            <span style={{fontSize:9.5,fontWeight:600,color:pc}}>● {mr.priority||"Medium"}</span>
+            <span style={{fontSize:9.5,fontWeight:700,color:sc.c,background:sc.bg,padding:"2px 8px",borderRadius:10,display:"block",marginBottom:3}}>{mr.status||t("common.pending")}</span>
+            <span style={{fontSize:9.5,fontWeight:600,color:pc}}>● {mr.priority||t("crm.medium")}</span>
           </div>
         </div>
         {/* Items */}
@@ -1759,29 +1752,29 @@ function WHMRCard({mr, acting, onApprove, onReject, rejectId, setRejectId, rejec
                 <span style={{fontWeight:600}}>{it.qty} {it.unit}</span>
               </div>
             ))}
-            {mr.items.length>3&&<div style={{fontSize:10.5,color:T.t4,fontStyle:"italic",marginTop:2}}>+{mr.items.length-3} more items</div>}
+            {mr.items.length>3&&<div style={{fontSize:10.5,color:T.t4,fontStyle:"italic",marginTop:2}}>{t("projects.mr_more_items", { mr: mr.items.length-3 })}</div>}
           </div>
         )}
-        <Credit label="Requested by" name={mr.requested_by_name||"Site Team"} time={mr.date||mr.created_at}/>
+        <Credit label={t("common.requested_by")} name={mr.requested_by_name||"Site Team"} time={mr.date||mr.created_at}/>
         <PhotoStrip photos={mr.photo_urls} accent={sc.c}/>
       </div>
       {(mr.status==="Pending"||!mr.status)&&(
         <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg}}>
           {isRej
             ?<div style={{display:"flex",flexDirection:"column",gap:5}}>
-                <input value={rejectNote} onChange={e=>setRejectNote(e.target.value)} placeholder="Reject reason..."
+                <input value={rejectNote} onChange={e=>setRejectNote(e.target.value)} placeholder={t("projects.reject_reason")}
                   style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.redM,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 <div style={{display:"flex",gap:5}}>
-                  <button onClick={()=>{setRejectId(null);setRejectNote("");}} style={{flex:1,padding:"5px",borderRadius:6,background:"white",border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>Cancel</button>
-                  <button onClick={()=>onReject(mr.id)} style={{flex:2,padding:"5px",borderRadius:6,background:T.red,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{act==="rejecting"?"...":"Confirm Reject"}</button>
+                  <button onClick={()=>{setRejectId(null);setRejectNote("");}} style={{flex:1,padding:"5px",borderRadius:6,background:"white",border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>{t("common.cancel")}</button>
+                  <button onClick={()=>onReject(mr.id)} style={{flex:2,padding:"5px",borderRadius:6,background:T.red,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{act==="rejecting"?"...":t("projects.confirm_reject")}</button>
                 </div>
               </div>
             :<div style={{display:"flex",gap:7}}>
                 <button onClick={()=>setRejectId("whmr"+mr.id)} disabled={!!act}
-                  style={{flex:1,padding:"7px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>✕ Reject</button>
+                  style={{flex:1,padding:"7px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("common.reject")}</button>
                 <button onClick={()=>onApprove(mr.id)} disabled={!!act}
                   style={{flex:2,padding:"7px",borderRadius:7,background:act?"#9CA3AF":T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-                  {act==="approving"?"Approving...":"✓ Approve & Dispatch"}
+                  {act==="approving"?t("common.approving"):t("projects.approve_dispatch")}
                 </button>
               </div>
           }
@@ -1801,10 +1794,10 @@ function TransferCard({tr}){
           <div>
             <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{tr.transfer_no||`TRF-${tr.id}`}</div>
             <div style={{fontSize:11,color:T.t4,marginTop:1}}>
-              {tr.from_location||"Warehouse"} → {tr.to_location||"Site"}
+              {tr.from_location||t("common.warehouse")} → {tr.to_location||t("common.site")}
             </div>
           </div>
-          <span style={{fontSize:9.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:10,border:"1px solid "+T.bluM,flexShrink:0}}>{tr.status||"Completed"}</span>
+          <span style={{fontSize:9.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:10,border:"1px solid "+T.bluM,flexShrink:0}}>{tr.status||t("common.completed")}</span>
         </div>
         {tr.items?.length>0&&tr.items.slice(0,3).map((it,i)=>(
           <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,color:T.t2,marginBottom:2}}>
@@ -1813,9 +1806,7 @@ function TransferCard({tr}){
           </div>
         ))}
         {tr.items?.length>3&&<div style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>+{tr.items.length-3} more</div>}
-        <div style={{fontSize:10.5,color:T.t4,marginTop:5}}>
-          By {tr.transferred_by_name||"Warehouse"} · {fmtDate(tr.date||tr.created_at)}
-        </div>
+        <div style={{fontSize:10.5,color:T.t4,marginTop:5}}>{t("projects.by_tr_fmtdate", { tr: tr.transferred_by_name||"Warehouse", fmtDate: fmtDate(tr.date||tr.created_at) })}</div>
       </div>
     </div>
   );
@@ -2229,11 +2220,11 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     const act=acting[key];
     if(rejectId===key) return(
       <div style={{display:"flex",flexDirection:"column",gap:5,marginTop:8}}>
-        <input value={rejectNote} onChange={e=>setRejectNote(e.target.value)} placeholder="Reject karne ka reason..."
+        <input value={rejectNote} onChange={e=>setRejectNote(e.target.value)} placeholder={t("projects.reject_karne_ka_reason")}
           style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.redM,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
         <div style={{display:"flex",gap:5}}>
-          <button onClick={()=>{setRejectId(null);setRejectNote("");}} style={{flex:1,padding:"5px",borderRadius:6,background:T.surface,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>Cancel</button>
-          <button onClick={onReject} style={{flex:2,padding:"5px",borderRadius:6,background:T.red,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{act==="rejecting"?"...":"Confirm Reject"}</button>
+          <button onClick={()=>{setRejectId(null);setRejectNote("");}} style={{flex:1,padding:"5px",borderRadius:6,background:T.surface,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>{t("common.cancel")}</button>
+          <button onClick={onReject} style={{flex:2,padding:"5px",borderRadius:6,background:T.red,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{act==="rejecting"?"...":t("projects.confirm_reject")}</button>
         </div>
       </div>
     );
@@ -2241,11 +2232,11 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
       <div style={{display:"flex",gap:6,marginTop:8}}>
         <button onClick={()=>setRejectId(key)} disabled={!!act}
           style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-          ✕ Reject
+         {t("common.reject")}
         </button>
         <button onClick={onApprove} disabled={!!act}
           style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-          {act==="approving"?"Approving...":"✓ Approve"}
+          {act==="approving"?t("common.approving"):t("common.approve")}
         </button>
       </div>
     );
@@ -2271,7 +2262,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           : "Revision note (compulsory) — designer ko kya badalna hai?\n\nExample: \"Footing depth 1.2m karein, parapet height 4ft tak badhaaye\"";
         revisionNote=await window.promptAsync(promptMsg);
         if(!revisionNote||!revisionNote.trim()){
-          if(revisionNote!==null) window.alert("Revision note required.");
+          if(revisionNote!==null) window.alert(t("projects.revision_note_required"));
           return;
         }
       } else if((isDesign||src==="purchase_order")&&isRej){
@@ -2280,7 +2271,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           : "Rejection reason — drawing kyu reject ho rahi hai?";
         rejectNote=await window.promptAsync(promptMsg);
         if(!rejectNote||!rejectNote.trim()){
-          if(rejectNote!==null) window.alert("Rejection reason required.");
+          if(rejectNote!==null) window.alert(t("projects.rejection_reason_required"));
           return;
         }
       }
@@ -2385,33 +2376,31 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
               {src==="design"&&item.category&&<span style={{fontSize:9,color:T.t4}}>{item.category} · {item.drawing_type||"2D"}</span>}
             </div>
             <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{item.title}</div>
-            <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{item.project_name||"—"} · by {item.submitted_by_name}{(!src||item._request_id)?" · L"+item.current_level+"/"+item.max_level:""}</div>
+            <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{t("projects.item_by_submitted_by_namesrc", { item: item.project_name||"—", submitted_by_name: item.submitted_by_name, src: (!src||item._request_id)?" · L"+item.current_level+"/"+item.max_level:"" })}</div>
             {/* Design — show drawing-status pill, view link, and last revision comment */}
             {src==="design"&&(
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6,alignItems:"center"}}>
                 {item.drawing_status==="Revision" && (
-                  <span style={{fontSize:9.5,fontWeight:700,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,padding:"1px 7px",borderRadius:10,textTransform:"uppercase",letterSpacing:".3px"}}>↻ Revised</span>
+                  <span style={{fontSize:9.5,fontWeight:700,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,padding:"1px 7px",borderRadius:10,textTransform:"uppercase",letterSpacing:".3px"}}>{t("projects.revised")}</span>
                 )}
                 {item.file_url && (
                   <a href={item.file_url} target="_blank" rel="noreferrer"
                     style={{fontSize:11,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,padding:"3px 9px",borderRadius:6,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}}>
-                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    View Drawing{item.file_size ? ` (${item.file_size})` : ""}
-                  </a>
+                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>{t("projects.view_drawingitem", { item: item.file_size ? ` (${item.file_size})` : "" })}</a>
                 )}
               </div>
             )}
             {src==="design"&&item.last_revision_comment && (
               <div style={{marginTop:6,padding:"6px 10px",background:T.ambL,border:`1px solid ${T.ambM}`,borderLeft:`3px solid ${T.amb}`,borderRadius:6,fontSize:11,color:T.t2,lineHeight:1.5}}>
-                <span style={{fontSize:9.5,fontWeight:700,color:T.amb,letterSpacing:".3px",textTransform:"uppercase",display:"block",marginBottom:2}}>Last revision note</span>
+                <span style={{fontSize:9.5,fontWeight:700,color:T.amb,letterSpacing:".3px",textTransform:"uppercase",display:"block",marginBottom:2}}>{t("projects.last_revision_note")}</span>
                 "{item.last_revision_comment}"
               </div>
             )}
             {src==="labour_rate"&&(
               <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,padding:"6px 10px",background:T.bluL,borderRadius:6,border:"1px solid "+T.bluM}}>
-                <span style={{fontSize:11,color:T.t3}}>Current: <b style={{color:T.t2}}>₹{item.current_rate||0}/day</b></span>
+                <span style={{fontSize:11,color:T.t3}}>{t("projects.current")} <b style={{color:T.t2}}>₹{item.current_rate||0}/day</b></span>
                 <span style={{fontSize:13,color:T.blu,fontWeight:700}}>→</span>
-                <span style={{fontSize:11,color:T.t3}}>Requested: <b style={{color:T.blu}}>₹{item.requested_rate||0}/day</b></span>
+                <span style={{fontSize:11,color:T.t3}}>{t("projects.requested")} <b style={{color:T.blu}}>₹{item.requested_rate||0}/day</b></span>
                 <span style={{fontSize:10,color:item.requested_rate>item.current_rate?T.amb:T.grn,fontWeight:700,marginLeft:"auto"}}>
                   {item.requested_rate>item.current_rate?"+":""}₹{(item.requested_rate||0)-(item.current_rate||0)}
                 </span>
@@ -2419,15 +2408,15 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             )}
             {src==="labour_rate"&&item.labour_type==="base_rate"&&(
               <div style={{marginTop:5,padding:"4px 9px",borderRadius:6,background:item.apply_scope==="all"?T.ambL:T.surfaceB,border:`1px solid ${item.apply_scope==="all"?T.ambM:T.b1}`,fontSize:10.5,color:item.apply_scope==="all"?T.amb:T.t3,fontWeight:600}}>
-                {item.apply_scope==="all" ? "🔄 SCOPE: Apply to ALL existing workers + future" : "📋 SCOPE: New appointments only"}
+                {item.apply_scope==="all" ? t("projects.scope_apply_to_all_existing_workers") : t("projects.scope_new_appointments_only")}
               </div>
             )}
             {src==="labour_rate"&&item.notes&&<div style={{fontSize:11,color:T.t3,marginTop:4,fontStyle:"italic"}}>"{item.notes}"</div>}
             {src==="salary_edit"&&(
               <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,padding:"6px 10px",background:T.bluL,borderRadius:6,border:"1px solid "+T.bluM}}>
-                <span style={{fontSize:11,color:T.t3}}>Current: <b style={{color:T.t2}}>{fmtAmt(item.old_amount||0)}</b></span>
+                <span style={{fontSize:11,color:T.t3}}>{t("projects.current")} <b style={{color:T.t2}}>{fmtAmt(item.old_amount||0)}</b></span>
                 <span style={{fontSize:13,color:T.blu,fontWeight:700}}>→</span>
-                <span style={{fontSize:11,color:T.t3}}>Requested: <b style={{color:T.blu}}>{fmtAmt(item.new_amount||0)}</b></span>
+                <span style={{fontSize:11,color:T.t3}}>{t("projects.requested")} <b style={{color:T.blu}}>{fmtAmt(item.new_amount||0)}</b></span>
                 <span style={{fontSize:10,color:item.new_amount<item.old_amount?T.amb:T.grn,fontWeight:700,marginLeft:"auto"}}>
                   {item.new_amount<item.old_amount?"−":"+"}{fmtAmt(Math.abs((item.new_amount||0)-(item.old_amount||0)))}
                 </span>
@@ -2437,9 +2426,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             {item.module==="Subcon WO Amendment"&&(item._amend_new!=null||item._amend_reason)&&(<>
               {item._amend_old!=null&&item._amend_new!=null&&(
                 <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,padding:"6px 10px",background:T.bluL,borderRadius:6,border:"1px solid "+T.bluM,flexWrap:"wrap"}}>
-                  <span style={{fontSize:11,color:T.t3}}>Old WO: <b style={{color:T.t2}}>{fmtAmt(item._amend_old)}</b></span>
+                  <span style={{fontSize:11,color:T.t3}}>{t("projects.old_wo")} <b style={{color:T.t2}}>{fmtAmt(item._amend_old)}</b></span>
                   <span style={{fontSize:13,color:T.blu,fontWeight:700}}>→</span>
-                  <span style={{fontSize:11,color:T.t3}}>New WO: <b style={{color:T.blu}}>{fmtAmt(item._amend_new)}</b></span>
+                  <span style={{fontSize:11,color:T.t3}}>{t("projects.new_wo")} <b style={{color:T.blu}}>{fmtAmt(item._amend_new)}</b></span>
                   {item._amend_delta!=null&&item._amend_delta!==0&&(
                     <span style={{fontSize:10,color:item._amend_delta>0?T.amb:T.grn,fontWeight:700,marginLeft:"auto"}}>
                       {item._amend_delta>0?"▲ +":"▼ −"}{fmtAmt(Math.abs(item._amend_delta))}
@@ -2447,18 +2436,16 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                   )}
                 </div>
               )}
-              {item._amend_reason&&<div style={{fontSize:11,color:T.t3,marginTop:4,fontStyle:"italic"}}>Reason: "{item._amend_reason}"</div>}
+              {item._amend_reason&&<div style={{fontSize:11,color:T.t3,marginTop:4,fontStyle:"italic"}}>{t("projects.reason_amend_reason", { _amend_reason: item._amend_reason })}</div>}
             </>)}
             {src==="attendance_review"&&(
               <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,padding:"6px 10px",background:"#F0FDFA",borderRadius:6,border:"1px solid #99F6E4",flexWrap:"wrap"}}>
                 <span style={{fontSize:11,color:T.t2}}>🕐 {item.punch_at?new Date(item.punch_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}</span>
                 {item.punch_lat!=null&&(
                   <a href={`https://www.google.com/maps?q=${item.punch_lat},${item.punch_lng}`} target="_blank" rel="noreferrer"
-                    style={{fontSize:11,color:"#0D9488",fontWeight:700,textDecoration:"none"}}>
-                    📍 {Number(item.punch_lat).toFixed(5)}, {Number(item.punch_lng).toFixed(5)} — map pe dekho ↗
-                  </a>
+                    style={{fontSize:11,color:"#0D9488",fontWeight:700,textDecoration:"none"}}>{t("projects.number_number2_map_pe_dekho", { Number: Number(item.punch_lat).toFixed(5), Number2: Number(item.punch_lng).toFixed(5) })}</a>
                 )}
-                <span style={{fontSize:10.5,color:T.amb,fontWeight:600,width:"100%"}}>⚠ Geofence ke bahar punch — approve = Present counts, reject = Absent</span>
+                <span style={{fontSize:10.5,color:T.amb,fontWeight:600,width:"100%"}}>{t("projects.geofence_ke_bahar_punch_approve_present")}</span>
               </div>
             )}
           </div>
@@ -2473,14 +2460,14 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                 {i<item.max_level-1&&<div style={{width:16,height:2,background:done?"#059669":"#E5E7EB"}}/>}
               </div>;
             })}
-            <span style={{fontSize:9.5,color:T.t4,marginLeft:4}}>Pending: {item.pending_role||"—"}</span>
+            <span style={{fontSize:9.5,color:T.t4,marginLeft:4}}>{t("projects.pending_item", { item: item.pending_role||"—" })}</span>
           </div>
         )}
         {/* Escalation note — level had no eligible approver for this project */}
         {item._escalated&&(
           <div style={{margin:"4px 0 2px",padding:"5px 9px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:10.5,color:T.amb,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
             <span>⚠</span>
-            <span>Is project pe koi {item._escalatedFrom||"approver"} assigned nahi — Admin ko bheja gaya</span>
+            <span>{t("projects.is_project_pe_koi_item_assigned", { item: item._escalatedFrom||"approver" })}</span>
           </div>
         )}
         {/* Inline PO detail panel — expand on card click */}
@@ -2489,12 +2476,12 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             {poLoading===item._source_id&&!poDetail?(
               <div style={{textAlign:"center",padding:"14px 0",color:T.t4,fontSize:11.5}}>
                 <div style={{width:16,height:16,border:`2px solid ${T.b1}`,borderTopColor:T.blu,borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 5px"}}/>
-                Loading PO…
+               {t("projects.loading_po")}
               </div>
             ):poDetail?(<>
               {/* PO header row */}
               <div style={{display:"flex",gap:8,fontSize:10.5,color:T.t3,marginBottom:6,flexWrap:"wrap"}}>
-                {poDetail.expected_delivery&&<span>📅 Delivery: <b style={{color:T.t1}}>{String(poDetail.expected_delivery).split("T")[0]}</b></span>}
+                {poDetail.expected_delivery&&<span>{t("projects.delivery_2")} <b style={{color:T.t1}}>{String(poDetail.expected_delivery).split("T")[0]}</b></span>}
                 {poDetail.delivery_site&&<span>📍 {poDetail.delivery_site}</span>}
                 {poDetail.notes&&<span style={{fontStyle:"italic",color:T.t4}}>"{poDetail.notes}"</span>}
               </div>
@@ -2505,7 +2492,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                     <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.55)",textAlign:i>1?"right":"left",textTransform:"uppercase"}}>{h}</div>
                   ))}
                 </div>
-                {(poDetail.items||[]).length===0&&<div style={{padding:"12px 0",textAlign:"center",color:T.t4}}>No items</div>}
+                {(poDetail.items||[]).length===0&&<div style={{padding:"12px 0",textAlign:"center",color:T.t4}}>{t("common.no_items_2")}</div>}
                 {(poDetail.items||[]).map(it=>{
                   const amt = (Number(it.quantity)||0)*(Number(it.rate)||0);
                   return(
@@ -2519,7 +2506,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                   );
                 })}
                 <div style={{display:"grid",gridTemplateColumns:"1.7fr 36px 50px 60px 70px",padding:"6px 8px",gap:4,borderTop:`2px solid ${T.b1}`,background:T.bluL,alignItems:"center"}}>
-                  <div style={{gridColumn:"1 / 5",textAlign:"right",fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase"}}>Total</div>
+                  <div style={{gridColumn:"1 / 5",textAlign:"right",fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase"}}>{t("common.total")}</div>
                   <div style={{textAlign:"right",fontSize:11,fontWeight:800,color:T.blu}}>₹{Number(poDetail.total_amount||0).toLocaleString("en-IN")}</div>
                 </div>
               </div>
@@ -2532,7 +2519,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           <button onClick={togglePoExpand}
             style={{marginTop:7,width:"100%",padding:"5px",borderRadius:6,background:isPoExpanded?T.bluL:"transparent",border:`1px solid ${isPoExpanded?T.bluM:T.b2}`,color:isPoExpanded?T.blu:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
             <span style={{fontSize:8}}>{isPoExpanded?"▲":"▼"}</span>
-            {isPoExpanded?"Hide detail":"View detail"}
+            {isPoExpanded?t("projects.hide_detail"):t("projects.view_detail")}
           </button>
         )}
         {/* Action buttons — only when it's the viewer's turn (_canActNow).
@@ -2542,24 +2529,24 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           ?<div style={{marginTop:8,padding:"7px 10px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,display:"flex",flexDirection:"column",gap:2}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:11.5}}>⏳</span>
-                <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{waitingText(item)||"approver"}</b></span>
+                <span style={{fontSize:11,color:T.t3}}>{t("projects.waiting_on")} <b style={{color:T.amb}}>{waitingText(item)||"approver"}</b></span>
               </div>
               {escalationNote(item)&&<span style={{fontSize:10,color:T.t3,paddingLeft:17.5}}>{escalationNote(item)}</span>}
             </div>
           :<div style={{display:"flex",gap:6,marginTop:8}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>srcAction("reject")} disabled={!!act}
               style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-              {act==="rejecting"?"...":"✕ Reject"}
+              {act==="rejecting"?"...":t("common.reject")}
             </button>
             {(src==="design"||item.module==="Design Approval"||isPO)&&(
               <button onClick={()=>srcAction("Revision")} disabled={!!act}
                 style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-                {act==="revising"?"...":"↻ Revise"}
+                {act==="revising"?"...":t("projects.revise")}
               </button>
             )}
             <button onClick={()=>srcAction("approve")} disabled={!!act}
               style={{flex:isPO?1:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-              {act==="approving"?"Approving...":"✓ Approve"}
+              {act==="approving"?t("common.approving"):t("common.approve")}
             </button>
           </div>}
         {isRaBill&&(
@@ -2570,14 +2557,14 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             }}
             style={{marginTop:7,width:"100%",padding:"6px 8px",borderRadius:6,background:isRaExpanded?T.bluL:"transparent",border:`1px solid ${isRaExpanded?T.bluM:T.b1}`,color:isRaExpanded?T.blu:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
             <span style={{fontSize:8}}>{isRaExpanded?"▲":"▼"}</span>
-            {isRaExpanded?"Hide bill detail":"View bill detail"}
+            {isRaExpanded?t("projects.hide_bill_detail"):t("projects.view_bill_detail")}
           </button>
         )}
         {isCeAmend&&(
           <button onClick={toggleCeAmendExpand}
             style={{marginTop:7,width:"100%",padding:"6px 8px",borderRadius:6,background:isCeAmendExpanded?T.bluL:"transparent",border:`1px solid ${isCeAmendExpanded?T.bluM:T.b1}`,color:isCeAmendExpanded?T.blu:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
             <span style={{fontSize:8}}>{isCeAmendExpanded?"▲":"▼"}</span>
-            {isCeAmendExpanded?"Hide amendment detail":"View amendment detail"}
+            {isCeAmendExpanded?t("projects.hide_amendment_detail"):t("projects.view_amendment_detail")}
           </button>
         )}
         {isCeAmend&&isCeAmendExpanded&&(
@@ -2585,7 +2572,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             {ceAmendLoading===item._source_id&&!ceAmendDetail?(
               <div style={{textAlign:"center",padding:"18px 0",color:T.t4,fontSize:12}}>
                 <div style={{width:18,height:18,border:`2px solid ${T.b1}`,borderTopColor:T.blu,borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 6px"}}/>
-                Loading amendment…
+               {t("projects.loading_amendment")}
               </div>
             ):ceAmendDetail?(()=>{
               const proposed   = ceAmendDetail.proposed || {};
@@ -2603,7 +2590,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
               return (<>
                 {/* Change reason — most important context for admin */}
                 <div style={{background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:6,padding:"7px 10px",marginBottom:8}}>
-                  <div style={{fontSize:8.5,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Change Reason</div>
+                  <div style={{fontSize:8.5,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("projects.change_reason")}</div>
                   <div style={{fontSize:11.5,color:"#78350F",lineHeight:1.4}}>{ceAmendDetail.reason||"—"}</div>
                 </div>
                 {/* Proposed header diffs */}
@@ -2620,7 +2607,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                 {/* Total tile */}
                 <div style={{display:"grid",gridTemplateColumns:"1fr",gap:5,marginBottom:8}}>
                   <div style={{textAlign:"center",background:T.grnL,borderRadius:5,padding:"5px"}}>
-                    <div style={{fontSize:8,color:T.grn,fontWeight:700,textTransform:"uppercase"}}>Proposed Grand Total</div>
+                    <div style={{fontSize:8,color:T.grn,fontWeight:700,textTransform:"uppercase"}}>{t("projects.proposed_grand_total")}</div>
                     <div style={{fontSize:13,fontWeight:800,color:T.grn,marginTop:1}}>{"₹"+Number(grandTotal||0).toLocaleString("en-IN")}</div>
                   </div>
                 </div>
@@ -2631,7 +2618,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                       <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.55)",textAlign:i>1?"right":"left",textTransform:"uppercase"}}>{h}</div>
                     ))}
                   </div>
-                  {sections.length===0&&<div style={{padding:"14px 0",textAlign:"center",color:T.t4,fontSize:11}}>No sections</div>}
+                  {sections.length===0&&<div style={{padding:"14px 0",textAlign:"center",color:T.t4,fontSize:11}}>{t("projects.no_sections")}</div>}
                   {sections.map((sec,si)=>{
                     // Mode is part of the proposed payload (round-tripped
                     // from the builder). Render section bar accordingly.
@@ -2646,10 +2633,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                       <React.Fragment key={si}>
                         <div style={{padding:"4px 8px",background:T.bluL,borderTop:`1px solid ${T.b1}`,fontSize:10,fontWeight:700,color:T.blu,display:"flex",alignItems:"center",gap:8}}>
                           <span style={{flex:1}}>
-                            {sec.title||"Section"}
-                            {secPerItem && <span style={{marginLeft:6,padding:"0 5px",fontSize:8.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",borderRadius:3}}>PER-ITEM</span>}
+                            {sec.title||t("projects.section")}
+                            {secPerItem && <span style={{marginLeft:6,padding:"0 5px",fontSize:8.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",borderRadius:3}}>{t("projects.per_item")}</span>}
                           </span>
-                          <span style={{fontVariantNumeric:"tabular-nums"}}>Qty {Math.round(secQtyShow).toLocaleString("en-IN")}</span>
+                          <span style={{fontVariantNumeric:"tabular-nums"}}>{t("projects.qty_math", { Math: Math.round(secQtyShow).toLocaleString("en-IN") })}</span>
                           {!secPerItem && <span style={{fontVariantNumeric:"tabular-nums"}}>{"₹"+Number(secRateSum||0).toLocaleString("en-IN")}/sqft</span>}
                           <span style={{color:T.grn,fontVariantNumeric:"tabular-nums",minWidth:70,textAlign:"right"}}>{"₹"+Number(secTotal||0).toLocaleString("en-IN")}</span>
                         </div>
@@ -2678,7 +2665,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           <button onClick={toggleAutoInvExpand}
             style={{marginTop:7,width:"100%",padding:"6px 8px",borderRadius:6,background:isAutoInvExpanded?"#EDE9FE":"transparent",border:`1px solid ${isAutoInvExpanded?"#C4B5FD":T.b1}`,color:isAutoInvExpanded?"#6D28D9":T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
             <span style={{fontSize:8}}>{isAutoInvExpanded?"▲":"▼"}</span>
-            {isAutoInvExpanded?"Hide invoice detail":"View invoice detail"}
+            {isAutoInvExpanded?t("projects.hide_invoice_detail"):t("projects.view_invoice_detail")}
           </button>
         )}
         {isAutoInv&&isAutoInvExpanded&&(
@@ -2686,7 +2673,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             {autoInvLoading===item._source_id&&!autoInvDetail?(
               <div style={{textAlign:"center",padding:"18px 0",color:T.t4,fontSize:12}}>
                 <div style={{width:18,height:18,border:`2px solid ${T.b1}`,borderTopColor:"#6D28D9",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 6px"}}/>
-                Loading invoice…
+               {t("projects.loading_invoice")}
               </div>
             ):autoInvDetail?(()=>{
               const inv = autoInvDetail.invoice || {};
@@ -2696,7 +2683,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                 {/* Trigger audit panel — small purple callout */}
                 {task && (
                   <div style={{padding:"7px 10px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:6,marginBottom:8}}>
-                    <div style={{fontSize:8.5,fontWeight:700,color:"#6D28D9",textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>🔗 Triggered by Task</div>
+                    <div style={{fontSize:8.5,fontWeight:700,color:"#6D28D9",textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("projects.triggered_by_task")}</div>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
                       <span style={{fontSize:11,fontWeight:700,color:T.t1,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title || task.name}</span>
                       <span style={{fontSize:11,fontWeight:800,color:T.grn,fontVariantNumeric:"tabular-nums"}}>{task.progress}%</span>
@@ -2706,11 +2693,11 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                 {/* Invoice meta */}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:5,marginBottom:8}}>
                   <div style={{background:T.surfaceB,borderRadius:5,padding:"4px 7px"}}>
-                    <div style={{fontSize:8,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Customer</div>
+                    <div style={{fontSize:8,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("common.customer")}</div>
                     <div style={{fontSize:10.5,color:T.t1,marginTop:1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{inv.customer_name||"—"}</div>
                   </div>
                   <div style={{background:T.surfaceB,borderRadius:5,padding:"4px 7px"}}>
-                    <div style={{fontSize:8,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Date</div>
+                    <div style={{fontSize:8,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("common.date")}</div>
                     <div style={{fontSize:10.5,color:T.t1,marginTop:1,fontWeight:600}}>{inv.invoice_date}</div>
                   </div>
                 </div>
@@ -2734,10 +2721,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                 {/* Tax breakdown — 4 mini tiles */}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4}}>
                   {[
-                    {l:"Gross",v:inv.gross_amount,c:T.t1},
+                    {l:t("common.gross"),v:inv.gross_amount,c:T.t1},
                     {l:"Ret "+(inv.retention_pct||0)+"%",v:inv.retention_amt,c:T.amb},
                     {l:"TDS "+(inv.tds_pct||0)+"%",v:inv.tds_amt,c:T.red},
-                    {l:"Net Rec",v:inv.net_receivable,c:T.grn},
+                    {l:t("projects.net_rec"),v:inv.net_receivable,c:T.grn},
                   ].map(s=>(
                     <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:5,padding:"5px 4px"}}>
                       <div style={{fontSize:7.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".2px"}}>{s.l}</div>
@@ -2759,16 +2746,16 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             {raItemsLoading===item._source_id&&!raDetail?(
               <div style={{textAlign:"center",padding:"18px 0",color:T.t4,fontSize:12}}>
                 <div style={{width:18,height:18,border:`2px solid ${T.b1}`,borderTopColor:T.blu,borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 6px"}}/>
-                Loading items…
+               {t("projects.loading_items")}
               </div>
             ):raDetail?(<>
               {/* 4 KPI tiles */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5,marginBottom:8}}>
                 {[
-                  {l:"Gross",v:raDetail.bill.gross_amount,c:T.t1},
-                  {l:"Retention",v:raDetail.bill.retention_amt,c:T.amb},
+                  {l:t("common.gross"),v:raDetail.bill.gross_amount,c:T.t1},
+                  {l:t("common.retention_2"),v:raDetail.bill.retention_amt,c:T.amb},
                   {l:"TDS",v:raDetail.bill.tds_amt,c:T.red},
-                  {l:"Net",v:raDetail.bill.net_payable,c:T.grn},
+                  {l:t("common.net"),v:raDetail.bill.net_payable,c:T.grn},
                 ].map(s=>(
                   <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:5,padding:"5px 4px"}}>
                     <div style={{fontSize:8,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{s.l}</div>
@@ -2783,7 +2770,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                     <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.55)",textAlign:i>1?"right":"left",textTransform:"uppercase"}}>{h}</div>
                   ))}
                 </div>
-                {raDetail.items.length===0&&<div style={{padding:"14px 0",textAlign:"center",color:T.t4,fontSize:11}}>No items</div>}
+                {raDetail.items.length===0&&<div style={{padding:"14px 0",textAlign:"center",color:T.t4,fontSize:11}}>{t("common.no_items_2")}</div>}
                 {raDetail.items.map(it=>(
                   <div key={it.id} style={{display:"grid",gridTemplateColumns:"1.7fr 36px 50px 60px 70px",padding:"5px 8px",gap:4,borderTop:`1px solid ${T.b1}`,alignItems:"center"}}>
                     <div style={{color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</div>
@@ -2803,7 +2790,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             style={{marginTop:7,width:"100%",padding:"6px",borderRadius:6,background:"transparent",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}
             onMouseEnter={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.color=T.blu;}}
             onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.t3;}}>
-            📋 Open in Project — full details →
+           {t("projects.open_in_project_full_details")}
           </button>
         )}
       </div>
@@ -2822,7 +2809,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     setActing(p=>({...p,["w"+it.txn_id]:null}));
   };
   const walReject=async(it)=>{
-    const reason=await window.promptAsync("Reject ka reason (optional):","");
+    const reason=await window.promptAsync(t("projects.reject_ka_reason_optional"),"");
     if(reason===null)return;
     setSaveErr("");setActing(p=>({...p,["w"+it.txn_id]:"rejecting"}));
     try{const r=await api.post("/wallets/reject/"+it.txn_id,{reason:reason.trim()});if(r&&r.success!==false)removeWallet(it.txn_id);else setSaveErr((r&&r.message)||"Reject failed");}
@@ -2830,7 +2817,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     setActing(p=>({...p,["w"+it.txn_id]:null}));
   };
   const walAsk=async(it)=>{
-    const msg=await window.promptAsync("Staff se kya clarification chahiye?","");
+    const msg=await window.promptAsync(t("projects.staff_se_kya_clarification_chahiye"),"");
     if(msg===null)return;
     if(!msg.trim()){setSaveErr("Sawaal likhein.");return;}
     setSaveErr("");setActing(p=>({...p,["w"+it.txn_id]:"asking"}));
@@ -2865,26 +2852,26 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     return(
       <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.blu}}>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3,flexWrap:"wrap"}}>
-          <span style={{fontSize:9.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>Wallet · {WCAT_LBL[it.wallet_category]||"Other"}</span>
-          {it.is_transfer&&<span style={{fontSize:9,fontWeight:700,color:"#7C3AED",background:"#F5F3FF",padding:"1px 7px",borderRadius:10}}>Transfer</span>}
-          {it.limit_exceeded&&<span style={{fontSize:9,fontWeight:700,color:T.red,background:T.redL,padding:"1px 7px",borderRadius:10}}>Limit breach</span>}
+          <span style={{fontSize:9.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>{t("projects.wallet_wcat_lbl", { WCAT_LBL: WCAT_LBL[it.wallet_category]||"Other" })}</span>
+          {it.is_transfer&&<span style={{fontSize:9,fontWeight:700,color:"#7C3AED",background:"#F5F3FF",padding:"1px 7px",borderRadius:10}}>{t("projects.transfer")}</span>}
+          {it.limit_exceeded&&<span style={{fontSize:9,fontWeight:700,color:T.red,background:T.redL,padding:"1px 7px",borderRadius:10}}>{t("projects.limit_breach")}</span>}
         </div>
         <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>₹{Number(it.amount||0).toLocaleString("en-IN")}</div>
         <div style={{fontSize:10.5,color:T.t4,marginTop:2}}><b style={{color:T.t3}}>{it.sender_name}</b> → {it.party_name}{it.project_name?" · "+it.project_name:""}</div>
         {it.note&&<div style={{fontSize:10.5,color:T.t4,marginTop:2,fontStyle:"italic"}}>"{it.note}"</div>}
         {(it.photo_url||it.photo_pending)&&(
           <div style={{display:"flex",gap:8,marginTop:5,alignItems:"center"}}>
-            {it.photo_url&&<a href={it.photo_url} target="_blank" rel="noreferrer" style={{fontSize:10.5,color:T.blu,fontWeight:600}}>Photo dekhein</a>}
-            {it.photo_pending&&<span style={{fontSize:9,fontWeight:700,color:T.amb,background:T.ambL,padding:"1px 7px",borderRadius:10}}>Photo pending</span>}
+            {it.photo_url&&<a href={it.photo_url} target="_blank" rel="noreferrer" style={{fontSize:10.5,color:T.blu,fontWeight:600}}>{t("projects.photo_dekhein")}</a>}
+            {it.photo_pending&&<span style={{fontSize:9,fontWeight:700,color:T.amb,background:T.ambL,padding:"1px 7px",borderRadius:10}}>{t("projects.photo_pending")}</span>}
           </div>
         )}
-        {blocked&&<div style={{marginTop:7,fontSize:10,color:T.amb,background:T.ambL,padding:"5px 9px",borderRadius:6}}>Is category me photo zaroori — sync hone tak approve disabled.</div>}
+        {blocked&&<div style={{marginTop:7,fontSize:10,color:T.amb,background:T.ambL,padding:"5px 9px",borderRadius:6}}>{t("projects.is_category_me_photo_zaroori_sync")}</div>}
         {clar.length>0&&(
           <div style={{marginTop:8,borderTop:"1px solid "+T.b1,paddingTop:7}}>
             {/* Collapsed by default — one compact row; click to expand the thread */}
             <button onClick={()=>setShowClar(s=>!s)}
               style={{display:"flex",alignItems:"center",gap:6,width:"100%",background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}>
-              <span style={{fontSize:9.5,fontWeight:700,color:T.blu}}>💬 Conversation ({clar.length})</span>
+              <span style={{fontSize:9.5,fontWeight:700,color:T.blu}}>{t("projects.conversation_clar", { clar: clar.length })}</span>
               {!showClar&&<span style={{fontSize:9.5,color:T.t4,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,textAlign:"left"}}>— {(clar[clar.length-1]?.message)||""}</span>}
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2.4} strokeLinecap="round" style={{marginLeft:"auto",flexShrink:0,transform:showClar?"rotate(180deg)":"none",transition:"transform .15s"}}><path d="M6 9l6 6 6-6"/></svg>
             </button>
@@ -2896,9 +2883,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                     : !["admin","super_admin"].includes(String(c.from_role||"").toLowerCase());
                   return(
                     <div key={c.id} style={{marginBottom:6,paddingLeft:8,borderLeft:"2px solid "+(isStaff?T.grn:T.blu)}}>
-                      <span style={{fontSize:10,fontWeight:700,color:isStaff?T.grn:T.blu}}>{c.from_name||c.from_role}{isStaff?" (staff)":""}</span>
+                      <span style={{fontSize:10,fontWeight:700,color:isStaff?T.grn:T.blu}}>{c.from_name||c.from_role}{isStaff?t("projects.staff"):""}</span>
                       <div style={{fontSize:11,color:T.t2,marginTop:1}}>{c.message}</div>
-                      {c.photo_url&&<a href={c.photo_url} target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blu,fontWeight:600}}>Photo</a>}
+                      {c.photo_url&&<a href={c.photo_url} target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blu,fontWeight:600}}>{t("projects.photo")}</a>}
                     </div>
                   );
                 })}
@@ -2907,9 +2894,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           </div>
         )}
         <div style={{display:"flex",gap:6,marginTop:8}}>
-          <button onClick={()=>walReject(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="rejecting"?"...":"✕ Reject"}</button>
-          <button onClick={()=>walAsk(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.bluL,border:"1px solid "+T.blu,color:T.blu,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="asking"?"...":"Ask info"}</button>
-          <button onClick={()=>walApprove(it)} disabled={!!act||blocked} style={{flex:1,padding:"6px",borderRadius:6,background:blocked?T.b1:T.grn,border:"none",color:blocked?T.t4:"white",fontSize:11,fontWeight:700,cursor:(act||blocked)?"not-allowed":"pointer"}}>{act==="approving"?"...":"✓ Approve"}</button>
+          <button onClick={()=>walReject(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="rejecting"?"...":t("common.reject")}</button>
+          <button onClick={()=>walAsk(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.bluL,border:"1px solid "+T.blu,color:T.blu,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="asking"?"...":t("projects.ask_info")}</button>
+          <button onClick={()=>walApprove(it)} disabled={!!act||blocked} style={{flex:1,padding:"6px",borderRadius:6,background:blocked?T.b1:T.grn,border:"none",color:blocked?T.t4:"white",fontSize:11,fontWeight:700,cursor:(act||blocked)?"not-allowed":"pointer"}}>{act==="approving"?"...":t("common.approve")}</button>
         </div>
       </div>
     );
@@ -2924,14 +2911,14 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   );
 
   const APPROVAL_TABS=[
-    {id:"design",  label:"Design",  color:"#7C3AED", count:designItems.length},
-    {id:"finance", label:"Finance", color:T.blu,     count:financeItems.length+walletItems.length},
-    {id:"payment", label:"Payment", color:T.grn,     count:paymentItems.length},
+    {id:"design",  label:t("common.design"),  color:"#7C3AED", count:designItems.length},
+    {id:"finance", label:t("common.finance"), color:T.blu,     count:financeItems.length+walletItems.length},
+    {id:"payment", label:t("common.payment"), color:T.grn,     count:paymentItems.length},
   ];
   const MATERIAL_TABS=[
-    {id:"mr",        label:"Material Requests", color:T.blu, count:mrScoped("Requested").length},
-    {id:"po",        label:"PO Approval",       color:T.amb, count:pendingPOsScoped.length},
-    {id:"warehouse", label:"Warehouse",         color:T.grn, count:whPendingMRs.length},
+    {id:"mr",        label:t("common.material_requests"), color:T.blu, count:mrScoped("Requested").length},
+    {id:"po",        label:t("projects.po_approval"),       color:T.amb, count:pendingPOsScoped.length},
+    {id:"warehouse", label:t("common.warehouse"),         color:T.grn, count:whPendingMRs.length},
   ];
   const tabs=mode==="approvals"?APPROVAL_TABS:MATERIAL_TABS;
   const drawerTitle=mode==="approvals"?"Pending Approvals":"Material Approvals";
@@ -2946,18 +2933,18 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
           <div style={{fontSize:15,fontWeight:700,color:"white"}}>{drawerTitle}</div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <button onClick={()=>load(true)} disabled={loading} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:loading?"default":"pointer",color:loading?"rgba(255,255,255,0.35)":"rgba(255,255,255,0.7)",fontSize:10.5,padding:"3px 9px",borderRadius:5}}>{loading?"↻ …":"↻ Refresh"}</button>
+            <button onClick={()=>load(true)} disabled={loading} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:loading?"default":"pointer",color:loading?"rgba(255,255,255,0.35)":"rgba(255,255,255,0.7)",fontSize:10.5,padding:"3px 9px",borderRadius:5}}>{loading?"↻ …":t("common.refresh_2")}</button>
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",padding:4}}><IcX size={15}/></button>
           </div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10}}>
           <span style={{background:headerAccent,color:"white",fontSize:11,fontWeight:700,padding:"2px 10px",borderRadius:20}}>{myCount} pending</span>
-          <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{mode==="approvals"?"Design · Finance · Payment":"Procurement · MR · Warehouse"}</span>
+          <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{mode==="approvals"?t("projects.design_finance_payment"):t("projects.procurement_mr_warehouse")}</span>
         </div>
         {/* My Approvals / All toggle — only admin/super_admin/PM */}
         {canSeeAll&&(
           <div style={{display:"flex",background:"rgba(255,255,255,0.08)",borderRadius:20,padding:3,gap:3,marginBottom:10}}>
-            {[{v:"my",label:"My approvals",ic:"👤",n:myCount},{v:"all",label:"All",ic:"☰",n:allCount}].map(o=>(
+            {[{v:"my",label:t("project_detail.my_approvals"),ic:"👤",n:myCount},{v:"all",label:t("common.all"),ic:"☰",n:allCount}].map(o=>(
               <button key={o.v} onClick={()=>setApprScope(o.v)}
                 style={{flex:1,padding:"6px",border:"none",borderRadius:20,cursor:"pointer",fontSize:11.5,
                   fontWeight:apprScope===o.v?700:500,transition:"all .15s",
@@ -2988,29 +2975,29 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
       {/* Body */}
       <div style={{flex:1,overflowY:"auto"}}>
         {saveErr&&<div style={{margin:"8px 14px",padding:"8px 12px",background:T.redL,border:"1px solid "+T.redM,borderRadius:7,fontSize:12,color:T.red}}>{saveErr}</div>}
-        {loading&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>Loading...</div>}
+        {loading&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("common.loading")}</div>}
 
         {/* ── APPROVALS MODE ── */}
         {!loading&&mode==="approvals"&&activeTab==="design"&&(
           designItems.length===0
-            ?<EmptyState msg="Koi pending Design approval nahi!" sub="Sab drawings reviewed hain"/>
-            :<><SectionHead label="Design Approvals" count={designItems.length} color="#7C3AED" bg="#F5F3FF" bdr="#DDD6FE"/>
+            ?<EmptyState msg="Koi pending Design approval nahi!" sub={t("projects.sab_drawings_reviewed_hain")}/>
+            :<><SectionHead label={t("projects.design_approvals")} count={designItems.length} color="#7C3AED" bg="#F5F3FF" bdr="#DDD6FE"/>
               <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
                 {designItems.map(item=><CentralCard key={item.id} item={item}/>)}
               </div></>
         )}
         {!loading&&mode==="approvals"&&activeTab==="finance"&&(
           (financeItems.length===0&&walletItems.length===0)
-            ?<EmptyState msg="Koi pending Finance approval nahi!" sub="PO, RA Bills, Subcon WO, Wallet sab clear hain"/>
+            ?<EmptyState msg="Koi pending Finance approval nahi!" sub={t("projects.po_ra_bills_subcon_wo_wallet")}/>
             :<>
               {financeItems.length>0&&<>
-                <SectionHead label="Finance Approvals" count={financeItems.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
+                <SectionHead label={t("projects.finance_approvals")} count={financeItems.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
                 <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
                   {financeItems.map(item=><CentralCard key={item.id} item={item}/>)}
                 </div>
               </>}
               {walletItems.length>0&&<>
-                <SectionHead label="Wallet Approvals" count={walletItems.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
+                <SectionHead label={t("projects.wallet_approvals")} count={walletItems.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
                 <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
                   {walletItems.map(item=><WalletApprovalCard key={item.txn_id} item={item}/>)}
                 </div>
@@ -3019,8 +3006,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         )}
         {!loading&&mode==="approvals"&&activeTab==="payment"&&(
           paymentItems.length===0
-            ?<EmptyState msg="Koi pending Payment Request nahi!" sub="Sab PRs clear hain"/>
-            :<><SectionHead label="Payment Requests" count={paymentItems.length} color={T.grn} bg={T.grnL} bdr={T.grnM}/>
+            ?<EmptyState msg="Koi pending Payment Request nahi!" sub={t("projects.sab_prs_clear_hain")}/>
+            :<><SectionHead label={t("common.payment_requests")} count={paymentItems.length} color={T.grn} bg={T.grnL} bdr={T.grnM}/>
               <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
                 {data.centralized.filter(i=>i._source==="payment_request").map(item=><CentralCard key={item.id} item={item}/>)}
                 {data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")).map(pr=>(
@@ -3028,8 +3015,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                       <div style={{flex:1}}>
                         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3}}>
-                          <span style={{fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>PAYMENT REQUEST</span>
-                          <span style={{fontSize:9.5,color:T.t4}}>PR-{pr.id}</span>
+                          <span style={{fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>{t("projects.payment_request")}</span>
+                          <span style={{fontSize:9.5,color:T.t4}}>{t("projects.pr_id", { id: pr.id })}</span>
                         </div>
                         <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{pr.party_name||pr.party||"—"}</div>
                         <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{pr.project_name||pr.project||"—"} · {pr.description||pr.note||"—"}</div>
@@ -3052,17 +3039,17 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
               style={{flex:"1 1 130px",padding:"6px 9px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,color:T.t2,background:"white",cursor:"pointer",fontFamily:"inherit"}}>
               {mrSiteList.map(s=><option key={s}>{s}</option>)}
             </select>
-            <input value={mrSearch} onChange={e=>setMrSearch(e.target.value)} placeholder="Search material..."
+            <input value={mrSearch} onChange={e=>setMrSearch(e.target.value)} placeholder={t("common.search_material")}
               style={{flex:"2 1 150px",padding:"6px 9px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,color:T.t2,background:"white",outline:"none",fontFamily:"inherit"}}/>
           </div>
           {/* Status sub-tabs */}
           <div style={{display:"flex",gap:0,padding:"8px 14px 5px",overflowX:"auto",borderBottom:"1px solid "+T.b1}}>
             {[
-              {s:"Requested", label:"Requests",  c:T.amb},
-              {s:"Approved",  label:"Approved",  c:T.grn},
-              {s:"Ordered",   label:"Ordered",   c:T.blu},
-              {s:"Received",  label:"Delivered", c:"#7C3AED"},
-              {s:"Rejected",  label:"Rejected",  c:T.red},
+              {s:"Requested", label:t("common.requests"),  c:T.amb},
+              {s:"Approved",  label:t("common.approved"),  c:T.grn},
+              {s:"Ordered",   label:t("common.ordered"),   c:T.blu},
+              {s:"Received",  label:t("projects.delivered"), c:"#7C3AED"},
+              {s:"Rejected",  label:t("common.rejected"),  c:T.red},
             ].map(({s,label,c})=>{
               const cnt=mrByStage(s).length;
               return(
@@ -3081,7 +3068,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             {mrScoped(mrStage).length===0
               ?<EmptyState
                   msg={mrStage==="Requested"?(apprScope==="my"?"Koi MR aapke approval ke liye nahi!":"Koi pending request nahi!"):"Koi "+mrStage.toLowerCase()+" MR nahi!"}
-                  sub={(mrSite!=="All"||mrSearch)?"Filter change karke dekhein":apprScope==="my"&&mrStage==="Requested"?"\"All\" pe switch karke poori list dekhein":"Is stage mein koi item nahi"}/>
+                  sub={(mrSite!=="All"||mrSearch)?t("projects.filter_change_karke_dekhein"):apprScope==="my"&&mrStage==="Requested"?t("projects.all_pe_switch_karke_poori_list"):t("projects.is_stage_mein_koi_item_nahi")}/>
               :mrScoped(mrStage).map(mr=><MRFlowCard key={mr.id} mr={mr} stage={mrStage}
                   waitingOn={!canActOnMr(mr.id)?waitFor("Material Request",mrWaitMap.get(String(mr.id))):null}
                   waitingNote={!canActOnMr(mr.id)?escalationNote(mrWaitMap.get(String(mr.id))):null}
@@ -3121,7 +3108,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         {!loading&&mode==="materials"&&activeTab==="po"&&(<>
           {/* PO sub-tabs */}
           <div style={{display:"flex",gap:6,padding:"10px 14px 6px",borderBottom:"1px solid "+T.b1}}>
-            {[{v:"pending",label:"Pending Approval",c:T.amb},{v:"approved",label:"Approved",c:T.grn}].map(opt=>(
+            {[{v:"pending",label:t("common.pending_approval"),c:T.amb},{v:"approved",label:t("common.approved"),c:T.grn}].map(opt=>(
               <button key={opt.v} onClick={()=>setPoView(opt.v)}
                 style={{padding:"5px 12px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,fontWeight:poView===opt.v?700:500,
                   background:poView===opt.v?opt.c:T.b1,color:poView===opt.v?"white":T.t3,display:"flex",alignItems:"center",gap:4}}>
@@ -3134,7 +3121,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           </div>
           <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:10}}>
             {(poView==="pending"?pendingPOsScoped:approvedPOs).length===0
-              ?<EmptyState msg={poView==="pending"?(apprScope==="my"?"Koi PO aapke approval ke liye nahi!":"Koi pending PO approval nahi!"):"Koi approved PO nahi!"} sub={apprScope==="my"&&poView==="pending"?"\"All\" pe switch karke poori list dekhein":"Sab POs processed hain"}/>
+              ?<EmptyState msg={poView==="pending"?(apprScope==="my"?"Koi PO aapke approval ke liye nahi!":"Koi pending PO approval nahi!"):"Koi approved PO nahi!"} sub={apprScope==="my"&&poView==="pending"?t("projects.all_pe_switch_karke_poori_list"):t("projects.sab_pos_processed_hain")}/>
               :(poView==="pending"?pendingPOsScoped:approvedPOs).map(po=>(
                 <POApprovalCard key={po.id} po={po} approved={poView==="approved"} acting={acting}
                   canAct={canActOnPo(po.id)}
@@ -3148,7 +3135,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                     setActing(p=>({...p,["po"+po.id]:null}));
                   }}
                   onCancel={async()=>{
-                    if(!await window.confirmAsync("Cancel this PO?")) return;
+                    if(!await window.confirmAsync(t("projects.cancel_this_po"))) return;
                     setActing(p=>({...p,["po"+po.id]:"cancelling"}));
                     await api.patch("/procurement/pos/"+po.id+"/cancel",{});
                     setData(p=>({...p,pos:p.pos.filter(x=>x.id!==po.id)}));
@@ -3165,9 +3152,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           {/* Warehouse sub-tabs */}
           <div style={{display:"flex",gap:6,padding:"10px 14px 6px",borderBottom:"1px solid "+T.b1,overflowX:"auto"}}>
             {[
-              {v:"mr",       label:"Site Requests", c:T.amb, count:whPendingMRs.length},
-              {v:"grn",      label:"GRN Received",  c:T.grn, count:recentGRNs.length},
-              {v:"transfer", label:"Transfers",     c:T.blu, count:recentTransfers.length},
+              {v:"mr",       label:t("projects.site_requests"), c:T.amb, count:whPendingMRs.length},
+              {v:"grn",      label:t("common.grn_received"),  c:T.grn, count:recentGRNs.length},
+              {v:"transfer", label:t("common.transfers"),     c:T.blu, count:recentTransfers.length},
             ].map(opt=>(
               <button key={opt.v} onClick={()=>setWhTab(opt.v)}
                 style={{flexShrink:0,padding:"5px 11px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,fontWeight:whTab===opt.v?700:500,
@@ -3183,7 +3170,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             {/* Pending / Approved toggle */}
             <div style={{padding:"8px 14px 4px",display:"flex",gap:6}}>
               <button onClick={()=>setData(p=>p)} style={{display:"none"}}/>
-              {[{v:"pending",l:"Pending",items:whPendingMRs},{v:"approved",l:"Approved / Issued",items:whApprovedMRs}].map(opt=>(
+              {[{v:"pending",l:t("common.pending"),items:whPendingMRs},{v:"approved",l:t("projects.approved_issued"),items:whApprovedMRs}].map(opt=>(
                 <button key={opt.v} onClick={()=>{}}
                   style={{padding:"3px 10px",borderRadius:14,border:"1px solid "+T.b1,fontSize:11,cursor:"default",
                     background:T.bg,color:T.t3,display:"flex",alignItems:"center",gap:4,pointerEvents:"none"}}>
@@ -3193,7 +3180,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             </div>
             <div style={{padding:"6px 14px 10px",display:"flex",flexDirection:"column",gap:10}}>
               {whPendingMRs.length===0
-                ?<EmptyState msg="Koi pending warehouse request nahi!" sub="Site se koi material request nahi aayi abhi"/>
+                ?<EmptyState msg="Koi pending warehouse request nahi!" sub={t("projects.site_se_koi_material_request_nahi")}/>
                 :whPendingMRs.map(mr=>(
                     <WHMRCard key={mr.id} mr={mr} acting={acting}
                       rejectId={rejectId} setRejectId={setRejectId} rejectNote={rejectNote} setRejectNote={setRejectNote}
@@ -3215,14 +3202,14 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                   ))
               }
               {whApprovedMRs.length>0&&(<>
-                <div style={{fontSize:10.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.6px",marginTop:6}}>Already Approved / Issued</div>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.6px",marginTop:6}}>{t("projects.already_approved_issued")}</div>
                 {whApprovedMRs.slice(0,5).map(mr=>(
                   <div key={mr.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"9px 12px",borderLeft:"3px solid "+T.grn}}>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:600,color:T.t1}}>
                       <span>{mr.mr_no||`WHMR-${mr.id}`} · {mr.project_name||"—"}</span>
                       <span style={{fontSize:10.5,color:T.grn,fontWeight:700}}>{mr.status}</span>
                     </div>
-                    <div style={{fontSize:11,color:T.t4,marginTop:2}}>{mr.items?.length||0} items · {mr.priority||"Medium"} priority</div>
+                    <div style={{fontSize:11,color:T.t4,marginTop:2}}>{t("projects.mr_items_mr2_priority", { mr: mr.items?.length||0, mr2: mr.priority||"Medium" })}</div>
                   </div>
                 ))}
               </>)}
@@ -3233,7 +3220,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           {whTab==="grn"&&(
             <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:10}}>
               {recentGRNs.length===0
-                ?<EmptyState msg="Koi GRN nahi!" sub="Abhi tak koi material receive nahi hua"/>
+                ?<EmptyState msg="Koi GRN nahi!" sub={t("projects.abhi_tak_koi_material_receive_nahi")}/>
                 :recentGRNs.map(grn=><GRNCard key={grn.id} grn={grn}/>)
               }
             </div>
@@ -3243,7 +3230,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           {whTab==="transfer"&&(
             <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:10}}>
               {recentTransfers.length===0
-                ?<EmptyState msg="Koi transfer nahi!" sub="Inter-site material transfers yahaan dikhenge"/>
+                ?<EmptyState msg="Koi transfer nahi!" sub={t("projects.inter_site_material_transfers_yahaan_dikhenge")}/>
                 :recentTransfers.map(tr=><TransferCard key={tr.id} tr={tr}/>)
               }
             </div>
@@ -3477,23 +3464,23 @@ function ProjectsPage({onSelectProject}){
   const SM={"Ongoing":{c:T.grn,bg:T.grnL},"Completed":{c:T.blu,bg:T.bluL},"Hold":{c:T.amb,bg:T.ambL},"Not Started":{c:T.slt,bg:T.sltL}};
 
   const ACTION_TILES=[
-    {label:"Pending Approvals",val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>{setApprovalMode("approvals");setShowApprovals(true);}},
-    {label:"Material Requests", val:mrPendingCount,Icon:IcProc,color:T.blu,bg:T.bluL,bdr:T.bluM,onClick:()=>{setApprovalMode("materials");setShowApprovals(true);}},
-    {label:"My To-Do",          val:todoCount,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM,onClick:()=>{
+    {label:t("common.pending_approvals"),val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>{setApprovalMode("approvals");setShowApprovals(true);}},
+    {label:t("common.material_requests"), val:mrPendingCount,Icon:IcProc,color:T.blu,bg:T.bluL,bdr:T.bluM,onClick:()=>{setApprovalMode("materials");setShowApprovals(true);}},
+    {label:t("projects.my_to_do"),          val:todoCount,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM,onClick:()=>{
       setShowTodoDrawer(true);
       setTodosLoading(true);
       api.get("/projects/all-todos").then(r=>{
         if(r.success) setAllTodos(r.data||[]);
       }).catch(()=>{}).finally(()=>setTodosLoading(false));
     }},
-    {label:"Open Issues", val:allIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length, Icon:IcWarn, color:T.red,bg:T.redL,bdr:T.redM,
+    {label:t("projects.open_issues"), val:allIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length, Icon:IcWarn, color:T.red,bg:T.redL,bdr:T.redM,
       onClick:()=>{
       setIssueFilter("Open");
       setShowIssuesDrawer(true);
       // Refresh on open
       api.get("/tasks/all-issues").then(r=>{ if(r.success) setAllIssues(r.data||[]); }).catch(()=>{});
     }},
-    {label:"Site Pulse",        val:"LIVE",Icon:IcPulse,color:T.pur,bg:T.purL,bdr:"#C4B5FD",live:true,onClick:()=>setShowPulse(true)},
+    {label:t("project_detail.site_pulse"),        val:"LIVE",Icon:IcPulse,color:T.pur,bg:T.purL,bdr:"#C4B5FD",live:true,onClick:()=>setShowPulse(true)},
   ];
 
   const Pill=({label,c,bg})=>(
@@ -3509,13 +3496,13 @@ function ProjectsPage({onSelectProject}){
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{textAlign:"center",padding:"60px 0",color:"#94A3B8"}}>
         <div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>
-        Loading...
+       {t("common.loading")}
       </div>
     </div>
   );
   if(loadError&&allProjects.length===0) return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",fontFamily:"'Segoe UI',sans-serif"}}>
-      <div style={{textAlign:"center",padding:"60px 0",color:"#EF4444",fontSize:13}}>Failed to load data. <span style={{color:"#3B82F6",cursor:"pointer",textDecoration:"underline"}} onClick={()=>fetchProjects()}>Retry</span></div>
+      <div style={{textAlign:"center",padding:"60px 0",color:"#EF4444",fontSize:13}}>{t("projects.failed_to_load_data")} <span style={{color:"#3B82F6",cursor:"pointer",textDecoration:"underline"}} onClick={()=>fetchProjects()}>{t("common.retry")}</span></div>
     </div>
   );
 
@@ -3524,7 +3511,7 @@ function ProjectsPage({onSelectProject}){
 
       {/* ── COUNT PILLS ── */}
       <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:10,flexWrap:"wrap"}}>
-        {[{l:"Total",v:stats.total,c:T.blu},{l:"Ongoing",v:stats.ongoing,c:T.grn},{l:"Hold",v:stats.hold,c:T.amb},{l:"Not Started",v:stats.notStarted,c:T.slt},{l:"Completed",v:stats.completed,c:T.t4}].map((p,i)=>(
+        {[{l:t("common.total"),v:stats.total,c:T.blu},{l:t("projects.ongoing"),v:stats.ongoing,c:T.grn},{l:t("common.hold"),v:stats.hold,c:T.amb},{l:t("common.not_started"),v:stats.notStarted,c:T.slt},{l:t("common.completed"),v:stats.completed,c:T.t4}].map((p,i)=>(
           <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,background:T.surface,borderRadius:20,padding:"4px 11px 4px 8px",border:`1px solid ${T.b1}`,boxShadow:"0 1px 2px rgba(0,0,0,.04)",flexShrink:0,cursor:"default"}} onMouseEnter={e=>e.currentTarget.style.borderColor=p.c+"55"} onMouseLeave={e=>e.currentTarget.style.borderColor=T.b1}>
             <span style={{width:7,height:7,borderRadius:"50%",background:p.c,display:"inline-block",flexShrink:0}}/>
             <span style={{fontSize:14,fontWeight:800,color:T.t1}}>{p.v}</span>
@@ -3534,7 +3521,7 @@ function ProjectsPage({onSelectProject}){
         <div style={{flex:1}}/>
         <button onClick={()=>setHideCompleted(h=>!h)} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:20,border:`1.5px solid ${!hideCompleted?T.blu:T.b1}`,background:!hideCompleted?T.bluL:T.surface,fontSize:11,fontWeight:600,color:!hideCompleted?T.blu:T.t3,cursor:"pointer",transition:"all .18s"}}>
           {!hideCompleted?<IcEyeX size={13} color={T.blu}/>:<IcEye size={13} color={T.t4}/>}
-          {!hideCompleted?"Hide Completed":"Show Completed"}
+          {!hideCompleted?t("design.hide_completed"):t("design.show_completed")}
           {hideCompleted&&stats.completed>0&&<span style={{background:T.bluL,color:T.blu,fontSize:9,fontWeight:700,padding:"0 5px",borderRadius:10}}>{stats.completed}</span>}
         </button>
       </div>
@@ -3566,7 +3553,7 @@ function ProjectsPage({onSelectProject}){
           <div style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex",alignItems:"center",lineHeight:0}}>
             <IcSrch size={13} color={T.t4}/>
           </div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search projects or clients..."
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("projects.search_projects_or_clients")}
             style={{width:"100%",height:32,padding:"0 9px 0 28px",borderRadius:6,border:`1.5px solid ${search?T.blu:T.b1}`,fontSize:12.5,color:T.t1,background:search?T.bluL:T.surfaceB,outline:"none",boxSizing:"border-box",fontFamily:"inherit",transition:"border-color .15s,background .15s"}}
             onFocus={e=>{e.target.style.borderColor=T.blu;e.target.style.background=T.bluL;}}
             onBlur={e=>{if(!search){e.target.style.borderColor=T.b1;e.target.style.background=T.surfaceB;}}}/>
@@ -3576,7 +3563,7 @@ function ProjectsPage({onSelectProject}){
         <div style={{position:"relative"}}>
           <select value={filterCity} onChange={e=>setFilterCity(e.target.value)}
             style={{height:32,padding:"0 24px 0 9px",borderRadius:6,border:`1.5px solid ${filterCity!=="All"?T.blu:T.b1}`,background:filterCity!=="All"?T.bluL:T.surfaceB,fontSize:12,color:filterCity!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:filterCity!=="All"?600:400,minWidth:90,appearance:"none",WebkitAppearance:"none"}}>
-            {cities.map(c=><option key={c} value={c}>{c==="All"?"All Cities":c}</option>)}
+            {cities.map(c=><option key={c} value={c}>{c==="All"?t("projects.all_cities"):c}</option>)}
           </select>
           <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcDown size={11} color={T.t4}/></div>
         </div>
@@ -3585,7 +3572,7 @@ function ProjectsPage({onSelectProject}){
         <div style={{position:"relative"}}>
           <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
             style={{height:32,padding:"0 24px 0 9px",borderRadius:6,border:`1.5px solid ${filterStatus!=="All"?T.blu:T.b1}`,background:filterStatus!=="All"?T.bluL:T.surfaceB,fontSize:12,color:filterStatus!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:filterStatus!=="All"?600:400,minWidth:90,appearance:"none",WebkitAppearance:"none"}}>
-            {["All","Ongoing","Hold","Not Started"].map(s=><option key={s} value={s}>{s==="All"?"All Status":s}</option>)}
+            {["All","Ongoing","Hold","Not Started"].map(s=><option key={s} value={s}>{s==="All"?t("common.all_status"):s}</option>)}
           </select>
           <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcDown size={11} color={T.t4}/></div>
         </div>
@@ -3594,9 +3581,9 @@ function ProjectsPage({onSelectProject}){
         {!!tenderOpts.length&&(
         <div style={{position:"relative"}}>
           <select value={filterTender} onChange={e=>setFilterTender(e.target.value)}
-            title="Ek tender ki saari site ek saath"
+            title={t("projects.ek_tender_ki_saari_site_ek")}
             style={{height:32,padding:"0 24px 0 9px",borderRadius:6,border:`1.5px solid ${filterTender!=="All"?T.ind:T.b1}`,background:filterTender!=="All"?T.indL:T.surfaceB,fontSize:12,color:filterTender!=="All"?T.ind:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:filterTender!=="All"?600:400,minWidth:110,maxWidth:190,appearance:"none",WebkitAppearance:"none"}}>
-            <option value="All">All Tenders</option>
+            <option value="All">{t("projects.all_tenders")}</option>
             {tenderOpts.map(([id,label])=><option key={id} value={id}>{label}</option>)}
           </select>
           <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcDown size={11} color={T.t4}/></div>
@@ -3605,7 +3592,7 @@ function ProjectsPage({onSelectProject}){
 
         {/* Sort */}
         <div style={{display:"flex",alignItems:"center",gap:3}}>
-          <span style={{fontSize:10.5,color:T.t4}}>Sort:</span>
+          <span style={{fontSize:10.5,color:T.t4}}>{t("projects.sort")}</span>
           {["Default","A→Z","End","↓%","↑%",...(tenderOpts.length?["Tender"]:[])].map(s=>(
             <button key={s} onClick={()=>setSortBy(s)}
               style={{height:32,padding:"0 8px",borderRadius:6,border:`1.5px solid ${sortBy===s?T.blu:T.b1}`,background:sortBy===s?T.bluL:T.surfaceB,fontSize:11.5,fontWeight:sortBy===s?700:400,color:sortBy===s?T.blu:T.t3,cursor:"pointer",transition:"all .12s"}}>
@@ -3631,14 +3618,14 @@ function ProjectsPage({onSelectProject}){
         <button onClick={exportCSV} style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12,fontWeight:600,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",flexShrink:0}}
           onMouseEnter={e=>{e.currentTarget.style.borderColor=T.grn;e.currentTarget.style.color=T.grn;e.currentTarget.style.background=T.grnL;}}
           onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.color=T.t2;e.currentTarget.style.background=T.surfaceB;}}>
-          <IcDown size={12} color="currentColor"/> Export CSV
+          <IcDown size={12} color="currentColor"/> {t("projects.export_csv")}
         </button>
 
         {/* New Project */}
         {canCreateProject&&<button onClick={()=>setShowNew(true)} style={{height:32,padding:"0 14px",borderRadius:6,background:`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,boxShadow:`0 3px 8px ${T.blu}44`,whiteSpace:"nowrap",flexShrink:0}}
           onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 5px 14px ${T.blu}55`}
           onMouseLeave={e=>e.currentTarget.style.boxShadow=`0 3px 8px ${T.blu}44`}>
-          <IcAdd size={13} color="white"/> New Project
+          <IcAdd size={13} color="white"/> {t("projects.new_project")}
         </button>}
       </div>
 
@@ -3675,7 +3662,7 @@ function ProjectsPage({onSelectProject}){
             <button onClick={()=>setFilterTender("All")}
               style={{height:28,padding:"0 11px",borderRadius:6,border:`1px solid ${T.ind}44`,background:T.surface,
                 color:T.ind,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
-              Sab sites
+             {t("projects.sab_sites")}
             </button>
           </div>
         );
@@ -3683,10 +3670,9 @@ function ProjectsPage({onSelectProject}){
 
       {/* Results hint */}
       <div style={{fontSize:10.5,color:T.t4,marginBottom:9,display:"flex",alignItems:"center",gap:7}}>
-        <span>{filtered.length} projects shown</span>
+        <span>{t("projects.filtered_projects_shown", { filtered: filtered.length })}</span>
         {hideCompleted&&stats.completed>0&&<span onClick={()=>setHideCompleted(false)} style={{background:T.bluL,color:T.blu,fontSize:9.5,fontWeight:700,padding:"1px 8px",borderRadius:20,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
-          <IcEye size={10} color={T.blu}/> {stats.completed} completed hidden
-        </span>}
+          <IcEye size={10} color={T.blu}/>{t("projects.completed_completed_hidden", { completed: stats.completed })}</span>}
       </div>
 
       {/* ── TILE VIEW ── */}
@@ -3740,17 +3726,17 @@ function ProjectsPage({onSelectProject}){
                           <button onClick={()=>{setCardMenu(null);onSelectProject&&onSelectProject(p);}}
                             style={{width:"100%",padding:"8px 12px",border:"none",background:"none",textAlign:"left",fontSize:12,color:T.t1,cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.b1}`}}
                             onMouseEnter={e=>e.currentTarget.style.background=T.bluL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                            <IcArrow size={13} color={T.blu}/> Open Project
+                            <IcArrow size={13} color={T.blu}/> {t("projects.open_project")}
                           </button>
                           {isAdmin&&<button onClick={()=>{setCardMenu(null);setDupOf(p);}}
                             style={{width:"100%",padding:"8px 12px",border:"none",background:"none",textAlign:"left",fontSize:12,color:T.t1,cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid "+T.b1}}
                             onMouseEnter={e=>e.currentTarget.style.background=T.ambL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                            <IcCopy size={13} color={T.amb}/> Copy Project
+                            <IcCopy size={13} color={T.amb}/> {t("projects.copy_project")}
                           </button>}
                           {isAdmin&&<button onClick={()=>{setCardMenu(null);setSettingsOf(p);}}
                             style={{width:"100%",padding:"8px 12px",border:"none",background:"none",textAlign:"left",fontSize:12,color:T.t1,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
                             onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                            <IcSet size={13} color={T.slt}/> Settings
+                            <IcSet size={13} color={T.slt}/> {t("common.settings")}
                           </button>}
                         </div>
                       )}
@@ -3761,12 +3747,12 @@ function ProjectsPage({onSelectProject}){
                   <div style={{display:"flex",gap:8,marginBottom:5}}>
                     <span style={{display:"flex",alignItems:"center",gap:3,fontSize:10.5,color:T.t3}}><IcLoc size={10} color={T.t4}/>{p.city}</span>
                     <span style={{fontSize:10.5,color:T.t3}}>{p.type}</span>
-                    <span style={{fontSize:10.5,color:T.t3}}>PM: <b style={{color:T.t2,fontWeight:600}}>{p.pm}</b></span>
+                    <span style={{fontSize:10.5,color:T.t3}}>{t("projects.pm")} <b style={{color:T.t2,fontWeight:600}}>{p.pm}</b></span>
                   </div>
 
                   {/* Progress */}
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                    <span style={{fontSize:10,color:T.t4}}>Progress</span>
+                    <span style={{fontSize:10,color:T.t4}}>{t("common.progress")}</span>
                     <span style={{fontSize:10.5,fontWeight:700,color:progClr(p.progress)}}>{p.progress}%</span>
                   </div>
                   <PBar pct={p.progress} color={progClr(p.progress)} h={3}/>
@@ -3781,7 +3767,7 @@ function ProjectsPage({onSelectProject}){
                     ))}
                     <div style={{paddingLeft:8,flexShrink:0,textAlign:"right"}}>
                       <div style={{fontSize:9,color:T.t4,marginBottom:3,whiteSpace:"nowrap"}}>{p.end}</div>
-                      <button onClick={e=>{e.stopPropagation();onSelectProject&&onSelectProject(p);}} style={{fontSize:10.5,fontWeight:600,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,cursor:"pointer",padding:"2px 8px",borderRadius:5,whiteSpace:"nowrap"}}>Open →</button>
+                      <button onClick={e=>{e.stopPropagation();onSelectProject&&onSelectProject(p);}} style={{fontSize:10.5,fontWeight:600,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,cursor:"pointer",padding:"2px 8px",borderRadius:5,whiteSpace:"nowrap"}}>{t("projects.open")}</button>
                     </div>
                   </div>
                 </div>
@@ -3834,7 +3820,7 @@ function ProjectsPage({onSelectProject}){
                 <span style={{fontSize:12,fontWeight:700,color:margin>0?T.grn:T.red,fontVariantNumeric:"tabular-nums"}}>{margin>0?"+":""}₹{fmt(Math.abs(margin))}</span>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5}}>
                   <span style={{fontSize:10.5,color:T.t4}}>{p.end}</span>
-                  {isAdmin&&<button onClick={e=>{e.stopPropagation();setDupOf(p);}} style={{background:"none",border:`1px solid ${T.b1}`,borderRadius:5,padding:"2px 6px",cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontSize:9.5,color:T.t3,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.background=T.ambL;e.currentTarget.style.color=T.amb;e.currentTarget.style.borderColor=T.ambM;}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.t3;e.currentTarget.style.borderColor=T.b1;}}><IcCopy size={10} color="currentColor"/> Copy</button>}
+                  {isAdmin&&<button onClick={e=>{e.stopPropagation();setDupOf(p);}} style={{background:"none",border:`1px solid ${T.b1}`,borderRadius:5,padding:"2px 6px",cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontSize:9.5,color:T.t3,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.background=T.ambL;e.currentTarget.style.color=T.amb;e.currentTarget.style.borderColor=T.ambM;}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.t3;e.currentTarget.style.borderColor=T.b1;}}><IcCopy size={10} color="currentColor"/> {t("mom.copy")}</button>}
                 </div>
               </div>
             );
@@ -3843,16 +3829,16 @@ function ProjectsPage({onSelectProject}){
       )}
 
       {filtered.length===0&&!search&&filterCity==="All"&&filterStatus==="All"&&allProjects.length===0&&(
-        <div style={{textAlign:"center",padding:"80px 0"}}><div style={{fontSize:36,marginBottom:8}}>📋</div><div style={{color:"#64748B",fontSize:14,fontWeight:600}}>No projects yet</div><div style={{color:"#94A3B8",fontSize:12,marginTop:4}}>Create your first project to get started</div></div>
+        <div style={{textAlign:"center",padding:"80px 0"}}><div style={{fontSize:36,marginBottom:8}}>📋</div><div style={{color:"#64748B",fontSize:14,fontWeight:600}}>{t("projects.no_projects_yet")}</div><div style={{color:"#94A3B8",fontSize:12,marginTop:4}}>{t("projects.create_your_first_project_to_get")}</div></div>
       )}
-      {filtered.length===0&&(search||filterCity!=="All"||filterStatus!=="All"||allProjects.length>0)&&<div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}><div style={{fontSize:38,marginBottom:10}}>🔍</div><div style={{fontSize:15,fontWeight:600,color:T.t2}}>No projects found</div><div style={{fontSize:12,marginTop:4,color:T.t4}}>Try changing filters or search term</div></div>}
+      {filtered.length===0&&(search||filterCity!=="All"||filterStatus!=="All"||allProjects.length>0)&&<div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}><div style={{fontSize:38,marginBottom:10}}>🔍</div><div style={{fontSize:15,fontWeight:600,color:T.t2}}>{t("projects.no_projects_found")}</div><div style={{fontSize:12,marginTop:4,color:T.t4}}>{t("projects.try_changing_filters_or_search_term")}</div></div>}
 
       {/* ── PAGINATION ── */}
       {totalPages>1&&(
         <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,marginTop:14,padding:"10px 0"}}>
           <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}
             style={{height:30,padding:"0 10px",borderRadius:6,border:`1.5px solid ${page===1?T.b1:T.blu}`,background:page===1?T.surfaceB:T.bluL,fontSize:12,fontWeight:600,color:page===1?T.t4:T.blu,cursor:page===1?"not-allowed":"pointer"}}>
-            ← Prev
+           {t("projects.prev")}
           </button>
           {Array.from({length:totalPages},(_,i)=>i+1).filter(p=>p===1||p===totalPages||Math.abs(p-page)<=2).map((p,idx,arr)=>{
             const prev=arr[idx-1];
@@ -3867,9 +3853,9 @@ function ProjectsPage({onSelectProject}){
           })}
           <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}
             style={{height:30,padding:"0 10px",borderRadius:6,border:`1.5px solid ${page===totalPages?T.b1:T.blu}`,background:page===totalPages?T.surfaceB:T.bluL,fontSize:12,fontWeight:600,color:page===totalPages?T.t4:T.blu,cursor:page===totalPages?"not-allowed":"pointer"}}>
-            Next →
+           {t("mom.next")}
           </button>
-          <span style={{fontSize:11,color:T.t4,marginLeft:8}}>Page {page} of {totalPages}</span>
+          <span style={{fontSize:11,color:T.t4,marginLeft:8}}>{t("projects.page_page_of_totalpages", { page, totalPages })}</span>
         </div>
       )}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)} onSelectProject={onSelectProject}/>}
@@ -3931,11 +3917,9 @@ function IssueChat({issueId}){
   };
   return(
     <div style={{borderTop:"1px solid #F1F5F9",paddingTop:10,marginTop:8}}>
-      <div style={{fontSize:9.5,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
-        Chat ({comments.length})
-      </div>
-      {!loaded&&<div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"6px 0"}}>Loading...</div>}
-      {loaded&&comments.length===0&&<div style={{fontSize:11,color:"#CBD5E1",textAlign:"center",padding:"6px 0"}}>No messages yet</div>}
+      <div style={{fontSize:9.5,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("projects.chat_comments", { comments: comments.length })}</div>
+      {!loaded&&<div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"6px 0"}}>{t("common.loading")}</div>}
+      {loaded&&comments.length===0&&<div style={{fontSize:11,color:"#CBD5E1",textAlign:"center",padding:"6px 0"}}>{t("projects.no_messages_yet")}</div>}
       <div style={{maxHeight:160,overflowY:"auto",marginBottom:8}}>
         {comments.map(c=>(
           <div key={c.id} style={{display:"flex",gap:7,marginBottom:7,alignItems:"flex-start"}}>
@@ -3955,11 +3939,11 @@ function IssueChat({issueId}){
       <div style={{display:"flex",gap:6}}>
         <input value={text} onChange={e=>setText(e.target.value)}
           onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()}
-          placeholder="Type message..."
+          placeholder={t("projects.type_message")}
           style={{flex:1,padding:"7px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:12,color:"#1E293B",outline:"none",fontFamily:"inherit"}}/>
         <button onClick={send} disabled={sending||!text.trim()}
           style={{padding:"7px 12px",borderRadius:7,background:sending||!text.trim()?"#E2E8F0":"#2563EB",color:sending||!text.trim()?"#94A3B8":"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>
-          Send
+         {t("common.send")}
         </button>
       </div>
     </div>
@@ -4014,8 +3998,8 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
       <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Open Issues</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:1}}>{filtered.length} issue{filtered.length!==1?"s":""} · All projects</div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>{t("projects.open_issues")}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:1}}>{t("projects.filtered_issuefiltered2_all_projects", { filtered: filtered.length, filtered2: filtered.length!==1?"s":"" })}</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -4032,7 +4016,7 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
         </div>
         {/* Sort row */}
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <span style={{fontSize:10,color:"rgba(255,255,255,0.35)",whiteSpace:"nowrap"}}>Sort:</span>
+          <span style={{fontSize:10,color:"rgba(255,255,255,0.35)",whiteSpace:"nowrap"}}>{t("projects.sort")}</span>
           {[["date","Date"],["project","Project"],["assigned","Assigned"],["category","Category"]].map(([id,lbl])=>(
             <button key={id} onClick={()=>setSortBy(id)}
               style={{padding:"3px 9px",borderRadius:12,border:"none",background:sortBy===id?"rgba(255,255,255,.2)":"rgba(255,255,255,.07)",color:sortBy===id?"white":"rgba(255,255,255,.45)",fontSize:10.5,fontWeight:sortBy===id?700:400,cursor:"pointer"}}>
@@ -4044,8 +4028,8 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
 
       {/* List */}
       <div style={{flex:1,overflowY:"auto",padding:"12px 14px"}}>
-        {loading&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>Loading issues...</div>}
-        {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>No issues found</div>}
+        {loading&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>{t("projects.loading_issues")}</div>}
+        {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>{t("projects.no_issues_found")}</div>}
         {filtered.map(issue=>{
           const pc=priC[issue.priority]||priC["Medium"];
           const ic=issC[issue.status]||issC["Open"];
@@ -4081,13 +4065,13 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
                   <button onClick={()=>setExpandedChat(expandedChat===issue.id?null:issue.id)}
                     style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:5,border:"1px solid #E2E8F0",background:expandedChat===issue.id?"#DBEAFE":"white",cursor:"pointer",fontSize:10,color:expandedChat===issue.id?"#2563EB":"#64748B",fontWeight:600}}>
                     <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                    Chat
+                   {t("projects.chat")}
                   </button>
                   {!isClosed&&(
                     <button onClick={()=>{setShowCloseFor(showCloseFor===issue.id?null:issue.id);setCloseMsg("");}}
                       style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:5,border:"1px solid #BBF7D0",background:showCloseFor===issue.id?"#DCFCE7":"white",cursor:"pointer",fontSize:10,color:"#16A34A",fontWeight:600}}>
                       <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
-                      Close
+                     {t("common.close")}
                     </button>
                   )}
                 </div>
@@ -4096,16 +4080,16 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
               {/* Close Issue section */}
               {!isClosed&&showCloseFor===issue.id&&(
                 <div style={{marginTop:8,padding:"10px 12px",background:"#F0FDF4",borderRadius:8,border:"1px solid #BBF7D0"}}>
-                  <div style={{fontSize:10.5,fontWeight:600,color:"#16A34A",marginBottom:6}}>Closing message (optional)</div>
+                  <div style={{fontSize:10.5,fontWeight:600,color:"#16A34A",marginBottom:6}}>{t("projects.closing_message_optional")}</div>
                   <textarea value={closeMsg} onChange={e=>setCloseMsg(e.target.value)} rows={2}
-                    placeholder="Reason for closing / resolution note..."
+                    placeholder={t("projects.reason_for_closing_resolution_note")}
                     style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
                   <div style={{display:"flex",gap:6,marginTop:7}}>
                     <button onClick={()=>{setShowCloseFor(null);setCloseMsg("");}}
-                      style={{flex:1,padding:"6px",borderRadius:6,background:"white",border:"1px solid #E2E8F0",fontSize:11.5,color:"#64748B",cursor:"pointer",fontWeight:500}}>Cancel</button>
+                      style={{flex:1,padding:"6px",borderRadius:6,background:"white",border:"1px solid #E2E8F0",fontSize:11.5,color:"#64748B",cursor:"pointer",fontWeight:500}}>{t("common.cancel")}</button>
                     <button onClick={()=>handleCloseIssue(issue.id)} disabled={closingId===issue.id}
                       style={{flex:2,padding:"6px",borderRadius:6,background:"#16A34A",border:"none",fontSize:11.5,color:"white",cursor:"pointer",fontWeight:700}}>
-                      {closingId===issue.id?"Closing...":"✓ Confirm Close"}
+                      {closingId===issue.id?t("common.closing"):t("projects.confirm_close")}
                     </button>
                   </div>
                 </div>
@@ -4169,9 +4153,9 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
   // Inverse of progressFromStatus — given checklist completion %, derive
   // the task status so the checklist drives the bucket the todo lives in.
   const statusFromPct = (pct) => {
-    if (pct >= 100) return "Completed";
-    if (pct > 0)    return "In Progress";
-    return "Not Started";
+    if (pct >= 100) return t("common.completed");
+    if (pct > 0)    return t("projects.in_progress");
+    return t("common.not_started");
   };
 
   const toggleDone = async (t, e) => {
@@ -4219,8 +4203,8 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
       <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:"white"}}>My To-Do</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:1}}>{pendingCount} pending · {doneCount} done · All projects</div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>{t("projects.my_to_do")}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:1}}>{t("projects.pendingcount_pending_donecount_done_all_projects", { pendingCount, doneCount })}</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -4237,7 +4221,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
           </div>
           <button onClick={()=>setShowAddForm(p=>!p)}
             style={{padding:"5px 11px",borderRadius:6,border:"1px solid rgba(255,255,255,0.2)",background:showAddForm?"#7C3AED":"rgba(255,255,255,0.1)",color:"white",fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-            {showAddForm?"✕ Cancel":"+ Company Todo"}
+            {showAddForm?t("projects.cancel"):t("projects.company_todo")}
           </button>
         </div>
       </div>
@@ -4245,18 +4229,18 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
       {/* Add Company Todo form */}
       {showAddForm && (
         <div style={{padding:"12px 14px",background:"#F5F3FF",borderBottom:"1px solid #DDD6FE",flexShrink:0}}>
-          <div style={{fontSize:10.5,fontWeight:700,color:"#7C3AED",letterSpacing:".4px",marginBottom:8}}>+ NEW TODO</div>
+          <div style={{fontSize:10.5,fontWeight:700,color:"#7C3AED",letterSpacing:".4px",marginBottom:8}}>{t("projects.new_todo")}</div>
           <input value={newTodo.title} onChange={e=>setNewTodo(p=>({...p,title:e.target.value}))}
-            placeholder="Todo title..." autoFocus
+            placeholder={t("projects.todo_title")} autoFocus
             style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #DDD6FE",fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",marginBottom:8}}/>
           {/* ── Scope selector — Company level vs a specific project. ── */}
           <div style={{marginBottom:8}}>
-            <div style={{fontSize:9.5,fontWeight:700,color:"#7C3AED",letterSpacing:".4px",marginBottom:4}}>KAHAAN BANEGA?</div>
+            <div style={{fontSize:9.5,fontWeight:700,color:"#7C3AED",letterSpacing:".4px",marginBottom:4}}>{t("projects.kahaan_banega")}</div>
             <select
               value={newTodo.project_id || ""}
               onChange={e=>setNewTodo(p=>({...p,project_id:e.target.value?Number(e.target.value):null}))}
               style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #DDD6FE",fontSize:12,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}>
-              <option value="">🏢 Company level (sabhi projects ke liye)</option>
+              <option value="">{t("projects.company_level_sabhi_projects_ke_liye")}</option>
               {projects.map(p=>(
                 <option key={p.id} value={p.id}>📍 {p.name}{p.city?" · "+p.city:""}</option>
               ))}
@@ -4264,9 +4248,9 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
             <SearchSelect value={newTodo.priority} options={["High","Medium","Low"]} compact
-              onChange={v=>setNewTodo(p=>({...p,priority:v}))} placeholder="Priority"/>
+              onChange={v=>setNewTodo(p=>({...p,priority:v}))} placeholder={t("common.priority")}/>
             <SearchSelect value={newTodo.category} options={["Admin","Finance","HR","Compliance","Other"]} compact
-              onChange={v=>setNewTodo(p=>({...p,category:v}))} placeholder="Category"/>
+              onChange={v=>setNewTodo(p=>({...p,category:v}))} placeholder={t("common.category")}/>
             <input type="date" value={newTodo.due_date} onChange={e=>setNewTodo(p=>({...p,due_date:e.target.value}))}
               style={{padding:"6px 8px",borderRadius:6,border:"1px solid #DDD6FE",fontSize:11,outline:"none"}}/>
           </div>
@@ -4288,15 +4272,15 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
             setCreating(false);
           }} disabled={!newTodo.title.trim()||creating}
             style={{width:"100%",padding:"8px",borderRadius:6,border:"none",background:newTodo.title.trim()?"#7C3AED":"#ccc",color:"white",fontSize:12,fontWeight:700,cursor:newTodo.title.trim()?"pointer":"not-allowed"}}>
-            {creating?"Adding…":(newTodo.project_id?"+ Add to Project Todo":"+ Add Company Todo")}
+            {creating?t("common.adding"):(newTodo.project_id?t("projects.add_to_project_todo"):t("projects.add_company_todo"))}
           </button>
         </div>
       )}
 
       {/* Content */}
       <div style={{flex:1,overflow:"auto",padding:"10px 14px"}}>
-        {loading?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>Loading...</div>
-        :filtered.length===0?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>No todos found</div>
+        {loading?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>{t("common.loading")}</div>
+        :filtered.length===0?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>{t("projects.no_todos_found")}</div>
         :filtered.map(t=>{
           const pr=priC[t.priority]||priC["Medium"];
           const clDone=(t.checklist||[]).filter(c=>c.done).length;
@@ -4310,7 +4294,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                 onMouseEnter={e=>{if(!isExpanded){e.currentTarget.parentElement.style.boxShadow="0 4px 14px rgba(15,23,42,0.08)";e.currentTarget.parentElement.style.borderColor="#BFDBFE";}}}
                 onMouseLeave={e=>{if(!isExpanded){e.currentTarget.parentElement.style.boxShadow="none";e.currentTarget.parentElement.style.borderColor="#E2E8F0";}}}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
-                  <div onClick={(e)=>toggleDone(t,e)} title={t.done?"Mark as pending":"Mark as done"}
+                  <div onClick={(e)=>toggleDone(t,e)} title={t.done?t("projects.mark_as_pending"):t("projects.mark_as_done")}
                     style={{width:18,height:18,borderRadius:4,border:t.done?`none`:`1.5px solid #CBD5E1`,background:t.done?"#22C55E":"transparent",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
                     {t.done&&<svg width={10} height={10} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>}
                   </div>
@@ -4319,11 +4303,11 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                     <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
                       {t.project_name && <span onClick={(e)=>{e.stopPropagation();goToProject(t);}}
                         style={{fontSize:10,fontWeight:600,color:"#3B82F6",background:"#EFF6FF",padding:"1px 7px",borderRadius:10,cursor:"pointer",border:"1px solid #BFDBFE"}}>{t.project_name}</span>}
-                      {!t.project_id&&<span style={{fontSize:10,fontWeight:600,color:"#7C3AED",background:"#F5F3FF",padding:"1px 7px",borderRadius:10,border:"1px solid #DDD6FE"}}>🏢 Company</span>}
+                      {!t.project_id&&<span style={{fontSize:10,fontWeight:600,color:"#7C3AED",background:"#F5F3FF",padding:"1px 7px",borderRadius:10,border:"1px solid #DDD6FE"}}>{t("projects.company")}</span>}
                       {t.category&&t.category!=="Other"&&<span style={{fontSize:10,color:"#64748B",background:"#F1F5F9",padding:"1px 6px",borderRadius:10}}>{t.category}</span>}
                       <span style={{fontSize:10,fontWeight:600,color:pr.c,background:pr.bg,padding:"1px 6px",borderRadius:10}}>{t.priority}</span>
                       {t.assigned_name&&<span style={{fontSize:10,color:"#64748B"}}>@{t.assigned_name.split(" ")[0]}</span>}
-                      {t.due_date&&<span style={{fontSize:10,color:"#64748B"}}>Due {fmtDate(t.due_date)}</span>}
+                      {t.due_date&&<span style={{fontSize:10,color:"#64748B"}}>{t("projects.due_fmtdate", { fmtDate: fmtDate(t.due_date) })}</span>}
                       {hasChecklist&&<span style={{fontSize:10,fontWeight:600,color:clDone===t.checklist.length?"#22C55E":"#94A3B8"}}>☑ {clDone}/{t.checklist.length}</span>}
                     </div>
                   </div>
@@ -4347,7 +4331,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                     })();
                     return (
                       <div style={{paddingTop:10,fontSize:11,color:"#64748B"}}>
-                        <span style={{fontWeight:600,color:"#475569"}}>🙋 Raised by</span>{" "}
+                        <span style={{fontWeight:600,color:"#475569"}}>{t("projects.raised_by")}</span>{" "}
                         {t.created_by_name || "—"}{stamp ? " · " + stamp : ""}
                       </div>
                     );
@@ -4356,7 +4340,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                   {hasChecklist ? (
                     <div style={{paddingTop:10}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                        <div style={{fontSize:10,fontWeight:700,color:"#64748B",letterSpacing:".5px"}}>☑ CHECKLIST</div>
+                        <div style={{fontSize:10,fontWeight:700,color:"#64748B",letterSpacing:".5px"}}>{t("projects.checklist")}</div>
                         <span style={{fontSize:10,fontWeight:700,color:clDone===t.checklist.length?"#15803D":"#7C3AED"}}>{clDone}/{t.checklist.length}</span>
                       </div>
                       {/* Progress bar — drives task status via toggleChecklistItem */}
@@ -4377,13 +4361,13 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                           <div style={{width:16,height:16,borderRadius:4,border:c.done?"none":"1.5px solid #CBD5E1",background:c.done?"#22C55E":"white",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",opacity:savingChk===`${t.id}-${idx}`?.5:1}}>
                             {c.done&&<svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.5}><path d="M2 5l2.5 2.5L8 3"/></svg>}
                           </div>
-                          <span style={{flex:1,fontSize:12.5,color:c.done?"#94A3B8":"#1E293B",textDecoration:c.done?"line-through":"none"}}>{c.text||c.t||c.title||c.item||c.label||c.name||"Item"}</span>
-                          {savingChk===`${t.id}-${idx}`&&<span style={{fontSize:9,color:"#94A3B8"}}>saving…</span>}
+                          <span style={{flex:1,fontSize:12.5,color:c.done?"#94A3B8":"#1E293B",textDecoration:c.done?"line-through":"none"}}>{c.text||c.t||c.title||c.item||c.label||c.name||t("common.item")}</span>
+                          {savingChk===`${t.id}-${idx}`&&<span style={{fontSize:9,color:"#94A3B8"}}>{t("projects.saving")}</span>}
                         </div>
                       ))}
                     </div>
                   ):(
-                    <div style={{padding:"12px 4px",fontSize:11.5,color:"#94A3B8",fontStyle:"italic"}}>No checklist items.</div>
+                    <div style={{padding:"12px 4px",fontSize:11.5,color:"#94A3B8",fontStyle:"italic"}}>{t("projects.no_checklist_items")}</div>
                   )}
                   {t.description && (
                     <div style={{marginTop:10,paddingTop:8,borderTop:"1px dashed #E2E8F0",fontSize:11.5,color:"#475569",lineHeight:1.5}}>
@@ -4406,14 +4390,14 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                       }}
                         disabled={pinging === t.id}
                         style={{padding:"6px 12px",borderRadius:6,border:"none",background:"#D97706",color:"white",fontSize:11,fontWeight:700,cursor:pinging===t.id?"wait":"pointer",display:"flex",alignItems:"center",gap:4,opacity:pinging===t.id?0.7:1}}>
-                        <span>{pinging === t.id ? "Pinging…" : "Ping"}</span>
+                        <span>{pinging === t.id ? t("projects.pinging") : t("projects.ping")}</span>
                         {pinging !== t.id && <span>🔔</span>}
                       </button>
                     )}
                     {t.project_id && (
                       <button onClick={(e)=>{e.stopPropagation();goToProject(t);}}
                         style={{padding:"6px 12px",borderRadius:6,border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#3B82F6",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                        Open in Project →
+                       {t("projects.open_in_project")}
                       </button>
                     )}
                   </div>

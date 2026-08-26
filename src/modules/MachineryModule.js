@@ -18,6 +18,7 @@
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api, { API_BASE, getToken } from "../config/api";
+import { t, Rich } from "../i18n";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -68,10 +69,10 @@ const fmtD = (raw) => {
 const todayStr = () => new Date().toLocaleDateString("en-CA");
 
 const DOC_TYPES = [
-  { k: "insurance", l: "Insurance" }, { k: "rc", l: "RC" },
-  { k: "fitness", l: "Fitness certificate" }, { k: "puc", l: "PUC" },
-  { k: "road_tax", l: "Road tax" }, { k: "permit", l: "Permit" },
-  { k: "other", l: "Other" },
+  { k: "insurance", get l() { return t("machinery.insurance"); } }, { k: "rc", l: "RC" },
+  { k: "fitness", get l() { return t("machinery.fitness_certificate"); } }, { k: "puc", l: "PUC" },
+  { k: "road_tax", get l() { return t("machinery.road_tax"); } }, { k: "permit", get l() { return t("machinery.permit"); } },
+  { k: "other", get l() { return t("common.other"); } },
 ];
 const docLabel = (k) => (DOC_TYPES.find((d) => d.k === k) || {}).l || k;
 
@@ -80,9 +81,9 @@ const docLabel = (k) => (DOC_TYPES.find((d) => d.k === k) || {}).l || k;
 const expiryTone = (days) => {
   if (days == null) return { c: T.t3, bg: T.sltL, label: "—" };
   if (days < 0) return { c: T.red, bg: T.redL, label: `${Math.abs(days)} din pehle khatam` };
-  if (days === 0) return { c: T.red, bg: T.redL, label: "Aaj khatam" };
-  if (days <= 30) return { c: T.amb, bg: T.ambL, label: `${days} din` };
-  return { c: T.grn, bg: T.grnL, label: "Valid" };
+  if (days === 0) return { c: T.red, bg: T.redL, label: t("machinery.aaj_khatam") };
+  if (days <= 30) return { c: T.amb, bg: T.ambL, label: t("machinery.days_din", { days }) };
+  return { c: T.grn, bg: T.grnL, label: t("machinery.valid") };
 };
 
 // Meter kitni purani hai — ek hi jumla teeno jagah (fleet list, header,
@@ -93,12 +94,12 @@ const meterAge = (days) =>
 // Kiraye ka basis. 'km' tipper/trailer ke liye — ganit wahi (qty × rate) hai,
 // sirf quantity ka naam badalta hai.
 const MODES = [
-  { k: "hourly", l: "Per hour", unit: "₹/hr" },
-  { k: "daily", l: "Per day", unit: "₹/day" },
-  { k: "monthly", l: "Per month", unit: "₹/month" },
-  { k: "km", l: "Per km", unit: "₹/km" },
-  { k: "trip", l: "Per trip", unit: "₹/trip" },
-  { k: "fixed", l: "Fixed / lump", unit: "₹ lump" },
+  { k: "hourly", get l() { return t("machinery.per_hour"); }, unit: "₹/hr" },
+  { k: "daily", get l() { return t("machinery.per_day"); }, unit: "₹/day" },
+  { k: "monthly", get l() { return t("machinery.per_month"); }, unit: "₹/month" },
+  { k: "km", get l() { return t("machinery.per_km"); }, unit: "₹/km" },
+  { k: "trip", get l() { return t("machinery.per_trip"); }, unit: "₹/trip" },
+  { k: "fixed", get l() { return t("machinery.fixed_lump"); }, unit: "₹ lump" },
 ];
 const modeUnit = (k) => (MODES.find((m) => m.k === k) || MODES[0]).unit;
 
@@ -224,7 +225,7 @@ const FileField = ({ value, onChange, label = "Copy (photo / PDF)" }) => {
     const f = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!f) return;
-    if (f.size > 10 * 1024 * 1024) { setError("File 10MB se badi hai"); return; }
+    if (f.size > 10 * 1024 * 1024) { setError(t("machinery.file_10mb_se_badi_hai")); return; }
     setError(""); setBusy(true);
     try { onChange(await uploadDoc(f)); }
     catch (ex) { setError(ex.message || "Upload nahi hua"); }
@@ -235,13 +236,13 @@ const FileField = ({ value, onChange, label = "Copy (photo / PDF)" }) => {
       {value ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <a href={value} target="_blank" rel="noreferrer"
-            style={{ fontSize: 11.5, color: T.ind, fontWeight: 700, textDecoration: "none" }}>Chadhi hui copy dekho</a>
+            style={{ fontSize: 11.5, color: T.ind, fontWeight: 700, textDecoration: "none" }}>{t("machinery.chadhi_hui_copy_dekho")}</a>
           <button type="button" onClick={() => onChange(null)}
             style={{ background: "none", border: "none", color: T.t3, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>hatao</button>
         </div>
       ) : (
         <label style={{ ...inp, display: "flex", alignItems: "center", cursor: busy ? "wait" : "pointer", color: busy ? T.t4 : T.t3 }}>
-          {busy ? "Chadh rahi hai..." : "File chuno"}
+          {busy ? t("machinery.chadh_rahi_hai") : t("machinery.file_chuno")}
           <input type="file" accept="image/*,.pdf" onChange={pick} disabled={busy} style={{ display: "none" }} />
         </label>
       )}
@@ -256,7 +257,7 @@ const CompletenessBar = ({ c, compact }) => {
   if (!c) return <span style={{ fontSize: 11.5, color: T.t4 }}>—</span>;
   const col = c.pct >= 90 ? T.grn : c.pct >= 60 ? T.amb : T.red;
   return (
-    <div title={c.missing.length ? "Baaki: " + c.missing.map((m) => m.label).join(", ") : "Poora record"}>
+    <div title={c.missing.length ? "Baaki: " + c.missing.map((m) => m.label).join(", ") : t("machinery.poora_record")}>
       <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
         <div style={{ flex: 1, height: 6, background: T.sltL, borderRadius: 4, overflow: "hidden", minWidth: 52 }}>
           <div style={{ width: c.pct + "%", height: "100%", background: col, borderRadius: 4 }} />
@@ -265,7 +266,7 @@ const CompletenessBar = ({ c, compact }) => {
       </div>
       {!compact && (
         <div style={{ fontSize: 10, color: T.t4, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {c.missing.length ? c.missing.slice(0, 2).map((m) => m.label).join(" · ") + (c.missing.length > 2 ? ` +${c.missing.length - 2}` : "") : "Poora"}
+          {c.missing.length ? c.missing.slice(0, 2).map((m) => m.label).join(" · ") + (c.missing.length > 2 ? ` +${c.missing.length - 2}` : "") : t("machinery.poora")}
         </div>
       )}
     </div>
@@ -283,7 +284,7 @@ const PartyPicker = ({ value, onChange, parties, roles, placeholder }) => {
   return (
     <>
       <select value={value || ""} onChange={(e) => onChange(e.target.value || null)} style={inp}>
-        <option value="">{placeholder || "— chuno —"}</option>
+        <option value="">{placeholder || t("machinery.chuno")}</option>
         {shown.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select>
       <button type="button" onClick={() => setAll((v) => !v)}
@@ -321,7 +322,7 @@ const Modal = ({ open, onClose, title, sub, width = 620, children, footer }) => 
 // invites trust that a three-week-old reading has not earned.
 const MeterCell = ({ meter, unit }) => {
   if (!meter || (meter.hours == null && meter.km == null)) {
-    return <span style={{ fontSize: 11.5, color: T.t4 }}>Reading nahi</span>;
+    return <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.reading_nahi")}</span>;
   }
   const val = unit === "km"
     ? (meter.km != null ? fmtN(meter.km) + " km" : fmtN(meter.hours) + " hrs")
@@ -329,9 +330,7 @@ const MeterCell = ({ meter, unit }) => {
   return (
     <div>
       <div style={{ fontSize: 12.5, fontWeight: 600, color: meter.is_stale ? T.amb : T.t1 }}>{val}</div>
-      <div style={{ fontSize: 10, color: T.t4 }}>
-        {meter.source} se · {meterAge(meter.days_old)}
-      </div>
+      <div style={{ fontSize: 10, color: T.t4 }}>{t("machinery.source_se_meterage", { source: meter.source, meterAge: meterAge(meter.days_old) })}</div>
     </div>
   );
 };
@@ -348,8 +347,8 @@ const MeterCell = ({ meter, unit }) => {
 // ki bell, jo is poore module ki jaan hai, kabhi bajti hi nahi.
 // ══════════════════════════════════════════════════════════════════
 const KEY_DOCS = [
-  { k: "insurance", l: "Insurance" },
-  { k: "fitness", l: "Fitness certificate" },
+  { k: "insurance", get l() { return t("machinery.insurance"); } },
+  { k: "fitness", get l() { return t("machinery.fitness_certificate"); } },
   { k: "puc", l: "PUC" },
 ];
 
@@ -385,7 +384,7 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
 
   const save = async () => {
     setError("");
-    if (!String(f.name || "").trim()) { setError("Machine ka naam zaroori hai"); setTab("id"); return; }
+    if (!String(f.name || "").trim()) { setError(t("machinery.machine_ka_naam_zaroori_hai")); setTab("id"); return; }
     // Jis kaagaz ki koi bhi detail bhari hai par valid-till nahi, wo chup-chaap
     // girne se accha hai ki abhi rok diya jaye.
     const docList = [];
@@ -394,7 +393,7 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
       if (!v) continue;
       const touched = v.doc_no || v.valid_till || v.provider_name || v.photo_url || v.amount;
       if (!touched) continue;
-      if (!v.valid_till) { setError(`${d.l} ki "valid till" date daalein — uske bina reminder nahi chalega`); setTab("docs"); return; }
+      if (!v.valid_till) { setError(t("machinery.l_ki_valid_till_date_daalein", { l: d.l })); setTab("docs"); return; }
       docList.push({ doc_type: d.k, ...v, amount: v.amount ? parseFloat(v.amount) : null });
     }
 
@@ -437,17 +436,17 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
   };
 
   const TABS = [
-    { id: "id", l: "Pehchaan" },
-    { id: "rate", l: "Rate & fuel" },
-    { id: "tele", l: "Telematics" },
-    ...(editing ? [] : [{ id: "docs", l: "Kaagaz & meter" }]),
+    { id: "id", l: t("machinery.pehchaan") },
+    { id: "rate", l: t("machinery.rate_fuel") },
+    { id: "tele", l: t("machinery.telematics") },
+    ...(editing ? [] : [{ id: "docs", l: t("machinery.kaagaz_meter") }]),
   ];
 
   return (
     <Modal open={open} onClose={onClose} width={720}
-      title={editing ? "Machine edit karein" : "Nayi machine"}
-      sub={editing ? machine.name : "Register wahi ek hai — Library me ab machine ka section nahi"}
-      footer={<><Btn ghost onClick={onClose}>Cancel</Btn><Btn onClick={save} disabled={busy}>{busy ? "Saving..." : editing ? "Update" : "Machine banao"}</Btn></>}>
+      title={editing ? t("machinery.machine_edit_karein") : t("machinery.nayi_machine")}
+      sub={editing ? machine.name : t("machinery.register_wahi_ek_hai_library_me")}
+      footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn><Btn onClick={save} disabled={busy}>{busy ? t("common.saving") : editing ? t("machinery.update") : t("machinery.machine_banao")}</Btn></>}>
 
       <div style={{ display: "flex", gap: 2, borderBottom: `1.5px solid ${T.b1}`, marginBottom: 16 }}>
         {TABS.map((x) => (
@@ -460,44 +459,44 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
 
       {tab === "id" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Field label="Machine ka naam *" span={2}>
-            <input value={f.name || ""} onChange={(e) => upd("name", e.target.value)} placeholder="e.g. JCB 3DX Backhoe Loader" style={inp} />
+          <Field label={t("machinery.machine_ka_naam")} span={2}>
+            <input value={f.name || ""} onChange={(e) => upd("name", e.target.value)} placeholder={t("machinery.e_g_jcb_3dx_backhoe_loader")} style={inp} />
           </Field>
-          <Field label="Gadi no. (registration)" hint="Yahi do machine ko sach me alag karta hai — naam nahi.">
-            <input value={f.registration_no || ""} onChange={(e) => upd("registration_no", e.target.value)} placeholder="MP09 AB 1234" style={inp} />
+          <Field label={t("machinery.gadi_no_registration")} hint={t("machinery.yahi_do_machine_ko_sach_me")}>
+            <input value={f.registration_no || ""} onChange={(e) => upd("registration_no", e.target.value)} placeholder={t("machinery.mp09_ab_1234")} style={inp} />
           </Field>
-          <Field label="Code">
-            <input value={f.code || ""} onChange={(e) => upd("code", e.target.value)} placeholder="EQ-JCB-01" style={inp} />
+          <Field label={t("common.code")}>
+            <input value={f.code || ""} onChange={(e) => upd("code", e.target.value)} placeholder={t("machinery.eq_jcb_01")} style={inp} />
           </Field>
-          <Field label="Ownership">
+          <Field label={t("common.ownership")}>
             <select value={f.ownership || "owned"} onChange={(e) => upd("ownership", e.target.value)} style={inp}>
-              <option value="owned">Apni (Owned)</option>
-              <option value="rented">Kiraye ki (Rented)</option>
+              <option value="owned">{t("machinery.apni_owned")}</option>
+              <option value="rented">{t("machinery.kiraye_ki_rented")}</option>
             </select>
           </Field>
-          <Field label="Machine type">
-            <input value={f.machine_type || ""} onChange={(e) => upd("machine_type", e.target.value)} placeholder="excavator / tipper / roller" style={inp} />
+          <Field label={t("machinery.machine_type")}>
+            <input value={f.machine_type || ""} onChange={(e) => upd("machine_type", e.target.value)} placeholder={t("machinery.excavator_tipper_roller")} style={inp} />
           </Field>
-          <Field label="Meter kis cheez ka">
+          <Field label={t("machinery.meter_kis_cheez_ka")}>
             <select value={f.meter_unit || "hours"} onChange={(e) => upd("meter_unit", e.target.value)} style={inp}>
-              <option value="hours">Hour-meter (ghante)</option>
-              <option value="km">Odometer (km)</option>
-              <option value="both">Dono</option>
+              <option value="hours">{t("machinery.hour_meter_ghante")}</option>
+              <option value="km">{t("machinery.odometer_km")}</option>
+              <option value="both">{t("machinery.dono")}</option>
             </select>
           </Field>
-          <Field label="Operator">
+          <Field label={t("machinery.operator")}>
             <input value={f.operator_name || ""} onChange={(e) => upd("operator_name", e.target.value)} style={inp} />
           </Field>
-          <Field label="Make"><input value={f.make || ""} onChange={(e) => upd("make", e.target.value)} style={inp} /></Field>
-          <Field label="Model"><input value={f.model || ""} onChange={(e) => upd("model", e.target.value)} style={inp} /></Field>
-          <Field label="Chassis no."><input value={f.chassis_no || ""} onChange={(e) => upd("chassis_no", e.target.value)} style={inp} /></Field>
-          <Field label="Engine no."><input value={f.engine_no || ""} onChange={(e) => upd("engine_no", e.target.value)} style={inp} /></Field>
+          <Field label={t("machinery.make")}><input value={f.make || ""} onChange={(e) => upd("make", e.target.value)} style={inp} /></Field>
+          <Field label={t("machinery.model")}><input value={f.model || ""} onChange={(e) => upd("model", e.target.value)} style={inp} /></Field>
+          <Field label={t("machinery.chassis_no")}><input value={f.chassis_no || ""} onChange={(e) => upd("chassis_no", e.target.value)} style={inp} /></Field>
+          <Field label={t("machinery.engine_no")}><input value={f.engine_no || ""} onChange={(e) => upd("engine_no", e.target.value)} style={inp} /></Field>
           {owned && (
             <>
-              <Field label="Purchase date">
+              <Field label={t("machinery.purchase_date")}>
                 <input type="date" value={f.purchase_date ? String(f.purchase_date).slice(0, 10) : ""} onChange={(e) => upd("purchase_date", e.target.value)} style={inp} />
               </Field>
-              <Field label="Purchase cost (₹)">
+              <Field label={t("machinery.purchase_cost")}>
                 <input value={f.purchase_cost || ""} inputMode="decimal" onChange={(e) => upd("purchase_cost", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
               </Field>
             </>
@@ -507,7 +506,7 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
 
       {tab === "rate" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Field label="Rate type">
+          <Field label={t("machinery.rate_type")}>
             <select value={f.measurement_mode || "hourly"} onChange={(e) => upd("measurement_mode", e.target.value)} style={inp}>
               {MODES.map((m) => <option key={m.k} value={m.k}>{m.l}</option>)}
             </select>
@@ -516,21 +515,21 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
             <input value={f.default_rate || ""} inputMode="decimal" onChange={(e) => upd("default_rate", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
           </Field>
           {!owned && (
-            <Field label="Kiraye ka vendor" span={2}>
+            <Field label={t("machinery.kiraye_ka_vendor")} span={2}>
               <PartyPicker value={f.default_vendor_id} onChange={(v) => upd("default_vendor_id", v)}
-                parties={parties} roles={HIRE_VENDOR_ROLES} placeholder="— kis se kiraye par li hai —" />
+                parties={parties} roles={HIRE_VENDOR_ROLES} placeholder={t("machinery.kis_se_kiraye_par_li_hai")} />
             </Field>
           )}
-          <Field label="Diesel kiska" span={2}
-            hint="Rent me shaamil hai to hum na litre track karte hain na cost — Fuel module me ye machine aayegi hi nahi.">
+          <Field label={t("machinery.diesel_kiska")} span={2}
+            hint={t("machinery.rent_me_shaamil_hai_to_hum")}>
             {/* Apni machine ka diesel hamesha hamara hi hai — wahan ye box
                 disabled hai, par tab bhi "company" hi padhna chahiye. Pehle
                 yahan default 'rent_included' dikh jaata tha, jo owned machine
                 par seedha ulta padhta hai. */}
             <select value={owned ? "company" : (f.fuel_responsibility || "rent_included")}
               onChange={(e) => upd("fuel_responsibility", e.target.value)} style={inp} disabled={owned}>
-              <option value="company">Hamara (company deti hai)</option>
-              <option value="rent_included">Kiraye me shaamil (vendor ka)</option>
+              <option value="company">{t("machinery.hamara_company_deti_hai")}</option>
+              <option value="rent_included">{t("machinery.kiraye_me_shaamil_vendor_ka")}</option>
             </select>
           </Field>
           {/* "Fuel vendor (pump)" yahan se HATA diya gaya. Machine ka pump fix
@@ -539,7 +538,7 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
               poochna ek jhoothi pakkai thi: bharne wala kuch bhar deta, aur
               wo kahin lagta bhi nahi tha. */}
           {fuelOurs && (
-            <Field label="Fuel norm (L/hr)" hint="Isse zyada kharcha hone par Fuel module khud batata hai.">
+            <Field label={t("machinery.fuel_norm_l_hr")} hint={t("machinery.isse_zyada_kharcha_hone_par_fuel")}>
               <input value={f.fuel_per_hour || ""} inputMode="decimal" onChange={(e) => upd("fuel_per_hour", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 8" style={inp} />
             </Field>
           )}
@@ -548,39 +547,35 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
 
       {tab === "tele" && (
         <>
-          <Notice>
-            Ye machine ka apna record hai (laga hai ya nahi, device/IMEI). Vendor ka API ab{" "}
-            <b>account level</b> par judta hai — Machinery ke <b>GPS tab</b> se; wahi se unit
-            is machine se jodi jaati hai aur data apne aap aata hai.
-          </Notice>
+          <Notice><Rich k="machinery.ye_machine_ka_apna_record_hai" params={{ v: " " }} /></Notice>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Field label="GPS / telematics laga hai?" span={2}>
+            <Field label={t("machinery.gps_telematics_laga_hai")} span={2}>
               <select value={f.telematics_enabled == null ? "" : String(f.telematics_enabled)}
                 onChange={(e) => upd("telematics_enabled", e.target.value === "" ? null : Number(e.target.value))} style={inp}>
-                <option value="">— abhi tay nahi —</option>
-                <option value="1">Haan, laga hai</option>
-                <option value="0">Nahi</option>
+                <option value="">{t("machinery.abhi_tay_nahi")}</option>
+                <option value="1">{t("machinery.haan_laga_hai")}</option>
+                <option value="0">{t("machinery.nahi")}</option>
               </select>
             </Field>
             {Number(f.telematics_enabled) === 1 && (
               <>
-                <Field label="Telematics vendor" span={2}>
+                <Field label={t("machinery.telematics_vendor")} span={2}>
                   <PartyPicker value={f.telematics_vendor_party_id} onChange={(v) => upd("telematics_vendor_party_id", v)}
-                    parties={parties} roles={["vendor", "supplier", "consultant", "material_vendor"]} placeholder="— vendor chuno —" />
+                    parties={parties} roles={["vendor", "supplier", "consultant", "material_vendor"]} placeholder={t("machinery.vendor_chuno")} />
                 </Field>
-                <Field label="Device / IMEI no.">
+                <Field label={t("machinery.device_imei_no")}>
                   <input value={f.telematics_device_id || ""} onChange={(e) => upd("telematics_device_id", e.target.value)} style={inp} />
                 </Field>
-                <Field label="API URL">
+                <Field label={t("machinery.api_url")}>
                   <input value={f.telematics_api_url || ""} onChange={(e) => upd("telematics_api_url", e.target.value)} placeholder="https://..." style={inp} />
                 </Field>
-                <Field label="API key" span={2}
+                <Field label={t("machinery.api_key")} span={2}
                   hint={f.telematics_api_key_set
                     ? `Abhi set hai (${f.telematics_api_key_masked}). Badalni ho tabhi nayi type karein — khaali chhodne par purani bani rahegi.`
-                    : "Ye key kabhi wapas screen par nahi dikhegi — sirf aakhri 4 akshar."}>
+                    : t("machinery.ye_key_kabhi_wapas_screen_par")}>
                   <input type="password" autoComplete="new-password" value={f.telematics_api_key || ""}
                     onChange={(e) => upd("telematics_api_key", e.target.value)}
-                    placeholder={f.telematics_api_key_set ? "badalni ho to nayi key" : ""} style={inp} />
+                    placeholder={f.telematics_api_key_set ? t("machinery.badalni_ho_to_nayi_key") : ""} style={inp} />
                 </Field>
               </>
             )}
@@ -592,17 +587,17 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
         <>
           <Notice>
             {owned
-              ? <>Teen kaagaz jo aksar chuk jaate hain. Sirf <b>valid till</b> zaroori hai — usi par reminder chalta hai.</>
-              : <>Kiraye ki machine par hum vendor ka kaagaz <b>sirf expiry ke liye</b> dekhte hain. Unfit machine aapki site par chale to zimmedari aapki hai.</>}
+              ? <>{t("machinery.teen_kaagaz_jo_aksar_chuk_jaate")} <b>{t("machinery.valid_till")}</b> {t("machinery.zaroori_hai_usi_par_reminder_chalta")}</>
+              : <>{t("machinery.kiraye_ki_machine_par_hum_vendor")} <b>{t("machinery.sirf_expiry_ke_liye")}</b> {t("machinery.dekhte_hain_unfit_machine_aapki_site")}</>}
           </Notice>
           {KEY_DOCS.map((d) => (
             <div key={d.k} style={{ border: `1px solid ${T.b1}`, borderRadius: 10, padding: "11px 13px", marginBottom: 10 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 9 }}>{d.l}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                <Field label="Number">
+                <Field label={t("machinery.number")}>
                   <input value={(docs[d.k] || {}).doc_no || ""} onChange={(e) => updDoc(d.k, "doc_no", e.target.value)} style={inp} />
                 </Field>
-                <Field label="Valid till">
+                <Field label={t("machinery.valid_till_2")}>
                   <input type="date" value={(docs[d.k] || {}).valid_till || ""} onChange={(e) => updDoc(d.k, "valid_till", e.target.value)} style={inp} />
                 </Field>
                 <FileField value={(docs[d.k] || {}).photo_url} onChange={(u) => updDoc(d.k, "photo_url", u)} />
@@ -610,22 +605,22 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
             </div>
           ))}
           <div style={{ border: `1px solid ${T.b1}`, borderRadius: 10, padding: "11px 13px" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 3 }}>Aaj ka meter</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 3 }}>{t("machinery.aaj_ka_meter")}</div>
             <div style={{ fontSize: 10.5, color: T.t4, marginBottom: 9 }}>
-              Iske bina koi bhi "service due" mehaz andaza rahega.
+             {t("machinery.iske_bina_koi_bhi_service_due")}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
               {(f.meter_unit === "hours" || f.meter_unit === "both") && (
-                <Field label="Hour-meter (hrs)">
+                <Field label={t("machinery.hour_meter_hrs")}>
                   <input value={f.opening_hours || ""} inputMode="decimal" onChange={(e) => upd("opening_hours", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
                 </Field>
               )}
               {(f.meter_unit === "km" || f.meter_unit === "both") && (
-                <Field label="Odometer (km)">
+                <Field label={t("machinery.odometer_km")}>
                   <input value={f.opening_km || ""} inputMode="decimal" onChange={(e) => upd("opening_km", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
                 </Field>
               )}
-              <Field label="Kis din ki">
+              <Field label={t("machinery.kis_din_ki")}>
                 <input type="date" value={f.opening_read_at || todayStr()} onChange={(e) => upd("opening_read_at", e.target.value)} style={inp} />
               </Field>
             </div>
@@ -654,7 +649,7 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
 const rupee = (n) => "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
 
 function CostReport({ econ, health }) {
-  if (!econ) return <Empty>Report load ho rahi hai...</Empty>;
+  if (!econ) return <Empty>{t("machinery.report_load_ho_rahi_hai")}</Empty>;
   const rows = econ.machines || [];
   const f = econ.fleet || {};
   const okRows = rows.filter((m) => m.cost_per_unit != null);
@@ -666,31 +661,31 @@ function CostReport({ econ, health }) {
       {econ.note && <Notice>{econ.note}</Notice>}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
-        <StatCard label="Kul kharcha" value={rupee(f.cost_total)} sub={econ.window.from + " se " + econ.window.to} color={T.ind} icon={IcWrench} />
-        <StatCard label="Apni machine se recovery" value={rupee(f.recovery_total)} sub="project se liya gaya" color={T.grn} icon={IcTruck} />
-        <StatCard label="Hisaab ban saka" value={f.with_cost_per_unit + "/" + rows.length} sub={blocked.length ? blocked.length + " par data kam" : "sab par"} color={blocked.length ? T.amb : T.grn} icon={IcGauge} />
-        <StatCard label="Breakdown" value={f.breakdown_count || 0} sub={f.preventive_pct != null ? f.preventive_pct + "% preventive" : (f.service_count ? "ratio abhi nahi" : "koi service nahi")} color={f.breakdown_count ? T.red : T.grn} icon={IcAlert} />
+        <StatCard label={t("machinery.kul_kharcha")} value={rupee(f.cost_total)} sub={econ.window.from + " se " + econ.window.to} color={T.ind} icon={IcWrench} />
+        <StatCard label={t("machinery.apni_machine_se_recovery")} value={rupee(f.recovery_total)} sub={t("machinery.project_se_liya_gaya")} color={T.grn} icon={IcTruck} />
+        <StatCard label={t("machinery.hisaab_ban_saka")} value={f.with_cost_per_unit + "/" + rows.length} sub={blocked.length ? blocked.length + " par data kam" : t("machinery.sab_par")} color={blocked.length ? T.amb : T.grn} icon={IcGauge} />
+        <StatCard label={t("machinery.breakdown")} value={f.breakdown_count || 0} sub={f.preventive_pct != null ? f.preventive_pct + "% preventive" : (f.service_count ? t("machinery.ratio_abhi_nahi") : t("machinery.koi_service_nahi"))} color={f.breakdown_count ? T.red : T.grn} icon={IcAlert} />
       </div>
 
-      <Panel title="Machine ka hisaab" style={{ marginBottom: 12 }}>
+      <Panel title={t("machinery.machine_ka_hisaab")} style={{ marginBottom: 12 }}>
         {okRows.length === 0 && (
           <Empty>
-            Abhi kisi machine ka ₹/hr nahi nikal saka.<br />
-            <span style={{ fontSize: 11.5 }}>Neeche har machine par wajah likhi hai — zyadatar me meter unit set karna aur do reading darj hona kaafi hota hai.</span>
+           {t("machinery.abhi_kisi_machine_ka_hr_nahi")}<br />
+            <span style={{ fontSize: 11.5 }}>{t("machinery.neeche_har_machine_par_wajah_likhi")}</span>
           </Empty>
         )}
         {okRows.length > 0 && (
           <>
             <Row head cols="1.5fr 78px 1fr 1.1fr 1fr 110px">
-              <span>Machine</span><span>Kiski</span><span>Chali</span><span>Kharcha</span><span>Per unit</span><span>Rate cover?</span>
+              <span>{t("fuel.machine")}</span><span>{t("machinery.kiski")}</span><span>{t("machinery.chali")}</span><span>{t("machinery.kharcha")}</span><span>{t("machinery.per_unit")}</span><span>{t("machinery.rate_cover")}</span>
             </Row>
             {okRows.map((m) => (
               <Row key={m.equipment_id} cols="1.5fr 78px 1fr 1.1fr 1fr 110px">
                 <div>
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{m.name}</div>
-                  <div style={{ fontSize: 10, color: T.t4 }}>{m.registration_no || "reg. no. nahi"}</div>
+                  <div style={{ fontSize: 10, color: T.t4 }}>{m.registration_no || t("machinery.reg_no_nahi")}</div>
                 </div>
-                <span><Pill label={m.owned ? "Apni" : "Kiraye"} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
+                <span><Pill label={m.owned ? t("machinery.apni") : t("machinery.kiraye")} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
                 {/* Numerator aur denominator dono dikhte hain — akela "₹420/hr"
                     par koi bharosa nahi kar sakta, na use jaanch sakta hai. */}
                 <div>
@@ -716,15 +711,13 @@ function CostReport({ econ, health }) {
                 </div>
                 <span>
                   {m.covers_cost === null ? <span style={{ fontSize: 11, color: T.t4 }}>—</span>
-                    : m.covers_cost ? <Pill label="Haan" c={T.grn} bg={T.grnL} />
-                    : <Pill label="Nahi — rate kam" c={T.red} bg={T.redL} />}
+                    : m.covers_cost ? <Pill label={t("machinery.haan")} c={T.grn} bg={T.grnL} />
+                    : <Pill label={t("machinery.nahi_rate_kam")} c={T.red} bg={T.redL} />}
                 </span>
               </Row>
             ))}
             <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4, lineHeight: 1.55 }}>
-              Isme <b>depreciation aur operator ki salary shaamil nahi</b> hai. Kiraye ki machine par
-              service (aur aksar diesel) vendor ka hota hai, isliye uska kharcha kam dikhega — dono
-              taraf ka hisaab adhoora hai, seedhi tulna mat karein.
+             {t("machinery.isme")} <b>{t("machinery.depreciation_aur_operator_ki_salary_shaamil")}</b> {t("machinery.hai_kiraye_ki_machine_par_service")}
             </div>
           </>
         )}
@@ -735,7 +728,7 @@ function CostReport({ econ, health }) {
           {blocked.map((m) => (
             <Row key={m.equipment_id} cols="1.5fr 78px 1fr 1.6fr">
               <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{m.name}</span>
-              <span><Pill label={m.owned ? "Apni" : "Kiraye"} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
+              <span><Pill label={m.owned ? t("machinery.apni") : t("machinery.kiraye")} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
               <span style={{ fontSize: 11.5, color: T.t3 }}>kharcha {rupee(m.cost.total)}</span>
               <span style={{ fontSize: 11, color: T.amb }}>{m.run.reason}</span>
             </Row>
@@ -744,15 +737,15 @@ function CostReport({ econ, health }) {
       )}
 
       {ovr.owned && (ovr.owned.machines > 0 || ovr.rented.machines > 0) && (
-        <Panel title="Apni vs kiraye ki" style={{ marginBottom: 12 }}>
-          <Row head cols="1fr 1fr 1fr"><span>Kiski</span><span>Machines</span><span>Aausat per unit</span></Row>
+        <Panel title={t("machinery.apni_vs_kiraye_ki")} style={{ marginBottom: 12 }}>
+          <Row head cols="1fr 1fr 1fr"><span>{t("machinery.kiski")}</span><span>{t("machinery.machines")}</span><span>{t("machinery.aausat_per_unit")}</span></Row>
           <Row cols="1fr 1fr 1fr">
-            <span style={{ fontSize: 12.5, color: T.t1 }}>Apni</span>
+            <span style={{ fontSize: 12.5, color: T.t1 }}>{t("machinery.apni")}</span>
             <span style={{ fontSize: 12 }}>{ovr.owned.machines}</span>
             <span style={{ fontSize: 12.5, fontWeight: 700 }}>{ovr.owned.avg_cost_per_unit != null ? rupee(ovr.owned.avg_cost_per_unit) : "—"}</span>
           </Row>
           <Row cols="1fr 1fr 1fr">
-            <span style={{ fontSize: 12.5, color: T.t1 }}>Kiraye ki</span>
+            <span style={{ fontSize: 12.5, color: T.t1 }}>{t("machinery.kiraye_ki")}</span>
             <span style={{ fontSize: 12 }}>{ovr.rented.machines}</span>
             <span style={{ fontSize: 12.5, fontWeight: 700 }}>{ovr.rented.avg_cost_per_unit != null ? rupee(ovr.rented.avg_cost_per_unit) : "—"}</span>
           </Row>
@@ -761,15 +754,15 @@ function CostReport({ econ, health }) {
       )}
 
       {health && (health.machines || []).length > 0 && (
-        <Panel title="Preventive vs breakdown" style={{ marginBottom: 12 }}>
-          <Row head cols="1.6fr 1.2fr 1fr 1fr"><span>Machine</span><span>Service</span><span>Breakdown</span><span>Downtime</span></Row>
+        <Panel title={t("machinery.preventive_vs_breakdown")} style={{ marginBottom: 12 }}>
+          <Row head cols="1.6fr 1.2fr 1fr 1fr"><span>{t("fuel.machine")}</span><span>{t("machinery.service")}</span><span>{t("machinery.breakdown")}</span><span>{t("machinery.downtime")}</span></Row>
           {health.machines.map((m) => (
             <Row key={m.equipment_id} cols="1.6fr 1.2fr 1fr 1fr">
               <span style={{ fontSize: 12.5, color: T.t1 }}>{m.name}</span>
               <span style={{ fontSize: 12 }}>{m.service_count}{m.preventive_pct != null ? " (" + m.preventive_pct + "% preventive)" : ""}</span>
               <span style={{ fontSize: 12, color: m.breakdowns ? T.red : T.t3 }}>{m.breakdowns}</span>
               <span style={{ fontSize: 12, color: T.t3 }}>
-                {m.downtime_hours != null ? fmtN(m.downtime_hours) + " hrs" : <span style={{ color: T.t4 }}>darj nahi</span>}
+                {m.downtime_hours != null ? fmtN(m.downtime_hours) + " hrs" : <span style={{ color: T.t4 }}>{t("machinery.darj_nahi")}</span>}
               </span>
             </Row>
           ))}
@@ -791,47 +784,47 @@ function CostReport({ econ, health }) {
 // pehle har row ka faisla dikh jaata hai.
 // ══════════════════════════════════════════════════════════════════
 const IMPORT_COLS = [
-  { key: "name", label: "Machine ka naam", required: true, aliases: ["machine", "equipment name", "equipment", "naam", "machine name"] },
-  { key: "registration_no", label: "Gadi no.", aliases: ["registration", "reg no", "reg", "vehicle no", "number plate", "gadi"] },
-  { key: "code", label: "Code", aliases: ["equipment code", "asset code"] },
-  { key: "machine_type", label: "Machine type", aliases: ["type", "category", "prakar", "equipment type", "machine category"] },
-  { key: "ownership", label: "Ownership", aliases: ["owned rented", "own rented", "own", "owned", "rented", "hire type", "malikana", "apni kiraye"] },
-  { key: "measurement_mode", label: "Rate type", aliases: ["mode", "measurement", "basis", "rate basis"] },
-  { key: "default_rate", label: "Rate", aliases: ["rate", "default rate", "kiraya", "hire rate", "rent", "amount", "rate per unit"] },
-  { key: "meter_unit", label: "Meter unit", aliases: ["meter", "meter type"] },
-  { key: "opening_hours", label: "Opening hours", aliases: ["hour meter", "hours", "hmr"] },
-  { key: "opening_km", label: "Opening km", aliases: ["odometer", "km", "kms"] },
+  { key: "name", get label() { return t("machinery.machine_ka_naam"); }, required: true, aliases: ["machine", "equipment name", "equipment", "naam", "machine name"] },
+  { key: "registration_no", get label() { return t("machinery.gadi_no"); }, aliases: ["registration", "reg no", "reg", "vehicle no", "number plate", "gadi"] },
+  { key: "code", get label() { return t("machinery.code"); }, aliases: ["equipment code", "asset code"] },
+  { key: "machine_type", get label() { return t("machinery.machine_type"); }, aliases: ["type", "category", "prakar", "equipment type", "machine category"] },
+  { key: "ownership", get label() { return t("machinery.ownership"); }, aliases: ["owned rented", "own rented", "own", "owned", "rented", "hire type", "malikana", "apni kiraye"] },
+  { key: "measurement_mode", get label() { return t("machinery.rate_type"); }, aliases: ["mode", "measurement", "basis", "rate basis"] },
+  { key: "default_rate", get label() { return t("common.rate"); }, aliases: ["rate", "default rate", "kiraya", "hire rate", "rent", "amount", "rate per unit"] },
+  { key: "meter_unit", get label() { return t("machinery.meter_unit"); }, aliases: ["meter", "meter type"] },
+  { key: "opening_hours", get label() { return t("machinery.opening_hours"); }, aliases: ["hour meter", "hours", "hmr"] },
+  { key: "opening_km", get label() { return t("machinery.opening_km"); }, aliases: ["odometer", "km", "kms"] },
   // Kiraye ki machine ka malik. Form me ye hamesha se tha, import me chhoot
   // gaya tha — matlab 20 rented machine import karke phir ek-ek kholkar vendor
   // bharna padta tha, aur uske bina kiraye ka paisa kisi ke naam nahi baithta.
-  { key: "default_vendor", label: "Kiraye ka vendor (malik)", aliases: ["vendor", "owner", "malik", "hire vendor", "kiraya vendor", "rented from", "supplier", "party"] },
+  { key: "default_vendor", get label() { return t("machinery.kiraye_ka_vendor_malik"); }, aliases: ["vendor", "owner", "malik", "hire vendor", "kiraya vendor", "rented from", "supplier", "party"] },
   // "Diesel kiska" — apni machine par hamesha company, kiraye wali par asli
   // sawaal. Ye tay karta hai ki machine Fuel module me aayegi bhi ya nahi.
-  { key: "fuel_responsibility", label: "Diesel kiska (hamara / kiraye me)", aliases: ["diesel", "fuel", "diesel kiska", "fuel responsibility", "fuel kiska", "diesel kaun dega"] },
-  { key: "fuel_per_hour", label: "Fuel norm (L/hr)", aliases: ["fuel norm", "l/hr", "lph", "mileage"] },
-  { key: "make", label: "Make", aliases: ["brand", "company"] },
-  { key: "model", label: "Model", aliases: [] },
-  { key: "chassis_no", label: "Chassis no.", aliases: ["chassis"] },
-  { key: "engine_no", label: "Engine no.", aliases: ["engine"] },
-  { key: "operator_name", label: "Operator", aliases: ["driver", "chalak"] },
+  { key: "fuel_responsibility", get label() { return t("machinery.diesel_kiska_hamara_kiraye_me"); }, aliases: ["diesel", "fuel", "diesel kiska", "fuel responsibility", "fuel kiska", "diesel kaun dega"] },
+  { key: "fuel_per_hour", get label() { return t("machinery.fuel_norm_l_hr"); }, aliases: ["fuel norm", "l/hr", "lph", "mileage"] },
+  { key: "make", get label() { return t("machinery.make"); }, aliases: ["brand", "company"] },
+  { key: "model", get label() { return t("machinery.model"); }, aliases: [] },
+  { key: "chassis_no", get label() { return t("machinery.chassis_no"); }, aliases: ["chassis"] },
+  { key: "engine_no", get label() { return t("machinery.engine_no"); }, aliases: ["engine"] },
+  { key: "operator_name", get label() { return t("machinery.operator"); }, aliases: ["driver", "chalak"] },
   // Kaagaz ki expiry import me hona hi chahiye. 40 machine import karke phir
   // 120 document haath se bharna — import ka matlab hi khatam ho jaata, aur
   // expiry hi is module ki jaan hai.
-  { key: "insurance_no", label: "Insurance no.", aliases: ["policy no", "insurance policy"] },
-  { key: "insurance_till", label: "Insurance valid till", aliases: ["insurance expiry", "insurance", "policy expiry", "bima"] },
-  { key: "fitness_no", label: "Fitness no.", aliases: ["fitness certificate no"] },
-  { key: "fitness_till", label: "Fitness valid till", aliases: ["fitness expiry", "fitness", "fc expiry", "fc"] },
-  { key: "puc_no", label: "PUC no.", aliases: ["puc certificate no"] },
-  { key: "puc_till", label: "PUC valid till", aliases: ["puc expiry", "puc", "pollution", "pollution expiry"] },
+  { key: "insurance_no", get label() { return t("machinery.insurance_no"); }, aliases: ["policy no", "insurance policy"] },
+  { key: "insurance_till", get label() { return t("machinery.insurance_valid_till"); }, aliases: ["insurance expiry", "insurance", "policy expiry", "bima"] },
+  { key: "fitness_no", get label() { return t("machinery.fitness_no"); }, aliases: ["fitness certificate no"] },
+  { key: "fitness_till", get label() { return t("machinery.fitness_valid_till"); }, aliases: ["fitness expiry", "fitness", "fc expiry", "fc"] },
+  { key: "puc_no", get label() { return t("machinery.puc_no"); }, aliases: ["puc certificate no"] },
+  { key: "puc_till", get label() { return t("machinery.puc_valid_till"); }, aliases: ["puc expiry", "puc", "pollution", "pollution expiry"] },
   // Telematics. Device/IMEI har machine ka alag hota hai, isliye bulk me isi
   // ka sabse zyada matlab hai. API key yahan JAAN-BUJH KAR nahi hai — wo ek
   // secret hai, aur Excel file WhatsApp/email par ghumti hai. Key machine
   // kholkar bhari jaati hai, jahan wo masked rehti hai aur kabhi wapas nahi
   // dikhti.
-  { key: "telematics_enabled", label: "GPS laga hai (haan/nahi)", aliases: ["gps", "telematics", "tracker", "gps hai"] },
-  { key: "telematics_device_id", label: "Device / IMEI no.", aliases: ["imei", "device id", "device", "gps device", "tracker id"] },
-  { key: "telematics_vendor", label: "Telematics vendor", aliases: ["gps vendor", "tracker vendor", "gps company"] },
-  { key: "telematics_api_url", label: "Telematics API URL", aliases: ["gps api", "api url"] },
+  { key: "telematics_enabled", get label() { return t("machinery.gps_laga_hai_haan_nahi"); }, aliases: ["gps", "telematics", "tracker", "gps hai"] },
+  { key: "telematics_device_id", get label() { return t("machinery.device_imei_no"); }, aliases: ["imei", "device id", "device", "gps device", "tracker id"] },
+  { key: "telematics_vendor", get label() { return t("machinery.telematics_vendor"); }, aliases: ["gps vendor", "tracker vendor", "gps company"] },
+  { key: "telematics_api_url", get label() { return t("machinery.telematics_api_url"); }, aliases: ["gps api", "api url"] },
 ];
 
 // "haan/nahi" ke wo saare roop jo log sach me likhte hain.
@@ -839,8 +832,8 @@ const YESNO = { haan: 1, ha: 1, hai: 1, yes: 1, y: 1, true: 1, "1": 1, laga: 1, 
                 nahi: 0, nhi: 0, no: 0, n: 0, false: 0, "0": 0, off: 0 };
 
 const DOC_IMPORT = [
-  { type: "insurance", no: "insurance_no", till: "insurance_till", label: "Insurance" },
-  { type: "fitness", no: "fitness_no", till: "fitness_till", label: "Fitness" },
+  { type: "insurance", no: "insurance_no", till: "insurance_till", get label() { return t("machinery.insurance"); } },
+  { type: "fitness", no: "fitness_no", till: "fitness_till", get label() { return t("machinery.fitness"); } },
   { type: "puc", no: "puc_no", till: "puc_till", label: "PUC" },
 ];
 
@@ -941,9 +934,9 @@ function ImportWizard({ open, onClose, onDone }) {
       const buf = await f.arrayBuffer();
       // cellFormula:false → formula load hi nahi hota, sirf cached value.
       const wb = XLSX.read(new Uint8Array(buf), { type: "array", cellFormula: false, cellText: true, cellDates: false });
-      if (!wb.SheetNames.length) { setError("File me koi sheet nahi mili"); return; }
+      if (!wb.SheetNames.length) { setError(t("machinery.file_me_koi_sheet_nahi_mili")); return; }
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false, defval: "" });
-      if (!rows.length) { setError("Sheet khaali hai"); return; }
+      if (!rows.length) { setError(t("machinery.sheet_khaali_hai")); return; }
       // Header wo row hai jisme sabse zyada bhare hue khaane hain — file ke
       // upar aksar title/logo ki adhoori rows hoti hain.
       let best = 0, bestN = -1;
@@ -954,7 +947,7 @@ function ImportWizard({ open, onClose, onDone }) {
       setFileName(f.name); setAoa(rows); setHeaderRow(best);
       setMap(autoMap(rows[best] || []));
       setStep(2);
-    } catch (_) { setError("File padhne me dikkat — sahi .xlsx / .xls / .csv chuno"); }
+    } catch (_) { setError(t("machinery.file_padhne_me_dikkat_sahi_xlsx")); }
   };
 
   const header = aoa[headerRow] || [];
@@ -1079,32 +1072,31 @@ function ImportWizard({ open, onClose, onDone }) {
   const missingReq = IMPORT_COLS.filter((c) => c.required && map[c.key] == null);
 
   return (
-    <Modal open={open} onClose={onClose} width={860} title="Excel se machines import"
-      sub={fileName || "Naam ke alawa sab optional — baad me edit ho sakta hai"}
+    <Modal open={open} onClose={onClose} width={860} title={t("machinery.excel_se_machines_import")}
+      sub={fileName || t("machinery.naam_ke_alawa_sab_optional_baad")}
       footer={
-        step === 1 ? <Btn ghost onClick={onClose}>Cancel</Btn>
-        : step === 2 ? <><Btn ghost onClick={() => setStep(1)}>Peeche</Btn>
-            <Btn onClick={runPreview} disabled={busy || !!missingReq.length || !parsed.length}>{busy ? "Dekh rahe hain..." : `Jaanch karo (${parsed.length})`}</Btn></>
-        : step === 3 ? <><Btn ghost onClick={() => setStep(2)}>Peeche</Btn>
-            <Btn onClick={commit} disabled={busy || !preview || !preview.summary.ok}>{busy ? "Import ho raha hai..." : `${preview ? preview.summary.ok : 0} machine import karo`}</Btn></>
-        : <Btn onClick={onClose}>Theek hai</Btn>
+        step === 1 ? <Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
+        : step === 2 ? <><Btn ghost onClick={() => setStep(1)}>{t("common.peeche")}</Btn>
+            <Btn onClick={runPreview} disabled={busy || !!missingReq.length || !parsed.length}>{busy ? t("machinery.dekh_rahe_hain") : `Jaanch karo (${parsed.length})`}</Btn></>
+        : step === 3 ? <><Btn ghost onClick={() => setStep(2)}>{t("common.peeche")}</Btn>
+            <Btn onClick={commit} disabled={busy || !preview || !preview.summary.ok}>{busy ? t("machinery.import_ho_raha_hai") : `${preview ? preview.summary.ok : 0} machine import karo`}</Btn></>
+        : <Btn onClick={onClose}>{t("machinery.theek_hai")}</Btn>
       }>
 
       {step === 1 && (
         <>
           <Notice>
-            Jis machine ka <b>naam ya gadi no.</b> pehle se register me hai, wo skip ho jayegi —
-            purana record import se kabhi overwrite nahi hota.
+           {t("machinery.jis_machine_ka")} <b>{t("machinery.naam_ya_gadi_no")}</b> {t("machinery.pehle_se_register_me_hai_wo")}
           </Notice>
           <label style={{ display: "block", border: `2px dashed ${T.b2}`, borderRadius: 12, padding: "34px 20px", textAlign: "center", cursor: "pointer" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: T.t2 }}>Excel / CSV file chuno</div>
-            <div style={{ fontSize: 11.5, color: T.t4, marginTop: 5 }}>.xlsx · .xls · .csv</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.t2 }}>{t("machinery.excel_csv_file_chuno")}</div>
+            <div style={{ fontSize: 11.5, color: T.t4, marginTop: 5 }}>{t("machinery.xlsx_xls_csv")}</div>
             <input type="file" accept=".xlsx,.xls,.csv" onChange={onFile} style={{ display: "none" }} />
           </label>
           <div style={{ textAlign: "center", marginTop: 12 }}>
             <button type="button" onClick={template}
               style={{ background: "none", border: "none", color: T.ind, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-              Template download karo
+             {t("machinery.template_download_karo")}
             </button>
           </div>
         </>
@@ -1113,25 +1105,22 @@ function ImportWizard({ open, onClose, onDone }) {
       {step === 2 && (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-            <span style={{ fontSize: 11.5, color: T.t3 }}>Header row</span>
+            <span style={{ fontSize: 11.5, color: T.t3 }}>{t("common.header_row")}</span>
             <select value={headerRow} onChange={(e) => { const h = Number(e.target.value); setHeaderRow(h); setMap(autoMap(aoa[h] || [])); }}
               style={{ ...inp, width: 150 }}>
-              {aoa.slice(0, 10).map((r, i) => <option key={i} value={i}>Row {i + 1}</option>)}
+              {aoa.slice(0, 10).map((r, i) => <option key={i} value={i}>{t("machinery.row_i", { i: i + 1 })}</option>)}
             </select>
-            <span style={{ fontSize: 11.5, color: T.t4 }}>{parsed.length} machine mili</span>
+            <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.parsed_machine_mili", { parsed: parsed.length })}</span>
           </div>
           {!!missingReq.length && (
-            <div style={{ marginBottom: 12, padding: "9px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>
-              {missingReq.map((c) => c.label).join(", ")} ka column chuno — uske bina import nahi hoga
-            </div>
+            <div style={{ marginBottom: 12, padding: "9px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>{t("machinery.missingreq_ka_column_chuno_uske_bina", { missingReq: missingReq.map((c) => c.label).join(", ") })}</div>
           )}
           {/* Ownership bahut kuch tay karti hai — kaagaz ka scope, diesel kiska,
               aur completeness ka hisaab. Column na mile to sab chup-chaap
               "rented" ban jaate; ye keh dena zaroori hai. */}
           {map.ownership == null && (
             <div style={{ marginBottom: 12, padding: "9px 12px", background: T.ambL, color: T.amb, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>
-              Ownership ka column nahi chuna — saari machine <b>Rented</b> maani jayengi. Apni machines
-              baad me ek-ek kar ke badalni padengi.
+             {t("machinery.ownership_ka_column_nahi_chuna_saari")} <b>{t("machinery.rented")}</b> {t("machinery.maani_jayengi_apni_machines_baad_me")}
             </div>
           )}
           {map.measurement_mode != null && (() => {
@@ -1142,9 +1131,7 @@ function ImportWizard({ open, onClose, onDone }) {
               return raw && !MODE_WORDS[norm(raw).split(" ")[0]] ? raw : null;
             }).filter(Boolean))];
             return bad.length ? (
-              <div style={{ marginBottom: 12, padding: "9px 12px", background: T.ambL, color: T.amb, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>
-                Rate type me ye shabd samajh nahi aaye: {bad.slice(0, 5).join(", ")} — wo rows "Per hour" maani jayengi.
-              </div>
+              <div style={{ marginBottom: 12, padding: "9px 12px", background: T.ambL, color: T.amb, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>{t("machinery.rate_type_me_ye_shabd_samajh", { bad: bad.slice(0, 5).join(", ") })}</div>
             ) : null;
           })()}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -1153,7 +1140,7 @@ function ImportWizard({ open, onClose, onDone }) {
                 <select value={map[c.key] == null ? "" : map[c.key]}
                   onChange={(e) => setMap((p) => ({ ...p, [c.key]: e.target.value === "" ? null : Number(e.target.value) }))}
                   style={inp}>
-                  <option value="">— nahi hai —</option>
+                  <option value="">{t("machinery.nahi_hai")}</option>
                   {header.map((h, i) => <option key={i} value={i}>{String(h).trim() || `Column ${i + 1}`}</option>)}
                 </select>
               </Field>
@@ -1166,10 +1153,10 @@ function ImportWizard({ open, onClose, onDone }) {
         <>
           <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
             {[
-              { l: "Banengi", v: preview.summary.ok, c: T.grn },
-              { l: "Skip (pehle se hai)", v: preview.summary.skip, c: T.amb },
-              { l: "Galti", v: preview.summary.error, c: T.red },
-              { l: "Kaagaz banenge", v: preview.summary.documents || 0, c: T.ind },
+              { l: t("machinery.banengi"), v: preview.summary.ok, c: T.grn },
+              { l: t("machinery.skip_pehle_se_hai"), v: preview.summary.skip, c: T.amb },
+              { l: t("machinery.galti"), v: preview.summary.error, c: T.red },
+              { l: t("machinery.kaagaz_banenge"), v: preview.summary.documents || 0, c: T.ind },
             ].map((x) => (
               <div key={x.l} style={{ flex: 1, border: `1.5px solid ${T.b1}`, borderTop: `3px solid ${x.c}`, borderRadius: 10, padding: "10px 13px" }}>
                 <div style={{ fontSize: 19, fontWeight: 800, color: x.c }}>{x.v}</div>
@@ -1184,18 +1171,18 @@ function ImportWizard({ open, onClose, onDone }) {
             if (!bad.length) return null;
             return (
               <div style={{ marginBottom: 12, padding: "9px 12px", background: T.ambL, color: T.amb, fontSize: 11.5, borderRadius: 7, fontWeight: 600, lineHeight: 1.5 }}>
-                In rows ki date samajh nahi aayi — un machines ke kaagaz nahi banenge (machine ban jayegi):
+                {t("machinery.rows_date_samajh_nahi_aayi")}
                 {bad.slice(0, 4).map((p) => (
                   <div key={p._row} style={{ fontWeight: 500 }}>row {p._row} · {p.name} — {p._bad_dates.join(", ")}</div>
                 ))}
-                {bad.length > 4 && <div style={{ fontWeight: 500 }}>…aur {bad.length - 4} row</div>}
-                <div style={{ fontWeight: 500, marginTop: 4 }}>Date ka format <b>dd-mm-yyyy</b> rakhein (jaise 30-06-2027).</div>
+                {bad.length > 4 && <div style={{ fontWeight: 500 }}>{t("machinery.aur_bad_row", { bad: bad.length - 4 })}</div>}
+                <div style={{ fontWeight: 500, marginTop: 4 }}>{t("machinery.date_ka_format")} <b>{t("machinery.dd_mm_yyyy")}</b> {t("machinery.rakhein_jaise_30_06_2027")}</div>
               </div>
             );
           })()}
           <div style={{ maxHeight: 320, overflowY: "auto", border: `1px solid ${T.b1}`, borderRadius: 10 }}>
             <Row head cols="46px 1.4fr 0.9fr 78px 1.1fr 1.2fr">
-              <span>Row</span><span>Machine</span><span>Gadi no.</span><span>Faisla</span><span>Kaagaz</span><span>Wajah</span>
+              <span>{t("machinery.row")}</span><span>{t("fuel.machine")}</span><span>{t("machinery.gadi_no")}</span><span>{t("machinery.faisla")}</span><span>{t("machinery.kaagaz")}</span><span>{t("machinery.wajah")}</span>
             </Row>
             {preview.verdicts.map((v) => {
               const src = parsed.find((p) => p._row === v.row);
@@ -1206,9 +1193,9 @@ function ImportWizard({ open, onClose, onDone }) {
                   <span style={{ fontSize: 12, color: T.t1 }}>{v.name || "—"}</span>
                   <span style={{ fontSize: 11.5, color: T.t3 }}>{v.registration_no || "—"}</span>
                   <span>
-                    {v.status === "ok" ? <Pill label="Banegi" c={T.grn} bg={T.grnL} />
-                      : v.status === "skip" ? <Pill label="Skip" c={T.amb} bg={T.ambL} />
-                      : <Pill label="Galti" c={T.red} bg={T.redL} />}
+                    {v.status === "ok" ? <Pill label={t("machinery.banegi")} c={T.grn} bg={T.grnL} />
+                      : v.status === "skip" ? <Pill label={t("crm.skip")} c={T.amb} bg={T.ambL} />
+                      : <Pill label={t("machinery.galti")} c={T.red} bg={T.redL} />}
                   </span>
                   {/* Parse ki hui date dikhana zaroori hai — 06-07 ulta padha
                       gaya ho to yahin pakda jayega, import ke baad nahi. */}
@@ -1228,12 +1215,10 @@ function ImportWizard({ open, onClose, onDone }) {
       {step === 4 && result && (
         <>
           <div style={{ padding: "13px 15px", background: T.grnL, border: `1px solid ${T.grn}33`, borderRadius: 10, marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: T.grn }}>{result.created.length} machine ban gayi</div>
-            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 3 }}>
-              {result.summary.skip} skip (pehle se thi) · {result.summary.error} galti wali chhod di gayi.
-              {result.documents_created > 0
-                ? <> {result.documents_created} kaagaz bhi darj ho gaye — unki expiry par bell apne aap jayegi.</>
-                : <> Kaagaz kisi row me nahi mile — machine kholkar bharne honge, warna expiry ki bell nahi bajegi.</>}
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.grn }}>{t("machinery.result_machine_ban_gayi", { result: result.created.length })}</div>
+            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 3 }}>{t("machinery.skip_skip_pehle_se_thi_error", { skip: result.summary.skip, error: result.summary.error })}{result.documents_created > 0
+                ? <>{t("machinery.documents_created_kaagaz_bhi_darj_ho", { documents_created: result.documents_created })}</>
+                : <> {t("machinery.kaagaz_kisi_row_me_nahi_mile")}</>}
             </div>
           </div>
           <div style={{ maxHeight: 260, overflowY: "auto", border: `1px solid ${T.b1}`, borderRadius: 10 }}>
@@ -1349,7 +1334,7 @@ function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templ
         template_id: it.template_id ? Number(it.template_id) : null,
       }));
     if (f.payment_mode === "credit" && total > 0 && !f.vendor_party_id) {
-      setError("Udhaar par party chunna zaroori hai — payable kisi ke naam hoga"); return;
+      setError(t("machinery.udhaar_par_party_chunna_zaroori_hai")); return;
     }
     const body = {
       equipment_id: machine.id,
@@ -1376,36 +1361,36 @@ function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templ
 
   return (
     <Modal open={open} onClose={onClose} width={760}
-      title={closing ? "Service band karein" : "Service darj karein"}
+      title={closing ? t("machinery.service_band_karein") : t("machinery.service_darj_karein")}
       sub={machine ? machine.name + (machine.registration_no ? ` · ${machine.registration_no}` : "") : ""}
-      footer={<><Btn ghost onClick={onClose}>Cancel</Btn>
-        <Btn onClick={save} disabled={busy}>{busy ? "Saving..." : closing ? "Band karo" : f.keep_open ? "Kholo (machine Under Repair)" : "Darj karo"}</Btn></>}>
+      footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={busy}>{busy ? t("common.saving") : closing ? t("machinery.band_karo") : f.keep_open ? t("machinery.kholo_machine_under_repair") : t("machinery.darj_karo")}</Btn></>}>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-        <Field label="Date">
+        <Field label={t("common.date")}>
           <input type="date" value={f.service_date || ""} onChange={(e) => upd("service_date", e.target.value)} style={inp} />
         </Field>
-        <Field label="Type">
+        <Field label={t("common.type")}>
           <select value={f.service_type || "preventive"} onChange={(e) => upd("service_type", e.target.value)} style={inp}>
-            <option value="preventive">Preventive (time par)</option>
-            <option value="breakdown">Breakdown (kharab hui)</option>
-            <option value="overhaul">Overhaul</option>
+            <option value="preventive">{t("machinery.preventive_time_par")}</option>
+            <option value="breakdown">{t("machinery.breakdown_kharab_hui")}</option>
+            <option value="overhaul">{t("machinery.overhaul")}</option>
           </select>
         </Field>
-        <Field label="Payment">
+        <Field label={t("common.payment")}>
           <select value={f.payment_mode || "cash"} onChange={(e) => upd("payment_mode", e.target.value)} style={inp}>
-            <option value="cash">Cash (site se diya)</option>
-            <option value="credit">Udhaar (baad me pay)</option>
+            <option value="cash">{t("machinery.cash_site_se_diya")}</option>
+            <option value="credit">{t("machinery.udhaar_baad_me_pay")}</option>
           </select>
         </Field>
-        <Field label={f.payment_mode === "credit" ? "Vendor (party) *" : "Vendor (party)"} span={2}>
+        <Field label={f.payment_mode === "credit" ? t("machinery.vendor_party") : t("machinery.vendor_party_2")} span={2}>
           <PartyPicker value={f.vendor_party_id} onChange={(v) => upd("vendor_party_id", v)}
-            parties={parties || []} roles={SERVICE_VENDOR_ROLES} placeholder="— workshop / mechanic chuno —" />
+            parties={parties || []} roles={SERVICE_VENDOR_ROLES} placeholder={t("machinery.workshop_mechanic_chuno")} />
         </Field>
         {!f.vendor_party_id && (
-          <Field label="Ya naam likho (sirf cash)" hint="Highway ka mechanic — ek baar ka kaam.">
+          <Field label={t("machinery.ya_naam_likho_sirf_cash")} hint={t("machinery.highway_ka_mechanic_ek_baar_ka")}>
             <input value={f.vendor_name || ""} onChange={(e) => upd("vendor_name", e.target.value)} style={inp}
-              disabled={f.payment_mode === "credit"} placeholder={f.payment_mode === "credit" ? "udhaar par party zaroori" : ""} />
+              disabled={f.payment_mode === "credit"} placeholder={f.payment_mode === "credit" ? t("machinery.udhaar_par_party_zaroori") : ""} />
           </Field>
         )}
       </div>
@@ -1414,27 +1399,26 @@ function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templ
         <label style={{ display: "flex", gap: 8, alignItems: "flex-start", margin: "12px 0 2px", cursor: "pointer" }}>
           <input type="checkbox" checked={!!f.keep_open} onChange={(e) => upd("keep_open", e.target.checked)} style={{ marginTop: 2 }} />
           <span style={{ fontSize: 11.5, color: T.t2 }}>
-            <b>Machine abhi workshop me hai</b> — service khuli rahegi, machine "Under Repair" ho jayegi.
-            Bill aane par isi row par click karke band karna.
+            <b>{t("machinery.machine_abhi_workshop_me_hai")}</b> {t("machinery.service_khuli_rahegi_machine_under_repair")}
           </span>
         </label>
       )}
 
       {(closing || !f.keep_open) && (
         <>
-          <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, margin: "14px 0 8px" }}>Kya-kya hua / badla</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, margin: "14px 0 8px" }}>{t("machinery.kya_kya_hua_badla")}</div>
           {items.map((it, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1.6fr 110px 90px 90px 130px 26px", gap: 8, marginBottom: 7, alignItems: "center" }}>
-              <input value={it.item} onChange={(e) => updItem(i, "item", e.target.value)} placeholder="e.g. Engine oil 15W40" style={inp} />
+              <input value={it.item} onChange={(e) => updItem(i, "item", e.target.value)} placeholder={t("machinery.e_g_engine_oil_15w40")} style={inp} />
               <select value={it.part_category} onChange={(e) => updItem(i, "part_category", e.target.value)} style={inp}>
                 {["oil", "filter", "tyre", "hydraulic", "electrical", "engine", "other"].map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
               <input value={it.cost} inputMode="decimal" onChange={(e) => updItem(i, "cost", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="₹" style={inp} />
-              <input value={it.life_hours} inputMode="decimal" onChange={(e) => updItem(i, "life_hours", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="life hrs" style={inp}
-                title="Is part ki apni life (ghante) — bharoge to iska agla due isi se banega, template se nahi" />
+              <input value={it.life_hours} inputMode="decimal" onChange={(e) => updItem(i, "life_hours", e.target.value.replace(/[^0-9.]/g, ""))} placeholder={t("machinery.life_hrs")} style={inp}
+                title={t("machinery.is_part_ki_apni_life_ghante")} />
               <select value={it.template_id || ""} onChange={(e) => updItem(i, "template_id", e.target.value)} style={inp}
-                title="Kaunsa service task poora hua — uska due clock isi se aage badhta hai">
-                <option value="">— task —</option>
+                title={t("machinery.kaunsa_service_task_poora_hua_uska")}>
+                <option value="">{t("machinery.task")}</option>
                 {(templates || []).map((t) => <option key={t.id} value={t.id}>{t.task}</option>)}
               </select>
               <button type="button" onClick={() => setItems((p) => p.filter((_, n) => n !== i))}
@@ -1443,17 +1427,17 @@ function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templ
           ))}
           <button type="button" onClick={() => setItems((p) => [...p, { item: "", part_category: "other", cost: "", life_hours: "", template_id: "" }])}
             style={{ background: "none", border: "none", color: T.ind, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", padding: "2px 0 10px" }}>
-            + line
+           {t("machinery.line")}
           </button>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            <Field label="Labour / mechanic (₹)">
+            <Field label={t("machinery.labour_mechanic")}>
               <input value={f.labour_cost || ""} inputMode="decimal" onChange={(e) => upd("labour_cost", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
             </Field>
-            <Field label="Bill no.">
+            <Field label={t("machinery.bill_no")}>
               <input value={f.invoice_no || ""} onChange={(e) => upd("invoice_no", e.target.value)} style={inp} />
             </Field>
-            <FileField value={f.photo_url} onChange={(u) => { upd("photo_url", u); setBill(null); }} label="Bill (photo / PDF)" />
+            <FileField value={f.photo_url} onChange={(u) => { upd("photo_url", u); setBill(null); }} label={t("machinery.bill_photo_pdf")} />
           </div>
 
           {/* M4 — bill se bharo. Button photo lagne ke BAAD hi aata hai, aur
@@ -1464,10 +1448,10 @@ function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templ
                 style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid " + T.ind,
                          background: reading ? T.surfaceB : T.surface, color: T.ind,
                          fontSize: 12, fontWeight: 700, cursor: reading ? "default" : "pointer", fontFamily: "inherit" }}>
-                {reading ? "Bill padha ja raha hai…" : "✨ Bill se khaane bharein"}
+                {reading ? t("machinery.bill_padha_ja_raha_hai") : t("machinery.bill_se_khaane_bharein")}
               </button>
               <span style={{ fontSize: 10.5, color: T.t4, marginLeft: 10 }}>
-                Bhare hue khaane nahi badlenge — sirf khaali bharenge.
+               {t("machinery.bhare_hue_khaane_nahi_badlenge_sirf")}
               </span>
             </div>
           )}
@@ -1481,16 +1465,10 @@ function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templ
                 <b>{bill.message}</b>
               ) : (
                 <>
-                  <b>
-                    Bill padh liya — {bill.added} line{bill.added === 1 ? "" : "en"} bhari
-                    {bill.read && bill.read.total_on_bill != null
+                  <b>{t("machinery.bill_padh_liya_added_linebill_bhari", { added: bill.added, bill: bill.added === 1 ? "" : "en", bill2: bill.read && bill.read.total_on_bill != null
                       ? `, bill par total ₹${Number(bill.read.total_on_bill).toLocaleString("en-IN")}`
-                      : ", bill par total nahi mila"}.
-                  </b>
-                  <div style={{ marginTop: 3 }}>
-                    Ye AI ne padha hai — Save se pehle khud jaanch lein.
-                    {bill.confidence !== "high" ? " (bharosa: " + bill.confidence + ")" : ""}
-                  </div>
+                      : ", bill par total nahi mila" })}</b>
+                  <div style={{ marginTop: 3 }}>{t("machinery.ye_ai_ne_padha_hai_save", { bill: bill.confidence !== "high" ? " (bharosa: " + bill.confidence + ")" : "" })}</div>
                   {(bill.warnings || []).map((w, i) => (
                     <div key={i} style={{ marginTop: 4, color: T.t2 }}>• {w}</div>
                   ))}
@@ -1500,13 +1478,12 @@ function ServiceForm({ open, onClose, onSaved, machine, parties, existing, templ
           )}
           {/* Total poora likha jaata hai, fmtC ka chhota roop nahi — accounts
               isi ankde se milaan karega. */}
-          <div style={{ marginTop: 10, padding: "9px 13px", background: T.surfaceB, borderRadius: 8, fontSize: 12.5, fontWeight: 700, color: T.t1 }}>
-            Total: ₹{total.toLocaleString("en-IN")} <span style={{ fontWeight: 500, color: T.t4 }}>(parts ₹{partsTotal.toLocaleString("en-IN")} + labour)</span>
+          <div style={{ marginTop: 10, padding: "9px 13px", background: T.surfaceB, borderRadius: 8, fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("machinery.total_total", { total: total.toLocaleString("en-IN") })}<span style={{ fontWeight: 500, color: T.t4 }}>{t("machinery.parts_partstotal_labour", { partsTotal: partsTotal.toLocaleString("en-IN") })}</span>
           </div>
         </>
       )}
 
-      <Field label="Note">
+      <Field label={t("common.note")}>
         <input value={f.note || ""} onChange={(e) => upd("note", e.target.value)} style={{ ...inp, marginTop: 10 }} />
       </Field>
 
@@ -1532,7 +1509,7 @@ function DocForm({ open, onClose, onSaved, machine }) {
 
   const save = async () => {
     setError("");
-    if (!f.valid_till) { setError("Valid till zaroori hai"); return; }
+    if (!f.valid_till) { setError(t("machinery.valid_till_zaroori_hai")); return; }
     setBusy(true);
     try {
       const r = await api.post("/machinery/documents", {
@@ -1554,42 +1531,41 @@ function DocForm({ open, onClose, onSaved, machine }) {
   const owned = machine && String(machine.ownership || "").toLowerCase() === "owned";
 
   return (
-    <Modal open={open} onClose={onClose} title="Document add karein"
+    <Modal open={open} onClose={onClose} title={t("machinery.document_add_karein")}
       sub={machine ? machine.name + (machine.registration_no ? ` · ${machine.registration_no}` : "") : ""}
-      footer={<><Btn ghost onClick={onClose}>Cancel</Btn><Btn onClick={save} disabled={busy}>{busy ? "Saving..." : "Save"}</Btn></>}>
+      footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn><Btn onClick={save} disabled={busy}>{busy ? t("common.saving") : t("common.save")}</Btn></>}>
       {!owned && (
         <Notice>
-          Ye kiraye ki machine hai — hum vendor ka kaagaz sirf <b>expiry ke liye</b> dekhte hain.
-          Unfit machine aapki site par chale to zimmedari aapki hoti hai.
+         {t("machinery.ye_kiraye_ki_machine_hai_hum")} <b>{t("machinery.expiry_ke_liye")}</b> {t("machinery.dekhte_hain_unfit_machine_aapki_site_2")}
         </Notice>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="Document">
+        <Field label={t("machinery.document")}>
           <select value={f.doc_type || "insurance"} onChange={(e) => upd("doc_type", e.target.value)} style={inp}>
             {DOC_TYPES.map((d) => <option key={d.k} value={d.k}>{d.l}</option>)}
           </select>
         </Field>
-        <Field label="Number">
-          <input value={f.doc_no || ""} onChange={(e) => upd("doc_no", e.target.value)} placeholder="policy / certificate no." style={inp} />
+        <Field label={t("machinery.number")}>
+          <input value={f.doc_no || ""} onChange={(e) => upd("doc_no", e.target.value)} placeholder={t("machinery.policy_certificate_no")} style={inp} />
         </Field>
-        <Field label="Issuer / company">
-          <input value={f.provider_name || ""} onChange={(e) => upd("provider_name", e.target.value)} placeholder="e.g. Bajaj Allianz" style={inp} />
+        <Field label={t("machinery.issuer_company")}>
+          <input value={f.provider_name || ""} onChange={(e) => upd("provider_name", e.target.value)} placeholder={t("machinery.e_g_bajaj_allianz")} style={inp} />
         </Field>
-        <Field label="Premium / fee (₹)">
+        <Field label={t("machinery.premium_fee")}>
           <input value={f.amount || ""} inputMode="decimal" onChange={(e) => upd("amount", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
         </Field>
-        <Field label="Valid from">
+        <Field label={t("machinery.valid_from")}>
           <input type="date" value={f.valid_from || ""} onChange={(e) => upd("valid_from", e.target.value)} style={inp} />
         </Field>
-        <Field label="Valid till *">
+        <Field label={t("machinery.valid_till_3")}>
           <input type="date" value={f.valid_till || ""} onChange={(e) => upd("valid_till", e.target.value)} style={inp} />
         </Field>
-        <Field label="Reminder (din pehle)"
-          hint="Aakhri din aur uska ek din pehle hamesha yaad dilaya jayega, chahe yahan kuch bhi ho.">
+        <Field label={t("machinery.reminder_din_pehle")}
+          hint={t("machinery.aakhri_din_aur_uska_ek_din")}>
           <input value={f.reminder_days || ""} onChange={(e) => upd("reminder_days", e.target.value)} placeholder="30,15,7" style={inp} />
         </Field>
         <FileField value={f.photo_url} onChange={(u) => upd("photo_url", u)} />
-        <Field label="Note" span={2}>
+        <Field label={t("common.note")} span={2}>
           <input value={f.note || ""} onChange={(e) => upd("note", e.target.value)} style={inp} />
         </Field>
       </div>
@@ -1615,7 +1591,7 @@ function MeterForm({ open, onClose, onSaved, machine, current }) {
 
   const save = async () => {
     setError("");
-    if (!f.hours && !f.km) { setError("Hours ya km, ek to bharein"); return; }
+    if (!f.hours && !f.km) { setError(t("machinery.hours_ya_km_ek_to_bharein")); return; }
     setBusy(true);
     try {
       const r = await api.post("/machinery/meter", {
@@ -1634,23 +1610,20 @@ function MeterForm({ open, onClose, onSaved, machine, current }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Meter reading" width={520}
+    <Modal open={open} onClose={onClose} title={t("machinery.meter_reading")} width={520}
       sub={machine ? machine.name : ""}
-      footer={<><Btn ghost onClick={onClose}>Cancel</Btn><Btn onClick={save} disabled={busy}>{busy ? "Saving..." : "Save"}</Btn></>}>
+      footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn><Btn onClick={save} disabled={busy}>{busy ? t("common.saving") : t("common.save")}</Btn></>}>
       {current && (current.hours != null || current.km != null) && (
-        <div style={{ marginBottom: 12, fontSize: 11.5, color: T.t3 }}>
-          Abhi ka record: <b style={{ color: T.t1 }}>{current.hours != null ? fmtN(current.hours) + " hrs" : fmtN(current.km) + " km"}</b>
-          {" "}({current.source} se, {meterAge(current.days_old)})
-        </div>
+        <div style={{ marginBottom: 12, fontSize: 11.5, color: T.t3 }}><Rich k="machinery.abhi_ka_record_current_v_source" params={{ current: current.hours != null ? fmtN(current.hours) + " hrs" : fmtN(current.km) + " km", v: " ", source: current.source, meterAge: meterAge(current.days_old) }} /></div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="Hour-meter (hrs)">
+        <Field label={t("machinery.hour_meter_hrs")}>
           <input value={f.hours || ""} inputMode="decimal" onChange={(e) => upd("hours", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
         </Field>
-        <Field label="Odometer (km)">
+        <Field label={t("machinery.odometer_km")}>
           <input value={f.km || ""} inputMode="decimal" onChange={(e) => upd("km", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
         </Field>
-        <Field label="Kis din ki reading" span={2}>
+        <Field label={t("machinery.kis_din_ki_reading")} span={2}>
           <input type="date" value={f.read_at || ""} onChange={(e) => upd("read_at", e.target.value)} style={inp} />
         </Field>
         <div style={{ gridColumn: "span 2" }}>
@@ -1658,14 +1631,14 @@ function MeterForm({ open, onClose, onSaved, machine, current }) {
             <input type="checkbox" checked={!!f.is_meter_reset} onChange={(e) => upd("is_meter_reset", e.target.checked)}
               style={{ width: 16, height: 16, marginTop: 2, cursor: "pointer" }} />
             <span style={{ fontSize: 12, color: T.t2, lineHeight: 1.5 }}>
-              <b>Meter badla / reset hua hai</b>
+              <b>{t("machinery.meter_badla_reset_hua_hai")}</b>
               <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>
-                Isse naya baseline shuru hota hai. Bina tick kiye purani se kam reading nahi lagegi — wo aam taur par typo hoti hai.
+               {t("machinery.isse_naya_baseline_shuru_hota_hai")}
               </div>
             </span>
           </label>
         </div>
-        <Field label="Note" span={2}>
+        <Field label={t("common.note")} span={2}>
           <input value={f.note || ""} onChange={(e) => upd("note", e.target.value)} style={inp} />
         </Field>
       </div>
@@ -1713,8 +1686,8 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
   }, [id]);
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <Empty>Loading...</Empty>;
-  if (!m) return <Empty>Machine nahi mili.</Empty>;
+  if (loading) return <Empty>{t("common.loading")}</Empty>;
+  if (!m) return <Empty>{t("machinery.machine_nahi_mili")}</Empty>;
 
   const owned = m.owned;
   const docs = m.documents || [];
@@ -1738,11 +1711,11 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
   // ek khaali khaana dena jo kabhi bharega nahi. Kaagaz phir bhi dikhte hain,
   // kyunki unfit machine site par chale to zimmedari hamari hai.
   const TABS = [
-    { id: "ov", l: "Overview" },
-    ...(owned ? [{ id: "svc", l: "Service log" }] : []),
-    { id: "fuel", l: "Fuel" },
-    { id: "usage", l: "Usage" },
-    { id: "docs", l: "Documents" },
+    { id: "ov", l: t("common.overview") },
+    ...(owned ? [{ id: "svc", l: t("machinery.service_log") }] : []),
+    { id: "fuel", l: t("app.fuel") },
+    { id: "usage", l: t("machinery.usage") },
+    { id: "docs", l: t("common.documents") },
     // GPS tab sirf judi hui machine par — bina jod ke dikha kar "khaali
     // khaana jo kabhi nahi bharega" nahi dena (wahi niyam jo rented ke
     // service tab par laga hai). Jodna Machinery ke GPS tab se hota hai.
@@ -1760,25 +1733,23 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
     <div>
       <button onClick={onBack} type="button"
         style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 600, color: T.t3, marginBottom: 10, padding: 0 }}>
-        ‹ Fleet par wapas
+       {t("machinery.fleet_par_wapas")}
       </button>
 
       <div style={{ background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 12, padding: 16, marginBottom: 16, display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: T.t1 }}>{m.name}{m.code ? ` — ${m.code}` : ""}</div>
           <div style={{ fontSize: 11.5, color: T.t3, marginTop: 4, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-            {m.registration_no || <span style={{ color: T.amb }}>Registration no. nahi bhara</span>}
-            <Pill label={owned ? "Owned" : "Rented"} c={owned ? T.ind : T.t3} bg={owned ? T.indL : T.sltL} />
+            {m.registration_no || <span style={{ color: T.amb }}>{t("machinery.registration_no_nahi_bhara")}</span>}
+            <Pill label={owned ? t("machinery.owned") : t("machinery.rented")} c={owned ? T.ind : T.t3} bg={owned ? T.indL : T.sltL} />
             {/* Workshop me padi machine ka status dikhna zaroori hai — warna
                 service kholne se jo badla, wo kahin dikhta hi nahi aur log
                 maanenge ki kuch hua hi nahi. */}
-            {m.status === "Under Repair" && <Pill label="Under Repair" c={T.red} bg={T.redL} />}
-            {m.operator_name && <span>· Operator: {m.operator_name}</span>}
+            {m.status === "Under Repair" && <Pill label={t("machinery.under_repair")} c={T.red} bg={T.redL} />}
+            {m.operator_name && <span>{t("machinery.operator_operator_name", { operator_name: m.operator_name })}</span>}
           </div>
-          <div style={{ fontSize: 11.5, color: T.t3, marginTop: 7 }}>
-            Meter <b style={{ color: T.t1 }}>{m.meter?.hours != null ? fmtN(m.meter.hours) + " hrs" : m.meter?.km != null ? fmtN(m.meter.km) + " km" : "—"}</b>
-            {m.meter && <span style={{ color: T.t4 }}> · {m.meter.source} se, {meterAge(m.meter.days_old)}</span>}
-            {m.purchase_cost ? <span> · purchase {fmtC(m.purchase_cost)}</span> : null}
+          <div style={{ fontSize: 11.5, color: T.t3, marginTop: 7 }}><Rich k="machinery.meter_m" params={{ m: m.meter?.hours != null ? fmtN(m.meter.hours) + " hrs" : m.meter?.km != null ? fmtN(m.meter.km) + " km" : "—" }} />{m.meter && <span style={{ color: T.t4 }}>{t("machinery.source_se_meterage", { source: m.meter.source, meterAge: meterAge(m.meter.days_old) })}</span>}
+            {m.purchase_cost ? <span>{t("machinery.purchase_fmtc", { fmtC: fmtC(m.purchase_cost) })}</span> : null}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -1788,8 +1759,8 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
               <div style={{ fontSize: 10, color: T.t4 }}>{expiryTone(worst.days).label} · {fmtD(worst.valid_till)}</div>
             </div>
           )}
-          <Btn ghost icon={IcGauge} onClick={() => setMeterOpen(true)}>Meter</Btn>
-          {onEdit && <Btn ghost onClick={() => onEdit(m)}>Edit</Btn>}
+          <Btn ghost icon={IcGauge} onClick={() => setMeterOpen(true)}>{t("machinery.meter")}</Btn>
+          {onEdit && <Btn ghost onClick={() => onEdit(m)}>{t("common.edit_2")}</Btn>}
         </div>
       </div>
 
@@ -1799,10 +1770,8 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
         <div style={{ background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 10, padding: "11px 14px", marginBottom: 14 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: T.t1, marginBottom: 5 }}>Record adhoora hai</div>
-              <div style={{ fontSize: 11, color: T.t3 }}>
-                Baaki: {m.completeness.missing.map((x) => x.label).join(" · ")}
-              </div>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: T.t1, marginBottom: 5 }}>{t("machinery.record_adhoora_hai")}</div>
+              <div style={{ fontSize: 11, color: T.t3 }}>{t("machinery.baaki_m", { m: m.completeness.missing.map((x) => x.label).join(" · ") })}</div>
             </div>
             <div style={{ width: 130 }}><CompletenessBar c={m.completeness} compact /></div>
           </div>
@@ -1819,13 +1788,13 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
       </div>
 
       {activeTab === "ov" && (
-        <Panel title="Timeline — fuel, usage, service, kaagaz ek saath">
-          {timeline.length === 0 && <Empty>Is machine par abhi koi record nahi.</Empty>}
+        <Panel title={t("machinery.timeline_fuel_usage_service_kaagaz_ek")}>
+          {timeline.length === 0 && <Empty>{t("machinery.is_machine_par_abhi_koi_record")}</Empty>}
           {timeline.map((r, i) => {
-            const tone = r.kind === "fuel" ? { c: T.ind, bg: T.indL, l: "Fuel" }
-              : r.kind === "usage" ? { c: T.blu, bg: T.bluL, l: "Usage" }
-              : r.kind === "service" ? { c: T.grn, bg: T.grnL, l: "Service" }
-              : { c: T.slt, bg: T.sltL, l: "Document" };
+            const tone = r.kind === "fuel" ? { c: T.ind, bg: T.indL, l: t("app.fuel") }
+              : r.kind === "usage" ? { c: T.blu, bg: T.bluL, l: t("machinery.usage") }
+              : r.kind === "service" ? { c: T.grn, bg: T.grnL, l: t("machinery.service") }
+              : { c: T.slt, bg: T.sltL, l: t("machinery.document") };
             return (
               <Row key={i} cols="90px 90px 1.6fr 1fr 100px">
                 <span style={{ fontSize: 11, color: T.t3 }}>{fmtD(r.at)}</span>
@@ -1849,60 +1818,56 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
           {/* Agli service kab — task-wise. Andaza alert nahi banta: meter
               purana ho to wahi likha aata hai. */}
           {svcDue && svcDue.tasks && svcDue.tasks.length > 0 && (
-            <Panel title="Agli service kab" style={{ marginBottom: 14 }}>
+            <Panel title={t("machinery.agli_service_kab")} style={{ marginBottom: 14 }}>
               <Row head cols="1.5fr 90px 1fr 1fr">
-                <span>Task</span><span>Haalat</span><span>Kitna baaki</span><span>Aakhri baar</span>
+                <span>{t("machinery.task_2")}</span><span>{t("machinery.haalat")}</span><span>{t("machinery.kitna_baaki")}</span><span>{t("machinery.aakhri_baar")}</span>
               </Row>
               {svcDue.tasks.map((tk) => {
-                const tone = tk.status === "overdue" ? { c: T.red, bg: T.redL, l: "Overdue" }
-                  : tk.status === "due" ? { c: T.amb, bg: T.ambL, l: "Due" }
-                  : tk.status === "soon" ? { c: T.amb, bg: T.ambL, l: "Jaldi" }
-                  : tk.status === "unknown" ? { c: T.t3, bg: T.sltL, l: "Pata nahi" }
+                const tone = tk.status === "overdue" ? { c: T.red, bg: T.redL, l: t("common.overdue") }
+                  : tk.status === "due" ? { c: T.amb, bg: T.ambL, l: t("common.due") }
+                  : tk.status === "soon" ? { c: T.amb, bg: T.ambL, l: t("machinery.jaldi") }
+                  : tk.status === "unknown" ? { c: T.t3, bg: T.sltL, l: t("machinery.pata_nahi") }
                   : { c: T.grn, bg: T.grnL, l: "OK" };
                 return (
                   <Row key={tk.template_id} cols="1.5fr 90px 1fr 1fr">
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>
-                      {tk.task}{tk.from_part && <span style={{ fontSize: 9.5, color: T.ind, fontWeight: 700 }}> · part ki life se</span>}
+                      {tk.task}{tk.from_part && <span style={{ fontSize: 9.5, color: T.ind, fontWeight: 700 }}> {t("machinery.part_ki_life_se")}</span>}
                     </span>
                     <span><Pill label={tone.l} c={tone.c} bg={tone.bg} /></span>
                     <span style={{ fontSize: 11.5, color: tk.remaining != null && tk.remaining < 0 ? T.red : T.t3 }}>
                       {tk.remaining == null ? (tk.reason || "—")
                         : `${tk.remaining < 0 ? Math.abs(tk.remaining) + " " : tk.remaining + " "}${tk.basis === "km" ? "km" : tk.basis === "days" ? "din" : "hrs"}${tk.remaining < 0 ? " upar" : " baaki"}`}
-                      {tk.meter_stale && <span style={{ color: T.amb }}> · meter purana, andaza</span>}
+                      {tk.meter_stale && <span style={{ color: T.amb }}> {t("machinery.meter_purana_andaza")}</span>}
                     </span>
-                    <span style={{ fontSize: 11.5, color: T.t3 }}>{tk.last_service ? fmtD(tk.last_service) : "kabhi nahi"}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{tk.last_service ? fmtD(tk.last_service) : t("fuel.kabhi_nahi")}</span>
                   </Row>
                 );
               })}
             </Panel>
           )}
           {svcDue && svcDue.no_templates && (
-            <Notice>
-              Is machine ke liye koi service task set nahi — bina task ke "agli service kab" nikal hi nahi sakta.{" "}
-              <button type="button" onClick={async () => {
+            <Notice>{t("machinery.is_machine_ke_liye_koi_service", { v: " " })}<button type="button" onClick={async () => {
                 const r = await api.post("/machinery/templates/seed", {}).catch(() => null);
                 if (r && r.success) load(true);
                 else window.alert((r && r.message) || "Seed nahi chala");
               }}
                 style={{ background: "none", border: "none", color: T.ind, fontWeight: 700, fontSize: 11.5, cursor: "pointer", fontFamily: "inherit", padding: 0, textDecoration: "underline" }}>
-                Aam service tasks bhar do
-              </button>{" "}
-              (JCB/tipper/roller ke standard kaam, intervals ke saath — baad me edit ho sakte hain).
-            </Notice>
+               {t("machinery.aam_service_tasks_bhar_do")}
+              </button>{t("machinery.v_jcb_tipper_roller_ke_standard", { v: " " })}</Notice>
           )}
 
-          <Panel title="Service log"
-            action={<Btn size="sm" icon={IcWrench} onClick={() => { setSvcEdit(null); setSvcOpen(true); }}>Service</Btn>}>
+          <Panel title={t("machinery.service_log")}
+            action={<Btn size="sm" icon={IcWrench} onClick={() => { setSvcEdit(null); setSvcOpen(true); }}>{t("machinery.service")}</Btn>}>
             {services.length === 0 && (
               <Empty>
-                Koi service darj nahi.<br />
-                <span style={{ fontSize: 11.5 }}>Kaunsa part kab badla, kitne ka — sab yahin jama hota hai.</span>
+               {t("machinery.koi_service_darj_nahi")}<br />
+                <span style={{ fontSize: 11.5 }}>{t("machinery.kaunsa_part_kab_badla_kitne_ka")}</span>
               </Empty>
             )}
             {services.length > 0 && (
               <>
                 <Row head cols="92px 1.2fr 1.2fr 90px 100px 110px">
-                  <span>Date</span><span>Kya hua</span><span>Vendor</span><span>Type</span><span style={{ textAlign: "right" }}>Kharcha</span><span>Payment</span>
+                  <span>{t("common.date")}</span><span>{t("fuel.kya_hua")}</span><span>{t("common.vendor")}</span><span>{t("common.type")}</span><span style={{ textAlign: "right" }}>{t("machinery.kharcha")}</span><span>{t("common.payment")}</span>
                 </Row>
                 {services.map((s) => (
                   <Row key={s.id} cols="92px 1.2fr 1.2fr 90px 100px 110px"
@@ -1910,7 +1875,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
                     <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(s.service_date)}</span>
                     <span style={{ fontSize: 12, color: T.t1 }}>
                       {s.status === "open"
-                        ? <Pill label="KHULI HAI — band karne ko click" c={T.amb} bg={T.ambL} />
+                        ? <Pill label={t("machinery.khuli_hai_band_karne_ko_click")} c={T.amb} bg={T.ambL} />
                         : (s.items || []).map((i) => i.item).join(", ") || s.note || "—"}
                     </span>
                     <span style={{ fontSize: 11.5, color: T.t3 }}>{s.vendor || "—"}</span>
@@ -1919,8 +1884,8 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
                     <span>
                       {s.status === "open" ? <span style={{ fontSize: 11, color: T.t4 }}>—</span>
                         : s.payment_mode === "credit"
-                          ? <Pill label={s.settlement_status === "paid" ? "Paid" : "Baaki"} c={s.settlement_status === "paid" ? T.grn : T.amb} bg={s.settlement_status === "paid" ? T.grnL : T.ambL} />
-                          : <Pill label="Cash" c={T.slt} bg={T.sltL} />}
+                          ? <Pill label={s.settlement_status === "paid" ? t("common.paid") : t("common.baaki")} c={s.settlement_status === "paid" ? T.grn : T.amb} bg={s.settlement_status === "paid" ? T.grnL : T.ambL} />
+                          : <Pill label={t("common.cash")} c={T.slt} bg={T.sltL} />}
                     </span>
                   </Row>
                 ))}
@@ -1932,13 +1897,13 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
 
       {activeTab === "fuel" && (
         <>
-          <Notice>Ye Fuel module ka hi data hai, is machine par chhaan kar. Entry wahin se hoti hai — do jagah entry se hisaab kabhi milta nahi.</Notice>
-          <Panel title="Fuel">
-            {fuelRows.length === 0 && <Empty>Is machine par koi diesel record nahi.</Empty>}
+          <Notice>{t("machinery.ye_fuel_module_ka_hi_data")}</Notice>
+          <Panel title={t("app.fuel")}>
+            {fuelRows.length === 0 && <Empty>{t("machinery.is_machine_par_koi_diesel_record")}</Empty>}
             {fuelRows.length > 0 && (
               <>
                 <Row head cols="100px 1.4fr 100px 110px 100px">
-                  <span>Date</span><span>Kahan se</span><span>Litres</span><span>Meter</span><span style={{ textAlign: "right" }}>Amount</span>
+                  <span>{t("common.date")}</span><span>{t("fuel.kahan_se")}</span><span>{t("fuel.litres")}</span><span>{t("machinery.meter")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span>
                 </Row>
                 {fuelRows.map((r, i) => (
                   <Row key={i} cols="100px 1.4fr 100px 110px 100px">
@@ -1956,8 +1921,8 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
       )}
 
       {activeTab === "usage" && (
-        <Panel title="Usage">
-          {usageRows.length === 0 && <Empty>Koi usage entry nahi.</Empty>}
+        <Panel title={t("machinery.usage")}>
+          {usageRows.length === 0 && <Empty>{t("machinery.koi_usage_entry_nahi")}</Empty>}
           {usageRows.map((r, i) => (
             <Row key={i} cols="100px 1.6fr 100px 110px">
               <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(r.at)}</span>
@@ -1970,17 +1935,17 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
       )}
 
       {activeTab === "docs" && (
-        <Panel title="Documents & permits" action={<Btn size="sm" icon={IcAdd} onClick={() => setDocOpen(true)}>Document</Btn>}>
+        <Panel title={t("machinery.documents_permits")} action={<Btn size="sm" icon={IcAdd} onClick={() => setDocOpen(true)}>{t("machinery.document")}</Btn>}>
           {docs.length === 0 && (
             <Empty>
-              Koi kaagaz darj nahi.<br />
-              <span style={{ fontSize: 11.5 }}>Insurance, fitness, PUC, permit — expiry yahin se yaad dilayi jaati hai.</span>
+             {t("machinery.koi_kaagaz_darj_nahi")}<br />
+              <span style={{ fontSize: 11.5 }}>{t("machinery.insurance_fitness_puc_permit_expiry_yahin")}</span>
             </Empty>
           )}
           {docs.length > 0 && (
             <>
               <Row head cols="1.2fr 1.3fr 110px 100px 130px">
-                <span>Document</span><span>Number / issuer</span><span>Valid till</span><span>Fee</span><span>Status</span>
+                <span>{t("machinery.document")}</span><span>{t("machinery.number_issuer")}</span><span>{t("machinery.valid_till_2")}</span><span>{t("machinery.fee")}</span><span>{t("common.status")}</span>
               </Row>
               {docRows.map((d) => {
                 const isCurrent = curIds.has(d.id);
@@ -1989,17 +1954,17 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
                   <Row key={d.id} cols="1.2fr 1.3fr 110px 100px 130px">
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>
                       {docLabel(d.doc_type)}
-                      {!isCurrent && <span style={{ fontSize: 10, color: T.t4, fontWeight: 500 }}> · purana</span>}
+                      {!isCurrent && <span style={{ fontSize: 10, color: T.t4, fontWeight: 500 }}> {t("machinery.purana")}</span>}
                     </span>
                     <span style={{ fontSize: 11.5, color: T.t3 }}>{[d.doc_no, d.provider_name].filter(Boolean).join(" · ") || "—"}</span>
                     <span style={{ fontSize: 12 }}>{fmtD(d.valid_till)}</span>
                     <span style={{ fontSize: 12 }}>{d.amount ? fmtC(d.amount) : "—"}</span>
-                    <span>{isCurrent ? <Pill label={tone.label} c={tone.c} bg={tone.bg} /> : <Pill label="History" c={T.t3} bg={T.sltL} />}</span>
+                    <span>{isCurrent ? <Pill label={tone.label} c={tone.c} bg={tone.bg} /> : <Pill label={t("common.history")} c={T.t3} bg={T.sltL} />}</span>
                   </Row>
                 );
               })}
               <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-                Renewal par nayi row banti hai — purani history me rehti hai. Reminder hamesha sabse nayi wali par chalta hai.
+               {t("machinery.renewal_par_nayi_row_banti_hai")}
               </div>
             </>
           )}
@@ -2012,30 +1977,26 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
             <div style={{ background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 10, padding: "9px 13px", fontSize: 11.5, color: T.t2, display: "flex", alignItems: "center", gap: 7 }}>
               <span style={{ width: 8, height: 8, borderRadius: 4, background: gps.unit.health === "green" ? T.grn : gps.unit.health === "amber" ? T.amb : T.red, display: "inline-block" }} />
               <b>{gps.unit.unit_name}</b>
-              <span style={{ color: T.t4 }}>· aakhri data {gps.unit.last_data_at ? fmtD(gps.unit.last_data_at) : "kabhi nahi"}</span>
+              <span style={{ color: T.t4 }}>{t("machinery.aakhri_data_gps", { gps: gps.unit.last_data_at ? fmtD(gps.unit.last_data_at) : "kabhi nahi" })}</span>
             </div>
             {gps.unit.has_fls ? (
-              <div style={{ background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 10, padding: "9px 13px", fontSize: 11.5 }}>
-                Sensor kharcha <b>{gps.lph != null ? `${fmtN(gps.lph)} L/hr` : "—"}</b>
-                {gps.norm_lph != null && gps.lph != null && (
-                  <span style={{ marginLeft: 6, color: gps.lph > gps.norm_lph * 1.15 ? T.red : T.grn, fontWeight: 700 }}>
-                    (norm {fmtN(gps.norm_lph)})
-                  </span>
+              <div style={{ background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 10, padding: "9px 13px", fontSize: 11.5 }}><Rich k="machinery.sensor_kharcha_gps" params={{ gps: gps.lph != null ? `${fmtN(gps.lph)} L/hr` : "—" }} />{gps.norm_lph != null && gps.lph != null && (
+                  <span style={{ marginLeft: 6, color: gps.lph > gps.norm_lph * 1.15 ? T.red : T.grn, fontWeight: 700 }}>{t("machinery.norm_fmtn", { fmtN: fmtN(gps.norm_lph) })}</span>
                 )}
               </div>
             ) : (
               <div style={{ background: T.sltL, borderRadius: 10, padding: "9px 13px", fontSize: 11.5, color: T.t3 }}>
-                Is unit par fuel sensor nahi — sirf engine hours / km milte hain
+               {t("machinery.is_unit_par_fuel_sensor_nahi")}
               </div>
             )}
           </div>
 
-          <Panel title="Roz ka sensor data — pichhle 14 din" style={{ marginBottom: 14 }}>
-            {gps.daily.length === 0 && <Empty>Abhi koi din ka data nahi aaya.</Empty>}
+          <Panel title={t("machinery.roz_ka_sensor_data_pichhle_14")} style={{ marginBottom: 14 }}>
+            {gps.daily.length === 0 && <Empty>{t("machinery.abhi_koi_din_ka_data_nahi")}</Empty>}
             {gps.daily.length > 0 && (
               <>
                 <Row head cols="100px 1fr 1fr 1fr 1fr 1fr 1.4fr">
-                  <span>Din</span><span>Engine</span><span>Chali (km)</span><span>Diesel piya</span><span>Bhara</span><span>Drop</span><span>Kahan</span>
+                  <span>{t("fuel.din")}</span><span>{t("machinery.engine")}</span><span>{t("machinery.chali_km")}</span><span>{t("machinery.diesel_piya")}</span><span>{t("fuel.bhara_2")}</span><span>{t("machinery.drop")}</span><span>{t("fuel.kahan")}</span>
                 </Row>
                 {gps.daily.map((d) => (
                   <Row key={d.day} cols="100px 1fr 1fr 1fr 1fr 1fr 1.4fr">
@@ -2048,7 +2009,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
                     <span style={{ fontSize: 11.5, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                       title={d.trip_from && d.trip_to && d.trip_from !== d.trip_to ? `${d.trip_from} → ${d.trip_to}` : undefined}>
                       {d.park_location || d.trip_to || "—"}
-                      {d.trip_from && d.trip_to && d.trip_from !== d.trip_to && <span style={{ color: T.t4 }}> · chali {d.trip_from} → {d.trip_to}</span>}
+                      {d.trip_from && d.trip_to && d.trip_from !== d.trip_to && <span style={{ color: T.t4 }}>{t("machinery.chali_trip_from_trip_to", { trip_from: d.trip_from, trip_to: d.trip_to })}</span>}
                     </span>
                   </Row>
                 ))}
@@ -2056,8 +2017,8 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
             )}
           </Panel>
 
-          <Panel title="Fuel events — bharna aur drop">
-            {gps.events.length === 0 && <Empty>Is duration me koi fill/drop nahi.</Empty>}
+          <Panel title={t("machinery.fuel_events_bharna_aur_drop")}>
+            {gps.events.length === 0 && <Empty>{t("machinery.is_duration_me_koi_fill_drop")}</Empty>}
             {gps.events.map((ev) => (
               <Row key={ev.id} cols="130px 90px 1fr 1.2fr">
                 <span style={{ fontSize: 11, color: T.t3 }}>{String(ev.event_time).replace("T", " ").slice(0, 16)}</span>
@@ -2067,14 +2028,13 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
                 <span style={{ fontSize: 11.5, color: T.t3 }}>{ev.location_text || "—"}</span>
                 <span style={{ fontSize: 11.5, color: T.t3 }}>
                   {ev.event_type === "fill"
-                    ? (ev.matched_fuel_entry_id ? "Fuel entry se mila" : "Entry nahi mili — Cross-check me hai")
-                    : ev.review_status === "ok" ? "Jaanch ho chuki — theek tha" : "Jaanch baaki (Fuel → Cross-check)"}
+                    ? (ev.matched_fuel_entry_id ? t("machinery.fuel_entry_se_mila") : t("machinery.entry_nahi_mili_cross_check_me"))
+                    : ev.review_status === "ok" ? t("machinery.jaanch_ho_chuki_theek_tha") : t("machinery.jaanch_baaki_fuel_cross_check")}
                 </span>
               </Row>
             ))}
             <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-              Drop = engine band tha aur tank ka level tezi se gira. Ye sensor ka andaza hai — tanker se
-              doosri machine me diesel dena bhi aise hi dikhta hai. Faisla Fuel → Cross-check me hota hai.
+             {t("machinery.drop_engine_band_tha_aur_tank")}
             </div>
           </Panel>
         </>
@@ -2170,13 +2130,13 @@ const RFilterBar = ({ children, chips, onClear }) => (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>{children}</div>
     {chips.length > 0 && (
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", borderTop: `1px solid ${T.b1}`, paddingTop: 8 }}>
-        <span style={{ fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".4px" }}>Lage hue filter</span>
+        <span style={{ fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".4px" }}>{t("fuel.lage_hue_filter")}</span>
         {chips.map((c, i) => (
           <span key={i} style={{ background: T.indL, color: T.ind, border: `1px solid ${T.indM || T.b1}`, borderRadius: 20, padding: "2px 9px", fontSize: 10.5, fontWeight: 600 }}>
             {c.k}: {c.v}
           </span>
         ))}
-        <span onClick={onClear} style={{ fontSize: 10.5, color: T.t3, cursor: "pointer", textDecoration: "underline", marginLeft: 4 }}>sab hatao</span>
+        <span onClick={onClear} style={{ fontSize: 10.5, color: T.t3, cursor: "pointer", textDecoration: "underline", marginLeft: 4 }}>{t("fuel.sab_hatao")}</span>
       </div>
     )}
   </div>
@@ -2219,14 +2179,14 @@ function ExportBar({ rows, columns, pdfPath, params, baseName, caption, disabled
     try {
       if (kind === "xls") {
         await exportExcel(rows, columns, fname, baseName);
-        setMsg({ ok: true, t: "Excel ban gayi" });
+        setMsg({ ok: true, t: t("fuel.excel_ban_gayi") });
       } else {
         const blob = await fetchReportPdf(pdfPath, params);
-        if (kind === "pdf") { saveBlob(blob, fname + ".pdf"); setMsg({ ok: true, t: "PDF ban gayi" }); }
+        if (kind === "pdf") { saveBlob(blob, fname + ".pdf"); setMsg({ ok: true, t: t("fuel.pdf_ban_gayi") }); }
         else {
           const how = await sharePdf(blob, fname + ".pdf", caption);
-          if (how === "downloaded") setMsg({ ok: true, t: "PDF download ho gayi — WhatsApp me attach kar dijiye" });
-          else if (how === "shared") setMsg({ ok: true, t: "Bhej di" });
+          if (how === "downloaded") setMsg({ ok: true, t: t("fuel.pdf_download_ho_gayi_whatsapp_me") });
+          else if (how === "shared") setMsg({ ok: true, t: t("fuel.bhej_di") });
         }
       }
     } catch (e) { setMsg({ ok: false, t: e.message || "Nahi ho paya" }); }
@@ -2237,12 +2197,12 @@ function ExportBar({ rows, columns, pdfPath, params, baseName, caption, disabled
     <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
       {empty && disabledWhy && <span style={{ fontSize: 10.5, color: T.t4 }}>{disabledWhy}</span>}
       {msg && <span style={{ fontSize: 10.5, fontWeight: 600, color: msg.ok ? T.grn : T.red }}>{msg.t}</span>}
-      <Btn size="sm" ghost icon={IcSheet} disabled={empty || !!busy} onClick={() => run("xls")}>Excel</Btn>
+      <Btn size="sm" ghost icon={IcSheet} disabled={empty || !!busy} onClick={() => run("xls")}>{t("common.excel")}</Btn>
       <Btn size="sm" ghost icon={IcFile} disabled={empty || !!busy} onClick={() => run("pdf")}>
-        {busy === "pdf" ? "Ban rahi..." : "PDF"}
+        {busy === "pdf" ? t("fuel.ban_rahi") : "PDF"}
       </Btn>
       <Btn size="sm" c={T.grn} icon={IcWa} disabled={empty || !!busy} onClick={() => run("wa")}>
-        {busy === "wa" ? "..." : "WhatsApp"}
+        {busy === "wa" ? "..." : t("common.whatsapp")}
       </Btn>
     </div>
   );
@@ -2251,8 +2211,8 @@ function ExportBar({ rows, columns, pdfPath, params, baseName, caption, disabled
 // ── Report 1: USAGE REGISTER ──────────────────────────────────────
 const EMPTY_UF = { project_id: "", equipment_id: "", ownership: "", measurement_mode: "", sector: "" };
 const MODE_OPTS = [
-  { v: "hourly", l: "Ghante" }, { v: "daily", l: "Din" }, { v: "monthly", l: "Mahina" },
-  { v: "km", l: "KM" }, { v: "trip", l: "Trip" }, { v: "fixed", l: "Lump sum" },
+  { v: "hourly", get l() { return t("machinery.ghante"); } }, { v: "daily", get l() { return t("machinery.din"); } }, { v: "monthly", get l() { return t("machinery.mahina"); } },
+  { v: "km", l: "KM" }, { v: "trip", get l() { return t("machinery.trip"); } }, { v: "fixed", get l() { return t("machinery.lump_sum"); } },
 ];
 
 function UsageRegister({ fleet, projects, from, to, onRange }) {
@@ -2275,21 +2235,21 @@ function UsageRegister({ fleet, projects, from, to, onRange }) {
   const rows = data?.rows || [];
   const tot = data?.totals || {};
   const COLS = [
-    { key: "date", label: "Date", w: 11 },
-    { key: "machine", label: "Machine", w: 22 },
-    { key: "registration_no", label: "Gadi no.", w: 14 },
-    { key: "ownership", label: "Ownership", w: 11 },
-    { key: "project", label: "Project", w: 20 },
-    { key: "sector", label: "Sector", w: 10 },
-    { key: "qty", label: "Qty", w: 9 },
-    { key: "qty_unit", label: "Unit", w: 8 },
-    { key: "meter", label: "Meter", w: 16 },
-    { key: "rate", label: "Rate", w: 10 },
-    { key: "amount", label: "Amount", w: 12, excel: (r) => (r.amount == null ? "" : Math.round(r.amount)) },
-    { key: "vendor", label: "Vendor", w: 20 },
-    { key: "operator", label: "Operator", w: 16 },
-    { key: "entered_by", label: "Kisne bhara", w: 16 },
-    { key: "remark", label: "Remark", w: 30 },
+    { key: "date", label: t("common.date"), w: 11 },
+    { key: "machine", label: t("fuel.machine"), w: 22 },
+    { key: "registration_no", label: t("machinery.gadi_no"), w: 14 },
+    { key: "ownership", label: t("common.ownership"), w: 11 },
+    { key: "project", label: t("common.project"), w: 20 },
+    { key: "sector", label: t("common.sector"), w: 10 },
+    { key: "qty", label: t("common.qty"), w: 9 },
+    { key: "qty_unit", label: t("common.unit"), w: 8 },
+    { key: "meter", label: t("machinery.meter"), w: 16 },
+    { key: "rate", label: t("common.rate"), w: 10 },
+    { key: "amount", label: t("common.amount_2"), w: 12, excel: (r) => (r.amount == null ? "" : Math.round(r.amount)) },
+    { key: "vendor", label: t("common.vendor"), w: 20 },
+    { key: "operator", label: t("machinery.operator"), w: 16 },
+    { key: "entered_by", label: t("fuel.kisne_bhara"), w: 16 },
+    { key: "remark", label: t("common.remark"), w: 30 },
   ];
   const cols = "76px 1.5fr 1fr 78px 1.1fr 66px 84px 108px 74px 92px 1fr";
 
@@ -2297,7 +2257,7 @@ function UsageRegister({ fleet, projects, from, to, onRange }) {
     <div style={{ display: "grid", gap: 11 }}>
       <RFilterBar chips={data?.applied || []} onClear={() => setF(EMPTY_UF)}>
         <div>
-          <RLbl>Se — Tak</RLbl>
+          <RLbl>{t("fuel.se_tak")}</RLbl>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input type="date" value={from} onChange={(e) => onRange(e.target.value, to)}
               style={{ ...inp, width: 136, padding: "6px 9px", fontSize: 11.5 }} />
@@ -2306,40 +2266,40 @@ function UsageRegister({ fleet, projects, from, to, onRange }) {
               style={{ ...inp, width: 136, padding: "6px 9px", fontSize: 11.5 }} />
           </div>
         </div>
-        <RSel label="Project" value={f.project_id} onChange={(v) => set("project_id", v)}
+        <RSel label={t("common.project")} value={f.project_id} onChange={(v) => set("project_id", v)}
           options={projects.map((x) => ({ v: x.id, l: x.name }))} />
-        <RSel label="Machine" value={f.equipment_id} onChange={(v) => set("equipment_id", v)}
+        <RSel label={t("fuel.machine")} value={f.equipment_id} onChange={(v) => set("equipment_id", v)}
           options={fleet.map((x) => ({ v: x.id, l: x.name }))} />
-        <RSel label="Ownership" value={f.ownership} onChange={(v) => set("ownership", v)}
-          options={[{ v: "owned", l: "Apni" }, { v: "rented", l: "Kiraye ki" }]} w={120} />
-        <RSel label="Rate type" value={f.measurement_mode} onChange={(v) => set("measurement_mode", v)}
+        <RSel label={t("common.ownership")} value={f.ownership} onChange={(v) => set("ownership", v)}
+          options={[{ v: "owned", l: t("machinery.apni") }, { v: "rented", l: t("machinery.kiraye_ki") }]} w={120} />
+        <RSel label={t("machinery.rate_type")} value={f.measurement_mode} onChange={(v) => set("measurement_mode", v)}
           options={MODE_OPTS} w={120} />
-        <RInp label="Sector" value={f.sector} onChange={(v) => set("sector", v)} w={95} ph="15" />
+        <RInp label={t("common.sector")} value={f.sector} onChange={(v) => set("sector", v)} w={95} ph="15" />
       </RFilterBar>
 
-      <Panel title={loading ? "Usage Register — laa rahe hain..." : `Usage Register — ${rows.length} entry`}
+      <Panel title={loading ? t("machinery.usage_register_laa_rahe_hain") : `Usage Register — ${rows.length} entry`}
         action={<ExportBar rows={rows} columns={COLS} pdfPath="/machinery/reports/usage-register.pdf"
           params={params} baseName="usage-register"
           caption={`Machine Usage Register${from ? ` ${from} se ${to}` : ""} — Sanchalan`} />}>
-        {!loading && rows.length === 0 && <Empty>Is filter par koi entry nahi mili.</Empty>}
+        {!loading && rows.length === 0 && <Empty>{t("fuel.is_filter_par_koi_entry_nahi")}</Empty>}
         {rows.length > 0 && (
           <>
             <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11.5, color: T.t2 }}>{tot.entries} entry</span>
               {/* Ghante sirf ghante wali machine ke, din sirf din wali ke —
                   alag unit ka jod ek jhooth hota. */}
-              {tot.hours > 0 && <span style={{ fontSize: 11.5, color: T.t2 }}>Ghante <b style={{ color: T.t1 }}>{fmtN(tot.hours)}</b></span>}
-              {tot.days > 0 && <span style={{ fontSize: 11.5, color: T.t2 }}>Din <b style={{ color: T.t1 }}>{fmtN(tot.days)}</b></span>}
-              <span style={{ fontSize: 11.5, color: T.t2 }}>Kul <b style={{ color: T.t1 }}>{fmtC(tot.amount)}</b></span>
+              {tot.hours > 0 && <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.ghante")} <b style={{ color: T.t1 }}>{fmtN(tot.hours)}</b></span>}
+              {tot.days > 0 && <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.din")} <b style={{ color: T.t1 }}>{fmtN(tot.days)}</b></span>}
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.kul")} <b style={{ color: T.t1 }}>{fmtC(tot.amount)}</b></span>
             </div>
             <div style={{ overflowX: "auto" }}>
               <div style={{ minWidth: 1140 }}>
                 <Row head cols={cols}>
-                  <span>Date</span><span>Machine</span><span>Project</span><span>Own</span>
-                  <span>Vendor</span><span>Sector</span>
-                  <span style={{ textAlign: "right" }}>Qty</span><span style={{ textAlign: "right" }}>Meter</span>
-                  <span style={{ textAlign: "right" }}>Rate</span><span style={{ textAlign: "right" }}>Amount</span>
-                  <span>Remark</span>
+                  <span>{t("common.date")}</span><span>{t("fuel.machine")}</span><span>{t("common.project")}</span><span>{t("fuel.own")}</span>
+                  <span>{t("common.vendor")}</span><span>{t("common.sector")}</span>
+                  <span style={{ textAlign: "right" }}>{t("common.qty")}</span><span style={{ textAlign: "right" }}>{t("machinery.meter")}</span>
+                  <span style={{ textAlign: "right" }}>{t("common.rate")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span>
+                  <span>{t("common.remark")}</span>
                 </Row>
                 {rows.map((r, i) => (
                   <Row key={i} cols={cols}>
@@ -2350,7 +2310,7 @@ function UsageRegister({ fleet, projects, from, to, onRange }) {
                     </div>
                     <span style={{ fontSize: 11.5, color: T.t3 }}>{r.project || "—"}</span>
                     <span>{r.ownership
-                      ? <Pill label={r.ownership === "Owned" ? "Apni" : "Kiraye"} c={r.ownership === "Owned" ? T.ind : T.t3} bg={r.ownership === "Owned" ? T.indL : T.sltL} />
+                      ? <Pill label={r.ownership === "Owned" ? t("machinery.apni") : t("machinery.kiraye")} c={r.ownership === "Owned" ? T.ind : T.t3} bg={r.ownership === "Owned" ? T.indL : T.sltL} />
                       : <span style={{ fontSize: 11, color: T.t4 }}>—</span>}</span>
                     <span style={{ fontSize: 11.5, color: T.t3 }}>{r.vendor || "—"}</span>
                     <span style={{ fontSize: 11.5, color: T.t3 }}>{r.sector || "—"}</span>
@@ -2367,7 +2327,7 @@ function UsageRegister({ fleet, projects, from, to, onRange }) {
             </div>
             {tot.truncated && (
               <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.amb, background: T.ambL }}>
-                Bahut zyada entry hain — sirf pehli 5000 dikh rahi hain. Date range chhota kijiye.
+               {t("fuel.bahut_zyada_entry_hain_sirf_pehli")}
               </div>
             )}
           </>
@@ -2398,15 +2358,15 @@ function LogSheetReport({ fleet, from, to, onRange }) {
   const rows = data?.rows || [];
   const tot = data?.totals || {};
   const COLS = [
-    { key: "date", label: "Date", w: 12 },
-    { key: "party_name", label: "Party name", w: 22 },
-    { key: "start_reading", label: "Start", w: 10 },
-    { key: "stop_reading", label: "Stop", w: 10 },
-    { key: "hours", label: "Hours", w: 9 },
-    { key: "diesel", label: "Diesel", w: 9 },
-    { key: "pump_name", label: "Pump name", w: 18 },
-    { key: "sector", label: "Sector", w: 10 },
-    { key: "remark", label: "Remark", w: 34 },
+    { key: "date", label: t("common.date"), w: 12 },
+    { key: "party_name", label: t("machinery.party_name"), w: 22 },
+    { key: "start_reading", label: t("common.start"), w: 10 },
+    { key: "stop_reading", label: t("machinery.stop"), w: 10 },
+    { key: "hours", label: t("machinery.hours"), w: 9 },
+    { key: "diesel", label: t("machinery.diesel"), w: 9 },
+    { key: "pump_name", label: t("machinery.pump_name"), w: 18 },
+    { key: "sector", label: t("common.sector"), w: 10 },
+    { key: "remark", label: t("common.remark"), w: 34 },
   ];
   const cols = "82px 1.2fr 74px 74px 66px 70px 1fr 74px 1.5fr";
   const machine = fleet.find((m) => String(m.id) === String(machineId));
@@ -2415,10 +2375,10 @@ function LogSheetReport({ fleet, from, to, onRange }) {
     <div style={{ display: "grid", gap: 11 }}>
       <RFilterBar chips={machine ? [{ k: "Machine", v: machine.name }, { k: "Se–Tak", v: `${from} → ${to}` }] : []}
         onClear={() => setMachineId("")}>
-        <RSel label="Machine" value={machineId} onChange={setMachineId}
-          options={fleet.map((x) => ({ v: x.id, l: x.name }))} w={230} placeholder="Machine chuniye" />
+        <RSel label={t("fuel.machine")} value={machineId} onChange={setMachineId}
+          options={fleet.map((x) => ({ v: x.id, l: x.name }))} w={230} placeholder={t("machinery.machine_chuniye")} />
         <div>
-          <RLbl>Se — Tak</RLbl>
+          <RLbl>{t("fuel.se_tak")}</RLbl>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input type="date" value={from} onChange={(e) => onRange(e.target.value, to)}
               style={{ ...inp, width: 136, padding: "6px 9px", fontSize: 11.5 }} />
@@ -2430,33 +2390,29 @@ function LogSheetReport({ fleet, from, to, onRange }) {
       </RFilterBar>
 
       <Panel
-        title={machine ? `${machine.name} — Log Sheet` : "Log Sheet"}
+        title={machine ? `${machine.name} — Log Sheet` : t("machinery.log_sheet")}
         action={<ExportBar rows={rows} columns={COLS} pdfPath="/machinery/reports/log-sheet.pdf"
           params={params} baseName={`log-sheet-${slug(machine?.name)}`}
           disabled={!machineId} disabledWhy={!machineId ? "Pehle machine chuniye" : ""}
           caption={`${machine?.name || "Machine"} log sheet ${from} se ${to} — Sanchalan`} />}>
 
-        {!machineId && <Empty>Upar se ek machine chuniye — us machine ka har din ka hisaab yahan aayega.</Empty>}
-        {machineId && loading && <Empty>Laa rahe hain...</Empty>}
+        {!machineId && <Empty>{t("machinery.upar_se_ek_machine_chuniye_us")}</Empty>}
+        {machineId && loading && <Empty>{t("fuel.laa_rahe_hain")}</Empty>}
         {machineId && !loading && rows.length > 0 && (
           <>
             <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>Kaam ke din <b style={{ color: T.t1 }}>{tot.work_days} / {tot.total_days}</b></span>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>Ghante <b style={{ color: T.t1 }}>{fmtN(tot.hours)}</b></span>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>Diesel <b style={{ color: T.t1 }}>{fmtN(tot.diesel)} L</b></span>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>
-                {/* 0 ghante par L/hr banta hi nahi — wahan "infinite mileage"
-                    dikhane se behtar hai khaali chhodna. */}
-                L/hr <b style={{ color: T.t1 }}>{tot.litres_per_hour == null ? "—" : tot.litres_per_hour}</b>
-              </span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{t("machinery.kaam_ke_din")} <b style={{ color: T.t1 }}>{tot.work_days} / {tot.total_days}</b></span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.ghante")} <b style={{ color: T.t1 }}>{fmtN(tot.hours)}</b></span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{t("machinery.diesel")} <b style={{ color: T.t1 }}>{fmtN(tot.diesel)} L</b></span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}><Rich k="machinery.l_hr_litres_per_hour" params={{ litres_per_hour: tot.litres_per_hour == null ? "—" : tot.litres_per_hour }} /></span>
             </div>
             <div style={{ overflowX: "auto" }}>
               <div style={{ minWidth: 980 }}>
                 <Row head cols={cols}>
-                  <span>Date</span><span>Party name</span>
-                  <span style={{ textAlign: "right" }}>Start</span><span style={{ textAlign: "right" }}>Stop</span>
-                  <span style={{ textAlign: "right" }}>Hours</span><span style={{ textAlign: "right" }}>Diesel</span>
-                  <span>Pump name</span><span>Sector</span><span>Remark</span>
+                  <span>{t("common.date")}</span><span>{t("machinery.party_name")}</span>
+                  <span style={{ textAlign: "right" }}>{t("common.start")}</span><span style={{ textAlign: "right" }}>{t("machinery.stop")}</span>
+                  <span style={{ textAlign: "right" }}>{t("machinery.hours")}</span><span style={{ textAlign: "right" }}>{t("machinery.diesel")}</span>
+                  <span>{t("machinery.pump_name")}</span><span>{t("common.sector")}</span><span>{t("common.remark")}</span>
                 </Row>
                 {rows.map((r, i) => (
                   <Row key={i} cols={cols}>
@@ -2468,19 +2424,18 @@ function LogSheetReport({ fleet, from, to, onRange }) {
                     <span style={{ fontSize: 12, fontWeight: r.diesel ? 600 : 400, color: r.diesel ? T.t1 : T.t4, textAlign: "right" }}>{r.diesel || 0}</span>
                     <span style={{ fontSize: 11, color: T.t3 }}>{r.pump_name || "—"}</span>
                     <span style={{ fontSize: 11, color: T.t3 }}>{r.sector || "—"}</span>
-                    <span style={{ fontSize: 11, color: r.worked ? T.t3 : T.t4 }}>{r.remark || (r.worked ? "—" : "NO WORK")}</span>
+                    <span style={{ fontSize: 11, color: r.worked ? T.t3 : T.t4 }}>{r.remark || (r.worked ? "—" : t("machinery.no_work"))}</span>
                   </Row>
                 ))}
               </div>
             </div>
             <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-              Har din ki row hai — kaam na hua ho to bhi. Diesel me pump aur barrel dono ginte hain;
-              barrel wale par pump ki jagah "STOCK DIESEL" likha aata hai.
+             {t("machinery.har_din_ki_row_hai_kaam")}
             </div>
           </>
         )}
         {machineId && !loading && rows.length === 0 && (
-          <Empty>Is duration me is machine ka koi din darj nahi.</Empty>
+          <Empty>{t("machinery.is_duration_me_is_machine_ka")}</Empty>
         )}
       </Panel>
     </div>
@@ -2493,10 +2448,10 @@ function LogSheetReport({ fleet, from, to, onRange }) {
 // yahan sab ek saath aata hai, aur wahi PDF/Excel me jaata hai.
 const EMPTY_FS = { ownership: "", status: "", attention: "" };
 const STATUS_OPTS = [
-  { v: "Available", l: "Available" },
-  { v: "In Use", l: "In Use" },
-  { v: "Under Repair", l: "Under Repair" },
-  { v: "Idle", l: "Idle" },
+  { v: "Available", get l() { return t("machinery.available"); } },
+  { v: "In Use", get l() { return t("machinery.in_use"); } },
+  { v: "Under Repair", get l() { return t("machinery.under_repair"); } },
+  { v: "Idle", get l() { return t("machinery.idle"); } },
 ];
 
 function FleetSummary({ from, to, onRange }) {
@@ -2520,24 +2475,24 @@ function FleetSummary({ from, to, onRange }) {
   const tot = data?.totals || {};
 
   const COLS = [
-    { key: "machine", label: "Machine", w: 22 },
-    { key: "registration_no", label: "Gadi no.", w: 14 },
-    { key: "ownership", label: "Ownership", w: 11 },
-    { key: "vendor", label: "Vendor", w: 20 },
-    { key: "status", label: "Status", w: 13 },
-    { key: "meter_value", label: "Meter", w: 11, excel: (r) => r.meter_value ?? "" },
-    { key: "meter_unit", label: "Unit", w: 8 },
-    { key: "run", label: "Chali", w: 10, excel: (r) => r.run ?? "" },
-    { key: "litres", label: "Diesel L", w: 10 },
-    { key: "fuel_amount", label: "Diesel Rs", w: 12, excel: (r) => Math.round(r.fuel_amount) },
-    { key: "service_amount", label: "Service Rs", w: 12, excel: (r) => Math.round(r.service_amount) },
-    { key: "hire_paid", label: "Kiraya Rs", w: 12, excel: (r) => Math.round(r.hire_paid) },
-    { key: "total_cost", label: "Kul Rs", w: 12, excel: (r) => Math.round(r.total_cost) },
-    { key: "cost_per_unit", label: "Rs/unit", w: 11, excel: (r) => r.cost_per_unit ?? "" },
-    { key: "recovery", label: "Recovery Rs", w: 12, excel: (r) => (r.recovery == null ? "" : Math.round(r.recovery)) },
-    { key: "breakdowns", label: "Breakdown", w: 10 },
-    { key: "doc_text", label: "Kaagaz", w: 26 },
-    { key: "why", label: "Note", w: 30,
+    { key: "machine", label: t("fuel.machine"), w: 22 },
+    { key: "registration_no", label: t("machinery.gadi_no"), w: 14 },
+    { key: "ownership", label: t("common.ownership"), w: 11 },
+    { key: "vendor", label: t("common.vendor"), w: 20 },
+    { key: "status", label: t("common.status"), w: 13 },
+    { key: "meter_value", label: t("machinery.meter"), w: 11, excel: (r) => r.meter_value ?? "" },
+    { key: "meter_unit", label: t("common.unit"), w: 8 },
+    { key: "run", label: t("machinery.chali"), w: 10, excel: (r) => r.run ?? "" },
+    { key: "litres", label: t("machinery.diesel_l"), w: 10 },
+    { key: "fuel_amount", label: t("fuel.diesel_rs"), w: 12, excel: (r) => Math.round(r.fuel_amount) },
+    { key: "service_amount", label: t("machinery.service_rs"), w: 12, excel: (r) => Math.round(r.service_amount) },
+    { key: "hire_paid", label: t("machinery.kiraya_rs"), w: 12, excel: (r) => Math.round(r.hire_paid) },
+    { key: "total_cost", label: t("fuel.kul_rs"), w: 12, excel: (r) => Math.round(r.total_cost) },
+    { key: "cost_per_unit", label: t("machinery.rs_unit"), w: 11, excel: (r) => r.cost_per_unit ?? "" },
+    { key: "recovery", label: t("machinery.recovery_rs"), w: 12, excel: (r) => (r.recovery == null ? "" : Math.round(r.recovery)) },
+    { key: "breakdowns", label: t("machinery.breakdown"), w: 10 },
+    { key: "doc_text", label: t("machinery.kaagaz"), w: 26 },
+    { key: "why", label: t("common.note"), w: 30,
       excel: (r) => (r.cost_per_unit == null ? (r.run_reason || "Rs/unit nikal nahi saka") : "") },
   ];
   const cols = "1.5fr 84px 1fr 88px 78px 80px 84px 84px 86px 1.1fr";
@@ -2546,7 +2501,7 @@ function FleetSummary({ from, to, onRange }) {
     <div style={{ display: "grid", gap: 11 }}>
       <RFilterBar chips={data?.applied || []} onClear={() => setF(EMPTY_FS)}>
         <div>
-          <RLbl>Se — Tak</RLbl>
+          <RLbl>{t("fuel.se_tak")}</RLbl>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input type="date" value={from} onChange={(e) => onRange(e.target.value, to)}
               style={{ ...inp, width: 136, padding: "6px 9px", fontSize: 11.5 }} />
@@ -2555,46 +2510,46 @@ function FleetSummary({ from, to, onRange }) {
               style={{ ...inp, width: 136, padding: "6px 9px", fontSize: 11.5 }} />
           </div>
         </div>
-        <RSel label="Ownership" value={f.ownership} onChange={(v) => set("ownership", v)}
-          options={[{ v: "owned", l: "Apni" }, { v: "rented", l: "Kiraye ki" }]} w={120} />
-        <RSel label="Status" value={f.status} onChange={(v) => set("status", v)} options={STATUS_OPTS} w={140} />
+        <RSel label={t("common.ownership")} value={f.ownership} onChange={(v) => set("ownership", v)}
+          options={[{ v: "owned", l: t("machinery.apni") }, { v: "rented", l: t("machinery.kiraye_ki") }]} w={120} />
+        <RSel label={t("common.status")} value={f.status} onChange={(v) => set("status", v)} options={STATUS_OPTS} w={140} />
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.t2, cursor: "pointer", paddingBottom: 6 }}>
           <input type="checkbox" checked={f.attention === "1"}
             onChange={(e) => set("attention", e.target.checked ? "1" : "")} />
-          Sirf dhyan dene layak
+         {t("machinery.sirf_dhyan_dene_layak")}
         </label>
       </RFilterBar>
 
-      <Panel title={loading ? "Fleet Summary — laa rahe hain..." : `Fleet Summary — ${rows.length} machine`}
+      <Panel title={loading ? t("machinery.fleet_summary_laa_rahe_hain") : `Fleet Summary — ${rows.length} machine`}
         action={<ExportBar rows={rows} columns={COLS} pdfPath="/machinery/reports/fleet-summary.pdf"
           params={params} baseName="fleet-summary"
           caption={`Fleet Summary${from ? ` ${from} se ${to}` : ""} — Sanchalan`} />}>
-        {!loading && rows.length === 0 && <Empty>Is filter par koi machine nahi mili.</Empty>}
+        {!loading && rows.length === 0 && <Empty>{t("machinery.is_filter_par_koi_machine_nahi")}</Empty>}
         {rows.length > 0 && (
           <>
             <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11.5, color: T.t2 }}>
-                {tot.machines} machine <span style={{ color: T.t4 }}>(apni {tot.owned} · kiraye {tot.rented})</span>
+                {tot.machines} machine <span style={{ color: T.t4 }}>{t("machinery.apni_owned_kiraye_rented", { owned: tot.owned, rented: tot.rented })}</span>
               </span>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>Kul kharcha <b style={{ color: T.t1 }}>{fmtC(tot.total_cost)}</b></span>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>Diesel {fmtN(tot.litres)} L</span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{t("machinery.kul_kharcha")} <b style={{ color: T.t1 }}>{fmtC(tot.total_cost)}</b></span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{t("machinery.diesel_fmtn_l", { fmtN: fmtN(tot.litres) })}</span>
               {tot.docs_due > 0 && (
-                <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>{tot.docs_due} ka kaagaz 30 din me</span>
+                <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>{t("machinery.docs_due_ka_kaagaz_30_din", { docs_due: tot.docs_due })}</span>
               )}
               {/* Adhoorapan chhupana nahi — report kis had tak bharosemand hai
                   ye padhne wale ko pata hona chahiye. */}
               {tot.no_rate > 0 && (
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{tot.no_rate} ka Rs/unit nikal nahi saka</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{t("machinery.no_rate_ka_rs_unit_nikal", { no_rate: tot.no_rate })}</span>
               )}
             </div>
             <div style={{ overflowX: "auto" }}>
               <div style={{ minWidth: 1120 }}>
                 <Row head cols={cols}>
-                  <span>Machine</span><span>Own</span><span>Status / Vendor</span>
-                  <span style={{ textAlign: "right" }}>Meter</span><span style={{ textAlign: "right" }}>Chali</span>
-                  <span style={{ textAlign: "right" }}>Diesel</span><span style={{ textAlign: "right" }}>Service</span>
-                  <span style={{ textAlign: "right" }}>Kul</span><span style={{ textAlign: "right" }}>Rs/unit</span>
-                  <span>Kaagaz</span>
+                  <span>{t("fuel.machine")}</span><span>{t("fuel.own")}</span><span>{t("machinery.status_vendor")}</span>
+                  <span style={{ textAlign: "right" }}>{t("machinery.meter")}</span><span style={{ textAlign: "right" }}>{t("machinery.chali")}</span>
+                  <span style={{ textAlign: "right" }}>{t("machinery.diesel")}</span><span style={{ textAlign: "right" }}>{t("machinery.service")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.kul")}</span><span style={{ textAlign: "right" }}>{t("machinery.rs_unit")}</span>
+                  <span>{t("machinery.kaagaz")}</span>
                 </Row>
                 {rows.map((r) => {
                   const docBad = r.doc_days != null && r.doc_days < 0;
@@ -2608,17 +2563,17 @@ function FleetSummary({ from, to, onRange }) {
                           {r.breakdowns > 0 && <span style={{ color: T.red }}> · {r.breakdowns} breakdown</span>}
                         </div>
                       </div>
-                      <span><Pill label={r.owned ? "Apni" : "Kiraye"} c={r.owned ? T.ind : T.t3} bg={r.owned ? T.indL : T.sltL} /></span>
+                      <span><Pill label={r.owned ? t("machinery.apni") : t("machinery.kiraye")} c={r.owned ? T.ind : T.t3} bg={r.owned ? T.indL : T.sltL} /></span>
                       <span style={{ fontSize: 11, color: T.t3 }}>
                         {r.status === "Under Repair"
-                          ? <Pill label="Under Repair" c={T.red} bg={T.redL} />
+                          ? <Pill label={t("machinery.under_repair")} c={T.red} bg={T.redL} />
                           : (r.status || "—")}
                         {r.vendor && <div style={{ fontSize: 10, color: T.t4, marginTop: 2 }}>{r.vendor}</div>}
                       </span>
                       <span style={{ fontSize: 11.5, textAlign: "right", color: r.meter_age_days > 30 ? T.amb : T.t3 }}>
                         {r.meter_value != null ? fmtN(r.meter_value) : "—"}
                         {r.meter_age_days != null && r.meter_age_days > 30 && (
-                          <div style={{ fontSize: 9.5 }}>{r.meter_age_days} din purani</div>
+                          <div style={{ fontSize: 9.5 }}>{t("machinery.meter_age_days_din_purani", { meter_age_days: r.meter_age_days })}</div>
                         )}
                       </span>
                       <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>
@@ -2634,7 +2589,7 @@ function FleetSummary({ from, to, onRange }) {
                       <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(r.total_cost)}</span>
                       <span style={{ textAlign: "right" }}>
                         {r.cost_per_unit == null
-                          ? <span title={r.run_reason || ""} style={{ fontSize: 10, color: T.t4 }}>nikla nahi</span>
+                          ? <span title={r.run_reason || ""} style={{ fontSize: 10, color: T.t4 }}>{t("machinery.nikla_nahi")}</span>
                           : <>
                               <div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{fmtN(r.cost_per_unit)}</div>
                               {r.recovery_per_unit != null && (
@@ -2655,9 +2610,7 @@ function FleetSummary({ from, to, onRange }) {
               </div>
             </div>
             <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-              Kharcha = apni machine par diesel + service + kaagaz; kiraye wali par jo kiraya sach me
-              diya (+ diesel agar hamara ho). Charge-out isme nahi — wo "vasooli" me alag dikhta hai.
-              Jiska Rs/unit nikal nahi saka wahan "nikla nahi" likha hai, 0 nahi.
+             {t("machinery.kharcha_apni_machine_par_diesel_service")}
             </div>
           </>
         )}
@@ -2669,9 +2622,9 @@ function FleetSummary({ from, to, onRange }) {
 function ReportsTab({ fleet, projects, from, to, onRange }) {
   const [sub, setSub] = useState("summary");
   const SUBS = [
-    { id: "summary", l: "Fleet Summary" },
-    { id: "usage", l: "Usage Register" },
-    { id: "log", l: "Log Sheet" },
+    { id: "summary", l: t("machinery.fleet_summary") },
+    { id: "usage", l: t("machinery.usage_register") },
+    { id: "log", l: t("machinery.log_sheet") },
   ];
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -2744,35 +2697,35 @@ function TeleConfigForm({ existing, onSaved, onCancel }) {
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="API base URL" span={2} hint="Vendor ke diye URL ka shuru ka hissa — /getReport se pehle tak">
+        <Field label={t("machinery.api_base_url")} span={2} hint={t("machinery.vendor_ke_diye_url_ka_shuru")}>
           <input value={f.base_url} onChange={(e) => upd("base_url", e.target.value)} placeholder="https://api.vendor.in:5000" style={inp} />
         </Field>
-        <Field label="API token" span={2}
+        <Field label={t("machinery.api_token")} span={2}
           hint={existing?.api_token_set
             ? `Abhi set hai (${existing.api_token_masked}). Badalna ho tabhi naya daalein — khaali chhodne par purana bana rahega.`
-            : "Vendor ke URL me token=... wala lamba hissa. Ye kabhi wapas screen par nahi dikhega."}>
+            : t("machinery.vendor_ke_url_me_token_wala")}>
           <input type="password" autoComplete="new-password" value={f.api_token}
             onChange={(e) => upd("api_token", e.target.value)}
-            placeholder={existing?.api_token_set ? "badalna ho to naya token" : ""} style={inp} />
+            placeholder={existing?.api_token_set ? t("machinery.badalna_ho_to_naya_token") : ""} style={inp} />
         </Field>
-        <Field label="Resource ID" hint="URL me resourceId=... wala number">
+        <Field label={t("machinery.resource_id")} hint={t("machinery.url_me_resourceid_wala_number")}>
           <input value={f.resource_id} onChange={(e) => upd("resource_id", e.target.value)} style={inp} />
         </Field>
       </div>
 
-      <Field label="Groups — vendor panel ke unit-group (URL me objectId)"
-        hint='Har group ka objectId aur apna naam, jaise 30434668 → "Truck"'>
+      <Field label={t("machinery.groups_vendor_panel_ke_unit_group")}
+        hint={t("machinery.har_group_ka_objectid_aur_apna")}>
         <div style={{ display: "grid", gap: 7 }}>
           {f.groups.map((g, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 34px", gap: 7 }}>
               <input value={g.objectId} onChange={(e) => updGroup(i, "objectId", e.target.value)} placeholder="objectId" style={inp} />
-              <input value={g.label || ""} onChange={(e) => updGroup(i, "label", e.target.value)} placeholder="naam (Truck / Machine)" style={inp} />
+              <input value={g.label || ""} onChange={(e) => updGroup(i, "label", e.target.value)} placeholder={t("machinery.naam_truck_machine")} style={inp} />
               <button type="button" onClick={() => upd("groups", f.groups.filter((_, j) => j !== i))}
                 disabled={f.groups.length <= 1}
                 style={{ border: `1.5px solid ${T.b1}`, background: T.surface, borderRadius: 8, cursor: f.groups.length <= 1 ? "not-allowed" : "pointer", color: T.t3 }}>×</button>
             </div>
           ))}
-          <div><Btn size="sm" ghost icon={IcAdd} onClick={() => upd("groups", [...f.groups, { objectId: "", label: "" }])}>Group</Btn></div>
+          <div><Btn size="sm" ghost icon={IcAdd} onClick={() => upd("groups", [...f.groups, { objectId: "", label: "" }])}>{t("machinery.group")}</Btn></div>
         </div>
       </Field>
 
@@ -2780,19 +2733,17 @@ function TeleConfigForm({ existing, onSaved, onCancel }) {
 
       {testResult && (
         <div style={{ border: `1px solid ${T.grnL}`, background: T.grnL, borderRadius: 10, padding: "10px 13px", fontSize: 11.5, color: T.grn }}>
-          <b>Vendor se jawab mila ({testResult.day} ka din):</b>
+          <b>{t("machinery.vendor_se_jawab_mila_day_ka", { day: testResult.day })}</b>
           {testResult.groups.map((g) => (
-            <div key={g.group} style={{ marginTop: 5, color: T.t2 }}>
-              <b>{g.group}</b> — {g.units.length} unit: {g.units.map((u) => u.name).join(", ") || "koi nahi"}
-            </div>
+            <div key={g.group} style={{ marginTop: 5, color: T.t2 }}><Rich k="machinery.group_g_unit_g2" params={{ group: g.group, g: g.units.length, g2: g.units.map((u) => u.name).join(", ") || "koi nahi" }} /></div>
           ))}
         </div>
       )}
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        {onCancel && <Btn ghost onClick={onCancel}>Cancel</Btn>}
-        <Btn ghost onClick={test} disabled={testing}>{testing ? "Pooch rahe hain..." : "Test karo"}</Btn>
-        <Btn onClick={save} disabled={busy}>{busy ? "Save..." : "Save"}</Btn>
+        {onCancel && <Btn ghost onClick={onCancel}>{t("common.cancel")}</Btn>}
+        <Btn ghost onClick={test} disabled={testing}>{testing ? t("machinery.pooch_rahe_hain") : t("machinery.test_karo")}</Btn>
+        <Btn onClick={save} disabled={busy}>{busy ? t("machinery.save") : t("common.save")}</Btn>
       </div>
     </div>
   );
@@ -2924,19 +2875,19 @@ function TeleMap({ dash, height = 540 }) {
     return () => { dead = true; };
   }, [selId, status]);
 
-  if (status === "nokey") return <Empty>Map ke liye REACT_APP_GOOGLE_MAPS_KEY chahiye — deploy config me set hota hai.</Empty>;
-  if (status === "err") return <Empty>Google Maps load nahi hua — internet/key check karo.</Empty>;
+  if (status === "nokey") return <Empty>{t("machinery.map_ke_liye_react_app_google")}</Empty>;
+  if (status === "err") return <Empty>{t("machinery.google_maps_load_nahi_hua_internet")}</Empty>;
 
   return (
     <div>
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: 11, color: T.t3, marginBottom: 8 }}>
-        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: T.grn, marginRight: 4 }} />24 ghante me data</span>
-        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: T.amb, marginRight: 4 }} />2-3 din purana</span>
-        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: T.red, marginRight: 4 }} />sensor chup</span>
-        <span style={{ color: T.t4 }}>· Jagah = aakhri sync tak ki parking · pin par click → 14 din ka raasta</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: T.grn, marginRight: 4 }} />{t("machinery.24_ghante_me_data")}</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: T.amb, marginRight: 4 }} />{t("machinery.2_3_din_purana")}</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: T.red, marginRight: 4 }} />{t("machinery.sensor_chup")}</span>
+        <span style={{ color: T.t4 }}>{t("machinery.jagah_aakhri_sync_tak_ki_parking")}</span>
       </div>
       <div ref={boxRef} style={{ height, borderRadius: 12, border: `1.5px solid ${T.b1}`, overflow: "hidden" }} />
-      {points.length === 0 && <Empty>Abhi kisi unit ke coordinates nahi aaye — pehla sync hone do.</Empty>}
+      {points.length === 0 && <Empty>{t("machinery.abhi_kisi_unit_ke_coordinates_nahi")}</Empty>}
     </div>
   );
 }
@@ -2945,7 +2896,7 @@ function TeleMap({ dash, height = 540 }) {
 // wahi jo Sahayak ka machine_gps tool padhta hai — screen aur bot kabhi alag
 // number nahi bolenge.
 function TeleDash({ dash, onAction }) {
-  if (!dash) return <Empty>Loading...</Empty>;
+  if (!dash) return <Empty>{t("common.loading")}</Empty>;
   const t = dash.tiles || {};
   const machines = (dash.machines || []).slice().sort((a, b) => {
     if (a.linked !== b.linked) return a.linked ? -1 : 1;
@@ -2967,21 +2918,21 @@ function TeleDash({ dash, onAction }) {
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
-        <StatCard label="Kal ka kaam" value={hhmm(t.engine_sec_yday) + " hrs"}
+        <StatCard label={t("machinery.kal_ka_kaam")} value={hhmm(t.engine_sec_yday) + " hrs"}
           sub={`${fmtN(t.diesel_yday)} L diesel (sensor)`} color={T.ind} icon={IcClock} />
-        <StatCard label="Sensors" value={`${t.online || 0}/${t.units || 0} online`}
+        <StatCard label={t("machinery.sensors")} value={`${t.online || 0}/${t.units || 0} online`}
           sub={t.silent ? `${t.silent} chup — dekhna padega` : `${t.linked || 0} machine se jude`}
           color={t.silent ? T.red : T.grn} icon={IcSignal} />
-        <StatCard label="Fuel drop bina jaanch" value={t.drops_pending || 0}
-          sub="engine band tha, level gira" color={t.drops_pending ? T.red : T.grn} icon={IcDrop} />
-        <StatCard label="Fill bina entry" value={t.fills_no_entry || 0}
-          sub="36 ghante nikal gaye, entry nahi" color={t.fills_no_entry ? T.amb : T.grn} icon={IcAlert} />
+        <StatCard label={t("machinery.fuel_drop_bina_jaanch")} value={t.drops_pending || 0}
+          sub={t("machinery.engine_band_tha_level_gira")} color={t.drops_pending ? T.red : T.grn} icon={IcDrop} />
+        <StatCard label={t("machinery.fill_bina_entry")} value={t.fills_no_entry || 0}
+          sub={t("machinery.36_ghante_nikal_gaye_entry_nahi")} color={t.fills_no_entry ? T.amb : T.grn} icon={IcAlert} />
       </div>
 
-      <Panel title="Fleet — kal ka kaam aur 7 din ka hisaab">
+      <Panel title={t("machinery.fleet_kal_ka_kaam_aur_7")}>
         <Row head cols="16px 1.5fr 90px 90px 110px 90px 1.3fr">
-          <span></span><span>Machine</span><span>Kal chali</span><span>Diesel kal</span>
-          <span>L/hr (7d)</span><span>Fill / Drop</span><span>Jagah</span>
+          <span></span><span>{t("fuel.machine")}</span><span>{t("machinery.kal_chali")}</span><span>{t("machinery.diesel_kal")}</span>
+          <span>{t("machinery.l_hr_7d")}</span><span>{t("machinery.fill_drop")}</span><span>{t("fuel.jagah")}</span>
         </Row>
         {machines.map((m) => {
           const over = m.lph7 != null && m.norm_lph != null && m.lph7 > m.norm_lph * 1.15;
@@ -2992,8 +2943,8 @@ function TeleDash({ dash, onAction }) {
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: m.linked ? T.t1 : T.t3 }}>
                   {m.machine_name || m.unit_name}
                 </span>
-                {!m.linked && <span style={{ fontSize: 10, color: T.amb, fontWeight: 700 }}> · judi nahi</span>}
-                {!!m.has_fls && m.linked && <span style={{ fontSize: 10, color: T.t4 }}> · fuel sensor</span>}
+                {!m.linked && <span style={{ fontSize: 10, color: T.amb, fontWeight: 700 }}> {t("machinery.judi_nahi")}</span>}
+                {!!m.has_fls && m.linked && <span style={{ fontSize: 10, color: T.t4 }}> {t("machinery.fuel_sensor")}</span>}
               </span>
               <span style={{ fontFamily: "monospace", fontSize: 12 }}>{m.yday ? hhmm(m.yday.engine_sec) : "—"}</span>
               <span style={{ fontFamily: "monospace", fontSize: 12 }}>{m.yday && m.yday.consumed_l > 0 ? fmtN(m.yday.consumed_l) + " L" : "—"}</span>
@@ -3010,36 +2961,36 @@ function TeleDash({ dash, onAction }) {
           );
         })}
         <div style={{ padding: "8px 15px", fontSize: 10.5, color: T.t4 }}>
-          L/hr sirf un dinon se jinme engine 30 min se zyada chala — 10 minute wale din ka litre/ghanta shor hota hai, hisaab nahi.
+         {t("machinery.l_hr_sirf_un_dinon_se")}
         </div>
       </Panel>
 
       {(dash.flags.drops.length > 0 || dash.flags.fills_no_entry.length > 0 || dash.flags.silent.length > 0) && (
-        <Panel title="Dhyan dene layak">
+        <Panel title={t("fuel.dhyan_dene_layak")}>
           {dash.flags.drops.map((d) => (
             <Row key={"d" + d.id} cols="110px 1.4fr 90px 1fr 100px">
               <span style={{ fontSize: 11, color: T.t3 }}>{String(d.event_time).replace("T", " ").slice(5, 16)}</span>
-              <span style={{ fontSize: 12, fontWeight: 600 }}>{d.machine_name || d.unit_name}<span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> · fuel drop</span></span>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>{d.machine_name || d.unit_name}<span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> {t("machinery.fuel_drop")}</span></span>
               <span style={{ fontFamily: "monospace", fontSize: 12, color: T.red, fontWeight: 700 }}>−{fmtN(d.litres)} L</span>
               <span style={{ fontSize: 11, color: T.t3 }}>{d.location_text || "—"}</span>
-              <span style={{ textAlign: "right" }}><Btn size="sm" ghost onClick={() => review(d.id)}>Theek tha</Btn></span>
+              <span style={{ textAlign: "right" }}><Btn size="sm" ghost onClick={() => review(d.id)}>{t("fuel.theek_tha")}</Btn></span>
             </Row>
           ))}
           {dash.flags.fills_no_entry.map((f) => (
             <Row key={"f" + f.id} cols="110px 1.4fr 90px 1fr 100px">
               <span style={{ fontSize: 11, color: T.t3 }}>{String(f.event_time).replace("T", " ").slice(5, 16)}</span>
-              <span style={{ fontSize: 12, fontWeight: 600 }}>{f.machine_name || f.unit_name}<span style={{ fontWeight: 400, color: T.amb, fontSize: 10.5 }}> · diesel bhara, entry nahi</span></span>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>{f.machine_name || f.unit_name}<span style={{ fontWeight: 400, color: T.amb, fontSize: 10.5 }}> {t("machinery.diesel_bhara_entry_nahi")}</span></span>
               <span style={{ fontFamily: "monospace", fontSize: 12 }}>{fmtN(f.litres)} L</span>
-              <span style={{ fontSize: 11, color: T.t3 }}>Fuel module me entry karwao</span>
+              <span style={{ fontSize: 11, color: T.t3 }}>{t("machinery.fuel_module_me_entry_karwao")}</span>
               <span></span>
             </Row>
           ))}
           {dash.flags.silent.map((s, i) => (
             <Row key={"s" + i} cols="110px 1.4fr 90px 1fr 100px">
               <span></span>
-              <span style={{ fontSize: 12, fontWeight: 600 }}>{s.machine_name || s.unit_name}<span style={{ fontWeight: 400, color: T.red, fontSize: 10.5 }}> · sensor chup hai</span></span>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>{s.machine_name || s.unit_name}<span style={{ fontWeight: 400, color: T.red, fontSize: 10.5 }}> {t("machinery.sensor_chup_hai")}</span></span>
               <span></span>
-              <span style={{ fontSize: 11, color: T.t3 }}>aakhri data {s.last_data_at ? fmtD(s.last_data_at) : "kabhi nahi"} — vendor se poochho</span>
+              <span style={{ fontSize: 11, color: T.t3 }}>{t("machinery.aakhri_data_s_vendor_se_poochho", { s: s.last_data_at ? fmtD(s.last_data_at) : "kabhi nahi" })}</span>
               <span></span>
             </Row>
           ))}
@@ -3082,17 +3033,14 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncing, data]);
 
-  if (!data) return <Empty>Loading...</Empty>;
+  if (!data) return <Empty>{t("common.loading")}</Empty>;
 
   if (!data.account) {
     return (
-      <Panel title="GPS / telematics vendor jodo">
+      <Panel title={t("machinery.gps_telematics_vendor_jodo")}>
         <div style={{ padding: 16 }}>
           <Notice>
-            Vendor (jaise Technoton) ka API yahan judta hai. Uske baad har raat ka engine hours,
-            diesel aur fuel events apne aap aayenge, aur unki gadiyan neeche list me dikh kar
-            machine se jodi ja sakengi. Vendor ke bheje URL me hi token, resourceId aur objectId
-            (group) likhe hote hain.
+           {t("machinery.vendor_jaise_technoton_ka_api_yahan")}
           </Notice>
           <TeleConfigForm existing={null} onSaved={() => onReload && onReload(true)} />
         </div>
@@ -3121,7 +3069,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
 
   const link = async (u) => {
     const eqId = Number(choice[u.id] != null ? choice[u.id] : (u.top ? u.top.equipment_id : 0));
-    if (!eqId) { window.alert("Pehle machine chuno"); return; }
+    if (!eqId) { window.alert(t("machinery.pehle_machine_chuno")); return; }
     const m = machineById[eqId];
     const canFillReg = !!(u.derived_reg_no && m && !String(m.registration_no || "").trim());
     setBusyId(u.id);
@@ -3143,7 +3091,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
   };
 
   const unlink = async (u) => {
-    if (!window.confirm(`"${u.unit_name}" ko "${u.machine_name}" se kholna hai?\n\nIska sensor data machine se hat jayega (data khota nahi — dobara jodne par wapas mil jaata hai).`)) return;
+    if (!window.confirm(t("machinery.unit_name_ko_machine_name_se", { unit_name: u.unit_name, machine_name: u.machine_name }))) return;
     await act(u, "unlink");
   };
 
@@ -3158,26 +3106,26 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
         <div style={{ fontSize: 11.5, color: T.t3, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <Pill label={acc.vendor || "vendor"} c={T.ind} bg={T.indL} />
           {acc.last_sync_status === "error"
-            ? <span style={{ color: T.red, fontWeight: 600 }}>Aakhri sync FAIL — {acc.last_error || "vendor se jawab nahi"}</span>
+            ? <span style={{ color: T.red, fontWeight: 600 }}>{t("machinery.aakhri_sync_fail_acc", { acc: acc.last_error || "vendor se jawab nahi" })}</span>
             : acc.last_sync_at
-              ? <span>Aakhri sync {fmtD(acc.last_sync_at)} · har raat apne aap chalta hai</span>
-              : <span>Abhi pehla sync hona baaki hai</span>}
+              ? <span>{t("machinery.aakhri_sync_fmtd_har_raat_apne", { fmtD: fmtD(acc.last_sync_at) })}</span>
+              : <span>{t("machinery.abhi_pehla_sync_hona_baaki_hai")}</span>}
         </div>
         <div style={{ display: "flex", gap: 7 }}>
-          <Btn size="sm" ghost onClick={() => setConfigOpen(true)}>Settings</Btn>
-          <Btn size="sm" onClick={doSync} disabled={syncing}>{syncing ? "Sync chal raha hai..." : "Sync now"}</Btn>
+          <Btn size="sm" ghost onClick={() => setConfigOpen(true)}>{t("common.settings")}</Btn>
+          <Btn size="sm" onClick={doSync} disabled={syncing}>{syncing ? t("machinery.sync_chal_raha_hai") : t("machinery.sync_now")}</Btn>
         </div>
       </div>
       {syncing && (
-        <Notice>Vendor se data aa raha hai — 1-2 minute lagte hain (unka server ek waqt me ek hi report deta hai). Screen apne aap taaza ho jayegi.</Notice>
+        <Notice>{t("machinery.vendor_se_data_aa_raha_hai")}</Notice>
       )}
 
       {/* ── sub-views: Dashboard | Map | Jod ── */}
       <div style={{ display: "flex", gap: 6 }}>
         {[
-          { id: "dash", l: "Dashboard" },
-          { id: "map", l: "Map" },
-          { id: "jod", l: "Jodna baaki", badge: pending.length || null },
+          { id: "dash", l: t("common.dashboard") },
+          { id: "map", l: t("machinery.map") },
+          { id: "jod", l: t("machinery.jodna_baaki"), badge: pending.length || null },
         ].map((x) => (
           <button key={x.id} type="button" onClick={() => setSub(x.id)}
             style={{
@@ -3198,7 +3146,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
       {sub === "jod" && (<>
       {/* ── jodna baaki ── */}
       <Panel title={`Jodna baaki — vendor ki ${pending.length} unit kisi machine se judi nahi`}>
-        {pending.length === 0 && <Empty>Sab units judi hui hain. Nayi unit vendor panel me aate hi yahan khud dikh jayegi.</Empty>}
+        {pending.length === 0 && <Empty>{t("machinery.sab_units_judi_hui_hain_nayi")}</Empty>}
         {pending.map((u) => {
           const selId = choice[u.id] != null ? choice[u.id] : (u.top ? u.top.equipment_id : "");
           const selMachine = machineById[Number(selId)];
@@ -3209,30 +3157,27 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
                 <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
                   {u.unit_name}
                   {u.group_label && <Pill label={u.group_label} c={T.slt} bg={T.sltL} />}
-                  {!!u.has_fls && <Pill label="Fuel sensor" c={T.ind} bg={T.indL} />}
+                  {!!u.has_fls && <Pill label={t("machinery.fuel_sensor_2")} c={T.ind} bg={T.indL} />}
                 </div>
                 <div style={{ fontSize: 10.5, color: T.t4 }}>
-                  {u.last_data_at ? `aakhri data ${fmtD(u.last_data_at)}` : "data abhi nahi aaya"}
+                  {u.last_data_at ? `aakhri data ${fmtD(u.last_data_at)}` : t("machinery.data_abhi_nahi_aaya")}
                 </div>
               </div>
 
               {u.top ? (
-                <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 8 }}>
-                  Sujhav: <b style={{ color: T.t1 }}>{u.top.name}</b>
-                  {u.top.registration_no ? ` (${u.top.registration_no})` : ""} — {u.top.why} · bharosa {u.top.confidence}%
-                  {u.top.conflict && <span style={{ color: T.amb, fontWeight: 600 }}> · ⚠ {u.top.conflict}</span>}
-                  {u.ambiguous && <span style={{ color: T.amb, fontWeight: 600 }}> · do machine barabar milti hain — khud chuno</span>}
+                <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 8 }}><Rich k="machinery.sujhav_name_u_why_bharosa_confidence" params={{ name: u.top.name, u: u.top.registration_no ? ` (${u.top.registration_no})` : "", why: u.top.why, confidence: u.top.confidence }} />{u.top.conflict && <span style={{ color: T.amb, fontWeight: 600 }}> · ⚠ {u.top.conflict}</span>}
+                  {u.ambiguous && <span style={{ color: T.amb, fontWeight: 600 }}> {t("machinery.do_machine_barabar_milti_hain_khud")}</span>}
                 </div>
               ) : (
                 <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 8 }}>
-                  Koi milti-julti machine nahi mili — list se chuno ya nayi banao.
+                 {t("machinery.koi_milti_julti_machine_nahi_mili")}
                 </div>
               )}
 
               <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
                 <select value={selId} onChange={(e) => setChoice((p) => ({ ...p, [u.id]: e.target.value }))}
                   style={{ ...inp, width: 320 }}>
-                  <option value="">— machine chuno —</option>
+                  <option value="">{t("machinery.machine_chuno")}</option>
                   {machines.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name}{m.registration_no ? ` (${m.registration_no})` : ""}
@@ -3240,17 +3185,17 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
                   ))}
                 </select>
                 <Btn size="sm" onClick={() => link(u)} disabled={busyId === u.id || !selId}>
-                  {busyId === u.id ? "..." : "Jodo"}
+                  {busyId === u.id ? "..." : t("machinery.jodo")}
                 </Btn>
-                <Btn size="sm" ghost onClick={() => onNewMachine && onNewMachine(u)}>Nayi machine banao</Btn>
-                <Btn size="sm" ghost onClick={() => act(u, "ignore")} disabled={busyId === u.id}>Hamari nahi hai</Btn>
+                <Btn size="sm" ghost onClick={() => onNewMachine && onNewMachine(u)}>{t("machinery.nayi_machine_banao")}</Btn>
+                <Btn size="sm" ghost onClick={() => act(u, "ignore")} disabled={busyId === u.id}>{t("machinery.hamari_nahi_hai")}</Btn>
               </div>
 
               {canFillReg && (
                 <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11.5, color: T.t2, marginTop: 8, cursor: "pointer" }}>
                   <input type="checkbox" checked={fillReg[u.id] !== false}
                     onChange={(e) => setFillReg((p) => ({ ...p, [u.id]: e.target.checked }))} />
-                  Machine ka gadi no. khaali hai — sensor wala <b>{u.derived_reg_no}</b> bhar do
+                 {t("machinery.machine_ka_gadi_no_khaali_hai")} <b>{u.derived_reg_no}</b> {t("machinery.bhar_do")}
                 </label>
               )}
             </div>
@@ -3260,11 +3205,11 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
 
       {/* ── jude hue ── */}
       <Panel title={`Jude hue (${linked.length})`}>
-        {linked.length === 0 && <Empty>Abhi koi unit judi nahi. Upar "Jodna baaki" se shuru karo.</Empty>}
+        {linked.length === 0 && <Empty>{t("machinery.abhi_koi_unit_judi_nahi_upar")}</Empty>}
         {linked.length > 0 && (
           <>
             <Row head cols="16px 1.4fr 1.4fr 130px 90px">
-              <span></span><span>Vendor unit</span><span>Machine</span><span>Aakhri data</span><span></span>
+              <span></span><span>{t("machinery.vendor_unit")}</span><span>{t("fuel.machine")}</span><span>{t("machinery.aakhri_data")}</span><span></span>
             </Row>
             {linked.map((u) => (
               <Row key={u.id} cols="16px 1.4fr 1.4fr 130px 90px">
@@ -3273,11 +3218,11 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{u.machine_name}
                   {u.machine_reg ? <span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> · {u.machine_reg}</span> : null}</span>
                 <span style={{ fontSize: 11.5, color: u.health === "red" ? T.red : T.t3 }}>
-                  {u.last_data_at ? fmtD(u.last_data_at) : "kabhi nahi"}
-                  {u.health === "red" && " · sensor chup hai"}
+                  {u.last_data_at ? fmtD(u.last_data_at) : t("fuel.kabhi_nahi")}
+                  {u.health === "red" && t("machinery.sensor_chup_hai")}
                 </span>
                 <span style={{ textAlign: "right" }}>
-                  <Btn size="sm" ghost onClick={() => unlink(u)} disabled={busyId === u.id}>Kholo</Btn>
+                  <Btn size="sm" ghost onClick={() => unlink(u)} disabled={busyId === u.id}>{t("machinery.kholo")}</Btn>
                 </span>
               </Row>
             ))}
@@ -3287,21 +3232,21 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
 
       {/* ── GPS nahi hai ── */}
       <Panel title={`Machines bina GPS unit ke (${noUnit.length})`}>
-        {noUnit.length === 0 && <Empty>Har machine kisi na kisi unit se judi hai.</Empty>}
+        {noUnit.length === 0 && <Empty>{t("machinery.har_machine_kisi_na_kisi_unit")}</Empty>}
         {noUnit.map((m) => (
           <Row key={m.id} cols="1.6fr 1fr 1.4fr">
             <span style={{ fontSize: 12.5, fontWeight: 600, color: m.flag === "grey" ? T.t3 : T.t1 }}>
               {m.name}{m.registration_no ? <span style={{ fontWeight: 400, color: T.t4, fontSize: 10.5 }}> · {m.registration_no}</span> : null}
             </span>
             <span>
-              {m.flag === "red" && <Pill label="GPS haan, unit nahi" c={T.red} bg={T.redL} />}
-              {m.flag === "amber" && <Pill label="GPS ka jawab nahi bhara" c={T.amb} bg={T.ambL} />}
-              {m.flag === "grey" && <Pill label="GPS nahi hai" c={T.t3} bg={T.sltL} />}
+              {m.flag === "red" && <Pill label={t("machinery.gps_haan_unit_nahi")} c={T.red} bg={T.redL} />}
+              {m.flag === "amber" && <Pill label={t("machinery.gps_ka_jawab_nahi_bhara")} c={T.amb} bg={T.ambL} />}
+              {m.flag === "grey" && <Pill label={t("machinery.gps_nahi_hai")} c={T.t3} bg={T.sltL} />}
             </span>
             <span style={{ fontSize: 11, color: T.t4 }}>
-              {m.flag === "red" && "Master kehta hai GPS laga hai par vendor me unit nahi mili — vendor/config check karo"}
-              {m.flag === "amber" && "Machine kholkar Telematics me haan/nahi bharo — khaali jawab bhi kami ginti hai"}
-              {m.flag === "grey" && "Theek hai — is machine par GPS hai hi nahi"}
+              {m.flag === "red" && t("machinery.master_kehta_hai_gps_laga_hai")}
+              {m.flag === "amber" && t("machinery.machine_kholkar_telematics_me_haan_nahi")}
+              {m.flag === "grey" && t("machinery.theek_hai_is_machine_par_gps")}
             </span>
           </Row>
         ))}
@@ -3313,7 +3258,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
             <Row key={u.id} cols="1.6fr 130px">
               <span style={{ fontSize: 12, color: T.t3 }}>{u.unit_name}</span>
               <span style={{ textAlign: "right" }}>
-                <Btn size="sm" ghost onClick={() => act(u, "restore")}>Wapas lao</Btn>
+                <Btn size="sm" ghost onClick={() => act(u, "restore")}>{t("machinery.wapas_lao")}</Btn>
               </span>
             </Row>
           ))}
@@ -3321,7 +3266,7 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
       )}
       </>)}
 
-      <Modal open={configOpen} onClose={() => setConfigOpen(false)} title="Telematics settings" width={640}>
+      <Modal open={configOpen} onClose={() => setConfigOpen(false)} title={t("machinery.telematics_settings")} width={640}>
         <TeleConfigForm existing={acc}
           onSaved={() => { setConfigOpen(false); onReload && onReload(true); }}
           onCancel={() => setConfigOpen(false)} />
@@ -3395,31 +3340,31 @@ function MachineryModule() {
   const expired = active.filter((d) => d.days < 0);
 
   const TILES = useMemo(() => ([
-    { l: "Machines", v: fleet.length, sub: `${owned.length} owned · ${fleet.length - owned.length} rented`, c: T.ind, I: IcTruck },
-    { l: "Kaagaz khatam / paas", v: active.length, sub: expired.length ? `${expired.length} nikal chuke` : "30 din ke andar", c: active.length ? T.red : T.grn, I: IcDoc },
-    { l: "Meter purani/nahi", v: (gaps.counts.meter || 0), sub: "iske bina service due nahi nikalti", c: (gaps.counts.meter ? T.amb : T.grn), I: IcGauge },
+    { l: t("machinery.machines"), v: fleet.length, sub: `${owned.length} owned · ${fleet.length - owned.length} rented`, c: T.ind, I: IcTruck },
+    { l: t("machinery.kaagaz_khatam_paas"), v: active.length, sub: expired.length ? `${expired.length} nikal chuke` : "30 din ke andar", c: active.length ? T.red : T.grn, I: IcDoc },
+    { l: t("machinery.meter_purani_nahi"), v: (gaps.counts.meter || 0), sub: t("machinery.iske_bina_service_due_nahi_nikalti"), c: (gaps.counts.meter ? T.amb : T.grn), I: IcGauge },
     // Chautha tile ab poore record ka haal batata hai. Sirf "reg. no. missing"
     // se kaam nahi chalta — jis machine ka rate ya kaagaz nahi, wo bhi utni hi
     // adhoori hai, aur wo tile me kahin dikhta hi nahi tha.
-    { l: "Record poora", v: (gaps.avg_pct != null ? gaps.avg_pct : 100) + "%",
+    { l: t("machinery.record_poora"), v: (gaps.avg_pct != null ? gaps.avg_pct : 100) + "%",
       sub: gaps.gaps && gaps.gaps.length ? `${gaps.gaps.length} machine adhoori` : "sab poori",
       c: (gaps.avg_pct >= 90 ? T.grn : gaps.avg_pct >= 60 ? T.amb : T.red), I: IcAlert },
   ]), [fleet, owned, active, expired, gaps]);
 
   const TABS = [
-    { id: "fleet", l: "Fleet", I: IcTruck },
-    { id: "due", l: "Reminders", I: IcBell, badge: active.length || null },
+    { id: "fleet", l: t("machinery.fleet"), I: IcTruck },
+    { id: "due", l: t("machinery.reminders"), I: IcBell, badge: active.length || null },
     // Badge = kitni vendor units abhi kisi machine se judi nahi — wahi is
     // tab ka asli kaam hai. Account hi na ho to badge ka koi matlab nahi.
     { id: "gps", l: "GPS", I: IcSignal, badge: (tele && tele.account && tele.pending.length) || null },
-    { id: "insights", l: "Insights", I: IcSpark },
-    { id: "reports", l: "Reports", I: IcChart },
+    { id: "insights", l: t("machinery.insights"), I: IcSpark },
+    { id: "reports", l: t("common.reports"), I: IcChart },
   ];
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", flexDirection: "column", gap: 14 }}>
       <div style={{ width: 36, height: 36, border: "3px solid #E2E8F0", borderTopColor: T.ind, borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-      <div style={{ fontSize: 13, color: "#8896A6" }}>Loading Machinery...</div>
+      <div style={{ fontSize: 13, color: "#8896A6" }}>{t("machinery.loading_machinery")}</div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
@@ -3467,21 +3412,21 @@ function MachineryModule() {
             )}
 
             {tab === "fleet" && (
-              <Panel title="Fleet" action={
+              <Panel title={t("machinery.fleet")} action={
                 <div style={{ display: "flex", gap: 7 }}>
-                  <Btn size="sm" ghost onClick={() => setImportOpen(true)}>Excel import</Btn>
-                  <Btn size="sm" icon={IcAdd} onClick={() => { setEditMachine(null); setFormOpen(true); }}>Machine</Btn>
+                  <Btn size="sm" ghost onClick={() => setImportOpen(true)}>{t("machinery.excel_import")}</Btn>
+                  <Btn size="sm" icon={IcAdd} onClick={() => { setEditMachine(null); setFormOpen(true); }}>{t("fuel.machine")}</Btn>
                 </div>}>
                 {fleet.length === 0 && (
                   <Empty>
-                    Koi machine register nahi.<br />
-                    <span style={{ fontSize: 11.5 }}>Upar "Machine" se add karein — gadi no., rate, kaagaz aur aaj ka meter ek hi form me.</span>
+                   {t("machinery.koi_machine_register_nahi")}<br />
+                    <span style={{ fontSize: 11.5 }}>{t("machinery.upar_machine_se_add_karein_gadi")}</span>
                   </Empty>
                 )}
                 {fleet.length > 0 && (
                   <>
                     <Row head cols="1.7fr 92px 1fr 1.1fr 120px 110px">
-                      <span>Machine</span><span>Ownership</span><span>Current meter</span><span>Documents</span><span>Health</span><span>Detail poora</span>
+                      <span>{t("fuel.machine")}</span><span>{t("common.ownership")}</span><span>{t("machinery.current_meter")}</span><span>{t("common.documents")}</span><span>{t("machinery.health")}</span><span>{t("machinery.detail_poora")}</span>
                     </Row>
                     {fleet.map((m) => {
                       const tone = m.doc_status ? expiryTone(m.doc_status.days) : null;
@@ -3492,22 +3437,22 @@ function MachineryModule() {
                           <div>
                             <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{m.name}{m.code ? ` — ${m.code}` : ""}</div>
                             <div style={{ fontSize: 10.5, color: T.t4 }}>
-                              {m.registration_no || (m.owned ? "reg. no. nahi" : m.default_vendor_name || "—")}
+                              {m.registration_no || (m.owned ? t("machinery.reg_no_nahi") : m.default_vendor_name || "—")}
                             </div>
                           </div>
-                          <span><Pill label={m.owned ? "Owned" : "Rented"} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
-                          <span>{m.owned ? <MeterCell meter={m.meter} unit={m.meter_unit} /> : <span style={{ fontSize: 11.5, color: T.t4 }}>Vendor scope</span>}</span>
+                          <span><Pill label={m.owned ? t("machinery.owned") : t("machinery.rented")} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
+                          <span>{m.owned ? <MeterCell meter={m.meter} unit={m.meter_unit} /> : <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.vendor_scope")}</span>}</span>
                           <span>
                             {m.doc_status
                               ? <Pill label={`${docLabel(m.doc_status.type)} · ${tone.label}`} c={tone.c} bg={tone.bg} />
-                              : <span style={{ fontSize: 11, color: T.t4 }}>{m.owned ? "Koi kaagaz nahi" : "Verify baaki"}</span>}
+                              : <span style={{ fontSize: 11, color: T.t4 }}>{m.owned ? t("machinery.koi_kaagaz_nahi") : t("machinery.verify_baaki")}</span>}
                           </span>
                           <span>
                             {/* Workshop me padi machine kaagaz ke rang se chhup jaati thi —
                                 repair sab par bhaari hai. */}
-                            {m.status === "Under Repair" ? <Pill label="Under Repair" c={T.red} bg={T.redL} />
-                              : bad ? <Pill label="Action needed" c={T.red} bg={T.redL} />
-                              : soon ? <Pill label="Dhyan dein" c={T.amb} bg={T.ambL} />
+                            {m.status === "Under Repair" ? <Pill label={t("machinery.under_repair")} c={T.red} bg={T.redL} />
+                              : bad ? <Pill label={t("machinery.action_needed")} c={T.red} bg={T.redL} />
+                              : soon ? <Pill label={t("machinery.dhyan_dein")} c={T.amb} bg={T.ambL} />
                               : <Pill label="OK" c={T.grn} bg={T.grnL} />}
                           </span>
                           <span><CompletenessBar c={m.completeness} /></span>
@@ -3522,31 +3467,30 @@ function MachineryModule() {
             {tab === "due" && (
               <>
                 <Notice>
-                  Kaagaz ki expiry par bell apne aap jaati hai — 30 / 15 / 7 / 1 din pehle aur khatam hone wale din, har ek baar hi.
-                  Ye Sahayak ke daily digest se alag chalti hai, kyunki digest teen din me ek baar hi aata hai aur date koi intezaar nahi karti.
+                 {t("machinery.kaagaz_ki_expiry_par_bell_apne")}
                 </Notice>
-                <Panel title="Reminders">
-                  {due.length === 0 && <Empty>Agle 45 din me kuch due nahi.</Empty>}
+                <Panel title={t("machinery.reminders")}>
+                  {due.length === 0 && <Empty>{t("machinery.agle_45_din_me_kuch_due")}</Empty>}
                   {due.length > 0 && (
                     <>
                       <Row head cols="110px 1.5fr 1.4fr 110px 110px">
-                        <span>Due</span><span>Machine</span><span>Kya</span><span>Date</span><span></span>
+                        <span>{t("common.due")}</span><span>{t("fuel.machine")}</span><span>{t("fuel.kya")}</span><span>{t("common.date")}</span><span></span>
                       </Row>
                       {due.map((d) => {
                         const tone = expiryTone(d.days);
                         return (
                           <Row key={d.ref_type + d.ref_id} cols="110px 1.5fr 1.4fr 110px 110px">
-                            <span><Pill label={d.snoozed ? "Snoozed" : tone.label} c={d.snoozed ? T.t3 : tone.c} bg={d.snoozed ? T.sltL : tone.bg} /></span>
+                            <span><Pill label={d.snoozed ? t("machinery.snoozed") : tone.label} c={d.snoozed ? T.t3 : tone.c} bg={d.snoozed ? T.sltL : tone.bg} /></span>
                             <div>
                               <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{d.machine_name}</div>
-                              <div style={{ fontSize: 10.5, color: T.t4 }}>{d.registration_no || (d.scope === "vendor" ? "kiraye ki" : "—")}</div>
+                              <div style={{ fontSize: 10.5, color: T.t4 }}>{d.registration_no || (d.scope === "vendor" ? t("machinery.kiraye_ki_2") : "—")}</div>
                             </div>
                             <span style={{ fontSize: 12, color: T.t2 }}>
                               {d.label}{d.provider ? ` — ${d.provider}` : ""}{d.amount ? ` · ${fmtC(d.amount)}` : ""}
                             </span>
                             <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(d.valid_till)}</span>
                             <span style={{ textAlign: "right" }}>
-                              <Btn size="sm" ghost onClick={() => snooze(d)}>Snooze 7d</Btn>
+                              <Btn size="sm" ghost onClick={() => snooze(d)}>{t("machinery.snooze_7d")}</Btn>
                             </span>
                           </Row>
                         );
@@ -3560,12 +3504,12 @@ function MachineryModule() {
             {tab === "insights" && (
               <div style={{ display: "grid", gap: 12 }}>
                 <CostReport econ={econ} health={health} />
-                <Panel title="Abhi kya kami hai" style={{ marginTop: 2 }}>
-                  {(gaps.gaps || []).length === 0 && <Empty>Koi kami nahi — Insights M2/M3 me chalu honge.</Empty>}
+                <Panel title={t("machinery.abhi_kya_kami_hai")} style={{ marginTop: 2 }}>
+                  {(gaps.gaps || []).length === 0 && <Empty>{t("machinery.koi_kami_nahi_insights_m2_m3")}</Empty>}
                   {(gaps.gaps || []).map((g) => (
                     <Row key={g.id} cols="1.6fr 1fr 1.4fr">
                       <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{g.name}</span>
-                      <span><Pill label={g.owned ? "Owned" : "Rented"} c={g.owned ? T.ind : T.t3} bg={g.owned ? T.indL : T.sltL} /></span>
+                      <span><Pill label={g.owned ? t("machinery.owned") : t("machinery.rented")} c={g.owned ? T.ind : T.t3} bg={g.owned ? T.indL : T.sltL} /></span>
                       {/* Labels ab backend ke completeness se aate hain —
                           pehle yahan apni alag list thi jo fleet ke bar se
                           alag hi bolti thi. */}

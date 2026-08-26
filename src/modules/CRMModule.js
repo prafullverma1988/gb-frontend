@@ -6,6 +6,7 @@ import LeadDesignDrawer from "../components/LeadDesignDrawer";
 import ShareDrawingDrawer from "../components/ShareDrawingDrawer";
 import DesignOverviewDrawer from "../components/DesignOverviewDrawer";
 import ExportMenu from "../components/DataExport";
+import { t } from "../i18n";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -64,13 +65,13 @@ const fmtN=(n)=>n==null?"—":Number(n).toLocaleString("en-IN");
 
 // ── PIPELINE STAGES ──────────────────────────────────────────────
 const STAGES=[
-  {id:"soft_lead",label:"Soft Lead",  color:"#F59E0B", bg:"#FFFBEB", desc:"Engaging with free design plan"},
-  {id:"lead",     label:"Lead",       color:"#6366F1", bg:"#EEF2FF", desc:"New enquiry received"},
-  {id:"followup", label:"Follow Up",  color:"#0891B2", bg:"#E0F2FE", desc:"Active conversation"},
-  {id:"proposal", label:"Proposal",   color:"#D97706", bg:"#FFFBEB", desc:"Quotation sent"},
-  {id:"converted",label:"Converted",  color:"#059669", bg:"#ECFDF5", desc:"Deal closed!"},
-  {id:"lost",     label:"Lost",       color:"#6B7280", bg:"#F1F5F9", desc:"Not interested"},
-  {id:"project",  label:"Converted to Project", color:"#1565C0", bg:"#E3F2FD", desc:"Active project"},
+  {id:"soft_lead",get label() { return t("crm.soft_lead"); },  color:"#F59E0B", bg:"#FFFBEB", get desc() { return t("crm.engaging_with_free_design_plan"); }},
+  {id:"lead",     get label() { return t("crm.lead"); },       color:"#6366F1", bg:"#EEF2FF", get desc() { return t("crm.new_enquiry_received"); }},
+  {id:"followup", get label() { return t("crm.follow_up"); },  color:"#0891B2", bg:"#E0F2FE", get desc() { return t("crm.active_conversation"); }},
+  {id:"proposal", get label() { return t("crm.proposal"); },   color:"#D97706", bg:"#FFFBEB", get desc() { return t("crm.quotation_sent"); }},
+  {id:"converted",get label() { return t("crm.converted"); },  color:"#059669", bg:"#ECFDF5", get desc() { return t("crm.deal_closed"); }},
+  {id:"lost",     get label() { return t("crm.lost"); },       color:"#6B7280", bg:"#F1F5F9", get desc() { return t("crm.not_interested"); }},
+  {id:"project",  get label() { return t("crm.converted_to_project"); }, color:"#1565C0", bg:"#E3F2FD", get desc() { return t("crm.active_project"); }},
 ];
 
 const SOURCES=["Direct Call","Reference","Site Visit","Facebook Ad","Instagram","Google","Newspaper","Banner","Just Dial","Builder Fair","Other"];
@@ -87,21 +88,21 @@ const leadHasRatesInfo = (lead) => !!(lead?.city_id && lead?.construction_type_i
 // ── NAV ──────────────────────────────────────────────────────────
 const NAV=[
   {sec:null,items:[
-    {id:"dashboard",l:"Dashboard",I:IcHome},
-    {id:"projects",l:"Projects",I:IcProj},
+    {id:"dashboard",get l() { return t("common.dashboard"); },I:IcHome},
+    {id:"projects",get l() { return t("common.projects"); },I:IcProj},
     {id:"crm",l:"CRM",I:IcCRM,badge:3},
-    {id:"tasks",l:"Tasks",I:IcTask},
-    {id:"team",l:"Team",I:IcTeam},
+    {id:"tasks",get l() { return t("common.tasks"); },I:IcTask},
+    {id:"team",get l() { return t("common.team"); },I:IcTeam},
   ]},
   {sec:"FINANCE & OPS",items:[
-    {id:"finance",l:"Finance",I:IcFin},
-    {id:"procurement",l:"Procurement",I:IcProc},
-    {id:"warehouse",l:"Warehouse",I:IcWH},
-    {id:"payroll",l:"Payroll",I:IcPay},
+    {id:"finance",get l() { return t("common.finance"); },I:IcFin},
+    {id:"procurement",get l() { return t("common.procurement"); },I:IcProc},
+    {id:"warehouse",get l() { return t("common.warehouse"); },I:IcWH},
+    {id:"payroll",get l() { return t("common.payroll"); },I:IcPay},
   ]},
   {sec:"MORE",items:[
-    {id:"reports",l:"Reports",I:IcRep},
-    {id:"settings",l:"Settings",I:IcSet},
+    {id:"reports",get l() { return t("common.reports"); },I:IcRep},
+    {id:"settings",get l() { return t("common.settings"); },I:IcSet},
   ]},
 ];
 
@@ -132,7 +133,7 @@ function ContactReminderPopup({lead,onDismiss,onWhatsApp,onCall}){
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.7)",textTransform:"uppercase",letterSpacing:"1px",marginBottom:2}}>
-              {isOverdue?"OVERDUE — CONTACT NOW":isToday?"TODAY'S FOLLOW UP":"UPCOMING CONTACT"}
+              {isOverdue?t("crm.overdue_contact_now"):isToday?t("crm.today_s_follow_up"):t("crm.upcoming_contact")}
             </div>
             <div style={{fontSize:16,fontWeight:700,color:"white"}}>{lead.name}</div>
             <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:1}}>{lead.projType} · ₹{fmt(lead.budget)} · {lead.city}</div>
@@ -145,7 +146,7 @@ function ContactReminderPopup({lead,onDismiss,onWhatsApp,onCall}){
           {/* Contact date info */}
           <div style={{padding:"10px 13px",background:isOverdue?T.redL:isToday?T.ambL:T.bluL,border:`1px solid ${isOverdue?T.redM:isToday?T.ambM:T.bluM}`,borderRadius:8,marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:12.5,fontWeight:600,color:isOverdue?T.red:isToday?T.amb:T.blu}}>
-              {isOverdue?`${Math.abs(diff)} day${Math.abs(diff)>1?"s":""} overdue`:isToday?"Scheduled for today":`In ${diff} days · ${lead.contactDate}`}
+              {isOverdue?`${Math.abs(diff)} day${Math.abs(diff)>1?"s":""} overdue`:isToday?t("crm.scheduled_for_today"):`In ${diff} days · ${lead.contactDate}`}
             </span>
             {lead.phone&&<span style={{fontSize:12,color:T.t3,fontFamily:"monospace"}}>{lead.phone}</span>}
           </div>
@@ -153,7 +154,7 @@ function ContactReminderPopup({lead,onDismiss,onWhatsApp,onCall}){
           {/* Last note */}
           {lead.followupHistory?.length>0&&(
             <div style={{padding:"9px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:14}}>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Last note</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("crm.last_note")}</div>
               <div style={{fontSize:12.5,color:T.t2}}>{lead.followupHistory[lead.followupHistory.length-1].note}</div>
               <div style={{fontSize:10.5,color:T.t4,marginTop:3}}>{lead.followupHistory[lead.followupHistory.length-1].date} · {lead.followupHistory[lead.followupHistory.length-1].by}</div>
             </div>
@@ -163,26 +164,24 @@ function ContactReminderPopup({lead,onDismiss,onWhatsApp,onCall}){
           <div style={{padding:"10px 12px",background:"#ECFDF5",border:"1px solid #A7F3D0",borderRadius:8,marginBottom:16}}>
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
               <IcWA size={14} color={T.wa}/>
-              <span style={{fontSize:10.5,fontWeight:700,color:"#064E3B",textTransform:"uppercase",letterSpacing:".4px"}}>WhatsApp Message Preview</span>
+              <span style={{fontSize:10.5,fontWeight:700,color:"#064E3B",textTransform:"uppercase",letterSpacing:".4px"}}>{t("crm.whatsapp_message_preview")}</span>
             </div>
-            <div style={{fontSize:12,color:"#065F46",lineHeight:1.6,fontStyle:"italic",background:"white",padding:"8px 10px",borderRadius:6,border:"1px solid #A7F3D0"}}>
-              "Namaskar {lead.name.split(" ")[0]} ji 🙏 Aapne hmare saath {lead.projType} project ke liye baat ki thi. Kya aaj baat kar sakte hain? "
-            </div>
+            <div style={{fontSize:12,color:"#065F46",lineHeight:1.6,fontStyle:"italic",background:"white",padding:"8px 10px",borderRadius:6,border:"1px solid #A7F3D0"}}>{t("crm.namaskar_lead_ji_aapne_hmare_saath", { lead: lead.name.split(" ")[0], projType: lead.projType })}</div>
           </div>
 
           {/* Action buttons */}
           <div style={{display:"flex",gap:8}}>
             <button onClick={onCall}
               style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"11px",borderRadius:9,background:`linear-gradient(135deg,${T.blu},#1d4ed8)`,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",boxShadow:`0 4px 12px ${T.blu}44`}}>
-              <IcPhone size={15} color="white"/> Call Now
+              <IcPhone size={15} color="white"/> {t("crm.call_now")}
             </button>
             <button onClick={onWhatsApp}
               style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"11px",borderRadius:9,background:`linear-gradient(135deg,${T.wa},#128C7E)`,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",boxShadow:`0 4px 12px ${T.wa}44`}}>
-              <IcWA size={15} color="white"/> WhatsApp
+              <IcWA size={15} color="white"/> {t("common.whatsapp")}
             </button>
             <button onClick={onDismiss}
               style={{flex:1,padding:"11px",borderRadius:9,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:13,fontWeight:600,color:T.t3,cursor:"pointer"}}>
-              Dismiss
+             {t("common.dismiss")}
             </button>
           </div>
         </div>
@@ -195,10 +194,10 @@ function ContactReminderPopup({lead,onDismiss,onWhatsApp,onCall}){
 // ── WHATSAPP SEND MODAL ──────────────────────────────────────────
 function WhatsAppModal({lead,onClose}){
   const templates=[
-    {id:"followup",label:"Follow Up",msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nAapne hmare saath ${lead.projType} project ke liye baat ki thi. Kya aaj kuch waqt hai baat karne ka?\n\nHum aapki requirements ke anusar best solution denge.\n\n📞 Contact us for details`},
-    {id:"proposal",label:"Proposal Sent",msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nHumne aapka ${lead.projType} project estimate taiyar kar liya hai.\n\n💰 Estimated Budget: ₹${fmt(lead.budget)}\n\nKripya review karein aur hume apne vichar batayein.\n\nContact us for details`},
-    {id:"reminder",label:"Reminder",msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nYaad dila dein - aapka ${lead.projType} project ke bare mein baat karna baaki hai.\n\nKya aaj ya kal koi suitable time hai?\n\nThank you`},
-    {id:"custom",label:"Custom",msg:""},
+    {id:"followup",label:t("crm.follow_up"),msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nAapne hmare saath ${lead.projType} project ke liye baat ki thi. Kya aaj kuch waqt hai baat karne ka?\n\nHum aapki requirements ke anusar best solution denge.\n\n📞 Contact us for details`},
+    {id:"proposal",label:t("crm.proposal_sent"),msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nHumne aapka ${lead.projType} project estimate taiyar kar liya hai.\n\n💰 Estimated Budget: ₹${fmt(lead.budget)}\n\nKripya review karein aur hume apne vichar batayein.\n\nContact us for details`},
+    {id:"reminder",label:t("crm.reminder"),msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nYaad dila dein - aapka ${lead.projType} project ke bare mein baat karna baaki hai.\n\nKya aaj ya kal koi suitable time hai?\n\nThank you`},
+    {id:"custom",label:t("crm.custom"),msg:""},
   ];
   const [selTpl,setSelTpl]=useState("followup");
   const [msg,setMsg]=useState(templates[0].msg);
@@ -234,7 +233,7 @@ function WhatsAppModal({lead,onClose}){
       <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
         {/* Template selector */}
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:10.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Message Template</div>
+          <div style={{fontSize:10.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("crm.message_template")}</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {templates.map(t=>(
               <button key={t.id} onClick={()=>handleTpl(t.id)}
@@ -247,27 +246,27 @@ function WhatsAppModal({lead,onClose}){
 
         {/* Message editor — chat bubble style */}
         <div style={{background:"#E5DDD5",borderRadius:10,padding:"12px",marginBottom:12}}>
-          <div style={{fontSize:9.5,color:"#6B7280",marginBottom:6}}>Preview · Edit before sending</div>
+          <div style={{fontSize:9.5,color:"#6B7280",marginBottom:6}}>{t("crm.preview_edit_before_sending")}</div>
           <div style={{background:"#DCF8C6",borderRadius:"0 10px 10px 10px",padding:"10px 12px",boxShadow:"0 1px 2px rgba(0,0,0,0.1)"}}>
             <textarea value={msg} onChange={e=>setMsg(e.target.value)} rows={7}
               style={{width:"100%",background:"transparent",border:"none",outline:"none",fontSize:12.5,color:"#111",lineHeight:1.6,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
-            <div style={{fontSize:10,color:"#6B7280",textAlign:"right",marginTop:4}}>📱 WhatsApp · {msg.length} chars</div>
+            <div style={{fontSize:10,color:"#6B7280",textAlign:"right",marginTop:4}}>{t("crm.whatsapp_msg_chars", { msg: msg.length })}</div>
           </div>
         </div>
 
         {/* Also send via */}
         <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7}}>
           <IcMail size={13} color={T.t4}/>
-          <span style={{fontSize:11.5,color:T.t3}}>Also send via Email: <strong style={{color:T.t1}}>{lead.email}</strong></span>
-          <button style={{marginLeft:"auto",padding:"3px 9px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>Send Email</button>
+          <span style={{fontSize:11.5,color:T.t3}}>{t("crm.also_send_via_email")} <strong style={{color:T.t1}}>{lead.email}</strong></span>
+          <button style={{marginLeft:"auto",padding:"3px 9px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("crm.send_email")}</button>
         </div>
       </div>
 
       <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:8,flexShrink:0}}>
-        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:8,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:8,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
         <button onClick={sendWhatsApp}
           style={{flex:2,padding:"10px",borderRadius:8,background:"linear-gradient(135deg,#25D366,#128C7E)",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
-          <IcWA size={15} color="white"/> Send on WhatsApp
+          <IcWA size={15} color="white"/> {t("crm.send_on_whatsapp")}
         </button>
       </div>
     </div>
@@ -295,7 +294,7 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:6}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
-            {lead._type==="solar"&&<span style={{fontSize:9,fontWeight:800,color:"#E65100",background:"#FFF3E0",border:"1px solid #FFD54F",borderRadius:3,padding:"1px 5px",flexShrink:0}}>☀ Solar</span>}
+            {lead._type==="solar"&&<span style={{fontSize:9,fontWeight:800,color:"#E65100",background:"#FFF3E0",border:"1px solid #FFD54F",borderRadius:3,padding:"1px 5px",flexShrink:0}}>{t("crm.solar")}</span>}
             <div style={{fontSize:13,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lead.name}</div>
           </div>
           <div style={{fontSize:11,color:T.t4,display:"flex",alignItems:"center",gap:4}}>
@@ -323,7 +322,7 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
         <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 9px",background:isOverdue?T.redL:isToday?T.ambL:isDueSoon?"#FEF9EC":T.surfaceB,border:`1px solid ${isOverdue?T.redM:isToday?T.ambM:isDueSoon?T.ambM:T.b1}`,borderRadius:6,marginBottom:8}}>
           <IcCal size={11} color={isOverdue?T.red:isToday?T.amb:T.t4}/>
           <span style={{fontSize:11,fontWeight:isOverdue||isToday?700:400,color:isOverdue?T.red:isToday?T.amb:T.t3}}>
-            {isOverdue?`Overdue ${Math.abs(diff)}d`:isToday?"Contact today!":isDueSoon?`Due in ${diff}d`:lead.contactDate}
+            {isOverdue?`Overdue ${Math.abs(diff)}d`:isToday?t("crm.contact_today"):isDueSoon?`Due in ${diff}d`:lead.contactDate}
           </span>
           {(isOverdue||isToday)&&(
             <button onClick={e=>{e.stopPropagation();onWhatsApp(lead);}}
@@ -338,12 +337,12 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
       {onDesign && (
         <div onClick={e=>e.stopPropagation()} style={{marginBottom:7}}>
           <button onClick={()=>onDesign(lead)}
-            title="Design requests for this lead"
+            title={t("crm.design_requests_for_this_lead")}
             style={{width:"100%",padding:"6px 10px",borderRadius:6,border:`1px dashed ${T.purM||"#DDD6FE"}`,background:T.purL||"#F5F3FF",color:T.pur||"#7C3AED",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5,transition:"all .12s"}}
             onMouseEnter={e=>e.currentTarget.style.background="#EDE9FE"}
             onMouseLeave={e=>e.currentTarget.style.background=T.purL||"#F5F3FF"}>
             <span>🎨</span>
-            <span>Design Plan</span>
+            <span>{t("crm.design_plan")}</span>
             {lead.design_count>0&&<span style={{background:T.pur||"#7C3AED",color:"#fff",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:8}}>{lead.design_count}</span>}
           </button>
         </div>
@@ -351,7 +350,7 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
 
       {/* Footer: followup count + quick move */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:7,borderTop:`1px solid ${T.b1}`}}>
-        <span style={{fontSize:10.5,color:T.t4}}>{lead.followupHistory?.length||0} follow-up{lead.followupHistory?.length!==1?"s":""}</span>
+        <span style={{fontSize:10.5,color:T.t4}}>{t("crm.lead_follow_uplead2", { lead: lead.followupHistory?.length||0, lead2: lead.followupHistory?.length!==1?"s":"" })}</span>
         <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
           <button onClick={()=>onWhatsApp(lead)}
             style={{width:24,height:24,borderRadius:5,background:"#DCFCE7",border:"1px solid #A7F3D0",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -420,7 +419,7 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,on
             <div style={{flex:1,overflowY:"auto",background:stage.bg,borderRadius:"0 0 9px 9px",border:`1px solid ${stage.color}44`,borderTop:"none",padding:"10px 9px",minHeight:200}}>
               {stageLeads.length===0&&(
                 <div style={{textAlign:"center",padding:"24px 12px",color:`${stage.color}88`,fontSize:12}}>
-                  No leads in this stage
+                 {t("crm.no_leads_in_this_stage")}
                 </div>
               )}
               {stageLeads.map(lead=>(
@@ -440,8 +439,7 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,on
                 <button onClick={()=>onAddLead(stage.id)} style={{width:"100%",padding:"7px",borderRadius:7,border:`1.5px dashed ${stage.color}66`,background:"transparent",color:`${stage.color}BB`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,marginTop:4}}
                   onMouseEnter={e=>{e.currentTarget.style.background=`${stage.color}11`;}}
                   onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-                  <IcAdd size={12} color="currentColor"/> Add {stage.label}
-                </button>
+                  <IcAdd size={12} color="currentColor"/>{t("crm.add_label", { label: stage.label })}</button>
               )}
             </div>
           </div>
@@ -662,7 +660,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
 
   const uploadQuotation=async()=>{
     const file=qFileRef.current?.files?.[0];
-    if(!file) return alert("Please select a PDF file");
+    if(!file) return alert(t("crm.please_select_a_pdf_file"));
     setUploading(true);setUploadPct(0);
     try{
       // Upload to Cloudinary
@@ -704,7 +702,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
   };
 
   const deleteQuotation=async(qid)=>{
-    if(!await window.confirmAsync("Delete this quotation?")) return;
+    if(!await window.confirmAsync(t("crm.delete_this_quotation"))) return;
     try{
       const res=await api.del("/crm/quotations/"+qid);
       if(res.success) setQuotations(p=>p.filter(q=>q.id!==qid));
@@ -765,11 +763,11 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
           </button>
           <button onClick={()=>onWhatsApp(lead)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.wa,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-            <IcWA size={13} color="white"/> WhatsApp
+            <IcWA size={13} color="white"/> {t("common.whatsapp")}
           </button>
           <button onClick={()=>window.open(`mailto:${lead.email}`)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",color:"white",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-            <IcMail size={13} color="white"/> Mail
+            <IcMail size={13} color="white"/> {t("crm.mail")}
           </button>
         </div>
       </div>
@@ -777,12 +775,12 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
       {/* Inner tabs */}
       <div style={{background:T.surface,borderBottom:`1px solid ${T.b1}`,display:"flex",flexShrink:0,overflowX:"auto"}}>
         {[
-          {id:"overview", l:"Overview"},
-          {id:"followup", l:`Follow Ups (${history.length})`},
-          {id:"buildQuote", l:`Build Quote (${builderQuotes.length})`},
-          {id:"quotations", l:`PDF Quotes (${quotations.length})`},
-          {id:"contact",  l:"Contact Date"},
-          {id:"move",     l:"Move Stage"},
+          {id:"overview", l:t("common.overview")},
+          {id:"followup", l:t("crm.follow_ups_length", { length: history.length })},
+          {id:"buildQuote", l:t("crm.build_quote_length", { length: builderQuotes.length })},
+          {id:"quotations", l:t("crm.pdf_quotes_length", { length: quotations.length })},
+          {id:"contact",  l:t("crm.contact_date")},
+          {id:"move",     l:t("crm.move_stage")},
         ].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             style={{padding:"10px 14px",border:"none",background:"none",fontSize:12,fontWeight:tab===t.id?700:400,color:tab===t.id?T.blu:T.t3,borderBottom:tab===t.id?`2px solid ${T.blu}`:"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>
@@ -797,7 +795,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
         {tab==="overview"&&(
           <div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
-              {[{l:"Source",v:lead.source},{l:"Project Type",v:lead.projType},{l:"Budget",v:`₹${fmtN(lead.budget)}`},{l:"City",v:lead.city},{l:"Email",v:lead.email||"—"},{l:"Assigned To",v:lead.assignedTo},{l:"Created",v:lead.createdAt},{l:"Last Contact",v:lead.followupHistory?.[lead.followupHistory.length-1]?.date||"—"}].map(({l,v})=>(
+              {[{l:t("common.source"),v:lead.source},{l:t("crm.project_type"),v:lead.projType},{l:t("common.budget"),v:`₹${fmtN(lead.budget)}`},{l:t("common.city"),v:lead.city},{l:t("common.email"),v:lead.email||"—"},{l:t("common.assigned_to"),v:lead.assignedTo},{l:t("common.created"),v:lead.createdAt},{l:t("crm.last_contact"),v:lead.followupHistory?.[lead.followupHistory.length-1]?.date||"—"}].map(({l,v})=>(
                 <div key={l} style={{padding:"8px 11px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`}}>
                   <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{l}</div>
                   <div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{v}</div>
@@ -805,7 +803,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
               ))}
             </div>
             {lead.notes&&<div style={{padding:"10px 13px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderLeft:`4px solid ${stage?.color||T.slt}`,borderRadius:"0 7px 7px 0",marginBottom:12}}>
-              <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Notes</div>
+              <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.notes")}</div>
               <div style={{fontSize:12.5,color:T.t2,lineHeight:1.6}}>{lead.notes}</div>
             </div>}
             {lead.tags?.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -832,13 +830,13 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                 </div>
               </div>
             ))}
-            {history.length===0&&<div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:13}}>No follow-ups recorded yet</div>}
+            {history.length===0&&<div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:13}}>{t("crm.no_follow_ups_recorded_yet")}</div>}
             <div style={{display:"flex",gap:7,marginTop:8}}>
-              <input value={newNote} onChange={e=>setNewNote(e.target.value)} placeholder="Add follow-up note..."
+              <input value={newNote} onChange={e=>setNewNote(e.target.value)} placeholder={t("crm.add_follow_up_note")}
                 style={{flex:1,padding:"9px 12px",borderRadius:8,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}
                 onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}
                 onKeyDown={e=>e.key==="Enter"&&addNote()}/>
-              <button onClick={addNote} style={{padding:"9px 14px",borderRadius:8,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>Add</button>
+              <button onClick={addNote} style={{padding:"9px 14px",borderRadius:8,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>{t("common.add")}</button>
             </div>
           </div>
         )}
@@ -848,37 +846,37 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
           <div>
             {/* Upload section */}
             <div style={{padding:"13px 14px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:10}}>Upload Quotation (PDF)</div>
+              <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:10}}>{t("crm.upload_quotation_pdf")}</div>
               <input ref={qFileRef} type="file" accept=".pdf" style={{display:"block",marginBottom:8,fontSize:12,color:T.t2}}/>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
                 <div>
-                  <label style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Title</label>
+                  <label style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("common.title_2")}</label>
                   <input value={qForm.title} onChange={e=>setQForm(p=>({...p,title:e.target.value}))} placeholder={`Quotation V${quotations.length+1}`}
                     style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
                 <div>
-                  <label style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Amount (₹)</label>
+                  <label style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.amount")}</label>
                   <input type="number" value={qForm.amount} onChange={e=>setQForm(p=>({...p,amount:e.target.value}))} placeholder="e.g. 2500000"
                     style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               </div>
-              <input value={qForm.notes} onChange={e=>setQForm(p=>({...p,notes:e.target.value}))} placeholder="Notes (optional)"
+              <input value={qForm.notes} onChange={e=>setQForm(p=>({...p,notes:e.target.value}))} placeholder={t("common.notes_optional")}
                 style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:8}}/>
               {uploading&&<div style={{marginBottom:8}}>
                 <div style={{height:5,background:T.b1,borderRadius:5,overflow:"hidden"}}>
                   <div style={{height:"100%",width:`${uploadPct}%`,background:T.blu,borderRadius:5,transition:"width .3s"}}/>
                 </div>
-                <div style={{fontSize:10.5,color:T.blu,marginTop:3}}>{uploadPct}% uploading...</div>
+                <div style={{fontSize:10.5,color:T.blu,marginTop:3}}>{t("crm.uploadpct_uploading", { uploadPct })}</div>
               </div>}
               <button onClick={uploadQuotation} disabled={uploading}
                 style={{padding:"8px 16px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:uploading?"not-allowed":"pointer",opacity:uploading?0.6:1}}>
-                {uploading?"Uploading...":"Upload Quotation"}
+                {uploading?t("common.uploading"):t("crm.upload_quotation")}
               </button>
             </div>
 
             {/* Quotation list */}
-            {quotLoading&&<div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading quotations...</div>}
-            {!quotLoading&&quotations.length===0&&<div style={{textAlign:"center",padding:"30px",color:T.t4,fontSize:13}}>No quotations uploaded yet</div>}
+            {quotLoading&&<div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>{t("crm.loading_quotations")}</div>}
+            {!quotLoading&&quotations.length===0&&<div style={{textAlign:"center",padding:"30px",color:T.t4,fontSize:13}}>{t("crm.no_quotations_uploaded_yet")}</div>}
             {quotations.map(q=>{
               const STATUS_Q={"sent":{c:T.blu,bg:T.bluL,brd:T.bluM},"draft":{c:T.slt,bg:T.sltL,brd:T.b2},"accepted":{c:T.grn,bg:T.grnL,brd:T.grnM},"rejected":{c:T.red,bg:T.redL,brd:T.redM}};
               const ss=STATUS_Q[q.status]||STATUS_Q["sent"];
@@ -892,7 +890,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                         <span style={{display:"inline-block",background:ss.bg,color:ss.c,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:20,border:`1px solid ${ss.brd}`}}>{q.status}</span>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                        {q.created_by_name && <Credit label="Created by" name={q.created_by_name} time={q.created_at}/>}
+                        {q.created_by_name && <Credit label={t("crm.created_by")} name={q.created_by_name} time={q.created_at}/>}
                         {q.file_size && <span style={{fontSize:11,color:T.t4}}>· {q.file_size}</span>}
                       </div>
                     </div>
@@ -902,18 +900,18 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                   <div style={{display:"flex",gap:6}}>
                     <button onClick={()=>window.open(q.file_url,"_blank")}
                       style={{padding:"5px 11px",borderRadius:5,border:`1px solid ${T.bluM}`,background:T.bluL,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      View PDF
+                     {t("crm.view_pdf")}
                     </button>
                     {lead.stage==="converted"&&q.status!=="accepted"&&(
                       <button onClick={()=>acceptQuotation(q.id)}
                         style={{padding:"5px 11px",borderRadius:5,border:`1px solid ${T.grnM}`,background:T.grnL,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                        ✓ Mark as Final
+                       {t("crm.mark_as_final")}
                       </button>
                     )}
-                    {q.status==="accepted"&&<span style={{padding:"5px 11px",fontSize:11,fontWeight:700,color:T.grn}}>✓ Final Quotation</span>}
+                    {q.status==="accepted"&&<span style={{padding:"5px 11px",fontSize:11,fontWeight:700,color:T.grn}}>{t("crm.final_quotation")}</span>}
                     <button onClick={()=>deleteQuotation(q.id)}
                       style={{padding:"5px 11px",borderRadius:5,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",marginLeft:"auto"}}>
-                      Delete
+                     {t("common.delete")}
                     </button>
                   </div>
                 </div>
@@ -927,25 +925,25 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
           <div>
             <div style={{padding:"13px 14px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,marginBottom:14}}>
               <div style={{fontSize:12,color:T.blu,lineHeight:1.6}}>
-                <strong>Automated Reminder System</strong><br/>
-                Jab aap contact date set karte ho → app popup aata hai on that date · WhatsApp message template ready milta hai · Phone ka shortcut directly available
+                <strong>{t("crm.automated_reminder_system")}</strong><br/>
+               {t("crm.jab_aap_contact_date_set_karte")}
               </div>
             </div>
 
             <div style={{marginBottom:14}}>
-              <label style={{fontSize:10.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:7}}>Next Contact Date</label>
+              <label style={{fontSize:10.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:7}}>{t("crm.next_contact_date")}</label>
               <input type="date" value={editContact} onChange={e=>setEditContact(e.target.value)}
                 style={{width:"100%",padding:"10px 13px",borderRadius:8,border:`1.5px solid ${editContact?T.blu:T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               {editContact&&daysDiff(editContact)!==null&&(
                 <div style={{fontSize:11.5,color:daysDiff(editContact)<0?T.red:daysDiff(editContact)===0?T.amb:T.grn,marginTop:5,fontWeight:600}}>
-                  {daysDiff(editContact)<0?`${Math.abs(daysDiff(editContact))} days overdue`:daysDiff(editContact)===0?"Today!":daysDiff(editContact)===1?"Tomorrow":`In ${daysDiff(editContact)} days`}
+                  {daysDiff(editContact)<0?`${Math.abs(daysDiff(editContact))} days overdue`:daysDiff(editContact)===0?t("crm.today"):daysDiff(editContact)===1?t("crm.tomorrow"):`In ${daysDiff(editContact)} days`}
                 </div>
               )}
             </div>
 
             {/* Quick presets */}
             <div style={{marginBottom:14}}>
-              <div style={{fontSize:10.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Quick Set</div>
+              <div style={{fontSize:10.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("crm.quick_set")}</div>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
                 {[["Today","2026-03-16"],["Tomorrow","2026-03-17"],["In 3 days","2026-03-19"],["In 1 week","2026-03-23"],["In 2 weeks","2026-03-30"]].map(([l,d])=>(
                   <button key={l} onClick={()=>setEditContact(d)}
@@ -958,8 +956,8 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
 
             {/* Notification channels */}
             <div style={{padding:"12px 14px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:8,marginBottom:14}}>
-              <div style={{fontSize:11.5,fontWeight:700,color:T.t2,marginBottom:9}}>When contact date arrives, remind via:</div>
-              {[{l:"App Popup",d:"Full-screen popup on login",c:T.blu,on:true},{l:"WhatsApp Template",d:"Ready message to send client",c:T.wa,on:true},{l:"Browser Notification",d:"Desktop notification",c:T.pur,on:false}].map((ch,i)=>(
+              <div style={{fontSize:11.5,fontWeight:700,color:T.t2,marginBottom:9}}>{t("crm.when_contact_date_arrives_remind_via")}</div>
+              {[{l:t("crm.app_popup"),d:t("crm.full_screen_popup_on_login"),c:T.blu,on:true},{l:t("crm.whatsapp_template"),d:t("crm.ready_message_to_send_client"),c:T.wa,on:true},{l:t("crm.browser_notification"),d:t("crm.desktop_notification"),c:T.pur,on:false}].map((ch,i)=>(
                 <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:i<2?8:0}}>
                   <div style={{width:8,height:8,borderRadius:"50%",background:ch.on?ch.c:T.b2,flexShrink:0}}/>
                   <div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:T.t1}}>{ch.l}</div><div style={{fontSize:10.5,color:T.t4}}>{ch.d}</div></div>
@@ -972,7 +970,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
 
             <button onClick={saveContactDate}
               style={{width:"100%",padding:"11px",borderRadius:8,background:contactSaved?T.grn:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"background .2s"}}>
-              {contactSaved?<><IcChk size={15} color="white"/> Date Saved!</>:<><IcCal size={15} color="white"/> Save Contact Date & Enable Reminder</>}
+              {contactSaved?<><IcChk size={15} color="white"/> {t("crm.date_saved")}</>:<><IcCal size={15} color="white"/> {t("crm.save_contact_date_enable_reminder")}</>}
             </button>
           </div>
         )}
@@ -992,7 +990,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
             if (!dt) return "—";
             const d = new Date(dt);
             const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-            return days === 0 ? "today" : days === 1 ? "1 day ago" : days + " days ago";
+            return days === 0 ? "today" : days === 1 ? t("crm.1_day_ago") : days + " days ago";
           };
           // Phase 9: backend handles lead-stage side-effects + timeline log
           // on every status transition. Frontend just calls the endpoint
@@ -1008,11 +1006,11 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
             reloadBuilderQuotes();
           };
           const sendQuote = async (qid) => {
-            if (!await window.confirmAsync("Send this quotation to the client? It will become read-only after sending.")) return;
+            if (!await window.confirmAsync(t("crm.send_this_quotation_to_the_client"))) return;
             await transition(qid, "Sent");
           };
           const reviseQuote = async (q) => {
-            if (!await window.confirmAsync(`Create a revised copy of ${q.quote_no} as a new Draft?`)) return;
+            if (!await window.confirmAsync(t("crm.create_a_revised_copy_of_quote", { quote_no: q.quote_no }))) return;
             const r = await api.post("/library/quotations/" + q.id + "/duplicate", {});
             if (!r?.success) return alert(r?.message || "Failed");
             reloadBuilderQuotes();
@@ -1024,7 +1022,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
           // attaches the file manually on their device after downloading.
           const shareWhatsApp = (q) => {
             const phone = (lead.phone || "").replace(/\D/g, "");
-            if (!phone) return alert("Lead has no phone number");
+            if (!phone) return alert(t("crm.lead_has_no_phone_number"));
             const firstName = (lead.name || "").split(" ")[0] || "Sir/Ma'am";
             const total = "₹" + Math.round(Number(q.grand_total) || 0).toLocaleString("en-IN");
             const msg = [
@@ -1044,7 +1042,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
             window.open("https://wa.me/" + intlPhone + "?text=" + encodeURIComponent(msg), "_blank");
           };
           const delQuote = async (qid) => {
-            if (!await window.confirmAsync("Delete this quotation? This soft-deletes the row.")) return;
+            if (!await window.confirmAsync(t("crm.delete_this_quotation_this_soft_deletes"))) return;
             const r = await api.del("/library/quotations/" + qid);
             if (r?.success) reloadBuilderQuotes();
             else alert(r?.message || "Failed");
@@ -1055,11 +1053,11 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
             <div>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
                 <div style={{ fontSize:12.5, color:T.t2 }}>
-                  Live quotations built from your rate library.
+                 {t("crm.live_quotations_built_from_your_rate")}
                 </div>
                 <button onClick={() => hasRates && setBuilderOpen({ quoteId: null })}
                   disabled={!hasRates}
-                  title={hasRates ? "Open quote builder" : "Set City + Construction Type below first"}
+                  title={hasRates ? t("crm.open_quote_builder") : t("crm.set_city_construction_type_below_first")}
                   style={{
                     padding:"8px 14px", borderRadius:7,
                     background: hasRates ? T.blu : "#E5E7EB",
@@ -1068,7 +1066,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                     cursor: hasRates ? "pointer" : "not-allowed",
                     display:"flex", alignItems:"center", gap:6,
                   }}>
-                  <IcAdd size={13} color={hasRates ? "white" : "#9CA3AF"}/> Create New Quote
+                  <IcAdd size={13} color={hasRates ? "white" : "#9CA3AF"}/> {t("crm.create_new_quote")}
                 </button>
               </div>
 
@@ -1085,28 +1083,28 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                   <>
                     <div style={{ fontSize:10.5, fontWeight:700, color:T.t4,
                                   textTransform:"uppercase", letterSpacing:".4px", marginBottom:8 }}>
-                      {hasRates ? "Change city / construction type" : "Set city + construction type"}
+                      {hasRates ? t("crm.change_city_construction_type") : t("crm.set_city_construction_type")}
                     </div>
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
                       <div>
-                        <label style={{ fontSize:9.5, fontWeight:600, color:T.t4, display:"block", marginBottom:3, textTransform:"uppercase" }}>City</label>
+                        <label style={{ fontSize:9.5, fontWeight:600, color:T.t4, display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.city")}</label>
                         <select value={bqEdit.cityId} onChange={e => setBqEdit(p => ({ ...p, cityId: e.target.value }))}
                           style={{ width:"100%", padding:"7px 9px", borderRadius:6,
                                    border:`1.5px solid ${bqEdit.cityId ? T.b1 : "#FCA5A5"}`,
                                    background:bqEdit.cityId ? T.surface : "#FEF2F2",
                                    fontSize:12.5, color:T.t1, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}>
-                          <option value="">Select city...</option>
+                          <option value="">{t("crm.select_city")}</option>
                           {bqCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label style={{ fontSize:9.5, fontWeight:600, color:T.t4, display:"block", marginBottom:3, textTransform:"uppercase" }}>Construction Type</label>
+                        <label style={{ fontSize:9.5, fontWeight:600, color:T.t4, display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.construction_type")}</label>
                         <select value={bqEdit.typeId} onChange={e => setBqEdit(p => ({ ...p, typeId: e.target.value }))}
                           style={{ width:"100%", padding:"7px 9px", borderRadius:6,
                                    border:`1.5px solid ${bqEdit.typeId ? T.b1 : "#FCA5A5"}`,
                                    background:bqEdit.typeId ? T.surface : "#FEF2F2",
                                    fontSize:12.5, color:T.t1, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}>
-                          <option value="">Select type...</option>
+                          <option value="">{t("common.select_type")}</option>
                           {bqCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </select>
                       </div>
@@ -1117,7 +1115,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                           style={{ padding:"6px 12px", borderRadius:5, background:T.surface,
                                    border:`1px solid ${T.b1}`, fontSize:11.5, fontWeight:600,
                                    color:T.t3, cursor:bqSaving?"not-allowed":"pointer" }}>
-                          Cancel
+                         {t("common.cancel")}
                         </button>
                       )}
                       <button onClick={saveBuildQuoteRates}
@@ -1127,7 +1125,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                                  color:(bqSaving||!bqEdit.cityId||!bqEdit.typeId)?T.t4:"white",
                                  border:"none", fontSize:11.5, fontWeight:700,
                                  cursor:(bqSaving||!bqEdit.cityId||!bqEdit.typeId)?"not-allowed":"pointer" }}>
-                        {bqSaving ? "Saving…" : (hasRates ? "Save Changes" : "Save & Continue")}
+                        {bqSaving ? t("common.saving_2") : (hasRates ? t("common.save_changes") : t("crm.save_continue"))}
                       </button>
                     </div>
                   </>
@@ -1142,20 +1140,20 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                     <button onClick={() => setBqEdit({ cityId: lead.city_id || "", typeId: lead.construction_type_id || "" })}
                       style={{ marginLeft:"auto", background:"transparent", border:`1px solid ${T.b1}`,
                                color:T.t3, padding:"4px 10px", borderRadius:5, fontSize:11, fontWeight:600, cursor:"pointer" }}>
-                      Change
+                     {t("common.change")}
                     </button>
                   </div>
                 )}
               </div>
 
               {builderLoading && builderQuotes.length === 0 && (
-                <div style={{ padding:"18px", textAlign:"center", color:"#9CA3AF", fontSize:12 }}>Loading…</div>
+                <div style={{ padding:"18px", textAlign:"center", color:"#9CA3AF", fontSize:12 }}>{t("common.loading_2")}</div>
               )}
 
               {!builderLoading && builderQuotes.length === 0 && (
                 <div style={{ padding:"24px 14px", textAlign:"center", color:"#9CA3AF", fontSize:12.5,
                               border:"1px dashed #CBD5E1", borderRadius:8, background:"#F8FAFC" }}>
-                  No quotations built yet for this lead.
+                 {t("crm.no_quotations_built_yet_for_this")}
                 </div>
               )}
 
@@ -1183,7 +1181,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                     {/* Action toolbar — PDF, WhatsApp share + status-specific actions */}
                     <div style={{ display:"flex", gap:5, flexShrink:0 }}>
                       <button onClick={() => downloadQuotePdf(q.id, q.quote_no)}
-                        title="Download PDF"
+                        title={t("transaction_detail.download_pdf")}
                         style={{ padding:"5px 8px", fontSize:13, fontWeight:600, borderRadius:5,
                                  background:"white", border:`1px solid ${T.b1}`, color:"#475569", cursor:"pointer", lineHeight:1 }}>
                         📄
@@ -1191,7 +1189,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                       {/* WhatsApp share — only when lead has a phone */}
                       {lead.phone && (
                         <button onClick={() => shareWhatsApp(q)}
-                          title="Share via WhatsApp"
+                          title={t("crm.share_via_whatsapp")}
                           style={{ padding:"5px 8px", fontSize:13, fontWeight:600, borderRadius:5,
                                    background:"white", border:"1px solid #BBF7D0", color:"#15803D", cursor:"pointer", lineHeight:1 }}>
                           📱
@@ -1200,16 +1198,16 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                       {isDraft && (
                         <>
                           <button onClick={() => setBuilderOpen({ quoteId: q.id })}
-                            title="Edit draft"
+                            title={t("crm.edit_draft")}
                             style={{ padding:"5px 10px", fontSize:11, fontWeight:600, borderRadius:5,
                                      background:"white", border:`1px solid ${T.b1}`, color:T.t2, cursor:"pointer" }}>
-                            Edit
+                           {t("common.edit_2")}
                           </button>
                           <button onClick={() => sendQuote(q.id)}
-                            title="Mark as Sent + move lead to Proposal"
+                            title={t("crm.mark_as_sent_move_lead_to")}
                             style={{ padding:"5px 10px", fontSize:11, fontWeight:700, borderRadius:5,
                                      background:T.blu, border:"none", color:"white", cursor:"pointer" }}>
-                            Send
+                           {t("common.send")}
                           </button>
                         </>
                       )}
@@ -1218,35 +1216,35 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                           <button onClick={() => transition(q.id, "Accepted", "Mark this quotation as Accepted by the client? Lead will move to Converted.")}
                             style={{ padding:"5px 10px", fontSize:11, fontWeight:700, borderRadius:5,
                                      background:"#10B981", border:"none", color:"white", cursor:"pointer" }}>
-                            Accept
+                           {t("crm.accept")}
                           </button>
                           <button onClick={() => transition(q.id, "Rejected", "Mark this quotation as Rejected?")}
                             style={{ padding:"5px 10px", fontSize:11, fontWeight:600, borderRadius:5,
                                      background:"white", border:"1px solid #FCA5A5", color:"#DC2626", cursor:"pointer" }}>
-                            Reject
+                           {t("common.reject_2")}
                           </button>
                         </>
                       )}
                       {!isDraft && !isSent && (
                         <button onClick={() => setBuilderOpen({ quoteId: q.id })}
-                          title="View"
+                          title={t("common.view_2")}
                           style={{ padding:"5px 10px", fontSize:11, fontWeight:600, borderRadius:5,
                                    background:"white", border:`1px solid ${T.b1}`, color:T.t2, cursor:"pointer" }}>
-                          View
+                         {t("common.view_2")}
                         </button>
                       )}
                       {/* Revise (duplicate) — available on every non-Draft status */}
                       {!isDraft && (
                         <button onClick={() => reviseQuote(q)}
-                          title="Create a new Draft revised from this quote"
+                          title={t("crm.create_a_new_draft_revised_from")}
                           style={{ padding:"5px 10px", fontSize:11, fontWeight:600, borderRadius:5,
                                    background:"white", border:"1px solid #C4B5FD", color:"#5B21B6", cursor:"pointer" }}>
-                          Revise
+                         {t("crm.revise")}
                         </button>
                       )}
                       {isDraft && (
                         <button onClick={() => delQuote(q.id)}
-                          title="Delete draft"
+                          title={t("crm.delete_draft")}
                           style={{ padding:"5px 8px", fontSize:12, fontWeight:700, borderRadius:5,
                                    background:"transparent", border:"1px solid #FCA5A5", color:"#DC2626", cursor:"pointer" }}>
                           ×
@@ -1263,7 +1261,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
         {/* MOVE STAGE */}
         {tab==="move"&&(
           <div>
-            <div style={{fontSize:12.5,color:T.t2,marginBottom:14}}>Move <strong>{lead.name}</strong> to a different pipeline stage:</div>
+            <div style={{fontSize:12.5,color:T.t2,marginBottom:14}}>{t("crm.move")} <strong>{lead.name}</strong> {t("crm.to_a_different_pipeline_stage")}</div>
 
             {!pendingMove && !convertOpen && STAGES.map(s=>{
               const isCurrentStage=s.id===lead.stage;
@@ -1276,10 +1274,10 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                   <div style={{width:12,height:12,borderRadius:"50%",background:s.color,flexShrink:0}}/>
                   <div style={{flex:1,textAlign:"left"}}>
                     <div style={{fontSize:13,fontWeight:600,color:isCurrentStage?s.color:T.t1}}>
-                      {s.label} {isCurrentStage&&"← Current"}
+                      {s.label} {isCurrentStage&&t("crm.current")}
                       {needsRates && (
                         <span style={{marginLeft:6,padding:"1px 7px",fontSize:9.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",borderRadius:3,letterSpacing:".2px",verticalAlign:"middle"}}>
-                          NEEDS CITY + TYPE
+                         {t("crm.needs_city_type")}
                         </span>
                       )}
                     </div>
@@ -1296,31 +1294,31 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
             {pendingMove && (
               <div style={{padding:14,borderRadius:10,border:`2px solid ${T.blu}`,background:"#F0F9FF"}}>
                 <div style={{fontSize:13,fontWeight:700,color:"#0F172A",marginBottom:4}}>
-                  Set City + Construction Type
+                 {t("crm.set_city_construction_type_2")}
                 </div>
                 <div style={{fontSize:11.5,color:"#475569",marginBottom:14}}>
-                  Required to move to <strong>{STAGES.find(s=>s.id===pendingMove.stage)?.label}</strong> so we can match the right rate package for quotations.
+                 {t("crm.required_to_move_to")} <strong>{STAGES.find(s=>s.id===pendingMove.stage)?.label}</strong> {t("crm.so_we_can_match_the_right")}
                 </div>
                 <div style={{marginBottom:10}}>
-                  <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>City *</label>
+                  <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.city_2")}</label>
                   <select value={moveCityId} onChange={e => setMoveCityId(e.target.value)}
                     style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${moveCityId?T.b1:"#FCA5A5"}`,background:moveCityId?T.surface:"#FEF2F2",fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                    <option value="">Select city...</option>
+                    <option value="">{t("crm.select_city")}</option>
                     {libCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div style={{marginBottom:14}}>
-                  <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Construction Type *</label>
+                  <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("crm.construction_type")}</label>
                   <select value={moveTypeId} onChange={e => setMoveTypeId(e.target.value)}
                     style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${moveTypeId?T.b1:"#FCA5A5"}`,background:moveTypeId?T.surface:"#FEF2F2",fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                    <option value="">Select type...</option>
+                    <option value="">{t("common.select_type")}</option>
                     {libCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
                 <div style={{display:"flex",gap:8}}>
                   <button onClick={() => setPendingMove(null)} disabled={moveSaving}
                     style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:moveSaving?"not-allowed":"pointer"}}>
-                    Back
+                   {t("common.back")}
                   </button>
                   <button onClick={confirmMoveWithRates}
                     disabled={moveSaving || !moveCityId || !moveTypeId}
@@ -1329,7 +1327,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                             color:(moveSaving||!moveCityId||!moveTypeId)?T.t4:"white",
                             border:"none",fontSize:12.5,fontWeight:700,
                             cursor:(moveSaving||!moveCityId||!moveTypeId)?"not-allowed":"pointer"}}>
-                    {moveSaving ? "Saving…" : "Set & Move"}
+                    {moveSaving ? t("common.saving_2") : t("crm.set_move")}
                   </button>
                 </div>
               </div>
@@ -1343,15 +1341,14 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
             {convertOpen && (
               <div style={{padding:14,borderRadius:10,border:"2px solid #10B981",background:"#F0FDF4"}}>
                 <div style={{fontSize:13,fontWeight:700,color:"#065F46",marginBottom:4}}>
-                  Convert to Project
+                 {t("crm.convert_to_project")}
                 </div>
                 <div style={{fontSize:11.5,color:"#047857",marginBottom:14}}>
-                  Create a construction project carrying over <strong>{lead.name}</strong>'s info (city, type, customer).
-                  Optionally pick a final quote — the Estimate Builder will start from it.
+                 {t("crm.create_a_construction_project_carrying_over")} <strong>{lead.name}</strong>{t("crm.s_info_city_type_customer_optionally")}
                 </div>
 
                 <div style={{marginBottom:10}}>
-                  <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Project Name *</label>
+                  <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.project_name")}</label>
                   <input value={convertForm.project_name || ""}
                     onChange={e => setConvertForm(p => ({ ...p, project_name: e.target.value }))}
                     placeholder={`${lead.name} — Project`} autoFocus
@@ -1360,13 +1357,13 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
 
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                   <div>
-                    <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Start Date</label>
+                    <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.start_date")}</label>
                     <input type="date" value={convertForm.start_date || ""}
                       onChange={e => setConvertForm(p => ({ ...p, start_date: e.target.value }))}
                       style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                   </div>
                   <div>
-                    <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>End Date</label>
+                    <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.end_date")}</label>
                     <input type="date" value={convertForm.end_date || ""}
                       onChange={e => setConvertForm(p => ({ ...p, end_date: e.target.value }))}
                       style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
@@ -1376,12 +1373,12 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                 {convertQuotes.length > 0 && (
                   <div style={{marginBottom:14}}>
                     <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>
-                      Final Quote (optional)
+                     {t("crm.final_quote_optional")}
                     </label>
                     <select value={convertForm.quote_id || ""}
                       onChange={e => setConvertForm(p => ({ ...p, quote_id: e.target.value }))}
                       style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                      <option value="">— None / decide later —</option>
+                      <option value="">{t("crm.none_decide_later")}</option>
                       {convertQuotes.map(q => (
                         <option key={q.id} value={q.id}>
                           {q.quote_no} · {q.status} · ₹{Math.round(Number(q.grand_total)||0).toLocaleString("en-IN")}
@@ -1389,8 +1386,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                       ))}
                     </select>
                     <div style={{fontSize:10.5,color:"#64748B",marginTop:4}}>
-                      💡 Pick the quote you settled on. Estimate Builder will pre-fill from it.
-                      Skip to keep all quotes available later.
+                     {t("crm.pick_the_quote_you_settled_on")}
                     </div>
                   </div>
                 )}
@@ -1398,12 +1394,12 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                 <div style={{display:"flex",gap:6}}>
                   <button onClick={cancelConvert} disabled={convertSaving}
                     style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:convertSaving?"not-allowed":"pointer"}}>
-                    Back
+                   {t("common.back")}
                   </button>
                   <button onClick={skipConvert} disabled={convertSaving}
-                    title="Mark lead Converted without creating a project"
+                    title={t("crm.mark_lead_converted_without_creating_a")}
                     style={{flex:1,padding:"9px",borderRadius:7,background:"white",border:`1px dashed ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:convertSaving?"not-allowed":"pointer"}}>
-                    Skip — Just Convert
+                   {t("crm.skip_just_convert")}
                   </button>
                   <button onClick={confirmConvertWithProject}
                     disabled={convertSaving || !convertForm.project_name?.trim()}
@@ -1411,7 +1407,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                             background:(convertSaving||!convertForm.project_name?.trim())?"#9CA3AF":"#10B981",
                             color:"white",border:"none",fontSize:12.5,fontWeight:700,
                             cursor:(convertSaving||!convertForm.project_name?.trim())?"not-allowed":"pointer"}}>
-                    {convertSaving ? "Creating…" : "Create Project & Convert"}
+                    {convertSaving ? t("common.creating") : t("crm.create_project_convert")}
                   </button>
                 </div>
               </div>
@@ -2054,7 +2050,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                     display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <div>
           <div style={{ fontSize:14, fontWeight:700, display:"flex", gap:10, alignItems:"center" }}>
-            {step === "package" ? "New Quotation" : (quoteNo || "New Quotation")}
+            {step === "package" ? t("crm.new_quotation") : (quoteNo || t("crm.new_quotation"))}
             {step === "build" && (
               <span style={{ padding:"2px 9px", fontSize:10.5, fontWeight:700, borderRadius:4,
                              background:statusColor.bg, color:statusColor.fg, display:"inline-flex", gap:5, alignItems:"center" }}>
@@ -2077,7 +2073,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
       <div style={{ flex:1, overflowY:"auto", background:"#F8FAFC" }}>
         {step === "loading" && (
           <div style={{ padding:"60px 20px", textAlign:"center", color:"#64748B", fontSize:13 }}>
-            Loading quotation…
+           {t("crm.loading_quotation")}
           </div>
         )}
 
@@ -2086,7 +2082,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
           <div style={{ maxWidth:880, margin:"0 auto", padding:"24px 20px" }}>
             <div style={{ fontSize:11, fontWeight:700, color:"#6B7280", textTransform:"uppercase",
                           letterSpacing:".5px", marginBottom:8 }}>
-              Pick a package
+             {t("crm.pick_a_package")}
             </div>
             {loadError && (
               <div style={{ padding:"10px 14px", background:"#FEE2E2", border:"1px solid #FECACA",
@@ -2097,9 +2093,9 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
             {filteredPackages.length === 0 ? (
               <div style={{ padding:"30px 18px", background:"white", border:"1px dashed #CBD5E1",
                             borderRadius:10, textAlign:"center", color:"#64748B", fontSize:13 }}>
-                No packages defined for <strong>{lead.construction_type_name || "this construction type"}</strong> yet.
+               {t("crm.no_packages_defined_for")} <strong>{lead.construction_type_name || t("crm.this_construction_type")}</strong> {t("crm.yet")}
                 <div style={{ marginTop:6, fontSize:12, color:"#9CA3AF" }}>
-                  Go to <strong>Library → Client BOQ Rate</strong> to set one up.
+                 {t("crm.go_to")} <strong>{t("crm.library_client_boq_rate")}</strong> {t("crm.to_set_one_up")}
                 </div>
               </div>
             ) : (
@@ -2112,7 +2108,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                     onMouseLeave={e => { e.currentTarget.style.borderColor = "#E5E7EB"; e.currentTarget.style.boxShadow = "none"; }}>
                     <div style={{ fontSize:14, fontWeight:700, color:"#0F172A", marginBottom:4 }}>{pkg.name}</div>
                     {pkg.sqft_rate > 0 && (
-                      <div style={{ fontSize:12, color:"#64748B" }}>Rs.{inrIN(pkg.sqft_rate)}/sqft</div>
+                      <div style={{ fontSize:12, color:"#64748B" }}>{t("crm.rs_inrin_sqft", { inrIN: inrIN(pkg.sqft_rate) })}</div>
                     )}
                     {pkg.description && (
                       <div style={{ fontSize:11, color:"#94A3B8", marginTop:6, lineHeight:1.4 }}>{pkg.description}</div>
@@ -2131,7 +2127,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
             {quoteId && Math.abs(breakdown.grandTotal - savedGrandTotal) > 0.5 && !readOnly && (
               <div style={{ padding:"9px 14px", background:"#FFFBEB", border:"1px solid #FCD34D",
                             borderRadius:8, color:"#92400E", fontSize:12, marginBottom:12 }}>
-                💡 Master rates or your edits changed since last save. Save Draft to sync.
+               {t("crm.master_rates_or_your_edits_changed")}
               </div>
             )}
 
@@ -2145,33 +2141,31 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                   <polyline points="9 18 15 12 9 6"/>
                 </svg>
                 <span style={{ fontSize:12, fontWeight:700, color:"#0F172A", textTransform:"uppercase", letterSpacing:".4px" }}>
-                  Quote Settings
+                 {t("crm.quote_settings")}
                 </span>
-                <span style={{ fontSize:11, color:"#64748B", marginLeft:"auto" }}>
-                  Validity: {validity} days
-                </span>
+                <span style={{ fontSize:11, color:"#64748B", marginLeft:"auto" }}>{t("crm.validity_validity_days", { validity })}</span>
               </div>
               {showSettings && (
                 <div style={{ padding:"14px" }}>
                   <div style={{ display:"grid", gridTemplateColumns:"140px 1fr", gap:14, marginBottom:10 }}>
                     <div>
-                      <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:4, textTransform:"uppercase" }}>Validity (days)</label>
+                      <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:4, textTransform:"uppercase" }}>{t("crm.validity_days")}</label>
                       <input type="number" value={validity}
                         onChange={e => setValidity(Number(e.target.value) || 0)}
                         disabled={readOnly}
                         style={{ width:"100%", padding:"7px 9px", borderRadius:6, border:"1.5px solid #D1D5DB", fontSize:12.5, outline:"none", fontFamily:"inherit", textAlign:"right", boxSizing:"border-box" }}/>
                     </div>
                     <div>
-                      <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:4, textTransform:"uppercase" }}>Notes (internal)</label>
+                      <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:4, textTransform:"uppercase" }}>{t("crm.notes_internal")}</label>
                       <input value={notes} onChange={e => setNotes(e.target.value)}
-                        disabled={readOnly} placeholder="Optional"
+                        disabled={readOnly} placeholder={t("common.optional")}
                         style={{ width:"100%", padding:"7px 9px", borderRadius:6, border:"1.5px solid #D1D5DB", fontSize:12.5, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
                     </div>
                   </div>
                   <div>
-                    <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:4, textTransform:"uppercase" }}>Terms &amp; Conditions</label>
+                    <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:4, textTransform:"uppercase" }}>{t("crm.terms_conditions")}</label>
                     <textarea value={terms} onChange={e => setTerms(e.target.value)}
-                      disabled={readOnly} rows={3} placeholder="Payment terms, warranty, exclusions..."
+                      disabled={readOnly} rows={3} placeholder={t("crm.payment_terms_warranty_exclusions")}
                       style={{ width:"100%", padding:"7px 9px", borderRadius:6, border:"1.5px solid #D1D5DB", fontSize:12, outline:"none", fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
                   </div>
                 </div>
@@ -2183,22 +2177,22 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
               <div style={{ display:"flex", gap:8, justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
                 <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                   <button onClick={() => setEditMode(m => !m)}
-                    title={canEdit ? "Exit edit mode — back to quoting view" : "Unlock structural edits + master rate changes"}
+                    title={canEdit ? t("crm.exit_edit_mode_back_to_quoting") : t("crm.unlock_structural_edits_master_rate_changes")}
                     style={{ padding:"6px 14px", borderRadius:6,
                              background: canEdit ? "#10B981" : "white",
                              border:"1.5px solid " + (canEdit ? "#10B981" : "#94A3B8"),
                              color: canEdit ? "white" : "#334155",
                              fontSize:11.5, fontWeight:700, cursor:"pointer",
                              display:"flex", alignItems:"center", gap:5 }}>
-                    {canEdit ? "✓ Done Editing" : "✎ Edit Package"}
+                    {canEdit ? t("common.done_editing") : t("common.edit_package")}
                   </button>
                   {canEdit && (
                     <button onClick={openEditPkg}
-                      title="Edit package name / per-sqft rate / description"
+                      title={t("crm.edit_package_name_per_sqft_rate")}
                       style={{ padding:"6px 11px", borderRadius:6, background:"white",
                                border:"1px dashed #94A3B8", fontSize:11, fontWeight:600,
                                color:"#475569", cursor:"pointer" }}>
-                      Package basics…
+                     {t("crm.package_basics")}
                     </button>
                   )}
                 </div>
@@ -2207,7 +2201,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                     style={{ padding:"6px 12px", borderRadius:6, background:"white",
                              border:"1.5px solid " + COL_DARK, fontSize:11.5, fontWeight:700,
                              color: COL_DARK, cursor:"pointer" }}>
-                    + Add Section
+                   {t("common.add_section")}
                   </button>
                 )}
               </div>
@@ -2217,7 +2211,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
             {breakdown.sections.length === 0 ? (
               <div style={{ padding:"30px 18px", background:"white", border:"1px dashed #CBD5E1",
                             borderRadius:10, textAlign:"center", color:"#64748B", fontSize:13 }}>
-                This package has no sections yet. {!readOnly && <span>Click <strong>+ Add Section</strong> above.</span>}
+                {t("crm.package_no_sections")} {!readOnly && <span>{t("common.click")} <strong>{t("common.add_section")}</strong> {t("crm.above")}</span>}
               </div>
             ) : breakdown.sections.map(sec => {
               const sCollapsed = !!collapsedSections[sec.id];
@@ -2242,7 +2236,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                     {noAreaHint && !readOnly && !secPerItem && (
                       <span style={{ marginLeft:6, padding:"2px 8px", fontSize:10.5, fontWeight:600,
                                      background:"rgba(252,211,77,0.18)", color:"#FCD34D", borderRadius:4, border:"1px solid rgba(252,211,77,0.35)" }}>
-                        set area
+                       {t("crm.set_area")}
                       </span>
                     )}
                     {secPerItem && (
@@ -2250,7 +2244,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                                      background:"rgba(245,158,11,0.22)", color:"#FCD34D",
                                      border:"1px solid #F59E0B", borderRadius:4,
                                      letterSpacing:".3px", textTransform:"uppercase" }}>
-                        Per-item Qty
+                       {t("common.per_item_qty")}
                       </span>
                     )}
                     <div style={{ marginLeft:"auto", display:"flex", gap:12, alignItems:"center", fontSize:11.5, fontWeight:600 }}>
@@ -2259,11 +2253,9 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                           are mathematically meaningless. */}
                       {!secPerItem && (
                         <>
-                          <span style={{ padding:"3px 9px", background:COL_TEAL_BG, color:COL_TEAL, borderRadius:4, fontWeight:700 }}>
-                            Rs.{inrIN(sec.base + sec.addOn || 0)}/{sec.unit || "sqft"}
-                          </span>
+                          <span style={{ padding:"3px 9px", background:COL_TEAL_BG, color:COL_TEAL, borderRadius:4, fontWeight:700 }}>{t("crm.rs_inrin_sec", { inrIN: inrIN(sec.base + sec.addOn || 0), sec: sec.unit || "sqft" })}</span>
                           <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-                            <span style={{ color:"rgba(255,255,255,0.55)", fontSize:11, textTransform:"uppercase" }}>Area</span>
+                            <span style={{ color:"rgba(255,255,255,0.55)", fontSize:11, textTransform:"uppercase" }}>{t("common.area")}</span>
                             {readOnly ? (
                               <span style={{ padding:"4px 8px", color:"white", fontWeight:700, fontSize:12 }}>{inrIN(sec.area)}</span>
                             ) : (
@@ -2277,7 +2269,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                           </span>
                         </>
                       )}
-                      <span style={{ color:"rgba(255,255,255,0.6)" }}>Total <strong style={{ color:COL_TEAL_BG, fontSize:13 }}>Rs.{inrIN(sec.total)}</strong></span>
+                      <span style={{ color:"rgba(255,255,255,0.6)" }}>{t("common.total")} <strong style={{ color:COL_TEAL_BG, fontSize:13 }}>{t("crm.rs_inrin", { inrIN: inrIN(sec.total) })}</strong></span>
                     </div>
                   </div>
 
@@ -2286,7 +2278,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                     <div style={{ padding:10 }}>
                       {sec.categories.length === 0 && (
                         <div style={{ padding:"14px 12px", textAlign:"center", color:"#9CA3AF", fontSize:12.5 }}>
-                          No categories.
+                         {t("crm.no_categories")}
                         </div>
                       )}
                       {sec.categories.map(cat => {
@@ -2311,14 +2303,14 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                                 {/* Category Area override hidden when section uses per-item qty */}
                                 {!secPerItem && (
                                   <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-                                    <span style={{ color:"#64748B", fontSize:10.5, textTransform:"uppercase" }}>Area</span>
+                                    <span style={{ color:"#64748B", fontSize:10.5, textTransform:"uppercase" }}>{t("common.area")}</span>
                                     {readOnly ? (
                                       <span style={{ padding:"3px 7px", color:"#0F172A", fontWeight:700, fontSize:12 }}>{inrIN(cat.area)}</span>
                                     ) : (
                                       <input type="number" value={overrideVal}
                                         onChange={e => patchCategory(sec.id, cat.id, { area_override: e.target.value === "" ? null : e.target.value })}
                                         placeholder={String(sec.area)}
-                                        title={overrideVal ? "Override active — clear to inherit section's area" : `Inherits ${sec.area} from section`}
+                                        title={overrideVal ? t("crm.override_active_clear_to_inherit_section") : `Inherits ${sec.area} from section`}
                                         style={{ width:70, padding:"4px 7px", borderRadius:5, textAlign:"right",
                                                  fontFamily:"inherit", fontSize:11.5, fontWeight:700,
                                                  border:"1.5px solid " + (overrideVal ? COL_AMBER : "#CBD5E1"),
@@ -2327,7 +2319,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                                     )}
                                   </span>
                                 )}
-                                <span style={{ color:"#64748B" }}>Total <strong style={{ color:COL_GREEN }}>Rs.{inrIN(cat.total)}</strong></span>
+                                <span style={{ color:"#64748B" }}>{t("common.total")} <strong style={{ color:COL_GREEN }}>{t("crm.rs_inrin", { inrIN: inrIN(cat.total) })}</strong></span>
                               </div>
                             </div>
 
@@ -2336,18 +2328,18 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                               <table style={{ width:"100%", borderCollapse:"collapse" }}>
                                 <thead>
                                   <tr style={{ background:"#FAFAFA" }}>
-                                    <th style={{ padding:"7px 12px", textAlign:"left", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase" }}>Item</th>
-                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase", width:100 }}>Base</th>
-                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_AMBER, textTransform:"uppercase", width:100 }}>Add-on</th>
-                                    <th style={{ padding:"7px 12px", textAlign:"left", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase" }}>Description</th>
-                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_TEAL, textTransform:"uppercase", width:70 }}>Area</th>
-                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_GREEN, textTransform:"uppercase", width:110 }}>Total</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"left", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase" }}>{t("common.item")}</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase", width:100 }}>{t("common.base")}</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_AMBER, textTransform:"uppercase", width:100 }}>{t("common.add_on")}</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"left", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase" }}>{t("common.description")}</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_TEAL, textTransform:"uppercase", width:70 }}>{t("common.area")}</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_GREEN, textTransform:"uppercase", width:110 }}>{t("common.total")}</th>
                                     <th style={{ width:36 }}/>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {cat.items.length === 0 && (
-                                    <tr><td colSpan={7} style={{ padding:"12px", textAlign:"center", color:"#9CA3AF", fontSize:12 }}>No items.</td></tr>
+                                    <tr><td colSpan={7} style={{ padding:"12px", textAlign:"center", color:"#9CA3AF", fontSize:12 }}>{t("common.no_items")}</td></tr>
                                   )}
                                   {cat.items.map((it, idx) => {
                                     // Look up master item name from boqItems? We don't have it here.
@@ -2397,9 +2389,9 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                                         </td>
                                         <td style={{ padding:"8px 12px" }}>
                                           {canEdit ? (
-                                            <input type="text" value={descVal} placeholder={it.masterDesc || "Optional"}
+                                            <input type="text" value={descVal} placeholder={it.masterDesc || t("common.optional")}
                                               onChange={e => patchItem(sec.id, cat.id, it.item_id, { description_override: e.target.value || null })}
-                                              title={it.masterDesc ? `Master: ${it.masterDesc}` : "Leave blank to use master"}
+                                              title={it.masterDesc ? `Master: ${it.masterDesc}` : t("crm.leave_blank_to_use_master")}
                                               style={{ width:"100%", padding:"5px 9px", borderRadius:5, fontFamily:"inherit", fontSize:11.5,
                                                        border:"1.5px solid " + (descVal ? COL_AMBER : "#E5E7EB"),
                                                        background: descVal ? "#FFFBEB" : "white", outline:"none", boxSizing:"border-box" }}/>
@@ -2431,13 +2423,11 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                                             inrIN(it.qty != null ? it.qty : cat.area)
                                           )}
                                         </td>
-                                        <td style={{ padding:"8px 12px", textAlign:"right", fontSize:13, fontWeight:700, color:COL_GREEN }}>
-                                          Rs.{inrIN(it.total)}
-                                        </td>
+                                        <td style={{ padding:"8px 12px", textAlign:"right", fontSize:13, fontWeight:700, color:COL_GREEN }}>{t("crm.rs_inrin", { inrIN: inrIN(it.total) })}</td>
                                         <td style={{ padding:"8px 6px", textAlign:"center" }}>
                                           {it.hasOverride && canEdit && (
                                             <button onClick={() => resetItemRow(sec.id, cat.id, it.item_id)}
-                                              title="Reset to master rates"
+                                              title={t("crm.reset_to_master_rates")}
                                               style={{ background:"transparent", border:"1px solid #E5E7EB", color:"#64748B", borderRadius:4, width:22, height:22, fontSize:11, cursor:"pointer" }}>
                                               ↺
                                             </button>
@@ -2455,9 +2445,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                                 <button onClick={() => openAddItem(sec, cat)}
                                   style={{ background:"transparent", border:"1px dashed #BFDBFE",
                                            color: COL_BLUE, borderRadius:5,
-                                           padding:"4px 11px", fontSize:11, fontWeight:700, cursor:"pointer" }}>
-                                  + Add Item to {cat.name}
-                                </button>
+                                           padding:"4px 11px", fontSize:11, fontWeight:700, cursor:"pointer" }}>{t("crm.add_item_to_name", { name: cat.name })}</button>
                               </div>
                             )}
                           </div>
@@ -2470,7 +2458,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                             style={{ background:"white", border:"1px dashed #94A3B8",
                                      color:"#475569", borderRadius:6,
                                      padding:"5px 13px", fontSize:11.5, fontWeight:700, cursor:"pointer" }}>
-                            + Add Category
+                           {t("common.add_category")}
                           </button>
                         </div>
                       )}
@@ -2485,11 +2473,9 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
               <div style={{ marginTop:10, padding:"14px 20px", background:COL_DARK, color:"white",
                             borderRadius:10, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                 <span style={{ fontSize:13, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px", color:"rgba(255,255,255,0.7)" }}>
-                  Grand Total
+                 {t("common.grand_total")}
                 </span>
-                <span style={{ fontSize:20, fontWeight:700, color:COL_TEAL_BG }}>
-                  Rs.{inrIN(breakdown.grandTotal)}
-                </span>
+                <span style={{ fontSize:20, fontWeight:700, color:COL_TEAL_BG }}>{t("crm.rs_inrin", { inrIN: inrIN(breakdown.grandTotal) })}</span>
               </div>
             )}
           </div>
@@ -2504,18 +2490,18 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
             <button onClick={() => setStep("package")} disabled={saving || sendingStage}
               style={{ padding:"9px 16px", borderRadius:7, border:"1px solid #D1D5DB", background:"white",
                        fontSize:12.5, color:"#475569", fontWeight:600, cursor:(saving||sendingStage)?"not-allowed":"pointer" }}>
-              ← Back to Packages
+             {t("crm.back_to_packages")}
             </button>
           )}
           <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center" }}>
             {/* PDF download + WhatsApp share — only when quote saved */}
             {quoteId && (
               <button onClick={() => downloadQuotePdf(quoteId, quoteNo)}
-                title="Download as PDF"
+                title={t("crm.download_as_pdf")}
                 style={{ padding:"9px 14px", borderRadius:7, background:"white", border:"1.5px solid #94A3B8",
                          fontSize:12.5, fontWeight:700, color:"#334155", cursor:"pointer",
                          display:"flex", alignItems:"center", gap:6 }}>
-                📄 Download PDF
+               {t("common.download_pdf")}
               </button>
             )}
             {quoteId && lead.phone && (
@@ -2537,17 +2523,17 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                   const intl = phone.length === 10 ? "91" + phone : phone;
                   window.open("https://wa.me/" + intl + "?text=" + encodeURIComponent(msg), "_blank");
                 }}
-                title="Share via WhatsApp"
+                title={t("crm.share_via_whatsapp")}
                 style={{ padding:"9px 14px", borderRadius:7, background:"#F0FDF4", border:"1.5px solid #86EFAC",
                          fontSize:12.5, fontWeight:700, color:"#166534", cursor:"pointer",
                          display:"flex", alignItems:"center", gap:6 }}>
-                📱 WhatsApp
+               {t("crm.whatsapp")}
               </button>
             )}
             <button onClick={onClose} disabled={saving || sendingStage}
               style={{ padding:"9px 18px", borderRadius:7, background:"#F8FAFC", border:"1px solid #D1D5DB",
                        fontSize:12.5, fontWeight:600, color:"#374151", cursor:(saving||sendingStage)?"not-allowed":"pointer" }}>
-              Cancel
+             {t("common.cancel")}
             </button>
             {!readOnly && (
               <>
@@ -2556,20 +2542,20 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                            border:"1.5px solid " + (canSave ? COL_BLUE : "#D1D5DB"),
                            color: canSave ? COL_BLUE : "#9CA3AF",
                            fontSize:12.5, fontWeight:700, cursor: canSave ? "pointer" : "not-allowed" }}>
-                  {saving ? "Saving…" : "Save Draft"}
+                  {saving ? t("common.saving_2") : t("crm.save_draft")}
                 </button>
                 <button onClick={saveAndSend} disabled={!canSave}
                   style={{ padding:"9px 22px", borderRadius:7,
                            background: canSave ? COL_BLUE : "#9CA3AF",
                            color:"white", border:"none", fontSize:12.5, fontWeight:700,
                            cursor: canSave ? "pointer" : "not-allowed" }}>
-                  {sendingStage ? "Sending…" : "Save & Send"}
+                  {sendingStage ? t("common.sending") : t("crm.save_send")}
                 </button>
               </>
             )}
             {readOnly && (
               <span style={{ padding:"9px 18px", fontSize:12, color:"#64748B" }}>
-                This quote is <strong>{status}</strong>. Read-only.
+               {t("crm.this_quote_is")} <strong>{status}</strong>{t("crm.read_only")}
               </span>
             )}
           </div>
@@ -2591,9 +2577,9 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
             <div style={{ background:COL_DARK, padding:"13px 18px", borderRadius:"12px 12px 0 0",
                           display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <div style={{ fontSize:14, fontWeight:700, color:"white" }}>Edit Package</div>
+                <div style={{ fontSize:14, fontWeight:700, color:"white" }}>{t("common.edit_package_2")}</div>
                 <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>
-                  Changes save to library — affects future quotes too
+                 {t("crm.changes_save_to_library_affects_future")}
                 </div>
               </div>
               <button onClick={() => !pkgEditSaving && setPkgEditOpen(false)}
@@ -2601,24 +2587,24 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
             </div>
             <div style={{ padding:18 }}>
               <div style={{ marginBottom:10 }}>
-                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Name *</label>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.name")}</label>
                 <input autoFocus value={pkgEditForm.name || ""}
                   onChange={e => setPkgEditForm(p => ({ ...p, name: e.target.value }))}
                   style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                            fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
               </div>
               <div style={{ marginBottom:10 }}>
-                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Per-sqft Rate (Rs.)</label>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("crm.per_sqft_rate_rs")}</label>
                 <input type="number" value={pkgEditForm.sqft_rate ?? 0}
                   onChange={e => setPkgEditForm(p => ({ ...p, sqft_rate: e.target.value }))}
                   style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                            fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", textAlign:"right" }}/>
               </div>
               <div>
-                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Description</label>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.description")}</label>
                 <input value={pkgEditForm.description || ""}
                   onChange={e => setPkgEditForm(p => ({ ...p, description: e.target.value }))}
-                  placeholder="Optional"
+                  placeholder={t("common.optional")}
                   style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                            fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
               </div>
@@ -2627,14 +2613,14 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
               <button onClick={() => !pkgEditSaving && setPkgEditOpen(false)} disabled={pkgEditSaving}
                 style={{ flex:1, padding:"9px", borderRadius:6, border:"1px solid #D1D5DB",
                          background:"white", fontSize:13, color:"#374151", cursor: pkgEditSaving ? "not-allowed":"pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={saveEditPkg} disabled={pkgEditSaving || !pkgEditForm.name?.trim()}
                 style={{ flex:2, padding:"9px", borderRadius:6,
                          background:(pkgEditSaving||!pkgEditForm.name?.trim())?"#9CA3AF":COL_BLUE,
                          color:"white", border:"none", fontSize:13, fontWeight:700,
                          cursor:(pkgEditSaving||!pkgEditForm.name?.trim())?"not-allowed":"pointer" }}>
-                {pkgEditSaving ? "Saving…" : "Save"}
+                {pkgEditSaving ? t("common.saving_2") : t("common.save")}
               </button>
             </div>
           </div>
@@ -2655,26 +2641,24 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
             <div style={{ background:COL_DARK, padding:"13px 18px", borderRadius:"12px 12px 0 0",
                           display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <div style={{ fontSize:14, fontWeight:700, color:"white" }}>Add Section</div>
-                <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>
-                  Saves to library. Package: {selectedPackage?.name}
-                </div>
+                <div style={{ fontSize:14, fontWeight:700, color:"white" }}>{t("common.add_section_2")}</div>
+                <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>{t("crm.saves_to_library_package_name", { name: selectedPackage?.name })}</div>
               </div>
               <button onClick={() => !addSecSaving && setAddSecModal(false)}
                 style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
             </div>
             <div style={{ padding:18 }}>
               <div style={{ marginBottom:10 }}>
-                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Name *</label>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.name")}</label>
                 <input autoFocus value={addSecForm.name}
                   onChange={e => setAddSecForm(p => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. Ground Floor, Other Civil Work"
+                  placeholder={t("crm.e_g_ground_floor_other_civil")}
                   style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                            fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
                 <div>
-                  <label style={{ fontSize:10, fontWeight:700, color:COL_TEAL, display:"block", marginBottom:3, textTransform:"uppercase" }}>Area / Qty</label>
+                  <label style={{ fontSize:10, fontWeight:700, color:COL_TEAL, display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("crm.area_qty")}</label>
                   <input type="number" value={addSecForm.default_qty}
                     onChange={e => setAddSecForm(p => ({ ...p, default_qty: e.target.value }))}
                     placeholder="0"
@@ -2682,16 +2666,16 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                              fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", textAlign:"right", background:"#F0FDFA" }}/>
                 </div>
                 <div>
-                  <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Unit</label>
+                  <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.unit")}</label>
                   <select value={addSecForm.unit}
                     onChange={e => setAddSecForm(p => ({ ...p, unit: e.target.value }))}
                     style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                              fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", background:"white" }}>
                     <option value="sqft">sqft</option>
-                    <option value="lump_sum">lump sum</option>
+                    <option value="lump_sum">{t("common.lump_sum")}</option>
                     <option value="rft">rft</option>
                     <option value="nos">nos</option>
-                    <option value="cubic_ft">cubic ft</option>
+                    <option value="cubic_ft">{t("common.cubic_ft")}</option>
                   </select>
                 </div>
               </div>
@@ -2704,11 +2688,9 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                   <input type="checkbox" checked={!!addSecForm.per_item_qty} onChange={() => {}}
                     style={{ width:15, height:15, cursor:"pointer", flexShrink:0 }}/>
                   <div>
-                    <div style={{ fontSize:11.5, fontWeight:700, color:"#0F172A" }}>
-                      Per-item quantity {addSecForm.per_item_qty ? "(ON)" : "(OFF — uniform area)"}
-                    </div>
+                    <div style={{ fontSize:11.5, fontWeight:700, color:"#0F172A" }}>{t("crm.per_item_quantity_addsecform", { addSecForm: addSecForm.per_item_qty ? "(ON)" : "(OFF — uniform area)" })}</div>
                     <div style={{ fontSize:10, color:"#6B7280", marginTop:1 }}>
-                      Each item has its own qty. Best for mixed sections like Other Civil Work.
+                     {t("crm.each_item_has_its_own_qty")}
                     </div>
                   </div>
                 </label>
@@ -2718,14 +2700,14 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
               <button onClick={() => !addSecSaving && setAddSecModal(false)} disabled={addSecSaving}
                 style={{ flex:1, padding:"9px", borderRadius:6, border:"1px solid #D1D5DB",
                          background:"white", fontSize:13, color:"#374151", cursor: addSecSaving?"not-allowed":"pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={saveAddSec} disabled={addSecSaving || !addSecForm.name?.trim()}
                 style={{ flex:2, padding:"9px", borderRadius:6,
                          background:(addSecSaving||!addSecForm.name?.trim())?"#9CA3AF":COL_BLUE,
                          color:"white", border:"none", fontSize:13, fontWeight:700,
                          cursor:(addSecSaving||!addSecForm.name?.trim())?"not-allowed":"pointer" }}>
-                {addSecSaving ? "Adding…" : "Add Section"}
+                {addSecSaving ? t("common.adding") : t("common.add_section_2")}
               </button>
             </div>
           </div>
@@ -2750,8 +2732,8 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
               <div style={{ background:COL_DARK, padding:"13px 16px", color:"white",
                             display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div>
-                  <div style={{ fontSize:14, fontWeight:700 }}>Add Category</div>
-                  <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>Section: {addCatDrawer.section_name}</div>
+                  <div style={{ fontSize:14, fontWeight:700 }}>{t("common.add_category_2")}</div>
+                  <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>{t("crm.section_section_name", { section_name: addCatDrawer.section_name })}</div>
                 </div>
                 <button onClick={() => !addCatSaving && setAddCatDrawer(null)}
                   style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
@@ -2780,7 +2762,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                       )}
                       <span style={{ flex:1 }}>
                         <span style={{ fontSize:12.5, fontWeight:600, color:"#0F172A" }}>{c.name}</span>
-                        {exists && <span style={{ marginLeft:8, fontSize:10, color:"#9CA3AF" }}>(already added)</span>}
+                        {exists && <span style={{ marginLeft:8, fontSize:10, color:"#9CA3AF" }}>{t("common.already_added")}</span>}
                       </span>
                     </label>
                   );
@@ -2791,32 +2773,32 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                       style={{ width:"100%", padding:"8px 12px", background:"#F0FDF4",
                                border:"1px dashed #10B981", color:"#10B981",
                                borderRadius:6, fontSize:12, fontWeight:700, cursor:"pointer" }}>
-                      + Create new category
+                     {t("common.create_new_category")}
                     </button>
                   ) : (
                     <div style={{ padding:10, background:"#F9FAFB", borderRadius:6, border:"1px solid #E5E7EB" }}>
                       <input autoFocus value={addCatNewForm.name}
                         onChange={e => setAddCatNewForm(p => ({ ...p, name: e.target.value }))}
-                        placeholder="Name"
+                        placeholder={t("common.name_2")}
                         style={{ width:"100%", padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB",
                                  fontSize:12, marginBottom:6, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
                       <input value={addCatNewForm.code}
                         onChange={e => setAddCatNewForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
-                        placeholder="Code (optional)"
+                        placeholder={t("common.code_optional")}
                         style={{ width:"100%", padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB",
                                  fontSize:12, marginBottom:6, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
                       <div style={{ display:"flex", gap:6 }}>
                         <button onClick={() => setAddCatNewForm(null)}
                           style={{ flex:1, padding:6, borderRadius:5, background:"white",
                                    border:"1px solid #D1D5DB", fontSize:11.5, color:"#6B7280", cursor:"pointer" }}>
-                          Cancel
+                         {t("common.cancel")}
                         </button>
                         <button onClick={createAndAddCat} disabled={addCatSaving || !addCatNewForm.name?.trim()}
                           style={{ flex:2, padding:6, borderRadius:5,
                                    background: (addCatSaving||!addCatNewForm.name?.trim())?"#9CA3AF":"#10B981",
                                    color:"white", border:"none", fontSize:11.5, fontWeight:700,
                                    cursor: (addCatSaving||!addCatNewForm.name?.trim())?"not-allowed":"pointer" }}>
-                          {addCatSaving ? "Saving…" : "Create + Add"}
+                          {addCatSaving ? t("common.saving_2") : t("common.create_add")}
                         </button>
                       </div>
                     </div>
@@ -2827,14 +2809,14 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                 <button onClick={() => !addCatSaving && setAddCatDrawer(null)} disabled={addCatSaving}
                   style={{ flex:1, padding:"8px", borderRadius:6, border:"1px solid #D1D5DB",
                            background:"white", fontSize:12, color:"#374151", cursor: addCatSaving?"not-allowed":"pointer" }}>
-                  Cancel
+                 {t("common.cancel")}
                 </button>
                 <button onClick={confirmAddCat} disabled={addCatSaving || addCatPicks.length === 0}
                   style={{ flex:2, padding:"8px", borderRadius:6,
                            background:(addCatSaving||addCatPicks.length===0)?"#9CA3AF":COL_BLUE,
                            color:"white", border:"none", fontSize:12, fontWeight:700,
                            cursor:(addCatSaving||addCatPicks.length===0)?"not-allowed":"pointer" }}>
-                  {addCatSaving ? "Adding…" : `Add Selected (${addCatPicks.length})`}
+                  {addCatSaving ? t("common.adding") : `Add Selected (${addCatPicks.length})`}
                 </button>
               </div>
             </div>
@@ -2868,7 +2850,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
               <div style={{ background:COL_DARK, padding:"13px 16px", color:"white",
                             display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:14, fontWeight:700 }}>Add Item</div>
+                  <div style={{ fontSize:14, fontWeight:700 }}>{t("common.add_item_2")}</div>
                   <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1,
                                 whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
                     {addItemDrawer.section_name} › {addItemDrawer.category_name}
@@ -2880,7 +2862,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
               <div style={{ padding:"10px 14px", borderBottom:"1px solid #E5E7EB", background:"#F9FAFB" }}>
                 <input value={addItemSearch}
                   onChange={e => setAddItemSearch(e.target.value)}
-                  placeholder="Search items…"
+                  placeholder={t("common.search_items")}
                   style={{ width:"100%", padding:"7px 11px", borderRadius:6,
                            border:"1.5px solid #E5E7EB", fontSize:12.5, outline:"none",
                            fontFamily:"inherit", boxSizing:"border-box" }}/>
@@ -2916,11 +2898,9 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                           )}
                           <span style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontSize:12.5, fontWeight:600, color:"#0F172A" }}>
-                              {i.name}{here && <span style={{ marginLeft:8, fontSize:10, color:"#9CA3AF" }}>(already here)</span>}
+                              {i.name}{here && <span style={{ marginLeft:8, fontSize:10, color:"#9CA3AF" }}>{t("common.already_here")}</span>}
                             </div>
-                            <div style={{ fontSize:10.5, color:"#64748B", marginTop:1 }}>
-                              base Rs.{inrIN(i.base_rate)} · {i.unit}
-                            </div>
+                            <div style={{ fontSize:10.5, color:"#64748B", marginTop:1 }}>{t("crm.base_rs_inrin_unit", { inrIN: inrIN(i.base_rate), unit: i.unit })}</div>
                           </span>
                         </label>
                       );
@@ -2933,13 +2913,13 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                       style={{ width:"100%", padding:"8px 12px", background:"#F0FDF4",
                                border:"1px dashed #10B981", color:"#10B981",
                                borderRadius:6, fontSize:12, fontWeight:700, cursor:"pointer" }}>
-                      + Create new item
+                     {t("common.create_new_item")}
                     </button>
                   ) : (
                     <div style={{ padding:10, background:"#F9FAFB", borderRadius:6, border:"1px solid #E5E7EB" }}>
                       <input autoFocus value={addItemNewForm.name}
                         onChange={e => setAddItemNewForm(p => ({ ...p, name: e.target.value }))}
-                        placeholder="Item name"
+                        placeholder={t("common.item_name")}
                         style={{ width:"100%", padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB",
                                  fontSize:12, marginBottom:6, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:6 }}>
@@ -2950,21 +2930,21 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                         </select>
                         <input type="number" value={addItemNewForm.base_rate}
                           onChange={e => setAddItemNewForm(p => ({ ...p, base_rate: e.target.value }))}
-                          placeholder="Base rate"
+                          placeholder={t("common.base_rate")}
                           style={{ padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB", fontSize:12, fontFamily:"inherit", textAlign:"right", boxSizing:"border-box" }}/>
                       </div>
                       <div style={{ display:"flex", gap:6 }}>
                         <button onClick={() => setAddItemNewForm(null)}
                           style={{ flex:1, padding:6, borderRadius:5, background:"white",
                                    border:"1px solid #D1D5DB", fontSize:11.5, color:"#6B7280", cursor:"pointer" }}>
-                          Cancel
+                         {t("common.cancel")}
                         </button>
                         <button onClick={createAndAddItem} disabled={addItemSaving || !addItemNewForm.name?.trim()}
                           style={{ flex:2, padding:6, borderRadius:5,
                                    background:(addItemSaving||!addItemNewForm.name?.trim())?"#9CA3AF":"#10B981",
                                    color:"white", border:"none", fontSize:11.5, fontWeight:700,
                                    cursor:(addItemSaving||!addItemNewForm.name?.trim())?"not-allowed":"pointer" }}>
-                          {addItemSaving ? "Saving…" : "Create + Add"}
+                          {addItemSaving ? t("common.saving_2") : t("common.create_add")}
                         </button>
                       </div>
                     </div>
@@ -2975,14 +2955,14 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                 <button onClick={() => !addItemSaving && setAddItemDrawer(null)} disabled={addItemSaving}
                   style={{ flex:1, padding:"8px", borderRadius:6, border:"1px solid #D1D5DB",
                            background:"white", fontSize:12, color:"#374151", cursor: addItemSaving?"not-allowed":"pointer" }}>
-                  Cancel
+                 {t("common.cancel")}
                 </button>
                 <button onClick={confirmAddItems} disabled={addItemSaving || addItemPicks.length === 0}
                   style={{ flex:2, padding:"8px", borderRadius:6,
                            background:(addItemSaving||addItemPicks.length===0)?"#9CA3AF":COL_BLUE,
                            color:"white", border:"none", fontSize:12, fontWeight:700,
                            cursor:(addItemSaving||addItemPicks.length===0)?"not-allowed":"pointer" }}>
-                  {addItemSaving ? "Adding…" : `Add Selected (${addItemPicks.length})`}
+                  {addItemSaving ? t("common.adding") : `Add Selected (${addItemPicks.length})`}
                 </button>
               </div>
             </div>
@@ -3040,16 +3020,16 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
   };
 
   const FIELDS=[
-    {l:"Full Name *",k:"name",type:"input",ph:"Client full name",col:2},
-    {l:"Phone *",k:"phone",type:"input",ph:"10-digit mobile",col:1},
-    {l:"Email",k:"email",type:"input",ph:"email@gmail.com",col:1},
-    {l:"Budget (₹)",k:"budget",type:"number",ph:"e.g. 3500000",col:1},
-    {l:"Plot Area (sq ft)",k:"plotArea",type:"number",ph:"e.g. 1200",col:1},
-    {l:"Apx Buildup Area (sq ft)",k:"apxBuildupArea",type:"number",ph:"e.g. 2400",col:1},
-    {l:"Lead Source",k:"source",type:"select",opts:SOURCES,col:1},
-    {l:"Assigned To",k:"assignedTo",type:"select",opts:ASSIGNED_TO,col:1},
-    {l:"Initial Stage",k:"stage",type:"select",opts:STAGES.map(s=>s.id),col:1},
-    {l:"Priority",k:"priority",type:"select",opts:["High","Medium","Low"],col:1},
+    {l:t("crm.full_name"),k:"name",type:"input",ph:"Client full name",col:2},
+    {l:t("crm.phone"),k:"phone",type:"input",ph:"10-digit mobile",col:1},
+    {l:t("common.email"),k:"email",type:"input",ph:"email@gmail.com",col:1},
+    {l:t("crm.budget"),k:"budget",type:"number",ph:"e.g. 3500000",col:1},
+    {l:t("crm.plot_area_sq_ft"),k:"plotArea",type:"number",ph:"e.g. 1200",col:1},
+    {l:t("crm.apx_buildup_area_sq_ft"),k:"apxBuildupArea",type:"number",ph:"e.g. 2400",col:1},
+    {l:t("crm.lead_source"),k:"source",type:"select",opts:SOURCES,col:1},
+    {l:t("common.assigned_to"),k:"assignedTo",type:"select",opts:ASSIGNED_TO,col:1},
+    {l:t("crm.initial_stage"),k:"stage",type:"select",opts:STAGES.map(s=>s.id),col:1},
+    {l:t("common.priority"),k:"priority",type:"select",opts:["High","Medium","Low"],col:1},
   ];
 
   // Required gates — only name + phone are mandatory at fresh-lead time.
@@ -3059,7 +3039,7 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(560px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-        <div><div style={{fontSize:14,fontWeight:700,color:"white"}}>Add New Lead</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:1}}>New client enquiry into the pipeline</div></div>
+        <div><div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("crm.add_new_lead")}</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:1}}>{t("crm.new_client_enquiry_into_the_pipeline")}</div></div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={14}/></button>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
@@ -3079,13 +3059,13 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
           {/* ── City — library-sourced, optional at lead-creation ── */}
           <div>
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>
-              City
+             {t("common.city")}
             </label>
             <select value={form.cityId} onChange={e => pickCity(e.target.value)}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,
                       border:`1.5px solid ${T.b1}`, background:T.surface,
                       fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-              <option value="">Select city (optional)...</option>
+              <option value="">{t("crm.select_city_optional")}</option>
               {libCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
@@ -3093,13 +3073,13 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
           {/* ── Construction Type — library-sourced, optional at lead-creation ── */}
           <div>
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>
-              Construction Type
+             {t("common.construction_type")}
             </label>
             <select value={form.constructionTypeId} onChange={e => pickCType(e.target.value)}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,
                       border:`1.5px solid ${T.b1}`, background:T.surface,
                       fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-              <option value="">Select type (optional)...</option>
+              <option value="">{t("crm.select_type_optional")}</option>
               {libCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
@@ -3108,41 +3088,41 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
         {/* Soft hint — these become required at Follow-Up stage */}
         {(!form.cityId || !form.constructionTypeId) && (
           <div style={{padding:"7px 10px",background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:6,fontSize:11,color:"#92400E",marginBottom:10}}>
-            💡 You can skip City + Construction Type for now. They'll be required when this lead moves to <strong>Follow Up</strong> so the quotation builder can match the right rate package.
+           {t("crm.you_can_skip_city_construction_type")} <strong>{t("crm.follow_up")}</strong> {t("crm.so_the_quotation_builder_can_match")}
           </div>
         )}
 
         {/* Contact date */}
         <div style={{marginBottom:10}}>
-          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Next Contact Date</label>
+          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("crm.next_contact_date")}</label>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <input type="date" value={form.contactDate} onChange={upd("contactDate")}
               style={{flex:1,padding:"8px 10px",borderRadius:7,border:`1.5px solid ${form.contactDate?T.grn:T.b1}`,fontSize:12.5,color:T.t1,background:form.contactDate?T.grnL:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             {form.contactDate&&<span style={{fontSize:11.5,color:T.grn,fontWeight:600}}>
-              {daysDiff(form.contactDate)===0?"Today!":daysDiff(form.contactDate)===1?"Tomorrow":`In ${daysDiff(form.contactDate)} days`}
+              {daysDiff(form.contactDate)===0?t("crm.today"):daysDiff(form.contactDate)===1?t("crm.tomorrow"):`In ${daysDiff(form.contactDate)} days`}
             </span>}
           </div>
-          {form.contactDate&&<div style={{fontSize:11,color:T.grn,marginTop:3}}>✓ Auto reminder will be set for this date</div>}
+          {form.contactDate&&<div style={{fontSize:11,color:T.grn,marginTop:3}}>{t("crm.auto_reminder_will_be_set_for")}</div>}
         </div>
 
         {/* Notes + Tags */}
         <div style={{marginBottom:10}}>
-          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Initial Notes</label>
-          <textarea value={form.notes} onChange={upd("notes")} placeholder="Requirement details, site info, client preferences..." rows={3}
+          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("crm.initial_notes")}</label>
+          <textarea value={form.notes} onChange={upd("notes")} placeholder={t("crm.requirement_details_site_info_client_preferences")} rows={3}
             style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}
             onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
         </div>
         <div>
-          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Tags (comma separated)</label>
-          <input value={form.tags} onChange={upd("tags")} placeholder="e.g. hot, 3bhk, premium"
+          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("crm.tags_comma_separated")}</label>
+          <input value={form.tags} onChange={upd("tags")} placeholder={t("crm.e_g_hot_3bhk_premium")}
             style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
         </div>
       </div>
       <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
-        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
         <button onClick={()=>{if(canSave){onSave(form);onClose();}}} disabled={!canSave}
           style={{flex:2,padding:"10px",borderRadius:7,background:canSave?T.blu:T.b1,color:canSave?"white":T.t4,fontSize:12.5,fontWeight:700,border:"none",cursor:canSave?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-          <IcAdd size={14} color={canSave?"white":T.t4}/> Add to Pipeline
+          <IcAdd size={14} color={canSave?"white":T.t4}/> {t("crm.add_to_pipeline")}
         </button>
       </div>
     </div>
@@ -3161,13 +3141,13 @@ function SelectFinalQuotation({leadId,onDone,onSkip}){
   },[leadId]);
 
   const accept=async(qid)=>{
-    try{const res=await api.patch("/crm/quotations/"+qid+"/accept");if(res.success)onDone();}catch(e){alert("Error");}
+    try{const res=await api.patch("/crm/quotations/"+qid+"/accept");if(res.success)onDone();}catch(e){alert(t("crm.error"));}
   };
 
-  if(loading) return <div style={{textAlign:"center",padding:"12px",color:T.t4,fontSize:12}}>Loading...</div>;
+  if(loading) return <div style={{textAlign:"center",padding:"12px",color:T.t4,fontSize:12}}>{t("common.loading")}</div>;
   if(quots.length===0) return(
     <div style={{textAlign:"center"}}>
-      <div style={{fontSize:12,color:T.t4,marginBottom:12}}>No quotations uploaded for this lead</div>
+      <div style={{fontSize:12,color:T.t4,marginBottom:12}}>{t("crm.no_quotations_uploaded_for_this_lead")}</div>
       <button onClick={onSkip} style={{padding:"9px 20px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>OK</button>
     </div>
   );
@@ -3184,10 +3164,10 @@ function SelectFinalQuotation({leadId,onDone,onSkip}){
             <div style={{fontSize:10.5,color:T.t4}}>{q.file_size||"—"}</div>
           </div>
           {q.amount>0&&<span style={{fontSize:13,fontWeight:700,color:T.grn}}>₹{fmtN(q.amount)}</span>}
-          <span style={{fontSize:10,color:T.grn,fontWeight:700}}>Select →</span>
+          <span style={{fontSize:10,color:T.grn,fontWeight:700}}>{t("crm.select")}</span>
         </div>
       ))}
-      <button onClick={onSkip} style={{width:"100%",padding:"8px",borderRadius:7,background:"transparent",border:`1px solid ${T.b1}`,fontSize:11.5,fontWeight:600,color:T.t4,cursor:"pointer",marginTop:6}}>Skip</button>
+      <button onClick={onSkip} style={{width:"100%",padding:"8px",borderRadius:7,background:"transparent",border:`1px solid ${T.b1}`,fontSize:11.5,fontWeight:600,color:T.t4,cursor:"pointer",marginTop:6}}>{t("crm.skip")}</button>
     </div>
   );
 }
@@ -3238,7 +3218,7 @@ function TemplateBuilderModal({onClose}){
   const total=items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
 
   const save=async()=>{
-    if(!form.name.trim()) return alert("Template name is required");
+    if(!form.name.trim()) return alert(t("crm.template_name_is_required"));
     setSaving(true);
     try{
       const payload={...form,line_items:items.map(it=>({...it,qty:Number(it.qty)||0,rate:Number(it.rate)||0,amount:(Number(it.qty)||0)*(Number(it.rate)||0)}))};
@@ -3254,7 +3234,7 @@ function TemplateBuilderModal({onClose}){
   };
 
   const deleteTpl=async(tid)=>{
-    if(!await window.confirmAsync("Delete this template?")) return;
+    if(!await window.confirmAsync(t("crm.delete_this_template"))) return;
     try{
       await api.del("/crm/templates/"+tid);
       setTemplates(p=>p.filter(t=>t.id!==tid));
@@ -3269,45 +3249,45 @@ function TemplateBuilderModal({onClose}){
       {/* Left: Template List */}
       <div style={{width:220,flexShrink:0,background:T.sb,display:"flex",flexDirection:"column"}}>
         <div style={{padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
-          <div style={{fontSize:14,fontWeight:700,color:"white",marginBottom:8}}>Templates</div>
+          <div style={{fontSize:14,fontWeight:700,color:"white",marginBottom:8}}>{t("crm.templates")}</div>
           <button onClick={newTemplate} style={{width:"100%",padding:"7px",borderRadius:6,background:"rgba(255,255,255,0.1)",border:"1px dashed rgba(255,255,255,0.3)",color:"rgba(255,255,255,0.7)",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-            + New Template
+           {t("crm.new_template")}
           </button>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"8px"}}>
-          {loading&&<div style={{color:"rgba(255,255,255,0.4)",fontSize:11,padding:"10px",textAlign:"center"}}>Loading...</div>}
+          {loading&&<div style={{color:"rgba(255,255,255,0.4)",fontSize:11,padding:"10px",textAlign:"center"}}>{t("common.loading")}</div>}
           {templates.map(t=>(
             <div key={t.id} onClick={()=>selectTemplate(t)}
               style={{padding:"9px 11px",borderRadius:7,marginBottom:4,cursor:"pointer",background:selTpl?.id===t.id?"rgba(37,99,235,0.2)":"transparent",border:selTpl?.id===t.id?"1px solid rgba(37,99,235,0.4)":"1px solid transparent"}}
               onMouseEnter={e=>{if(selTpl?.id!==t.id)e.currentTarget.style.background="rgba(255,255,255,0.05)";}}
               onMouseLeave={e=>{if(selTpl?.id!==t.id)e.currentTarget.style.background="transparent";}}>
               <div style={{fontSize:12,fontWeight:600,color:"white",marginBottom:2}}>{t.name}</div>
-              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>{t.line_items?.length||0} items · ₹{fmtN(t.line_items?.reduce((s,it)=>s+(it.amount||0),0)||0)}</div>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>{t("crm.t_items_fmtn", { t: t.line_items?.length||0, fmtN: fmtN(t.line_items?.reduce((s,it)=>s+(it.amount||0),0)||0) })}</div>
             </div>
           ))}
         </div>
         <div style={{padding:"10px 14px",borderTop:"1px solid rgba(255,255,255,0.1)"}}>
-          <button onClick={onClose} style={{width:"100%",padding:"8px",borderRadius:6,background:"rgba(255,255,255,0.08)",border:"none",color:"rgba(255,255,255,0.5)",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Close</button>
+          <button onClick={onClose} style={{width:"100%",padding:"8px",borderRadius:6,background:"rgba(255,255,255,0.08)",border:"none",color:"rgba(255,255,255,0.5)",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("common.close")}</button>
         </div>
       </div>
 
       {/* Right: Form */}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,background:T.surface,flexShrink:0}}>
-          <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{selTpl?"Edit Template":"New Template"}</div>
+          <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{selTpl?t("crm.edit_template"):t("crm.new_template_2")}</div>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
           {/* Template name */}
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Template Name *</label>
-            <input value={form.name} onChange={upd("name")} placeholder="e.g. Standard Residential Quotation"
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.template_name")}</label>
+            <input value={form.name} onChange={upd("name")} placeholder={t("crm.e_g_standard_residential_quotation")}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,fontWeight:600,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
           {/* Company info */}
           <div style={{padding:"12px 14px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14}}>
-            <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Company Details</div>
+            <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>{t("crm.company_details")}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              {[{l:"Company Name",k:"company_name",ph:"Your Company Name"},{l:"Phone",k:"company_phone",ph:"+91-XXXXX"},{l:"Email",k:"company_email",ph:"info@company.com"},{l:"Address",k:"company_address",ph:"Raipur, CG"}].map(f=>(
+              {[{l:t("crm.company_name"),k:"company_name",ph:"Your Company Name"},{l:t("common.phone"),k:"company_phone",ph:"+91-XXXXX"},{l:t("common.email"),k:"company_email",ph:"info@company.com"},{l:t("crm.address"),k:"company_address",ph:"Raipur, CG"}].map(f=>(
                 <div key={f.k}>
                   <label style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:2}}>{f.l}</label>
                   <input value={form[f.k]} onChange={upd(f.k)} placeholder={f.ph}
@@ -3320,8 +3300,8 @@ function TemplateBuilderModal({onClose}){
           {/* Line Items */}
           <div style={{marginBottom:14}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-              <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>Line Items</div>
-              <button onClick={addRow} style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.bluM}`,background:T.bluL,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>+ Add Row</button>
+              <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.line_items")}</div>
+              <button onClick={addRow} style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.bluM}`,background:T.bluL,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("common.add_row")}</button>
             </div>
             <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,overflow:"hidden"}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 70px 70px 90px 90px 30px",padding:"6px 10px",background:T.sb}}>
@@ -3332,11 +3312,11 @@ function TemplateBuilderModal({onClose}){
               {items.map((it,i)=>(
                 <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px 30px",padding:"5px 10px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:6}}>
                   <input ref={el=>{if(el) itemRefs.current[i]=el;}}
-                    value={it.description} onChange={e=>updItem(i,"description",e.target.value)} placeholder="Work description"
+                    value={it.description} onChange={e=>updItem(i,"description",e.target.value)} placeholder={t("crm.work_description")}
                     style={{padding:"5px 7px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11.5,color:T.t1,outline:"none",fontFamily:"inherit"}}/>
                   <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)}
                     style={{padding:"5px 5px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11.5,color:T.t1,outline:"none",width:"100%",fontFamily:"inherit",boxSizing:"border-box"}}/>
-                  <SearchSelect value={it.unit} options={["SqFt","SqM","CuM","Rft","LS","Nos","KG","MT","Bags","Set"]} onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>
+                  <SearchSelect value={it.unit} options={["SqFt","SqM","CuM","Rft","LS","Nos","KG","MT","Bags","Set"]} onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
                   <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder="₹"
                     onKeyDown={e=>{if(e.key==="Enter" && i===items.length-1){e.preventDefault();addRow();}}}
                     style={{padding:"5px 5px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11.5,color:T.t1,outline:"none",width:"100%",fontFamily:"inherit",boxSizing:"border-box"}}/>
@@ -3345,26 +3325,26 @@ function TemplateBuilderModal({onClose}){
                 </div>
               ))}
               <div style={{display:"flex",justifyContent:"flex-end",padding:"8px 12px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`}}>
-                <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Total: ₹{fmtN(total)}</span>
+                <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("crm.total_fmtn", { fmtN: fmtN(total) })}</span>
               </div>
             </div>
           </div>
 
           {/* Terms */}
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Terms & Conditions</label>
-            <textarea value={form.terms_conditions} onChange={upd("terms_conditions")} rows={4} placeholder="Payment terms, validity, scope of work..."
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.terms_conditions")}</label>
+            <textarea value={form.terms_conditions} onChange={upd("terms_conditions")} rows={4} placeholder={t("crm.payment_terms_validity_scope_of_work")}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
           </div>
         </div>
 
         {/* Footer */}
         <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:8,flexShrink:0}}>
-          {selTpl&&<button onClick={()=>deleteTpl(selTpl.id)} style={{padding:"9px 14px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>Delete</button>}
+          {selTpl&&<button onClick={()=>deleteTpl(selTpl.id)} style={{padding:"9px 14px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.delete")}</button>}
           <div style={{flex:1}}/>
           <button onClick={save} disabled={saving}
             style={{padding:"9px 20px",borderRadius:7,background:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",opacity:saving?0.7:1}}>
-            {saving?"Saving...":selTpl?"Update Template":"Save Template"}
+            {saving?t("common.saving"):selTpl?t("crm.update_template"):t("crm.save_template")}
           </button>
         </div>
       </div>
@@ -3377,12 +3357,12 @@ function TemplateBuilderModal({onClose}){
 // ═══════════════════════════════════════════════════════════════════
 
 const SOLAR_STAGES = [
-  {id:"lead",      label:"Lead",      color:"#6366F1", bg:"#EEF2FF", desc:"New solar enquiry"},
-  {id:"followup",  label:"Follow Up", color:"#0891B2", bg:"#E0F2FE", desc:"Site details collected"},
-  {id:"proposal",  label:"Proposal",  color:"#D97706", bg:"#FFFBEB", desc:"Geo photo + quotation"},
-  {id:"converted", label:"Converted", color:"#059669", bg:"#ECFDF5", desc:"Docs uploaded → ready"},
-  {id:"lost",      label:"Lost",      color:"#6B7280", bg:"#F1F5F9", desc:"Not interested"},
-  {id:"project",   label:"Converted to Project", color:"#1565C0", bg:"#E3F2FD", desc:"Active solar project"},
+  {id:"lead",      get label() { return t("crm.lead"); },      color:"#6366F1", bg:"#EEF2FF", get desc() { return t("crm.new_solar_enquiry"); }},
+  {id:"followup",  get label() { return t("crm.follow_up"); }, color:"#0891B2", bg:"#E0F2FE", get desc() { return t("crm.site_details_collected"); }},
+  {id:"proposal",  get label() { return t("crm.proposal"); },  color:"#D97706", bg:"#FFFBEB", get desc() { return t("crm.geo_photo_quotation"); }},
+  {id:"converted", get label() { return t("crm.converted"); }, color:"#059669", bg:"#ECFDF5", get desc() { return t("crm.docs_uploaded_ready"); }},
+  {id:"lost",      get label() { return t("crm.lost"); },      color:"#6B7280", bg:"#F1F5F9", get desc() { return t("crm.not_interested"); }},
+  {id:"project",   get label() { return t("crm.converted_to_project"); }, color:"#1565C0", bg:"#E3F2FD", get desc() { return t("crm.active_solar_project"); }},
 ];
 
 const KW_OPTIONS = ["1","2","3","4","5","6","7","8","9","10"];
@@ -3416,8 +3396,8 @@ function LeadTypeSelector({onSelect, onClose}) {
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:16,width:"min(420px,92vw)",boxShadow:"0 24px 64px rgba(0,0,0,0.28)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:"#0D1B2A",padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
-          <div style={{fontSize:15,fontWeight:700,color:"white"}}>New Lead</div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.45)",marginTop:2}}>Kaun sa lead hai?</div>
+          <div style={{fontSize:15,fontWeight:700,color:"white"}}>{t("crm.new_lead")}</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.45)",marginTop:2}}>{t("crm.kaun_sa_lead_hai")}</div>
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}><IcX size={15}/></button>
       </div>
@@ -3428,8 +3408,8 @@ function LeadTypeSelector({onSelect, onClose}) {
           onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.background="white";}}>
           <div style={{width:44,height:44,borderRadius:10,background:T.bluL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>🏗️</div>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:T.t1}}>Construction / Other</div>
-            <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>Residential, commercial, industrial project</div>
+            <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{t("crm.construction_other")}</div>
+            <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>{t("crm.residential_commercial_industrial_project")}</div>
           </div>
         </button>
         <button onClick={()=>onSelect("solar")}
@@ -3438,8 +3418,8 @@ function LeadTypeSelector({onSelect, onClose}) {
           onMouseLeave={e=>{e.currentTarget.style.background="#FFFDE7";e.currentTarget.style.borderColor="#FFD54F";}}>
           <div style={{width:44,height:44,borderRadius:10,background:"#FFF3E0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>☀️</div>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:"#E65100"}}>Solar EPC — PM Surya Ghar</div>
-            <div style={{fontSize:11.5,color:"#BF360C",marginTop:2}}>Rooftop solar installation lead</div>
+            <div style={{fontSize:14,fontWeight:700,color:"#E65100"}}>{t("crm.solar_epc_pm_surya_ghar")}</div>
+            <div style={{fontSize:11.5,color:"#BF360C",marginTop:2}}>{t("crm.rooftop_solar_installation_lead")}</div>
           </div>
         </button>
       </div>
@@ -3462,10 +3442,10 @@ function AddSolarLeadModal({onClose, onSave, assignedToList, defaultStage}) {
   const upd = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const save = async () => {
-    if (!form.name.trim() || !form.phone.trim()) return setErr("Name aur Phone required");
+    if (!form.name.trim() || !form.phone.trim()) return setErr(t("crm.name_aur_phone_required"));
     setSaving(true); setErr("");
     try { await onSave(form); onClose(); }
-    catch(e) { setErr("Error saving lead"); }
+    catch(e) { setErr(t("crm.error_saving_lead")); }
     setSaving(false);
   };
 
@@ -3483,8 +3463,8 @@ function AddSolarLeadModal({onClose, onSave, assignedToList, defaultStage}) {
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(540px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.28)",zIndex:403,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:"linear-gradient(135deg,#E65100,#FF8F00)",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
         <div>
-          <div style={{fontSize:15,fontWeight:700,color:"white"}}>☀️ New Solar Lead</div>
-          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.7)",marginTop:2}}>PM Surya Ghar — Rooftop Solar</div>
+          <div style={{fontSize:15,fontWeight:700,color:"white"}}>{t("crm.new_solar_lead")}</div>
+          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.7)",marginTop:2}}>{t("crm.pm_surya_ghar_rooftop_solar")}</div>
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"white",opacity:0.7}}><IcX size={15}/></button>
       </div>
@@ -3495,44 +3475,44 @@ function AddSolarLeadModal({onClose, onSave, assignedToList, defaultStage}) {
           {inp("Mobile *","phone","10-digit number","tel")}
           {inp("City","city","Raipur, Durg...")}
           <div>
-            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>System Size (kW)</label>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("crm.system_size_kw")}</label>
             <SearchSelect value={form.requirement_kw}
-              options={KW_OPTIONS.map(k=>({key:k,label:`${k} kW`}))}
-              onChange={v=>upd("requirement_kw",v)} placeholder="Select size..."/>
+              options={KW_OPTIONS.map(k=>({key:k,label:t("crm.k_kw", { k })}))}
+              onChange={v=>upd("requirement_kw",v)} placeholder={t("crm.select_size")}/>
           </div>
           <div>
-            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Lead Source</label>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("crm.lead_source")}</label>
             <SearchSelect value={form.source} options={SOURCES}
-              onChange={v=>upd("source",v)} placeholder="Select source..."/>
+              onChange={v=>upd("source",v)} placeholder={t("crm.select_source")}/>
           </div>
           <div style={{gridColumn:"1/3"}}>{inp("Location / Area","location","Approx location or landmark")}</div>
           <div>
-            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Assigned To</label>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.assigned_to")}</label>
             <SearchSelect value={form.assignedTo} options={ASSIGNED_TO}
-              onChange={v=>upd("assignedTo",v)} placeholder="Select assignee..."/>
+              onChange={v=>upd("assignedTo",v)} placeholder={t("crm.select_assignee")}/>
           </div>
           <div>
-            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Priority</label>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.priority")}</label>
             <SearchSelect value={form.priority} options={["High","Medium","Low"]}
-              onChange={v=>upd("priority",v)} placeholder="Select priority..."/>
+              onChange={v=>upd("priority",v)} placeholder={t("common.select_priority")}/>
           </div>
           <div style={{gridColumn:"1/3"}}>
-            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Next Contact Date</label>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("crm.next_contact_date")}</label>
             <input type="date" value={form.contactDate} onChange={e=>upd("contactDate",e.target.value)}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${form.contactDate?T.grn:T.b1}`,fontSize:12.5,color:T.t1,background:form.contactDate?T.grnL:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
           <div style={{gridColumn:"1/3"}}>
-            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Notes</label>
-            <textarea value={form.notes} onChange={e=>upd("notes",e.target.value)} placeholder="Site details, roof info, customer preferences..." rows={2}
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.notes")}</label>
+            <textarea value={form.notes} onChange={e=>upd("notes",e.target.value)} placeholder={t("crm.site_details_roof_info_customer_preferences")} rows={2}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
           </div>
         </div>
       </div>
       <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,flexShrink:0}}>
-        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
         <button onClick={save} disabled={saving||!form.name.trim()||!form.phone.trim()}
           style={{flex:2,padding:"10px",borderRadius:7,background:saving||!form.name.trim()?"#FFA726":"linear-gradient(135deg,#E65100,#FF8F00)",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-          ☀️ {saving?"Saving...":"Add Solar Lead"}
+          ☀️ {saving?t("common.saving"):t("crm.add_solar_lead")}
         </button>
       </div>
     </div>
@@ -3579,11 +3559,11 @@ function FollowupLogSection({leadId, isActive, autoOpen=false}) {
   return (
     <div style={{padding:"12px 13px",borderBottom:`1px solid ${T.b1}`}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-        <div style={{fontSize:11,fontWeight:700,color:"#0891B2"}}>📞 Follow-up Log ({logs.length})</div>
+        <div style={{fontSize:11,fontWeight:700,color:"#0891B2"}}>{t("crm.follow_up_log_logs", { logs: logs.length })}</div>
         {isActive&&(
           <button onClick={()=>setShowAdd(s=>!s)}
             style={{padding:"4px 10px",borderRadius:5,background:showAdd?"#E0F2FE":"#0891B2",border:`1px solid #0891B2`,color:showAdd?"#0891B2":"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-            {showAdd?"Cancel":"+ Add Entry"}
+            {showAdd?t("common.cancel"):t("crm.add_entry")}
           </button>
         )}
       </div>
@@ -3593,26 +3573,26 @@ function FollowupLogSection({leadId, isActive, autoOpen=false}) {
         <div style={{background:"#F0F9FF",borderRadius:8,border:"1px solid #BAE6FD",padding:"10px 12px",marginBottom:10}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
             <div>
-              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Call Date</label>
+              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.call_date")}</label>
               <input type="date" value={form.call_date} onChange={e=>setForm(p=>({...p,call_date:e.target.value}))}
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             </div>
             <div>
-              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Next Follow-up</label>
+              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.next_follow_up")}</label>
               <input type="date" value={form.next_followup_date} onChange={e=>setForm(p=>({...p,next_followup_date:e.target.value}))}
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${form.next_followup_date?T.grn:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:form.next_followup_date?T.grnL:"white"}}/>
             </div>
             <div style={{gridColumn:"1/3"}}>
-              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Conversation Summary *</label>
+              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.conversation_summary")}</label>
               <textarea value={form.summary} onChange={e=>setForm(p=>({...p,summary:e.target.value}))}
                 autoFocus
-                placeholder="Customer ne kya kaha, interest level, concerns..." rows={3}
+                placeholder={t("crm.customer_ne_kya_kaha_interest_level")} rows={3}
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
             </div>
             <div style={{gridColumn:"1/3"}}>
-              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Additional Requirements</label>
+              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.additional_requirements")}</label>
               <textarea value={form.additional_requirements} onChange={e=>setForm(p=>({...p,additional_requirements:e.target.value}))}
-                placeholder="Battery, special structure, shade issue, loan required..." rows={1}
+                placeholder={t("crm.battery_special_structure_shade_issue_loan")} rows={1}
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
             </div>
             <div style={{gridColumn:"1/3",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}
@@ -3620,19 +3600,19 @@ function FollowupLogSection({leadId, isActive, autoOpen=false}) {
               <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${form.senior_consultant_needed?"#E65100":T.b2}`,background:form.senior_consultant_needed?"#E65100":"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 {form.senior_consultant_needed&&<span style={{color:"white",fontSize:11,fontWeight:800}}>✓</span>}
               </div>
-              <span style={{fontSize:12,color:"#E65100",fontWeight:600}}>Senior Consultant Required</span>
+              <span style={{fontSize:12,color:"#E65100",fontWeight:600}}>{t("crm.senior_consultant_required")}</span>
             </div>
           </div>
           <button onClick={addLog} disabled={saving||!form.summary.trim()}
             style={{width:"100%",padding:"8px",borderRadius:6,background:saving||!form.summary.trim()?T.b1:"#0891B2",color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-            {saving?"Saving...":"Save Follow-up Log"}
+            {saving?t("common.saving"):t("crm.save_follow_up_log")}
           </button>
         </div>
       )}
 
       {/* Log timeline */}
-      {loading&&<div style={{fontSize:11,color:T.t4,textAlign:"center",padding:"8px"}}>Loading...</div>}
-      {!loading&&logs.length===0&&<div style={{fontSize:11,color:T.t4,textAlign:"center",padding:"8px"}}>No follow-up entries yet</div>}
+      {loading&&<div style={{fontSize:11,color:T.t4,textAlign:"center",padding:"8px"}}>{t("common.loading")}</div>}
+      {!loading&&logs.length===0&&<div style={{fontSize:11,color:T.t4,textAlign:"center",padding:"8px"}}>{t("crm.no_follow_up_entries_yet")}</div>}
       {logs.map((log,i)=>(
         <div key={log.id} style={{display:"flex",gap:10,marginBottom:8,alignItems:"flex-start"}}>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
@@ -3644,11 +3624,11 @@ function FollowupLogSection({leadId, isActive, autoOpen=false}) {
           <div style={{flex:1,background:"#F0F9FF",borderRadius:7,padding:"8px 10px",border:"1px solid #BAE6FD"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
               <span style={{fontSize:11,fontWeight:700,color:"#0891B2"}}>{fmtDate(log.call_date)}</span>
-              {log.next_followup_date&&<span style={{fontSize:10,color:T.grn,fontWeight:600}}>Next: {fmtDate(log.next_followup_date)}</span>}
-              {log.senior_consultant_needed===1&&<span style={{fontSize:9,fontWeight:700,color:"#E65100",background:"#FFF3E0",border:"1px solid #FFD54F",borderRadius:3,padding:"1px 5px"}}>Senior Req.</span>}
+              {log.next_followup_date&&<span style={{fontSize:10,color:T.grn,fontWeight:600}}>{t("crm.next_fmtdate", { fmtDate: fmtDate(log.next_followup_date) })}</span>}
+              {log.senior_consultant_needed===1&&<span style={{fontSize:9,fontWeight:700,color:"#E65100",background:"#FFF3E0",border:"1px solid #FFD54F",borderRadius:3,padding:"1px 5px"}}>{t("crm.senior_req")}</span>}
             </div>
             <div style={{fontSize:12,color:T.t1,lineHeight:1.5}}>{log.summary}</div>
-            {log.additional_requirements&&<div style={{fontSize:11,color:T.t3,marginTop:3,fontStyle:"italic"}}>Requirements: {log.additional_requirements}</div>}
+            {log.additional_requirements&&<div style={{fontSize:11,color:T.t3,marginTop:3,fontStyle:"italic"}}>{t("crm.requirements_additional_requirements", { additional_requirements: log.additional_requirements })}</div>}
           </div>
         </div>
       ))}
@@ -3742,7 +3722,7 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
       const url = await uploadToCloudinary(file, "doc");
       setDocs(p=>({...p,[docKey]:url}));
       api.patch("/solar/leads/"+data.id, {[docKey]:url}).catch(()=>{});
-    } catch(ex) { setErr("Upload failed"); }
+    } catch(ex) { setErr(t("common.upload_failed")); }
     setUploading(p=>({...p,[docKey]:false}));
   };
 
@@ -3758,10 +3738,10 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
 
   const isProject = data.stage === "project";
   const TABS = [
-    {id:"overview",  l:"Overview"},
-    {id:"followups", l:"Follow Ups"},
-    {id:"quotations",l:"Documents"},
-    ...(!isProject ? [{id:"move", l:"Move Stage"}] : []),
+    {id:"overview",  l:t("common.overview")},
+    {id:"followups", l:t("crm.follow_ups")},
+    {id:"quotations",l:t("common.documents")},
+    ...(!isProject ? [{id:"move", l:t("crm.move_stage")}] : []),
   ];
 
   // Doc upload button
@@ -3769,16 +3749,16 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
     <div style={{marginBottom:8}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
         <span style={{fontSize:11.5,fontWeight:600,color:value?T.grn:T.t2}}>{value?"✓ ":""}{label}</span>
-        {value&&<a href={value} target="_blank" rel="noreferrer" style={{fontSize:10.5,color:T.blu}}>View ↗</a>}
+        {value&&<a href={value} target="_blank" rel="noreferrer" style={{fontSize:10.5,color:T.blu}}>{t("crm.view")}</a>}
       </div>
       <div style={{display:"flex",gap:6}}>
         <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:7,border:`1.5px dashed ${value?T.grnM:T.b1}`,background:value?T.grnL:"white",cursor:"pointer",fontSize:11.5,fontWeight:600,color:value?T.grn:T.t3}}>
           <input type="file" accept="image/*,application/pdf" capture="environment" onChange={e=>uploadDoc(e,key)} style={{display:"none"}} disabled={uploading[key]}/>
-          {uploading[key]?"Uploading...":"📷 Camera"}
+          {uploading[key]?t("common.uploading"):t("crm.camera")}
         </label>
         <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:7,border:`1.5px dashed ${value?T.grnM:T.b1}`,background:value?T.grnL:"white",cursor:"pointer",fontSize:11.5,fontWeight:600,color:value?T.grn:T.t3}}>
           <input type="file" accept="image/*,application/pdf" onChange={e=>uploadDoc(e,key)} style={{display:"none"}} disabled={uploading[key]}/>
-          {uploading[key]?"...":"📁 File"}
+          {uploading[key]?"...":t("crm.file")}
         </label>
       </div>
     </div>
@@ -3792,9 +3772,9 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
       <div style={{background:stage.color,padding:"14px 18px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
-            <span style={{fontSize:10.5,fontWeight:800,color:"white",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>☀ Solar EPC</span>
+            <span style={{fontSize:10.5,fontWeight:800,color:"white",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>{t("crm.solar_epc")}</span>
             <span style={{fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.9)",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>{stage.label}</span>
-            <span style={{fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.9)",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>{data.priority||"Medium"}</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.9)",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>{data.priority||t("crm.medium")}</span>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"white",opacity:0.7}}><IcX size={15}/></button>
         </div>
@@ -3808,11 +3788,11 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <a href={"tel:+91"+data.phone}
             style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:7,background:"rgba(255,255,255,0.15)",color:"white",fontSize:12,fontWeight:700,textDecoration:"none",border:"1px solid rgba(255,255,255,0.3)"}}>
-            📞 Call
+           {t("crm.call")}
           </a>
           <a href={"https://api.whatsapp.com/send?phone=91"+data.phone} target="_blank" rel="noreferrer"
             style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:7,background:"#25D366",color:"white",fontSize:12,fontWeight:700,textDecoration:"none"}}>
-            WhatsApp
+           {t("common.whatsapp")}
           </a>
           <span style={{fontSize:12,color:"rgba(255,255,255,0.75)",marginLeft:2}}>{data.phone}</span>
         </div>
@@ -3836,13 +3816,13 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
           <div>
             {/* Project badge */}
             <div style={{background:"#E3F2FD",borderRadius:9,border:"1.5px solid #90CAF9",padding:"12px 14px",marginBottom:10,textAlign:"center"}}>
-              <div style={{fontSize:13,fontWeight:700,color:"#1565C0"}}>✅ Converted to Project</div>
-              <div style={{fontSize:11,color:"#42A5F5",marginTop:3}}>This lead is now an active solar project. Data is read-only.</div>
-              {data.converted_project_id&&<div style={{fontSize:11,color:"#1565C0",marginTop:4,fontWeight:600}}>Project ID: #{data.converted_project_id}</div>}
+              <div style={{fontSize:13,fontWeight:700,color:"#1565C0"}}>{t("crm.converted_to_project_2")}</div>
+              <div style={{fontSize:11,color:"#42A5F5",marginTop:3}}>{t("crm.this_lead_is_now_an_active")}</div>
+              {data.converted_project_id&&<div style={{fontSize:11,color:"#1565C0",marginTop:4,fontWeight:600}}>{t("crm.project_id_converted_project_id", { converted_project_id: data.converted_project_id })}</div>}
             </div>
             {/* Read-only details */}
             <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px"}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>👤 Customer Details</div>
+              <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>{t("crm.customer_details")}</div>
               {[
                 ["Customer Name", data.name],
                 ["Mobile", data.phone],
@@ -3891,42 +3871,42 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
               </div>
               {/* Editable details */}
               <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px"}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>👤 Customer Details</div>
+                <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>{t("crm.customer_details")}</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                   <div style={{gridColumn:"1/3"}}>{inp("Customer Name","name","Full name")}</div>
                   {inp("Mobile","phone","10-digit","tel")}
                   {inp("City","city","Raipur...")}
                   {inp("Location / Area","location","Landmark")}
                   <div>
-                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>System Size</label>
+                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.system_size")}</label>
                     <SearchSelect value={ovForm.requirement_kw}
-                      options={KW_OPTIONS.map(k=>({key:k,label:`${k} kW`}))}
-                      onChange={v=>upd("requirement_kw",v)} placeholder="Select size..."/>
+                      options={KW_OPTIONS.map(k=>({key:k,label:t("crm.k_kw", { k })}))}
+                      onChange={v=>upd("requirement_kw",v)} placeholder={t("crm.select_size")}/>
                   </div>
                   <div>
-                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Type</label>
+                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("common.type")}</label>
                     <SearchSelect value={ovForm.requirement_type}
-                      options={[{key:"residential",label:"Residential"},{key:"commercial",label:"Commercial"}]}
-                      onChange={v=>upd("requirement_type",v)} placeholder="Select type..."/>
+                      options={[{key:"residential",label:t("crm.residential")},{key:"commercial",label:t("crm.commercial")}]}
+                      onChange={v=>upd("requirement_type",v)} placeholder={t("common.select_type")}/>
                   </div>
                   <div>
-                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Lead Source</label>
+                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.lead_source")}</label>
                     <SearchSelect value={ovForm.source} options={SOURCES}
-                      onChange={v=>upd("source",v)} placeholder="Select source..."/>
+                      onChange={v=>upd("source",v)} placeholder={t("crm.select_source")}/>
                   </div>
                 </div>
                 <div style={{borderTop:`1px solid ${T.b1}`,paddingTop:10,marginBottom:10}}>
-                  <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:8}}>📍 Site Details</div>
+                  <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:8}}>{t("crm.site_details")}</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
                     <div>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Exact Site Address</label>
-                      <textarea value={ovForm.exact_address} onChange={e=>upd("exact_address",e.target.value)} placeholder="House no., Street, Area, District, Pin..." rows={2}
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.exact_site_address")}</label>
+                      <textarea value={ovForm.exact_address} onChange={e=>upd("exact_address",e.target.value)} placeholder={t("crm.house_no_street_area_district_pin")} rows={2}
                         style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}
                         onFocus={e=>e.target.style.borderColor=stage.color} onBlur={e=>e.target.style.borderColor=T.b1}/>
                     </div>
                     <div>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Site Notes</label>
-                      <textarea value={ovForm.followup_notes} onChange={e=>upd("followup_notes",e.target.value)} placeholder="Roof type, shade, structure..." rows={2}
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.site_notes")}</label>
+                      <textarea value={ovForm.followup_notes} onChange={e=>upd("followup_notes",e.target.value)} placeholder={t("crm.roof_type_shade_structure")} rows={2}
                         style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}
                         onFocus={e=>e.target.style.borderColor=stage.color} onBlur={e=>e.target.style.borderColor=T.b1}/>
                     </div>
@@ -3935,13 +3915,13 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                       <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${ovForm.senior_consultant_needed?"#E65100":T.b2}`,background:ovForm.senior_consultant_needed?"#E65100":"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         {ovForm.senior_consultant_needed&&<span style={{color:"white",fontSize:13,fontWeight:800}}>✓</span>}
                       </div>
-                      <span style={{fontSize:12.5,fontWeight:600,color:"#E65100"}}>Senior Consultant Required</span>
+                      <span style={{fontSize:12.5,fontWeight:600,color:"#E65100"}}>{t("crm.senior_consultant_required")}</span>
                     </div>
                   </div>
                 </div>
                 <button onClick={()=>patchLead({...ovForm})} disabled={saving}
                   style={{width:"100%",padding:"10px",borderRadius:7,background:saving?T.b1:stage.color,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                  {saving?"Saving...":"💾 Save Details"}
+                  {saving?t("common.saving"):t("crm.save_details")}
                 </button>
               </div>
             </div>
@@ -3958,15 +3938,15 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
           <div>
             {/* ── READ-ONLY DOCUMENTS for project stage ── */}
             <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"14px",marginBottom:12}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>📄 Documents</div>
-              <div style={{fontSize:11.5,color:T.t3,marginBottom:12}}>Read-only — edit from Project module</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>{t("crm.documents")}</div>
+              <div style={{fontSize:11.5,color:T.t3,marginBottom:12}}>{t("crm.read_only_edit_from_project_module")}</div>
               {[
-                {key:"doc_ele_bill", label:"Electricity Bill",   icon:"⚡"},
-                {key:"doc_aadhaar",  label:"Aadhaar Card",       icon:"🪪"},
-                {key:"doc_pan",      label:"PAN Card",           icon:"💳"},
-                {key:"doc_bank",     label:"Bank Details",       icon:"🏦"},
-                {key:"geo_photo_url",label:"Geo-tag Site Photo", icon:"📍", isPhoto:true},
-                {key:"doc_itr",      label:"ITR / Form 16",      icon:"📋"},
+                {key:"doc_ele_bill", label:t("crm.electricity_bill"),   icon:"⚡"},
+                {key:"doc_aadhaar",  label:t("crm.aadhaar_card"),       icon:"🪪"},
+                {key:"doc_pan",      label:t("crm.pan_card"),           icon:"💳"},
+                {key:"doc_bank",     label:t("common.bank_details"),       icon:"🏦"},
+                {key:"geo_photo_url",label:t("crm.geo_tag_site_photo"), icon:"📍", isPhoto:true},
+                {key:"doc_itr",      label:t("crm.itr_form_16"),      icon:"📋"},
               ].map(doc=>{
                 const val = doc.isPhoto ? geoPhoto : docs[doc.key];
                 return (
@@ -3975,25 +3955,25 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                       <span style={{fontSize:16}}>{doc.icon}</span>
                       <span style={{fontSize:12,fontWeight:600,color:val?T.grn:T.t4}}>{val?"✓ ":""}{doc.label}</span>
                     </div>
-                    {val?<a href={val} target="_blank" rel="noreferrer" style={{fontSize:11,color:T.blu,fontWeight:600,padding:"2px 8px",background:T.bluL,borderRadius:5,textDecoration:"none",border:`1px solid ${T.bluM}`}}>View ↗</a>
-                      :<span style={{fontSize:10,color:T.t4}}>Not uploaded</span>}
+                    {val?<a href={val} target="_blank" rel="noreferrer" style={{fontSize:11,color:T.blu,fontWeight:600,padding:"2px 8px",background:T.bluL,borderRadius:5,textDecoration:"none",border:`1px solid ${T.bluM}`}}>{t("crm.view")}</a>
+                      :<span style={{fontSize:10,color:T.t4}}>{t("crm.not_uploaded")}</span>}
                   </div>
                 );
               })}
             </div>
             {/* ── Read-only Brand Quotations ── */}
             <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>💰 Brand Quotations</div>
+              <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>{t("crm.brand_quotations")}</div>
               {brands.filter(b=>b.brand&&b.amount).map((b,i)=>(
                 <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 12px",marginBottom:6,borderRadius:8,background:selectedBrand===b.brand?T.grnL:T.surfaceB,border:`1.5px solid ${selectedBrand===b.brand?T.grnM:T.b1}`}}>
                   <div>
-                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{b.brand} {selectedBrand===b.brand&&<span style={{color:T.grn}}>✓ Selected</span>}</div>
-                    {b.file&&<a href={b.file} target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blu}}>📄 Quotation PDF</a>}
+                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{b.brand} {selectedBrand===b.brand&&<span style={{color:T.grn}}>{t("crm.selected")}</span>}</div>
+                    {b.file&&<a href={b.file} target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blu}}>{t("crm.quotation_pdf")}</a>}
                   </div>
                   <span style={{fontSize:13,fontWeight:700,color:T.grn}}>₹{Number(b.amount).toLocaleString("en-IN")}</span>
                 </div>
               ))}
-              {brands.filter(b=>b.brand&&b.amount).length===0&&<div style={{fontSize:12,color:T.t4}}>No quotations added</div>}
+              {brands.filter(b=>b.brand&&b.amount).length===0&&<div style={{fontSize:12,color:T.t4}}>{t("crm.no_quotations_added")}</div>}
             </div>
           </div>
         )}
@@ -4001,15 +3981,15 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
           <div>
             {/* ── ALL DOCUMENTS — accessible at any stage ── */}
             <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"14px",marginBottom:12}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>📄 Documents</div>
-              <div style={{fontSize:11.5,color:T.t3,marginBottom:12}}>Kisi bhi stage mein upload karo — jo available ho woh abhi daal do</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>{t("crm.documents")}</div>
+              <div style={{fontSize:11.5,color:T.t3,marginBottom:12}}>{t("crm.kisi_bhi_stage_mein_upload_karo")}</div>
               {[
-                {key:"doc_ele_bill", label:"Electricity Bill",   icon:"⚡", required:true},
-                {key:"doc_aadhaar",  label:"Aadhaar Card",       icon:"🪪", required:true},
-                {key:"doc_pan",      label:"PAN Card",           icon:"💳", required:true},
-                {key:"doc_bank",     label:"Bank Details",       icon:"🏦", required:true},
-                {key:"geo_photo_url",label:"Geo-tag Site Photo", icon:"📍", required:true, isPhoto:true},
-                {key:"doc_itr",      label:"ITR / Form 16",      icon:"📋", required:false},
+                {key:"doc_ele_bill", label:t("crm.electricity_bill"),   icon:"⚡", required:true},
+                {key:"doc_aadhaar",  label:t("crm.aadhaar_card"),       icon:"🪪", required:true},
+                {key:"doc_pan",      label:t("crm.pan_card"),           icon:"💳", required:true},
+                {key:"doc_bank",     label:t("common.bank_details"),       icon:"🏦", required:true},
+                {key:"geo_photo_url",label:t("crm.geo_tag_site_photo"), icon:"📍", required:true, isPhoto:true},
+                {key:"doc_itr",      label:t("crm.itr_form_16"),      icon:"📋", required:false},
               ].map(doc=>{
                 const val = doc.isPhoto ? geoPhoto : docs[doc.key];
                 const setVal = doc.isPhoto
@@ -4022,13 +4002,13 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                         <span style={{fontSize:18}}>{doc.icon}</span>
                         <div>
                           <span style={{fontSize:12.5,fontWeight:700,color:val?T.grn:T.t1}}>{val?"✓ ":""}{doc.label}</span>
-                          {doc.required&&!val&&<span style={{fontSize:10,color:T.red,marginLeft:5}}>Required</span>}
-                          {!doc.required&&!val&&<span style={{fontSize:10,color:T.t4,marginLeft:5}}>Optional</span>}
+                          {doc.required&&!val&&<span style={{fontSize:10,color:T.red,marginLeft:5}}>{t("crm.required")}</span>}
+                          {!doc.required&&!val&&<span style={{fontSize:10,color:T.t4,marginLeft:5}}>{t("common.optional")}</span>}
                         </div>
                       </div>
                       {val&&<a href={val} target="_blank" rel="noreferrer"
                         style={{fontSize:11,color:T.blu,fontWeight:600,padding:"2px 8px",background:T.bluL,borderRadius:5,textDecoration:"none",border:`1px solid ${T.bluM}`}}>
-                        View ↗
+                       {t("crm.view")}
                       </a>}
                     </div>
                     {!val&&(
@@ -4042,7 +4022,7 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                               catch(ex){ setErr(ex.message||"Upload failed"); }
                               setUploading(p=>({...p,[doc.key]:false}));
                             }} style={{display:"none"}} disabled={uploading[doc.key]}/>
-                          {uploading[doc.key]?"Uploading...":"📷 Camera"}
+                          {uploading[doc.key]?t("common.uploading"):t("crm.camera")}
                         </label>
                         <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"white",cursor:"pointer",fontSize:11.5,fontWeight:600,color:T.t3}}>
                           <input type="file" accept={doc.isPhoto?"image/*":"image/*,application/pdf"}
@@ -4053,7 +4033,7 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                               catch(ex){ setErr(ex.message||"Upload failed"); }
                               setUploading(p=>({...p,[doc.key]:false}));
                             }} style={{display:"none"}} disabled={uploading[doc.key]}/>
-                          {uploading[doc.key]?"...":"📁 File"}
+                          {uploading[doc.key]?"...":t("crm.file")}
                         </label>
                       </div>
                     )}
@@ -4067,7 +4047,7 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                             catch(ex){ setErr(ex.message||"Upload failed"); }
                             setUploading(p=>({...p,[doc.key]:false}));
                           }} style={{display:"none"}} disabled={uploading[doc.key]}/>
-                        {uploading[doc.key]?"Uploading...":"Replace"}
+                        {uploading[doc.key]?t("common.uploading"):t("crm.replace")}
                       </label>
                     )}
                   </div>
@@ -4077,19 +4057,19 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
 
             {/* ── Brand Quotations ── */}
             <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>💰 Brand Quotations</div>
+              <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>{t("crm.brand_quotations")}</div>
               {brands.map((b,i)=>(
                 <div key={i} style={{marginBottom:10,padding:"10px 12px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`}}>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
                     <div>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Brand Name</label>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.brand_name")}</label>
                       <input value={b.brand} onChange={e=>setBrands(p=>p.map((x,j)=>j===i?{...x,brand:e.target.value}:x))}
                         onBlur={()=>saveQuotations()}
                         placeholder={`Brand ${i+1}`}
                         style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                     </div>
                     <div>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Amount (₹)</label>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.amount")}</label>
                       <input type="number" value={b.amount} onChange={e=>setBrands(p=>p.map((x,j)=>j===i?{...x,amount:e.target.value}:x))}
                         onBlur={()=>saveQuotations()}
                         placeholder="e.g. 250000"
@@ -4098,12 +4078,12 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                   </div>
                   {/* PDF Quotation Upload */}
                   <div style={{marginBottom:8}}>
-                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>📎 Quotation PDF</label>
+                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{t("crm.quotation_pdf_2")}</label>
                     {b.file?(
                       <div style={{display:"flex",alignItems:"center",gap:6}}>
                         <a href={b.file} target="_blank" rel="noreferrer"
                           style={{flex:1,display:"flex",alignItems:"center",gap:5,padding:"6px 9px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,fontSize:11.5,color:T.grn,textDecoration:"none",fontWeight:600}}>
-                          📄 PDF Uploaded ✓
+                         {t("crm.pdf_uploaded")}
                         </a>
                         <button onClick={()=>{const updated=brands.map((x,j)=>j===i?{...x,file:""}:x);setBrands(updated);saveQuotations(updated);}}
                           style={{padding:"6px 8px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10,cursor:"pointer",fontWeight:600}}>✕</button>
@@ -4119,11 +4099,11 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                               const updated=brands.map((x,j)=>j===i?{...x,file:url}:x);
                               setBrands(updated);
                               saveQuotations(updated);
-                            }catch(er){alert("Upload failed");}
+                            }catch(er){alert(t("common.upload_failed"));}
                             setUploading(p=>({...p,[`brand_${i}`]:false}));
                             e.target.value="";
                           }}/>
-                        {uploading[`brand_${i}`]?"Uploading...":"📤 Upload PDF / Image"}
+                        {uploading[`brand_${i}`]?t("common.uploading"):t("crm.upload_pdf_image")}
                       </label>
                     )}
                   </div>
@@ -4143,7 +4123,7 @@ Total: ${amt} (incl. GST + 5yr maintenance)`;
                         text+=`\n\n— ${data.assignedTo||"Team"}`;
                         window.open("https://api.whatsapp.com/send?phone=91"+data.phone+"&text="+encodeURIComponent(text),"_blank");
                       }} style={{flex:1,padding:"6px",borderRadius:6,background:"#25D366",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                        WhatsApp ↗
+                       {t("crm.whatsapp_2")}
                       </button>
                       <span style={{fontSize:12,fontWeight:700,color:T.grn}}>₹{Number(b.amount).toLocaleString("en-IN")}</span>
                     </div>
@@ -4152,14 +4132,14 @@ Total: ${amt} (incl. GST + 5yr maintenance)`;
               ))}
               <button onClick={saveQuotations}
                 style={{width:"100%",padding:"8px",borderRadius:7,background:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                💾 Save Quotations
+               {t("crm.save_quotations")}
               </button>
             </div>
 
             {/* Final selection + convert — only at proposal/converted stage */}
             {(data.stage==="converted"||data.stage==="proposal")&&(
               <div style={{background:"white",borderRadius:9,border:`1.5px solid ${T.grnM}`,padding:"12px 14px"}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.grn,marginBottom:10}}>✅ Final Quotation Selection</div>
+                <div style={{fontSize:12,fontWeight:700,color:T.grn,marginBottom:10}}>{t("crm.final_quotation_selection")}</div>
                 {brands.filter(b=>b.brand&&b.amount).map((b,i)=>(
                   <button key={i} onClick={()=>{setSelectedBrand(b.brand);api.patch("/solar/leads/"+data.id,{selected_brand:b.brand}).catch(()=>{});}}
                     style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",borderRadius:8,border:`2px solid ${selectedBrand===b.brand?T.grn:T.b1}`,background:selectedBrand===b.brand?T.grnL:"white",marginBottom:6,cursor:"pointer",transition:"all .15s"}}>
@@ -4182,13 +4162,13 @@ Total: ${amt} (incl. GST + 5yr maintenance)`;
                     setSaving(true); setErr("");
                     try{
                       const res=await api.post("/solar/leads/"+data.id+"/convert",{});
-                      if(res.success){alert("✅ Project created successfully!");onConvertToProject(res.data);onClose();}
+                      if(res.success){alert(t("crm.project_created_successfully"));onConvertToProject(res.data);onClose();}
                       else {setErr(res.message||"Conversion failed");alert("❌ "+(res.message||"Conversion failed"));}
                     }catch(e){setErr("Server error: "+e.message);alert("❌ Server error: "+e.message);}
                     setSaving(false);
                   }} disabled={saving}
                     style={{width:"100%",padding:"12px",borderRadius:8,background:saving?T.b1:"linear-gradient(135deg,#059669,#10B981)",color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",marginTop:8}}>
-                    {saving?"Creating Project...":"🚀 Convert to Solar Project"}
+                    {saving?t("crm.creating_project"):t("crm.convert_to_solar_project")}
                   </button>
                 )}
               </div>
@@ -4200,7 +4180,7 @@ Total: ${amt} (incl. GST + 5yr maintenance)`;
         {tab==="move"&&(
           <div>
             <div style={{fontSize:12.5,color:T.t2,marginBottom:12}}>
-              Move <strong>{data.name}</strong> to a different stage:
+             {t("crm.move")} <strong>{data.name}</strong> {t("crm.to_a_different_stage")}
             </div>
             {SOLAR_STAGES.filter(s=>s.id!=="project").map(s=>{
               const isCurrent = s.id===data.stage;
@@ -4208,11 +4188,11 @@ Total: ${amt} (incl. GST + 5yr maintenance)`;
                 <button key={s.id} onClick={async()=>{
                   if(isCurrent) return;
                   // Solar-specific validation
-                  if(s.id==="proposal"&&!data.exact_address) return setErr("Site address required before moving to Proposal. Fill in Follow-up tab first.");
+                  if(s.id==="proposal"&&!data.exact_address) return setErr(t("crm.site_address_required_before_moving_to"));
                   if(s.id==="converted"){
                     const hasQuot = brands.some(b=>b.brand&&b.amount);
-                    if(!geoPhoto) return setErr("Geo-tagged roof photo required (upload in Quotations tab)");
-                    if(!hasQuot) return setErr("Minimum 1 brand quotation required (fill in Quotations tab)");
+                    if(!geoPhoto) return setErr(t("crm.geo_tagged_roof_photo_required_upload"));
+                    if(!hasQuot) return setErr(t("crm.minimum_1_brand_quotation_required_fill"));
                   }
                   setErr("");
                   await moveStage(s.id);
@@ -4222,7 +4202,7 @@ Total: ${amt} (incl. GST + 5yr maintenance)`;
                   onMouseLeave={e=>{if(!isCurrent){e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.background=T.surface;}}}>
                   <div style={{width:12,height:12,borderRadius:"50%",background:s.color,flexShrink:0}}/>
                   <div style={{flex:1,textAlign:"left"}}>
-                    <div style={{fontSize:13,fontWeight:600,color:isCurrent?s.color:T.t1}}>{s.label} {isCurrent&&"← Current"}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:isCurrent?s.color:T.t1}}>{s.label} {isCurrent&&t("crm.current")}</div>
                     <div style={{fontSize:11,color:T.t4}}>{s.desc}</div>
                   </div>
                   {!isCurrent&&<IcMove size={14} color={T.t4}/>}
@@ -4241,21 +4221,21 @@ Total: ${amt} (incl. GST + 5yr maintenance)`;
         return (
           <div style={{padding:"10px 14px",borderTop:`1.5px solid ${T.b1}`,background:"white",flexShrink:0,display:"flex",gap:8,alignItems:"center"}}>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:10,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>Current Stage</div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>{t("crm.current_stage")}</div>
               <div style={{fontSize:12,fontWeight:700,color:stage.color}}>{stage.label}</div>
             </div>
             <button onClick={async()=>{
               setErr("");
-              if(nextStage.id==="proposal"&&!data.exact_address) return setErr("Address fill karo — Follow Ups tab mein");
+              if(nextStage.id==="proposal"&&!data.exact_address) return setErr(t("crm.address_fill_karo_follow_ups_tab"));
               if(nextStage.id==="converted"){
                 const hasQuot=brands.some(b=>b.brand&&b.amount);
-                if(!geoPhoto) return setErr("Geo photo required — Documents tab mein upload karo");
-                if(!hasQuot) return setErr("Brand quotation required — Documents tab mein bharo");
+                if(!geoPhoto) return setErr(t("crm.geo_photo_required_documents_tab_mein"));
+                if(!hasQuot) return setErr(t("crm.brand_quotation_required_documents_tab_mein"));
               }
               await patchLead({stage:nextStage.id});
             }} disabled={saving}
               style={{display:"flex",alignItems:"center",gap:6,padding:"9px 18px",borderRadius:8,background:saving?T.b1:nextStage.color,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:saving?"not-allowed":"pointer",whiteSpace:"nowrap",flexShrink:0}}>
-              {saving?"Moving...":"Move to "+nextStage.label+" →"}
+              {saving?t("crm.moving"):"Move to "+nextStage.label+" →"}
             </button>
           </div>
         );
@@ -4445,16 +4425,16 @@ function CRMModule(){
   const conversionRate=allLeads.length?Math.round((allLeads.filter(l=>l.stage==="converted"||l.stage==="project").length/allLeads.length)*100):0;
 
   const TILES=[
-    {l:"Total Leads",v:leads.length,sub:`${leads.filter(l=>l.stage==="lead").length} new · ${leads.filter(l=>l.stage==="followup").length} followup`,c:T.blu,I:IcCRM},
-    {l:"Pipeline Value",v:`₹${fmt(pipelineValue)}`,sub:"Active leads combined",c:T.pur,I:IcRs},
-    {l:"Converted",v:`₹${fmt(convertedValue)}`,sub:`${leads.filter(l=>l.stage==="converted").length} deals · ${conversionRate}% rate`,c:T.grn,I:IcChk},
-    {l:"Follow Up Today",v:todayDueCount,sub:"Contact date due",c:todayDueCount>0?T.red:T.grn,I:IcCal},
+    {l:t("crm.total_leads"),v:leads.length,sub:t("crm.length_new_length_followup", { length: leads.filter(l=>l.stage==="lead").length, length: leads.filter(l=>l.stage==="followup").length }),c:T.blu,I:IcCRM},
+    {l:t("crm.pipeline_value"),v:`₹${fmt(pipelineValue)}`,sub:t("crm.active_leads_combined"),c:T.pur,I:IcRs},
+    {l:t("crm.converted"),v:`₹${fmt(convertedValue)}`,sub:t("crm.length_deals_conversionrate_rate", { length: leads.filter(l=>l.stage==="converted").length, conversionRate }),c:T.grn,I:IcChk},
+    {l:t("crm.follow_up_today"),v:todayDueCount,sub:t("crm.contact_date_due"),c:todayDueCount>0?T.red:T.grn,I:IcCal},
   ];
 
   if(loading) return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",flexDirection:"column",gap:14}}>
       <div style={{width:36,height:36,border:"3px solid #E2E8F0",borderTopColor:"#1565C0",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
-      <div style={{fontSize:13,color:"#8896A6"}}>Loading CRM...</div>
+      <div style={{fontSize:13,color:"#8896A6"}}>{t("crm.loading_crm")}</div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
@@ -4485,43 +4465,43 @@ function CRMModule(){
         <div style={{background:"#0D1B2A",borderRadius:10,padding:"0 10px",display:"flex",alignItems:"center",gap:4,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
           <div style={{position:"relative",flex:1,maxWidth:220,margin:"8px 0"}}>
             <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={12} color="rgba(255,255,255,0.3)"/></span>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name or phone..."
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("crm.search_name_or_phone")}
               style={{width:"100%",height:30,padding:"0 8px 0 26px",borderRadius:6,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.1)",fontSize:12,color:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
           <button onClick={()=>setShowFilters(s=>!s)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:6,border:`1px solid ${activeF>0?"rgba(255,171,0,0.5)":"rgba(255,255,255,0.18)"}`,background:activeF>0?"rgba(255,171,0,0.15)":"rgba(255,255,255,0.07)",color:activeF>0?"#FDE68A":"rgba(255,255,255,0.7)",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-            <IcFilter size={12} color="currentColor"/> Filters {activeF>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{activeF}</span>}
+            <IcFilter size={12} color="currentColor"/> {t("common.filters")} {activeF>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{activeF}</span>}
           </button>
           <div style={{flex:1}}/>
           {todayDueCount>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",background:"rgba(217,119,6,0.2)",borderRadius:6,border:"1px solid rgba(217,119,6,0.4)"}}>
             <IcAlert size={11} color={T.amb}/>
-            <span style={{fontSize:10.5,fontWeight:700,color:T.ambM}}>{todayDueCount} due today</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:T.ambM}}>{t("crm.todayduecount_due_today", { todayDueCount })}</span>
           </div>}
           <button onClick={()=>setShowDesignOverview(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:"rgba(124,58,237,0.15)",border:"1px solid rgba(124,58,237,0.4)",color:"#C4B5FD",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-            🎨 Design Status
+           {t("design_overview.design_status")}
           </button>
           <ExportMenu
             filename="crm-leads"
-            title="CRM Leads"
+            title={t("crm.crm_leads")}
             columns={[
-              {key:"name",label:"Name"},
-              {key:"phone",label:"Phone"},
-              {key:"email",label:"Email"},
-              {key:"city",label:"City"},
-              {key:"projType",label:"Project Type"},
-              {key:"budget",label:"Budget",get:r=>r.budget?`₹${r.budget}`:""},
-              {key:"source",label:"Source"},
-              {key:"assignedTo",label:"Assigned To"},
-              {key:"stage",label:"Stage",get:r=>STAGES.find(s=>s.id===r.stage)?.label||r.stage||""},
-              {key:"priority",label:"Priority"},
-              {key:"contactDate",label:"Next Contact"},
-              {key:"createdAt",label:"Created"},
-              {key:"notes",label:"Notes"},
+              {key:"name",label:t("common.name_2")},
+              {key:"phone",label:t("common.phone")},
+              {key:"email",label:t("common.email")},
+              {key:"city",label:t("common.city")},
+              {key:"projType",label:t("crm.project_type")},
+              {key:"budget",label:t("common.budget"),get:r=>r.budget?`₹${r.budget}`:""},
+              {key:"source",label:t("common.source")},
+              {key:"assignedTo",label:t("common.assigned_to")},
+              {key:"stage",label:t("common.stage"),get:r=>STAGES.find(s=>s.id===r.stage)?.label||r.stage||""},
+              {key:"priority",label:t("common.priority")},
+              {key:"contactDate",label:t("crm.next_contact")},
+              {key:"createdAt",label:t("common.created")},
+              {key:"notes",label:t("common.notes")},
             ]}
             rows={[...(canConstruction?leads:[]),...(canSolar?solarLeads:[])]}
             onImport={async(rows)=>{
-              if(!rows.length){alert("No rows to import");return;}
+              if(!rows.length){alert(t("crm.no_rows_to_import"));return;}
               if(!await window.confirmAsync(`Import ${rows.length} lead${rows.length>1?"s":""}?`))return;
               let ok=0,fail=0;
               for(const r of rows){
@@ -4546,21 +4526,21 @@ function CRMModule(){
           />
           <button onClick={()=>setShowTemplates(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-            📋 Templates
+           {t("crm.templates_2")}
           </button>
           <button onClick={()=>openNewLead("lead")}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:canSolar&&!canConstruction?"linear-gradient(135deg,#E65100,#FF8F00)":T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-            <IcAdd size={13} color="white"/> {canSolar&&!canConstruction?"☀ New Solar Lead":"New Lead"}
+            <IcAdd size={13} color="white"/> {canSolar&&!canConstruction?t("crm.new_solar_lead_2"):t("crm.new_lead")}
           </button>
         </div>
 
         {/* Filter panel */}
         {showFilters&&(
           <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"10px 14px",marginTop:6,display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
-            {[{l:"Assigned",v:fAssignee,fn:setFAssignee,opts:["All",...ASSIGNED_TO]},
-              {l:"Source",v:fSource,fn:setFSource,opts:["All",...SOURCES]},
-              {l:"Project Type",v:fProjType,fn:setFProjType,opts:["All",...PROJ_TYPES]},
-              {l:"Priority",v:fPriority,fn:setFPriority,opts:["All","High","Medium","Low"]},
+            {[{l:t("crm.assigned"),v:fAssignee,fn:setFAssignee,opts:["All",...ASSIGNED_TO]},
+              {l:t("common.source"),v:fSource,fn:setFSource,opts:["All",...SOURCES]},
+              {l:t("crm.project_type"),v:fProjType,fn:setFProjType,opts:["All",...PROJ_TYPES]},
+              {l:t("common.priority"),v:fPriority,fn:setFPriority,opts:["All","High","Medium","Low"]},
             ].map(({l,v,fn,opts})=>(
               <div key={l}>
                 <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{l}</div>
@@ -4572,7 +4552,7 @@ function CRMModule(){
             ))}
             {activeF>0&&<button onClick={()=>{setFAssignee("All");setFSource("All");setFProjType("All");setFPriority("All");}}
               style={{height:30,padding:"0 11px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surfaceB,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",alignSelf:"flex-end"}}>
-              Clear
+             {t("common.clear")}
             </button>}
           </div>
         )}
@@ -4664,15 +4644,15 @@ function CRMModule(){
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(400px,90vw)",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:501,overflow:"hidden",animation:"popIn .2s ease",fontFamily:"'Segoe UI',sans-serif"}}>
           <div style={{background:"#D97706",padding:"16px 20px",textAlign:"center"}}>
             <div style={{fontSize:28,marginBottom:6}}>📋</div>
-            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Lead moved to Proposal!</div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>{t("crm.lead_moved_to_proposal")}</div>
             <div style={{fontSize:11.5,color:"rgba(255,255,255,0.8)",marginTop:3}}>{quotPromptLead.name}</div>
           </div>
           <div style={{padding:"18px 20px",textAlign:"center"}}>
-            <div style={{fontSize:13,color:T.t2,marginBottom:16}}>Kya aap is lead ke liye quotation upload karna chahte ho?</div>
+            <div style={{fontSize:13,color:T.t2,marginBottom:16}}>{t("crm.kya_aap_is_lead_ke_liye")}</div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setQuotPromptLead(null)}
                 style={{flex:1,padding:"10px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>
-                Baad mein
+               {t("crm.baad_mein")}
               </button>
               <button onClick={()=>{
                 if(quotPromptLead._isSolar){ setSelSolarLead({...quotPromptLead,_openTab:"quotations"}); }
@@ -4680,7 +4660,7 @@ function CRMModule(){
                 setQuotPromptLead(null);
               }}
                 style={{flex:2,padding:"10px",borderRadius:7,background:"#D97706",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-                Upload Now
+               {t("crm.upload_now")}
               </button>
             </div>
           </div>
@@ -4693,11 +4673,11 @@ function CRMModule(){
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(420px,90vw)",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:501,overflow:"hidden",animation:"popIn .2s ease",fontFamily:"'Segoe UI',sans-serif"}}>
           <div style={{background:"#059669",padding:"16px 20px",textAlign:"center"}}>
             <div style={{fontSize:28,marginBottom:6}}>🎉</div>
-            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Deal Converted!</div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>{t("crm.deal_converted")}</div>
             <div style={{fontSize:11.5,color:"rgba(255,255,255,0.8)",marginTop:3}}>{selectFinalLead.name}</div>
           </div>
           <div style={{padding:"18px 20px"}}>
-            <div style={{fontSize:13,color:T.t2,marginBottom:12,textAlign:"center"}}>Final quotation select karo ya skip karo:</div>
+            <div style={{fontSize:13,color:T.t2,marginBottom:12,textAlign:"center"}}>{t("crm.final_quotation_select_karo_ya_skip")}</div>
             <SelectFinalQuotation leadId={selectFinalLead.id} onDone={()=>{setSelectFinalLead(null);loadLeads();}} onSkip={()=>setSelectFinalLead(null)}/>
           </div>
         </div>

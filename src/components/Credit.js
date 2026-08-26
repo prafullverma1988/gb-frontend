@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 // ── AVATAR + CREDIT — audit-trail building blocks ──────────────────
 // Compact "Created by X · 2h ago" patterns used wherever a record has
 // who-did-what metadata: requests, approvals, transactions, etc.
@@ -74,7 +75,7 @@ export function fmtTimeAgo(t) {
     const d = new Date(t);
     if (isNaN(d.getTime())) return "";
     const diff = (Date.now() - d.getTime()) / 1000;
-    if (diff < 60) return "just now";
+    if (diff < 60) return t("common.just_now");
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;

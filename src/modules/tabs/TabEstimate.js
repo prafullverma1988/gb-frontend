@@ -5,6 +5,7 @@ import SearchSelect from "../../components/SearchSelect";
 import EstimateBuilderModal from "../EstimateBuilderModal";
 import { T, localYMD } from "../shared/tokens";
 import { PTAddTask } from "./TabTasks";
+import { t, Rich } from "../../i18n";
 
 function TabEstimate({ project }) {
   const projectId = project?.id;
@@ -66,7 +67,7 @@ function TabEstimate({ project }) {
   const [estForm, setEstForm] = useState({
     customer_id: "", customer_name: "", retention_pct: 5, tds_pct: 1, tax_pct: 0,
     description: "",
-    sections: [{ title: "Section 1", items: [{ description:"", unit:"", qty:"", rate:"" }] }],
+    sections: [{ title: t("estimate.section_1"), items: [{ description:"", unit:"", qty:"", rate:"" }] }],
   });
   // Form state — New Invoice (milestone OR manual)
   const [invForm, setInvForm] = useState({
@@ -364,7 +365,7 @@ function TabEstimate({ project }) {
   const submitAmendment = async () => {
     if (!selEst) return;
     if (!amendForm.reason || !amendForm.reason.trim()) {
-      alert("Please provide a reason for the amendment.");
+      alert(t("estimate.please_provide_a_reason_for_the"));
       return;
     }
     const validSecs = (amendForm.sections || [])
@@ -386,7 +387,7 @@ function TabEstimate({ project }) {
       }))
       .filter(s => s.items.length > 0);
     if (validSecs.length === 0) {
-      alert("Add at least one item with description, qty, and rate.");
+      alert(t("estimate.add_at_least_one_item_with"));
       return;
     }
     setAmendSaving(true);
@@ -429,8 +430,8 @@ function TabEstimate({ project }) {
   };
 
   const decideAmendment = async (amendId, status) => {
-    if (status === "Rejected" && !await window.confirmAsync("Reject this amendment? The estimate will stay unchanged.")) return;
-    if (status === "Approved" && !await window.confirmAsync("Approve this amendment? Sections + items will be replaced and the total recomputed.")) return;
+    if (status === "Rejected" && !await window.confirmAsync(t("estimate.reject_this_amendment_the_estimate_will"))) return;
+    if (status === "Approved" && !await window.confirmAsync(t("estimate.approve_this_amendment_sections_items_will"))) return;
     const r = await api.patch("/customer-estimates/amendments/" + amendId + "/action", { status })
       .catch(e => ({ success:false, message: e.message }));
     if (!r?.success) { alert(r?.message || "Failed"); return; }
@@ -569,7 +570,7 @@ function TabEstimate({ project }) {
     if (terms) termsBlock += `<div class="tc"><div class="tch">Terms &amp; Conditions</div><div class="tcb">${esc(terms)}</div></div>`;
 
     const w = window.open("", "_blank");
-    if (!w) { window.alert("Pop-up blocked — allow pop-ups to export PDF."); return; }
+    if (!w) { window.alert(t("estimate.pop_up_blocked_allow_pop_ups")); return; }
     const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"/>
       <title>BOQ — ${esc(selEst?.estimate_no || "")}</title>
@@ -732,8 +733,8 @@ function TabEstimate({ project }) {
     const validSecs = estForm.sections
       .map(s => ({ title: s.title, items: s.items.filter(i => i.description && i.qty && i.rate) }))
       .filter(s => s.items.length > 0);
-    if (!estForm.customer_name && !estForm.customer_id) return alert("Customer required");
-    if (validSecs.length === 0) return alert("Add at least one item with description, qty, rate");
+    if (!estForm.customer_name && !estForm.customer_id) return alert(t("estimate.customer_required"));
+    if (validSecs.length === 0) return alert(t("estimate.add_at_least_one_item_with_2"));
     setSaving(true);
     const r = await api.post("/customer-estimates", {
       project_id: projectId,
@@ -756,20 +757,20 @@ function TabEstimate({ project }) {
     if (r.success) {
       setShowNewEst(false);
       setEstForm({ customer_id:"", customer_name:"", retention_pct:5, tds_pct:1, tax_pct:0, description:"",
-        sections:[{title:"Section 1",items:[{description:"",unit:"",qty:"",rate:""}]}] });
+        sections:[{title:t("estimate.section_1"),items:[{description:"",unit:"",qty:"",rate:""}]}] });
       await loadEstimates();
       await selectEst(r.data);
     } else alert(r.message || "Failed");
   };
 
   const submitInvoice = async () => {
-    if (!selEst && invForm.source === "milestone") return alert("Select an estimate first");
+    if (!selEst && invForm.source === "milestone") return alert(t("estimate.select_an_estimate_first"));
 
     // ── Over-Billing Mode validation ─────────────────────────────
     // Reason is compulsory when mode is on. Frontend guard saves a
     // round-trip; backend also enforces with OVER_BILL_REASON_REQUIRED.
     if (invForm.overBillMode && !invForm.overBillReason.trim()) {
-      return alert("Over-Billing Mode is on. Please add a reason (compulsory for audit trail).");
+      return alert(t("estimate.over_billing_mode_is_on_please"));
     }
 
     setSaving(true);
@@ -777,7 +778,7 @@ function TabEstimate({ project }) {
     if (invForm.source === "manual") {
       const items = invForm.manualItems.filter(i => i.description && i.qty && i.rate)
         .map(i => ({ description:i.description, qty:parseFloat(i.qty), rate:parseFloat(i.rate) }));
-      if (items.length === 0) { setSaving(false); return alert("Add at least one line"); }
+      if (items.length === 0) { setSaving(false); return alert(t("estimate.add_at_least_one_line")); }
       body = {
         project_id: projectId, source: "manual",
         invoice_date: invForm.invoice_date, remark: invForm.remark,
@@ -792,7 +793,7 @@ function TabEstimate({ project }) {
       };
     } else {
       const items = invForm.items.filter(i => i.milestone_id);
-      if (items.length === 0) { setSaving(false); return alert("Select at least one milestone"); }
+      if (items.length === 0) { setSaving(false); return alert(t("estimate.select_at_least_one_milestone")); }
 
       // Translate this_qty → cumulative_qty for the backend.
       // Ledger has billed_qty per milestone; cumulative = billed + this_qty.
@@ -854,7 +855,7 @@ function TabEstimate({ project }) {
       // CASE A: nothing to bill
       if (normalItems.length === 0 && overItems.length === 0) {
         setSaving(false);
-        return alert("Nothing to bill — all selected milestones resolved to 0 qty.");
+        return alert(t("estimate.nothing_to_bill_all_selected_milestones"));
       }
 
       // CASE B: only normal items → single normal invoice
@@ -865,7 +866,7 @@ function TabEstimate({ project }) {
       else if (normalItems.length === 0) {
         if (!invForm.overBillMode) {
           setSaving(false);
-          return alert("⚠ One or more milestones are fully billed but you've entered extra quantity.\n\nTo proceed:\n• Click '+ Over-Billing' toggle at the top of the modal\n• Add a reason explaining the extra work\n• Save\n\nOr reduce the quantity to stay within BOQ.");
+          return alert(t("estimate.one_or_more_milestones_are_fully"));
         }
         body = baseBody(overItems, {
           is_over_bill: 1,
@@ -879,7 +880,7 @@ function TabEstimate({ project }) {
       else {
         if (!invForm.overBillMode) {
           setSaving(false);
-          return alert("⚠ Some quantities exceed BOQ remaining.\n\nTo proceed:\n• Click '+ Over-Billing' toggle at the top of the modal\n• Add a reason for the extra qty\n• System will auto-split into 2 linked invoices (BOQ portion + over-bill portion)\n\nOr reduce qty to fit within remaining.");
+          return alert(t("estimate.some_quantities_exceed_boq_remaining_to"));
         }
         const firstBody = baseBody(normalItems);
         const r1 = await postOne(firstBody);   // Call 1 — normal portion
@@ -913,7 +914,7 @@ function TabEstimate({ project }) {
     if (!body) {
       setSaving(false);
       console.error('[SUBMIT] body is undefined — CASE routing failed. invForm:', JSON.stringify({ source: invForm.source, overBillMode: invForm.overBillMode, _editId: invForm._editId }));
-      return alert("Internal error: invoice body not prepared. Please refresh and try again.");
+      return alert(t("estimate.internal_error_invoice_body_not_prepared"));
     }
     console.log('[SUBMIT] Sending invoice body:', JSON.stringify(body));
 
@@ -946,7 +947,7 @@ function TabEstimate({ project }) {
   };
 
   const submitPayment = async () => {
-    if (!showPay || !payForm.amount_received) return alert("Amount required");
+    if (!showPay || !payForm.amount_received) return alert(t("estimate.amount_required"));
     setSaving(true);
     const r = await api.post("/customer-estimates/payments", {
       invoice_id: showPay,
@@ -1059,7 +1060,7 @@ function TabEstimate({ project }) {
     await loadLinkedTasks(selEst.id);
   };
   const unlinkTask = async (milestoneId) => {
-    if (!await window.confirmAsync("Unlink this milestone from its task?")) return;
+    if (!await window.confirmAsync(t("estimate.unlink_this_milestone_from_its_task"))) return;
     const r = await api.del("/customer-estimates/milestones/rate/"+milestoneId+"/link")
       .catch(e => ({ success:false, message:e.message }));
     if (!r?.success) { alert(r?.message || "Unlink failed"); return; }
@@ -1093,7 +1094,7 @@ function TabEstimate({ project }) {
   };
   const rejectAutoInvoice = async () => {
     if (!previewInv?.invoice?.id) return;
-    if (!await window.confirmAsync("Reject and delete this auto-generated draft invoice?\n\nThe milestone will become eligible again on next trigger.")) return;
+    if (!await window.confirmAsync(t("estimate.reject_and_delete_this_auto_generated"))) return;
     setPreviewConfirming(true);
     const r = await api.del("/customer-estimates/invoices/"+previewInv.invoice.id)
       .catch(e => ({ success:false, message:e.message }));
@@ -1142,13 +1143,13 @@ function TabEstimate({ project }) {
     setShowSetMs(true);
   };
   const deleteRateSchedule = async (itemId, itemName) => {
-    if (!await window.confirmAsync(`Delete payment schedule for "${itemName}"?\n\nAll milestones for this item will be removed. Existing invoices stay intact.`)) return;
+    if (!await window.confirmAsync(t("estimate.delete_payment_schedule_for_itemname_all", { itemName }))) return;
     const r = await api.del("/customer-estimates/"+selEst.id+"/milestones/rate/"+itemId).catch(e => ({success:false, message:e.message}));
     if (!r?.success) { alert(r?.message || "Delete failed"); return; }
     await reloadSel();
   };
   const deletePercentSchedule = async () => {
-    if (!await window.confirmAsync("Delete the entire % payment schedule?\n\nAll stages will be removed. Existing invoices stay intact.")) return;
+    if (!await window.confirmAsync(t("estimate.delete_the_entire_payment_schedule_all"))) return;
     const r = await api.del("/customer-estimates/"+selEst.id+"/milestones/percent").catch(e => ({success:false, message:e.message}));
     if (!r?.success) { alert(r?.message || "Delete failed"); return; }
     await reloadSel();
@@ -1189,7 +1190,7 @@ function TabEstimate({ project }) {
         .filter(Boolean);
       if (itemsPayload.length === 0) {
         setSaving(false);
-        return alert("Pick at least one item and add at least one milestone with rate + qty.");
+        return alert(t("estimate.pick_at_least_one_item_and"));
       }
       if (selEst.billing_method !== "milestone_rate") {
         await api.put("/customer-estimates/"+selEst.id+"/billing-method",{billing_method:"milestone_rate"});
@@ -1200,7 +1201,7 @@ function TabEstimate({ project }) {
     } else {
       const ms = msForm.pctMs.filter(m => m.name && m.pct)
         .map((m,i) => ({ seq:i, name:m.name, pct: parseFloat(m.pct) }));
-      if (ms.length === 0) { setSaving(false); return alert("Add at least one milestone"); }
+      if (ms.length === 0) { setSaving(false); return alert(t("estimate.add_at_least_one_milestone")); }
       if (selEst.billing_method !== "milestone_percent") {
         await api.put("/customer-estimates/"+selEst.id+"/billing-method",{billing_method:"milestone_percent"});
       }
@@ -1259,10 +1260,10 @@ function TabEstimate({ project }) {
       {/* LEFT — Estimate list */}
       <div style={{width:230,borderRight:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0,overflowY:"auto"}}>
         <div style={{padding:"10px 12px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",position:"relative"}}>
-          <span style={{fontSize:11,fontWeight:700,color:T.t1}}>Estimates ({estimates.length})</span>
+          <span style={{fontSize:11,fontWeight:700,color:T.t1}}>{t("estimate.estimates_estimates", { estimates: estimates.length })}</span>
           <button onClick={()=>setEstChooserOpen(o=>!o)}
             style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-            + New ▾
+           {t("estimate.new")}
           </button>
           {/* Chooser dropdown — 4 paths */}
           {estChooserOpen && (() => {
@@ -1288,7 +1289,7 @@ function TabEstimate({ project }) {
                              boxShadow:"0 12px 32px rgba(0,0,0,0.18)",zIndex:201,overflow:"hidden"}}>
                   {!libReady && (
                     <div style={{padding:"8px 12px",fontSize:10.5,color:"#92400E",background:"#FFFBEB",borderBottom:"1px solid #FDE68A"}}>
-                      ⚠️ Project missing City / Type — CRM path disabled. Library path will ask for them.
+                     {t("estimate.project_missing_city_type_crm_path")}
                     </div>
                   )}
 
@@ -1298,7 +1299,7 @@ function TabEstimate({ project }) {
                       style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
                       onMouseEnter={e=>e.currentTarget.style.background="#F0FDF4"}
                       onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                      <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>📋 Take from CRM Final Quote</div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>{t("estimate.take_from_crm_final_quote")}</div>
                       <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>
                         {crmQuotes.quotes[0].quote_no} · ₹{Math.round(Number(crmQuotes.quotes[0].grand_total)||0).toLocaleString("en-IN")}
                       </div>
@@ -1309,7 +1310,7 @@ function TabEstimate({ project }) {
                       style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
                       onMouseEnter={e=>e.currentTarget.style.background="#F0FDF4"}
                       onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                      <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>📋 Take from CRM Quote</div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>{t("estimate.take_from_crm_quote")}</div>
                       <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>
                         {crmQuotes.quotes[0].quote_no} · {crmQuotes.quotes[0].status}
                       </div>
@@ -1318,7 +1319,7 @@ function TabEstimate({ project }) {
                   {crmReady && crmQuotes.mode === "all" && crmQuotes.quotes.length > 1 && (
                     <div style={{borderBottom:"1px solid "+T.b1}}>
                       <div style={{padding:"8px 12px 4px",fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
-                        📋 Take from CRM Quote
+                       {t("estimate.take_from_crm_quote")}
                       </div>
                       {crmQuotes.quotes.map(q => (
                         <div key={q.id} onClick={()=>openBuilder("from_quote", q.id)}
@@ -1337,10 +1338,10 @@ function TabEstimate({ project }) {
                     style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
                     onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"}
                     onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>📚 Pick from Library</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>{t("estimate.pick_from_library")}</div>
                     <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>
-                      {libReady ? "Pick a package + adjust quantities"
-                               : "Will ask city + type, then pick package"}
+                      {libReady ? t("estimate.pick_a_package_adjust_quantities")
+                               : t("estimate.will_ask_city_type_then_pick")}
                     </div>
                   </div>
 
@@ -1349,9 +1350,9 @@ function TabEstimate({ project }) {
                     style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
                     onMouseEnter={e=>e.currentTarget.style.background="#FAF5FF"}
                     onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>✏️ Build from Scratch</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>{t("estimate.build_from_scratch")}</div>
                     <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>
-                      Empty start — add sections + items from library or new
+                     {t("estimate.empty_start_add_sections_items_from")}
                     </div>
                   </div>
 
@@ -1360,9 +1361,9 @@ function TabEstimate({ project }) {
                     style={{padding:"10px 12px",cursor:"pointer"}}
                     onMouseEnter={e=>e.currentTarget.style.background="#F8FAFC"}
                     onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>⚡ Quick Manual</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>{t("estimate.quick_manual")}</div>
                     <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>
-                      Type free-form items — no library lookup
+                     {t("estimate.type_free_form_items_no_library")}
                     </div>
                   </div>
                 </div>
@@ -1370,8 +1371,8 @@ function TabEstimate({ project }) {
             );
           })()}
         </div>
-        {loading && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:11}}>Loading…</div>}
-        {!loading && estimates.length === 0 && <div style={{padding:"24px 12px",textAlign:"center",color:T.t4,fontSize:12}}>No estimates yet</div>}
+        {loading && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:11}}>{t("common.loading_2")}</div>}
+        {!loading && estimates.length === 0 && <div style={{padding:"24px 12px",textAlign:"center",color:T.t4,fontSize:12}}>{t("estimate.no_estimates_yet")}</div>}
         {estimates.map(e => {
           const isSel = selEst?.id === e.id;
           const stC = e.status === "Active" ? T.grn : T.t4;
@@ -1390,7 +1391,7 @@ function TabEstimate({ project }) {
                 {e.invoice_count > 0 && <div style={{fontSize:9.5,color:T.t4,marginTop:3}}>{e.invoice_count} invoice{e.invoice_count>1?"s":""}</div>}
                 {/* Trash icon (top-right) — opens danger panel below */}
                 <button onClick={(ev)=>{ ev.stopPropagation(); isDelOpen ? closeDelEst() : openDelEst(e); }}
-                  title="Delete this estimate"
+                  title={t("estimate.delete_this_estimate")}
                   style={{position:"absolute",top:8,right:8,background: isDelOpen ? "#FEE2E2" : "transparent",
                           border:"1px solid " + (isDelOpen ? "#FCA5A5" : "transparent"),
                           color: isDelOpen ? "#DC2626" : "#94A3B8",
@@ -1402,22 +1403,19 @@ function TabEstimate({ project }) {
               {isDelOpen && (
                 <div onClick={(ev)=>ev.stopPropagation()}
                   style={{padding:"9px 12px 11px",background:"#FEF2F2",borderTop:"1px solid #FCA5A5"}}>
-                  <div style={{fontSize:10.5,color:"#7F1D1D",lineHeight:1.45,marginBottom:6}}>
-                    Permanently delete <b>{e.estimate_no}</b>?
-                    {e.invoice_count > 0 && <><br/><b style={{color:"#991B1B"}}>⚠ {e.invoice_count} invoice{e.invoice_count>1?"s":""} linked.</b> They'll lose their estimate reference.</>}
-                    <br/>Type <b>{e.estimate_no}</b> below to confirm.
-                  </div>
+                  <div style={{fontSize:10.5,color:"#7F1D1D",lineHeight:1.45,marginBottom:6}}><Rich k="estimate.permanently_delete_estimate_no" params={{ estimate_no: e.estimate_no }} />{e.invoice_count > 0 && <><br/><b style={{color:"#991B1B"}}>{t("estimate.invoice_count_invoicee_linked", { invoice_count: e.invoice_count, e: e.invoice_count>1?"s":"" })}</b> {t("estimate.they_ll_lose_their_estimate_reference")}</>}
+                    <br/><Rich k="estimate.type_estimate_no_below_to_confirm" params={{ estimate_no: e.estimate_no }} /></div>
                   <input value={delEstText} onChange={(ev)=>setDelEstText(ev.target.value)}
                     placeholder={e.estimate_no}
                     style={{width:"100%",padding:"5px 8px",border:"1px solid #FCA5A5",borderRadius:5,fontSize:11,outline:"none",boxSizing:"border-box",marginBottom:6}}/>
                   <div style={{display:"flex",gap:5}}>
                     <button onClick={closeDelEst} disabled={delEstBusy}
                       style={{flex:1,background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,padding:"4px",fontSize:10.5,fontWeight:600,cursor: delEstBusy?"not-allowed":"pointer"}}>
-                      Cancel
+                     {t("common.cancel")}
                     </button>
                     <button onClick={()=>confirmDelEst(e)} disabled={!delEnabled}
                       style={{flex:1,background: delEnabled?"#DC2626":"#FCA5A5",border:"none",color:"white",borderRadius:5,padding:"4px",fontSize:10.5,fontWeight:700,cursor: delEnabled?"pointer":"not-allowed"}}>
-                      {delEstBusy ? "Deleting…" : "Delete"}
+                      {delEstBusy ? t("common.deleting_2") : t("common.delete")}
                     </button>
                   </div>
                 </div>
@@ -1430,9 +1428,9 @@ function TabEstimate({ project }) {
         <div style={{padding:"10px 12px",borderTop:"1px solid "+T.b1,marginTop:8}}>
           <button onClick={()=>{ setInvForm(p=>({...p,source:"manual"})); setShowNewInv(true); }}
             style={{width:"100%",background:T.purL,color:T.pur,border:"1.5px dashed "+T.pur,borderRadius:6,padding:"7px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-            + Manual Invoice
+           {t("estimate.manual_invoice")}
           </button>
-          <div style={{fontSize:9.5,color:T.t4,marginTop:4,textAlign:"center"}}>Ad-hoc, not tied to an estimate</div>
+          <div style={{fontSize:9.5,color:T.t4,marginTop:4,textAlign:"center"}}>{t("estimate.ad_hoc_not_tied_to_an")}</div>
         </div>
       </div>
 
@@ -1441,7 +1439,7 @@ function TabEstimate({ project }) {
         {!selEst && (
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:T.t4,flexDirection:"column",gap:8}}>
             <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5}><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            <div style={{fontSize:13,color:T.t3}}>Select an estimate or create one</div>
+            <div style={{fontSize:13,color:T.t3}}>{t("estimate.select_an_estimate_or_create_one")}</div>
           </div>
         )}
 
@@ -1451,15 +1449,15 @@ function TabEstimate({ project }) {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div>
                 <div style={{fontSize:15,fontWeight:700,color:"white"}}>{selEst.customer_name || "—"}</div>
-                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{selEst.estimate_no} · {selEst.billing_method} · Ret {selEst.retention_pct}% · TDS {selEst.tds_pct}% · Tax {selEst.tax_pct}%</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{t("estimate.estimate_no_billing_method_ret_retention", { estimate_no: selEst.estimate_no, billing_method: selEst.billing_method, retention_pct: selEst.retention_pct, tds_pct: selEst.tds_pct, tax_pct: selEst.tax_pct })}</div>
               </div>
               <div style={{display:"flex",gap:16,alignItems:"center"}}>
                 {summary && [
-                  {l:"Estimate",v:fmtC(summary.estimate_value),c:"#94A3B8"},
-                  {l:"Invoiced",v:fmtC(summary.total_invoiced),c:"#60A5FA"},
-                  {l:"Received",v:fmtC(summary.total_received),c:"#4ADE80"},
-                  {l:"Manual+",v:fmtC(summary.manual_extras),c:"#A78BFA"},
-                  {l:"Balance",v:fmtC(summary.balance_receivable),c:"#F87171"},
+                  {l:t("common.estimate"),v:fmtC(summary.estimate_value),c:"#94A3B8"},
+                  {l:t("app.invoiced"),v:fmtC(summary.total_invoiced),c:"#60A5FA"},
+                  {l:t("common.received"),v:fmtC(summary.total_received),c:"#4ADE80"},
+                  {l:t("estimate.manual"),v:fmtC(summary.manual_extras),c:"#A78BFA"},
+                  {l:t("common.balance"),v:fmtC(summary.balance_receivable),c:"#F87171"},
                 ].map(s => (
                   <div key={s.l} style={{textAlign:"right"}}>
                     <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",textTransform:"uppercase"}}>{s.l}</div>
@@ -1473,8 +1471,8 @@ function TabEstimate({ project }) {
           {/* Sub Tabs */}
           <div style={{display:"flex",borderBottom:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0}}>
             {[
-              {id:"boq",label:"BOQ / Items"},
-              {id:"milestone",label:"Payment Schedule"},
+              {id:"boq",label:t("estimate.boq_items")},
+              {id:"milestone",label:t("estimate.payment_schedule")},
               {id:"invoice",label:"Invoices ("+invoices.length+")"},
               // Payments tab removed — customer receipts are managed at the
               // Party Ledger level (Party tab → Receipt), not per-estimate.
@@ -1493,24 +1491,24 @@ function TabEstimate({ project }) {
               {subTab==="boq" && estDetail && (
                 <>
                   {/* Fold / expand all */}
-                  <button onClick={expandAllBoq} title="Expand all sections"
-                    style={{background:T.surface,border:"1px solid "+T.b1,color:T.t2,borderRadius:5,padding:"5px 9px",fontSize:11,fontWeight:600,cursor:"pointer"}}>⊞ Expand all</button>
-                  <button onClick={collapseAllBoq} title="Collapse all sections"
-                    style={{background:T.surface,border:"1px solid "+T.b1,color:T.t2,borderRadius:5,padding:"5px 9px",fontSize:11,fontWeight:600,cursor:"pointer"}}>⊟ Collapse all</button>
+                  <button onClick={expandAllBoq} title={t("estimate.expand_all_sections")}
+                    style={{background:T.surface,border:"1px solid "+T.b1,color:T.t2,borderRadius:5,padding:"5px 9px",fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("estimate.expand_all")}</button>
+                  <button onClick={collapseAllBoq} title={t("estimate.collapse_all_sections")}
+                    style={{background:T.surface,border:"1px solid "+T.b1,color:T.t2,borderRadius:5,padding:"5px 9px",fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("estimate.collapse_all")}</button>
                   {/* Exports */}
-                  <button onClick={exportBoqExcel} title="Download BOQ as Excel (CSV)"
-                    style={{background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>⬇ Excel</button>
-                  <button onClick={exportBoqPdf} title="Download / print BOQ as PDF"
-                    style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>⬇ PDF</button>
+                  <button onClick={exportBoqExcel} title={t("estimate.download_boq_as_excel_csv")}
+                    style={{background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.excel")}</button>
+                  <button onClick={exportBoqPdf} title={t("estimate.download_print_boq_as_pdf")}
+                    style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.pdf")}</button>
                   <button onClick={openEditBoq}
-                    title={pendingAmendCount > 0 ? "A pending amendment already exists — review it in the Amendments tab first" : "Propose changes to this estimate's BOQ (requires admin approval)"}
+                    title={pendingAmendCount > 0 ? "A pending amendment already exists — review it in the Amendments tab first" : t("estimate.propose_changes_to_this_estimate_s")}
                     disabled={pendingAmendCount > 0}
                     style={{background: pendingAmendCount > 0 ? "#E5E7EB" : "#FEF3C7",
                             color: pendingAmendCount > 0 ? "#9CA3AF" : "#92400E",
                             border:"1px solid "+ (pendingAmendCount > 0 ? "#E5E7EB" : "#FCD34D"),
                             borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,
                             cursor: pendingAmendCount > 0 ? "not-allowed" : "pointer"}}>
-                    ✎ Edit BOQ
+                   {t("estimate.edit_boq")}
                   </button>
                 </>
               )}
@@ -1537,8 +1535,8 @@ function TabEstimate({ project }) {
                       }}
                       disabled={linkedTasksLoading}
                       title={selEst.auto_bill_on_complete
-                        ? "Refresh task progress + create drafts for any newly-eligible milestones"
-                        : "Refresh task progress on milestones"}
+                        ? t("estimate.refresh_task_progress_create_drafts_for")
+                        : t("estimate.refresh_task_progress_on_milestones")}
                       style={{
                         background:"white",
                         color:T.t3,
@@ -1547,7 +1545,7 @@ function TabEstimate({ project }) {
                         cursor: linkedTasksLoading ? "default" : "pointer",
                         display:"flex",alignItems:"center",gap:4,
                       }}>
-                      {linkedTasksLoading ? "Refreshing…" : "↻ Refresh progress"}
+                      {linkedTasksLoading ? t("estimate.refreshing") : t("estimate.refresh_progress")}
                     </button>
                   )}
                   {/* 🤖 Auto-billing toggle — single estimate-level switch
@@ -1584,21 +1582,19 @@ function TabEstimate({ project }) {
                       }
                     }}
                     title={selEst.auto_bill_on_complete
-                      ? "Auto-billing is ON. Click to turn off."
-                      : "Auto-billing is OFF. Click to turn on — drafts created on task completion."}
+                      ? t("estimate.auto_billing_is_on_click_to")
+                      : t("estimate.auto_billing_is_off_click_to")}
                     style={{
                       background: selEst.auto_bill_on_complete ? "#DCFCE7" : T.surfaceB,
                       color: selEst.auto_bill_on_complete ? "#15803D" : T.t3,
                       border:"1px solid " + (selEst.auto_bill_on_complete ? "#86EFAC" : T.b1),
                       borderRadius:14,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer",
                       display:"flex",alignItems:"center",gap:5,
-                    }}>
-                    🤖 Auto-bill {selEst.auto_bill_on_complete ? "ON" : "OFF"}
-                  </button>
+                    }}>{t("estimate.auto_bill_selest", { selEst: selEst.auto_bill_on_complete ? "ON" : "OFF" })}</button>
                 <div style={{position:"relative"}}>
                   <button onClick={()=>setMsChooserOpen(o=>!o)}
                     style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                    + Set Schedule ▾
+                   {t("estimate.set_schedule")}
                   </button>
                   {msChooserOpen && (<>
                     {/* Click-outside scrim — sits below the menu, captures
@@ -1606,7 +1602,7 @@ function TabEstimate({ project }) {
                     <div onClick={()=>setMsChooserOpen(false)} style={{position:"fixed",inset:0,zIndex:200}}/>
                     <div style={{position:"absolute",top:30,right:0,width:280,background:"white",border:"1px solid "+T.b1,borderRadius:8,boxShadow:"0 12px 32px rgba(0,0,0,0.18)",zIndex:201,overflow:"hidden"}}>
                       <div style={{padding:"8px 12px",fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",borderBottom:"1px solid "+T.b1,background:T.surfaceB}}>
-                        Choose billing mode
+                       {t("estimate.choose_billing_mode")}
                       </div>
                       {/* Item-wise — opens existing modal with kind=rate */}
                       <div onClick={()=>{
@@ -1616,9 +1612,9 @@ function TabEstimate({ project }) {
                         style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
                         onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"}
                         onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                        <div style={{fontSize:12,fontWeight:700,color:T.t1}}>📋 Item-wise</div>
+                        <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("estimate.item_wise")}</div>
                         <div style={{fontSize:10.5,color:T.t3,marginTop:2,lineHeight:1.4}}>
-                          Pick BOQ items, define billing stages per item (₹/unit)
+                         {t("estimate.pick_boq_items_define_billing_stages")}
                         </div>
                       </div>
                       {/* % of Order Value */}
@@ -1629,16 +1625,16 @@ function TabEstimate({ project }) {
                         style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
                         onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"}
                         onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                        <div style={{fontSize:12,fontWeight:700,color:T.t1}}>📊 % of Order Value</div>
+                        <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("estimate.of_order_value")}</div>
                         <div style={{fontSize:10.5,color:T.t3,marginTop:2,lineHeight:1.4}}>
-                          Define milestones as % of total estimate value
+                         {t("estimate.define_milestones_as_of_total_estimate")}
                         </div>
                       </div>
                       {/* Manual — directly switches billing_method, no modal */}
                       <div onClick={async()=>{
                           setMsChooserOpen(false);
                           if (selEst.billing_method === "manual") return;
-                          if (!await window.confirmAsync("Switch to Manual mode? You'll bill per-item cumulative qty without preset stages.")) return;
+                          if (!await window.confirmAsync(t("estimate.switch_to_manual_mode_you_ll"))) return;
                           const r = await api.put("/customer-estimates/"+selEst.id+"/billing-method",{billing_method:"manual"}).catch(()=>({success:false}));
                           if (r.success) await reloadSel();
                           else alert(r.message||"Switch failed");
@@ -1646,9 +1642,9 @@ function TabEstimate({ project }) {
                         style={{padding:"10px 12px",cursor:"pointer"}}
                         onMouseEnter={e=>e.currentTarget.style.background="#FAF5FF"}
                         onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                        <div style={{fontSize:12,fontWeight:700,color:T.t1}}>✍️ Manual (Item Cumulative)</div>
+                        <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("estimate.manual_item_cumulative")}</div>
                         <div style={{fontSize:10.5,color:T.t3,marginTop:2,lineHeight:1.4}}>
-                          No preset stages — bill cumulative qty per item ad-hoc
+                         {t("estimate.no_preset_stages_bill_cumulative_qty")}
                         </div>
                       </div>
                     </div>
@@ -1659,11 +1655,11 @@ function TabEstimate({ project }) {
               {subTab==="invoice" && (<>
                 <button onClick={openNewInvoice}
                   style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                  + Invoice
+                 {t("estimate.invoice")}
                 </button>
                 <button onClick={()=>{ setInvForm(p=>({...p,source:"manual"})); setShowNewInv(true); }}
                   style={{background:T.purL,color:T.pur,border:"1px solid "+T.pur,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                  + Manual
+                 {t("estimate.manual_2")}
                 </button>
               </>)}
             </div>
@@ -1676,7 +1672,7 @@ function TabEstimate({ project }) {
             {subTab==="boq" && estDetail && (
               <div>
                 {(estDetail.sections||[]).length === 0 && (estDetail.unsectioned||[]).length === 0 && (
-                  <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No items in this estimate</div>
+                  <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("estimate.no_items_in_this_estimate")}</div>
                 )}
                 {(() => {
                   // Item rows stay column-aligned in this 5-col grid so
@@ -1728,7 +1724,7 @@ function TabEstimate({ project }) {
                           <span style={{fontSize:12.5,fontWeight:700,color:T.blu,display:"flex",alignItems:"center",gap:7}}>
                             <span style={{display:"inline-block",transition:"transform .15s",transform:secCollapsed?"rotate(-90deg)":"rotate(0deg)",fontSize:11,color:T.blu}}>▼</span>
                             {sec.title}
-                            {secPerItem && <span style={{marginLeft:4,padding:"1px 6px",fontSize:9.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",borderRadius:3,letterSpacing:".3px"}}>PER-ITEM QTY</span>}
+                            {secPerItem && <span style={{marginLeft:4,padding:"1px 6px",fontSize:9.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",borderRadius:3,letterSpacing:".3px"}}>{t("estimate.per_item_qty")}</span>}
                           </span>
                           <span/>{/* Unit column — empty on bar */}
                           <span style={{fontSize:11.5,fontWeight:700,color:T.blu,fontVariantNumeric:"tabular-nums",textAlign:"right",paddingRight:8}}>
@@ -1809,8 +1805,8 @@ function TabEstimate({ project }) {
               <div>
                 {selEst.billing_method === "manual" && (
                   <div style={{padding:"24px",textAlign:"center",color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8}}>
-                    <div style={{fontSize:13,marginBottom:6}}>This estimate uses <b>manual</b> billing (per-item cumulative qty).</div>
-                    <div style={{fontSize:11.5,color:T.t4}}>Click <b>+ Set Schedule</b> to switch to milestone-based (item-wise rate or % of order value).</div>
+                    <div style={{fontSize:13,marginBottom:6}}>{t("estimate.this_estimate_uses")} <b>manual</b> {t("estimate.billing_per_item_cumulative_qty")}</div>
+                    <div style={{fontSize:11.5,color:T.t4}}>{t("common.click")} <b>{t("estimate.set_schedule_2")}</b> {t("estimate.to_switch_to_milestone_based_item")}</div>
                   </div>
                 )}
                 {selEst.billing_method === "milestone_rate" && (estDetail?.sections||[]).map(sec => {
@@ -1870,13 +1866,13 @@ function TabEstimate({ project }) {
                                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom: hasSchedule?8:4,gap:8}}>
                                       <div style={{fontSize:12,fontWeight:700,color:T.t1,flex:1}}>
                                         {it._cleanDesc}
-                                        <span style={{fontSize:10.5,color:T.t4,fontWeight:500,marginLeft:8}}>· {boqQty} {it.unit} @ {fmtC(boqRate)}/unit = {fmtC(boqValue)}</span>
+                                        <span style={{fontSize:10.5,color:T.t4,fontWeight:500,marginLeft:8}}>{t("estimate.boqqty_unit_fmtc_unit_fmtc2", { boqQty, unit: it.unit, fmtC: fmtC(boqRate), fmtC2: fmtC(boqValue) })}</span>
                                       </div>
                                       {hasSchedule && (
                                         <div style={{display:"flex",gap:5}}>
-                                          <button onClick={()=>editRateSchedule(it.id)} title="Edit schedule"
+                                          <button onClick={()=>editRateSchedule(it.id)} title={t("estimate.edit_schedule")}
                                             style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>✎</button>
-                                          <button onClick={()=>deleteRateSchedule(it.id, it._cleanDesc)} title="Delete schedule"
+                                          <button onClick={()=>deleteRateSchedule(it.id, it._cleanDesc)} title={t("estimate.delete_schedule")}
                                             style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>🗑</button>
                                         </div>
                                       )}
@@ -1890,17 +1886,17 @@ function TabEstimate({ project }) {
                                       <div style={{marginBottom:8,padding:"7px 10px",background:T.surfaceB,borderRadius:6,border:"1px solid "+T.b1}}>
                                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:6}}>
                                           <div>
-                                            <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>Total (BOQ)</div>
+                                            <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>{t("estimate.total_boq")}</div>
                                             <div style={{fontSize:12,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{boqQty} {it.unit}</div>
                                             <div style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}>{fmtC(boqValue)}</div>
                                           </div>
                                           <div>
-                                            <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>Billed</div>
+                                            <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>{t("common.billed")}</div>
                                             <div style={{fontSize:12,fontWeight:700,color:billedQty>0?T.amb:T.t4,fontVariantNumeric:"tabular-nums"}}>{billedQty} {it.unit}</div>
                                             <div style={{fontSize:10.5,color:billedQty>0?T.amb:T.t4,fontVariantNumeric:"tabular-nums"}}>{fmtC(billedValue)}</div>
                                           </div>
                                           <div>
-                                            <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>Remaining</div>
+                                            <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>{t("estimate.remaining")}</div>
                                             <div style={{fontSize:12,fontWeight:700,color:remainQty>0?T.grn:T.t4,fontVariantNumeric:"tabular-nums"}}>{remainQty} {it.unit}</div>
                                             <div style={{fontSize:10.5,color:remainQty>0?T.grn:T.t4,fontVariantNumeric:"tabular-nums"}}>{fmtC(remainValue)}</div>
                                           </div>
@@ -1910,12 +1906,12 @@ function TabEstimate({ project }) {
                                             <div style={{width: pctBilled+"%",height:"100%",background: isFully ? T.amb : (pctBilled >= 50 ? T.blu : T.grn),transition:"width .3s"}}/>
                                           </div>
                                           <span style={{fontSize:10.5,fontWeight:700,color: isFully ? T.amb : T.t3,minWidth:42,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>
-                                            {isFully ? "✓ FULL" : pctBilled.toFixed(0)+"%"}
+                                            {isFully ? t("estimate.full") : pctBilled.toFixed(0)+"%"}
                                           </span>
                                         </div>
                                       </div>
                                     )}
-                                    {!hasSchedule && <div style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>No payment schedule set. Use + Set Schedule.</div>}
+                                    {!hasSchedule && <div style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>{t("estimate.no_payment_schedule_set_use_set")}</div>}
                                     {hasSchedule && (
                                       <>
                                         {/* Milestone column header — clear Qty / Rate / Bill Value */}
@@ -1950,15 +1946,11 @@ function TabEstimate({ project }) {
                                                                 background: mStatus === "fully_billed" ? "#FEF3C7" : T.grnL,
                                                                 color:      mStatus === "fully_billed" ? "#92400E" : T.grn,
                                                                 border:"1px solid " + (mStatus === "fully_billed" ? "#FCD34D" : T.grnM)}}>
-                                                    {mStatus === "fully_billed" ? "✓ FULLY BILLED" : "PARTIAL"}
+                                                    {mStatus === "fully_billed" ? t("estimate.fully_billed") : "PARTIAL"}
                                                   </span>
-                                                  <span style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}>
-                                                    Billed <b style={{color:T.amb}}>{mBilledQty}</b> {it.unit} = <b style={{color:T.amb}}>{fmtC(mBilledQty * mRate)}</b>
-                                                  </span>
+                                                  <span style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}><Rich k="estimate.billed_mbilledqty_unit_fmtc" params={{ mBilledQty, unit: it.unit, fmtC: fmtC(mBilledQty * mRate) }} /></span>
                                                   {mRemainQty > 0 && (
-                                                    <span style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}>
-                                                      · Remaining <b style={{color:T.grn}}>{mRemainQty}</b> {it.unit} = <b style={{color:T.grn}}>{fmtC(mRemainQty * mRate)}</b>
-                                                    </span>
+                                                    <span style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}><Rich k="estimate.remaining_mremainqty_unit_fmtc" params={{ mRemainQty, unit: it.unit, fmtC: fmtC(mRemainQty * mRate) }} /></span>
                                                   )}
                                                 </div>
                                               )}
@@ -1968,18 +1960,18 @@ function TabEstimate({ project }) {
                                                   <>
                                                     <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:14,background: linked.eligible ? "#DCFCE7" : T.bluL,border:"1px solid "+ (linked.eligible ? "#86EFAC" : T.bluM),fontSize:10.5,fontWeight:600,color: linked.eligible ? "#15803D" : T.blu}}>
                                                       🔗 {linked.task_name}
-                                                      <span style={{color: linked.eligible ? "#15803D" : T.t3,fontWeight:500}}>· {linked.progress}% / trigger @ {linked.trigger_pct}%</span>
-                                                      {linked.eligible && <span style={{fontSize:10}}>✓ ready to bill</span>}
+                                                      <span style={{color: linked.eligible ? "#15803D" : T.t3,fontWeight:500}}>{t("estimate.progress_trigger_trigger_pct", { progress: linked.progress, trigger_pct: linked.trigger_pct })}</span>
+                                                      {linked.eligible && <span style={{fontSize:10}}>{t("estimate.ready_to_bill")}</span>}
                                                     </span>
-                                                    <button onClick={()=>openTaskPicker(m.id)} title="Change link or trigger %"
+                                                    <button onClick={()=>openTaskPicker(m.id)} title={t("estimate.change_link_or_trigger")}
                                                       style={{background:"none",border:"none",color:T.t3,fontSize:11,cursor:"pointer",padding:"0 4px"}}>✎</button>
-                                                    <button onClick={()=>unlinkTask(m.id)} title="Unlink from task"
+                                                    <button onClick={()=>unlinkTask(m.id)} title={t("estimate.unlink_from_task")}
                                                       style={{background:"none",border:"none",color:T.red,fontSize:12,cursor:"pointer",padding:"0 4px"}}>×</button>
                                                   </>
                                                 ) : (
                                                   <button onClick={()=>openTaskPicker(m.id)}
                                                     style={{background:"transparent",border:"1px dashed "+T.b1,color:T.t3,borderRadius:14,padding:"3px 10px",fontSize:10.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
-                                                    🔗 Link to task
+                                                   {t("estimate.link_to_task")}
                                                   </button>
                                                 )}
                                               </div>
@@ -2001,23 +1993,23 @@ function TabEstimate({ project }) {
                 {selEst.billing_method === "milestone_percent" && (
                   <div style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Payment Milestones (% of order value)</div>
+                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("estimate.payment_milestones_of_order_value")}</div>
                       {milestones.percent.length > 0 && (
                         <div style={{display:"flex",gap:5}}>
                           <button onClick={editPercentSchedule}
-                            title="Edit schedule"
+                            title={t("estimate.edit_schedule")}
                             style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>
                             ✎
                           </button>
                           <button onClick={deletePercentSchedule}
-                            title="Delete schedule"
+                            title={t("estimate.delete_schedule")}
                             style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>
                             🗑
                           </button>
                         </div>
                       )}
                     </div>
-                    {milestones.percent.length === 0 && <div style={{fontSize:11.5,color:T.t4,fontStyle:"italic"}}>No milestones set yet.</div>}
+                    {milestones.percent.length === 0 && <div style={{fontSize:11.5,color:T.t4,fontStyle:"italic"}}>{t("estimate.no_milestones_set_yet")}</div>}
                     {milestones.percent.length > 0 && (
                       <div style={{display:"grid",gridTemplateColumns:"30px 1fr 80px 130px",gap:6,padding:"4px 0",borderBottom:"1px solid "+T.b1,marginBottom:4}}>
                         {["#","Milestone","%","Amount"].map(h => <span key={h} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
@@ -2039,7 +2031,7 @@ function TabEstimate({ project }) {
             {/* INVOICES TAB */}
             {subTab==="invoice" && (
               <div>
-                {invoices.length === 0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No invoices yet</div>}
+                {invoices.length === 0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("estimate.no_invoices_yet")}</div>}
                 {invoices.map(inv => {
                   // Color-code the left accent + status pill by lifecycle stage
                   const stC = inv.status==="Paid" ? T.grn
@@ -2065,15 +2057,15 @@ function TabEstimate({ project }) {
                         <div>
                           <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{inv.invoice_no}</span>
                           {inv.source==="manual" && <span style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:T.purL,color:T.pur,border:"1px solid "+T.pur}}>MANUAL</span>}
-                          {inv.source==="auto" && <span style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#EDE9FE",color:"#6D28D9",border:"1px solid #C4B5FD"}}>🤖 AUTO</span>}
-                          {inv.is_over_bill==1 && <span title={inv.over_bill_reason||"Over-bill invoice"} style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#FEE2E2",color:"#991B1B",border:"1px solid #FCA5A5"}}>🔴 OVER-BILL</span>}
+                          {inv.source==="auto" && <span style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#EDE9FE",color:"#6D28D9",border:"1px solid #C4B5FD"}}>{t("estimate.auto")}</span>}
+                          {inv.is_over_bill==1 && <span title={inv.over_bill_reason||t("estimate.over_bill_invoice")} style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#FEE2E2",color:"#991B1B",border:"1px solid #FCA5A5"}}>{t("estimate.over_bill")}</span>}
                           <span style={{fontSize:10.5,color:T.t4,marginLeft:8}}>{inv.invoice_date}</span>
                         </div>
                         <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stC+"22",color:stC}}>{inv.status}</span>
                       </div>
                       {isAutoDraft && (
                         <div style={{padding:"7px 10px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:6,marginBottom:8,fontSize:11,color:"#5B21B6",lineHeight:1.45}}>
-                          ⏳ Auto-generated from task progress. Click to review preview before confirming.
+                         {t("estimate.auto_generated_from_task_progress_click")}
                         </div>
                       )}
                       {/* ── Item summary line (P2+ enhancement) ──
@@ -2087,8 +2079,8 @@ function TabEstimate({ project }) {
                         const u = inv.first_item_unit || "";
                         return (
                           <div style={{marginBottom:8,padding:"6px 10px",background:T.surfaceB,borderRadius:5,borderLeft:"2px solid "+T.bluM,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                            <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>Billed:</span>
-                            <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{cleanDesc || "(item)"}</span>
+                            <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>{t("estimate.billed")}</span>
+                            <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{cleanDesc || t("estimate.item")}</span>
                             {q > 0 && (
                               <span style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}>· {q} {u}</span>
                             )}
@@ -2101,7 +2093,7 @@ function TabEstimate({ project }) {
                         );
                       })()}
                       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-                        {[{l:"Gross",v:fmtC(inv.gross_amount),c:T.t1},{l:"Retention",v:fmtC(inv.retention_amt),c:T.amb},{l:"TDS",v:fmtC(inv.tds_amt),c:T.red},{l:"Net Receivable",v:fmtC(inv.net_receivable),c:T.grn}].map(s => (
+                        {[{l:t("common.gross"),v:fmtC(inv.gross_amount),c:T.t1},{l:t("common.retention_2"),v:fmtC(inv.retention_amt),c:T.amb},{l:"TDS",v:fmtC(inv.tds_amt),c:T.red},{l:t("estimate.net_receivable"),v:fmtC(inv.net_receivable),c:T.grn}].map(s => (
                           <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:6,padding:"6px 8px"}}>
                             <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{s.l}</div>
                             <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
@@ -2109,7 +2101,7 @@ function TabEstimate({ project }) {
                         ))}
                       </div>
                       <div style={{marginTop:8,fontSize:10.5,color:T.t4,textAlign:"center",fontStyle:"italic"}}>
-                        Click anywhere to view full detail · delete
+                       {t("estimate.click_anywhere_to_view_full_detail")}
                       </div>
                     </div>
                   );
@@ -2121,8 +2113,8 @@ function TabEstimate({ project }) {
                 {standaloneInvoices.length > 0 && (
                   <>
                     <div style={{margin:"18px 0 10px",padding:"6px 12px",background:T.purL,borderRadius:6,fontSize:10,fontWeight:700,color:T.pur,textTransform:"uppercase",letterSpacing:".4px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span>📋 Standalone Manual Invoices · Not tied to any estimate ({standaloneInvoices.length})</span>
-                      <span style={{fontSize:9.5,color:T.t4,fontWeight:500,textTransform:"none",letterSpacing:0}}>Project-level ad-hoc</span>
+                      <span>{t("estimate.standalone_manual_invoices_not_tied_to", { standaloneInvoices: standaloneInvoices.length })}</span>
+                      <span style={{fontSize:9.5,color:T.t4,fontWeight:500,textTransform:"none",letterSpacing:0}}>{t("estimate.project_level_ad_hoc")}</span>
                     </div>
                     {standaloneInvoices.map(inv => {
                       const stC = inv.status==="Paid" ? T.grn : inv.status==="Approved" ? T.blu : inv.status==="Submitted" ? T.amb : T.t4;
@@ -2135,14 +2127,14 @@ function TabEstimate({ project }) {
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                             <div>
                               <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{inv.invoice_no}</span>
-                              <span style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:T.purL,color:T.pur,border:"1px solid "+T.pur}}>MANUAL · STANDALONE</span>
-                              {inv.is_over_bill==1 && <span title={inv.over_bill_reason||"Over-bill invoice"} style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#FEE2E2",color:"#991B1B",border:"1px solid #FCA5A5"}}>🔴 OVER-BILL</span>}
+                              <span style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:T.purL,color:T.pur,border:"1px solid "+T.pur}}>{t("estimate.manual_standalone")}</span>
+                              {inv.is_over_bill==1 && <span title={inv.over_bill_reason||t("estimate.over_bill_invoice")} style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#FEE2E2",color:"#991B1B",border:"1px solid #FCA5A5"}}>{t("estimate.over_bill")}</span>}
                               <span style={{fontSize:10.5,color:T.t4,marginLeft:8}}>{inv.invoice_date}</span>
                             </div>
                             <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stC+"22",color:stC}}>{inv.status}</span>
                           </div>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-                            {[{l:"Gross",v:fmtC(inv.gross_amount),c:T.t1},{l:"Retention",v:fmtC(inv.retention_amt),c:T.amb},{l:"TDS",v:fmtC(inv.tds_amt),c:T.red},{l:"Net Receivable",v:fmtC(inv.net_receivable),c:T.grn}].map(s => (
+                            {[{l:t("common.gross"),v:fmtC(inv.gross_amount),c:T.t1},{l:t("common.retention_2"),v:fmtC(inv.retention_amt),c:T.amb},{l:"TDS",v:fmtC(inv.tds_amt),c:T.red},{l:t("estimate.net_receivable"),v:fmtC(inv.net_receivable),c:T.grn}].map(s => (
                               <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:6,padding:"6px 8px"}}>
                                 <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{s.l}</div>
                                 <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
@@ -2156,8 +2148,8 @@ function TabEstimate({ project }) {
                             const u = inv.first_item_unit || "";
                             return (
                               <div style={{marginTop:8,padding:"6px 10px",background:T.surfaceB,borderRadius:5,borderLeft:"2px solid "+T.bluM,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                                <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>Billed:</span>
-                                <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{cleanDesc || "(item)"}</span>
+                                <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>{t("estimate.billed")}</span>
+                                <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{cleanDesc || t("estimate.item")}</span>
                                 {q > 0 && (
                                   <span style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}>· {q} {u}</span>
                                 )}
@@ -2171,7 +2163,7 @@ function TabEstimate({ project }) {
                           })()}
                           {inv.remark && <div style={{fontSize:10.5,color:T.t4,marginTop:8,fontStyle:"italic"}}>"{inv.remark}"</div>}
                           <div style={{marginTop:6,fontSize:10.5,color:T.t4,textAlign:"center",fontStyle:"italic"}}>
-                            Click to view detail
+                           {t("estimate.click_to_view_detail")}
                           </div>
                         </div>
                       );
@@ -2184,13 +2176,13 @@ function TabEstimate({ project }) {
             {/* PAYMENTS TAB */}
             {subTab==="payment" && (
               <div>
-                {payments.length === 0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No payments recorded</div>}
+                {payments.length === 0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("estimate.no_payments_recorded")}</div>}
                 {payments.map(p => (
                   <div key={p.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"10px 14px",marginBottom:6,display:"grid",gridTemplateColumns:"100px 1fr 120px 100px",gap:10,alignItems:"center"}}>
                     <span style={{fontSize:11.5,color:T.t3}}>{p.payment_date}</span>
                     <span style={{fontSize:12,color:T.t1}}>{p.payment_mode} {p.reference_no?" · "+p.reference_no:""}</span>
                     <span style={{fontSize:13,fontWeight:700,color:T.grn,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(p.amount_received)}</span>
-                    <span style={{fontSize:11,color:T.t4}}>Inv #{p.invoice_id}</span>
+                    <span style={{fontSize:11,color:T.t4}}>{t("estimate.inv_invoice_id", { invoice_id: p.invoice_id })}</span>
                   </div>
                 ))}
               </div>
@@ -2201,7 +2193,7 @@ function TabEstimate({ project }) {
               <div>
                 {amendments.length === 0 && (
                   <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>
-                    No amendments yet. Click <b>✎ Edit BOQ</b> on the BOQ tab to propose changes.
+                   {t("estimate.no_amendments_yet_click")} <b>{t("estimate.edit_boq")}</b> {t("estimate.on_the_boq_tab_to_propose")}
                   </div>
                 )}
                 {amendments.map(a => {
@@ -2218,9 +2210,9 @@ function TabEstimate({ project }) {
                         style={{padding:"10px 14px",display:"grid",gridTemplateColumns:"24px 1fr 140px 110px 110px",gap:10,alignItems:"center",cursor:"pointer",borderBottom: isOpen ? "1px solid "+T.b1 : "none"}}>
                         <span style={{transform: isOpen ? "rotate(90deg)" : "rotate(0deg)", transition:"transform .15s", color:T.t3, fontSize:13}}>▸</span>
                         <div>
-                          <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Amendment #{a.id}</div>
+                          <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("estimate.amendment_id", { id: a.id })}</div>
                           <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.4}}>
-                            <b>Reason:</b> {a.reason}
+                            <b>{t("common.reason_2")}</b> {a.reason}
                           </div>
                         </div>
                         <span style={{fontSize:10.5,color:T.t4}}>
@@ -2285,7 +2277,7 @@ function TabEstimate({ project }) {
                           {a.status !== "Pending" && (
                             <div style={{padding:"8px 12px",background:T.surface,borderRadius:6,border:"1px solid "+T.b1,fontSize:11,color:T.t3,marginBottom:8}}>
                               {a.status} on {(a.decided_at || "").slice(0,16).replace("T"," ")}
-                              {a.decided_by_name && <> · by {a.decided_by_name}</>}
+                              {a.decided_by_name && <>{t("estimate.by_decided_by_name", { decided_by_name: a.decided_by_name })}</>}
                             </div>
                           )}
                           {/* Approve / Reject — only when Pending */}
@@ -2293,11 +2285,11 @@ function TabEstimate({ project }) {
                             <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
                               <button onClick={()=>decideAmendment(a.id,"Rejected")}
                                 style={{background:"white",color:"#DC2626",border:"1.5px solid #FCA5A5",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                                Reject
+                               {t("common.reject_2")}
                               </button>
                               <button onClick={()=>decideAmendment(a.id,"Approved")}
                                 style={{background:T.grn,color:"white",border:"none",borderRadius:6,padding:"7px 18px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                                ✓ Approve & Apply
+                               {t("common.approve_apply")}
                               </button>
                             </div>
                           )}
@@ -2318,8 +2310,8 @@ function TabEstimate({ project }) {
         <div style={{position:"fixed",top:"4vh",left:"50%",transform:"translateX(-50%)",width:920,maxWidth:"95vw",height:"92vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
             <div>
-              <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Edit BOQ — {selEst.estimate_no}</div>
-              <div style={{fontSize:11,color:"#92400E",marginTop:2}}>⚠ Changes require admin approval before they apply.</div>
+              <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{t("estimate.edit_boq_estimate_no", { estimate_no: selEst.estimate_no })}</div>
+              <div style={{fontSize:11,color:"#92400E",marginTop:2}}>{t("estimate.changes_require_admin_approval_before_they")}</div>
             </div>
             <button onClick={()=>setShowEditBoq(false)} disabled={amendSaving}
               style={{background:"none",border:"none",fontSize:20,color:T.t3,cursor: amendSaving?"not-allowed":"pointer"}}>×</button>
@@ -2328,37 +2320,37 @@ function TabEstimate({ project }) {
             {/* Header fields */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:10,marginBottom:14}}>
               <div>
-                <label style={lblS}>Retention %</label>
+                <label style={lblS}>{t("common.retention")}</label>
                 <input type="number" value={amendForm.retention_pct}
                   onChange={e=>setAmendForm(p=>({...p,retention_pct:e.target.value}))} style={inpS}/>
               </div>
               <div>
-                <label style={lblS}>TDS %</label>
+                <label style={lblS}>{t("common.tds")}</label>
                 <input type="number" value={amendForm.tds_pct}
                   onChange={e=>setAmendForm(p=>({...p,tds_pct:e.target.value}))} style={inpS}/>
               </div>
               <div>
-                <label style={lblS}>Tax %</label>
+                <label style={lblS}>{t("estimate.tax")}</label>
                 <input type="number" value={amendForm.tax_pct}
                   onChange={e=>setAmendForm(p=>({...p,tax_pct:e.target.value}))} style={inpS}/>
               </div>
               <div>
-                <label style={lblS}>Description</label>
+                <label style={lblS}>{t("common.description")}</label>
                 <input type="text" value={amendForm.description}
                   onChange={e=>setAmendForm(p=>({...p,description:e.target.value}))} style={inpS}/>
               </div>
               <div>
-                <label style={lblS}>Start Date</label>
+                <label style={lblS}>{t("common.start_date")}</label>
                 <input type="date" value={amendForm.start_date}
                   onChange={e=>setAmendForm(p=>({...p,start_date:e.target.value}))} style={inpS}/>
               </div>
               <div>
-                <label style={lblS}>End Date</label>
+                <label style={lblS}>{t("common.end_date")}</label>
                 <input type="date" value={amendForm.end_date}
                   onChange={e=>setAmendForm(p=>({...p,end_date:e.target.value}))} style={inpS}/>
               </div>
               <div style={{gridColumn:"span 2"}}>
-                <label style={lblS}>Internal Remark</label>
+                <label style={lblS}>{t("estimate.internal_remark")}</label>
                 <input type="text" value={amendForm.remark}
                   onChange={e=>setAmendForm(p=>({...p,remark:e.target.value}))} style={inpS}/>
               </div>
@@ -2379,11 +2371,11 @@ function TabEstimate({ project }) {
                           return { ...p, sections: next };
                         });
                       }}
-                      placeholder="Section title"
+                      placeholder={t("estimate.section_title")}
                       style={{flex:1,padding:"5px 9px",border:"1px solid "+T.bluM,borderRadius:5,fontSize:12.5,fontWeight:700,color:T.blu,background:"white",outline:"none"}}/>
                     <span style={{fontSize:12,fontWeight:700,color:T.blu}}>{fmtC(secTotal)}</span>
                     <button onClick={async ()=>{
-                      if (!await window.confirmAsync("Delete this section + its items from the proposed BOQ?")) return;
+                      if (!await window.confirmAsync(t("estimate.delete_this_section_its_items_from"))) return;
                       setAmendForm(p=>({ ...p, sections: p.sections.filter((_,i)=> i !== si) }));
                     }}
                       style={{background:"white",border:"1px solid #FCA5A5",color:"#DC2626",borderRadius:4,padding:"2px 8px",fontSize:11,cursor:"pointer"}}>
@@ -2407,10 +2399,10 @@ function TabEstimate({ project }) {
                     return (
                       <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 70px 95px 90px 30px",padding:"5px 12px",borderBottom:"1px solid "+T.b1,gap:6,alignItems:"center",background:"white"}}>
                         <input value={it.description} onChange={e=>patch("description", e.target.value)}
-                          placeholder="Item description"
+                          placeholder={t("estimate.item_description")}
                           style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:12,outline:"none"}}/>
                         <input value={it.unit} onChange={e=>patch("unit", e.target.value)}
-                          placeholder="Sq.Ft"
+                          placeholder={t("estimate.sq_ft")}
                           style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none"}}/>
                         <input type="number" value={it.qty} onChange={e=>patch("qty", e.target.value)}
                           style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none",textAlign:"right"}}/>
@@ -2422,7 +2414,7 @@ function TabEstimate({ project }) {
                           next[si] = { ...next[si], items: next[si].items.filter((_,j)=> j !== ii) };
                           return { ...p, sections: next };
                         })}
-                          title="Delete row"
+                          title={t("estimate.delete_row")}
                           style={{background:"transparent",border:"none",color:"#DC2626",cursor:"pointer",fontSize:13}}>×</button>
                       </div>
                     );
@@ -2434,44 +2426,44 @@ function TabEstimate({ project }) {
                       return { ...p, sections: next };
                     })}
                       style={{background:"transparent",border:"1px dashed "+T.bluM,color:T.blu,borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      + Add Item
+                     {t("common.add_item")}
                     </button>
                   </div>
                 </div>
               );
             })}
 
-            <button onClick={()=>setAmendForm(p=>({ ...p, sections: [...p.sections, { title:"New Section", items:[{description:"",unit:"",qty:"",rate:""}] }] }))}
+            <button onClick={()=>setAmendForm(p=>({ ...p, sections: [...p.sections, { title:t("estimate.new_section"), items:[{description:"",unit:"",qty:"",rate:""}] }] }))}
               style={{background:"white",border:"1.5px dashed "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:11.5,fontWeight:700,cursor:"pointer",marginBottom:14}}>
-              + Add Section
+             {t("common.add_section")}
             </button>
 
             {/* Reason — required */}
             <div style={{background:"#FFFBEB",border:"1.5px solid #FCD34D",borderRadius:8,padding:"12px 14px",marginTop:6}}>
               <label style={{fontSize:11,fontWeight:700,color:"#92400E",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:".4px"}}>
-                ⚠ Change Reason (Required for Approval)
+               {t("estimate.change_reason_required_for_approval")}
               </label>
               <textarea value={amendForm.reason}
                 onChange={e=>setAmendForm(p=>({...p,reason:e.target.value}))}
                 rows={3}
-                placeholder="Why is this amendment being requested? Mention client request, scope change, error correction, etc."
+                placeholder={t("estimate.why_is_this_amendment_being_requested")}
                 style={{width:"100%",padding:"8px 10px",border:"1px solid #FCD34D",borderRadius:6,fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box",resize:"vertical"}}/>
             </div>
           </div>
           <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.surfaceB}}>
             <div style={{fontSize:11.5,color:T.t3}}>
-              Subtotal: <b style={{color:T.t1,fontSize:13}}>
+             {t("common.subtotal")} <b style={{color:T.t1,fontSize:13}}>
                 {fmtC(amendForm.sections.reduce((s,sec) => s + (sec.items||[]).reduce((ss,it)=> ss + (parseFloat(it.qty)||0)*(parseFloat(it.rate)||0), 0), 0))}
               </b>
             </div>
             <div style={{display:"flex",gap:10}}>
               <button onClick={()=>setShowEditBoq(false)} disabled={amendSaving}
                 style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:600,cursor: amendSaving?"not-allowed":"pointer"}}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={submitAmendment} disabled={amendSaving || !amendForm.reason.trim()}
                 style={{background: (amendSaving || !amendForm.reason.trim()) ? "#9CA3AF" : T.blu, color:"white", border:"none", borderRadius:6, padding:"7px 20px", fontSize:12, fontWeight:700, cursor: (amendSaving || !amendForm.reason.trim()) ? "not-allowed" : "pointer"}}>
-                {amendSaving ? "Submitting…" : "Submit for Approval"}
+                {amendSaving ? t("common.submitting") : t("common.submit_for_approval")}
               </button>
             </div>
           </div>
@@ -2498,13 +2490,13 @@ function TabEstimate({ project }) {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(2px)"}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:760,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>New Customer Estimate</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{t("estimate.new_customer_estimate")}</div>
             <button onClick={()=>setShowNewEst(false)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
           </div>
           <div style={{padding:"16px 18px",overflowY:"auto",flex:1}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
               <div>
-                <label style={lblS}>Customer</label>
+                <label style={lblS}>{t("common.customer")}</label>
                 {/* Searchable picker — client parties only (junk names
                     filtered server-side). value = customer_id. */}
                 <SearchSelect
@@ -2514,18 +2506,18 @@ function TabEstimate({ project }) {
                     const match = customers.find(c => String(c.id) === String(id));
                     setEstForm(p => ({...p, customer_id: match?.id || "", customer_name: match?.name || ""}));
                   }}
-                  placeholder="Search or pick a customer"
+                  placeholder={t("estimate_builder.search_or_pick_a_customer")}
                 />
               </div>
               <div>
-                <label style={lblS}>Description</label>
+                <label style={lblS}>{t("common.description")}</label>
                 <input type="text" value={estForm.description} onChange={e=>setEstForm(p=>({...p,description:e.target.value}))} style={inpS}/>
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:14}}>
-              <div><label style={lblS}>Retention %</label><input type="number" value={estForm.retention_pct} onChange={e=>setEstForm(p=>({...p,retention_pct:e.target.value}))} style={inpS}/></div>
-              <div><label style={lblS}>TDS %</label><input type="number" value={estForm.tds_pct} onChange={e=>setEstForm(p=>({...p,tds_pct:e.target.value}))} style={inpS}/></div>
-              <div><label style={lblS}>Tax % (GST)</label><input type="number" value={estForm.tax_pct} onChange={e=>setEstForm(p=>({...p,tax_pct:e.target.value}))} style={inpS}/></div>
+              <div><label style={lblS}>{t("common.retention")}</label><input type="number" value={estForm.retention_pct} onChange={e=>setEstForm(p=>({...p,retention_pct:e.target.value}))} style={inpS}/></div>
+              <div><label style={lblS}>{t("common.tds")}</label><input type="number" value={estForm.tds_pct} onChange={e=>setEstForm(p=>({...p,tds_pct:e.target.value}))} style={inpS}/></div>
+              <div><label style={lblS}>{t("estimate.tax_gst")}</label><input type="number" value={estForm.tax_pct} onChange={e=>setEstForm(p=>({...p,tax_pct:e.target.value}))} style={inpS}/></div>
             </div>
 
             {estForm.sections.map((sec, si) => (
@@ -2535,7 +2527,7 @@ function TabEstimate({ project }) {
                     onChange={e=>{ const s=[...estForm.sections]; s[si]={...s[si],title:e.target.value}; setEstForm(p=>({...p,sections:s})); }}
                     style={{...inpS,width:"60%",fontWeight:700,fontSize:13}}/>
                   {estForm.sections.length > 1 && (
-                    <button onClick={()=>removeSection(si)} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Remove Section</button>
+                    <button onClick={()=>removeSection(si)} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.remove_section")}</button>
                   )}
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 100px 32px",gap:6,marginBottom:6}}>
@@ -2544,11 +2536,11 @@ function TabEstimate({ project }) {
                 {sec.items.map((it, ii) => (
                   <div key={ii} style={{marginBottom:4}}>
                     <div style={{display:"grid",gridTemplateColumns:"24px 1fr 70px 80px 100px 32px",gap:6}}>
-                      <button onClick={()=>setLibPicker({si,ii})} title="Pick from Library"
+                      <button onClick={()=>setLibPicker({si,ii})} title={t("estimate.pick_from_library_2")}
                         style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,fontSize:13,cursor:"pointer"}}>
                         📚
                       </button>
-                      <input value={it.description} onChange={e=>setItemField(si,ii,"description",e.target.value)} placeholder="Item description (or pick 📚)" style={inpS}/>
+                      <input value={it.description} onChange={e=>setItemField(si,ii,"description",e.target.value)} placeholder={t("estimate.item_description_or_pick")} style={inpS}/>
                       <input value={it.unit} onChange={e=>setItemField(si,ii,"unit",e.target.value)} placeholder="sqft" style={inpS}/>
                       <input type="number" value={it.qty} onChange={e=>setItemField(si,ii,"qty",e.target.value)} placeholder="area" style={inpS}/>
                       <input type="number" value={it.rate} onChange={e=>setItemField(si,ii,"rate",e.target.value)} placeholder="rate" style={inpS}/>
@@ -2556,20 +2548,20 @@ function TabEstimate({ project }) {
                     </div>
                     {(it.library_item_id || it.library_city) && (
                       <div style={{marginLeft:30,marginTop:3,fontSize:10,color:T.t4}}>
-                        <span style={{background:T.purL,color:T.pur,padding:"1px 6px",borderRadius:3,fontWeight:600}}>📚 Library</span>
+                        <span style={{background:T.purL,color:T.pur,padding:"1px 6px",borderRadius:3,fontWeight:600}}>{t("estimate.library")}</span>
                         {it.library_city && <span style={{marginLeft:6}}>{it.library_city}{it.library_type?" · "+it.library_type:""}</span>}
                       </div>
                     )}
                   </div>
                 ))}
-                <button onClick={()=>addItem(si)} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Item</button>
+                <button onClick={()=>addItem(si)} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.add_item")}</button>
               </div>
             ))}
-            <button onClick={addSection} style={{background:T.surface,color:T.blu,border:"1.5px dashed "+T.blu,borderRadius:6,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Add Section</button>
+            <button onClick={addSection} style={{background:T.surface,color:T.blu,border:"1.5px dashed "+T.blu,borderRadius:6,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t("common.add_section")}</button>
           </div>
           <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0}}>
-            <button onClick={()=>setShowNewEst(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
-            <button onClick={submitEst} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Create Estimate"}</button>
+            <button onClick={()=>setShowNewEst(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
+            <button onClick={submitEst} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?t("common.saving_2"):t("estimate.create_estimate")}</button>
           </div>
         </div>
       </>)}
@@ -2583,14 +2575,14 @@ function TabEstimate({ project }) {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:680,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{invForm._editId ? "Edit Manual Invoice" : invForm.source==="manual"?"New Manual Invoice":"New Invoice (from milestones)"}</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{invForm._editId ? t("estimate.edit_manual_invoice") : invForm.source==="manual"?t("estimate.new_manual_invoice"):t("estimate.new_invoice_from_milestones")}</div>
             <button onClick={closeInvModal} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
           </div>
           <div style={{padding:"16px 18px",overflowY:"auto",flex:1}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
-              <div><label style={lblS}>Invoice Date</label><input type="date" value={invForm.invoice_date} onChange={e=>setInvForm(p=>({...p,invoice_date:e.target.value}))} style={inpS}/></div>
-              {invForm.source==="manual" && <div><label style={lblS}>Customer Name</label><input value={invForm.customer_name} onChange={e=>setInvForm(p=>({...p,customer_name:e.target.value}))} placeholder={selEst?.customer_name||"Customer"} style={inpS}/></div>}
-              {invForm.source==="milestone" && selEst && <div><div style={{fontSize:11,color:T.t3,paddingTop:18}}><b>Estimate:</b> {selEst.estimate_no} ({selEst.billing_method})</div></div>}
+              <div><label style={lblS}>{t("estimate.invoice_date")}</label><input type="date" value={invForm.invoice_date} onChange={e=>setInvForm(p=>({...p,invoice_date:e.target.value}))} style={inpS}/></div>
+              {invForm.source==="manual" && <div><label style={lblS}>{t("estimate.customer_name")}</label><input value={invForm.customer_name} onChange={e=>setInvForm(p=>({...p,customer_name:e.target.value}))} placeholder={selEst?.customer_name||t("common.customer")} style={inpS}/></div>}
+              {invForm.source==="milestone" && selEst && <div><div style={{fontSize:11,color:T.t3,paddingTop:18}}><b>{t("estimate.estimate")}</b> {selEst.estimate_no} ({selEst.billing_method})</div></div>}
             </div>
 
             {/* ── Over-Billing Mode toggle ──────────────────────────
@@ -2605,12 +2597,12 @@ function TabEstimate({ project }) {
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
                 <div style={{flex:1}}>
                   <div style={{fontSize:12.5,fontWeight:700,color: invForm.overBillMode ? "#991B1B" : T.t1}}>
-                    {invForm.overBillMode ? "⚠ OVER-BILLING MODE ENABLED" : "Normal billing mode"}
+                    {invForm.overBillMode ? t("estimate.over_billing_mode_enabled") : t("estimate.normal_billing_mode")}
                   </div>
                   <div style={{fontSize:10.5,color: invForm.overBillMode ? "#991B1B" : T.t3,marginTop:2,lineHeight:1.45}}>
                     {invForm.overBillMode
-                      ? "Fully-billed items selectable. Qty can exceed remaining. Reason compulsory."
-                      : "BOQ-capped. Click toggle if extra work / site change needs over-billing."}
+                      ? t("estimate.fully_billed_items_selectable_qty_can")
+                      : t("estimate.boq_capped_click_toggle_if_extra")}
                   </div>
                 </div>
                 <button
@@ -2621,18 +2613,18 @@ function TabEstimate({ project }) {
                     background: invForm.overBillMode ? "#DC2626" : T.bluL,
                     color: invForm.overBillMode ? "white" : T.blu,
                   }}>
-                  {invForm.overBillMode ? "Turn OFF" : "+ Over-Billing"}
+                  {invForm.overBillMode ? t("estimate.turn_off") : t("estimate.over_billing")}
                 </button>
               </div>
               {invForm.overBillMode && (
                 <div style={{marginTop:10}}>
                   <label style={{...lblS, color:"#991B1B", fontWeight:700}}>
-                    Reason <span style={{color:"#DC2626"}}>*</span> <span style={{fontWeight:400,fontSize:10}}>(compulsory — shown on invoice + client query)</span>
+                   {t("common.reason")} <span style={{color:"#DC2626"}}>*</span> <span style={{fontWeight:400,fontSize:10}}>{t("estimate.compulsory_shown_on_invoice_client_query")}</span>
                   </label>
                   <textarea
                     value={invForm.overBillReason}
                     onChange={e=>setInvForm(p=>({...p,overBillReason:e.target.value}))}
-                    placeholder="e.g. Extra work due to design change — additional 250 qty for slab thickness increase per client approval dated 28-May-2026"
+                    placeholder={t("estimate.e_g_extra_work_due_to")}
                     rows={2}
                     style={{...inpS, minHeight:50, resize:"vertical", fontFamily:"inherit", borderColor: invForm.overBillReason.trim() ? T.b1 : "#FCA5A5"}}
                   />
@@ -2661,18 +2653,18 @@ function TabEstimate({ project }) {
               </div>
               {invForm.manualItems.map((it, ii) => (
                 <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 100px 32px",gap:6,marginBottom:4}}>
-                  <input value={it.description} onChange={e=>{const arr=[...invForm.manualItems];arr[ii]={...arr[ii],description:e.target.value};setInvForm(p=>({...p,manualItems:arr}));}} placeholder="e.g. Termite treatment" style={inpS}/>
+                  <input value={it.description} onChange={e=>{const arr=[...invForm.manualItems];arr[ii]={...arr[ii],description:e.target.value};setInvForm(p=>({...p,manualItems:arr}));}} placeholder={t("estimate.e_g_termite_treatment")} style={inpS}/>
                   <input value={it.unit||""} onChange={e=>{const arr=[...invForm.manualItems];arr[ii]={...arr[ii],unit:e.target.value};setInvForm(p=>({...p,manualItems:arr}));}} placeholder="" style={inpS}/>
                   <input type="number" value={it.qty} onChange={e=>{const arr=[...invForm.manualItems];arr[ii]={...arr[ii],qty:e.target.value};setInvForm(p=>({...p,manualItems:arr}));}} placeholder="0" style={inpS}/>
                   <input type="number" value={it.rate} onChange={e=>{const arr=[...invForm.manualItems];arr[ii]={...arr[ii],rate:e.target.value};setInvForm(p=>({...p,manualItems:arr}));}} placeholder="0" style={inpS}/>
                   <button onClick={()=>{const arr=invForm.manualItems.filter((_,i)=>i!==ii);setInvForm(p=>({...p,manualItems:arr.length?arr:[{description:"",qty:"",rate:""}]}));}} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,fontSize:14,cursor:"pointer"}}>×</button>
                 </div>
               ))}
-              <button onClick={()=>setInvForm(p=>({...p,manualItems:[...p.manualItems,{description:"",qty:"",rate:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Line</button>
+              <button onClick={()=>setInvForm(p=>({...p,manualItems:[...p.manualItems,{description:"",qty:"",rate:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.add_line")}</button>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginTop:14}}>
-                <div><label style={lblS}>Retention %</label><input type="number" value={invForm.retention_pct} onChange={e=>setInvForm(p=>({...p,retention_pct:e.target.value}))} style={inpS}/></div>
-                <div><label style={lblS}>TDS %</label><input type="number" value={invForm.tds_pct} onChange={e=>setInvForm(p=>({...p,tds_pct:e.target.value}))} style={inpS}/></div>
-                <div><label style={lblS}>Tax %</label><input type="number" value={invForm.tax_pct} onChange={e=>setInvForm(p=>({...p,tax_pct:e.target.value}))} style={inpS}/></div>
+                <div><label style={lblS}>{t("common.retention")}</label><input type="number" value={invForm.retention_pct} onChange={e=>setInvForm(p=>({...p,retention_pct:e.target.value}))} style={inpS}/></div>
+                <div><label style={lblS}>{t("common.tds")}</label><input type="number" value={invForm.tds_pct} onChange={e=>setInvForm(p=>({...p,tds_pct:e.target.value}))} style={inpS}/></div>
+                <div><label style={lblS}>{t("estimate.tax")}</label><input type="number" value={invForm.tax_pct} onChange={e=>setInvForm(p=>({...p,tax_pct:e.target.value}))} style={inpS}/></div>
               </div>
             </>)}
 
@@ -2683,7 +2675,7 @@ function TabEstimate({ project }) {
                 is allowed by company policy. */}
             {invForm.source==="milestone" && selEst && selEst.billing_method === "milestone_rate" && (<>
               {ledgerLoading && (
-                <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading billing ledger…</div>
+                <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>{t("estimate.loading_billing_ledger")}</div>
               )}
               {!ledgerLoading && billingLedger?.mode === "milestone_rate" && (() => {
                 // overbillOK = company-level policy allow_overbill OR per-invoice user toggle (overBillMode)
@@ -2691,8 +2683,8 @@ function TabEstimate({ project }) {
                 return (
                   <>
                     <div style={{fontSize:11,color:T.t3,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span>Tick milestones to bill. Qty defaults to remaining; {overbillOK ? "over-bill allowed with red flag" : "capped at remaining qty"}.</span>
-                      {overbillOK && <span style={{padding:"2px 7px",fontSize:9.5,fontWeight:700,background:"#FEE2E2",color:"#991B1B",borderRadius:3}}>OVER-BILL ENABLED</span>}
+                      <span>{t("estimate.tick_milestones_to_bill_qty_defaults", { overbillOK: overbillOK ? "over-bill allowed with red flag" : "capped at remaining qty" })}</span>
+                      {overbillOK && <span style={{padding:"2px 7px",fontSize:9.5,fontWeight:700,background:"#FEE2E2",color:"#991B1B",borderRadius:3}}>{t("estimate.over_bill_enabled")}</span>}
                     </div>
                     {billingLedger.items.map(it => {
                       const pctBilled = it.total_planned > 0 ? Math.min(100, (it.total_billed / it.total_planned) * 100) : 0;
@@ -2702,9 +2694,7 @@ function TabEstimate({ project }) {
                           <div style={{marginBottom:8}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                               <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{it.description}</span>
-                              <span style={{fontSize:10.5,color:T.t3}}>
-                                Planned <b style={{color:T.t1}}>{it.total_planned}</b> {it.unit} · Billed <b style={{color:T.amb}}>{it.total_billed}</b> · Remaining <b style={{color:it.total_remaining > 0 ? T.grn : T.t4}}>{it.total_remaining}</b>
-                              </span>
+                              <span style={{fontSize:10.5,color:T.t3}}><Rich k="estimate.planned_total_planned_unit_billed_total" params={{ total_planned: it.total_planned, unit: it.unit, total_billed: it.total_billed, total_remaining: it.total_remaining }} /></span>
                             </div>
                             <div style={{height:5,background:T.b1,borderRadius:3,overflow:"hidden"}}>
                               <div style={{width: pctBilled+"%",height:"100%",background: pctBilled >= 100 ? T.t4 : T.blu,transition:"width .2s"}}/>
@@ -2746,13 +2736,11 @@ function TabEstimate({ project }) {
                                 <div style={{minWidth:0}}>
                                   <div style={{fontSize:12,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div>
                                   <div style={{fontSize:10,color:T.t4,marginTop:1,display:"flex",gap:6,flexWrap:"wrap"}}>
-                                    {isFully ? <span style={{padding:"1px 6px",background: overbillOK ? "#FEE2E2" : T.surfaceB,color: overbillOK ? "#991B1B" : T.t3,borderRadius:3,fontWeight:600}}>{overbillOK ? "🔴 Fully billed — over-bill enabled" : "✓ Fully invoiced"}</span>
-                                             : m.status === "partial" ? <span>{m.billed_qty}/{m.planned_qty} billed · {m.remaining_qty} left</span>
+                                    {isFully ? <span style={{padding:"1px 6px",background: overbillOK ? "#FEE2E2" : T.surfaceB,color: overbillOK ? "#991B1B" : T.t3,borderRadius:3,fontWeight:600}}>{overbillOK ? t("estimate.fully_billed_over_bill_enabled") : t("estimate.fully_invoiced")}</span>
+                                             : m.status === "partial" ? <span>{t("estimate.billed_qty_planned_qty_billed_remaining", { billed_qty: m.billed_qty, planned_qty: m.planned_qty, remaining_qty: m.remaining_qty })}</span>
                                              : <span>{m.planned_qty} {it.unit}</span>}
                                     {m.linked_task && (
-                                      <span style={{padding:"1px 6px",background:T.bluL,color:T.blu,borderRadius:3,fontWeight:600}}>
-                                        🔗 task @ {m.linked_task.progress}%
-                                      </span>
+                                      <span style={{padding:"1px 6px",background:T.bluL,color:T.blu,borderRadius:3,fontWeight:600}}>{t("estimate.task_progress", { progress: m.linked_task.progress })}</span>
                                     )}
                                   </div>
                                 </div>
@@ -2766,7 +2754,7 @@ function TabEstimate({ project }) {
                                       lower the qty OR turn on Over-Billing Mode + add
                                       reason. Submit is also guarded server-side. */}
                                   <input type="number"
-                                    placeholder={isFully && overbillOK ? "extra qty" : String(remainingQty)}
+                                    placeholder={isFully && overbillOK ? t("estimate.extra_qty") : String(remainingQty)}
                                     disabled={!picked || isDisabled}
                                     value={picked?.this_qty || ""}
                                     onChange={e => {
@@ -2784,14 +2772,10 @@ function TabEstimate({ project }) {
                                   {picked && enteredQty > 0 ? fmtC(enteredQty * m.rate) : "—"}
                                   {/* Split-aware over-bill breakdown — user-facing clarity */}
                                   {isSplit && (
-                                    <div style={{fontSize:8.5,color:"#991B1B",fontWeight:700,marginTop:1,lineHeight:1.3}}>
-                                      🔴 SPLIT: {normalPortion} BOQ + {overPortion} over
-                                    </div>
+                                    <div style={{fontSize:8.5,color:"#991B1B",fontWeight:700,marginTop:1,lineHeight:1.3}}>{t("estimate.split_normalportion_boq_overportion_over", { normalPortion, overPortion })}</div>
                                   )}
                                   {isFullOver && !isSplit && (
-                                    <div style={{fontSize:8.5,color:"#991B1B",fontWeight:700,marginTop:1}}>
-                                      🔴 ALL OVER-BILL ({overPortion} qty)
-                                    </div>
+                                    <div style={{fontSize:8.5,color:"#991B1B",fontWeight:700,marginTop:1}}>{t("estimate.all_over_bill_overportion_qty", { overPortion })}</div>
                                   )}
                                 </span>
                               </div>
@@ -2815,12 +2799,8 @@ function TabEstimate({ project }) {
                                 }}>
                                   <span style={{fontSize:14}}>⚠️</span>
                                   <div style={{flex:1,minWidth:180}}>
-                                    <div style={{fontSize:11.5,fontWeight:700,color:"#991B1B",lineHeight:1.4}}>
-                                      Over-billing detected — {enteredQty} {it.unit} entered, only {remainingQty} available
-                                    </div>
-                                    <div style={{fontSize:10.5,color:"#7F1D1D",marginTop:2,lineHeight:1.45}}>
-                                      Either reduce qty to {remainingQty}, or enable Over-Billing Mode + provide a reason explaining the extra work.
-                                    </div>
+                                    <div style={{fontSize:11.5,fontWeight:700,color:"#991B1B",lineHeight:1.4}}>{t("estimate.over_billing_detected_enteredqty_unit_entered", { enteredQty, unit: it.unit, remainingQty })}</div>
+                                    <div style={{fontSize:10.5,color:"#7F1D1D",marginTop:2,lineHeight:1.45}}>{t("estimate.either_reduce_qty_to_remainingqty_or", { remainingQty })}</div>
                                   </div>
                                   <button
                                     type="button"
@@ -2836,7 +2816,7 @@ function TabEstimate({ project }) {
                                       cursor:"pointer",
                                       whiteSpace:"nowrap",
                                     }}>
-                                    Turn ON Over-Billing
+                                   {t("estimate.turn_on_over_billing")}
                                   </button>
                                 </div>
                               )}
@@ -2848,7 +2828,7 @@ function TabEstimate({ project }) {
                     })}
                     {billingLedger.items.length === 0 && (
                       <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12.5}}>
-                        No milestones defined. Use <b>+ Set Schedule</b> first.
+                       {t("estimate.no_milestones_defined_use")} <b>{t("estimate.set_schedule_2")}</b> {t("estimate.first")}
                       </div>
                     )}
                   </>
@@ -2858,14 +2838,14 @@ function TabEstimate({ project }) {
 
             {/* % mode — same ledger pattern, but amounts instead of qty */}
             {invForm.source==="milestone" && selEst && selEst.billing_method === "milestone_percent" && (<>
-              {ledgerLoading && <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading billing ledger…</div>}
+              {ledgerLoading && <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>{t("estimate.loading_billing_ledger")}</div>}
               {!ledgerLoading && billingLedger?.mode === "milestone_percent" && (() => {
                 const overbillOK = !!billingLedger.allow_overbill;
                 return (
                   <div>
                     <div style={{fontSize:11,color:T.t3,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span>Tick stages to bill. {overbillOK ? "Over-bill allowed with red flag." : "Each stage can be billed once."}</span>
-                      {overbillOK && <span style={{padding:"2px 7px",fontSize:9.5,fontWeight:700,background:"#FEE2E2",color:"#991B1B",borderRadius:3}}>OVER-BILL ENABLED</span>}
+                      <span>{t("estimate.tick_stages_to_bill_overbillok", { overbillOK: overbillOK ? "Over-bill allowed with red flag." : "Each stage can be billed once." })}</span>
+                      {overbillOK && <span style={{padding:"2px 7px",fontSize:9.5,fontWeight:700,background:"#FEE2E2",color:"#991B1B",borderRadius:3}}>{t("estimate.over_bill_enabled")}</span>}
                     </div>
                     {billingLedger.stages.map(m => {
                       const picked = invForm.items.find(x => x.milestone_id === m.milestone_id);
@@ -2880,8 +2860,8 @@ function TabEstimate({ project }) {
                           <div style={{minWidth:0}}>
                             <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{m.name}</div>
                             <div style={{fontSize:10,color:T.t4,marginTop:1}}>
-                              {isFully ? <span style={{padding:"1px 6px",background:T.surfaceB,color:T.t3,borderRadius:3,fontWeight:600}}>✓ Fully invoiced</span>
-                                       : m.status === "partial" ? <span>{fmtC(m.billed_amount)} billed · {fmtC(m.remaining_amount)} left</span>
+                              {isFully ? <span style={{padding:"1px 6px",background:T.surfaceB,color:T.t3,borderRadius:3,fontWeight:600}}>{t("estimate.fully_invoiced")}</span>
+                                       : m.status === "partial" ? <span>{t("estimate.fmtc_billed_fmtc2_left", { fmtC: fmtC(m.billed_amount), fmtC2: fmtC(m.remaining_amount) })}</span>
                                        : <span>{fmtC(m.planned_amount)} planned</span>}
                             </div>
                           </div>
@@ -2900,7 +2880,7 @@ function TabEstimate({ project }) {
 
             {invForm.source==="milestone" && selEst && selEst.billing_method === "manual" && (
               <div>
-                <div style={{fontSize:11,color:T.t3,marginBottom:8}}>Estimate uses manual billing — enter cumulative qty per item.</div>
+                <div style={{fontSize:11,color:T.t3,marginBottom:8}}>{t("estimate.estimate_uses_manual_billing_enter_cumulative")}</div>
                 {(estDetail?.sections||[]).flatMap(s=>s.items).map(it => {
                   const picked = invForm.items.find(x => x.estimate_item_id === it.id);
                   return (
@@ -2912,7 +2892,7 @@ function TabEstimate({ project }) {
                         }}/>
                       <span style={{fontSize:12,color:T.t1}}>{it.description}</span>
                       <span style={{fontSize:11.5,color:T.t3,textAlign:"right",paddingRight:8}}>{fmtC(it.rate)}/{it.unit}</span>
-                      <input type="number" placeholder="cum qty" disabled={!picked}
+                      <input type="number" placeholder={t("estimate.cum_qty")} disabled={!picked}
                         value={picked?.cumulative_qty || ""}
                         onChange={e => setInvForm(p => ({...p, items: p.items.map(x => x.estimate_item_id===it.id ? {...x, cumulative_qty:e.target.value} : x)}))}
                         style={{...inpS,padding:"4px 8px",fontSize:11}}/>
@@ -2923,8 +2903,8 @@ function TabEstimate({ project }) {
             )}
           </div>
           <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
-            <button onClick={closeInvModal} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
-            <button onClick={submitInvoice} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":(invForm._editId?"Save Changes":"Create Invoice")}</button>
+            <button onClick={closeInvModal} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
+            <button onClick={submitInvoice} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?t("common.saving_2"):(invForm._editId?t("common.save_changes"):t("estimate.create_invoice"))}</button>
           </div>
         </div>
       </>);
@@ -2935,15 +2915,15 @@ function TabEstimate({ project }) {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:620,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Payment Schedule Setup</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{t("estimate.payment_schedule_setup")}</div>
             <button onClick={()=>setShowSetMs(false)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
           </div>
           <div style={{padding:"16px 18px",overflowY:"auto",flex:1}}>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
               <button onClick={()=>setMsForm(p=>({...p,kind:"rate"}))}
-                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="rate"?T.blu:T.surfaceB,color:msForm.kind==="rate"?"white":T.t2,border:"1px solid "+(msForm.kind==="rate"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>📋 Item-wise</button>
+                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="rate"?T.blu:T.surfaceB,color:msForm.kind==="rate"?"white":T.t2,border:"1px solid "+(msForm.kind==="rate"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>{t("estimate.item_wise")}</button>
               <button onClick={()=>setMsForm(p=>({...p,kind:"percent"}))}
-                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="percent"?T.blu:T.surfaceB,color:msForm.kind==="percent"?"white":T.t2,border:"1px solid "+(msForm.kind==="percent"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>📊 % of Order Value</button>
+                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="percent"?T.blu:T.surfaceB,color:msForm.kind==="percent"?"white":T.t2,border:"1px solid "+(msForm.kind==="percent"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>{t("estimate.of_order_value")}</button>
             </div>
 
             {msForm.kind === "rate" && (() => {
@@ -3010,18 +2990,16 @@ function TabEstimate({ project }) {
                 {/* Picker trigger — opens side drawer */}
                 {pickedItems.length === 0 ? (
                   <div style={{padding:"22px 16px",background:T.surfaceB,border:"1.5px dashed "+T.b1,borderRadius:8,textAlign:"center",marginBottom:12}}>
-                    <div style={{fontSize:12.5,color:T.t3,marginBottom:8}}>No items picked yet</div>
+                    <div style={{fontSize:12.5,color:T.t3,marginBottom:8}}>{t("estimate.no_items_picked_yet")}</div>
                     <button onClick={()=>{ setItemPickerSearch(""); setItemPickerOpen(true); }}
                       style={{background:T.blu,color:"white",border:"none",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                      📚 Pick Items from BOQ
+                     {t("estimate.pick_items_from_boq")}
                     </button>
                   </div>
                 ) : (
                   <div style={{marginBottom:12}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:8}}>
-                      <span style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
-                        Picked Items ({pickedItems.length})
-                      </span>
+                      <span style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>{t("estimate.picked_items_pickeditems", { pickedItems: pickedItems.length })}</span>
                       <div style={{display:"flex",gap:6}}>
                         {/* Bulk: turn every picked item into a single 'Complete' milestone
                             at its full rate. Saves clicks when stages aren't needed. */}
@@ -3034,13 +3012,13 @@ function TabEstimate({ project }) {
                               return { ...p, itemStages: next };
                             });
                           }}
-                          title="Each picked item becomes a single 'Complete' milestone at its full rate × qty"
+                          title={t("estimate.each_picked_item_becomes_a_single")}
                           style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #FCD34D",borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                          ✓ All = 1 milestone each
+                         {t("estimate.all_1_milestone_each")}
                         </button>
                         <button onClick={()=>{ setItemPickerSearch(""); setItemPickerOpen(true); }}
                           style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                          + Pick More
+                         {t("estimate.pick_more")}
                         </button>
                       </div>
                     </div>
@@ -3068,15 +3046,13 @@ function TabEstimate({ project }) {
                             </span>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</div>
-                              <div style={{fontSize:10,color:T.t4,marginTop:1}}>
-                                Item value <b style={{color:T.t2}}>{fmtC(itemTotal)}</b> ({fmtC(it.rate)} × {parseFloat(it.qty)})
-                                {filledCount > 0 && <span style={{color:T.grn,marginLeft:6,fontWeight:600}}>· {filledCount} milestone{filledCount>1?"s":""}</span>}
-                                {overAlloc && <span style={{color:"#DC2626",marginLeft:6,fontWeight:700}}>⚠ over-allocated</span>}
-                                {!overAlloc && filledCount > 0 && balanced && <span style={{color:T.grn,marginLeft:6,fontWeight:600}}>✓ balanced</span>}
+                              <div style={{fontSize:10,color:T.t4,marginTop:1}}><Rich k="estimate.item_value_fmtc_fmtc2_parsefloat" params={{ fmtC: fmtC(itemTotal), fmtC2: fmtC(it.rate), parseFloat: parseFloat(it.qty) }} />{filledCount > 0 && <span style={{color:T.grn,marginLeft:6,fontWeight:600}}>· {filledCount} milestone{filledCount>1?"s":""}</span>}
+                                {overAlloc && <span style={{color:"#DC2626",marginLeft:6,fontWeight:700}}>{t("estimate.over_allocated")}</span>}
+                                {!overAlloc && filledCount > 0 && balanced && <span style={{color:T.grn,marginLeft:6,fontWeight:600}}>{t("estimate.balanced")}</span>}
                               </div>
                             </div>
                             <button onClick={(e)=>{ e.stopPropagation(); removePicked(it.id); }}
-                              title="Remove from picked items"
+                              title={t("estimate.remove_from_picked_items")}
                               style={{background:T.redL,color:T.red,border:"none",borderRadius:4,width:22,height:22,fontSize:13,cursor:"pointer"}}>×</button>
                             <span style={{fontSize:10,color:T.t4}}>{expanded ? "▴" : "▾"}</span>
                           </div>
@@ -3085,7 +3061,7 @@ function TabEstimate({ project }) {
                               {/* Library template chip */}
                               {it.library_item_id && libStageCount > 0 && (
                                 <div style={{marginBottom:10,padding:"7px 10px",background:T.grnL,border:"1px solid "+T.grnM,borderRadius:5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                                  <span style={{fontSize:11,color:T.grn}}>📚 <b>{libItem.name}</b> has {libStageCount} library stage{libStageCount>1?"s":""}</span>
+                                  <span style={{fontSize:11,color:T.grn}}><Rich k="estimate.name_has_libstagecount_library_stagelibstagecount2" params={{ name: libItem.name, libStageCount, libStageCount2: libStageCount>1?"s":"" }} /></span>
                                   <button onClick={async()=>{
                                       setSaving(true);
                                       const r = await api.post("/customer-estimates/"+selEst.id+"/items/"+it.id+"/apply-library-stages", {}).catch(()=>({success:false}));
@@ -3098,7 +3074,7 @@ function TabEstimate({ project }) {
                                     }}
                                     disabled={saving}
                                     style={{padding:"4px 10px",background:T.grn,color:"white",border:"none",borderRadius:4,fontSize:10.5,fontWeight:700,cursor:saving?"default":"pointer"}}>
-                                    {saving?"Applying…":"Apply Library Stages"}
+                                    {saving?t("estimate.applying"):t("estimate.apply_library_stages")}
                                   </button>
                                 </div>
                               )}
@@ -3111,11 +3087,11 @@ function TabEstimate({ project }) {
                                 return (
                                 <div key={mi} style={{display:"grid",gridTemplateColumns:"26px 1fr 80px 70px 95px 26px",gap:6,marginBottom:4,alignItems:"center"}}>
                                   <span style={{fontSize:11,color:T.t4,display:"flex",alignItems:"center",gap:2}}>
-                                    {mi+1}{isLast && <span title="Auto-balances to remaining value" style={{fontSize:10}}>⚖</span>}
+                                    {mi+1}{isLast && <span title={t("estimate.auto_balances_to_remaining_value")} style={{fontSize:10}}>⚖</span>}
                                   </span>
                                   <input value={m.name}
                                     onChange={e=>patchItemStages(it.id, arr => { const next=[...arr]; next[mi]={...next[mi],name:e.target.value}; return next; })}
-                                    placeholder="e.g. Footing complete" style={{...inpS,padding:"5px 8px",fontSize:11.5}}/>
+                                    placeholder={t("estimate.e_g_footing_complete")} style={{...inpS,padding:"5px 8px",fontSize:11.5}}/>
                                   <input type="number" value={m.rate || ""}
                                     onChange={e=>editStageField(it, mi, "rate", e.target.value)}
                                     placeholder={String(parseFloat(it.rate)||0)}
@@ -3138,18 +3114,16 @@ function TabEstimate({ project }) {
                                            background: overAlloc ? "#FEF2F2" : balanced ? "#ECFDF5" : T.surfaceB,
                                            border:"1px solid " + (overAlloc ? "#FCA5A5" : balanced ? T.grnM : T.b1),
                                            display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:11}}>
-                                <span style={{color: overAlloc ? "#991B1B" : balanced ? "#065F46" : T.t3,fontWeight:600}}>
-                                  Allocated {fmtC(allocated)} / {fmtC(itemTotal)}
-                                </span>
+                                <span style={{color: overAlloc ? "#991B1B" : balanced ? "#065F46" : T.t3,fontWeight:600}}>{t("estimate.allocated_fmtc_fmtc2", { fmtC: fmtC(allocated), fmtC2: fmtC(itemTotal) })}</span>
                                 <span style={{fontWeight:700,fontVariantNumeric:"tabular-nums",
                                               color: overAlloc ? "#DC2626" : balanced ? T.grn : T.amb}}>
-                                  {overAlloc ? "Over by " + fmtC(Math.abs(remaining)) : balanced ? "✓ Fully allocated" : "Remaining " + fmtC(remaining)}
+                                  {overAlloc ? "Over by " + fmtC(Math.abs(remaining)) : balanced ? t("estimate.fully_allocated") : "Remaining " + fmtC(remaining)}
                                 </span>
                               </div>
                               <div style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
                                 <button onClick={()=>patchItemStages(it.id, arr => [...arr, { seq:arr.length, name:"", rate: String(parseFloat(it.rate)||0), qty:"" }])}
                                   style={{background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:4,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
-                                  + Add Milestone
+                                 {t("estimate.add_milestone")}
                                 </button>
                                 {/* "Item itself = 1 milestone" shortcut → rate + qty = item's */}
                                 <button onClick={()=>patchItemStages(it.id, () => ([
@@ -3157,13 +3131,11 @@ function TabEstimate({ project }) {
                                   ]))}
                                   title={`Replace stages with one milestone "Complete" at ${fmtC(it.rate)}/unit × ${parseFloat(it.qty)||0}`}
                                   style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #FCD34D",borderRadius:4,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
-                                  ✓ Use whole item as 1 milestone
+                                 {t("estimate.use_whole_item_as_1_milestone")}
                                 </button>
                               </div>
                               {overAlloc && (
-                                <div style={{marginTop:8,padding:"6px 9px",background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:4,fontSize:10.5,color:"#991B1B"}}>
-                                  ⚠ Milestone values exceed item value by {fmtC(Math.abs(remaining))}. Reduce a milestone — can't save until balanced.
-                                </div>
+                                <div style={{marginTop:8,padding:"6px 9px",background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:4,fontSize:10.5,color:"#991B1B"}}>{t("estimate.milestone_values_exceed_item_value_by", { fmtC: fmtC(Math.abs(remaining)) })}</div>
                               )}
                             </div>
                           )}
@@ -3208,12 +3180,12 @@ function TabEstimate({ project }) {
               };
               return (<>
                 <div style={{padding:"7px 10px",background:T.surfaceB,borderRadius:6,fontSize:11,color:T.t3,marginBottom:10,display:"flex",justifyContent:"space-between"}}>
-                  <span>Order value</span>
+                  <span>{t("estimate.order_value")}</span>
                   <span style={{fontWeight:700,color:T.t1}}>{fmtC(orderValue)}</span>
                 </div>
                 {/* Preset chips — quick splits */}
                 <div style={{display:"flex",gap:5,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-                  <span style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>Quick:</span>
+                  <span style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("estimate.quick")}</span>
                   {[
                     { label:"30 / 40 / 30",          splits:[30,40,30],          names:["Advance","On Progress","On Handover"] },
                     { label:"40 / 30 / 20 / 10",     splits:[40,30,20,10],       names:["Booking","Slab","Finishing","Handover"] },
@@ -3236,21 +3208,21 @@ function TabEstimate({ project }) {
                   return (
                     <div key={mi} style={{display:"grid",gridTemplateColumns:"40px 1fr 80px 120px 32px",gap:6,marginBottom:4,alignItems:"center"}}>
                       <span style={{fontSize:12,color:T.t4,paddingTop:8}}>{mi+1}</span>
-                      <input value={m.name} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],name:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="e.g. Foundation" style={inpS}/>
+                      <input value={m.name} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],name:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder={t("estimate.e_g_foundation")} style={inpS}/>
                       <input type="number" value={m.pct} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],pct:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="%" style={{...inpS,textAlign:"right"}}/>
                       <span style={{padding:"7px 10px",background:T.surfaceB,borderRadius:6,fontSize:12,fontWeight:600,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(amt)}</span>
                       <button onClick={()=>{const arr=msForm.pctMs.filter((_,i)=>i!==mi);setMsForm(p=>({...p,pctMs:arr.length?arr:[{seq:0,name:"",pct:""}]}));}} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,fontSize:14,cursor:"pointer"}}>×</button>
                     </div>
                   );
                 })}
-                <button onClick={()=>setMsForm(p=>({...p,pctMs:[...p.pctMs,{seq:p.pctMs.length,name:"",pct:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Milestone</button>
+                <button onClick={()=>setMsForm(p=>({...p,pctMs:[...p.pctMs,{seq:p.pctMs.length,name:"",pct:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.add_milestone")}</button>
                 {/* Live total row — green when ✓ 100%, amber when off */}
                 <div style={{marginTop:12,padding:"9px 12px",borderRadius:7,
                              background: sumOk ? T.grnL : "#FFFBEB",
                              border: "1px solid " + (sumOk ? T.grnM : "#FCD34D"),
                              display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:11.5,fontWeight:700,color: sumOk ? T.grn : "#92400E"}}>
-                    {sumOk ? "✓ Total 100% — schedule covers full order value"
+                    {sumOk ? t("estimate.total_100_schedule_covers_full_order")
                           : `Total ${pctSum.toFixed(2)}% — ${remaining > 0 ? remaining.toFixed(2) + "% remaining" : Math.abs(remaining).toFixed(2) + "% over"}`}
                   </span>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -3260,7 +3232,7 @@ function TabEstimate({ project }) {
                     {!sumOk && Math.abs(remaining) > 0.01 && (
                       <button onClick={distributeRemaining}
                         style={{background:"#FEF3C7",border:"1px solid #FCD34D",color:"#92400E",borderRadius:5,padding:"3px 9px",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
-                        {remaining > 0 ? "↻ Distribute remaining" : "↻ Trim excess"}
+                        {remaining > 0 ? t("estimate.distribute_remaining") : t("estimate.trim_excess")}
                       </button>
                     )}
                   </div>
@@ -3269,8 +3241,8 @@ function TabEstimate({ project }) {
             })()}
           </div>
           <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
-            <button onClick={()=>setShowSetMs(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
-            <button onClick={submitMilestones} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Save Schedule"}</button>
+            <button onClick={()=>setShowSetMs(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
+            <button onClick={submitMilestones} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?t("common.saving_2"):t("estimate.save_schedule")}</button>
           </div>
         </div>
       </>)}
@@ -3290,11 +3262,9 @@ function TabEstimate({ project }) {
             {/* Header */}
             <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:"#F5F3FF"}}>
               <div>
-                <div style={{fontSize:15,fontWeight:700,color:"#5B21B6",display:"flex",alignItems:"center",gap:8}}>
-                  🤖 Auto-Invoice Preview · {inv.invoice_no}
-                </div>
+                <div style={{fontSize:15,fontWeight:700,color:"#5B21B6",display:"flex",alignItems:"center",gap:8}}>{t("estimate.auto_invoice_preview_invoice_no", { invoice_no: inv.invoice_no })}</div>
                 <div style={{fontSize:11,color:"#7C3AED",marginTop:2}}>
-                  Review this draft. On Confirm, it becomes a live invoice.
+                 {t("estimate.review_this_draft_on_confirm_it")}
                 </div>
               </div>
               <button onClick={()=>setPreviewInv(null)} disabled={previewConfirming}
@@ -3306,32 +3276,32 @@ function TabEstimate({ project }) {
               {task && (
                 <div style={{padding:"10px 12px",background:"#EFF6FF",border:"1px solid "+T.bluM,borderRadius:8,marginBottom:14}}>
                   <div style={{fontSize:10,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>
-                    🔗 Triggered by Task
+                   {t("projects.triggered_by_task")}
                   </div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.t1,flex:1}}>{task.title || task.name}</div>
                     <span style={{fontSize:11,color:T.t3}}>{task.status}</span>
-                    <span style={{fontSize:13,fontWeight:800,color:T.grn,fontVariantNumeric:"tabular-nums"}}>{task.progress}% complete</span>
+                    <span style={{fontSize:13,fontWeight:800,color:T.grn,fontVariantNumeric:"tabular-nums"}}>{t("estimate.progress_complete", { progress: task.progress })}</span>
                   </div>
                 </div>
               )}
               {/* Invoice header — 4 cols: Customer | Project | Date | Source */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:10,marginBottom:14}}>
                 <div style={{background:T.surfaceB,borderRadius:7,padding:"8px 10px"}}>
-                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Customer</div>
+                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("common.customer")}</div>
                   <div style={{fontSize:12.5,color:T.t1,marginTop:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={inv.customer_name || "—"}>{inv.customer_name || "—"}</div>
                 </div>
                 <div style={{background:T.surfaceB,borderRadius:7,padding:"8px 10px"}}>
-                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Project</div>
+                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("common.project")}</div>
                   <div style={{fontSize:12.5,color:T.t1,marginTop:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={inv.project_name || project?.name || "—"}>{inv.project_name || project?.name || "—"}</div>
                 </div>
                 <div style={{background:T.surfaceB,borderRadius:7,padding:"8px 10px"}}>
-                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Invoice Date</div>
+                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("estimate.invoice_date")}</div>
                   <div style={{fontSize:12.5,color:T.t1,marginTop:2,fontWeight:600}}>{inv.invoice_date}</div>
                 </div>
                 <div style={{background:T.surfaceB,borderRadius:7,padding:"8px 10px"}}>
-                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Source</div>
-                  <div style={{fontSize:12.5,color:"#6D28D9",marginTop:2,fontWeight:700}}>🤖 AUTO · DRAFT</div>
+                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("common.source")}</div>
+                  <div style={{fontSize:12.5,color:"#6D28D9",marginTop:2,fontWeight:700}}>{t("estimate.auto_draft")}</div>
                 </div>
               </div>
               {/* Line items grid */}
@@ -3355,10 +3325,10 @@ function TabEstimate({ project }) {
               {/* Tax breakdown */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:8}}>
                 {[
-                  {l:"Gross",v:inv.gross_amount,c:T.t1},
-                  {l:`Retention ${inv.retention_pct}%`,v:inv.retention_amt,c:T.amb},
-                  {l:`TDS ${inv.tds_pct}%`,v:inv.tds_amt,c:T.red},
-                  {l:"Net Receivable",v:inv.net_receivable,c:T.grn},
+                  {l:t("common.gross"),v:inv.gross_amount,c:T.t1},
+                  {l:t("estimate.retention_retention_pct", { retention_pct: inv.retention_pct }),v:inv.retention_amt,c:T.amb},
+                  {l:t("estimate.tds_tds_pct", { tds_pct: inv.tds_pct }),v:inv.tds_amt,c:T.red},
+                  {l:t("estimate.net_receivable"),v:inv.net_receivable,c:T.grn},
                 ].map(s => (
                   <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:7,padding:"9px 8px"}}>
                     <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",fontWeight:700}}>{s.l}</div>
@@ -3376,16 +3346,16 @@ function TabEstimate({ project }) {
             <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.surfaceB,gap:8}}>
               <button onClick={rejectAutoInvoice} disabled={previewConfirming}
                 style={{background:"white",border:"1.5px solid "+T.redM,color:T.red,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor: previewConfirming?"default":"pointer"}}>
-                ✕ Reject Draft
+               {t("estimate.reject_draft")}
               </button>
               <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>setPreviewInv(null)} disabled={previewConfirming}
                   style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:600,cursor: previewConfirming?"default":"pointer"}}>
-                  Close
+                 {t("common.close")}
                 </button>
                 <button onClick={confirmAutoInvoice} disabled={previewConfirming}
                   style={{background: previewConfirming ? T.t4 : T.grn,color:"white",border:"none",borderRadius:6,padding:"7px 20px",fontSize:12,fontWeight:700,cursor: previewConfirming?"default":"pointer"}}>
-                  {previewConfirming ? "Submitting…" : "✓ Confirm & Submit"}
+                  {previewConfirming ? t("common.submitting") : t("estimate.confirm_submit")}
                 </button>
               </div>
             </div>
@@ -3422,7 +3392,7 @@ function TabEstimate({ project }) {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div>
                   <div style={{fontSize:11,fontWeight:600,opacity:0.7,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>
-                    {isAuto ? "🤖 Auto Invoice" : inv.source === "manual" ? "Manual Invoice" : "Customer Invoice"}
+                    {isAuto ? t("estimate.auto_invoice") : inv.source === "manual" ? t("estimate.manual_invoice_2") : t("estimate.customer_invoice")}
                   </div>
                   <div style={{fontSize:18,fontWeight:800,marginBottom:3}}>{inv.invoice_no || "—"}</div>
                   <div style={{fontSize:11,opacity:0.7}}>
@@ -3449,24 +3419,22 @@ function TabEstimate({ project }) {
               {invDetail && invDetail.is_over_bill == 1 && (
                 <div style={{margin:"14px 18px 0",padding:"12px 14px",borderRadius:8,background:"#FEF2F2",border:"1px solid #FCA5A5"}}>
                   <div style={{fontSize:12,fontWeight:800,color:"#991B1B",letterSpacing:".3px",textTransform:"uppercase",marginBottom:5,display:"flex",alignItems:"center",gap:6}}>
-                    🔴 Over-Bill Invoice
+                    {t("estimate.over_bill_invoice")}
                     {invDetail.linked_invoice_id && (
-                      <span style={{fontWeight:600,fontSize:10,padding:"2px 7px",background:"white",border:"1px solid #FCA5A5",borderRadius:10,letterSpacing:0,textTransform:"none"}}>
-                        🔗 Linked to normal portion: INV-{invDetail.linked_invoice_id}
-                      </span>
+                      <span style={{fontWeight:600,fontSize:10,padding:"2px 7px",background:"white",border:"1px solid #FCA5A5",borderRadius:10,letterSpacing:0,textTransform:"none"}}>{t("estimate.linked_to_normal_portion_inv_linked", { linked_invoice_id: invDetail.linked_invoice_id })}</span>
                     )}
                   </div>
                   <div style={{fontSize:11.5,color:"#7F1D1D",lineHeight:1.5}}>
-                    <b>Reason:</b> {invDetail.over_bill_reason || "(no reason recorded)"}
+                    <b>{t("common.reason_2")}</b> {invDetail.over_bill_reason || t("estimate.no_reason_recorded")}
                   </div>
                   <div style={{fontSize:10,color:"#991B1B",marginTop:6,fontStyle:"italic"}}>
-                    This invoice bills quantity beyond the original BOQ. Audit-relevant for client billing discussions.
+                   {t("estimate.this_invoice_bills_quantity_beyond_the")}
                   </div>
                 </div>
               )}
               {invDetailLoading && (
                 <div style={{textAlign:"center",padding:"40px 20px",color:T.t4,fontSize:13}}>
-                  Loading invoice…
+                 {t("projects.loading_invoice")}
                 </div>
               )}
               {!invDetailLoading && invDetail && (
@@ -3474,27 +3442,27 @@ function TabEstimate({ project }) {
                   {/* Audit / origin panel */}
                   <div style={{background:T.surfaceB,borderRadius:8,padding:"12px 14px",marginBottom:12}}>
                     <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>
-                      Origin
+                     {t("estimate.origin")}
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                       <div>
-                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>Project</div>
+                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>{t("common.project")}</div>
                         <div style={{fontSize:12,color:T.t1,fontWeight:600}}>{inv.project_name || "—"}</div>
                         {inv.city_name && <div style={{fontSize:10,color:T.t4}}>{inv.city_name}</div>}
                       </div>
                       <div>
-                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>Customer</div>
+                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>{t("common.customer")}</div>
                         <div style={{fontSize:12,color:T.t1,fontWeight:600}}>{inv.customer_name || "—"}</div>
                       </div>
                       <div>
-                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>Created by</div>
+                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>{t("crm.created_by")}</div>
                         <div style={{fontSize:12,color:T.t1,fontWeight:600}}>
-                          {inv.created_by_name ? inv.created_by_name : (isAuto ? "🤖 System (Auto-bill)" : "—")}
+                          {inv.created_by_name ? inv.created_by_name : (isAuto ? t("estimate.system_auto_bill") : "—")}
                         </div>
                       </div>
                       <div>
-                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>Estimate</div>
-                        <div style={{fontSize:12,color:T.t1,fontWeight:600}}>{inv.estimate_no || "Ad-hoc (manual)"}</div>
+                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>{t("common.estimate")}</div>
+                        <div style={{fontSize:12,color:T.t1,fontWeight:600}}>{inv.estimate_no || t("estimate.ad_hoc_manual")}</div>
                         {inv.billing_method && <div style={{fontSize:10,color:T.t4}}>{inv.billing_method}</div>}
                       </div>
                     </div>
@@ -3504,7 +3472,7 @@ function TabEstimate({ project }) {
                   {isAuto && inv.triggered_by_task_id && (
                     <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:"10px 12px",marginBottom:12}}>
                       <div style={{fontSize:10,fontWeight:700,color:"#6D28D9",textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>
-                        🔗 Triggered by Task
+                       {t("projects.triggered_by_task")}
                       </div>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                         <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{inv.trigger_task_title || inv.trigger_task_name || ("Task #"+inv.triggered_by_task_id)}</span>
@@ -3514,9 +3482,7 @@ function TabEstimate({ project }) {
                   )}
 
                   {/* Items */}
-                  <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>
-                    Line Items ({items.length})
-                  </div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("estimate.line_items_items", { items: items.length })}</div>
                   <div style={{border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden",marginBottom:14}}>
                     <div style={{display:"grid",gridTemplateColumns:"1.5fr 90px 60px 75px 90px",padding:"7px 12px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
                       {["Item","Milestone","Qty","Rate","Amount"].map((h,i) => (
@@ -3524,7 +3490,7 @@ function TabEstimate({ project }) {
                       ))}
                     </div>
                     {items.length === 0 && (
-                      <div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:11.5}}>No line items</div>
+                      <div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:11.5}}>{t("estimate.no_line_items")}</div>
                     )}
                     {items.map((it, idx) => (
                       <div key={idx} style={{display:"grid",gridTemplateColumns:"1.5fr 90px 60px 75px 90px",padding:"9px 12px",borderBottom: idx<items.length-1 ? "1px solid "+T.b1 : "none",alignItems:"center"}}>
@@ -3539,11 +3505,11 @@ function TabEstimate({ project }) {
 
                   {/* Tax breakdown */}
                   <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>
-                    Computation
+                   {t("estimate.computation")}
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
                     {[
-                      {l:"Gross",v:inv.gross_amount,c:T.t1,bold:false},
+                      {l:t("common.gross"),v:inv.gross_amount,c:T.t1,bold:false},
                       {l:`Retention ${inv.retention_pct||0}%`,v:inv.retention_amt,c:T.amb,sign:"−"},
                       {l:`TDS ${inv.tds_pct||0}%`,v:inv.tds_amt,c:T.red,sign:"−"},
                       {l:`Tax ${inv.tax_pct||0}%`,v:inv.tax_amt,c:T.blu,sign:"+"},
@@ -3560,21 +3526,19 @@ function TabEstimate({ project }) {
                   {/* Net + paid + due */}
                   <div style={{background:"linear-gradient(135deg, #ECFDF5, #D1FAE5)",border:"1.5px solid "+T.grnM,borderRadius:8,padding:"12px 14px",marginBottom:14}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                      <span style={{fontSize:11,fontWeight:700,color:"#065F46",textTransform:"uppercase",letterSpacing:".4px"}}>Net Receivable</span>
+                      <span style={{fontSize:11,fontWeight:700,color:"#065F46",textTransform:"uppercase",letterSpacing:".4px"}}>{t("estimate.net_receivable")}</span>
                       <span style={{fontSize:18,fontWeight:800,color:"#065F46",fontVariantNumeric:"tabular-nums"}}>{fmtC(inv.net_receivable)}</span>
                     </div>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#065F46"}}>
-                      <span>Received: <b>{fmtC(paid)}</b></span>
-                      <span>Due: <b style={{color: due > 0 ? T.red : T.grn}}>{fmtC(due)}</b></span>
+                      <span>{t("finance.received")} <b>{fmtC(paid)}</b></span>
+                      <span>{t("estimate.due")} <b style={{color: due > 0 ? T.red : T.grn}}>{fmtC(due)}</b></span>
                     </div>
                   </div>
 
                   {/* Payments list */}
                   {payments.length > 0 && (
                     <>
-                      <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>
-                        Payments ({payments.length})
-                      </div>
+                      <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("estimate.payments_payments", { payments: payments.length })}</div>
                       <div style={{border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden",marginBottom:14}}>
                         {payments.map((p, idx) => (
                           <div key={p.id} style={{display:"grid",gridTemplateColumns:"100px 1fr 100px",gap:8,padding:"9px 12px",alignItems:"center",borderBottom: idx<payments.length-1 ? "1px solid "+T.b1 : "none"}}>
@@ -3605,26 +3569,26 @@ function TabEstimate({ project }) {
                 {inv.status !== "Paid" ? (
                   <button onClick={()=>{ closeInvoiceDetail(); deleteInvoice(inv.id, inv.invoice_no); }}
                     style={{background:"white",border:"1.5px solid "+T.redM,color:T.red,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                    🗑 Delete Invoice
+                   {t("estimate.delete_invoice")}
                   </button>
                 ) : <span/>}
                 <div style={{display:"flex",gap:8}}>
                   {/* PDF download — always available */}
                   <button onClick={()=>downloadInvoicePdf(inv.id, inv.invoice_no)}
                     style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                    ⬇ PDF
+                   {t("estimate.pdf")}
                   </button>
                   {/* Edit — all non-Paid invoices. Manual → full item editor;
                       milestone/auto → compact header editor (date/remark/%). */}
                   {inv.status !== "Paid" && (
                     <button onClick={()=>editInvoice(inv)}
                       style={{background:"white",border:"1px solid "+T.bluM,color:T.blu,borderRadius:6,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                      ✎ Edit
+                     {t("estimate.edit")}
                     </button>
                   )}
                   <button onClick={closeInvoiceDetail}
                     style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                    Close
+                   {t("common.close")}
                   </button>
                   {/* Record Payment removed — customer receipts are recorded
                       in the Party Ledger (Party tab → Receipt), keeping all
@@ -3632,7 +3596,7 @@ function TabEstimate({ project }) {
                   {inv.status === "Draft" && (
                     <button onClick={()=>{ closeInvoiceDetail(); openInvoicePreview(inv.id); }}
                       style={{background:"#7C3AED",color:"white",border:"none",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                      Confirm & Submit
+                     {t("estimate.confirm_submit_2")}
                     </button>
                   )}
                 </div>
@@ -3661,57 +3625,57 @@ function TabEstimate({ project }) {
           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:480,maxWidth:"95vw",background:T.surface,borderRadius:12,zIndex:351,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
             <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
-                <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Edit Invoice · {hdrEditForm.invoice_no}</div>
-                <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>Line items are locked (from schedule). Edit date, note &amp; deductions.</div>
+                <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{t("estimate.edit_invoice_invoice_no", { invoice_no: hdrEditForm.invoice_no })}</div>
+                <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{t("estimate.line_items_are_locked_from_schedule")}</div>
               </div>
               <button onClick={()=>setHdrEditForm(null)} disabled={hdrEditSaving} style={{background:"none",border:"none",fontSize:20,color:T.t3,cursor:hdrEditSaving?"not-allowed":"pointer"}}>×</button>
             </div>
             <div style={{padding:"16px 18px"}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
                 <div>
-                  <label style={lblS}>Invoice Date</label>
+                  <label style={lblS}>{t("estimate.invoice_date")}</label>
                   <input type="date" value={hdrEditForm.invoice_date} onChange={e=>set("invoice_date", e.target.value)} style={inpS}/>
                 </div>
                 <div>
-                  <label style={lblS}>Gross (locked)</label>
+                  <label style={lblS}>{t("estimate.gross_locked")}</label>
                   <input value={fmtC(gross)} disabled style={{...inpS,background:T.surfaceB,color:T.t3}}/>
                 </div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
                 <div>
-                  <label style={lblS}>Retention %</label>
+                  <label style={lblS}>{t("common.retention")}</label>
                   <input type="number" value={hdrEditForm.retention_pct} onChange={e=>set("retention_pct", e.target.value)} style={{...inpS,textAlign:"right"}}/>
                 </div>
                 <div>
-                  <label style={lblS}>TDS %</label>
+                  <label style={lblS}>{t("common.tds")}</label>
                   <input type="number" value={hdrEditForm.tds_pct} onChange={e=>set("tds_pct", e.target.value)} style={{...inpS,textAlign:"right"}}/>
                 </div>
                 <div>
-                  <label style={lblS}>Tax %</label>
+                  <label style={lblS}>{t("estimate.tax")}</label>
                   <input type="number" value={hdrEditForm.tax_pct} onChange={e=>set("tax_pct", e.target.value)} style={{...inpS,textAlign:"right"}}/>
                 </div>
               </div>
               <div style={{marginBottom:12}}>
-                <label style={lblS}>Remark</label>
-                <input value={hdrEditForm.remark} onChange={e=>set("remark", e.target.value)} placeholder="Optional note" style={inpS}/>
+                <label style={lblS}>{t("common.remark")}</label>
+                <input value={hdrEditForm.remark} onChange={e=>set("remark", e.target.value)} placeholder={t("common.optional_note")} style={inpS}/>
               </div>
               {/* Live recompute preview */}
               <div style={{background:"linear-gradient(135deg, #ECFDF5, #D1FAE5)",border:"1.5px solid "+T.grnM,borderRadius:8,padding:"10px 14px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,color:"#065F46",marginBottom:4}}>
-                  <span>Retention −{fmtC(retAmt)}</span><span>TDS −{fmtC(tdsAmt)}</span><span>Tax +{fmtC(taxAmt)}</span>
+                  <span>{t("estimate.retention_fmtc", { fmtC: fmtC(retAmt) })}</span><span>{t("estimate.tds_fmtc", { fmtC: fmtC(tdsAmt) })}</span><span>{t("estimate.tax_fmtc", { fmtC: fmtC(taxAmt) })}</span>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:11,fontWeight:700,color:"#065F46",textTransform:"uppercase",letterSpacing:".4px"}}>Net Receivable</span>
+                  <span style={{fontSize:11,fontWeight:700,color:"#065F46",textTransform:"uppercase",letterSpacing:".4px"}}>{t("estimate.net_receivable")}</span>
                   <span style={{fontSize:18,fontWeight:800,color:"#065F46",fontVariantNumeric:"tabular-nums"}}>{fmtC(netRec)}</span>
                 </div>
               </div>
             </div>
             <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
               <button onClick={()=>setHdrEditForm(null)} disabled={hdrEditSaving}
-                style={{background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:600,cursor:hdrEditSaving?"not-allowed":"pointer"}}>Cancel</button>
+                style={{background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:600,cursor:hdrEditSaving?"not-allowed":"pointer"}}>{t("common.cancel")}</button>
               <button onClick={submitHdrEdit} disabled={hdrEditSaving}
                 style={{background:hdrEditSaving?T.t4:T.blu,color:"white",border:"none",borderRadius:6,padding:"7px 18px",fontSize:12,fontWeight:700,cursor:hdrEditSaving?"default":"pointer"}}>
-                {hdrEditSaving ? "Saving…" : "Save Changes"}
+                {hdrEditSaving ? t("common.saving_2") : t("common.save_changes")}
               </button>
             </div>
           </div>
@@ -3755,17 +3719,17 @@ function TabEstimate({ project }) {
             {/* Header */}
             <div style={{padding:"14px 18px",background:T.t1,color:"white",flexShrink:0}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                <div style={{fontSize:14,fontWeight:700}}>Link to Project Task</div>
+                <div style={{fontSize:14,fontWeight:700}}>{t("estimate.link_to_project_task")}</div>
                 <button onClick={()=>setTaskPickerFor(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.65)",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
               </div>
               <div style={{fontSize:10.5,color:"rgba(255,255,255,0.55)"}}>
-                Pick an existing task and set the % completion that triggers billing
+               {t("estimate.pick_an_existing_task_and_set")}
               </div>
             </div>
             {/* Trigger % input — always visible at top */}
             <div style={{padding:"12px 18px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,flexShrink:0}}>
               <label style={{fontSize:10,fontWeight:700,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>
-                Trigger at task completion %
+               {t("estimate.trigger_at_task_completion")}
               </label>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
                 <input type="range" min={0} max={100} step={5}
@@ -3788,25 +3752,23 @@ function TabEstimate({ project }) {
             {/* Search */}
             <div style={{padding:"10px 18px",borderBottom:"1px solid "+T.b1,flexShrink:0}}>
               <input value={taskPickerSearch} onChange={e=>setTaskPickerSearch(e.target.value)}
-                placeholder="Search tasks…" autoFocus
+                placeholder={t("estimate.search_tasks")} autoFocus
                 style={{width:"100%",padding:"7px 11px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             {/* Task list — hierarchical (parent → expandable children) */}
             <div style={{flex:1,overflowY:"auto",padding:"4px 0"}}>
               {projectTasks.length === 0 && (
                 <div style={{padding:"36px 20px",textAlign:"center"}}>
-                  <div style={{fontSize:12.5,color:T.t3,marginBottom:4}}>No tasks in this project yet.</div>
-                  <div style={{fontSize:11,color:T.t4,marginBottom:14}}>Create a task to link this milestone to it.</div>
+                  <div style={{fontSize:12.5,color:T.t3,marginBottom:4}}>{t("estimate.no_tasks_in_this_project_yet")}</div>
+                  <div style={{fontSize:11,color:T.t4,marginBottom:14}}>{t("estimate.create_a_task_to_link_this")}</div>
                   <button onClick={()=>setShowCreateTaskFor(true)}
                     style={{background:T.blu,color:"white",border:"none",borderRadius:6,padding:"8px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                    + Create Task
+                   {t("estimate.create_task")}
                   </button>
                 </div>
               )}
               {projectTasks.length > 0 && displayRows.length === 0 && (
-                <div style={{padding:"30px 20px",textAlign:"center",color:T.t4,fontSize:12.5}}>
-                  No tasks match "{taskPickerSearch}"
-                </div>
+                <div style={{padding:"30px 20px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("estimate.no_tasks_match_taskpickersearch", { taskPickerSearch })}</div>
               )}
               {displayRows.map(({ node: t, depth }) => {
                 const isSel  = linkSelectedTaskId === t.id;
@@ -3824,7 +3786,7 @@ function TabEstimate({ project }) {
                     {/* Expand chevron for parents (collapse state); spacer for leaves */}
                     {hasKids ? (
                       <button onClick={(e)=>{ e.stopPropagation(); setTaskPickerExpanded(p=>({...p,[t.id]:!p[t.id]})); }}
-                        title={isExpanded?"Collapse":"Expand subtasks"}
+                        title={isExpanded?t("common.collapse"):t("estimate.expand_subtasks")}
                         style={{background:"none",border:"none",cursor:"pointer",color:T.t3,fontSize:10,width:16,flexShrink:0,padding:0}}>
                         {isExpanded ? "▼" : "▶"}
                       </button>
@@ -3855,7 +3817,7 @@ function TabEstimate({ project }) {
                 <div style={{padding:"10px 18px",borderTop:"1px solid "+T.b1}}>
                   <button onClick={()=>setShowCreateTaskFor(true)}
                     style={{width:"100%",background:"transparent",border:"1px dashed "+T.bluM,color:T.blu,borderRadius:6,padding:"7px",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                    + Create New Task
+                   {t("estimate.create_new_task")}
                   </button>
                 </div>
               )}
@@ -3864,11 +3826,11 @@ function TabEstimate({ project }) {
             <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.surfaceB,gap:8}}>
               <button onClick={()=>setTaskPickerFor(null)} disabled={linking}
                 style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:600,cursor: linking?"default":"pointer"}}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={confirmLinkTask} disabled={linking || !linkSelectedTaskId}
                 style={{background: (!linkSelectedTaskId || linking) ? T.t4 : T.blu,color:"white",border:"none",borderRadius:6,padding:"7px 18px",fontSize:12,fontWeight:700,cursor: (!linkSelectedTaskId || linking) ? "default" : "pointer"}}>
-                {linking ? "Linking…" : "Link Task"}
+                {linking ? t("estimate.linking") : t("estimate.link_task")}
               </button>
             </div>
           </div>
@@ -3938,7 +3900,7 @@ function TabEstimate({ project }) {
             {/* Header */}
             <div style={{padding:"14px 18px",background:T.t1,color:"white",flexShrink:0}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                <div style={{fontSize:14,fontWeight:700}}>Pick Items for Schedule</div>
+                <div style={{fontSize:14,fontWeight:700}}>{t("estimate.pick_items_for_schedule")}</div>
                 <button onClick={()=>setItemPickerOpen(false)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.65)",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
               </div>
               <div style={{fontSize:10.5,color:"rgba(255,255,255,0.55)"}}>
@@ -3949,15 +3911,13 @@ function TabEstimate({ project }) {
             {/* Search */}
             <div style={{padding:"10px 18px",borderBottom:"1px solid "+T.b1,flexShrink:0}}>
               <input value={itemPickerSearch} onChange={e=>setItemPickerSearch(e.target.value)}
-                placeholder="Search items by name or category…" autoFocus
+                placeholder={t("master_library.search_items_by_name_or_category")} autoFocus
                 style={{width:"100%",padding:"7px 11px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             {/* List */}
             <div style={{flex:1,overflowY:"auto",padding:"4px 0"}}>
               {sections.length === 0 && (
-                <div style={{padding:"40px 20px",textAlign:"center",color:T.t4,fontSize:12.5}}>
-                  No items match "{itemPickerSearch}"
-                </div>
+                <div style={{padding:"40px 20px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("estimate.no_items_match_itempickersearch", { itemPickerSearch })}</div>
               )}
               {sections.map((sec) => (
                 <div key={sec.title} style={{marginBottom:4}}>
@@ -4013,7 +3973,7 @@ function TabEstimate({ project }) {
             <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.surfaceB}}>
               <button onClick={()=>setItemPickerOpen(false)}
                 style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                Done
+               {t("common.done")}
               </button>
               <span style={{fontSize:11.5,color:T.t3}}>
                 {msForm.pickedItemIds.length} item{msForm.pickedItemIds.length === 1 ? "" : "s"} selected
@@ -4032,12 +3992,12 @@ function TabEstimate({ project }) {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:310}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:760,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:311,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Pick from Client BOQ Library</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{t("estimate.pick_from_client_boq_library")}</div>
             <button onClick={()=>setLibPicker(null)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
           </div>
           <div style={{padding:"12px 18px",borderBottom:"1px solid "+T.b1,background:T.surfaceB}}>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
-              <span style={{fontSize:10,fontWeight:700,color:T.t3,alignSelf:"center"}}>CITY:</span>
+              <span style={{fontSize:10,fontWeight:700,color:T.t3,alignSelf:"center"}}>{t("estimate.city")}</span>
               {libCities.map(c => (
                 <button key={c.id} onClick={()=>setLibFilterCity(libFilterCity?.id===c.id?null:c)}
                   style={{padding:"4px 10px",borderRadius:5,border:"1px solid "+(libFilterCity?.id===c.id?"#0891B2":T.b1),background:libFilterCity?.id===c.id?"#0891B2":T.surface,color:libFilterCity?.id===c.id?"white":T.t2,fontSize:11,fontWeight:600,cursor:"pointer"}}>
@@ -4046,7 +4006,7 @@ function TabEstimate({ project }) {
               ))}
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
-              <span style={{fontSize:10,fontWeight:700,color:T.t3,alignSelf:"center"}}>PACKAGE:</span>
+              <span style={{fontSize:10,fontWeight:700,color:T.t3,alignSelf:"center"}}>{t("estimate.package")}</span>
               {libPackages.map(p => (
                 <button key={p.id} onClick={()=>setLibFilterPkg(libFilterPkg?.id===p.id?null:p)}
                   style={{padding:"4px 10px",borderRadius:5,border:"1px solid "+(libFilterPkg?.id===p.id?T.pur:T.b1),background:libFilterPkg?.id===p.id?T.pur:T.surface,color:libFilterPkg?.id===p.id?"white":T.t2,fontSize:11,fontWeight:600,cursor:"pointer"}}>
@@ -4054,10 +4014,10 @@ function TabEstimate({ project }) {
                 </button>
               ))}
             </div>
-            <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder="🔍 Search items by name / description"
+            <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder={t("estimate.search_items_by_name_description")}
               style={{...inpS,marginTop:4}}/>
             {(!libFilterCity || !libFilterPkg) && (
-              <div style={{marginTop:6,fontSize:10.5,color:T.amb}}>Pick a city + package to see city-specific rates. Without them, base rates are shown.</div>
+              <div style={{marginTop:6,fontSize:10.5,color:T.amb}}>{t("estimate.pick_a_city_package_to_see")}</div>
             )}
           </div>
           <div style={{flex:1,overflowY:"auto"}}>
@@ -4086,11 +4046,11 @@ function TabEstimate({ project }) {
                         <div style={{fontSize:9,color:T.t4,marginTop:1}}>{libFilterCity.name} · {libConTypeName(libFilterPkg)}</div>
                       )}
                     </div>
-                    <button style={{padding:"6px 12px",background:T.blu,color:"white",border:"none",borderRadius:5,fontSize:11,fontWeight:700,cursor:"pointer"}}>Pick →</button>
+                    <button style={{padding:"6px 12px",background:T.blu,color:"white",border:"none",borderRadius:5,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.pick")}</button>
                   </div>
                 );
               })}
-            {libItems.length === 0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No library items. Add some in Master Library → Client BOQ Rate.</div>}
+            {libItems.length === 0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("estimate.no_library_items_add_some_in")}</div>}
           </div>
         </div>
       </>)}
@@ -4100,27 +4060,27 @@ function TabEstimate({ project }) {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:480,maxWidth:"95vw",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Record Payment</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{t("common.record_payment")}</div>
             <button onClick={()=>setShowPay(null)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
           </div>
           <div style={{padding:"16px 18px"}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:10}}>
-              <div><label style={lblS}>Amount</label><input type="number" value={payForm.amount_received} onChange={e=>setPayForm(p=>({...p,amount_received:e.target.value}))} style={inpS}/></div>
-              <div><label style={lblS}>Date</label><input type="date" value={payForm.payment_date} onChange={e=>setPayForm(p=>({...p,payment_date:e.target.value}))} style={inpS}/></div>
+              <div><label style={lblS}>{t("common.amount_2")}</label><input type="number" value={payForm.amount_received} onChange={e=>setPayForm(p=>({...p,amount_received:e.target.value}))} style={inpS}/></div>
+              <div><label style={lblS}>{t("common.date")}</label><input type="date" value={payForm.payment_date} onChange={e=>setPayForm(p=>({...p,payment_date:e.target.value}))} style={inpS}/></div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:10}}>
-              <div><label style={lblS}>Mode</label>
+              <div><label style={lblS}>{t("common.mode")}</label>
                 <select value={payForm.payment_mode} onChange={e=>setPayForm(p=>({...p,payment_mode:e.target.value}))} style={inpS}>
-                  <option>Bank Transfer</option><option>Cash</option><option>Cheque</option><option>UPI</option><option>Credit Card</option>
+                  <option>{t("common.bank_transfer")}</option><option>{t("common.cash")}</option><option>{t("common.cheque")}</option><option>UPI</option><option>{t("estimate.credit_card")}</option>
                 </select>
               </div>
-              <div><label style={lblS}>Reference #</label><input value={payForm.reference_no} onChange={e=>setPayForm(p=>({...p,reference_no:e.target.value}))} style={inpS}/></div>
+              <div><label style={lblS}>{t("estimate.reference")}</label><input value={payForm.reference_no} onChange={e=>setPayForm(p=>({...p,reference_no:e.target.value}))} style={inpS}/></div>
             </div>
-            <div><label style={lblS}>Remark</label><input value={payForm.remark} onChange={e=>setPayForm(p=>({...p,remark:e.target.value}))} style={inpS}/></div>
+            <div><label style={lblS}>{t("common.remark")}</label><input value={payForm.remark} onChange={e=>setPayForm(p=>({...p,remark:e.target.value}))} style={inpS}/></div>
           </div>
           <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
-            <button onClick={()=>setShowPay(null)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
-            <button onClick={submitPayment} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.grn,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Record"}</button>
+            <button onClick={()=>setShowPay(null)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
+            <button onClick={submitPayment} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.grn,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?t("common.saving_2"):t("estimate.record")}</button>
           </div>
         </div>
       </>)}

@@ -18,6 +18,7 @@
 import { useState, useEffect, useMemo } from "react";
 import SearchSelect from "./SearchSelect";
 import api from "../config/api";
+import { t } from "../i18n";
 
 // Backend ke normPhone10 ka jodidaar — dono jagah ek hi niyam, warna screen
 // "ho gaya" dikhati aur server mana kar deta.
@@ -82,9 +83,9 @@ export default function ReceivingContacts({
     setErr("");
     if (full) { setErr("Zyada se zyada " + MAX_RECEIVING_CONTACTS + " contact bhej sakte ho."); return; }
     const phone = normPhone10(c.phone);
-    if (!String(c.name || "").trim()) { setErr("Naam bharo."); return; }
-    if (!phone) { setErr("10 ank ka mobile number bharo."); return; }
-    if (usedPh.has(phone)) { setErr("Yeh number pehle hi list me hai."); return; }
+    if (!String(c.name || "").trim()) { setErr(t("receiving_contacts.naam_bharo")); return; }
+    if (!phone) { setErr(t("receiving_contacts.10_ank_ka_mobile_number_bharo")); return; }
+    if (usedPh.has(phone)) { setErr(t("receiving_contacts.yeh_number_pehle_hi_list_me")); return; }
     onChange([...picked, { ...c, name: String(c.name).trim(), phone }]);
   };
   const remove = (i) => { setErr(""); onChange(picked.filter((_, j) => j !== i)); };
@@ -122,7 +123,7 @@ export default function ReceivingContacts({
                 <span style={{fontSize:10,opacity:.7}}>· {c.designation || prettyRole(c.role)}</span>
               )}
               {!disabled && (
-                <button type="button" onClick={() => remove(i)} title="Hatao"
+                <button type="button" onClick={() => remove(i)} title={t("common.hatao")}
                   style={{border:"none",background:"none",cursor:"pointer",color:T.blu,fontSize:14,lineHeight:1,padding:"0 2px"}}>×</button>
               )}
             </span>
@@ -139,7 +140,7 @@ export default function ReceivingContacts({
               label: u.name + " · " + (u.designation || prettyRole(u.role)) + " · " + normPhone10(u.phone),
             }))}
             onChange={addFromTeam}
-            placeholder={loading ? "Team load ho rahi hai…" : (withPh.length ? "Project team se chuno…" : "Team list khaali")}
+            placeholder={loading ? t("receiving_contacts.team_load_ho_rahi_hai") : (withPh.length ? t("receiving_contacts.project_team_se_chuno") : t("receiving_contacts.team_list_khaali"))}
             disabled={loading || withPh.length === 0}
             compact={compact}
             theme={T}
@@ -148,7 +149,7 @@ export default function ReceivingContacts({
             style={{padding: compact ? "5px 10px" : "7px 12px",borderRadius:6,background:showNew?T.b1:T.surfaceB,
               border:"1.5px solid " + T.b1,color:T.t2,fontSize:compact?11:11.5,fontWeight:700,
               cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
-            {showNew ? "Cancel" : "+ Naya contact"}
+            {showNew ? t("common.cancel") : t("receiving_contacts.naya_contact")}
           </button>
         </div>
       )}
@@ -157,13 +158,13 @@ export default function ReceivingContacts({
       {!disabled && showNew && !full && (
         <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr auto",gap:6,marginTop:6}}>
           <input value={nw.name} onChange={e => setNw(p => ({...p, name:e.target.value}))}
-            placeholder="Naam" autoFocus style={inpS}/>
+            placeholder={t("common.naam")} autoFocus style={inpS}/>
           <input value={nw.phone} onChange={e => setNw(p => ({...p, phone:e.target.value}))}
-            placeholder="10 ank mobile" inputMode="numeric" style={inpS}
+            placeholder={t("receiving_contacts.10_ank_mobile")} inputMode="numeric" style={inpS}
             onKeyDown={e => { if (e.key === "Enter") addManual(); }}/>
           <button type="button" onClick={addManual}
             style={{padding:compact?"5px 12px":"7px 14px",borderRadius:6,background:T.blu,border:"none",
-              color:"white",fontSize:compact?11:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Add</button>
+              color:"white",fontSize:compact?11:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t("common.add")}</button>
         </div>
       )}
 
@@ -176,20 +177,14 @@ export default function ReceivingContacts({
       {!loading && !!idKey && team.length === 0 && (
         <div style={{marginTop:6,padding:"6px 10px",background:T.ambL,border:"1px solid " + T.ambM,
           borderRadius:6,fontSize:10.5,color:T.amb,lineHeight:1.45}}>
-          Is project par abhi kisi ko access nahi diya gaya, isliye dropdown khaali hai.
-          Settings → Roles &amp; Access → Project Access me team add karo — ya abhi
-          "+ Naya contact" se naam aur number bhar do.
+         {t("receiving_contacts.is_project_par_abhi_kisi_ko")}
         </div>
       )}
       {!loading && noPhone.length > 0 && (
-        <div style={{marginTop:6,fontSize:10,color:T.t4,lineHeight:1.45}}>
-          Bina mobile number ke (isliye list me nahi): {noPhone.map(u => u.name).join(", ")} — Settings → Users me number bharo.
-        </div>
+        <div style={{marginTop:6,fontSize:10,color:T.t4,lineHeight:1.45}}>{t("receiving_contacts.bina_mobile_number_ke_isliye_list", { noPhone: noPhone.map(u => u.name).join(", ") })}</div>
       )}
       {full && (
-        <div style={{marginTop:6,fontSize:10,color:T.t4}}>
-          {MAX_RECEIVING_CONTACTS} contact ho gaye — aur jodne ke liye pehle kisi ko hatao.
-        </div>
+        <div style={{marginTop:6,fontSize:10,color:T.t4}}>{t("receiving_contacts.max_receiving_contacts_contact_ho_gaye", { MAX_RECEIVING_CONTACTS })}</div>
       )}
     </div>
   );

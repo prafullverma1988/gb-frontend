@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
+import { t } from "../../i18n";
 
 function TabFiles({ projectId }) {
   const [files, setFiles] = useState([]);
@@ -31,22 +32,22 @@ function TabFiles({ projectId }) {
   const pendingCount = files.filter(f=>!f.uploaded).length;
   const filtered = selFolder==="all"?files:files.filter(f=>f.folder===selFolder);
 
-  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>Loading files...</div>;
+  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>{t("files.loading_files")}</div>;
 
   return (
     <div style={{padding:"16px 0"}}>
       {/* Summary row */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
         <div onClick={()=>setSelFolder("all")} style={{padding:"12px 14px",borderRadius:9,border:`1.5px solid ${selFolder==="all"?T.blu:T.b1}`,background:selFolder==="all"?T.bluL:T.surface,cursor:"pointer"}}>
-          <div style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>Total Files</div>
+          <div style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>{t("files.total_files")}</div>
           <div style={{fontSize:22,fontWeight:700,color:T.t1}}>{files.length}</div>
         </div>
         <div style={{padding:"12px 14px",borderRadius:9,border:`1px solid ${T.b1}`,background:T.surface}}>
-          <div style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>Uploaded</div>
+          <div style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>{t("files.uploaded")}</div>
           <div style={{fontSize:22,fontWeight:700,color:T.grn}}>{uploadedCount}</div>
         </div>
         <div style={{padding:"12px 14px",borderRadius:9,border:`1px solid ${T.b1}`,background:T.surface}}>
-          <div style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>Pending</div>
+          <div style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>{t("common.pending")}</div>
           <div style={{fontSize:22,fontWeight:700,color:pendingCount?T.red:T.grn}}>{pendingCount}</div>
         </div>
       </div>
@@ -78,10 +79,10 @@ function TabFiles({ projectId }) {
         <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden",alignSelf:"start"}}>
           {/* Header */}
           <div style={{display:"grid",gridTemplateColumns:"28px 1fr 130px 50px 90px",padding:"8px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>
-            <span>#</span><span>File Name</span><span>Used In</span><span>Type</span><span>Actions</span>
+            <span>#</span><span>{t("files.file_name")}</span><span>{t("files.used_in")}</span><span>{t("common.type")}</span><span>{t("common.actions")}</span>
           </div>
           {filtered.length===0&&(
-            <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12}}>{selFolder==="all"?"No files found":"No files in this folder"}</div>
+            <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12}}>{selFolder==="all"?t("files.no_files_found"):t("files.no_files_in_this_folder")}</div>
           )}
           {filtered.map((f,i)=>{
             const ft=typeS[f.type]||{c:T.slt,bg:T.sltL,icon:"📎"};
@@ -108,7 +109,7 @@ function TabFiles({ projectId }) {
                     <>
                       <a href={f.file_url} target="_blank" rel="noreferrer"
                         style={{padding:"3px 8px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10,fontWeight:600,textDecoration:"none"}}>
-                        View
+                       {t("common.view_2")}
                       </a>
                       <a href={f.file_url} download target="_blank" rel="noreferrer"
                         style={{padding:"3px 8px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:10,fontWeight:600,textDecoration:"none"}}>
@@ -116,7 +117,7 @@ function TabFiles({ projectId }) {
                       </a>
                     </>
                   ):(
-                    <span style={{fontSize:10,color:T.red,fontWeight:600}}>Pending</span>
+                    <span style={{fontSize:10,color:T.red,fontWeight:600}}>{t("common.pending")}</span>
                   )}
                 </div>
               </div>

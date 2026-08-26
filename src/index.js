@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import { initCapacitor } from './capacitor-init';
+import { initI18n } from './i18n';
 
 // ── Sentry (production crash + chunk-error reporting) ────────────
 // Gated on REACT_APP_SENTRY_DSN so dev/local runs don't need a DSN.
@@ -35,10 +36,16 @@ if (process.env.REACT_APP_SENTRY_DSN) {
 initCapacitor();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    <AppErrorBoundary>
-      <App />
-    </AppErrorBoundary>
-  </React.StrictMode>
-);
+// Language pack render se PEHLE load hota hai. Warna Hindi/English wale user
+// ko pehla frame Hinglish me dikhta aur uske turant baad poori UI badal jaati.
+// Default (Hinglish) pack bundle me hi hai, to uske liye ye instant resolve
+// hota hai — sirf hi/en par ek chhota dynamic import lagta hai.
+initI18n().finally(() => {
+  root.render(
+    <React.StrictMode>
+      <AppErrorBoundary>
+        <App />
+      </AppErrorBoundary>
+    </React.StrictMode>
+  );
+});

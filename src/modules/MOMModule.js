@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import ExportMenu from "../components/DataExport";
+import { t } from "../i18n";
 
 // ── ICONS ──────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -59,22 +60,22 @@ const MEETING_TYPES=["Site Review","Client Meeting","Internal Team","Progress Re
 
 const NAV=[
   {sec:null,items:[
-    {id:"dashboard",l:"Dashboard",I:IcHome},
-    {id:"projects",l:"Projects",I:IcProj},
+    {id:"dashboard",get l() { return t("common.dashboard"); },I:IcHome},
+    {id:"projects",get l() { return t("common.projects"); },I:IcProj},
     {id:"crm",l:"CRM",I:IcCRM},
-    {id:"tasks",l:"Tasks",I:IcTask},
-    {id:"team",l:"Team",I:IcTeam},
+    {id:"tasks",get l() { return t("common.tasks"); },I:IcTask},
+    {id:"team",get l() { return t("common.team"); },I:IcTeam},
   ]},
   {sec:"FINANCE & OPS",items:[
-    {id:"finance",l:"Finance",I:IcFin},
-    {id:"procurement",l:"Procurement",I:IcProc},
-    {id:"warehouse",l:"Warehouse",I:IcWH},
-    {id:"payroll",l:"Payroll",I:IcPay},
+    {id:"finance",get l() { return t("common.finance"); },I:IcFin},
+    {id:"procurement",get l() { return t("common.procurement"); },I:IcProc},
+    {id:"warehouse",get l() { return t("common.warehouse"); },I:IcWH},
+    {id:"payroll",get l() { return t("common.payroll"); },I:IcPay},
   ]},
   {sec:"MORE",items:[
     {id:"mom",l:"MOM",I:IcMOM},
-    {id:"reports",l:"Reports",I:IcRep},
-    {id:"settings",l:"Settings",I:IcSet},
+    {id:"reports",get l() { return t("common.reports"); },I:IcRep},
+    {id:"settings",get l() { return t("common.settings"); },I:IcSet},
   ]},
 ];
 
@@ -139,7 +140,7 @@ function MOMCard({mom,onOpen,onUpdate}){
       {/* Action items progress */}
       <div style={{marginBottom:6}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-          <span style={{fontSize:10.5,color:T.t3}}>Action Items</span>
+          <span style={{fontSize:10.5,color:T.t3}}>{t("mom.action_items")}</span>
           <span style={{fontSize:10.5,fontWeight:600,color:pct===100?T.grn:overdueActions>0?T.amb:T.t3}}>{doneActions}/{totalActions} done</span>
         </div>
         <div style={{height:4,background:T.b1,borderRadius:4,overflow:"hidden"}}>
@@ -148,10 +149,10 @@ function MOMCard({mom,onOpen,onUpdate}){
       </div>
       {/* Footer */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:8,borderTop:`1px solid ${T.b1}`}}>
-        <span style={{fontSize:10.5,color:T.t4}}>By {mom.conductedBy}</span>
+        <span style={{fontSize:10.5,color:T.t4}}>{t("mom.by_conductedby", { conductedBy: mom.conductedBy })}</span>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           {overdueActions>0&&<Pill label={`${overdueActions} overdue`} c={T.amb} bg={T.ambL} brd={T.ambM}/>}
-          {mom.sharedWith.length>0&&<span style={{fontSize:10,color:T.grn,display:"flex",alignItems:"center",gap:3}}><IcShare size={10} color={T.grn}/>Shared</span>}
+          {mom.sharedWith.length>0&&<span style={{fontSize:10,color:T.grn,display:"flex",alignItems:"center",gap:3}}><IcShare size={10} color={T.grn}/>{t("mom.shared")}</span>}
           <Pill label={mom.status} c={T.grn} bg={T.grnL} brd={T.grnM}/>
         </div>
       </div>
@@ -226,7 +227,7 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
     setTimeout(()=>w.print(),400);
   };
 
-  const TABS=[{id:"details",l:"Details"},{id:"discussion",l:"Discussion"},{id:"actions",l:`Actions (${pendingCount} pending)`},{id:"next",l:"Next Meeting"}];
+  const TABS=[{id:"details",l:t("app.details")},{id:"discussion",l:t("mom.discussion")},{id:"actions",l:t("mom.actions_pendingcount_pending", { pendingCount })},{id:"next",l:t("mom.next_meeting")}];
 
   return(<>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
@@ -244,12 +245,12 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
             <div style={{fontSize:11.5,color:"rgba(255,255,255,0.55)",display:"flex",gap:12,flexWrap:"wrap"}}>
               <span>{fmtDate(mom.date)} · {mom.time}</span>
               <span>{mom.site}</span>
-              <span>By {mom.conductedBy}</span>
+              <span>{t("mom.by_conductedby", { conductedBy: mom.conductedBy })}</span>
             </div>
           </div>
           <div style={{display:"flex",gap:5,flexShrink:0}}>
             <button onClick={printMOM} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",borderRadius:6,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-              <IcPrint size={12} color="white"/> Print
+              <IcPrint size={12} color="white"/> {t("mom.print")}
             </button>
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={15}/></button>
           </div>
@@ -281,7 +282,7 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
         {activeTab==="details"&&(
           <div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
-              {[{l:"Date",v:fmtDate(mom.date)},{l:"Time",v:mom.time},{l:"Venue",v:mom.venue},{l:"Site / Project",v:mom.site},{l:"Conducted By",v:mom.conductedBy},{l:"Meeting Type",v:mom.type}].map(({l,v})=>(
+              {[{l:t("common.date"),v:fmtDate(mom.date)},{l:t("mom.time"),v:mom.time},{l:t("mom.venue"),v:mom.venue},{l:t("mom.site_project"),v:mom.site},{l:t("mom.conducted_by"),v:mom.conductedBy},{l:t("mom.meeting_type"),v:mom.type}].map(({l,v})=>(
                 <div key={l} style={{padding:"9px 11px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`}}>
                   <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{l}</div>
                   <div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{v}</div>
@@ -290,12 +291,12 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
             </div>
             {/* Agenda */}
             <div style={{padding:"11px 13px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:8,marginBottom:12}}>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Agenda</div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("mom.agenda")}</div>
               <pre style={{fontSize:12.5,color:T.t2,lineHeight:1.7,margin:0,fontFamily:"'Segoe UI',sans-serif",whiteSpace:"pre-wrap"}}>{mom.agenda}</pre>
             </div>
             {/* Notes */}
             {mom.notes&&<div style={{padding:"11px 13px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:8}}>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.amb,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>Notes</div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.amb,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>{t("common.notes")}</div>
               <div style={{fontSize:12.5,color:"#92400E",lineHeight:1.6}}>{mom.notes}</div>
             </div>}
           </div>
@@ -320,7 +321,7 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
           <div>
             {/* Summary */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
-              {[{l:"Total",v:actions.length,c:T.blu},{l:"Done",v:actions.filter(a=>a.status==="Done").length,c:T.grn},{l:"Pending",v:actions.filter(a=>a.status!=="Done").length,c:T.amb}].map((s,i)=>(
+              {[{l:t("common.total"),v:actions.length,c:T.blu},{l:t("common.done"),v:actions.filter(a=>a.status==="Done").length,c:T.grn},{l:t("common.pending"),v:actions.filter(a=>a.status!=="Done").length,c:T.amb}].map((s,i)=>(
                 <div key={i} style={{padding:"9px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`,textAlign:"center",borderTop:`3px solid ${s.c}`}}>
                   <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
                   <div style={{fontSize:10,color:T.t4}}>{s.l}</div>
@@ -370,26 +371,26 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
         {activeTab==="next"&&mom.nextMeeting&&(
           <div>
             <div style={{padding:"14px 16px",background:T.bluL,border:`1.5px solid ${T.bluM}`,borderRadius:10,marginBottom:14}}>
-              <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Next Meeting Scheduled</div>
+              <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>{t("mom.next_meeting_scheduled")}</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
                 <div style={{background:"white",padding:"9px 11px",borderRadius:7,border:`1px solid ${T.bluM}`}}>
-                  <div style={{fontSize:9.5,color:T.t4,marginBottom:2}}>Date</div>
+                  <div style={{fontSize:9.5,color:T.t4,marginBottom:2}}>{t("common.date")}</div>
                   <div style={{fontSize:14,fontWeight:700,color:T.blu}}>{fmtDate(mom.nextMeeting.date)}</div>
                 </div>
                 <div style={{background:"white",padding:"9px 11px",borderRadius:7,border:`1px solid ${T.bluM}`}}>
-                  <div style={{fontSize:9.5,color:T.t4,marginBottom:2}}>Time</div>
+                  <div style={{fontSize:9.5,color:T.t4,marginBottom:2}}>{t("mom.time")}</div>
                   <div style={{fontSize:14,fontWeight:700,color:T.blu}}>{mom.nextMeeting.time}</div>
                 </div>
               </div>
               <div style={{marginTop:9,padding:"9px 11px",background:"white",borderRadius:7,border:`1px solid ${T.bluM}`}}>
-                <div style={{fontSize:9.5,color:T.t4,marginBottom:2}}>Agenda</div>
+                <div style={{fontSize:9.5,color:T.t4,marginBottom:2}}>{t("mom.agenda")}</div>
                 <div style={{fontSize:12.5,color:T.t2}}>{mom.nextMeeting.agenda}</div>
               </div>
             </div>
             {/* Pending action items to carry forward */}
             {actions.filter(a=>a.status!=="Done").length>0&&(
               <div style={{padding:"11px 13px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:8}}>
-                <div style={{fontSize:11,fontWeight:700,color:T.amb,marginBottom:7}}>Carry Forward Actions ({actions.filter(a=>a.status!=="Done").length})</div>
+                <div style={{fontSize:11,fontWeight:700,color:T.amb,marginBottom:7}}>{t("mom.carry_forward_actions_actions", { actions: actions.filter(a=>a.status!=="Done").length })}</div>
                 {actions.filter(a=>a.status!=="Done").map((a,i)=>(
                   <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:i<actions.filter(x=>x.status!=="Done").length-1?`1px solid ${T.ambM}`:"none"}}>
                     <span style={{fontSize:12,color:"#92400E"}}>{a.task.slice(0,40)}{a.task.length>40?"…":""}</span>
@@ -498,12 +499,12 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
       {/* Header */}
       <div style={{background:T.sb,padding:"13px 18px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-          <div style={{fontSize:14,fontWeight:700,color:"white"}}>Create New MOM</div>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("mom.create_new_mom")}</div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={14}/></button>
         </div>
         {/* Steps */}
         <div style={{display:"flex",gap:4}}>
-          {[{n:1,l:"Meeting Details"},{n:2,l:"Discussion Points"},{n:3,l:"Action Items"}].map((s,i)=>(
+          {[{n:1,l:t("mom.meeting_details")},{n:2,l:t("mom.discussion_points")},{n:3,l:t("mom.action_items")}].map((s,i)=>(
             <div key={s.n} style={{flex:1,display:"flex",alignItems:"center",gap:5}}>
               <div style={{width:22,height:22,borderRadius:"50%",background:step>s.n?T.grn:step===s.n?T.blu:T.b2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 {step>s.n?<IcChk size={11} color="white"/>:<span style={{fontSize:10,fontWeight:700,color:step===s.n?"white":T.t4}}>{s.n}</span>}
@@ -521,38 +522,38 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
         {step===1&&(
           <div>
             <div style={{marginBottom:10}}>
-              <label style={labelStyle}>Meeting Title *</label>
-              <input value={form.title} onChange={upd("title")} placeholder="e.g. Site Review — GF Slab Progress" style={inputStyle} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              <label style={labelStyle}>{t("mom.meeting_title")}</label>
+              <input value={form.title} onChange={upd("title")} placeholder={t("mom.e_g_site_review_gf_slab")} style={inputStyle} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-              <div><label style={labelStyle}>Meeting Type</label>
-                <SearchSelect value={form.type} options={MEETING_TYPES} onChange={v=>setForm(p=>({...p,type:v}))} placeholder="Select meeting type..."/>
+              <div><label style={labelStyle}>{t("mom.meeting_type")}</label>
+                <SearchSelect value={form.type} options={MEETING_TYPES} onChange={v=>setForm(p=>({...p,type:v}))} placeholder={t("mom.select_meeting_type")}/>
               </div>
-              <div><label style={labelStyle}>Site / Project {projectId && <span style={{color:T.t4,fontSize:9,marginLeft:4,textTransform:"none",letterSpacing:0,fontWeight:500}}>(locked)</span>}</label>
+              <div><label style={labelStyle}>{t("mom.site_project")} {projectId && <span style={{color:T.t4,fontSize:9,marginLeft:4,textTransform:"none",letterSpacing:0,fontWeight:500}}>{t("mom.locked")}</span>}</label>
                 {projectId ? (
-                  <div style={{...inputStyle, display:"flex", alignItems:"center", justifyContent:"space-between", background:T.surfaceB, color:T.t2, cursor:"not-allowed"}} title="MOM is scoped to this project — switch projects from the side nav to change.">
+                  <div style={{...inputStyle, display:"flex", alignItems:"center", justifyContent:"space-between", background:T.surfaceB, color:T.t2, cursor:"not-allowed"}} title={t("mom.mom_is_scoped_to_this_project")}>
                     <span>🔒 {projectName || form.site || "—"}</span>
                   </div>
                 ) : (
-                  <SearchSelect value={form.site} options={sites} onChange={v=>setForm(p=>({...p,site:v}))} placeholder={sites.length?"Select project...":"Loading projects..."}/>
+                  <SearchSelect value={form.site} options={sites} onChange={v=>setForm(p=>({...p,site:v}))} placeholder={sites.length?t("common.select_project"):t("common.loading_projects")}/>
                 )}
               </div>
-              <div><label style={labelStyle}>Date</label>
+              <div><label style={labelStyle}>{t("common.date")}</label>
                 <input type="date" value={form.date} onChange={upd("date")} style={inputStyle}/>
               </div>
-              <div><label style={labelStyle}>Time</label>
-                <input value={form.time} onChange={upd("time")} placeholder="10:30 AM" style={inputStyle}/>
+              <div><label style={labelStyle}>{t("mom.time")}</label>
+                <input value={form.time} onChange={upd("time")} placeholder={t("mom.10_30_am")} style={inputStyle}/>
               </div>
-              <div style={{gridColumn:"span 2"}}><label style={labelStyle}>Venue / Location</label>
-                <input value={form.venue} onChange={upd("venue")} placeholder="Site office, Head office, client location..." style={inputStyle}/>
+              <div style={{gridColumn:"span 2"}}><label style={labelStyle}>{t("mom.venue_location")}</label>
+                <input value={form.venue} onChange={upd("venue")} placeholder={t("mom.site_office_head_office_client_location")} style={inputStyle}/>
               </div>
-              <div><label style={labelStyle}>Conducted By</label>
-                <SearchSelect value={form.conductedBy} options={team} onChange={v=>setForm(p=>({...p,conductedBy:v}))} placeholder={team.length?"Select user...":"Loading users..."}/>
+              <div><label style={labelStyle}>{t("mom.conducted_by")}</label>
+                <SearchSelect value={form.conductedBy} options={team} onChange={v=>setForm(p=>({...p,conductedBy:v}))} placeholder={team.length?t("mom.select_user"):t("mom.loading_users")}/>
               </div>
             </div>
             {/* Attendees */}
             <div style={{marginBottom:10}}>
-              <label style={labelStyle}>Attendees</label>
+              <label style={labelStyle}>{t("mom.attendees")}</label>
               <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:7}}>
                 {team.map(t=>{
                   const name = t.label;
@@ -564,17 +565,17 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
                     </button>
                   );
                 })}
-                {team.length===0 && <span style={{fontSize:11,color:T.t4,fontStyle:"italic",padding:"5px 0"}}>Loading users...</span>}
+                {team.length===0 && <span style={{fontSize:11,color:T.t4,fontStyle:"italic",padding:"5px 0"}}>{t("mom.loading_users")}</span>}
               </div>
               <div style={{display:"flex",gap:6}}>
-                <input value={attendeeInput} onChange={e=>setAttendeeInput(e.target.value)} placeholder="Add custom attendee name..." style={{...inputStyle,flex:1}} onKeyDown={e=>e.key==="Enter"&&addCustomAttendee()}/>
-                <button onClick={addCustomAttendee} style={{padding:"0 12px",borderRadius:7,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>Add</button>
+                <input value={attendeeInput} onChange={e=>setAttendeeInput(e.target.value)} placeholder={t("mom.add_custom_attendee_name")} style={{...inputStyle,flex:1}} onKeyDown={e=>e.key==="Enter"&&addCustomAttendee()}/>
+                <button onClick={addCustomAttendee} style={{padding:"0 12px",borderRadius:7,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>{t("common.add")}</button>
               </div>
             </div>
             {/* Agenda */}
             <div style={{marginBottom:10}}>
-              <label style={labelStyle}>Agenda</label>
-              <textarea value={form.agenda} onChange={upd("agenda")} rows={3} placeholder={"1. Topic one\n2. Topic two\n3. Any other matter"}
+              <label style={labelStyle}>{t("mom.agenda")}</label>
+              <textarea value={form.agenda} onChange={upd("agenda")} rows={3} placeholder={t("mom.1_topic_one_2_topic_two")}
                 style={{...inputStyle,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
             </div>
           </div>
@@ -583,7 +584,7 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
         {/* STEP 2 — Discussion Points */}
         {step===2&&(
           <div>
-            <div style={{fontSize:12,color:T.t3,marginBottom:12}}>Record key points discussed during the meeting:</div>
+            <div style={{fontSize:12,color:T.t3,marginBottom:12}}>{t("mom.record_key_points_discussed_during_the")}</div>
             {discussion.map((d,i)=>(
               <div key={i} style={{display:"flex",gap:8,marginBottom:8,alignItems:"flex-start"}}>
                 <div style={{width:24,height:24,borderRadius:"50%",background:T.blu,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:11,fontWeight:700,color:"white",marginTop:7}}>{i+1}</div>
@@ -598,14 +599,14 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
                   }}
                   style={{flex:1,padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                {discussion.length>1&&<button onClick={()=>removeDiscussion(i)} title="Remove point"
+                {discussion.length>1&&<button onClick={()=>removeDiscussion(i)} title={t("mom.remove_point")}
                   style={{background:"none",border:"none",cursor:"pointer",color:T.t4,marginTop:8,display:"flex",padding:4,borderRadius:4,transition:"background .12s"}}
                   onMouseEnter={el=>{el.currentTarget.style.background=T.redL;el.currentTarget.style.color=T.red;}}
                   onMouseLeave={el=>{el.currentTarget.style.background="none";el.currentTarget.style.color=T.t4;}}><IcX size={13}/></button>}
               </div>
             ))}
             <button onClick={addDiscussion} style={{display:"flex",alignItems:"center",gap:5,padding:"8px 14px",borderRadius:7,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:600,cursor:"pointer",marginTop:4}}>
-              <IcAdd size={13} color={T.blu}/> Add Discussion Point
+              <IcAdd size={13} color={T.blu}/> {t("mom.add_discussion_point")}
             </button>
           </div>
         )}
@@ -613,50 +614,50 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
         {/* STEP 3 — Action Items */}
         {step===3&&(
           <div>
-            <div style={{fontSize:12,color:T.t3,marginBottom:12}}>Define action items with owners and deadlines:</div>
+            <div style={{fontSize:12,color:T.t3,marginBottom:12}}>{t("mom.define_action_items_with_owners_and")}</div>
             {actions.map((a,i)=>(
               <div key={i} style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,padding:"11px 12px",marginBottom:8}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
-                  <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>Action {i+1}</span>
+                  <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>{t("mom.action_i", { i: i+1 })}</span>
                   {actions.length>1&&<button onClick={()=>removeAction(i)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex"}}><IcX size={12}/></button>}
                 </div>
                 <div style={{marginBottom:7}}>
                   <input ref={el=>{if(el) actionRefs.current[i]=el;}}
-                    value={a.task} onChange={e=>updAction(i,"task",e.target.value)} placeholder="What needs to be done?"
+                    value={a.task} onChange={e=>updAction(i,"task",e.target.value)} placeholder={t("mom.what_needs_to_be_done")}
                     style={{...inputStyle}}
                     onFocus={e=>e.target.style.borderColor=T.blu}
                     onBlur={e=>e.target.style.borderColor=T.b1}
                     onKeyDown={e=>{ if(e.key==="Enter" && i===actions.length-1){ e.preventDefault(); addAction(); } }}/>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                  <div><label style={labelStyle}>Assign To</label>
-                    <SearchSelect value={a.assignee} options={team} onChange={v=>updAction(i,"assignee",v)} placeholder={team.length?"Select user...":"Loading..."}/>
+                  <div><label style={labelStyle}>{t("mom.assign_to")}</label>
+                    <SearchSelect value={a.assignee} options={team} onChange={v=>updAction(i,"assignee",v)} placeholder={team.length?t("mom.select_user"):t("common.loading")}/>
                   </div>
-                  <div><label style={labelStyle}>Due Date</label>
+                  <div><label style={labelStyle}>{t("common.due_date")}</label>
                     <input type="date" value={a.dueDate} onChange={e=>updAction(i,"dueDate",e.target.value)} style={{...inputStyle}}/>
                   </div>
-                  <div><label style={labelStyle}>Priority</label>
-                    <SearchSelect value={a.priority} options={["High","Medium","Low"]} onChange={v=>updAction(i,"priority",v)} placeholder="Priority"/>
+                  <div><label style={labelStyle}>{t("common.priority")}</label>
+                    <SearchSelect value={a.priority} options={["High","Medium","Low"]} onChange={v=>updAction(i,"priority",v)} placeholder={t("common.priority")}/>
                   </div>
                 </div>
               </div>
             ))}
             <button onClick={addAction} style={{display:"flex",alignItems:"center",gap:5,padding:"8px 14px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:12,fontWeight:600,cursor:"pointer",marginTop:4}}>
-              <IcAdd size={13} color={T.grn}/> Add Action Item
+              <IcAdd size={13} color={T.grn}/> {t("mom.add_action_item")}
             </button>
             {/* Next meeting */}
             <div style={{marginTop:14,padding:"12px 14px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:8}}>
-              <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:8}}>Next Meeting (optional)</div>
+              <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:8}}>{t("mom.next_meeting_optional")}</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-                <div><label style={labelStyle}>Date</label><input type="date" value={form.nextMeetingDate} onChange={upd("nextMeetingDate")} style={inputStyle}/></div>
-                <div><label style={labelStyle}>Time</label><input value={form.nextMeetingTime} onChange={upd("nextMeetingTime")} placeholder="11:00 AM" style={inputStyle}/></div>
-                <div style={{gridColumn:"span 2"}}><label style={labelStyle}>Agenda Preview</label><input value={form.nextMeetingAgenda} onChange={upd("nextMeetingAgenda")} placeholder="What will be discussed..." style={inputStyle}/></div>
+                <div><label style={labelStyle}>{t("common.date")}</label><input type="date" value={form.nextMeetingDate} onChange={upd("nextMeetingDate")} style={inputStyle}/></div>
+                <div><label style={labelStyle}>{t("mom.time")}</label><input value={form.nextMeetingTime} onChange={upd("nextMeetingTime")} placeholder={t("mom.11_00_am")} style={inputStyle}/></div>
+                <div style={{gridColumn:"span 2"}}><label style={labelStyle}>{t("mom.agenda_preview")}</label><input value={form.nextMeetingAgenda} onChange={upd("nextMeetingAgenda")} placeholder={t("mom.what_will_be_discussed")} style={inputStyle}/></div>
               </div>
             </div>
             {/* Notes */}
             <div style={{marginTop:10}}>
-              <label style={labelStyle}>Additional Notes</label>
-              <textarea value={form.notes} onChange={upd("notes")} rows={2} placeholder="Any other important notes, decisions, or remarks..."
+              <label style={labelStyle}>{t("mom.additional_notes")}</label>
+              <textarea value={form.notes} onChange={upd("notes")} rows={2} placeholder={t("mom.any_other_important_notes_decisions_or")}
                 style={{...inputStyle,resize:"vertical"}}/>
             </div>
           </div>
@@ -665,17 +666,17 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
 
       {/* Footer nav */}
       <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
-        {step>1&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,padding:"10px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>← Back</button>}
+        {step>1&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,padding:"10px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.back_2")}</button>}
         {step<3&&<button onClick={()=>setStep(s=>s+1)} disabled={step===1&&!form.title.trim()}
           style={{flex:2,padding:"10px",borderRadius:7,background:step===1&&!form.title.trim()?T.b1:T.blu,color:step===1&&!form.title.trim()?T.t4:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:step===1&&!form.title.trim()?"not-allowed":"pointer"}}>
-          Next →
+         {t("mom.next")}
         </button>}
         {step===3&&<>
           {saveErr&&<div style={{flex:"1 1 100%",order:-1,padding:"6px 10px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,fontSize:11,color:T.red,marginBottom:4}}>{saveErr}</div>}
           <button onClick={save} disabled={saving}
             style={{flex:2,padding:"10px",borderRadius:7,background:saving?T.grn+"99":T.grn,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
             {saving?<span style={{width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"white",borderRadius:"50%",display:"inline-block",animation:"spin .7s linear infinite"}}/>:<IcChk size={14} color="white"/>}
-            {saving?"Saving…":"Save MOM"}
+            {saving?t("common.saving_2"):t("mom.save_mom")}
           </button>
         </>}
       </div>
@@ -685,11 +686,11 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
 
 // ── MEETING MODE (AI: record → transcribe → extract → create) ──
 const MM_TYPE={
-  mr:{label:"Material",color:T.amb,bg:T.ambL,tip:"→ Material Request banega"},
-  task:{label:"Task",color:T.blu,bg:T.bluL,tip:"→ Project Task banega"},
-  todo:{label:"Todo",color:T.grn,bg:T.grnL,tip:"→ Todo banega"},
-  issue:{label:"Issue",color:T.red,bg:T.redL,tip:"→ Issue (Site Issues task me)"},
-  task_update:{label:"Task update",color:T.pur,bg:T.purL,tip:"→ Existing task update hoga"},
+  mr:{get label() { return t("common.material"); },color:T.amb,bg:T.ambL,tip:"→ Material Request banega"},
+  task:{get label() { return t("mom.task"); },color:T.blu,bg:T.bluL,tip:"→ Project Task banega"},
+  todo:{get label() { return t("mom.todo"); },color:T.grn,bg:T.grnL,tip:"→ Todo banega"},
+  issue:{get label() { return t("mom.issue"); },color:T.red,bg:T.redL,tip:"→ Issue (Site Issues task me)"},
+  task_update:{get label() { return t("mom.task_update"); },color:T.pur,bg:T.purL,tip:"→ Existing task update hoga"},
 };
 const MM_ORDER=["mr","task","issue","task_update","todo"];
 // Fuzzy-match an AI-extracted assignee name to a real company user.
@@ -730,35 +731,35 @@ function MMItem({it,meta,onPatch,inputStyle,allMode,projects}){
         <div style={{flex:1,minWidth:0}}>
           {isUpd?(
             <>
-              <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:6}}>{it.task_name||it.title||"Existing task"}{allMode&&it.project?<span style={{fontSize:10,fontWeight:500,color:T.t4}}>  ·  {it.project}</span>:null}</div>
+              <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:6}}>{it.task_name||it.title||t("mom.existing_task")}{allMode&&it.project?<span style={{fontSize:10,fontWeight:500,color:T.t4}}>  ·  {it.project}</span>:null}</div>
               <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
                 <select value={it.status||""} onChange={e=>onPatch(it._id,{status:e.target.value})} style={{...inp,width:"auto"}}>
-                  <option value="">— status —</option>
+                  <option value="">{t("mom.status")}</option>
                   {["Not Started","Ongoing","Completed"].map(s=><option key={s}>{s}</option>)}
                 </select>
                 <input type="number" value={it.progress>=0?it.progress:""} onChange={e=>onPatch(it._id,{progress:e.target.value===""?-1:Number(e.target.value)})} placeholder="%" style={{...inp,width:64}}/>
-                <input value={it.note||""} onChange={e=>onPatch(it._id,{note:e.target.value})} placeholder="Progress note (optional)" style={{...inp,flex:1,minWidth:120}}/>
+                <input value={it.note||""} onChange={e=>onPatch(it._id,{note:e.target.value})} placeholder={t("mom.progress_note_optional")} style={{...inp,flex:1,minWidth:120}}/>
               </div>
-              <div style={{fontSize:9.5,color:it.task_id?T.t4:T.red}}>{it.task_id?("Task #"+it.task_id):"⚠ koi existing task match nahi — skip ho jayega"}</div>
+              <div style={{fontSize:9.5,color:it.task_id?T.t4:T.red}}>{it.task_id?("Task #"+it.task_id):t("mom.koi_existing_task_match_nahi_skip")}</div>
             </>
           ):(
             <>
               <input value={it.title} onChange={e=>onPatch(it._id,{title:e.target.value})} style={{...inp,fontWeight:600,fontSize:12.5,marginBottom:6}}/>
               {it.type==="mr"?(
                 <div style={{display:"flex",gap:6}}>
-                  <input type="number" value={it.quantity} onChange={e=>onPatch(it._id,{quantity:e.target.value})} placeholder="Qty" style={{...inp,width:70}}/>
+                  <input type="number" value={it.quantity} onChange={e=>onPatch(it._id,{quantity:e.target.value})} placeholder={t("common.qty")} style={{...inp,width:70}}/>
                   <input value={it.unit} onChange={e=>onPatch(it._id,{unit:e.target.value})} placeholder="unit" style={{...inp,width:80}}/>
-                  <input value={it.due_date} onChange={e=>onPatch(it._id,{due_date:e.target.value})} placeholder="YYYY-MM-DD" style={{...inp,flex:1}}/>
+                  <input value={it.due_date} onChange={e=>onPatch(it._id,{due_date:e.target.value})} placeholder={t("mom.yyyy_mm_dd")} style={{...inp,flex:1}}/>
                 </div>
               ):(
-                <textarea value={it.description} onChange={e=>onPatch(it._id,{description:e.target.value})} rows={2} placeholder="Details" style={{...inp,width:"100%",resize:"none",lineHeight:1.4,fontFamily:"inherit"}}/>
+                <textarea value={it.description} onChange={e=>onPatch(it._id,{description:e.target.value})} rows={2} placeholder={t("app.details")} style={{...inp,width:"100%",resize:"none",lineHeight:1.4,fontFamily:"inherit"}}/>
               )}
               <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,flexWrap:"wrap"}}>
                 {it.type!=="mr"&&<select value={it.priority} onChange={e=>onPatch(it._id,{priority:e.target.value})} style={{...inp,padding:"4px 7px",width:"auto"}}>{["Low","Medium","High"].map(p=><option key={p}>{p}</option>)}</select>}
                 {allMode&&(
                   <select value={it.project||""} onChange={e=>onPatch(it._id,{project:e.target.value})}
                     style={{...inp,padding:"4px 7px",width:"auto",maxWidth:150,border:`1.5px solid ${needProj?T.amb:T.b1}`,color:needProj?T.amb:T.t1}}>
-                    <option value="">⚠ project…</option>
+                    <option value="">{t("mom.project")}</option>
                     {projects.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
                   </select>
                 )}
@@ -815,7 +816,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
 
   const startRec=async()=>{
     setErr(""); setRecInfo("");
-    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!window.MediaRecorder){ setErr("Is browser pe recording support nahi — neeche transcript paste karein."); return; }
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!window.MediaRecorder){ setErr(t("mom.is_browser_pe_recording_support_nahi")); return; }
     try{
       const stream=await navigator.mediaDevices.getUserMedia({audio:true});
       streamRef.current=stream;
@@ -827,13 +828,13 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
       mrRef.current=mr; mr.start();
       setRecording(true); setRecSecs(0);
       timerRef.current=setInterval(()=>setRecSecs(s=>s+1),1000);
-    }catch(e){ if(streamRef.current){try{streamRef.current.getTracks().forEach(t=>t.stop());}catch(_){}} setErr("Mic permission chahiye — allow karke dobara try karein."); }
+    }catch(e){ if(streamRef.current){try{streamRef.current.getTracks().forEach(t=>t.stop());}catch(_){}} setErr(t("mom.mic_permission_chahiye_allow_karke_dobara")); }
   };
   const stopRec=()=>{ if(timerRef.current){clearInterval(timerRef.current);timerRef.current=null;} try{ if(mrRef.current&&mrRef.current.state!=="inactive") mrRef.current.stop(); }catch(e){} setRecording(false); };
   const onRecStop=async()=>{
     const blob=new Blob(chunksRef.current,{type:(mrRef.current&&mrRef.current.mimeType)||"audio/webm"}); chunksRef.current=[];
     if(streamRef.current){try{streamRef.current.getTracks().forEach(t=>t.stop());}catch(e){} streamRef.current=null;}
-    if(!blob.size){ setErr("Recording khali rahi — dobara try karein."); return; }
+    if(!blob.size){ setErr(t("mom.recording_khali_rahi_dobara_try_karein")); return; }
     setTranscribing(true);
     try{
       const b64=await blobToB64(blob);
@@ -843,12 +844,12 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
       setTranscript(p=>(p&&p.trim()?p.trim()+" ":"")+(r.transcript||""));
       if(r.audio_url) setAudioUrl(r.audio_url);
       if(r.mock) setRecInfo("Demo transcript (backend pe SARVAM_API_KEY set karein real transcription ke liye).");
-    }catch(e){ setTranscribing(false); setErr("Audio process nahi hua — dobara try karein."); }
+    }catch(e){ setTranscribing(false); setErr(t("mom.audio_process_nahi_hua_dobara_try")); }
   };
 
   const doExtract=async()=>{
-    if(mode==="single"&&!proj){ setErr("Single project mode me pehle project select karein."); return; }
-    if(!transcript.trim()){ setErr("Pehle record karein ya transcript daalein."); return; }
+    if(mode==="single"&&!proj){ setErr(t("mom.single_project_mode_me_pehle_project")); return; }
+    if(!transcript.trim()){ setErr(t("mom.pehle_record_karein_ya_transcript_daalein")); return; }
     setErr(""); setExtracting(true);
     const r=await api.post("/meetings/extract",{transcript:transcript.trim(),mode,project_id:proj||undefined,project_name:projName(proj)||undefined,title:title.trim()||undefined,audio_url:audioUrl||undefined});
     setExtracting(false);
@@ -869,7 +870,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
   // Review → Overview: validate every item has a project before the summary/submit
   const goOverview=()=>{
     const chosen=items.filter(it=>it._include);
-    if(!chosen.length){ setErr("Kam se kam ek item select karein."); return; }
+    if(!chosen.length){ setErr(t("mom.kam_se_kam_ek_item_select")); return; }
     const need=missingProj();
     if(need.length){ setErr(mode==="all"?`${need.length} item ko project assign karein (dropdown).`:"Material/Task/Issue ke liye project select karein."); return; }
     setErr(""); setStep("overview");
@@ -877,7 +878,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
 
   const commit=async()=>{
     const chosen=items.filter(it=>it._include);
-    if(!chosen.length){ setErr("Kam se kam ek item select karein."); return; }
+    if(!chosen.length){ setErr(t("mom.kam_se_kam_ek_item_select")); return; }
     const allMode=mode==="all";
     const need=missingProj();
     if(need.length){ setErr(allMode?`${need.length} item ko project assign karein (dropdown).`:"Material/Task/Issue ke liye project select karein."); setStep("review"); return; }
@@ -892,7 +893,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
         const list=(lr&&lr.data)||[];
         const found=list.find(t=>(t.name||"").toLowerCase()==="site issues");
         if(found) tid=found.id;
-        else { const cr=await api.post("/tasks",{project_id:pid,name:"Site Issues",title:"Site Issues",category:"General"}); tid=cr?.data?.id||null; }
+        else { const cr=await api.post("/tasks",{project_id:pid,name:"Site Issues",title:t("mom.site_issues"),category:"General"}); tid=cr?.data?.id||null; }
       }catch(e){}
       holderCache[pid]=tid; return tid;
     };
@@ -975,8 +976,8 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
             <Ic d={MIC_PATH} size={16} color="#C4B5FD"/>
           </div>
           <div style={{flex:1}}>
-            <div style={{fontSize:14,fontWeight:700,color:"white"}}>Meeting Mode</div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>{step==="review"?"Review & edit — items + project check karein":step==="overview"?"Overview — ek nazar me, phir Submit":step==="done"?"Ho gaya":"Record ya paste karein → AI nikalegi action items"}</div>
+            <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("mom.meeting_mode")}</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>{step==="review"?t("mom.review_edit_items_project_check_karein"):step==="overview"?t("mom.overview_ek_nazar_me_phir_submit"):step==="done"?t("mom.ho_gaya"):t("mom.record_ya_paste_karein_ai_nikalegi")}</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><IcX size={18} color="rgba(255,255,255,0.7)"/></button>
         </div>
@@ -986,68 +987,68 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
           {step==="capture"&&(
             <>
               <div style={{display:"flex",gap:5,marginBottom:12,background:T.sltL,padding:4,borderRadius:9}}>
-                {[{k:"single",l:"Single project"},{k:"all",l:"All projects"}].map(o=>(
+                {[{k:"single",l:t("mom.single_project")},{k:"all",l:t("mom.all_projects")}].map(o=>(
                   <button key={o.k} onClick={()=>setMode(o.k)}
                     style={{flex:1,padding:"8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:mode===o.k?T.surface:"transparent",color:mode===o.k?T.t1:T.t3,boxShadow:mode===o.k?"0 1px 3px rgba(0,0,0,0.12)":"none"}}>{o.l}</button>
                 ))}
               </div>
               {mode==="single"?(
                 <div style={{marginBottom:12}}>
-                  <label style={labelStyle}>Project <span style={{color:T.t4,textTransform:"none",fontWeight:500}}>(Material/Task ke liye)</span></label>
+                  <label style={labelStyle}>{t("common.project")} <span style={{color:T.t4,textTransform:"none",fontWeight:500}}>{t("mom.material_task_ke_liye")}</span></label>
                   <select value={proj} onChange={e=>setProj(e.target.value)} style={inputStyle}>
-                    <option value="">Select project…</option>
+                    <option value="">{t("mom.select_project")}</option>
                     {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
               ):(
                 <div style={{marginBottom:12,fontSize:11,color:T.t2,background:T.purL,border:`1px solid ${T.purM}`,borderRadius:8,padding:"9px 11px",lineHeight:1.5}}>
-                  <b style={{color:T.pur}}>All-projects mode:</b> ek hi recording me saare projects ki baat karein (ek-ek karke). AI har item ko uske project se jod dega + existing tasks update karega. Project pick zaroori nahi.
+                  <b style={{color:T.pur}}>{t("mom.all_projects_mode")}</b> {t("mom.ek_hi_recording_me_saare_projects")}
                 </div>
               )}
               <div style={{marginBottom:12}}>
-                <label style={labelStyle}>Meeting title</label>
+                <label style={labelStyle}>{t("mom.meeting_title_2")}</label>
                 {addingTitle?(
                   <div style={{display:"flex",gap:6}}>
-                    <input autoFocus value={title} onChange={e=>setTitle(e.target.value)} placeholder="Apna meeting title likhein…" style={inputStyle}
+                    <input autoFocus value={title} onChange={e=>setTitle(e.target.value)} placeholder={t("mom.apna_meeting_title_likhein")} style={inputStyle}
                       onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); addCustomTitle(title); } }}/>
-                    <button onClick={()=>addCustomTitle(title)} style={{...btnS,padding:"8px 14px",whiteSpace:"nowrap"}}>Save</button>
+                    <button onClick={()=>addCustomTitle(title)} style={{...btnS,padding:"8px 14px",whiteSpace:"nowrap"}}>{t("common.save")}</button>
                   </div>
                 ):(
                   <select value={titleOptions.includes(title)?title:""} onChange={e=>{ const v=e.target.value; if(v==="__add__"){ setTitle(""); setAddingTitle(true); } else setTitle(v); }} style={inputStyle}>
-                    <option value="">Select meeting title…</option>
+                    <option value="">{t("mom.select_meeting_title")}</option>
                     {titleOptions.map(t=><option key={t} value={t}>{t}</option>)}
-                    <option value="__add__">➕ Add new…</option>
+                    <option value="__add__">{t("mom.add_new")}</option>
                   </select>
                 )}
               </div>
               {transcribing?(
                 <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,padding:12,borderRadius:9,background:T.bluL,marginBottom:12}}>
                   <span style={{width:14,height:14,border:`2px solid ${T.blu}`,borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin .8s linear infinite"}}/>
-                  <span style={{fontSize:12.5,fontWeight:600,color:T.blu}}>Audio transcribe ho raha hai…</span>
+                  <span style={{fontSize:12.5,fontWeight:600,color:T.blu}}>{t("mom.audio_transcribe_ho_raha_hai")}</span>
                 </div>
               ):recording?(
                 <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:9,background:T.redL,border:`1px solid ${T.redM}`,marginBottom:12}}>
                   <span style={{width:11,height:11,borderRadius:"50%",background:T.red,animation:"mmpulse 1s ease-in-out infinite"}}/>
                   <span style={{fontSize:14,fontWeight:700,color:T.red,fontVariantNumeric:"tabular-nums"}}>{fmtSecs(recSecs)}</span>
-                  <span style={{fontSize:11.5,color:T.t3}}>Recording…</span>
-                  <button onClick={stopRec} style={{marginLeft:"auto",background:T.red,color:"white",border:"none",borderRadius:7,padding:"8px 15px",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>Stop & transcribe</button>
+                  <span style={{fontSize:11.5,color:T.t3}}>{t("mom.recording")}</span>
+                  <button onClick={stopRec} style={{marginLeft:"auto",background:T.red,color:"white",border:"none",borderRadius:7,padding:"8px 15px",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>{t("mom.stop_transcribe")}</button>
                 </div>
               ):(
                 <div style={{marginBottom:12}}>
                   <button onClick={startRec} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:11,background:T.pur,color:"white",border:"none",borderRadius:11,padding:"16px",fontSize:15.5,fontWeight:800,cursor:"pointer",boxShadow:"0 2px 10px rgba(124,58,237,0.28)"}}>
                     <span style={{width:30,height:30,borderRadius:15,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ic d={MIC_PATH} size={18} color="white"/></span>
-                    Start Meeting — Recording shuru karein
+                   {t("mom.start_meeting_recording_shuru_karein")}
                   </button>
-                  <div style={{textAlign:"center",fontSize:10.5,color:T.t4,marginTop:6}}>Meeting shuru karte hi record dabana na bhoolein 🎙️</div>
+                  <div style={{textAlign:"center",fontSize:10.5,color:T.t4,marginTop:6}}>{t("mom.meeting_shuru_karte_hi_record_dabana")}</div>
                 </div>
               )}
               {recInfo&&<div style={{fontSize:10.5,color:T.amb,marginTop:-6,marginBottom:10}}>{recInfo}</div>}
               <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 10px"}}>
-                <div style={{flex:1,height:1,background:T.b1}}/><span style={{fontSize:10,color:T.t4}}>ya likh ke daalein</span><div style={{flex:1,height:1,background:T.b1}}/>
+                <div style={{flex:1,height:1,background:T.b1}}/><span style={{fontSize:10,color:T.t4}}>{t("mom.ya_likh_ke_daalein")}</span><div style={{flex:1,height:1,background:T.b1}}/>
               </div>
-              <textarea value={transcript} onChange={e=>setTranscript(e.target.value)} rows={6} placeholder="Meeting ki baat-cheet yahan paste/type karein… (Hindi / Hinglish bhi chalega)" style={{...inputStyle,resize:"vertical",lineHeight:1.5}}/>
+              <textarea value={transcript} onChange={e=>setTranscript(e.target.value)} rows={6} placeholder={t("mom.meeting_ki_baat_cheet_yahan_paste")} style={{...inputStyle,resize:"vertical",lineHeight:1.5}}/>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
-                <button onClick={()=>{setTranscript(MM_SAMPLE);setErr("");}} style={{background:"none",border:"none",color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer",padding:0}}>Sample try karein</button>
+                <button onClick={()=>{setTranscript(MM_SAMPLE);setErr("");}} style={{background:"none",border:"none",color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer",padding:0}}>{t("mom.sample_try_karein")}</button>
                 <span style={{fontSize:10.5,color:T.t4}}>{transcript.trim()?transcript.trim().length+" chars":""}</span>
               </div>
             </>
@@ -1057,24 +1058,24 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
             <>
               {meeting&&meeting.summary?(
                 <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,padding:"10px 13px",marginBottom:14}}>
-                  <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>AI Summary</div>
+                  <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("mom.ai_summary")}</div>
                   <div style={{fontSize:12.5,color:T.t2,lineHeight:1.5}}>{meeting.summary}</div>
                 </div>
               ):null}
               {mode==="single"?(
                 <div style={{marginBottom:14}}>
-                  <label style={labelStyle}>Project <span style={{color:T.t4,textTransform:"none",fontWeight:500}}>(Material/Task ke liye zaroori)</span></label>
+                  <label style={labelStyle}>{t("common.project")} <span style={{color:T.t4,textTransform:"none",fontWeight:500}}>{t("mom.material_task_ke_liye_zaroori")}</span></label>
                   <select value={proj} onChange={e=>setProj(e.target.value)} style={inputStyle}>
-                    <option value="">Select project…</option>
+                    <option value="">{t("mom.select_project")}</option>
                     {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
               ):(
-                <div style={{marginBottom:12,fontSize:11,color:T.t3}}>Har item ka <b style={{color:T.pur}}>project</b> neeche check/correct karein — AI ne auto-assign kiya hai.</div>
+                <div style={{marginBottom:12,fontSize:11,color:T.t3}}>{t("mom.har_item_ka")} <b style={{color:T.pur}}>project</b> {t("mom.neeche_check_correct_karein_ai_ne")}</div>
               )}
               {audioUrl&&(
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                  <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>Recording</span>
+                  <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("mom.recording_2")}</span>
                   <audio src={audioUrl} controls style={{height:30,flex:1}}/>
                 </div>
               )}
@@ -1082,7 +1083,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
                 <div style={{background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9,padding:"10px 13px",marginBottom:14}}>
                   <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
                     <span style={{fontSize:15}}>{/rain|storm|drizzle|thunder/i.test(weather.condition||"")?"🌧️":((weather.temp||0)>=38?"☀️":"⛅")}</span>
-                    <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>Weather suggestions</span>
+                    <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{t("mom.weather_suggestions")}</span>
                     {weather.mock&&<span style={{fontSize:9,color:T.amb,background:T.ambL,padding:"2px 6px",borderRadius:5}}>demo</span>}
                   </div>
                   <div style={{fontSize:11,color:T.t3,marginBottom:8}}>{weather.summary}</div>
@@ -1092,13 +1093,13 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
                       <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                         <span style={{fontSize:9,fontWeight:700,color:MM_TYPE[s.type]?.color,background:MM_TYPE[s.type]?.bg,padding:"2px 6px",borderRadius:5}}>{MM_TYPE[s.type]?.label}</span>
                         <span style={{flex:1,fontSize:11.5,color:T.t2}}>{s.title}</span>
-                        <button onClick={()=>addSuggestion(s)} disabled={added} style={{background:added?T.grnL:T.blu,color:added?T.grn:"white",border:"none",borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:700,cursor:added?"default":"pointer"}}>{added?"✓ Added":"+ Add"}</button>
+                        <button onClick={()=>addSuggestion(s)} disabled={added} style={{background:added?T.grnL:T.blu,color:added?T.grn:"white",border:"none",borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:700,cursor:added?"default":"pointer"}}>{added?t("mom.added"):t("mom.add")}</button>
                       </div>
                     );
                   })}
                 </div>
               )}
-              {items.length===0&&<div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12.5}}>Is meeting me koi action item nahi mila.</div>}
+              {items.length===0&&<div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12.5}}>{t("mom.is_meeting_me_koi_action_item")}</div>}
               {MM_ORDER.map(tp=>{
                 const grp=items.filter(it=>it.type===tp); if(!grp.length) return null;
                 const meta=MM_TYPE[tp];
@@ -1122,7 +1123,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
             const names=Object.keys(groups);
             return(
               <>
-                <div style={{fontSize:12.5,color:T.t2,marginBottom:14,lineHeight:1.5}}>Sab kuch ek nazar me — har item apne <b>project</b> ke neeche. Theek lage to <b>Approve &amp; Create</b> karein, warna Back jaake edit karein.</div>
+                <div style={{fontSize:12.5,color:T.t2,marginBottom:14,lineHeight:1.5}}>{t("mom.sab_kuch_ek_nazar_me_har")} <b>project</b> {t("mom.ke_neeche_theek_lage_to")} <b>{t("mom.approve_create")}</b> {t("mom.karein_warna_back_jaake_edit_karein")}</div>
                 {names.map(pn=>(
                   <div key={pn} style={{marginBottom:14}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
@@ -1148,14 +1149,14 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
               <div>
                 <div style={{textAlign:"center",padding:"10px 0 16px"}}>
                   <div style={{width:54,height:54,borderRadius:27,background:T.grnL,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px"}}><IcChk size={28} color={T.grn}/></div>
-                  <div style={{fontSize:16,fontWeight:700,color:T.t1}}>{ok} item{ok!==1?"s":""} create ho gaye</div>
+                  <div style={{fontSize:16,fontWeight:700,color:T.t1}}>{t("mom.ok_itemok2_create_ho_gaye", { ok, ok2: ok!==1?"s":"" })}</div>
                   <div style={{fontSize:12,color:T.t3,marginTop:3}}>{(MM_ORDER.filter(tp=>by(tp)>0).map(tp=>`${by(tp)} ${MM_TYPE[tp].label}`).join(" · ")||"0 items")+(result.mom?" · 1 MOM logged":"")}</div>
                 </div>
                 {result.refs.map((r,i)=>(
                   <div key={i} style={{display:"flex",alignItems:"center",gap:10,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"9px 12px",marginBottom:7}}>
                     <span style={{fontSize:9.5,fontWeight:700,color:MM_TYPE[r.type].color,background:MM_TYPE[r.type].bg,padding:"3px 7px",borderRadius:5}}>{MM_TYPE[r.type].label}</span>
                     <span style={{flex:1,fontSize:12.5,color:T.t1}}>{r.title}</span>
-                    {r.ok?<span style={{fontSize:11,color:T.grn,fontWeight:600}}>{r.ref||"✓"}</span>:<span style={{fontSize:11,color:T.red,fontWeight:600}}>Fail</span>}
+                    {r.ok?<span style={{fontSize:11,color:T.grn,fontWeight:600}}>{r.ref||"✓"}</span>:<span style={{fontSize:11,color:T.red,fontWeight:600}}>{t("mom.fail")}</span>}
                   </div>
                 ))}
               </div>
@@ -1168,26 +1169,26 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
         {/* footer */}
         <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
           {step==="capture"&&(<>
-            <button onClick={onClose} style={btnS}>Cancel</button>
+            <button onClick={onClose} style={btnS}>{t("common.cancel")}</button>
             <div style={{flex:1}}/>
-            <button onClick={doExtract} disabled={extracting||!transcript.trim()} style={btnP(!extracting&&!!transcript.trim())}>{extracting?"AI soch rahi hai…":"Extract action items →"}</button>
+            <button onClick={doExtract} disabled={extracting||!transcript.trim()} style={btnP(!extracting&&!!transcript.trim())}>{extracting?t("mom.ai_soch_rahi_hai"):t("mom.extract_action_items")}</button>
           </>)}
           {step==="review"&&(<>
-            <button onClick={()=>setStep("capture")} style={btnS}>← Back</button>
+            <button onClick={()=>setStep("capture")} style={btnS}>{t("common.back_2")}</button>
             <div style={{flex:1}}/>
             <button onClick={goOverview} disabled={!chosenCount} style={btnP(!!chosenCount)}>{`Overview (${chosenCount}) →`}</button>
           </>)}
           {step==="overview"&&(<>
-            <button onClick={()=>setStep("review")} style={btnS}>← Back</button>
+            <button onClick={()=>setStep("review")} style={btnS}>{t("common.back_2")}</button>
             <div style={{flex:1}}/>
-            <button onClick={commit} disabled={committing||!chosenCount} style={btnP(!committing&&!!chosenCount)}>{committing?"Ban raha hai…":`Approve & Create (${chosenCount})`}</button>
+            <button onClick={commit} disabled={committing||!chosenCount} style={btnP(!committing&&!!chosenCount)}>{committing?t("common.ban_raha_hai"):`Approve & Create (${chosenCount})`}</button>
           </>)}
           {step==="done"&&result&&(<>
             <button onClick={()=>{const t=mmMinutesText({title:title||(meeting&&meeting.title)||"Meeting",summary:meeting&&meeting.summary},result.refs);window.open("https://wa.me/?text="+encodeURIComponent(t),"_blank");}}
-              style={{background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Share on WhatsApp</button>
-            <button onClick={()=>{const t=mmMinutesText({title:title||(meeting&&meeting.title)||"Meeting",summary:meeting&&meeting.summary},result.refs);try{navigator.clipboard.writeText(t).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1800);});}catch(e){}}} style={btnS}>{copied?"✓ Copied":"Copy"}</button>
+              style={{background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>{t("mom.share_on_whatsapp")}</button>
+            <button onClick={()=>{const t=mmMinutesText({title:title||(meeting&&meeting.title)||"Meeting",summary:meeting&&meeting.summary},result.refs);try{navigator.clipboard.writeText(t).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1800);});}catch(e){}}} style={btnS}>{copied?t("mom.copied"):t("mom.copy")}</button>
             <div style={{flex:1}}/>
-            <button onClick={onClose} style={btnP(true)}>Done</button>
+            <button onClick={onClose} style={btnP(true)}>{t("common.done")}</button>
           </>)}
         </div>
       </div>
@@ -1216,16 +1217,16 @@ function MeetingDetailModal({meeting,onClose}){
       <div style={{position:"fixed",top:0,right:0,bottom:0,width:"min(620px,96vw)",background:T.surface,boxShadow:"-8px 0 40px rgba(0,0,0,0.2)",zIndex:401,display:"flex",flexDirection:"column",animation:"slideIn .2s ease"}}>
         <div style={{background:T.sb,padding:"14px 18px",flexShrink:0,display:"flex",alignItems:"center",gap:10}}>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:14,fontWeight:700,color:"white",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{meeting.title||"AI Meeting"}</div>
+            <div style={{fontSize:14,fontWeight:700,color:"white",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{meeting.title||t("mom.ai_meeting")}</div>
             <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:1}}>{fmtDate(meeting.created_at)}{meeting.project_name?" · "+meeting.project_name:""}</div>
           </div>
-          <span style={{fontSize:9.5,fontWeight:700,color:committed?"#A7F3D0":"#FDE68A",background:"rgba(255,255,255,0.1)",padding:"3px 9px",borderRadius:6}}>{committed?"Committed":"Review"}</span>
+          <span style={{fontSize:9.5,fontWeight:700,color:committed?"#A7F3D0":"#FDE68A",background:"rgba(255,255,255,0.1)",padding:"3px 9px",borderRadius:6}}>{committed?t("mom.committed"):t("mom.review")}</span>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><IcX size={18} color="rgba(255,255,255,0.7)"/></button>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
           {meeting.summary?(
             <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,padding:"10px 13px",marginBottom:14}}>
-              <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>AI Summary</div>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("mom.ai_summary")}</div>
               <div style={{fontSize:12.5,color:T.t2,lineHeight:1.5}}>{meeting.summary}</div>
             </div>
           ):null}
@@ -1233,36 +1234,36 @@ function MeetingDetailModal({meeting,onClose}){
             <>
               <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:"12px 14px",marginBottom:12}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:11,fontWeight:700,color:T.t1}}>Action items progress</span>
+                  <span style={{fontSize:11,fontWeight:700,color:T.t1}}>{t("mom.action_items_progress")}</span>
                   <span style={{fontSize:11,fontWeight:700,color:T.grn}}>{status?`${status.done}/${status.total} done`:"…"}</span>
                 </div>
                 <div style={{height:7,background:T.surfaceB,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:status&&status.total?Math.round(status.done/status.total*100)+"%":"0%",background:T.grn,transition:"width .3s"}}/></div>
               </div>
               <div style={{display:"flex",gap:8,marginBottom:14}}>
-                <button onClick={share} style={{flex:1,background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Share on WhatsApp</button>
-                <button onClick={copy} style={{background:T.surface,border:`1px solid ${T.b1}`,color:T.t2,borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:600,cursor:"pointer"}}>{copied?"✓ Copied":"Copy"}</button>
+                <button onClick={share} style={{flex:1,background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer"}}>{t("mom.share_on_whatsapp")}</button>
+                <button onClick={copy} style={{background:T.surface,border:`1px solid ${T.b1}`,color:T.t2,borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:600,cursor:"pointer"}}>{copied?t("mom.copied"):t("mom.copy")}</button>
               </div>
-              <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Created ({okRefs.length})</div>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>{t("mom.created_okrefs", { okRefs: okRefs.length })}</div>
               {refs.map((r,i)=>{
                 const st=status&&status.items?status.items[i]:null;
                 return(
                   <div key={i} style={{display:"flex",alignItems:"center",gap:10,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"9px 12px",marginBottom:7}}>
                     <span style={{fontSize:9,fontWeight:700,color:MM_TYPE[r.type]?.color,background:MM_TYPE[r.type]?.bg,padding:"2px 7px",borderRadius:5}}>{MM_TYPE[r.type]?.label}</span>
                     <span style={{flex:1,fontSize:12.5,color:T.t1}}>{r.title}</span>
-                    {st?<span style={{fontSize:10,fontWeight:700,color:st.done?T.grn:T.amb,background:st.done?T.grnL:T.ambL,padding:"3px 8px",borderRadius:6}}>{st.status}</span>:(r.ok?<span style={{fontSize:11,color:T.grn,fontWeight:600}}>{r.ref||"✓"}</span>:<span style={{fontSize:11,color:T.red}}>Fail</span>)}
+                    {st?<span style={{fontSize:10,fontWeight:700,color:st.done?T.grn:T.amb,background:st.done?T.grnL:T.ambL,padding:"3px 8px",borderRadius:6}}>{st.status}</span>:(r.ok?<span style={{fontSize:11,color:T.grn,fontWeight:600}}>{r.ref||"✓"}</span>:<span style={{fontSize:11,color:T.red}}>{t("mom.fail")}</span>)}
                   </div>
                 );
               })}
             </>
           )}
-          {!committed&&<div style={{fontSize:12,color:T.t4,marginBottom:14}}>Ye meeting abhi review me hai — items create nahi hue.</div>}
+          {!committed&&<div style={{fontSize:12,color:T.t4,marginBottom:14}}>{t("mom.ye_meeting_abhi_review_me_hai")}</div>}
           {meeting.audio_url?(
             <div style={{marginTop:8,marginBottom:14}}>
-              <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Recording</div>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("mom.recording_2")}</div>
               <audio src={meeting.audio_url} controls style={{width:"100%",height:34}}/>
             </div>
           ):null}
-          <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6,marginTop:8}}>Transcript</div>
+          <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6,marginTop:8}}>{t("mom.transcript")}</div>
           <div style={{background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9,padding:"11px 13px",fontSize:12,color:T.t3,lineHeight:1.55,whiteSpace:"pre-wrap"}}>{meeting.transcript||"—"}</div>
           <div style={{height:16}}/>
         </div>
@@ -1324,10 +1325,10 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
   const pendingActionsCount=allPendingActions.length;
 
   const TILES=[
-    {l:"Total MOMs",v:totalMOMs,sub:`${moms.filter(m=>m.date>=TODAY.slice(0,7)+"-01").length} this month`,c:T.blu},
-    {l:"Pending Actions",v:pendingActionsCount,sub:"Across all meetings",c:pendingActionsCount>0?T.amb:T.grn},
-    {l:"Overdue Actions",v:overdueActions.length,sub:"Past due date",c:overdueActions.length>0?T.red:T.grn},
-    {l:"Sites Covered",v:new Set(moms.map(m=>m.site)).size,sub:"Active project meetings",c:T.pur},
+    {l:t("mom.total_moms"),v:totalMOMs,sub:t("mom.length_this_month", { length: moms.filter(m=>m.date>=TODAY.slice(0,7)+"-01").length }),c:T.blu},
+    {l:t("app.pending_actions"),v:pendingActionsCount,sub:t("mom.across_all_meetings"),c:pendingActionsCount>0?T.amb:T.grn},
+    {l:t("mom.overdue_actions"),v:overdueActions.length,sub:t("mom.past_due_date"),c:overdueActions.length>0?T.red:T.grn},
+    {l:t("mom.sites_covered"),v:new Set(moms.map(m=>m.site)).size,sub:t("mom.active_project_meetings"),c:T.pur},
   ];
 
   return(
@@ -1349,7 +1350,7 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
       <div style={{margin:"0 18px",flexShrink:0}}>
         <div style={{background:T.sb,borderRadius:10,padding:"0 10px",display:"flex",alignItems:"center",gap:6,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
           {/* View toggle */}
-          {[{id:"cards",l:"All MOMs",I:IcMOM},{id:"actions",l:"Action Tracker",I:IcAction},{id:"meetings",l:"AI Meetings",I:(p)=><Ic {...p} d={MIC_PATH}/>}].map(v=>{
+          {[{id:"cards",l:t("mom.all_moms"),I:IcMOM},{id:"actions",l:t("mom.action_tracker"),I:IcAction},{id:"meetings",l:t("mom.ai_meetings"),I:(p)=><Ic {...p} d={MIC_PATH}/>}].map(v=>{
             const ViewIcon=v.I;
             return(
             <button key={v.id} onClick={()=>setView(v.id)}
@@ -1363,50 +1364,50 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
           {/* Search */}
           <div style={{position:"relative"}}>
             <span style={{position:"absolute",left:7,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={12} color="rgba(255,255,255,0.3)"/></span>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search meetings..."
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("mom.search_meetings")}
               style={{height:28,padding:"0 8px 0 24px",borderRadius:6,border:"1px solid rgba(255,255,255,0.18)",background:"rgba(255,255,255,0.1)",fontSize:12,color:"white",outline:"none",width:150,boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
           {/* Filters */}
           <select value={fSite} onChange={e=>setFSite(e.target.value)}
             style={{height:28,padding:"0 8px",borderRadius:6,border:`1px solid ${fSite!=="All"?"rgba(251,191,36,0.5)":"rgba(255,255,255,0.18)"}`,background:fSite!=="All"?"rgba(251,191,36,0.15)":"rgba(255,255,255,0.07)",color:fSite!=="All"?"#FDE68A":"rgba(255,255,255,0.7)",fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-            <option value="All">All Sites</option>
+            <option value="All">{t("common.all_sites")}</option>
             {sites.map(s=><option key={s} style={{color:T.t1,background:T.surface}}>{s}</option>)}
           </select>
           <select value={fType} onChange={e=>setFType(e.target.value)}
             style={{height:28,padding:"0 8px",borderRadius:6,border:`1px solid ${fType!=="All"?"rgba(251,191,36,0.5)":"rgba(255,255,255,0.18)"}`,background:fType!=="All"?"rgba(251,191,36,0.15)":"rgba(255,255,255,0.07)",color:fType!=="All"?"#FDE68A":"rgba(255,255,255,0.7)",fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-            <option value="All">All Types</option>
+            <option value="All">{t("common.all_types")}</option>
             {MEETING_TYPES.map(t=><option key={t} style={{color:T.t1,background:T.surface}}>{t}</option>)}
           </select>
           {/* Export */}
           <ExportMenu
             filename="moms"
-            title="Minutes of Meeting"
+            title={t("app.minutes_of_meeting")}
             columns={[
               {key:"id",label:"ID"},
-              {key:"title",label:"Title"},
-              {key:"type",label:"Type"},
-              {key:"site",label:"Site / Project"},
-              {key:"date",label:"Date"},
-              {key:"time",label:"Time"},
-              {key:"venue",label:"Venue"},
-              {key:"conductedBy",label:"Conducted By"},
-              {key:"attendees",label:"Attendees",get:r=>Array.isArray(r.attendees)?r.attendees.join(", "):(r.attendees||"")},
-              {key:"agenda",label:"Agenda"},
-              {key:"discussion",label:"Discussion",get:r=>Array.isArray(r.discussion)?r.discussion.map(d=>d.point||d).join(" | "):(r.discussion||"")},
-              {key:"actionItems",label:"Action Items",get:r=>Array.isArray(r.actionItems)?r.actionItems.map(a=>`${a.task||""}${a.assignee?` (@${a.assignee})`:""}${a.dueDate?` due ${a.dueDate}`:""}`).join(" | "):""},
-              {key:"status",label:"Status"},
+              {key:"title",label:t("common.title_2")},
+              {key:"type",label:t("common.type")},
+              {key:"site",label:t("mom.site_project")},
+              {key:"date",label:t("common.date")},
+              {key:"time",label:t("mom.time")},
+              {key:"venue",label:t("mom.venue")},
+              {key:"conductedBy",label:t("mom.conducted_by")},
+              {key:"attendees",label:t("mom.attendees"),get:r=>Array.isArray(r.attendees)?r.attendees.join(", "):(r.attendees||"")},
+              {key:"agenda",label:t("mom.agenda")},
+              {key:"discussion",label:t("mom.discussion"),get:r=>Array.isArray(r.discussion)?r.discussion.map(d=>d.point||d).join(" | "):(r.discussion||"")},
+              {key:"actionItems",label:t("mom.action_items"),get:r=>Array.isArray(r.actionItems)?r.actionItems.map(a=>`${a.task||""}${a.assignee?` (@${a.assignee})`:""}${a.dueDate?` due ${a.dueDate}`:""}`).join(" | "):""},
+              {key:"status",label:t("common.status")},
             ]}
             rows={filtered}
           />
           {/* Meeting Mode (AI) */}
-          <button onClick={()=>setShowMeetingMode(true)} title="AI: record meeting → auto action items"
+          <button onClick={()=>setShowMeetingMode(true)} title={t("mom.ai_record_meeting_auto_action_items")}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.pur,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",whiteSpace:"nowrap"}}>
-            <Ic d={MIC_PATH} size={13} color="white"/> Meeting Mode
+            <Ic d={MIC_PATH} size={13} color="white"/> {t("mom.meeting_mode")}
           </button>
           {/* New MOM */}
           <button onClick={()=>setShowCreate(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-            <IcAdd size={13} color="white"/> New MOM
+            <IcAdd size={13} color="white"/> {t("mom.new_mom")}
           </button>
         </div>
       </div>
@@ -1420,7 +1421,7 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
             {filtered.map(mom=>(
               <MOMCard key={mom.id} mom={mom} onOpen={setSelMOM} onUpdate={updateMOM}/>
             ))}
-            {filtered.length===0&&<div style={{gridColumn:"1/-1",padding:"60px",textAlign:"center",color:T.t4,fontSize:13}}>No meetings found</div>}
+            {filtered.length===0&&<div style={{gridColumn:"1/-1",padding:"60px",textAlign:"center",color:T.t4,fontSize:13}}>{t("mom.no_meetings_found")}</div>}
           </div>
         )}
 
@@ -1429,7 +1430,7 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
           <div>
             {overdueActions.length>0&&<div style={{padding:"9px 13px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
               <IcAlert size={13} color={T.red}/>
-              <span style={{fontSize:12,fontWeight:700,color:T.red}}>{overdueActions.length} action items are overdue!</span>
+              <span style={{fontSize:12,fontWeight:700,color:T.red}}>{t("mom.overdueactions_action_items_are_overdue", { overdueActions: overdueActions.length })}</span>
             </div>}
             <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 120px 110px 110px 100px 90px",padding:"7px 14px",background:T.sb}}>
@@ -1463,7 +1464,7 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
                   </div>
                 );
               })}
-              {allPendingActions.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:13}}>All action items completed!</div>}
+              {allPendingActions.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:13}}>{t("mom.all_action_items_completed")}</div>}
             </div>
           </div>
         )}
@@ -1483,13 +1484,13 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
                   </div>
                   {mt.summary&&<div style={{fontSize:11.5,color:T.t3,lineHeight:1.45,marginBottom:8,maxHeight:33,overflow:"hidden"}}>{mt.summary}</div>}
                   <div style={{display:"flex",alignItems:"center",gap:7}}>
-                    {committed?<span style={{fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 8px",borderRadius:6}}>{made} created</span>:<span style={{fontSize:9.5,fontWeight:700,color:T.amb,background:T.ambL,padding:"3px 8px",borderRadius:6}}>{n} to review</span>}
-                    {mt.audio_url&&<span style={{fontSize:9.5,color:T.t4}}>🎙️ audio</span>}
+                    {committed?<span style={{fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 8px",borderRadius:6}}>{made} created</span>:<span style={{fontSize:9.5,fontWeight:700,color:T.amb,background:T.ambL,padding:"3px 8px",borderRadius:6}}>{t("mom.n_to_review", { n })}</span>}
+                    {mt.audio_url&&<span style={{fontSize:9.5,color:T.t4}}>{t("mom.audio")}</span>}
                   </div>
                 </div>
               );
             })}
-            {meetings.length===0&&<div style={{gridColumn:"1/-1",padding:"50px",textAlign:"center",color:T.t4,fontSize:13}}>Abhi koi AI meeting nahi — toolbar me <b>Meeting Mode</b> se shuru karein.</div>}
+            {meetings.length===0&&<div style={{gridColumn:"1/-1",padding:"50px",textAlign:"center",color:T.t4,fontSize:13}}>{t("mom.abhi_koi_ai_meeting_nahi_toolbar")} <b>{t("mom.meeting_mode")}</b> {t("mom.se_shuru_karein")}</div>}
           </div>
         )}
       </div>

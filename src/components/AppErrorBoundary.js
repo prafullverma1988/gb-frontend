@@ -17,6 +17,7 @@
 // Implemented defensively so it stays a no-op until Sentry is wired.
 // ─────────────────────────────────────────────────────────────────
 import React from "react";
+import { t } from "../i18n";
 
 const isChunkLoadError = (err) => {
   if (!err) return false;
@@ -113,7 +114,7 @@ class AppErrorBoundary extends React.Component {
               background:"#2563EB", color:"white", border:"none",
               fontSize:14, fontWeight:600, cursor:"pointer"
             }}
-          >Reload App</button>
+          >{t("app_error_boundary.reload_app")}</button>
         </div>
       </div>
     );

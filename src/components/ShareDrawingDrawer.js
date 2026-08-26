@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
 import { Credit } from "./Credit";
+import { t } from "../i18n";
 
 const T = {
   surface: "#FFFFFF",
@@ -117,13 +118,13 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
       await navigator.clipboard.writeText(publicShareUrl);
       window.toast?.success("Link copied to clipboard");
     } catch {
-      await window.promptAsync("Copy this link:", publicShareUrl);
+      await window.promptAsync(t("share_drawing.copy_this_link"), publicShareUrl);
     }
   };
 
   // Download the underlying PDF (forces download via blob)
   const downloadPdf = async () => {
-    if (!fileUrl) { alert("PDF link not available"); return; }
+    if (!fileUrl) { alert(t("share_drawing.pdf_link_not_available")); return; }
     setDownloading(true);
     try {
       const r = await fetch(fileUrl);
@@ -172,13 +173,13 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
         <div style={{ padding: "13px 16px", background: "#0D1B2A", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 13.5, fontWeight: 700, color: "white", display: "flex", alignItems: "center", gap: 6 }}>
-              📤 Share Drawing
+             {t("share_drawing.share_drawing")}
             </div>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {target?.drawing_title || "Drawing"}{target?.lead_name && ` · with ${target.lead_name}`}
+              {target?.drawing_title || t("common.drawing")}{target?.lead_name && ` · with ${target.lead_name}`}
             </div>
           </div>
-          <button onClick={onClose} title="Close"
+          <button onClick={onClose} title={t("common.close")}
             style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", padding: 6, borderRadius: 6, display: "flex" }}
             onMouseEnter={el => el.currentTarget.style.background = "rgba(255,255,255,0.1)"}
             onMouseLeave={el => el.currentTarget.style.background = "none"}>
@@ -190,11 +191,11 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px" }}>
           {/* Share Mode toggle — Link vs PDF + Link */}
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 6 }}>Share As</div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 6 }}>{t("share_drawing.share_as")}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {[
-                { v: "link", l: "🔗 Link", sub: "Public link in message" },
-                { v: "pdf",  l: "📄 PDF + Link", sub: "Download PDF + send link" },
+                { v: "link", l: t("share_drawing.link"), sub: t("share_drawing.public_link_in_message") },
+                { v: "pdf",  l: t("share_drawing.pdf_link"), sub: t("share_drawing.download_pdf_send_link") },
               ].map(o => {
                 const sel = shareMode === o.v;
                 return (
@@ -208,29 +209,27 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
             </div>
             {shareMode === "pdf" && (
               <div style={{ marginTop: 7, padding: "6px 10px", fontSize: 10.5, color: T.amb, background: T.ambL, border: `1px solid ${T.ambL}`, borderRadius: 6, lineHeight: 1.4 }}>
-                ⚠️ Link message me already hai. PDF download karke WhatsApp window me drag-drop ya 📎 attach button se file bhi lagao (WhatsApp Web auto-attach nahi karta).
+               {t("share_drawing.link_message_me_already_hai_pdf")}
               </div>
             )}
           </div>
 
           {/* Phone */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginBottom: 5 }}>
-              Client Phone {target?.lead_phone ? "(auto-filled)" : "(enter manually)"}
-            </label>
+            <label style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginBottom: 5 }}>{t("share_drawing.client_phone_target", { target: target?.lead_phone ? "(auto-filled)" : "(enter manually)" })}</label>
             <input value={phone} onChange={e => setPhone(e.target.value)}
-              placeholder="e.g. 919876543210 (with country code)"
+              placeholder={t("share_drawing.e_g_919876543210_with_country_code")}
               style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
-            <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>Country code zaroori (e.g. 91 for India). Khali rakho to WhatsApp web me contact pick kar sakte ho.</div>
+            <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>{t("share_drawing.country_code_zaroori_e_g_91")}</div>
           </div>
 
           {/* Editable message */}
           <div style={{ marginBottom: 12 }}>
             <label style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginBottom: 5 }}>
-              Message (editable)
+             {t("share_drawing.message_editable")}
             </label>
             <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={8}
-              placeholder={publicShareUrl ? "" : "Generating public link…"}
+              placeholder={publicShareUrl ? "" : t("share_drawing.generating_public_link")}
               style={{ width: "100%", padding: "10px 11px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 12.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", lineHeight: 1.5 }} />
           </div>
 
@@ -239,18 +238,18 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
             {shareMode === "pdf" && (
               <button onClick={downloadPdf} disabled={downloading || !fileUrl}
                 style={{ flex: "1 1 130px", padding: "9px", borderRadius: 7, background: "#7C3AED", border: "none", color: "white", fontSize: 12.5, fontWeight: 700, cursor: (downloading || !fileUrl) ? "not-allowed" : "pointer", opacity: (downloading || !fileUrl) ? 0.6 : 1 }}>
-                {downloading ? "⏳ Downloading…" : "📄 Download PDF"}
+                {downloading ? t("share_drawing.downloading") : t("common.download_pdf")}
               </button>
             )}
             <button onClick={openWhatsApp} disabled={!msg.trim()}
               style={{ flex: "1 1 130px", padding: "9px", borderRadius: 7, background: T.wa, border: "none", color: "white", fontSize: 12.5, fontWeight: 700, cursor: msg.trim() ? "pointer" : "not-allowed", opacity: msg.trim() ? 1 : 0.6 }}>
-              💬 Open WhatsApp
+             {t("share_drawing.open_whatsapp")}
             </button>
             <button onClick={markShared} disabled={generating}
               style={{ flex: "1.4 1 140px", padding: "9px", borderRadius: 7, background: T.blu, border: "none", color: "white", fontSize: 12.5, fontWeight: 700, cursor: generating ? "not-allowed" : "pointer", opacity: generating ? 0.7 : 1 }}>
-              {generating ? "…" : "✓ Sent — Mark Shared"}
+              {generating ? "…" : t("share_drawing.sent_mark_shared")}
             </button>
-            <button onClick={handleCopyLink} disabled={!publicShareUrl} title="Copy public link"
+            <button onClick={handleCopyLink} disabled={!publicShareUrl} title={t("share_drawing.copy_public_link")}
               style={{ flex: "0 0 38px", padding: "9px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, fontSize: 13, fontWeight: 700, cursor: publicShareUrl ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center" }}>
               🔗
             </button>
@@ -259,9 +258,7 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
           {/* Share history */}
           {shares.length > 0 && (
             <>
-              <div style={{ fontSize: 11, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>
-                Share history ({shares.length})
-              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>{t("share_drawing.share_history_shares", { shares: shares.length })}</div>
               {shares.map(s => {
                 const url = buildPublicUrl(s.share_token);
                 return (
@@ -284,19 +281,17 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
                         color: s.view_count > 0 ? T.grn : T.t4,
                         border: `1px solid ${s.view_count > 0 ? T.grnM : T.b1}`,
                       }}>
-                        {s.view_count > 0 ? `${s.view_count} view${s.view_count === 1 ? "" : "s"}` : "Not viewed"}
+                        {s.view_count > 0 ? `${s.view_count} view${s.view_count === 1 ? "" : "s"}` : t("share_drawing.not_viewed")}
                       </span>
                     </div>
                     <div style={{ fontSize: 10.5, color: T.t4, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{url}</div>
                     {(s.shared_by_name || s.shared_at) && (
                       <div style={{ marginTop: 5, paddingTop: 5, borderTop: `1px dashed ${T.b1}` }}>
-                        {s.shared_by_name && <Credit label="Shared by" name={s.shared_by_name} time={s.shared_at} />}
+                        {s.shared_by_name && <Credit label={t("share_drawing.shared_by")} name={s.shared_by_name} time={s.shared_at} />}
                       </div>
                     )}
                     {s.first_viewed_at && (
-                      <div style={{ marginTop: 4, fontSize: 10.5, color: T.grn }}>
-                        First viewed {new Date(s.first_viewed_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                      </div>
+                      <div style={{ marginTop: 4, fontSize: 10.5, color: T.grn }}>{t("share_drawing.first_viewed_vnew", { vnew: new Date(s.first_viewed_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) })}</div>
                     )}
                   </div>
                 );

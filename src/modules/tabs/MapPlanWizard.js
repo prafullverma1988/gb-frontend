@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
+import { t } from "../../i18n";
 
 /* ────────────────────────────────────────────────────────────────────
    MAP SE PLAN — F2 (+ 2026-08-20 ka sudhaar)
@@ -120,31 +121,30 @@ export default function MapPlanWizard({ projectId, onClose, onDone }) {
         maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.b1}` }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>Map se plan lao</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{t("map_plan_wizard.map_se_plan_lao")}</div>
           <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>
-            Naam aur lambai map se aati hai — lambai badal sakte ho, stage jodh sakte ho.
-            Pehle se bane task ko tick karoge to sirf uspar scope likhega, naya nahi banega.
+           {t("map_plan_wizard.naam_aur_lambai_map_se_aati")}
           </div>
           {groups.some((g) => g.kind === "line") && (
             <label style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 8, cursor: "pointer" }}>
               <input type="checkbox" checked={lineStagesOn} onChange={toggleLineStages} />
               <span style={{ fontSize: 11.5, color: T.t2 }}>
-                Har line ke andar <b>stages</b> (khudai · laying · testing…) — hata doge to ek line = ek task
+               {t("map_plan_wizard.har_line_ke_andar")} <b>stages</b> {t("map_plan_wizard.khudai_laying_testing_hata_doge_to")}
               </span>
             </label>
           )}
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px" }}>
-          {!data && !err && <div style={{ padding: "26px 0", textAlign: "center", fontSize: 12.5, color: T.t3 }}>Load ho raha hai…</div>}
+          {!data && !err && <div style={{ padding: "26px 0", textAlign: "center", fontSize: 12.5, color: T.t3 }}>{t("map_plan_wizard.load_ho_raha_hai")}</div>}
           {!!err && <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B",
             borderRadius: 8, padding: "9px 12px", fontSize: 12, marginBottom: 10 }}>{err}</div>}
 
           {data && !groups.length && (
             <div style={{ padding: "22px 12px", textAlign: "center", fontSize: 12.5, color: T.t3, lineHeight: 1.7 }}>
-              Is site par abhi koi line ya structure map par nahi hai.<br />
+             {t("map_plan_wizard.is_site_par_abhi_koi_line")}<br />
               <span style={{ fontSize: 11.5, color: T.t4 }}>
-                Tenders → Map me line draw karo ya KML import karo, phir yahan poora tree ek click me ban jayega.
+               {t("map_plan_wizard.tenders_map_me_line_draw_karo")}
               </span>
             </div>
           )}
@@ -167,8 +167,8 @@ export default function MapPlanWizard({ projectId, onClose, onDone }) {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead><tr>
                     <th style={{ ...th, width: 34 }}></th>
-                    <th style={th}>Task ka naam</th>
-                    <th style={{ ...th, textAlign: "right", width: 150 }}>{g.kind === "line" ? "Scope (badal sakte ho)" : "Stages"}</th>
+                    <th style={th}>{t("map_plan_wizard.task_ka_naam")}</th>
+                    <th style={{ ...th, textAlign: "right", width: 150 }}>{g.kind === "line" ? t("map_plan_wizard.scope_badal_sakte_ho") : t("map_plan_wizard.stages")}</th>
                     {g.kind === "line" && <th style={{ ...th, width: 96 }}></th>}
                   </tr></thead>
                   <tbody>
@@ -189,7 +189,7 @@ export default function MapPlanWizard({ projectId, onClose, onDone }) {
                               {c.already && (
                                 <span style={{ fontSize: 10, color: c.task_has_children ? T.t4 : "#059669" }}>
                                   {c.task_has_children
-                                    ? "✓ bana hua (stage wala) — scope uske stage-task par Tasks tab se likho"
+                                    ? t("map_plan_wizard.bana_hua_stage_wala_scope_uske")
                                     : c.task_scope_qty > 0
                                       ? `✓ bana hua · task me scope: ${fmtLen(c.task_scope_qty)}${c.take ? " → naya scope likhega" : ""}`
                                       : `✓ bana hua · scope abhi KHALI${c.take ? " → tick se likh jayega" : " — tick karke likho"}`}
@@ -218,7 +218,7 @@ export default function MapPlanWizard({ projectId, onClose, onDone }) {
                               <td style={{ padding: "6px 10px", textAlign: "right" }}>
                                 {c.already ? (
                                   c.take && Math.abs(Number(c.scope_qty) - Number(c.length_m)) > 0.5 ? (
-                                    <span style={{ fontSize: 9.5, color: T.amb }}>map: {fmtLen(c.length_m)}</span>
+                                    <span style={{ fontSize: 9.5, color: T.amb }}>{t("map_plan_wizard.map_fmtlen", { fmtLen: fmtLen(c.length_m) })}</span>
                                   ) : null
                                 ) : (
                                   <button onClick={() => setOpenStage(stageOpen ? null : key)} disabled={!c.take}
@@ -226,7 +226,7 @@ export default function MapPlanWizard({ projectId, onClose, onDone }) {
                                       border: `1px solid ${c.stages?.length ? T.ind : T.b1}`,
                                       background: c.stages?.length ? T.indL : T.surface,
                                       color: c.stages?.length ? T.ind : T.t2, fontFamily: "inherit" }}>
-                                    {c.stages?.length ? `${c.stages.length} stage` : "＋ stages"} {stageOpen ? "▴" : "▾"}
+                                    {c.stages?.length ? `${c.stages.length} stage` : t("map_plan_wizard.stages_2")} {stageOpen ? "▴" : "▾"}
                                   </button>
                                 )}
                               </td>
@@ -243,7 +243,7 @@ export default function MapPlanWizard({ projectId, onClose, onDone }) {
                                       style={{ border: "none", background: "none", cursor: "pointer", color: T.t4, fontSize: 12, lineHeight: 1, padding: 0 }}>×</button>
                                   </span>
                                 ))}
-                                <input placeholder="+ naya stage, Enter" onKeyDown={(e) => {
+                                <input placeholder={t("map_plan_wizard.naya_stage_enter")} onKeyDown={(e) => {
                                   if (e.key === "Enter" && e.target.value.trim()) {
                                     updChild(gi, ci, { stages: [...(c.stages || []), e.target.value.trim()] });
                                     e.target.value = "";
@@ -252,19 +252,16 @@ export default function MapPlanWizard({ projectId, onClose, onDone }) {
                                   fontSize: 11, color: T.t1, background: T.surface, outline: "none", fontFamily: "inherit" }} />
                                 {g.kind === "line" && !(c.stages || []).length && (c.stage_template || []).length > 0 && (
                                   <button onClick={() => updChild(gi, ci, { stages: [...c.stage_template] })} style={chipBtn(false)}>
-                                    template bharo
+                                   {t("map_plan_wizard.template_bharo")}
                                   </button>
                                 )}
                                 <button onClick={() => suggestStages(gi, ci, g, c)} disabled={aiBusy === key} style={chipBtn(true)}>
-                                  {aiBusy === key ? "AI soch raha…" : "✨ AI se sujhao"}
+                                  {aiBusy === key ? t("map_plan_wizard.ai_soch_raha") : t("map_plan_wizard.ai_se_sujhao")}
                                 </button>
                               </div>
-                              <div style={{ fontSize: 10, color: T.t4, marginTop: 6 }}>
-                                {g.kind === "line"
+                              <div style={{ fontSize: 10, color: T.t4, marginTop: 6 }}>{t("map_plan_wizard.g_vaakhiri_faisla_aapka_jo_chip", { g: g.kind === "line"
                                   ? `Stage jodoge to scope (${fmtLen(Number(c.scope_qty) || c.length_m)}) HAR stage par jayega — khudai bhi utni, laying bhi utni; har stage apni qty me napega.`
-                                  : "Structure ke stage par qty nahi hoti — supervisor % me marks karta hai."}
-                                {" "}Aakhiri faisla aapka — jo chip hataoge wo banega hi nahi.
-                              </div>
+                                  : "Structure ke stage par qty nahi hoti — supervisor % me marks karta hai.", v: " " })}</div>
                             </td></tr>
                           )}
                         </React.Fragment>
@@ -282,14 +279,14 @@ export default function MapPlanWizard({ projectId, onClose, onDone }) {
             {newCount || scopeCount
               ? [newCount ? `${newCount} naye · kul ${taskCount} task banenge` : null,
                  scopeCount ? `${scopeCount} purane par scope likhega` : null].filter(Boolean).join(" · ")
-              : "Kuch nahi chuna"}
+              : t("map_plan_wizard.kuch_nahi_chuna")}
           </div>
           <button onClick={onClose} style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${T.b1}`,
-            background: T.surface, color: T.t2, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+            background: T.surface, color: T.t2, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
           <button onClick={create} disabled={busy || (!newCount && !scopeCount)}
             style={{ padding: "7px 16px", borderRadius: 7, border: "none", background: (newCount || scopeCount) ? T.ind : T.b2,
               color: "#fff", fontSize: 12, fontWeight: 700, cursor: (newCount || scopeCount) ? "pointer" : "default", fontFamily: "inherit" }}>
-            {busy ? "Ban raha hai…" : "Plan banao"}
+            {busy ? t("common.ban_raha_hai") : t("map_plan_wizard.plan_banao")}
           </button>
         </div>
       </div>

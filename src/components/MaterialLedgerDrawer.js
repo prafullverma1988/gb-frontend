@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import api from "../config/api";
+import { t } from "../i18n";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -121,8 +122,8 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
   const handleMarkUsed = async () => {
     if (saving) return;
     const q = parseFloat(uForm.qty);
-    if (!q || q <= 0) { setErr("Qty daalo"); return; }
-    if (q > Number(material.balance)) { setErr(`Balance sirf ${material.balance} ${material.unit} hai`); return; }
+    if (!q || q <= 0) { setErr(t("material_ledger.qty_daalo")); return; }
+    if (q > Number(material.balance)) { setErr(t("material_ledger.balance_sirf_balance_unit_hai", { balance: material.balance, unit: material.unit })); return; }
     setSaving(true); setErr("");
     try {
       const res = await api.post(`/tasks/project/${projectId}/mark-used`, {
@@ -149,9 +150,9 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
 
   const balColor = material.balance <= 0 ? T.red : material.balance < material.total_received * 0.2 ? T.amb : T.grn;
   const TABS = [
-    { id: "all",  l: "All",  n: receipts.length + usage.length },
+    { id: "all",  l: t("common.all"),  n: receipts.length + usage.length },
     { id: "grn",  l: "GRN",  n: receipts.length },
-    { id: "used", l: "Used", n: usage.length },
+    { id: "used", l: t("common.used"), n: usage.length },
     { id: "mr",   l: "MR",   n: mrs === null ? "·" : mrs.length },
   ];
   // Ledger rows filtered for the active tab (running balance stays intact)
@@ -173,9 +174,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
         <div style={{ background: "#0D1B2A", padding: "14px 20px", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{material.material_name}</div>
-            <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.5)", fontWeight: 600, letterSpacing: ".3px", textTransform: "uppercase", marginTop: 2 }}>
-              Material Ledger · {material.unit}
-            </div>
+            <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.5)", fontWeight: 600, letterSpacing: ".3px", textTransform: "uppercase", marginTop: 2 }}>{t("material_ledger.material_ledger_unit", { unit: material.unit })}</div>
           </div>
           <button onClick={onClose}
             style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 16, cursor: "pointer", flexShrink: 0 }}>×</button>
@@ -186,7 +185,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
         {/* Hero — remaining balance on site */}
         <div style={{ padding: "18px 20px 12px", textAlign: "center", flexShrink: 0 }}>
           <div style={{ fontSize: 10.5, color: T.t3, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".6px" }}>
-            Remaining on Site
+           {t("material_ledger.remaining_on_site")}
           </div>
           <div style={{ fontSize: 40, fontWeight: 800, color: balColor, lineHeight: 1.05, marginTop: 3 }}>
             {material.balance}
@@ -218,7 +217,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
           <div style={{ flex: 1 }}/>
           <button onClick={() => setSortNew(s => !s)}
             style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${T.b1}`, background: T.surfaceB, color: T.t2, fontSize: 10.5, fontWeight: 600, cursor: "pointer" }}>
-            {sortNew ? "↓ Newest" : "↑ Oldest"}
+            {sortNew ? t("material_ledger.newest") : t("material_ledger.oldest")}
           </button>
         </div>
 
@@ -237,7 +236,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
                 ))}
               </div>
               {visibleLedger.length === 0
-                ? <Empty text={tab === "grn" ? "Koi GRN receipt nahi" : tab === "used" ? "Koi usage entry nahi" : "Koi entry nahi"}/>
+                ? <Empty text={tab === "grn" ? t("material_ledger.koi_grn_receipt_nahi") : tab === "used" ? t("material_ledger.koi_usage_entry_nahi") : t("material_ledger.koi_entry_nahi")}/>
                 : visibleLedger.map((e, i) => {
                   const isGRN = e._t === "grn";
                   const balNeg = e.bal < 0;
@@ -255,7 +254,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
                           <span style={{ fontFamily: "monospace", color: isGRN ? T.grn : T.amb, fontWeight: 700 }}>{e.ref}</span>
                           {e.sub ? ` · ${e.sub}` : ""}{e.by ? ` · ${e.by}` : ""}
                           {e.open_issues > 0 && (
-                            <span title="Is delivery me open issue hai — row kholo"
+                            <span title={t("material_ledger.is_delivery_me_open_issue_hai")}
                               style={{ marginLeft: 5, fontSize: 9, fontWeight: 700, color: T.red, background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 8, padding: "0 5px" }}>
                               ⚠ {e.open_issues}
                             </span>
@@ -267,7 +266,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
                       <div style={{ fontSize: 12, fontWeight: 800, color: balNeg ? T.red : T.t1, textAlign: "right" }}>{e.bal}</div>
                       <div style={{ display: "flex", justifyContent: "center" }}>
                         {showDel && (
-                          <button title="Delete usage entry" onClick={ev => { ev.stopPropagation(); handleDeleteUsed(e); }}
+                          <button title={t("material_ledger.delete_usage_entry")} onClick={ev => { ev.stopPropagation(); handleDeleteUsed(e); }}
                             style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: T.red, lineHeight: 0 }}>
                             <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
                           </button>
@@ -278,7 +277,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
                 })}
               {visibleLedger.length > 0 && (
                 <div style={{ display: "grid", gridTemplateColumns: "54px 1fr 48px 48px 58px 22px", gap: 5, padding: "9px 16px", background: "#0F172A" }}>
-                  <div style={{ gridColumn: "1 / 3", fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.5)", textTransform: "uppercase", letterSpacing: ".4px" }}>Total</div>
+                  <div style={{ gridColumn: "1 / 3", fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,.5)", textTransform: "uppercase", letterSpacing: ".4px" }}>{t("common.total")}</div>
                   <div style={{ fontSize: 12, fontWeight: 800, color: "#4ADE80", textAlign: "right" }}>{material.total_received}</div>
                   <div style={{ fontSize: 12, fontWeight: 800, color: "#F87171", textAlign: "right" }}>{material.total_used}</div>
                   <div style={{ fontSize: 12, fontWeight: 800, color: "#fff", textAlign: "right" }}>{material.balance}</div>
@@ -292,9 +291,9 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
           {tab === "mr" && (
             <div style={{ padding: "12px 14px" }}>
               {mrs === null
-                ? <div style={{ textAlign: "center", padding: 30, color: T.t4, fontSize: 12 }}>Loading…</div>
+                ? <div style={{ textAlign: "center", padding: 30, color: T.t4, fontSize: 12 }}>{t("common.loading_2")}</div>
                 : mrSorted.length === 0
-                  ? <Empty text="Is material ki koi MR nahi"/>
+                  ? <Empty text={t("material_ledger.is_material_ki_koi_mr_nahi")}/>
                   : mrSorted.map((m, i) => {
                     const st = m.stage || (m.mr_status === "Closed" ? "Closed" : m.mat_status === "Used" ? "Used" : m.mat_status === "Received" || m.mat_status === "PartialReceived" ? "Received" : m.mat_status === "Ordered" ? "Ordered" : m.mr_status === "Approved" ? "Approved" : m.mr_status === "Rejected" ? "Rejected" : "Requested");
                     const sm = MR_STAGE[st] || MR_STAGE.Requested;
@@ -321,19 +320,19 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
             <div style={{ padding: "11px 14px", borderBottom: `1px solid ${T.b1}` }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                 <div>
-                  <label style={lbl}>Qty Used *</label>
+                  <label style={lbl}>{t("material_ledger.qty_used")}</label>
                   <input type="number" value={uForm.qty} autoFocus
                     onChange={e => setUForm(p => ({ ...p, qty: e.target.value }))}
                     placeholder={`max ${material.balance}`} style={inp}/>
                 </div>
                 <div>
-                  <label style={lbl}>Date</label>
+                  <label style={lbl}>{t("common.date")}</label>
                   <input type="date" value={uForm.used_date}
                     onChange={e => setUForm(p => ({ ...p, used_date: e.target.value }))} style={inp}/>
                 </div>
               </div>
               <input value={uForm.remark} onChange={e => setUForm(p => ({ ...p, remark: e.target.value }))}
-                placeholder="Remark (optional)" style={{ ...inp, marginBottom: 8 }}/>
+                placeholder={t("common.remark_optional")} style={{ ...inp, marginBottom: 8 }}/>
             </div>
           )}
           <div style={{ padding: "11px 14px", display: "flex", gap: 8 }}>
@@ -341,23 +340,23 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
               !markUsed ? (
                 <button onClick={() => setMarkUsed(true)}
                   style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.grnL, border: `1px solid ${T.grnM}`, color: T.grn, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
-                  ▼ Mark Used
+                 {t("material_ledger.mark_used")}
                 </button>
               ) : (
                 <>
                   <button onClick={() => { setMarkUsed(false); setErr(""); }} disabled={saving}
                     style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, color: T.t3, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-                    Cancel
+                   {t("common.cancel")}
                   </button>
                   <button onClick={handleMarkUsed} disabled={saving}
                     style={{ flex: 2, padding: "9px", borderRadius: 7, background: saving ? "#9CA3AF" : T.grn, border: "none", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer" }}>
-                    {saving ? "Saving…" : "✓ Save Used Entry"}
+                    {saving ? t("common.saving_2") : t("material_ledger.save_used_entry")}
                   </button>
                 </>
               )
             ) : (
               <div style={{ flex: 1, textAlign: "center", fontSize: 11.5, color: T.t4, padding: "9px" }}>
-                Balance 0 — kuch use nahi kar sakte
+               {t("material_ledger.balance_0_kuch_use_nahi_kar")}
               </div>
             )}
           </div>

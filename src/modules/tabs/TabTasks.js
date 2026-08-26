@@ -8,6 +8,7 @@ import TenderPlanWizard from "./TenderPlanWizard";
 import MapPlanWizard from "./MapPlanWizard";
 import KalKaPlanModal from "./KalKaPlanModal";
 import { T } from "../shared/tokens";
+import { t, Rich } from "../../i18n";
 
 // ─── SKELETON LOADER ─────────────────────────────────────────────
 function Sk({ w="100%", h=14, r=6, mb=0 }) {
@@ -122,15 +123,15 @@ function ptPhaseCodes(roots){
 }
 // P4: structured delay reasons — fixed keys (AI-ready) + Hinglish labels + colour.
 const PT_DELAY_REASONS=[
-  {key:"material",   label:"Material late",     color:"#DC2626"},
-  {key:"labour",     label:"Labour kam",        color:"#EA580C"},
-  {key:"weather",    label:"Mausam / Baarish",  color:"#0891B2"},
-  {key:"drawing",    label:"Drawing/Approval",  color:"#7C3AED"},
-  {key:"client",     label:"Client change",     color:"#DB2777"},
-  {key:"payment",    label:"Payment delay",     color:"#CA8A04"},
-  {key:"machinery",  label:"Machine kharab",    color:"#475569"},
-  {key:"contractor", label:"Thekedar issue",    color:"#9333EA"},
-  {key:"other",      label:"Other",             color:"#64748B"},
+  {key:"material",   get label() { return t("tasks.material_late"); },     color:"#DC2626"},
+  {key:"labour",     get label() { return t("tasks.labour_kam"); },        color:"#EA580C"},
+  {key:"weather",    get label() { return t("tasks.mausam_baarish"); },  color:"#0891B2"},
+  {key:"drawing",    get label() { return t("tasks.drawing_approval"); },  color:"#7C3AED"},
+  {key:"client",     get label() { return t("tasks.client_change"); },     color:"#DB2777"},
+  {key:"payment",    get label() { return t("tasks.payment_delay"); },     color:"#CA8A04"},
+  {key:"machinery",  get label() { return t("tasks.machine_kharab"); },    color:"#475569"},
+  {key:"contractor", get label() { return t("tasks.thekedar_issue"); },    color:"#9333EA"},
+  {key:"other",      get label() { return t("common.other"); },             color:"#64748B"},
 ];
 const PT_REASON_MAP=Object.fromEntries(PT_DELAY_REASONS.map(r=>[r.key,r]));
 
@@ -191,17 +192,17 @@ function TabTasks({ projectId, isAdmin }) {
   useEffect(()=>{ loadProj(); /* eslint-disable-next-line */ }, [projectId]);
   const canEditSchedule = isAdmin || !proj?.plan_locked;
   const lockPlan = async () => {
-    if(!await window.confirmAsync("Plan lock karein? Iske baad sirf admin schedule (dates/duration/dependency) badal sakega.")) return;
+    if(!await window.confirmAsync(t("tasks.plan_lock_karein_iske_baad_sirf"))) return;
     try { await api.post("/projects/"+projectId+"/lock-plan",{}); } catch(_){}
     loadProj();
   };
   const unlockPlan = async () => {
-    const reason = await window.promptAsync("Plan unlock karne ka reason (min 5 char):"); if(!reason||reason.trim().length<5) return;
+    const reason = await window.promptAsync(t("tasks.plan_unlock_karne_ka_reason_min")); if(!reason||reason.trim().length<5) return;
     try { await api.post("/projects/"+projectId+"/unlock-plan",{reason}); } catch(_){}
     loadProj();
   };
   const unlockStart = async () => {
-    const reason = await window.promptAsync("Start date unlock karne ka reason (min 5 char):"); if(!reason||reason.trim().length<5) return;
+    const reason = await window.promptAsync(t("tasks.start_date_unlock_karne_ka_reason")); if(!reason||reason.trim().length<5) return;
     try { await api.post("/projects/"+projectId+"/unlock-start",{reason}); } catch(_){}
     loadProj();
   };
@@ -611,29 +612,29 @@ function TabTasks({ projectId, isAdmin }) {
               {t.tag&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{t.tag}</span>}
               {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:8,fontWeight:600,padding:"1px 4px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
               {(()=>{const fv=ptFinishVar(t);
-                if(fv.kind==="late")   return <span style={{background:"#FEE2E2",color:"#DC2626",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>✓ {fv.days}d late</span>;
-                if(fv.kind==="early")  return <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>✓ {fv.days}d early</span>;
-                if(fv.kind==="ontime"&&(t.status==="Completed"||Number(t.progress)===100)) return <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>✓ on time</span>;
+                if(fv.kind==="late")   return <span style={{background:"#FEE2E2",color:"#DC2626",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t("tasks.daysd_late", { days: fv.days })}</span>;
+                if(fv.kind==="early")  return <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t("tasks.daysd_early", { days: fv.days })}</span>;
+                if(fv.kind==="ontime"&&(t.status==="Completed"||Number(t.progress)===100)) return <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t("tasks.on_time")}</span>;
                 return null;})()}
               {/* P4: delay reason chip — shown on late tasks; click to set/change */}
               {(()=>{const fv=ptFinishVar(t); if(fv.kind!=="late"&&fv.kind!=="running") return null;
                 const r=t.delay_reason?PT_REASON_MAP[t.delay_reason]:null;
                 return r
-                  ? <span onClick={e=>{e.stopPropagation();setReasonMenu({x:e.clientX,y:e.clientY,task:t});}} title="Delay kaaron — badalne ke liye click" style={{background:r.color,color:"white",fontSize:8,fontWeight:700,padding:"1px 6px",borderRadius:3,flexShrink:0,cursor:"pointer",whiteSpace:"nowrap"}}>{r.label}</span>
-                  : <span onClick={e=>{e.stopPropagation();setReasonMenu({x:e.clientX,y:e.clientY,task:t});}} title="Delay ka kaaron set karo" style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #F59E0B",fontSize:8,fontWeight:700,padding:"0px 5px",borderRadius:3,flexShrink:0,cursor:"pointer",whiteSpace:"nowrap"}}>+ kaaron?</span>;
+                  ? <span onClick={e=>{e.stopPropagation();setReasonMenu({x:e.clientX,y:e.clientY,task:t});}} title={t("tasks.delay_kaaron_badalne_ke_liye_click")} style={{background:r.color,color:"white",fontSize:8,fontWeight:700,padding:"1px 6px",borderRadius:3,flexShrink:0,cursor:"pointer",whiteSpace:"nowrap"}}>{r.label}</span>
+                  : <span onClick={e=>{e.stopPropagation();setReasonMenu({x:e.clientX,y:e.clientY,task:t});}} title={t("tasks.delay_ka_kaaron_set_karo")} style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #F59E0B",fontSize:8,fontWeight:700,padding:"0px 5px",borderRadius:3,flexShrink:0,cursor:"pointer",whiteSpace:"nowrap"}}>{t("tasks.kaaron")}</span>;
               })()}
             </div>
             {/* Buttons on hover */}
             <div className="tsk-act" onClick={e=>e.stopPropagation()} style={{display:"none",alignItems:"center",gap:3,flexShrink:0,paddingLeft:5,background:"linear-gradient(to right,transparent,"+T.bluL+"dd 15%)"}}>
-                <button onClick={()=>setInfoTask(infoTask?.id===t.id?null:t)} title="Info"
+                <button onClick={()=>setInfoTask(infoTask?.id===t.id?null:t)} title={t("tasks.info")}
                   style={{width:22,height:22,borderRadius:4,background:infoTask?.id===t.id?"#FEF3C7":T.surface,border:"1px solid "+(infoTask?.id===t.id?"#FCD34D":T.b1),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===t.id?"#D97706":T.t3} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
                 </button>
-                {isAdmin&&depth<6&&<button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
+                {isAdmin&&depth<6&&<button onClick={()=>{setAddParent(t);setShowAdd(true);}} title={t("tasks.add_subtask")}
                   style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
                 </button>}
-                {isAdmin&&<button onClick={()=>setEditTask(t)} title="Edit"
+                {isAdmin&&<button onClick={()=>setEditTask(t)} title={t("common.edit_2")}
                   style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>}
@@ -647,7 +648,7 @@ function TabTasks({ projectId, isAdmin }) {
 
           {/* Progress — parents show a rolled-up value; "M" marks a pinned override */}
           <div style={{padding:"0 8px",...SEP,display:"flex",flexDirection:"column",justifyContent:"center",height:"100%"}}
-            title={hasKids?(ptIsOverridden(t)?ptOverrideTitle(t):"Children se auto-calculated (duration-weighted)"):""}>
+            title={hasKids?(ptIsOverridden(t)?ptOverrideTitle(t):t("tasks.children_se_auto_calculated_duration_weighted")):""}>
             <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
               <div style={{flex:1,height:4,background:"#E2E8F0",borderRadius:2,overflow:"hidden"}}>
                 <div style={{height:"100%",width:t.progress+"%",background:t.progress===100?"#10B981":t.progress>0?"#3B82F6":"#E2E8F0",borderRadius:2,transition:"width .3s"}}/>
@@ -738,12 +739,12 @@ function TabTasks({ projectId, isAdmin }) {
         {infoTask?.id===t.id&&(
           <div style={{padding:"10px 18px",background:"#FFFBEB",borderBottom:"1px solid #FDE68A",borderLeft:"3px solid "+lvl,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
             {[
-              {l:"Code",v:pcd.code||t.no||"—"},{l:"Phase",v:pcd.phaseName||"—"},
-              {l:"Category",v:t.category||"—"},{l:"Status",v:t.status||"—"},
-              {l:"Progress",v:(t.progress||0)+"%"},{l:"Assigned",v:t.assignee||"—"},
-              {l:"Start",v:fmtDate(t.baseStart)},{l:"End",v:fmtDate(t.baseEnd)},
-              {l:"Duration",v:t.duration>0?t.duration+"d":"—"},{l:"Tag",v:t.tag||"—"},
-              {l:"Last Update",v:fmtDate(t.lastUpdate)},{l:"Dhyan Alert",v:t.dhyanRakhen?"Yes":"No"},
+              {l:t("common.code"),v:pcd.code||t.no||"—"},{l:t("tasks.phase"),v:pcd.phaseName||"—"},
+              {l:t("common.category"),v:t.category||"—"},{l:t("common.status"),v:t.status||"—"},
+              {l:t("common.progress"),v:(t.progress||0)+"%"},{l:t("crm.assigned"),v:t.assignee||"—"},
+              {l:t("common.start"),v:fmtDate(t.baseStart)},{l:t("tasks.end"),v:fmtDate(t.baseEnd)},
+              {l:t("tasks.duration"),v:t.duration>0?t.duration+"d":"—"},{l:t("tasks.tag"),v:t.tag||"—"},
+              {l:t("tasks.last_update"),v:fmtDate(t.lastUpdate)},{l:t("tasks.dhyan_alert"),v:t.dhyanRakhen?"Yes":"No"},
             ].map(({l,v})=>(
               <div key={l}>
                 <div style={{fontSize:9,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px",marginBottom:1}}>{l}</div>
@@ -842,10 +843,10 @@ function TabTasks({ projectId, isAdmin }) {
       {/* Stats row */}
       <div style={{display:"grid",gridTemplateColumns:blMetrics?"repeat(8,1fr)":"repeat(5,1fr)",gap:9,marginBottom:12}}>
         {[
-          {l:"Total Tasks",v:allFlat.length,c:T.slt},
-          {l:"Ongoing",v:ongoing,c:T.blu},
-          {l:"Completed",v:completed,c:T.grn},
-          {l:"Delayed",v:delayed,c:delayed>0?T.red:T.grn},
+          {l:t("tasks.total_tasks"),v:allFlat.length,c:T.slt},
+          {l:t("projects.ongoing"),v:ongoing,c:T.blu},
+          {l:t("common.completed"),v:completed,c:T.grn},
+          {l:t("tasks.delayed"),v:delayed,c:delayed>0?T.red:T.grn},
         ].map((s,i)=>(
           <div key={i} style={{padding:"9px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{s.l}</div>
@@ -857,22 +858,22 @@ function TabTasks({ projectId, isAdmin }) {
           style={{padding:"9px 12px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,borderTop:`3px solid ${T.red}`,cursor:"pointer",transition:"box-shadow .15s"}}
           onMouseEnter={e=>e.currentTarget.style.boxShadow="0 3px 12px rgba(220,38,38,.15)"}
           onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-          <div style={{fontSize:9,color:T.red,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Open Issues</div>
+          <div style={{fontSize:9,color:T.red,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{t("projects.open_issues")}</div>
           <div style={{fontSize:18,fontWeight:700,color:T.red}}>{taskIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length||0}</div>
         </div>
 
         {/* Baseline metrics — only when baseline is set */}
         {blMetrics && <>
           <div style={{padding:"9px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,borderTop:`3px solid #7C3AED`}}>
-            <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>On-Time % (v{blMetrics.version})</div>
+            <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{t("tasks.on_time_vversion", { version: blMetrics.version })}</div>
             <div style={{fontSize:18,fontWeight:700,color:blMetrics.onTimePct>=80?T.grn:blMetrics.onTimePct>=50?T.amb:T.red}}>{blMetrics.onTimePct}%</div>
           </div>
           <div style={{padding:"9px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,borderTop:`3px solid #7C3AED`}}>
-            <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Avg Slip</div>
+            <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{t("tasks.avg_slip")}</div>
             <div style={{fontSize:18,fontWeight:700,color:parseFloat(blMetrics.avgSlip)>0?T.red:T.grn}}>{parseFloat(blMetrics.avgSlip)>0?"+":""}{blMetrics.avgSlip}d</div>
           </div>
           <div style={{padding:"9px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,borderTop:`3px solid #EC4899`}}>
-            <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Original Delay (v1)</div>
+            <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{t("tasks.original_delay_v1")}</div>
             <div style={{fontSize:18,fontWeight:700,color:blMetrics.origDelay>0?T.red:T.grn}}>{blMetrics.origDelay>0?"+":""}{blMetrics.origDelay}d</div>
           </div>
         </>}
@@ -884,23 +885,23 @@ function TabTasks({ projectId, isAdmin }) {
           <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#EA580C" strokeWidth={2} style={{flexShrink:0,marginTop:1}}><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:12.5,color:"#7C2D12",lineHeight:1.5}}>
-              <b>Schedule alert:</b>
-              {delayInsight.doneLate>0 && <> {delayInsight.doneLate} task late finish hue</>}
+              <b>{t("tasks.schedule_alert")}</b>
+              {delayInsight.doneLate>0 && <>{t("tasks.donelate_task_late_finish_hue", { doneLate: delayInsight.doneLate })}</>}
               {delayInsight.doneLate>0 && delayInsight.running>0 && <>,</>}
-              {delayInsight.running>0 && <> {delayInsight.running} abhi schedule se peeche chal rahe</>}.
-              {delayInsight.worst && <> Sabse bada slip: <b>{delayInsight.worst.t.no} {String(delayInsight.worst.t.name).slice(0,30)}</b> ({delayInsight.worst.days}d {delayInsight.worst.kind==="running"?"over":"late"}).</>}
-              {!delayInsight.anyActual && <span style={{color:"#9A3412"}}> {" "}Tip: progress update karne pe actual dates auto capture hoti hain.</span>}
+              {delayInsight.running>0 && <>{t("tasks.running_abhi_schedule_se_peeche_chal", { running: delayInsight.running })}</>}.
+              {delayInsight.worst && <><Rich k="tasks.sabse_bada_slip_no_string_daysd" params={{ no: delayInsight.worst.t.no, String: String(delayInsight.worst.t.name).slice(0,30), days: delayInsight.worst.days, delayInsight: delayInsight.worst.kind==="running"?"over":"late" }} /></>}
+              {!delayInsight.anyActual && <span style={{color:"#9A3412"}}>{t("tasks.vtip_progress_update_karne_pe_actual", { v: " " })}</span>}
             </div>
             {/* P4: delay-by-reason breakdown */}
             {(delayInsight.reasonRows.length>0 || delayInsight.lateNoReason>0) && (
               <div style={{display:"flex",alignItems:"center",gap:6,marginTop:7,flexWrap:"wrap"}}>
-                <span style={{fontSize:9.5,fontWeight:700,color:"#9A3412",textTransform:"uppercase",letterSpacing:".3px"}}>Kaaron:</span>
+                <span style={{fontSize:9.5,fontWeight:700,color:"#9A3412",textTransform:"uppercase",letterSpacing:".3px"}}>{t("tasks.kaaron_2")}</span>
                 {delayInsight.reasonRows.map(r=>(
                   <span key={r.key} title={`${r.count} task, ${r.days} din`} style={{display:"inline-flex",alignItems:"center",gap:4,background:"white",border:`1px solid ${r.color}`,borderRadius:11,padding:"1px 8px",fontSize:10.5,fontWeight:600,color:r.color}}>
                     <span style={{width:7,height:7,borderRadius:"50%",background:r.color}}/>{r.label} · {r.count} ({r.days}d)
                   </span>
                 ))}
-                {delayInsight.lateNoReason>0 && <span style={{fontSize:10.5,color:"#B45309",fontStyle:"italic"}}>+ {delayInsight.lateNoReason} bina kaaron (set karo)</span>}
+                {delayInsight.lateNoReason>0 && <span style={{fontSize:10.5,color:"#B45309",fontStyle:"italic"}}>{t("tasks.latenoreason_bina_kaaron_set_karo", { lateNoReason: delayInsight.lateNoReason })}</span>}
               </div>
             )}
           </div>
@@ -908,7 +909,7 @@ function TabTasks({ projectId, isAdmin }) {
       ) : delayInsight.hasData ? (
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",marginBottom:12,background:"#F0FDF4",border:"1px solid #BBF7D0",borderLeft:"4px solid #16A34A",borderRadius:8}}>
           <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth={2.2} style={{flexShrink:0}}><path d="M20 6L9 17l-5-5"/></svg>
-          <div style={{fontSize:12.5,color:"#14532D"}}><b>On track</b> — abhi tak koi delay nahi{delayInsight.doneOnTime>0?<> ({delayInsight.doneOnTime} task time pe complete)</>:null}{delayInsight.doneEarly>0?<>, {delayInsight.doneEarly} jaldi</>:null}.</div>
+          <div style={{fontSize:12.5,color:"#14532D"}}><Rich k="tasks.t_abhi_tak_koi_delay_nahi" params={{ t: t("common.on_track") }} />{delayInsight.doneOnTime>0?<>{t("tasks.doneontime_task_time_pe_complete", { doneOnTime: delayInsight.doneOnTime })}</>:null}{delayInsight.doneEarly>0?<>, {delayInsight.doneEarly} jaldi</>:null}.</div>
         </div>
       ) : null}
 
@@ -928,7 +929,7 @@ function TabTasks({ projectId, isAdmin }) {
         <button onClick={()=>setShowFilters(s=>!s)}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:6,border:`1.5px solid ${activeF>0?T.amb:T.b1}`,background:activeF>0?T.ambL:T.surface,color:activeF>0?T.amb:T.t3,fontSize:11.5,fontWeight:activeF>0?600:400,cursor:"pointer"}}>
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
-          Filters {activeF>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:700,padding:"0 5px",borderRadius:10}}>{activeF}</span>}
+          {t("common.filters")} {activeF>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:700,padding:"0 5px",borderRadius:10}}>{activeF}</span>}
         </button>
 
         {/* ── TODAY TOGGLE pill ── */}
@@ -938,17 +939,17 @@ function TabTasks({ projectId, isAdmin }) {
             color:fToday?"white":T.t3,fontSize:11.5,fontWeight:fToday?700:400,cursor:"pointer",
             whiteSpace:"nowrap",transition:"all .15s"}}>
           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          Today{fToday&&<svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>}
+          {t("common.today")}{fToday&&<svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>}
         </button>
         {/* ── UNIFIED DATE RANGE (list filter + gantt viewport) ── */}
         <div style={{display:"flex",alignItems:"center",gap:4,height:30,padding:"0 8px",borderRadius:7,
           border:`1.5px solid ${(fDateFrom||fDateTo)?T.bluM:T.b1}`,
           background:(fDateFrom||fDateTo)?T.bluL:T.surface}}>
           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={(fDateFrom||fDateTo)?T.blu:T.t4} strokeWidth={2}><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-          <input type="date" value={fDateFrom} onChange={e=>{setFDateFrom(e.target.value);if(view==="gantt")setGanttRange(p=>({...p,from:e.target.value}));}} placeholder="From"
+          <input type="date" value={fDateFrom} onChange={e=>{setFDateFrom(e.target.value);if(view==="gantt")setGanttRange(p=>({...p,from:e.target.value}));}} placeholder={t("common.from")}
             style={{border:"none",background:"transparent",fontSize:11,color:fDateFrom?T.blu:T.t3,outline:"none",width:102,fontFamily:"inherit"}}/>
           <span style={{color:T.t4,fontSize:10}}>–</span>
-          <input type="date" value={fDateTo} onChange={e=>{setFDateTo(e.target.value);if(view==="gantt")setGanttRange(p=>({...p,to:e.target.value}));}} placeholder="To"
+          <input type="date" value={fDateTo} onChange={e=>{setFDateTo(e.target.value);if(view==="gantt")setGanttRange(p=>({...p,to:e.target.value}));}} placeholder={t("common.to")}
             style={{border:"none",background:"transparent",fontSize:11,color:fDateTo?T.blu:T.t3,outline:"none",width:102,fontFamily:"inherit"}}/>
           {(fDateFrom||fDateTo)&&<button onClick={()=>{setFDateFrom("");setFDateTo("");setGanttRange({from:"",to:""}); }}
             style={{background:"none",border:"none",cursor:"pointer",color:T.blu,padding:0,display:"flex"}}>
@@ -959,7 +960,7 @@ function TabTasks({ projectId, isAdmin }) {
         <div style={{flex:1}}/>
         {dhyanCount>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",background:T.redL,borderRadius:6,border:`1px solid ${T.redM}`}}>
           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
-          <span style={{fontSize:10.5,fontWeight:700,color:T.red}}>{dhyanCount} DHYAN alerts</span>
+          <span style={{fontSize:10.5,fontWeight:700,color:T.red}}>{t("tasks.dhyancount_dhyan_alerts", { dhyanCount })}</span>
         </div>}
         {/* Gantt scale switcher — only when gantt is active */}
         {view==="gantt" && <div style={{display:"flex",alignItems:"center",gap:3,background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,padding:3}}>
@@ -974,13 +975,13 @@ function TabTasks({ projectId, isAdmin }) {
         {/* Level dropdown — All + L1(n) L2(n) ... */}
         <select value={levelFilter} onChange={e=>applyLevel(e.target.value)}
           style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${levelFilter!=="All"?T.blu:T.b1}`,background:levelFilter!=="All"?T.bluL:T.surface,color:levelFilter!=="All"?T.blu:T.t2,fontSize:11.5,fontWeight:levelFilter!=="All"?700:400,fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
-          <option value="All">All Levels ({allFlat.length})</option>
+          <option value="All">{t("tasks.all_levels_allflat", { allFlat: allFlat.length })}</option>
           {levelMeta.levels.map(lv=>(
             <option key={lv.depth} value={String(lv.depth+1)}>
-              L{lv.depth+1} — {lv.label}{lv.depth>0?" (upto)":""} ({lv.cumCount})
+              L{lv.depth+1} — {lv.label}{lv.depth>0?t("budget.upto"):""} ({lv.cumCount})
             </option>
           ))}
-          {levelFilter==="custom"&&<option value="custom">Custom view</option>}
+          {levelFilter==="custom"&&<option value="custom">{t("budget.custom_view")}</option>}
         </select>
         {/* CSV Export */}
         <button onClick={()=>{
@@ -992,16 +993,16 @@ function TabTasks({ projectId, isAdmin }) {
           const url=URL.createObjectURL(blob);
           const a=document.createElement("a");a.href=url;a.download="tasks_export.csv";a.click();
           URL.revokeObjectURL(url);
-        }} title="Export to CSV"
+        }} title={t("tasks.export_to_csv")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-          Export
+         {t("common.export")}
         </button>
         {/* Excel Import */}
-        {isAdmin&&<label title="Import from Excel/CSV"
+        {isAdmin&&<label title={t("tasks.import_from_excel_csv")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-          Import
+         {t("master_library.import")}
           <input type="file" accept=".csv" style={{display:"none"}} onChange={async e=>{
             const file=e.target.files[0]; if(!file) return;
             const text=await file.text();
@@ -1031,39 +1032,39 @@ function TabTasks({ projectId, isAdmin }) {
               const roots=[];flat.forEach(t=>{if(t.parent_id&&map[t.parent_id])map[t.parent_id].children.push(t);else roots.push(t);});
               setTasks(roots);
             }
-            alert("Import complete!");
+            alert(t("tasks.import_complete"));
             e.target.value="";
           }}/>
         </label>}
-        {isAdmin&&<button onClick={()=>setShowBoqWizard(true)} title="BOQ Excel se tasks import karein"
+        {isAdmin&&<button onClick={()=>setShowBoqWizard(true)} title={t("tasks.boq_excel_se_tasks_import_karein")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.ind}`,background:T.indL,fontSize:12,fontWeight:700,color:T.ind,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 17V7h6v10M4 21h16M6 21V5a2 2 0 012-2h8a2 2 0 012 2v16"/></svg>
-          Import BOQ
+         {t("tasks.import_boq")}
         </button>}
         {isAdmin&&!!tenderPlan?.packages?.length&&<button onClick={()=>setShowTenderPlan(true)}
-          title="Tender ke work package se is site ka task plan banao"
+          title={t("tasks.tender_ke_work_package_se_is")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.ind}`,background:T.indL,fontSize:12,fontWeight:700,color:T.ind,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 7h18M3 12h18M3 17h10"/></svg>
-          Tender se plan lao
+         {t("tasks.tender_se_plan_lao")}
         </button>}
         {isAdmin&&!!mapPlan?.groups?.length&&<button onClick={()=>setShowMapPlan(true)}
-          title="Map par khinchi lines aur structures se poora task tree banao"
+          title={t("tasks.map_par_khinchi_lines_aur_structures")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid #0E7490`,background:"#ECFEFF",fontSize:12,fontWeight:700,color:"#0E7490",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 20l-5.4 1.8a1 1 0 01-1.3-1V6.2a1 1 0 01.7-.9L9 3m0 17l6-2m-6 2V3m6 15l5.4 1.8a1 1 0 001.3-1V4.8a1 1 0 00-.7-.9L15 2m0 16V2m-6 1l6-1"/></svg>
-          Map se plan lao
+         {t("map_plan_wizard.map_se_plan_lao")}
         </button>}
         <button onClick={()=>setShowKalPlan(true)}
-          title="Raftar + schedule + rukavat se agle din ka kaam-sujhaav — ganit se, faisla aapka"
+          title={t("tasks.raftar_schedule_rukavat_se_agle_din")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid #B45309`,background:"#FFFBEB",fontSize:12,fontWeight:700,color:"#B45309",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-          🌅 Kal ka plan
+         {t("kal_ka_plan.kal_ka_plan")}
         </button>
         {isAdmin&&<button onClick={()=>setShowTemplatePicker(true)}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:"linear-gradient(135deg,#EC4899,#BE185D)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-          📋 Load Template
+         {t("tasks.load_template")}
         </button>}
         {isAdmin&&<button onClick={()=>{setAddParent(null);setShowAdd(true);}}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg> Add Task
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg> {t("tasks.add_task")}
         </button>}
       </div>
 
@@ -1072,10 +1073,10 @@ function TabTasks({ projectId, isAdmin }) {
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:10}}>
           {/* Row 1 */}
           <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap",marginBottom:10}}>
-            {[{l:"Category",v:fCat,fn:setFCat,opts:["All","Civil","Electrical","Plumbing","Finishing","Custom"],def:"All Categories"},
-              {l:"Status",v:fStatus,fn:setFStatus,opts:["All","Ongoing","Completed","Not Started","Hold"],def:"All Status"},
-              {l:"Tag",v:fTag,fn:setFTag,opts:["All",...allTags],def:"All Tags"},
-              {l:"Assigned To",v:fAssignee,fn:setFAssignee,opts:["All",...TEAM_PT],def:"All"},
+            {[{l:t("common.category"),v:fCat,fn:setFCat,opts:["All","Civil","Electrical","Plumbing","Finishing","Custom"],def:"All Categories"},
+              {l:t("common.status"),v:fStatus,fn:setFStatus,opts:["All","Ongoing","Completed","Not Started","Hold"],def:"All Status"},
+              {l:t("tasks.tag"),v:fTag,fn:setFTag,opts:["All",...allTags],def:"All Tags"},
+              {l:t("common.assigned_to"),v:fAssignee,fn:setFAssignee,opts:["All",...TEAM_PT],def:"All"},
             ].map(({l,v,fn,opts,def})=>(
               <div key={l}>
                 <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:4}}>{l}</div>
@@ -1087,7 +1088,7 @@ function TabTasks({ projectId, isAdmin }) {
             ))}
             <div>
               <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:4,display:"flex",alignItems:"center",gap:5}}>
-                Delayed
+                {t("common.delayed")}
                 {delayed>0&&<span style={{background:T.red,color:"white",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:10,lineHeight:1.4}}>{delayed}</span>}
               </div>
               <button onClick={()=>setFDelayed(s=>!s)}
@@ -1096,31 +1097,31 @@ function TabTasks({ projectId, isAdmin }) {
                   color:fDelayed?T.red:T.t3,fontSize:12,fontWeight:fDelayed?700:400,cursor:"pointer",
                   transition:"background .2s, border-color .2s, color .2s",whiteSpace:"nowrap"}}>
                 {fDelayed
-                  ? <><svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>Delayed Only</>
-                  : <>All Tasks</>}
+                  ? <><svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>{t("tasks.delayed_only")}</>
+                  : <>{t("tasks.all_tasks")}</>}
               </button>
             </div>
             {/* As Schedule toggle — flat chronological sort */}
             <div>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:4}}>View Mode</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:4}}>{t("tasks.view_mode")}</div>
               <button onClick={()=>setFAsSchedule(s=>!s)}
                 style={{height:30,padding:"0 11px",borderRadius:6,display:"flex",alignItems:"center",gap:5,
                   border:`1.5px solid ${fAsSchedule?T.grn:T.b1}`,background:fAsSchedule?T.grnL:T.surface,
                   color:fAsSchedule?T.grn:T.t3,fontSize:12,fontWeight:fAsSchedule?700:400,cursor:"pointer"}}>
                 <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-                {fAsSchedule?"Schedule View ON":"As Schedule"}
+                {fAsSchedule?t("tasks.schedule_view_on"):t("tasks.as_schedule")}
               </button>
             </div>
             {activeF>0&&<button onClick={()=>{setFCat("All");setFStatus("All");setFTag("All");setFAssignee("All");setFDelayed(false);setFAsSchedule(false);setFToday(false);setFDateFrom("");setFDateTo("");setGanttRange({from:"",to:""}); }}
               style={{height:30,padding:"0 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surfaceB,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",alignSelf:"flex-end"}}>
-              Clear All
+             {t("tasks.clear_all")}
             </button>}
           </div>
 
           {/* Row 2 — Saved Filters + Last Used */}
           <div style={{borderTop:`1px solid ${T.b1}`,paddingTop:10,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             {/* Saved filter chips */}
-            <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",flexShrink:0}}>Saved</div>
+            <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",flexShrink:0}}>{t("attendance.saved_3")}</div>
             {savedFilters.map((sf,i)=>{
               const isLast=lastUsedFilter&&JSON.stringify(lastUsedFilter)===JSON.stringify(sf.f);
               return(
@@ -1141,17 +1142,17 @@ function TabTasks({ projectId, isAdmin }) {
             {/* Save current filter */}
             <div style={{display:"flex",gap:5,alignItems:"center"}}>
               <input value={filterSaveName} onChange={e=>setFilterSaveName(e.target.value)}
-                placeholder="Save filter as..."
+                placeholder={t("tasks.save_filter_as")}
                 style={{height:28,padding:"0 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,color:T.t1,outline:"none",width:130,fontFamily:"inherit"}}
                 onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}
                 onKeyDown={e=>e.key==="Enter"&&saveCurrentFilter()}/>
               <button onClick={saveCurrentFilter}
                 style={{height:28,padding:"0 11px",borderRadius:6,background:filterSaveName.trim()?T.blu:T.b1,color:filterSaveName.trim()?"white":T.t4,border:"none",cursor:filterSaveName.trim()?"pointer":"default",fontSize:11.5,fontWeight:700}}>
-                Save
+               {t("common.save")}
               </button>
             </div>
 
-            {activeF>0&&<span style={{fontSize:11,color:T.t4,marginLeft:"auto"}}>{flatFiltered.length} tasks match</span>}
+            {activeF>0&&<span style={{fontSize:11,color:T.t4,marginLeft:"auto"}}>{t("tasks.flatfiltered_tasks_match", { flatFiltered: flatFiltered.length })}</span>}
           </div>
         </div>
       )}
@@ -1168,7 +1169,7 @@ function TabTasks({ projectId, isAdmin }) {
               ))}
             </div>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <button onClick={()=>{setFStatus("All");setFPhase("All");setFDelayed(false);setFToday(false);}} style={{padding:"6px 12px",borderRadius:6,background:"#FEE2E2",color:"#DC2626",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Clear All</button>
+              <button onClick={()=>{setFStatus("All");setFPhase("All");setFDelayed(false);setFToday(false);}} style={{padding:"6px 12px",borderRadius:6,background:"#FEE2E2",color:"#DC2626",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t("tasks.clear_all")}</button>
               <button onClick={()=>setShowFilters(false)} style={{width:30,height:30,borderRadius:8,border:"none",background:"#F1F5F9",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",color:"#64748B",fontFamily:"inherit"}}>×</button>
             </div>
           </div>
@@ -1181,7 +1182,7 @@ function TabTasks({ projectId, isAdmin }) {
                 {["All","Not Started","Ongoing","Completed","Hold"].map(s=>(
                   <button key={s} onClick={()=>setFStatus(s)}
                     style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${fStatus===s?"#2563EB":"#E2E8F0"}`,background:fStatus===s?"#2563EB":"white",color:fStatus===s?"white":"#374151",fontSize:12.5,fontWeight:fStatus===s?700:400,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>
-                    {s==="All"?"All":s}
+                    {s==="All"?t("common.all"):s}
                   </button>
                 ))}
               </div>
@@ -1194,7 +1195,7 @@ function TabTasks({ projectId, isAdmin }) {
                   {["All",...tasks.map(t=>t.name)].map(ph=>(
                     <button key={ph} onClick={()=>setFPhase(ph)}
                       style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${fPhase===ph?"#2563EB":"#E2E8F0"}`,background:fPhase===ph?"#2563EB":"white",color:fPhase===ph?"white":"#374151",fontSize:12,fontWeight:fPhase===ph?700:400,cursor:"pointer",fontFamily:"inherit",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",transition:"all .15s"}}>
-                      {ph==="All"?"All Phases":ph}
+                      {ph==="All"?t("tasks.all_phases"):ph}
                     </button>
                   ))}
                 </div>
@@ -1202,10 +1203,10 @@ function TabTasks({ projectId, isAdmin }) {
             )}
             {/* SHOW ONLY */}
             <div>
-              <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".6px",marginBottom:4}}>SHOW ONLY</div>
+              <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".6px",marginBottom:4}}>{t("tasks.show_only")}</div>
               {[
-                {label:"Today's tasks",sub:"Base start → end ke beech aaj ka din ho",v:fToday,fn:setFToday,ic:"⏰"},
-                {label:"Delayed tasks (late)",sub:"End date nikal gayi, abhi bhi incomplete",v:fDelayed,fn:setFDelayed,ic:"⚠️"},
+                {label:t("tasks.today_s_tasks"),sub:t("tasks.base_start_end_ke_beech_aaj"),v:fToday,fn:setFToday,ic:"⏰"},
+                {label:t("tasks.delayed_tasks_late"),sub:t("tasks.end_date_nikal_gayi_abhi_bhi"),v:fDelayed,fn:setFDelayed,ic:"⚠️"},
               ].map(({label,sub,v,fn,ic})=>(
                 <div key={label} onClick={()=>fn(s=>!s)} style={{display:"flex",alignItems:"center",gap:10,padding:"13px 0",borderBottom:"1px solid #F8FAFC",cursor:"pointer"}}>
                   <span style={{fontSize:18,flexShrink:0}}>{ic}</span>
@@ -1223,9 +1224,7 @@ function TabTasks({ projectId, isAdmin }) {
           {/* Apply button */}
           <div style={{padding:"12px 16px 16px"}}>
             <button onClick={()=>setShowFilters(false)}
-              style={{width:"100%",padding:"14px",borderRadius:10,background:"#2563EB",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"inherit"}}>
-              Apply{activeF>0?` (${activeF} active)`:""}
-            </button>
+              style={{width:"100%",padding:"14px",borderRadius:10,background:"#2563EB",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"inherit"}}>{t("tasks.applyactivef", { activeF: activeF>0?` (${activeF} active)`:"" })}</button>
           </div>
         </div>
         <style>{`@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
@@ -1236,12 +1235,12 @@ function TabTasks({ projectId, isAdmin }) {
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",position:"relative"}}>
           {/* Reset widths (only when customised) */}
           {isCustomWidths && (
-            <button onClick={resetColWidths} title="Reset column widths"
+            <button onClick={resetColWidths} title={t("tasks.reset_column_widths")}
               style={{position:"absolute",top:4,right:4,zIndex:3,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"rgba(255,255,255,0.8)",fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:4,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}
               onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.2)"}
               onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.1)"}>
               <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M3 12a9 9 0 109-9M3 12l4-4M3 12l4 4"/></svg>
-              Reset
+             {t("common.reset")}
             </button>
           )}
           {/* Header */}
@@ -1250,7 +1249,7 @@ function TabTasks({ projectId, isAdmin }) {
               <div key={k} style={{padding:"7px 5px",borderRight:i<COL_KEYS.length-1?"1px solid rgba(255,255,255,0.08)":"none",position:"relative",overflow:"hidden"}}>
                 <span style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>{COL_LABELS[k]}</span>
                 {COL_RESIZABLE[k] && (
-                  <div onMouseDown={startResize(k)} title="Drag to resize column"
+                  <div onMouseDown={startResize(k)} title={t("tasks.drag_to_resize_column")}
                     style={{position:"absolute",right:-4,top:4,bottom:4,width:9,cursor:"col-resize",zIndex:5,transition:"background .1s",display:"flex",alignItems:"center",justifyContent:"center"}}
                     onMouseEnter={e=>{e.currentTarget.style.background="rgba(59,130,246,0.7)";e.currentTarget.firstChild.style.background="white";}}
                     onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.firstChild.style.background="rgba(255,255,255,0.25)";}}>
@@ -1264,7 +1263,7 @@ function TabTasks({ projectId, isAdmin }) {
             {fAsSchedule&&scheduleFlat
               /* ── SCHEDULE VIEW: flat, date-sorted ── */
               ? scheduleFlat.length===0
-                ? <div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:13}}>Koi task nahi mila selected filters ke saath</div>
+                ? <div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:13}}>{t("tasks.koi_task_nahi_mila_selected_filters")}</div>
                 : scheduleFlat.map((t,i)=>{
                     const ss=STATUS_C[t.status]||STATUS_C["Not Started"];
                     const delay=ptDelayDays(t);
@@ -1358,7 +1357,7 @@ function TabTasks({ projectId, isAdmin }) {
                 <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
               </div>
               <div>
-                <div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.7)",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:3}}>⚠ DHYAN RAKHEN</div>
+                <div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.7)",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:3}}>{t("tasks.dhyan_rakhen")}</div>
                 <div style={{fontSize:14,fontWeight:700,color:"white"}}>{dhyanTask.name}</div>
                 <div style={{fontSize:10.5,color:"rgba(255,255,255,0.6)",marginTop:2}}>{dhyanTask.no} · {dhyanTask.category}</div>
               </div>
@@ -1367,13 +1366,13 @@ function TabTasks({ projectId, isAdmin }) {
               <div style={{background:T.redL,border:`1px solid ${T.redM}`,borderLeft:`4px solid ${T.red}`,borderRadius:7,padding:"12px 14px",marginBottom:14}}>
                 <div style={{fontSize:13.5,color:T.red,lineHeight:1.6,fontWeight:500}}>{dhyanTask.dhyanRakhen}</div>
               </div>
-              <div style={{fontSize:11.5,color:T.t4,marginBottom:14,textAlign:"center"}}>Is task ko kholne se pehle upar likhi baat dhyan se padh lein</div>
+              <div style={{fontSize:11.5,color:T.t4,marginBottom:14,textAlign:"center"}}>{t("tasks.is_task_ko_kholne_se_pehle")}</div>
               <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>{setDhyanTask(null);setPendingTask(null);}}
-                  style={{flex:1,padding:"10px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Wapas Jao</button>
+                  style={{flex:1,padding:"10px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("tasks.wapas_jao")}</button>
                 <button onClick={()=>{setOpenTask(pendingTask);setDhyanTask(null);setPendingTask(null);}}
                   style={{flex:2,padding:"10px",borderRadius:7,background:`linear-gradient(135deg,${T.grn},#047857)`,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-                  ✓ Samajh Gaya — Kholein
+                 {t("tasks.samajh_gaya_kholein")}
                 </button>
               </div>
             </div>
@@ -1394,7 +1393,7 @@ function TabTasks({ projectId, isAdmin }) {
       )}
       {!loading && tasks.length===0 && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:14}}>
         <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke={T.b2} strokeWidth={1.5} style={{margin:"0 auto 10px",display:"block"}}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-        No tasks yet. Create your first task to start tracking work.
+       {t("tasks.no_tasks_yet_create_your_first")}
       </div>}
 
       {/* Context Menu */}
@@ -1413,23 +1412,23 @@ function TabTasks({ projectId, isAdmin }) {
               <div style={{fontSize:9.5,color:"#9CA3AF",fontFamily:"monospace"}}>{contextMenu.task.no}</div>
             </div>
             {[
-              {icon:"M5 15l7-7 7 7",label:"Move Up",action:()=>{moveTask(contextMenu.task.id,"up");setContextMenu(null);}},
-              {icon:"M19 9l-7 7-7-7",label:"Move Down",action:()=>{moveTask(contextMenu.task.id,"down");setContextMenu(null);}},
+              {icon:"M5 15l7-7 7 7",label:t("tasks.move_up"),action:()=>{moveTask(contextMenu.task.id,"up");setContextMenu(null);}},
+              {icon:"M19 9l-7 7-7-7",label:t("tasks.move_down"),action:()=>{moveTask(contextMenu.task.id,"down");setContextMenu(null);}},
               null, // divider
-              {icon:"M12 5v14M5 12h14",label:"Add Subtask",action:()=>{setAddParent(contextMenu.task);setShowAdd(true);setContextMenu(null);},color:"#10B981",admin:true},
-              {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:"Edit Task",action:()=>{setEditTask(contextMenu.task);setContextMenu(null);},admin:true},
+              {icon:"M12 5v14M5 12h14",label:t("tasks.add_subtask"),action:()=>{setAddParent(contextMenu.task);setShowAdd(true);setContextMenu(null);},color:"#10B981",admin:true},
+              {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:t("tasks.edit_task"),action:()=>{setEditTask(contextMenu.task);setContextMenu(null);},admin:true},
               // Leaf only — a parent's 100% has to come from its children (or a
               // reasoned override), never from a one-click shortcut.
-              {icon:"M20 6L9 17l-5-5",label:"Mark Complete",hide:contextMenu.task.children?.length>0,
+              {icon:"M20 6L9 17l-5-5",label:t("tasks.mark_complete"),hide:contextMenu.task.children?.length>0,
                 action:async()=>{const r=await api.put("/tasks/"+contextMenu.task.id,{progress:100});setContextMenu(null);if(r.success)await refetchTasks();else alert(r.message||"Update failed");}},
-              {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:"Override Progress…",
+              {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:t("tasks.override_progress"),
                 hide:!(contextMenu.task.children?.length>0),admin:true,color:"#4B45C4",
                 action:()=>{setOverrideTask(contextMenu.task);setContextMenu(null);}},
-              {icon:"M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 8M21 3v5h-5",label:"Reset to Auto",
+              {icon:"M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 8M21 3v5h-5",label:t("tasks.reset_to_auto"),
                 hide:!(contextMenu.task.children?.length>0&&ptIsOverridden(contextMenu.task)),admin:true,
                 action:async()=>{const r=await api.del("/tasks/"+contextMenu.task.id+"/progress-override");setContextMenu(null);if(r.success)await refetchTasks();else alert(r.message||"Reset failed");}},
               null,
-              {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:"Delete Task",action:async()=>{
+              {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:t("tasks.delete_task"),action:async()=>{
                 const task=contextMenu.task;
                 // A clean task hard-deletes; one with sub-tasks / issues / photos /
                 // dependencies is archived instead. Backend decides — the confirm
@@ -1534,7 +1533,7 @@ function TabTasks({ projectId, isAdmin }) {
       {reasonMenu && <>
         <div onClick={()=>setReasonMenu(null)} style={{position:"fixed",inset:0,zIndex:998}}/>
         <div style={{position:"fixed",left:Math.min(reasonMenu.x,window.innerWidth-210),top:Math.min(reasonMenu.y,window.innerHeight-330),zIndex:999,background:"white",borderRadius:9,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:"1px solid #E5E7EB",width:200,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
-          <div style={{padding:"8px 12px",borderBottom:"1px solid #F3F4F6",fontSize:10.5,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px"}}>Delay ka kaaron?</div>
+          <div style={{padding:"8px 12px",borderBottom:"1px solid #F3F4F6",fontSize:10.5,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px"}}>{t("tasks.delay_ka_kaaron")}</div>
           <div style={{maxHeight:280,overflowY:"auto",padding:"4px 0"}}>
             {PT_DELAY_REASONS.map(r=>(
               <button key={r.key} onClick={()=>setDelayReason(reasonMenu.task,r.key)}
@@ -1544,7 +1543,7 @@ function TabTasks({ projectId, isAdmin }) {
               </button>
             ))}
             {reasonMenu.task?.delay_reason&&<button onClick={()=>setDelayReason(reasonMenu.task,"")}
-              style={{width:"100%",padding:"7px 12px",background:"none",border:"none",borderTop:"1px solid #F3F4F6",cursor:"pointer",fontSize:11.5,color:"#9CA3AF",textAlign:"left"}}>✕ Kaaron hatao</button>}
+              style={{width:"100%",padding:"7px 12px",background:"none",border:"none",borderTop:"1px solid #F3F4F6",cursor:"pointer",fontSize:11.5,color:"#9CA3AF",textAlign:"left"}}>{t("tasks.kaaron_hatao")}</button>}
           </div>
         </div>
       </>}
@@ -1705,7 +1704,7 @@ function ScheduleLifecycleStrip({ proj, isAdmin, onSetStart, onLockPlan, onUnloc
   if(!proj) return null;
   const stage = proj.start_locked ? "started" : proj.plan_locked ? "plan_locked" : "estimate";
   const fmt = (d)=> d ? new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}) : "—";
-  const stages = [{key:"estimate",label:"Estimate",icon:"📝"},{key:"plan_locked",label:"Plan Locked",icon:"📌"},{key:"started",label:"Started",icon:"🚦"}];
+  const stages = [{key:"estimate",label:t("common.estimate"),icon:"📝"},{key:"plan_locked",label:t("tasks.plan_locked"),icon:"📌"},{key:"started",label:t("tasks.started"),icon:"🚦"}];
   const curIdx = stages.findIndex(s=>s.key===stage);
   const Btn = ({onClick,bg,color,bd,children})=>(<button onClick={onClick} style={{padding:"6px 12px",borderRadius:6,background:bg,color,border:bd||"none",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>{children}</button>);
   return(
@@ -1722,21 +1721,21 @@ function ScheduleLifecycleStrip({ proj, isAdmin, onSetStart, onLockPlan, onUnloc
         ))}
       </div>
       <div style={{flex:1,minWidth:200,fontSize:11,color:"#64748B"}}>
-        {stage==="estimate" && <>Tentative plan — client ko timeline dikhao. Start date set karke dates auto banao.</>}
-        {stage==="plan_locked" && <>Plan locked — sirf admin schedule badal sakta. Green flag aaye to start date lock karo.</>}
-        {stage==="started" && <><b style={{color:"#16A34A"}}>Started: {fmt(proj.start_date)}</b> · dates locked 🔒</>}
+        {stage==="estimate" && <>{t("tasks.tentative_plan_client_ko_timeline_dikhao")}</>}
+        {stage==="plan_locked" && <>{t("tasks.plan_locked_sirf_admin_schedule_badal")}</>}
+        {stage==="started" && <><b style={{color:"#16A34A"}}>{t("tasks.started_fmt", { fmt: fmt(proj.start_date) })}</b> {t("tasks.dates_locked")}</>}
       </div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
         {stage==="estimate" && isAdmin && <>
-          <Btn onClick={onSetStart} bg="white" color="#1D4ED8" bd="1px solid #93C5FD">📅 Set Start Date</Btn>
-          <Btn onClick={onLockPlan} bg="white" color="#5B21B6" bd="1px solid #A78BFA">🔒 Lock Plan</Btn>
+          <Btn onClick={onSetStart} bg="white" color="#1D4ED8" bd="1px solid #93C5FD">{t("tasks.set_start_date")}</Btn>
+          <Btn onClick={onLockPlan} bg="white" color="#5B21B6" bd="1px solid #A78BFA">{t("tasks.lock_plan")}</Btn>
         </>}
         {stage==="plan_locked" && isAdmin && <>
-          <Btn onClick={onLockStart} bg="linear-gradient(135deg,#EA580C,#C2410C)" color="white">🚦 Lock Start Date</Btn>
-          <Btn onClick={onUnlockPlan} bg="white" color="#64748B" bd="1px solid #CBD5E1">Unlock Plan</Btn>
+          <Btn onClick={onLockStart} bg="linear-gradient(135deg,#EA580C,#C2410C)" color="white">{t("tasks.lock_start_date")}</Btn>
+          <Btn onClick={onUnlockPlan} bg="white" color="#64748B" bd="1px solid #CBD5E1">{t("tasks.unlock_plan")}</Btn>
         </>}
-        {stage==="started" && isAdmin && <Btn onClick={onUnlockStart} bg="white" color="#64748B" bd="1px solid #CBD5E1">🔓 Unlock Start</Btn>}
-        {!isAdmin && stage!=="started" && <span style={{fontSize:10.5,color:"#94A3B8",fontStyle:"italic"}}>Admin / PM only</span>}
+        {stage==="started" && isAdmin && <Btn onClick={onUnlockStart} bg="white" color="#64748B" bd="1px solid #CBD5E1">{t("tasks.unlock_start")}</Btn>}
+        {!isAdmin && stage!=="started" && <span style={{fontSize:10.5,color:"#94A3B8",fontStyle:"italic"}}>{t("tasks.admin_pm_only")}</span>}
       </div>
     </div>
   );
@@ -1751,7 +1750,7 @@ function StartDateModal({ mode, projectId, currentStart, phaseList, onClose, onD
   const [err,setErr] = useState("");
   const endpoint = isLock?"lock-start":"anchor-schedule";
   const run = async (m)=>{
-    if(!date){ setErr("Date select karo"); return null; }
+    if(!date){ setErr(t("tasks.date_select_karo")); return null; }
     setErr(""); setLoading(true);
     try{ const r=await api.post(`/projects/${projectId}/${endpoint}`,{start_date:date,mode:m});
       if(!r.success) throw new Error(r.message); return r.data;
@@ -1763,14 +1762,14 @@ function StartDateModal({ mode, projectId, currentStart, phaseList, onClose, onD
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div style={{background:"white",borderRadius:14,width:520,maxWidth:"92%",boxShadow:"0 24px 64px rgba(0,0,0,0.4)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
         <div style={{background:isLock?"linear-gradient(135deg,#EA580C,#C2410C)":"linear-gradient(135deg,#2563EB,#1D4ED8)",padding:"16px 22px",color:"white"}}>
-          <div style={{fontSize:16,fontWeight:700}}>{isLock?"🚦 Lock Project Start Date":"📅 Set / Recalculate Start Date"}</div>
-          <div style={{fontSize:11,opacity:0.9,marginTop:3}}>{isLock?"Green flag — yeh date lock karne pe saari task dates isi se re-anchor ho jaayengi.":"Saari task dates is start se dependency ke hisaab se recalc hongi."}</div>
+          <div style={{fontSize:16,fontWeight:700}}>{isLock?t("tasks.lock_project_start_date"):t("tasks.set_recalculate_start_date")}</div>
+          <div style={{fontSize:11,opacity:0.9,marginTop:3}}>{isLock?t("tasks.green_flag_yeh_date_lock_karne"):t("tasks.saari_task_dates_is_start_se")}</div>
         </div>
         <div style={{padding:"18px 22px"}}>
           {err && <div style={{background:"#FEE2E2",color:"#991B1B",padding:"8px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:"1px solid #FCA5A5"}}>{err}</div>}
-          <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>{isLock?"Real start date":"Start date"}</label>
+          <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>{isLock?t("tasks.real_start_date"):t("tasks.start_date")}</label>
           <input type="date" value={date} onChange={e=>{setDate(e.target.value);setPreview(null);}} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #D1D5DB",borderRadius:7,fontSize:13,fontFamily:"inherit",outline:"none",boxSizing:"border-box",marginBottom:12}}/>
-          {!preview && <button onClick={doPreview} disabled={loading||!date} style={{width:"100%",padding:"10px",borderRadius:7,background:date?"#0F172A":"#CBD5E1",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:loading||!date?"default":"pointer"}}>{loading?"…":"Preview changes"}</button>}
+          {!preview && <button onClick={doPreview} disabled={loading||!date} style={{width:"100%",padding:"10px",borderRadius:7,background:date?"#0F172A":"#CBD5E1",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:loading||!date?"default":"pointer"}}>{loading?"…":t("tasks.preview_changes")}</button>}
           {preview && (()=>{
             const allChanges  = preview.changes||[];
             const totalChanged = preview.changed_count || allChanges.length;
@@ -1787,15 +1786,13 @@ function StartDateModal({ mode, projectId, currentStart, phaseList, onClose, onD
             return(
               <div style={{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"10px 12px",marginBottom:4}}>
                 <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={2}><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2z"/></svg>
-                  Phase-wise schedule — {totalChanged} tasks badlenge
-                  {shiftDays!==0&&<span style={{fontSize:10,fontWeight:600,color:shiftDays<0?"#16A34A":"#DC2626",
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={2}><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2z"/></svg>{t("tasks.phase_wise_schedule_totalchanged_tasks_badlenge", { totalChanged })}{shiftDays!==0&&<span style={{fontSize:10,fontWeight:600,color:shiftDays<0?"#16A34A":"#DC2626",
                     background:shiftDays<0?"#DCFCE7":"#FEE2E2",padding:"1px 7px",borderRadius:10}}>
                     {shiftDays>0?"+":""}{shiftDays} din
                   </span>}
                 </div>
                 {list.length===0
-                  ? <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"10px 0"}}>Apply karne pe sab dates update hongi</div>
+                  ? <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"10px 0"}}>{t("tasks.apply_karne_pe_sab_dates_update")}</div>
                   : list.map((ph,i)=>{
                       const c        = changeMap[String(ph.id)];
                       const oldStart = c?.old_start || ph.baseStart;
@@ -1824,16 +1821,14 @@ function StartDateModal({ mode, projectId, currentStart, phaseList, onClose, onD
                       );
                     })
                 }
-                {subCount>0&&<div style={{fontSize:10,color:"#94A3B8",marginTop:7,textAlign:"center",borderTop:"1px solid #F1F5F9",paddingTop:6}}>
-                  + {subCount} sub-tasks ki dates bhi apply hone pe update hongi
-                </div>}
+                {subCount>0&&<div style={{fontSize:10,color:"#94A3B8",marginTop:7,textAlign:"center",borderTop:"1px solid #F1F5F9",paddingTop:6}}>{t("tasks.subcount_sub_tasks_ki_dates_bhi", { subCount })}</div>}
               </div>
             );
           })()}
         </div>
         <div style={{padding:"0 22px 18px",display:"flex",gap:8}}>
-          <button onClick={onClose} disabled={loading} style={{flex:1,padding:"10px",borderRadius:7,background:"#F1F5F9",color:"#475569",fontSize:12.5,fontWeight:700,border:"1px solid #E2E8F0",cursor:"pointer"}}>Cancel</button>
-          <button onClick={doApply} disabled={loading||!preview} style={{flex:1.6,padding:"10px",borderRadius:7,background:preview?(isLock?"#C2410C":"#1D4ED8"):"#CBD5E1",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:preview&&!loading?"pointer":"default"}}>{loading?"…":(isLock?"🔒 Lock & Set Dates":"Apply Dates")}</button>
+          <button onClick={onClose} disabled={loading} style={{flex:1,padding:"10px",borderRadius:7,background:"#F1F5F9",color:"#475569",fontSize:12.5,fontWeight:700,border:"1px solid #E2E8F0",cursor:"pointer"}}>{t("common.cancel")}</button>
+          <button onClick={doApply} disabled={loading||!preview} style={{flex:1.6,padding:"10px",borderRadius:7,background:preview?(isLock?"#C2410C":"#1D4ED8"):"#CBD5E1",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:preview&&!loading?"pointer":"default"}}>{loading?"…":(isLock?t("tasks.lock_set_dates"):t("tasks.apply_dates"))}</button>
         </div>
       </div>
     </div>
@@ -1844,7 +1839,7 @@ function BaselineStrip({ status, showCols, onToggleCols, onSet, onRebaseline, on
   if (!status) {
     return (
       <div style={{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"8px 12px",marginBottom:10,fontSize:11,color:"#64748B"}}>
-        Loading baseline status…
+       {t("tasks.loading_baseline_status")}
       </div>
     );
   }
@@ -1854,18 +1849,18 @@ function BaselineStrip({ status, showCols, onToggleCols, onSet, onRebaseline, on
       <div style={{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"9px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:12}}>
         <div style={{flex:1}}>
           <div style={{fontSize:11.5,fontWeight:600,color:"#475569",marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:13}}>📋</span> Planned schedule active — no baseline yet
+            <span style={{fontSize:13}}>📋</span> {t("tasks.planned_schedule_active_no_baseline_yet")}
           </div>
-          <div style={{fontSize:10.5,color:"#64748B"}}>Create a baseline jab delay ho — current dates lock ho jayengi aur aage ki variance track hogi.</div>
+          <div style={{fontSize:10.5,color:"#64748B"}}>{t("tasks.create_a_baseline_jab_delay_ho")}</div>
         </div>
         {canBaseline ? (
           <button onClick={onSet} style={{padding:"6px 12px",borderRadius:6,background:"white",color:"#5B21B6",fontSize:11,fontWeight:700,border:"1px solid #A78BFA",cursor:"pointer",whiteSpace:"nowrap"}}
             onMouseEnter={e=>{e.currentTarget.style.background="#F5F3FF";}}
             onMouseLeave={e=>{e.currentTarget.style.background="white";}}>
-            📌 Create Baseline
+           {t("tasks.create_baseline")}
           </button>
         ) : (
-          <span style={{fontSize:10.5,color:"#94A3B8",fontStyle:"italic"}}>Admin / PM only</span>
+          <span style={{fontSize:10.5,color:"#94A3B8",fontStyle:"italic"}}>{t("tasks.admin_pm_only")}</span>
         )}
       </div>
     );
@@ -1875,20 +1870,18 @@ function BaselineStrip({ status, showCols, onToggleCols, onSet, onRebaseline, on
   return (
     <div style={{background:"linear-gradient(90deg,#EDE9FE,#DDD6FE)",border:"1px solid #A78BFA",borderRadius:8,padding:"10px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
       <div style={{flex:1,minWidth:220}}>
-        <div style={{fontSize:12,fontWeight:700,color:"#5B21B6",marginBottom:2,display:"flex",alignItems:"center",gap:8}}>
-          📌 Baseline v{cur?.version} (current)
-          <span style={{background:"#7C3AED",color:"white",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:10,letterSpacing:".4px"}}>{status.task_with_baseline}/{status.task_total} TASKS</span>
+        <div style={{fontSize:12,fontWeight:700,color:"#5B21B6",marginBottom:2,display:"flex",alignItems:"center",gap:8}}>{t("tasks.baseline_vversion_current", { version: cur?.version })}<span style={{background:"#7C3AED",color:"white",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:10,letterSpacing:".4px"}}>{status.task_with_baseline}/{status.task_total} TASKS</span>
         </div>
-        <div style={{fontSize:10.5,color:"#5B21B6"}}>Set {when} by <b>{cur?.set_by_name||"—"}</b></div>
+        <div style={{fontSize:10.5,color:"#5B21B6"}}><Rich k="tasks.set_when_by_cur" params={{ when, cur: cur?.set_by_name||"—" }} /></div>
         {cur?.reason && <div style={{fontSize:10.5,color:"#6D28D9",marginTop:3,fontStyle:"italic"}}>"{cur.reason}"</div>}
       </div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        <button onClick={onToggleCols} title={showCols?"Hide baseline columns":"Show baseline columns"}
+        <button onClick={onToggleCols} title={showCols?t("tasks.hide_baseline_columns"):t("tasks.show_baseline_columns")}
           style={{padding:"6px 11px",borderRadius:6,background:showCols?"#7C3AED":"white",color:showCols?"white":"#5B21B6",fontSize:11,fontWeight:700,border:`1px solid #7C3AED`,cursor:"pointer"}}>
-          {showCols?"✓ Columns":"👁 Columns"}
+          {showCols?t("tasks.columns"):t("tasks.columns_2")}
         </button>
-        <button onClick={onHistory} style={{padding:"6px 11px",borderRadius:6,background:"white",color:"#5B21B6",fontSize:11,fontWeight:700,border:`1px solid #7C3AED`,cursor:"pointer"}}>📜 History</button>
-        {canBaseline && <button onClick={onRebaseline} style={{padding:"6px 11px",borderRadius:6,background:"linear-gradient(135deg,#7C3AED,#5B21B6)",color:"white",fontSize:11,fontWeight:700,border:"none",cursor:"pointer"}}>🔄 Rebaseline</button>}
+        <button onClick={onHistory} style={{padding:"6px 11px",borderRadius:6,background:"white",color:"#5B21B6",fontSize:11,fontWeight:700,border:`1px solid #7C3AED`,cursor:"pointer"}}>{t("tasks.history")}</button>
+        {canBaseline && <button onClick={onRebaseline} style={{padding:"6px 11px",borderRadius:6,background:"linear-gradient(135deg,#7C3AED,#5B21B6)",color:"white",fontSize:11,fontWeight:700,border:"none",cursor:"pointer"}}>{t("tasks.rebaseline")}</button>}
       </div>
     </div>
   );
@@ -1908,7 +1901,7 @@ function RebaselineModal({ mode, projectId, onClose, onSuccess }) {
 
   const submit = async () => {
     setError("");
-    if (reason.trim().length < 5) { setError("Reason must be at least 5 characters"); return; }
+    if (reason.trim().length < 5) { setError(t("tasks.reason_must_be_at_least_5")); return; }
     setLoading(true);
     try {
       if (isSet) {
@@ -1930,50 +1923,50 @@ function RebaselineModal({ mode, projectId, onClose, onSuccess }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}>
       <div style={{background:"white",borderRadius:14,width:520,maxWidth:"92%",boxShadow:"0 24px 64px rgba(0,0,0,0.4)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
         <div style={{background:"linear-gradient(135deg,#7C3AED,#5B21B6)",padding:"16px 22px",color:"white"}}>
-          <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.8,marginBottom:3}}>{isSet?"CREATE BASELINE":"REBASELINE"}</div>
-          <div style={{fontSize:16,fontWeight:700}}>{isSet?"📌 Create Baseline v1":"🔄 Create New Baseline Version"}</div>
-          <div style={{fontSize:11,opacity:0.85,marginTop:3}}>{isSet?"Typically done when delay hota hai — current planned dates snapshot ho jayengi aur aage ki variance track hogi.":"Completed tasks keep their previous baseline. Remaining tasks get the new schedule."}</div>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.8,marginBottom:3}}>{isSet?t("tasks.create_baseline_2"):"REBASELINE"}</div>
+          <div style={{fontSize:16,fontWeight:700}}>{isSet?t("tasks.create_baseline_v1"):t("tasks.create_new_baseline_version")}</div>
+          <div style={{fontSize:11,opacity:0.85,marginTop:3}}>{isSet?t("tasks.typically_done_when_delay_hota_hai"):t("tasks.completed_tasks_keep_their_previous_baseline")}</div>
         </div>
         <div style={{padding:"18px 22px"}}>
           {error && <div style={{background:"#FEE2E2",color:"#991B1B",padding:"8px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:"1px solid #FCA5A5"}}>{error}</div>}
 
           <div style={{marginBottom:14}}>
-            <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>Baseline Date</label>
+            <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>{t("tasks.baseline_date")}</label>
             <input type="date" value={baselineDate} onChange={e=>setBaselineDate(e.target.value)}
               style={{width:"100%",padding:"9px 12px",border:"1.5px solid #D1D5DB",borderRadius:7,fontSize:12.5,fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
-            <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>Is snapshot ki pehchaan/tareekh (label) — version {isSet?"v1":"+1"} ke saath save hoga</div>
+            <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>{t("tasks.is_snapshot_ki_pehchaan_tareekh_label", { isSet: isSet?"v1":"+1" })}</div>
           </div>
 
           <div style={{marginBottom:14}}>
-            <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>Reason <span style={{color:"#EF4444"}}>*</span></label>
-            <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder={isSet?"e.g. Project kickoff — locking initial schedule":"e.g. Monsoon delay, client scope change..."}
+            <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>{t("common.reason")} <span style={{color:"#EF4444"}}>*</span></label>
+            <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder={isSet?t("tasks.e_g_project_kickoff_locking_initial"):t("tasks.e_g_monsoon_delay_client_scope")}
               rows={3} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #D1D5DB",borderRadius:7,fontSize:12.5,fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box"}}/>
-            <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>Min 5 characters — audit log me save hoga</div>
+            <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>{t("tasks.min_5_characters_audit_log_me")}</div>
           </div>
 
           {!isSet && (
             <div style={{marginBottom:14}}>
-              <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>Mode</label>
+              <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>{t("common.mode")}</label>
               <div style={{display:"flex",gap:8}}>
                 <label style={{flex:1,padding:"10px 12px",border:`2px solid ${rbMode==="auto"?"#7C3AED":"#E5E7EB"}`,borderRadius:7,cursor:"pointer",background:rbMode==="auto"?"#F5F3FF":"white"}}>
                   <input type="radio" checked={rbMode==="auto"} onChange={()=>setRbMode("auto")} style={{marginRight:6}}/>
-                  <span style={{fontSize:12,fontWeight:600}}>Auto-shift</span>
-                  <div style={{fontSize:10,color:"#6B7280",marginLeft:20}}>Shift all remaining tasks by N days</div>
+                  <span style={{fontSize:12,fontWeight:600}}>{t("tasks.auto_shift")}</span>
+                  <div style={{fontSize:10,color:"#6B7280",marginLeft:20}}>{t("tasks.shift_all_remaining_tasks_by_n")}</div>
                 </label>
                 <label style={{flex:1,padding:"10px 12px",border:`2px solid ${rbMode==="manual"?"#7C3AED":"#E5E7EB"}`,borderRadius:7,cursor:"pointer",background:rbMode==="manual"?"#F5F3FF":"white",opacity:.5}}>
                   <input type="radio" checked={rbMode==="manual"} onChange={()=>{}} disabled style={{marginRight:6}}/>
-                  <span style={{fontSize:12,fontWeight:600}}>Manual (coming soon)</span>
-                  <div style={{fontSize:10,color:"#6B7280",marginLeft:20}}>Edit each task individually</div>
+                  <span style={{fontSize:12,fontWeight:600}}>{t("tasks.manual_coming_soon")}</span>
+                  <div style={{fontSize:10,color:"#6B7280",marginLeft:20}}>{t("tasks.edit_each_task_individually")}</div>
                 </label>
               </div>
 
               {rbMode==="auto" && (
                 <div style={{marginTop:10,padding:"10px 12px",background:"#F9FAFB",borderRadius:7,border:"1px solid #E5E7EB"}}>
-                  <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:4}}>Shift remaining tasks by</label>
+                  <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:4}}>{t("tasks.shift_remaining_tasks_by")}</label>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
                     <input type="number" value={shiftDays} onChange={e=>setShiftDays(e.target.value)} style={{width:80,padding:"6px 10px",border:"1.5px solid #D1D5DB",borderRadius:6,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
                     <span style={{fontSize:12,color:"#6B7280"}}>days</span>
-                    <span style={{fontSize:10,color:"#9CA3AF",marginLeft:8}}>(+ delays, − pulls earlier)</span>
+                    <span style={{fontSize:10,color:"#9CA3AF",marginLeft:8}}>{t("tasks.delays_pulls_earlier")}</span>
                   </div>
                 </div>
               )}
@@ -1982,10 +1975,10 @@ function RebaselineModal({ mode, projectId, onClose, onSuccess }) {
 
           <div style={{display:"flex",gap:8,marginTop:20}}>
             <button onClick={onClose} disabled={loading}
-              style={{flex:1,padding:"10px",borderRadius:7,background:"#F3F4F6",border:"1px solid #D1D5DB",fontSize:12.5,fontWeight:600,color:"#374151",cursor:loading?"not-allowed":"pointer"}}>Cancel</button>
+              style={{flex:1,padding:"10px",borderRadius:7,background:"#F3F4F6",border:"1px solid #D1D5DB",fontSize:12.5,fontWeight:600,color:"#374151",cursor:loading?"not-allowed":"pointer"}}>{t("common.cancel")}</button>
             <button onClick={submit} disabled={loading}
               style={{flex:2,padding:"10px",borderRadius:7,background:loading?"#C4B5FD":"linear-gradient(135deg,#7C3AED,#5B21B6)",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:loading?"not-allowed":"pointer"}}>
-              {loading?"Saving...":isSet?"🔒 Confirm & Lock Baseline":"🔄 Confirm Rebaseline"}
+              {loading?t("common.saving"):isSet?t("tasks.confirm_lock_baseline"):t("tasks.confirm_rebaseline")}
             </button>
           </div>
         </div>
@@ -2018,7 +2011,7 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
 
   const apply = async () => {
     setError("");
-    if (!selected) { setError("Pick a template first"); return; }
+    if (!selected) { setError(t("tasks.pick_a_template_first")); return; }
     const tpl = list.find(t => t.id === selected);
     if (!await window.confirmAsync(`"${tpl?.name}" load karein?\n\nProject ke maujooda Gantt tasks REPLACE ho jaayenge — sirf yeh template rahega. (To-Do tab affect nahi hota.)\n\nContinue?`)) return;
     setApplying(true);
@@ -2039,9 +2032,9 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
         {/* Header */}
         <div style={{background:"linear-gradient(135deg,#EC4899,#BE185D)",padding:"16px 22px",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
-            <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.85,marginBottom:3}}>PROJECT TASK TEMPLATES</div>
-            <div style={{fontSize:16,fontWeight:800}}>📋 Load Task Template</div>
-            <div style={{fontSize:11,opacity:0.9,marginTop:3}}>Pre-built WBS with dependencies, durations, and BOQ — auto-adjusted to project start date.</div>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.85,marginBottom:3}}>{t("tasks.project_task_templates")}</div>
+            <div style={{fontSize:16,fontWeight:800}}>{t("tasks.load_task_template")}</div>
+            <div style={{fontSize:11,opacity:0.9,marginTop:3}}>{t("tasks.pre_built_wbs_with_dependencies_durations")}</div>
           </div>
           <button onClick={onClose} disabled={applying} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"white",width:30,height:30,borderRadius:6,cursor:applying?"not-allowed":"pointer",fontSize:14,fontWeight:700}}>✕</button>
         </div>
@@ -2049,13 +2042,11 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
         {/* Body */}
         <div style={{padding:"16px 22px",overflowY:"auto",flex:1}}>
           {error && <div style={{background:"#FEE2E2",color:"#991B1B",padding:"9px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:"1px solid #FCA5A5"}}>{error}</div>}
-          {result && <div style={{background:"#D1FAE5",color:"#065F46",padding:"11px 14px",borderRadius:7,fontSize:12.5,marginBottom:12,border:"1px solid #6EE7B7",fontWeight:600}}>
-            ✓ Template applied — {result.tasks_inserted} tasks, {result.boq_inserted || 0} BOQ items, {result.total_duration_days} days
-          </div>}
+          {result && <div style={{background:"#D1FAE5",color:"#065F46",padding:"11px 14px",borderRadius:7,fontSize:12.5,marginBottom:12,border:"1px solid #6EE7B7",fontWeight:600}}>{t("tasks.template_applied_tasks_inserted_tasks_result", { tasks_inserted: result.tasks_inserted, result: result.boq_inserted || 0, total_duration_days: result.total_duration_days })}</div>}
 
-          {!list && !error && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>Loading templates…</div>}
+          {!list && !error && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>{t("tasks.loading_templates")}</div>}
 
-          {list && list.length === 0 && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>No templates available yet.</div>}
+          {list && list.length === 0 && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>{t("tasks.no_templates_available_yet")}</div>}
 
           {list && list.map(t => {
             const isSelected = selected === t.id;
@@ -2070,7 +2061,7 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
                       <span style={{background:"#FCE7F3",color:"#9D174D",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t.phase_count} phases</span>
                       <span style={{background:"#E0F2FE",color:"#075985",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t.package_count} packages</span>
                       <span style={{background:"#DCFCE7",color:"#14532D",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t.activity_count} activities</span>
-                      <span style={{background:"#FEF3C7",color:"#78350F",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t.boq_count} BOQ items</span>
+                      <span style={{background:"#FEF3C7",color:"#78350F",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t("tasks.boq_count_boq_items", { boq_count: t.boq_count })}</span>
                     </div>
                     <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>
                       {(t.tags || []).map(tg => <span key={tg} style={{background:"#F3F4F6",color:"#6B7280",fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:4}}>{tg}</span>)}
@@ -2085,19 +2076,19 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
           {/* Options */}
           {selected && !result && (
             <div style={{marginTop:16,padding:"12px 14px",background:"#F9FAFB",borderRadius:8,border:"1px solid #E5E7EB"}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",marginBottom:9}}>Apply Options</div>
+              <div style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",marginBottom:9}}>{t("tasks.apply_options")}</div>
               <div style={{marginBottom:10}}>
-                <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:4}}>Start date (optional)</label>
+                <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:4}}>{t("tasks.start_date_optional")}</label>
                 <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}
                   style={{width:"100%",padding:"7px 10px",border:"1.5px solid #D1D5DB",borderRadius:6,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-                <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>Leave blank to use the project's own start date.</div>
+                <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>{t("tasks.leave_blank_to_use_the_project")}</div>
               </div>
               <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#374151",marginBottom:8,cursor:"pointer"}}>
                 <input type="checkbox" checked={includeBOQ} onChange={e=>setIncludeBOQ(e.target.checked)}/>
-                <span>Include BOQ items (recommended)</span>
+                <span>{t("tasks.include_boq_items_recommended")}</span>
               </label>
               <div style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,color:"#92400E",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:6,padding:"7px 10px"}}>
-                <span>🔄</span><span>Template load karne par project ke <b>maujooda Gantt tasks replace</b> ho jaayenge (sirf yeh template rahega). Start-date lock ke baad template change nahi hota.</span>
+                <span>🔄</span><span>{t("tasks.template_load_karne_par_project_ke")} <b>{t("tasks.maujooda_gantt_tasks_replace")}</b> {t("tasks.ho_jaayenge_sirf_yeh_template_rahega")}</span>
               </div>
             </div>
           )}
@@ -2105,9 +2096,9 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
 
         {/* Footer */}
         <div style={{padding:"14px 22px",borderTop:"1px solid #E5E7EB",background:"#F9FAFB",display:"flex",justifyContent:"flex-end",gap:8}}>
-          <button onClick={onClose} disabled={applying} style={{padding:"8px 14px",borderRadius:6,background:"white",border:"1px solid #D1D5DB",fontSize:12.5,fontWeight:600,color:"#374151",cursor:applying?"not-allowed":"pointer"}}>Cancel</button>
+          <button onClick={onClose} disabled={applying} style={{padding:"8px 14px",borderRadius:6,background:"white",border:"1px solid #D1D5DB",fontSize:12.5,fontWeight:600,color:"#374151",cursor:applying?"not-allowed":"pointer"}}>{t("common.cancel")}</button>
           <button onClick={apply} disabled={!selected || applying || result} style={{padding:"8px 16px",borderRadius:6,background:(!selected||applying||result)?"#F9A8D4":"linear-gradient(135deg,#EC4899,#BE185D)",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:(!selected||applying||result)?"not-allowed":"pointer"}}>
-            {applying ? "Applying…" : result ? "Done ✓" : "🚀 Apply Template"}
+            {applying ? t("estimate.applying") : result ? t("tasks.done") : t("tasks.apply_template")}
           </button>
         </div>
       </div>
@@ -2131,7 +2122,7 @@ function BaselineHistoryModal({ projectId, canBaseline, onClose, onDeleted }) {
 
   const handleDelete = async () => {
     setError("");
-    if (deleteReason.trim().length < 5) { setError("Reason must be at least 5 characters"); return; }
+    if (deleteReason.trim().length < 5) { setError(t("tasks.reason_must_be_at_least_5")); return; }
     setDeleting(true);
     try {
       const r = await api.baseline.clear(projectId, { reason: deleteReason });
@@ -2146,25 +2137,25 @@ function BaselineHistoryModal({ projectId, canBaseline, onClose, onDeleted }) {
       <div style={{background:"white",borderRadius:14,width:640,maxWidth:"92%",maxHeight:"85vh",boxShadow:"0 24px 64px rgba(0,0,0,0.4)",overflow:"hidden",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
         <div style={{background:"linear-gradient(135deg,#7C3AED,#5B21B6)",padding:"16px 22px",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
-            <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.8,marginBottom:3}}>PROJECT BASELINE</div>
-            <div style={{fontSize:16,fontWeight:700}}>📜 History</div>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.8,marginBottom:3}}>{t("tasks.project_baseline")}</div>
+            <div style={{fontSize:16,fontWeight:700}}>{t("tasks.history")}</div>
           </div>
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"white",width:30,height:30,borderRadius:6,cursor:"pointer",fontSize:14,fontWeight:700}}>✕</button>
         </div>
         <div style={{padding:"18px 22px",overflow:"auto"}}>
           {error && <div style={{padding:12,background:"#FEE2E2",color:"#991B1B",borderRadius:7,fontSize:12}}>{error}</div>}
-          {!history && !error && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>Loading…</div>}
-          {history && history.length === 0 && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>No baselines yet.</div>}
+          {!history && !error && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>{t("common.loading_2")}</div>}
+          {history && history.length === 0 && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>{t("tasks.no_baselines_yet")}</div>}
           {history && history.map(b => (
             <div key={b.id} style={{padding:"12px 14px",marginBottom:8,background:b.is_current?"#F5F3FF":"#F9FAFB",border:`1px solid ${b.is_current?"#A78BFA":"#E5E7EB"}`,borderLeft:`4px solid ${b.is_current?"#7C3AED":"#9CA3AF"}`,borderRadius:7}}>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
-                <span style={{fontSize:14,fontWeight:800,color:b.is_current?"#5B21B6":"#374151"}}>Baseline v{b.version}</span>
+                <span style={{fontSize:14,fontWeight:800,color:b.is_current?"#5B21B6":"#374151"}}>{t("tasks.baseline_vversion", { version: b.version })}</span>
                 {b.is_current && <span style={{background:"#7C3AED",color:"white",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:10,letterSpacing:".4px"}}>CURRENT</span>}
                 <span style={{fontSize:10,color:"#6B7280",marginLeft:"auto"}}>{b.task_count} tasks</span>
               </div>
               <div style={{fontSize:11,color:"#6B7280",marginBottom:4}}>
                 {b.set_at ? new Date(b.set_at).toLocaleString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—"}
-                {" · by "}<b>{b.set_by_name || "—"}</b>
+                {t("estimate.by")}<b>{b.set_by_name || "—"}</b>
               </div>
               {b.reason && <div style={{fontSize:12,color:"#374151",fontStyle:"italic",background:"white",padding:"6px 10px",borderRadius:5,border:"1px solid #E5E7EB"}}>"{b.reason}"</div>}
             </div>
@@ -2175,22 +2166,22 @@ function BaselineHistoryModal({ projectId, canBaseline, onClose, onDeleted }) {
             <div style={{marginTop:18,paddingTop:14,borderTop:"1px dashed #E5E7EB"}}>
               {!showDelete ? (
                 <button onClick={()=>setShowDelete(true)} style={{fontSize:10.5,color:"#94A3B8",background:"none",border:"none",cursor:"pointer",textDecoration:"underline",padding:"4px 0"}}>
-                  Need to delete all baselines? (admin / PM)
+                 {t("tasks.need_to_delete_all_baselines_admin")}
                 </button>
               ) : (
                 <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:7,padding:"12px 14px"}}>
-                  <div style={{fontSize:11.5,fontWeight:700,color:"#991B1B",marginBottom:6,display:"flex",alignItems:"center",gap:6}}>⚠ Delete all baselines</div>
-                  <div style={{fontSize:10.5,color:"#7F1D1D",marginBottom:10}}>Ye action saari baseline versions ({history.length}) aur per-task snapshots ko hata dega. Planned dates unchanged rahengi. <b>Ye undo nahi ho sakta.</b></div>
+                  <div style={{fontSize:11.5,fontWeight:700,color:"#991B1B",marginBottom:6,display:"flex",alignItems:"center",gap:6}}>{t("tasks.delete_all_baselines")}</div>
+                  <div style={{fontSize:10.5,color:"#7F1D1D",marginBottom:10}}><Rich k="tasks.ye_action_saari_baseline_versions_history" params={{ history: history.length }} /></div>
                   {error && <div style={{fontSize:11,color:"#991B1B",marginBottom:8,fontWeight:600}}>{error}</div>}
-                  <label style={{fontSize:10,fontWeight:700,color:"#7F1D1D",textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Reason <span style={{color:"#DC2626"}}>*</span></label>
-                  <input value={deleteReason} onChange={e=>setDeleteReason(e.target.value)} placeholder="Why deleting baselines?"
+                  <label style={{fontSize:10,fontWeight:700,color:"#7F1D1D",textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.reason")} <span style={{color:"#DC2626"}}>*</span></label>
+                  <input value={deleteReason} onChange={e=>setDeleteReason(e.target.value)} placeholder={t("tasks.why_deleting_baselines")}
                     style={{width:"100%",padding:"7px 10px",border:"1.5px solid #FCA5A5",borderRadius:6,fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box",marginBottom:10}}/>
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={()=>{setShowDelete(false);setDeleteReason("");setError("");}} disabled={deleting}
-                      style={{flex:1,padding:"7px",borderRadius:6,background:"white",border:"1px solid #D1D5DB",fontSize:11.5,fontWeight:600,color:"#374151",cursor:deleting?"not-allowed":"pointer"}}>Cancel</button>
+                      style={{flex:1,padding:"7px",borderRadius:6,background:"white",border:"1px solid #D1D5DB",fontSize:11.5,fontWeight:600,color:"#374151",cursor:deleting?"not-allowed":"pointer"}}>{t("common.cancel")}</button>
                     <button onClick={handleDelete} disabled={deleting}
                       style={{flex:1,padding:"7px",borderRadius:6,background:deleting?"#FCA5A5":"linear-gradient(135deg,#DC2626,#991B1B)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:deleting?"not-allowed":"pointer"}}>
-                      {deleting?"Deleting...":"🗑 Delete All Baselines"}
+                      {deleting?t("common.deleting"):t("tasks.delete_all_baselines_2")}
                     </button>
                   </div>
                 </div>
@@ -2345,13 +2336,13 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
    <div ref={wrapRef}>
     {/* Legend */}
     <div style={{display:"flex",alignItems:"center",gap:14,padding:"8px 14px",fontSize:10.5,color:T.t3,borderBottom:`1px solid ${T.b1}`,flexWrap:"wrap",background:"#F8FAFC"}}>
-      <span style={LG}><span style={{width:20,height:6,borderRadius:3,background:"#3B82F6",opacity:0.45,display:"inline-block"}}/>Planned</span>
-      <span style={LG}><span style={{width:20,height:9,borderRadius:3,background:T.grn,opacity:0.9,display:"inline-block"}}/>Actual</span>
-      <span style={LG}><span style={{width:20,height:6,borderRadius:3,background:"#DC2626",display:"inline-block"}}/><b style={{color:"#DC2626"}}>Critical</b></span>
-      <span style={LG}><span style={{width:20,height:3,background:"#CBD5E1",display:"inline-block"}}/>Slack</span>
-      <span style={LG}><svg width={22} height={10}><path d="M0,5 H14" stroke="#94A3B8" strokeWidth={1.5}/><path d="M14,2 L20,5 L14,8Z" fill="#94A3B8"/></svg>Dependency</span>
-      {!hasCpm&&<span style={{color:"#F59E0B",fontSize:10,fontStyle:"italic"}}>⟳ critical path load ho raha…</span>}
-      {allFlat.length===0&&<span style={{color:T.t4,fontSize:10,fontStyle:"italic"}}>Koi task nahi — dates set karo</span>}
+      <span style={LG}><span style={{width:20,height:6,borderRadius:3,background:"#3B82F6",opacity:0.45,display:"inline-block"}}/>{t("tasks.planned")}</span>
+      <span style={LG}><span style={{width:20,height:9,borderRadius:3,background:T.grn,opacity:0.9,display:"inline-block"}}/>{t("tasks.actual")}</span>
+      <span style={LG}><span style={{width:20,height:6,borderRadius:3,background:"#DC2626",display:"inline-block"}}/><b style={{color:"#DC2626"}}>{t("tasks.critical")}</b></span>
+      <span style={LG}><span style={{width:20,height:3,background:"#CBD5E1",display:"inline-block"}}/>{t("tasks.slack")}</span>
+      <span style={LG}><svg width={22} height={10}><path d="M0,5 H14" stroke="#94A3B8" strokeWidth={1.5}/><path d="M14,2 L20,5 L14,8Z" fill="#94A3B8"/></svg>{t("tasks.dependency")}</span>
+      {!hasCpm&&<span style={{color:"#F59E0B",fontSize:10,fontStyle:"italic"}}>{t("tasks.critical_path_load_ho_raha")}</span>}
+      {allFlat.length===0&&<span style={{color:T.t4,fontSize:10,fontStyle:"italic"}}>{t("tasks.koi_task_nahi_dates_set_karo")}</span>}
     </div>
 
     <svg width={TOTAL_W} height={TOTAL_H} style={{display:"block",fontFamily:"'Segoe UI',sans-serif",minWidth:TOTAL_W}}>
@@ -2364,8 +2355,8 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
       {/* ── MONTH HEADER ── */}
       <rect x={0} y={0} width={TOTAL_W} height={TOTAL_HEADER} fill="#0D1B2A"/>
       <rect x={0} y={0} width={LBL_W} height={TOTAL_HEADER} fill="#0D1B2A"/>
-      <text x={12} y={HDR_H/2+5} fontSize={10} fill="rgba(255,255,255,0.5)" fontWeight="600">PHASE / CODE</text>
-      <text x={12} y={HDR_H+HDR2_H/2+4} fontSize={9} fill="rgba(255,255,255,0.35)">Task Name</text>
+      <text x={12} y={HDR_H/2+5} fontSize={10} fill="rgba(255,255,255,0.5)" fontWeight="600">{t("tasks.phase_code")}</text>
+      <text x={12} y={HDR_H+HDR2_H/2+4} fontSize={9} fill="rgba(255,255,255,0.35)">{t("tasks.task_name")}</text>
       {/* Dynamic scale cells */}
       {(()=>{
         let cx=LBL_W;
@@ -2514,7 +2505,7 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
       const px = Math.min(panelPos.x+16, (typeof window!=="undefined"?window.innerWidth:1200)-290);
       const py = Math.min(panelPos.y+10,  (typeof window!=="undefined"?window.innerHeight:800)-220);
       const rmBtn = (onClick)=>(
-        <button onClick={onClick} title="Hatao"
+        <button onClick={onClick} title={t("common.hatao")}
           style={{background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.35)",cursor:"pointer",color:"#F87171",padding:"1px 6px",borderRadius:4,fontSize:12,fontWeight:700,lineHeight:1,flexShrink:0}}>×</button>
       );
       return(
@@ -2531,16 +2522,14 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
               style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.4)",display:"flex",padding:0,flexShrink:0}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>}
-            {!isPinned&&<span style={{fontSize:9,color:"rgba(255,255,255,0.3)",flexShrink:0}}>click = pin</span>}
+            {!isPinned&&<span style={{fontSize:9,color:"rgba(255,255,255,0.3)",flexShrink:0}}>{t("tasks.click_pin")}</span>}
           </div>
 
           {/* Depends on */}
           <div style={{marginBottom:8}}>
-            <div style={{fontSize:9.5,fontWeight:700,color:"#60A5FA",textTransform:"uppercase",letterSpacing:".6px",marginBottom:4}}>
-              Depends on ({preds.length})
-            </div>
+            <div style={{fontSize:9.5,fontWeight:700,color:"#60A5FA",textTransform:"uppercase",letterSpacing:".6px",marginBottom:4}}>{t("tasks.depends_on_preds", { preds: preds.length })}</div>
             {preds.length===0
-              ?<div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontStyle:"italic"}}>koi nahi</div>
+              ?<div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontStyle:"italic"}}>{t("tasks.koi_nahi")}</div>
               :preds.map(p=>(
                 <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
                   <span style={{opacity:.45,fontSize:9,fontFamily:"monospace",flexShrink:0}}>{p.no||""}</span>
@@ -2553,11 +2542,9 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
 
           {/* Required by */}
           <div style={{marginBottom:isPinned?10:0}}>
-            <div style={{fontSize:9.5,fontWeight:700,color:"#FB923C",textTransform:"uppercase",letterSpacing:".6px",marginBottom:4}}>
-              Required by ({succs.length})
-            </div>
+            <div style={{fontSize:9.5,fontWeight:700,color:"#FB923C",textTransform:"uppercase",letterSpacing:".6px",marginBottom:4}}>{t("tasks.required_by_succs", { succs: succs.length })}</div>
             {succs.length===0
-              ?<div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontStyle:"italic"}}>koi nahi</div>
+              ?<div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontStyle:"italic"}}>{t("tasks.koi_nahi")}</div>
               :succs.map(s=>(
                 <div key={s.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
                   <span style={{opacity:.45,fontSize:9,fontFamily:"monospace",flexShrink:0}}>{s.no||""}</span>
@@ -2572,10 +2559,10 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
           {isPinned&&(
             <div style={{borderTop:"1px solid rgba(255,255,255,0.1)",paddingTop:9}}>
               <div style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".6px",marginBottom:5}}>
-                + Dependency add karo
+               {t("tasks.dependency_add_karo")}
               </div>
               <input value={addSearchQ} onChange={e=>setAddSearchQ(e.target.value)}
-                placeholder="Task code ya naam type karo..."
+                placeholder={t("tasks.task_code_ya_naam_type_karo")}
                 style={{width:"100%",padding:"6px 8px",borderRadius:6,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.07)",
                   color:"white",fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               {addSearchQ&&(
@@ -2597,7 +2584,7 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
                   }
                   {allFlat.filter(t=>t.id!==tid&&!(predsMap[tid]||[]).includes(t.id)
                     &&(t.name.toLowerCase().includes(addSearchQ.toLowerCase())||(t.no||"").toLowerCase().includes(addSearchQ.toLowerCase()))).length===0
-                    &&<div style={{fontSize:11,color:"rgba(255,255,255,0.35)",padding:"6px 4px"}}>Koi task nahi mila</div>
+                    &&<div style={{fontSize:11,color:"rgba(255,255,255,0.35)",padding:"6px 4px"}}>{t("tasks.koi_task_nahi_mila")}</div>
                   }
                 </div>
               )}
@@ -2644,8 +2631,8 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(460px,95vw)",background:"white",borderRadius:12,zIndex:401,boxShadow:"0 20px 60px rgba(0,0,0,0.2)",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
       <div style={{background:"#1E3A5F",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
-          <div style={{fontSize:14,fontWeight:700,color:"white"}}>New Material Request</div>
-          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:2}}>Task: {task.name} · {task.no}</div>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("tasks.new_material_request")}</div>
+          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:2}}>{t("tasks.task_name_no", { name: task.name, no: task.no })}</div>
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",display:"flex"}}>
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -2653,10 +2640,10 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
       </div>
       <div style={{padding:"16px 18px"}}>
         <div style={{background:"#FEF9C3",border:"1px solid #FDE047",borderRadius:7,padding:"8px 12px",marginBottom:14,fontSize:11.5,color:"#713F12"}}>
-          Request Procurement mein jayegi — Admin approve karenge phir order hoga
+         {t("tasks.request_procurement_mein_jayegi_admin_approve")}
         </div>
         <div style={{marginBottom:10}}>
-          <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Material Name *</label>
+          <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("tasks.material_name")}</label>
           <LibrarySelect type="material" value={form.item_name}
             onChange={v=>{
               const found=matLib.find(m=>m.name===v);
@@ -2666,7 +2653,7 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
-            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Quantity *</label>
+            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("mrdetail.quantity")}</label>
             <input type="number" inputMode="decimal" min={0} step="any" value={form.quantity}
               onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E"||e.key==="+") e.preventDefault();}}
               onChange={e=>{
@@ -2687,7 +2674,7 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
               return (
                 <>
                   <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>
-                    Unit{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>(from library)</span>}
+                    {t("common.unit")}{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>{t("tasks.from_library")}</span>}
                   </label>
                   {isLocked ? (
                     <div style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
@@ -2704,26 +2691,26 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
             })()}
           </div>
           <div>
-            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Required By</label>
+            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.required_by")}</label>
             <input type="date" value={form.required_date} onChange={e=>setForm(p=>({...p,required_date:e.target.value}))}
               style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
           <div>
-            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Approx. Amount</label>
+            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("mrdetail.approx_amount")}</label>
             <input type="number" value={form.approx_amount} onChange={e=>setForm(p=>({...p,approx_amount:e.target.value}))} placeholder="₹"
               style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
         </div>
         <div style={{marginBottom:14}}>
-          <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Notes</label>
-          <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Special requirements..."
+          <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.notes")}</label>
+          <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2} placeholder={t("tasks.special_requirements")}
             style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
         </div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:"#F1F5F9",color:"#64748B",border:"none",cursor:"pointer",fontSize:13,fontWeight:600}}>Cancel</button>
+          <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:"#F1F5F9",color:"#64748B",border:"none",cursor:"pointer",fontSize:13,fontWeight:600}}>{t("common.cancel")}</button>
           <button onClick={async()=>{
             if(submittingRef.current) return; // hard guard
-            if(!form.item_name.trim()||!form.quantity) return alert("Material name and quantity required");
+            if(!form.item_name.trim()||!form.quantity) return alert(t("tasks.material_name_and_quantity_required"));
             submittingRef.current=true;
             setSaving(true);
             const res=await api.post("/procurement/mrs",{
@@ -2755,7 +2742,7 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
             else alert(res.message||"Failed");
           }} disabled={saving}
             style={{flex:2,padding:"10px",borderRadius:7,background:saving?"#94A3B8":"#2563EB",color:"white",border:"none",cursor:saving?"default":"pointer",fontSize:13,fontWeight:700}}>
-            {saving?"Submitting...":"Submit Request"}
+            {saving?t("common.submitting_2"):t("common.submit_request")}
           </button>
         </div>
       </div>
@@ -2801,7 +2788,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
 
   const handleOrderedReceive=async(mr)=>{
     const row=grnRows[mr.id]||{};
-    if(!row.challan) return alert("Challan number required");
+    if(!row.challan) return alert(t("common.challan_number_required"));
     setGrnSaving(true);
     try{
       // Use mark-received which properly updates MR mat_status to Received
@@ -2818,7 +2805,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
   };
 
   const handleDirectSave=async()=>{
-    if(!form.material_name.trim()||!form.received_qty) return alert("Material name and received qty required");
+    if(!form.material_name.trim()||!form.received_qty) return alert(t("tasks.material_name_and_received_qty_required"));
     setSaving(true);
     const res=await api.post("/procurement/grns",{
       project_id: projectId,
@@ -2847,8 +2834,8 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
       {/* Header */}
       <div style={{background:"#0F172A",padding:"13px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
         <div>
-          <div style={{fontSize:14,fontWeight:700,color:"white"}}>Record GRN — Material Received</div>
-          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:2}}>Task: {task.name} · {task.no}</div>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("tasks.record_grn_material_received")}</div>
+          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:2}}>{t("tasks.task_name_no", { name: task.name, no: task.no })}</div>
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",display:"flex"}}>
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -2858,8 +2845,8 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
       {/* Tabs */}
       <div style={{display:"flex",background:"white",borderBottom:"1px solid #E2E8F0",flexShrink:0}}>
         {[
-          {id:"ordered",l:"Ordered Materials",count:orderedMRs.filter(m=>!grnDone.includes(m.id)).length},
-          {id:"direct",l:"Direct Receive",count:0},
+          {id:"ordered",l:t("material.ordered_materials"),count:orderedMRs.filter(m=>!grnDone.includes(m.id)).length},
+          {id:"direct",l:t("material.direct_receive"),count:0},
         ].map(t=>(
           <button key={t.id} onClick={()=>setGrnTab(t.id)}
             style={{flex:1,padding:"11px",border:"none",background:"none",fontSize:13,fontWeight:grnTab===t.id?700:400,color:grnTab===t.id?"#2563EB":"#64748B",borderBottom:grnTab===t.id?"2px solid #2563EB":"2px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
@@ -2877,8 +2864,8 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
           <div>
             {orderedMRs.length===0&&(
               <div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8"}}>
-                <div style={{fontSize:13,marginBottom:4}}>No ordered materials pending</div>
-                <div style={{fontSize:11}}>MR raise karo aur approve/order hone do</div>
+                <div style={{fontSize:13,marginBottom:4}}>{t("tasks.no_ordered_materials_pending")}</div>
+                <div style={{fontSize:11}}>{t("tasks.mr_raise_karo_aur_approve_order")}</div>
               </div>
             )}
             {orderedMRs.map(mr=>{
@@ -2889,30 +2876,28 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                     <div>
                       <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{mr.item_name}</div>
-                      <div style={{fontSize:11,color:"#94A3B8",marginTop:2}}>
-                        Ordered: {mr.quantity} {mr.unit}
-                        {mr.project_name&&<span style={{color:"#64748B"}}> · {mr.project_name}</span>}
+                      <div style={{fontSize:11,color:"#94A3B8",marginTop:2}}>{t("tasks.ordered_quantity_unit", { quantity: mr.quantity, unit: mr.unit })}{mr.project_name&&<span style={{color:"#64748B"}}> · {mr.project_name}</span>}
                       </div>
                     </div>
-                    {done&&<span style={{fontSize:11,fontWeight:700,color:"#16A34A",background:"#DCFCE7",padding:"3px 9px",borderRadius:20}}>✓ Received</span>}
+                    {done&&<span style={{fontSize:11,fontWeight:700,color:"#16A34A",background:"#DCFCE7",padding:"3px 9px",borderRadius:20}}>{t("common.received_2")}</span>}
                   </div>
                   {!done&&(
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"flex-end"}}>
                       <div>
-                        <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:3,textTransform:"uppercase"}}>Challan No *</label>
+                        <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:3,textTransform:"uppercase"}}>{t("tasks.challan_no")}</label>
                         <input value={row.challan||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],challan:e.target.value}}))}
-                          placeholder="e.g. CH-445"
+                          placeholder={t("material.e_g_ch_445")}
                           style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                           onFocus={e=>e.target.style.borderColor="#2563EB"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
                       </div>
                       <div>
-                        <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:3,textTransform:"uppercase"}}>Received Qty</label>
+                        <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:3,textTransform:"uppercase"}}>{t("mrdetail.received_qty")}</label>
                         <input type="number" value={row.received_qty||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],received_qty:e.target.value}}))}
                           style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                       </div>
                       <button onClick={()=>handleOrderedReceive(mr)} disabled={grnSaving}
                         style={{padding:"8px 14px",borderRadius:6,background:grnSaving?"#94A3B8":"#16A34A",color:"white",border:"none",cursor:grnSaving?"default":"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>
-                        ✓ Receive
+                       {t("tasks.receive")}
                       </button>
                     </div>
                   )}
@@ -2926,12 +2911,12 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
         {grnTab==="direct"&&(
           <div>
             <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:7,padding:"8px 12px",marginBottom:14,fontSize:11.5,color:"#14532D"}}>
-              Direct site delivery — Stock register mein add hoga
+             {t("tasks.direct_site_delivery_stock_register_mein")}
             </div>
             <div style={{marginBottom:10}}>
-              <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Material Name *</label>
+              <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("tasks.material_name")}</label>
               <input value={form.material_name} onChange={e=>setForm(p=>({...p,material_name:e.target.value}))}
-                placeholder="e.g. OPC Cement 53 Grade" list="grn-mat-list"
+                placeholder={t("master_library.e_g_opc_cement_53_grade")} list="grn-mat-list"
                 style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                 onFocus={e=>e.target.style.borderColor="#16A34A"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
               <datalist id="grn-mat-list">
@@ -2940,7 +2925,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
               <div>
-                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Received Qty *</label>
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("tasks.received_qty")}</label>
                 <input type="number" value={form.received_qty} onChange={e=>setForm(p=>({...p,received_qty:e.target.value}))} placeholder="0"
                   style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
@@ -2953,10 +2938,10 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
                   return (
                     <>
                       <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>
-                        Unit{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>(from library)</span>}
+                        {t("common.unit")}{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>{t("tasks.from_library")}</span>}
                       </label>
                       {isLocked ? (
-                        <div title="Library me change karein" style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
+                        <div title={t("material.library_me_change_karein")} style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
                           <span>🔒</span>{displayUnit}
                         </div>
                       ) : (
@@ -2970,22 +2955,22 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
                 })()}
               </div>
               <div>
-                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Vendor Name</label>
-                <input value={form.vendor_name} onChange={e=>setForm(p=>({...p,vendor_name:e.target.value}))} placeholder="Supplier name"
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("tasks.vendor_name")}</label>
+                <input value={form.vendor_name} onChange={e=>setForm(p=>({...p,vendor_name:e.target.value}))} placeholder={t("common.supplier_name")}
                   style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
               <div>
-                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Challan No</label>
-                <input value={form.challan_no} onChange={e=>setForm(p=>({...p,challan_no:e.target.value}))} placeholder="Optional"
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("tasks.challan_no_2")}</label>
+                <input value={form.challan_no} onChange={e=>setForm(p=>({...p,challan_no:e.target.value}))} placeholder={t("common.optional")}
                   style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
               <div>
-                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Received Date</label>
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("tasks.received_date")}</label>
                 <input type="date" value={form.received_date} onChange={e=>setForm(p=>({...p,received_date:e.target.value}))}
                   style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
               <div>
-                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Quality</label>
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("tasks.quality")}</label>
                 <select value={form.quality} onChange={e=>setForm(p=>({...p,quality:e.target.value}))}
                   style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
                   {["Good","Average","Rejected"].map(q=><option key={q}>{q}</option>)}
@@ -2993,8 +2978,8 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
               </div>
             </div>
             <div style={{marginBottom:14}}>
-              <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Remark</label>
-              <input value={form.remark} onChange={e=>setForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"
+              <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.remark")}</label>
+              <input value={form.remark} onChange={e=>setForm(p=>({...p,remark:e.target.value}))} placeholder={t("common.optional")}
                 style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             </div>
           </div>
@@ -3003,11 +2988,11 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
 
       {/* Footer */}
       <div style={{padding:"12px 18px",borderTop:"1px solid #E2E8F0",flexShrink:0,display:"flex",gap:8}}>
-        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:"#F1F5F9",color:"#64748B",border:"none",cursor:"pointer",fontSize:13,fontWeight:600}}>Close</button>
+        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:"#F1F5F9",color:"#64748B",border:"none",cursor:"pointer",fontSize:13,fontWeight:600}}>{t("common.close")}</button>
         {grnTab==="direct"&&(
           <button onClick={handleDirectSave} disabled={saving}
             style={{flex:2,padding:"10px",borderRadius:7,background:saving?"#94A3B8":"#16A34A",color:"white",border:"none",cursor:saving?"default":"pointer",fontSize:13,fontWeight:700}}>
-            {saving?"Saving...":"Record GRN"}
+            {saving?t("common.saving"):t("common.record_grn")}
           </button>
         )}
       </div>
@@ -3056,8 +3041,8 @@ function TaskIssueDrawer({issues, loading, filter, setFilter, onClose, onStatusC
       <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Issues — This Project</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2}}>{filtered.length} issue{filtered.length!==1?"s":""} · task-wise</div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>{t("tasks.issues_this_project")}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2}}>{t("tasks.filtered_issuefiltered2_task_wise", { filtered: filtered.length, filtered2: filtered.length!==1?"s":"" })}</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
             <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -3076,15 +3061,15 @@ function TaskIssueDrawer({issues, loading, filter, setFilter, onClose, onStatusC
 
       {/* Body */}
       <div style={{flex:1,overflowY:"auto",padding:"12px 14px"}}>
-        {loading&&<div style={{textAlign:"center",padding:"60px 0",color:"#94A3B8"}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>}
-        {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>No issues found for this project.</div>}
+        {loading&&<div style={{textAlign:"center",padding:"60px 0",color:"#94A3B8"}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>{t("common.loading")}</div>}
+        {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>{t("tasks.no_issues_found_for_this_project")}</div>}
 
         {Object.entries(byTask).map(([taskLabel,taskIssues])=>(
           <div key={taskLabel} style={{marginBottom:14}}>
             {/* Task header */}
             <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7,padding:"5px 10px",background:"#1E293B",borderRadius:7}}>
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2"/></svg>
-              <span style={{fontSize:11.5,fontWeight:700,color:"white"}}>{taskLabel.trim()||"Unknown Task"}</span>
+              <span style={{fontSize:11.5,fontWeight:700,color:"white"}}>{taskLabel.trim()||t("tasks.unknown_task")}</span>
               <span style={{marginLeft:"auto",fontSize:10,color:"#94A3B8"}}>{taskIssues.length} issue{taskIssues.length!==1?"s":""}</span>
             </div>
 
@@ -3119,13 +3104,13 @@ function TaskIssueDrawer({issues, loading, filter, setFilter, onClose, onStatusC
                     <button onClick={()=>setExpandedChat(expandedChat===issue.id?null:issue.id)}
                       style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,border:"1px solid #E2E8F0",background:expandedChat===issue.id?"#DBEAFE":"white",cursor:"pointer",fontSize:11,color:expandedChat===issue.id?"#2563EB":"#64748B",fontWeight:600}}>
                       <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                      Message
+                     {t("tasks.message")}
                     </button>
                     {!isClosed&&(
                       <button onClick={()=>handleClose(issue.id)} disabled={closingId===issue.id}
                         style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,border:"1px solid #D1FAE5",background:"#ECFDF5",cursor:"pointer",fontSize:11,color:"#16A34A",fontWeight:600,marginLeft:"auto"}}>
                         <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
-                        {closingId===issue.id?"Closing...":"Close Issue"}
+                        {closingId===issue.id?t("common.closing"):t("tasks.close_issue")}
                       </button>
                     )}
                   </div>
@@ -3165,11 +3150,9 @@ function TaskIssueChat({issueId}){
   return(
     <div style={{background:"#F8FAFC",borderRadius:8,padding:"10px 12px",marginBottom:10,border:"1px solid #E2E8F0"}}>
       <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
-        <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-        Chat ({comments.length})
-      </div>
-      {!loaded&&<div style={{textAlign:"center",padding:"10px 0",color:"#94A3B8"}}><div style={{width:20,height:20,border:"2px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 6px"}}></div><span style={{fontSize:11}}>Loading...</span></div>}
-      {loaded&&comments.length===0&&<div style={{fontSize:11,color:"#CBD5E1",textAlign:"center",padding:"4px 0"}}>No messages yet — start the conversation</div>}
+        <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>{t("tasks.chat_comments", { comments: comments.length })}</div>
+      {!loaded&&<div style={{textAlign:"center",padding:"10px 0",color:"#94A3B8"}}><div style={{width:20,height:20,border:"2px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 6px"}}></div><span style={{fontSize:11}}>{t("common.loading")}</span></div>}
+      {loaded&&comments.length===0&&<div style={{fontSize:11,color:"#CBD5E1",textAlign:"center",padding:"4px 0"}}>{t("tasks.no_messages_yet_start_the_conversation")}</div>}
       <div style={{maxHeight:160,overflowY:"auto",marginBottom:8}}>
         {comments.map(c=>(
           <div key={c.id} style={{display:"flex",gap:7,marginBottom:8}}>
@@ -3189,11 +3172,11 @@ function TaskIssueChat({issueId}){
       <div style={{display:"flex",gap:6}}>
         <input value={text} onChange={e=>setText(e.target.value)}
           onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&!sending&&send()}
-          placeholder="Type message... (Enter to send)"
+          placeholder={t("tasks.type_message_enter_to_send")}
           style={{flex:1,padding:"7px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:12,color:"#1E293B",outline:"none",fontFamily:"inherit",background:"white"}}/>
         <button onClick={send} disabled={sending||!text.trim()}
           style={{padding:"7px 13px",borderRadius:7,background:!text.trim()?"#E2E8F0":"#2563EB",color:!text.trim()?"#94A3B8":"white",border:"none",cursor:text.trim()?"pointer":"default",fontSize:12,fontWeight:600,flexShrink:0}}>
-          {sending?"...":"Send"}
+          {sending?"...":t("common.send")}
         </button>
       </div>
     </div>
@@ -3265,7 +3248,7 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId}){
   };
   const micToggle=async()=>{
     if(recOn){ try{recRef.current?.stop();}catch(_){} return; }
-    if(!navigator.mediaDevices?.getUserMedia){ window.alert("Is browser me mic nahi chalta"); return; }
+    if(!navigator.mediaDevices?.getUserMedia){ window.alert(t("tasks.is_browser_me_mic_nahi_chalta")); return; }
     try{
       const stream=await navigator.mediaDevices.getUserMedia({audio:true});
       const mr=new MediaRecorder(stream);
@@ -3291,22 +3274,22 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId}){
         }
       };
       mr.start(); recRef.current=mr; setRecOn(true);
-    }catch(_){ window.alert("Mic nahi mila — browser ko ijazat do"); }
+    }catch(_){ window.alert(t("tasks.mic_nahi_mila_browser_ko_ijazat")); }
   };
   const aiOf=(e)=>{
     if(e._ai)return e._ai;
     try{const mj=typeof e.measure_json==="string"?JSON.parse(e.measure_json):e.measure_json;return mj?.ai||null;}
     catch(_){return null;}
   };
-  const GEO={verified:{t:"✓ line par",c:"#059669",bg:"#ECFDF5"},off_line:{t:"⚠ line se hat kar",c:"#B45309",bg:"#FFFBEB"},
-    no_geo:{t:"jagah darj nahi",c:"#64748B",bg:"#F1F5F9"},no_photo:{t:"photo nahi",c:"#94A3B8",bg:"#F8FAFC"}};
+  const GEO={verified:{t:t("tasks.line_par"),c:"#059669",bg:"#ECFDF5"},off_line:{t:t("tasks.line_se_hat_kar"),c:"#B45309",bg:"#FFFBEB"},
+    no_geo:{t:t("tasks.jagah_darj_nahi"),c:"#64748B",bg:"#F1F5F9"},no_photo:{t:t("tasks.photo_nahi"),c:"#94A3B8",bg:"#F8FAFC"}};
 
   return(<div>
     {/* done/scope — asli number bade akshar me, % uska saaya */}
     <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:6}}>
       <span style={{fontSize:22,fontWeight:800,color:pct>=100?"#10B981":"#2563EB"}}>{Math.round(done*100)/100}</span>
       <span style={{fontSize:13,color:"#64748B",fontWeight:600}}>/ {Math.round(scope*100)/100} {unit}</span>
-      <span style={{marginLeft:"auto",fontSize:11,color:"#94A3B8"}}>% khud nikalta hai — done ÷ scope</span>
+      <span style={{marginLeft:"auto",fontSize:11,color:"#94A3B8"}}>{t("tasks.khud_nikalta_hai_done_scope")}</span>
     </div>
     <div style={{height:8,background:"#E2E8F0",borderRadius:4,overflow:"hidden",marginBottom:12}}>
       <div style={{height:"100%",width:pct+"%",background:pct>=100?"#10B981":"#2563EB",borderRadius:4,transition:"width .3s"}}/>
@@ -3318,11 +3301,11 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId}){
         placeholder={"Aaj kitna hua? ("+unit+")"}
         style={{flex:"0 0 150px",padding:"10px 11px",borderRadius:8,border:"1.5px solid #CBD5E1",fontSize:14,fontWeight:700,
           color:"#1E293B",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-      <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note — kya kaam hua (AI isse milata hai)"
+      <input value={note} onChange={e=>setNote(e.target.value)} placeholder={t("tasks.note_kya_kaam_hua_ai_isse")}
         onKeyDown={e=>{if(e.key==="Enter")save();}}
         style={{flex:1,padding:"10px 11px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:12.5,
           color:"#1E293B",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-      <button onClick={micToggle} disabled={vBusy} title={recOn?"Rok kar bhejo":"Bolkar entry — task, qty, note bol do"}
+      <button onClick={micToggle} disabled={vBusy} title={recOn?t("tasks.rok_kar_bhejo"):t("tasks.bolkar_entry_task_qty_note_bol")}
         style={{padding:"10px 13px",borderRadius:8,border:`1.5px solid ${recOn?"#DC2626":"#C7D2FE"}`,
           background:recOn?"#FEF2F2":"#EEF2FF",fontSize:14,cursor:"pointer",fontFamily:"inherit",
           animation:recOn?"pulse 1s infinite":"none"}}>
@@ -3331,33 +3314,32 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId}){
       <button onClick={save} disabled={saving||!(Number(qty)>0)}
         style={{padding:"10px 16px",borderRadius:8,border:"none",background:Number(qty)>0?"#2563EB":"#CBD5E1",color:"white",
           fontSize:13,fontWeight:700,cursor:Number(qty)>0?"pointer":"default",fontFamily:"inherit"}}>
-        {saving?"…":"Darj karo"}
+        {saving?"…":t("machinery.darj_karo")}
       </button>
     </div>
-    {recOn&&<div style={{fontSize:11,color:"#DC2626",marginBottom:8}}>🔴 Bol rahe ho… ⏹ dabate hi Sahayak sunega.</div>}
-    {vBusy&&<div style={{fontSize:11,color:"#4B45C4",marginBottom:8}}>Sahayak sun raha hai…</div>}
+    {recOn&&<div style={{fontSize:11,color:"#DC2626",marginBottom:8}}>{t("tasks.bol_rahe_ho_dabate_hi_sahayak")}</div>}
+    {vBusy&&<div style={{fontSize:11,color:"#4B45C4",marginBottom:8}}>{t("tasks.sahayak_sun_raha_hai")}</div>}
     {vSug&&(
       <div style={{marginBottom:10,padding:"8px 11px",borderRadius:8,fontSize:11.5,lineHeight:1.6,
         background:vSug.found&&vSug.task&&Number(vSug.task.id)===Number(task.id)?"#F0FDF4":"#FFFBEB",
         border:"1px solid "+(vSug.found&&vSug.task&&Number(vSug.task.id)===Number(task.id)?"#BBF7D0":"#FDE68A"),
         color:vSug.found&&vSug.task&&Number(vSug.task.id)===Number(task.id)?"#166534":"#92400E"}}>
-        <b>Suna:</b> "{vSug.transcript}"
+        <b>{t("tasks.suna")}</b> "{vSug.transcript}"
         {vSug.found?(
           vSug.task?(Number(vSug.task.id)===Number(task.id)
-            ?<> — form bhar diya{vSug.din==="kal"?" (entry KAL ki jayegi)":""}. Dekh kar <b>Darj karo</b> dabao.</>
-            :<> — ye <b>"{vSug.task.name}"</b> ka kaam lag raha hai{vSug.qty?` (${vSug.qty} ${vSug.task.unit||""})`:""}, is task ka nahi. Us task ko khol kar darj karo.</>)
-          :<> — kaunsa task hai samajh nahi aaya. Qty haath se likh do.</>
-        ):<> — {vSug.reason||"samajh nahi aaya."}</>}
+            ?<><Rich k="tasks.form_bhar_diyavsug_dekh_kar_t" params={{ vSug: vSug.din==="kal"?t("tasks.entry_kal_ki_jayegi"):"", t: t("machinery.darj_karo") }} /></>
+            :<><Rich k="tasks.ye_name_ka_kaam_lag_raha" params={{ name: vSug.task.name, vSug: vSug.qty?` (${vSug.qty} ${vSug.task.unit||""})`:"" }} /></>)
+          :<> {t("tasks.kaunsa_task_hai_samajh_nahi_aaya")}</>
+        ):<> — {vSug.reason||t("tasks.samajh_nahi_aaya")}</>}
       </div>
     )}
     <div style={{fontSize:10.5,color:"#94A3B8",marginBottom:12,lineHeight:1.5}}>
-      Us din ki photos entry se apne aap jud jaati hain; AI teeno (qty + photo + note) ko dekh kar
-      neeche batata hai kahan aur kya kaam dikha. Faisla aapka hi hai.
+     {t("tasks.us_din_ki_photos_entry_se")}
     </div>
 
     {/* Entries */}
-    {entries===null&&<div style={{fontSize:11.5,color:"#94A3B8",padding:"8px 0"}}>Entries aa rahi hain…</div>}
-    {entries!==null&&!entries.length&&<div style={{fontSize:11.5,color:"#94A3B8",padding:"8px 0"}}>Abhi koi entry nahi — pehli aaj hi likho.</div>}
+    {entries===null&&<div style={{fontSize:11.5,color:"#94A3B8",padding:"8px 0"}}>{t("tasks.entries_aa_rahi_hain")}</div>}
+    {entries!==null&&!entries.length&&<div style={{fontSize:11.5,color:"#94A3B8",padding:"8px 0"}}>{t("tasks.abhi_koi_entry_nahi_pehli_aaj")}</div>}
     {(entries||[]).map(e=>{
       const g=GEO[e.geo_flag]||null;
       const ai=aiOf(e);
@@ -3375,10 +3357,10 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId}){
               <button onClick={()=>aiCheck(e)} disabled={aiBusy===e.id}
                 style={{fontSize:10,padding:"2px 9px",borderRadius:12,border:"1px solid #C7D2FE",background:"#EEF2FF",
                   color:"#4B45C4",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                {aiBusy===e.id?"jaanch chal rahi…":ai?"AI dobara":"✨ AI jaanch"}
+                {aiBusy===e.id?t("tasks.jaanch_chal_rahi"):ai?t("tasks.ai_dobara"):t("tasks.ai_jaanch")}
               </button>
             )}
-            <button onClick={()=>del(e)} title="Entry hatao"
+            <button onClick={()=>del(e)} title={t("tasks.entry_hatao")}
               style={{border:"none",background:"none",cursor:"pointer",color:"#94A3B8",fontSize:13,padding:"0 2px",fontFamily:"inherit"}}>×</button>
           </div>
           {e.remarks&&e.remarks!=="Web se darj"&&e.remarks!=="Site se darj"&&(
@@ -3497,7 +3479,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   const [commentText,setCommentText]=useState("");
   const [sendingComment,setSendingComment]=useState(false);
 
-  const autoStatus=(p)=>{ if(p===0) return "Not Started"; if(p===100) return "Completed"; return "Ongoing"; };
+  const autoStatus=(p)=>{ if(p===0) return t("common.not_started"); if(p===100) return t("common.completed"); return t("projects.ongoing"); };
   const ss={"Completed":{c:T.grn,bg:T.grnL,brd:T.grnM},"Ongoing":{c:T.blu,bg:T.bluL,brd:T.bluM},"Not Started":{c:T.slt,bg:T.sltL,brd:T.b2},"Hold":{c:T.amb,bg:T.ambL,brd:T.ambM}};
   const sm=ss[autoStatus(prog)]||ss["Not Started"];
   const delay=ptDelayDays(task);
@@ -3594,7 +3576,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
         <div style={{background:"#1E293B",padding:"10px 16px 12px",flexShrink:0}}>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",padding:"0 0 8px 0",display:"flex",alignItems:"center",gap:5}}>
             <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            <span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>Back</span>
+            <span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>{t("common.back")}</span>
           </button>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
             <div style={{flex:1,minWidth:0}}>
@@ -3602,8 +3584,8 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5,flexWrap:"wrap"}}>
                 <span style={{background:sm.bg,color:sm.c,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20}}>{autoStatus(prog)}</span>
                 {task.category&&<span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{task.category}</span>}
-                {task.dhyanRakhen&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>⚠ DHYAN</span>}
-                {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{delay}d delay</span>}
+                {task.dhyanRakhen&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{t("tasks.dhyan")}</span>}
+                {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{t("tasks.delayd_delay", { delay })}</span>}
               </div>
             </div>
             <span style={{fontSize:26,fontWeight:800,color:prog===100?"#10B981":prog>0?"#60A5FA":"#94A3B8",flexShrink:0,lineHeight:1,marginTop:2}}>{prog}%</span>
@@ -3619,8 +3601,8 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
                 <span style={{fontSize:9.5,color:"rgba(255,255,255,0.35)",fontFamily:"monospace"}}>{task.no}</span>
                 <span style={{background:sm.bg,color:sm.c,fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>{autoStatus(prog)}</span>
-                {task.dhyanRakhen&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>⚠ DHYAN</span>}
-                {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>{delay}d delayed</span>}
+                {task.dhyanRakhen&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>{t("tasks.dhyan")}</span>}
+                {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>{t("tasks.delayd_delayed", { delay })}</span>}
               </div>
               <div style={{fontSize:15,fontWeight:700,color:"white",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.name}</div>
               <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:3}}>{task.category}{task.assignee?" · "+task.assignee:""}</div>
@@ -3647,11 +3629,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
       {/* ── SCROLLSPY NAV (sticky) ── */}
       <div style={{background:"white",borderBottom:"2px solid #E2E8F0",padding:"0 10px",flexShrink:0,display:"flex",overflowX:"auto",gap:2,WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
         {[
-          {id:"progress", l:"Progress",  ic:"M13 2L3 14h9l-1 8 10-12h-9l1-8z",       cnt:null},
-          {id:"materials",l:"Materials", ic:"M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4", cnt:materials.length||null},
-          {id:"labour",   l:"Workers",   ic:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z", cnt:labours.length||null},
-          {id:"photos",   l:"Photos",    ic:"M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z", cnt:photos.length||null},
-          {id:"issues",   l:"Issues",    ic:"M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01", cnt:issues.filter(i=>i.status==="Open"||i.status==="In Progress").length||null},
+          {id:"progress", l:t("common.progress"),  ic:"M13 2L3 14h9l-1 8 10-12h-9l1-8z",       cnt:null},
+          {id:"materials",l:t("common.materials"), ic:"M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4", cnt:materials.length||null},
+          {id:"labour",   l:t("common.workers"),   ic:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z", cnt:labours.length||null},
+          {id:"photos",   l:t("common.photos"),    ic:"M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z", cnt:photos.length||null},
+          {id:"issues",   l:t("common.issues"),    ic:"M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01", cnt:issues.filter(i=>i.status==="Open"||i.status==="In Progress").length||null},
         ].map(t=>{
           const active=activeSection===t.id;
           return(
@@ -3696,11 +3678,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
         <div ref={progressRef} data-section="progress" style={{padding:"16px 14px 6px"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
             <div style={{width:3,height:18,borderRadius:2,background:"#2563EB"}}/>
-            <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Progress</span>
+            <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.progress")}</span>
           </div>
           <div style={{background:"white",borderRadius:12,padding:16,border:"1px solid #E2E8F0",marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,.04)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isSummary?10:14}}>
-              <span style={{fontSize:14,fontWeight:600,color:"#1E293B"}}>Completion</span>
+              <span style={{fontSize:14,fontWeight:600,color:"#1E293B"}}>{t("tasks.completion")}</span>
               <span style={{fontSize:26,fontWeight:800,color:prog===100?"#10B981":prog>0?"#2563EB":"#94A3B8",lineHeight:1}}>{prog}%</span>
             </div>
             {isSummary?(<>
@@ -3710,15 +3692,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               </div>
               {ptIsOverridden(task)?(
                 <div style={{fontSize:11.5,color:"#475569",lineHeight:1.55}}>
-                  <b style={{color:"#4B45C4"}}>Manually pinned at {task.progress_override}%</b>
-                  {task.progress_auto!=null&&<> — children {task.progress_auto}% keh rahe hain.</>}
+                  <b style={{color:"#4B45C4"}}>{t("tasks.manually_pinned_at_progress_override", { progress_override: task.progress_override })}</b>
+                  {task.progress_auto!=null&&<>{t("tasks.children_progress_auto_keh_rahe_hain", { progress_auto: task.progress_auto })}</>}
                   <br/>{PT_OVERRIDE_REASONS[task.override_reason]||task.override_reason}
                   {task.override_note&&<> — "{task.override_note}"</>}
                 </div>
               ):(
-                <div style={{fontSize:11.5,color:"#64748B",lineHeight:1.5}}>
-                  Yeh parent task hai — progress {childCount} sub-task{childCount===1?"":"s"} se auto-calculate hota hai (duration-weighted). Manual value ke liye task list me row par right-click → Override Progress.
-                </div>
+                <div style={{fontSize:11.5,color:"#64748B",lineHeight:1.5}}>{t("tasks.yeh_parent_task_hai_progress_childcount", { childCount, childCount2: childCount===1?"":"s" })}</div>
               )}
             </>):hasScope?(
               <QtyProgressBox task={task} meIsPriv={meIsPriv} projectId={projectId}
@@ -3736,8 +3716,8 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",background:sm.bg,border:"1px solid "+sm.brd,borderRadius:10,marginBottom:12}}>
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={sm.c} strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
             <div>
-              <div style={{fontSize:12,color:sm.c,fontWeight:700}}>Status: {autoStatus(prog)}</div>
-              <div style={{fontSize:11,color:"#64748B"}}>{prog===0?"Not started yet":prog===100?"Task complete!":"In progress"}</div>
+              <div style={{fontSize:12,color:sm.c,fontWeight:700}}>{t("tasks.status_autostatus", { autoStatus: autoStatus(prog) })}</div>
+              <div style={{fontSize:11,color:"#64748B"}}>{prog===0?t("tasks.not_started_yet"):prog===100?t("tasks.task_complete"):t("overview.in_progress")}</div>
             </div>
           </div>
           {/* Quick % buttons + save — sirf bina-scope leaf par; qty task apni
@@ -3759,7 +3739,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               else alert(res.message||"Save failed");
             }} disabled={saving}
               style={{width:"100%",padding:"14px",borderRadius:10,background:saving?"#94A3B8":"#2563EB",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:saving?"default":"pointer",letterSpacing:".2px"}}>
-              {saving?"Saving...":"Save Progress"}
+              {saving?t("common.saving"):t("tasks.save_progress")}
             </button>
           </>}
         </div>
@@ -3768,7 +3748,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
         <div ref={materialsRef} data-section="materials" style={{padding:"20px 14px 6px"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
             <div style={{width:3,height:18,borderRadius:2,background:"#059669"}}/>
-            <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Materials</span>
+            <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.materials")}</span>
             {materials.length>0&&<span style={{background:"#D1FAE5",color:"#065F46",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{materials.length} items</span>}
           </div>
           {/* 3 action buttons */}
@@ -3776,12 +3756,12 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
             <button onClick={()=>setMatTab(matTab==="usedlog"?"none":"usedlog")}
               style={{padding:"12px 6px",borderRadius:10,border:"1.5px solid "+(matTab==="usedlog"?"#16A34A":"#BBF7D0"),background:matTab==="usedlog"?"#DCFCE7":"#F0FDF4",color:"#16A34A",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
               <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 12h6M9 16h4"/></svg>
-              Mark Used
+             {t("tasks.mark_used")}
             </button>
             <button onClick={()=>setShowMRModal(true)}
               style={{padding:"12px 6px",borderRadius:10,border:"1.5px solid #BFDBFE",background:"#EFF6FF",color:"#2563EB",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
               <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14"/></svg>
-              New MR
+             {t("tasks.new_mr")}
             </button>
             <button onClick={()=>setShowGRNModal(true)}
               style={{padding:"12px 6px",borderRadius:10,border:"1.5px solid #A7F3D0",background:"#ECFDF5",color:"#059669",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
@@ -3793,13 +3773,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
           {matTab==="usedlog"&&(
             <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,padding:"14px",marginBottom:12}}>
               <div style={{fontSize:12,fontWeight:700,color:"#15803D",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span>Mark Material Used</span>
+                <span>{t("tasks.mark_material_used")}</span>
                 <button onClick={()=>setMatTab("none")} style={{background:"none",border:"none",cursor:"pointer",color:"#94A3B8",fontSize:22,lineHeight:1,padding:0}}>×</button>
               </div>
-              {invLoading&&<div style={{textAlign:"center",padding:"12px 0",color:"#94A3B8",fontSize:12}}>Loading inventory...</div>}
+              {invLoading&&<div style={{textAlign:"center",padding:"12px 0",color:"#94A3B8",fontSize:12}}>{t("common.loading_inventory")}</div>}
               {!invLoading&&inventory.filter(i=>Number(i.balance||0)>0).length>0&&(
                 <div style={{marginBottom:10}}>
-                  <div style={{fontSize:10.5,color:"#64748B",fontWeight:600,marginBottom:6,textTransform:"uppercase",letterSpacing:".4px"}}>Select from stock</div>
+                  <div style={{fontSize:10.5,color:"#64748B",fontWeight:600,marginBottom:6,textTransform:"uppercase",letterSpacing:".4px"}}>{t("tasks.select_from_stock")}</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,maxHeight:180,overflowY:"auto"}}>
                     {inventory.filter(i=>Number(i.balance||0)>0).map((item,i)=>{
                       const isSel=usedLogForm.material_name===item.material_name;
@@ -3807,7 +3787,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                         <div key={i} onClick={()=>setUsedLogForm(f=>({...f,material_name:item.material_name,unit:item.unit||"Nos"}))}
                           style={{padding:"10px",borderRadius:8,border:"1.5px solid "+(isSel?"#16A34A":"#BBF7D0"),background:isSel?"#DCFCE7":"white",cursor:"pointer"}}>
                           <div style={{fontSize:12,fontWeight:700,color:isSel?"#15803D":"#1E293B"}}>{item.material_name}</div>
-                          <div style={{fontSize:10.5,color:"#64748B"}}>Bal: {item.balance} {item.unit}</div>
+                          <div style={{fontSize:10.5,color:"#64748B"}}>{t("tasks.bal_balance_unit", { balance: item.balance, unit: item.unit })}</div>
                         </div>
                       );
                     })}
@@ -3816,17 +3796,17 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               )}
               <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:8,marginBottom:10}}>
                 <div>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Material Name</label>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("master_library.material_name")}</label>
                   <input value={usedLogForm.material_name} onChange={e=>{
                       const v=e.target.value;
                       const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===v.trim().toLowerCase());
                       setUsedLogForm(f=>({...f,material_name:v,unit:m?.unit||f.unit}));
-                    }} placeholder="e.g. Cement" list="usedlog-matlib"
+                    }} placeholder={t("tasks.e_g_cement")} list="usedlog-matlib"
                     style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                   <datalist id="usedlog-matlib">{matLib.map(m=><option key={m.id} value={m.name}/>)}</datalist>
                 </div>
                 <div>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Qty</label>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.qty")}</label>
                   <input type="number" value={usedLogForm.used_qty} onChange={e=>setUsedLogForm(f=>({...f,used_qty:e.target.value}))} placeholder="0"
                     style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
@@ -3841,10 +3821,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                     return (
                       <>
                         <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>
-                          Unit{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>(from library)</span>}
+                          {t("common.unit")}{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>{t("tasks.from_library")}</span>}
                         </label>
                         {isLocked ? (
-                          <div title="Library me change karein" style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
+                          <div title={t("material.library_me_change_karein")} style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
                             <span>🔒</span>{displayUnit}
                           </div>
                         ) : (
@@ -3858,12 +3838,12 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   })()}
                 </div>
                 <div>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Date</label>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.date")}</label>
                   <input type="date" value={usedLogForm.used_date} onChange={e=>setUsedLogForm(f=>({...f,used_date:e.target.value}))}
                     style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               </div>
-              <input value={usedLogForm.remark} onChange={e=>setUsedLogForm(f=>({...f,remark:e.target.value}))} placeholder="Remark (optional)"
+              <input value={usedLogForm.remark} onChange={e=>setUsedLogForm(f=>({...f,remark:e.target.value}))} placeholder={t("common.remark_optional")}
                 style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:10}}/>
               <button disabled={usedLogSaving||!usedLogForm.material_name||!usedLogForm.used_qty} onClick={async()=>{
                 if(!usedLogForm.material_name||!usedLogForm.used_qty) return;
@@ -3876,14 +3856,14 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 } else alert(res.message||"Failed");
                 setUsedLogSaving(false);
               }} style={{width:"100%",padding:"12px",borderRadius:8,background:usedLogSaving?"#94A3B8":"#16A34A",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>
-                {usedLogSaving?"Saving...":"✓ Log Usage"}
+                {usedLogSaving?t("common.saving"):t("tasks.log_usage")}
               </button>
             </div>
           )}
           {/* Used log recent */}
           {usedLog.length>0&&matTab!=="usedlog"&&(
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Recent Usage</div>
+              <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("tasks.recent_usage")}</div>
               {usedLog.slice(0,3).map((u,i)=>{
                 const showDel = u.id && canDeleteUsed(u.created_by);
                 return (
@@ -3891,7 +3871,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   <span style={{fontSize:12,fontWeight:600,color:"#065F46",flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{u.material_name}</span>
                   <span style={{fontSize:12,fontWeight:700,color:"#16A34A"}}>{u.used_qty} {u.unit}</span>
                   {showDel?(
-                    <button title="Delete this used entry"
+                    <button title={t("tasks.delete_this_used_entry")}
                       onClick={async()=>{
                         if(!await window.confirmAsync("Is used entry ko delete kar dein? ("+u.used_qty+" "+(u.unit||"")+")")) return;
                         const r=await api.del("/tasks/"+task.id+"/used-log/"+u.id);
@@ -3912,7 +3892,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
             </div>
           )}
           {/* Material activity list */}
-          {matLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>Loading materials...</div>}
+          {matLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>{t("tasks.loading_materials")}</div>}
           {!matLoading&&materials.length>0&&(isMobile?(
             /* ── Mobile: compact TABLE view ── */
             <div style={{background:"white",borderRadius:10,border:"1px solid #E2E8F0",overflow:"hidden",marginBottom:8}}>
@@ -3939,7 +3919,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
           ):(
             /* ── Desktop: card view ── */
             <div>
-              <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Material Activity ({materials.length})</div>
+              <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>{t("tasks.material_activity_materials", { materials: materials.length })}</div>
               {materials.map((m,i)=>{
                 const mrC=m.mat_status==="Received"||m.mat_status==="PartialReceived"?"#16A34A":m.mat_status==="Ordered"?"#D97706":m.mr_status==="Approved"?"#2563EB":"#64748B";
                 const mrL=m.mat_status==="Received"?"Received":m.mat_status==="PartialReceived"?"Partial Rcvd":m.mat_status==="Ordered"?"Ordered":m.mr_status==="Approved"?"Approved":m.mr_status||"Pending";
@@ -3950,9 +3930,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                       <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:mrC+"22",color:mrC}}>{mrL}</span>
                     </div>
                     <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-                      {m.required_qty>0&&<span style={{fontSize:11,color:"#94A3B8"}}>Req: <b style={{color:"#475569"}}>{m.required_qty} {m.unit}</b></span>}
-                      {m.received_qty>0&&<span style={{fontSize:11,color:"#94A3B8"}}>Rcvd: <b style={{color:"#16A34A"}}>{m.received_qty} {m.unit}</b></span>}
-                      {m.used_qty>0&&<span style={{fontSize:11,color:"#94A3B8"}}>Used: <b style={{color:"#D97706"}}>{m.used_qty} {m.unit}</b></span>}
+                      {m.required_qty>0&&<span style={{fontSize:11,color:"#94A3B8"}}>{t("tasks.req")} <b style={{color:"#475569"}}>{m.required_qty} {m.unit}</b></span>}
+                      {m.received_qty>0&&<span style={{fontSize:11,color:"#94A3B8"}}>{t("tasks.rcvd")} <b style={{color:"#16A34A"}}>{m.received_qty} {m.unit}</b></span>}
+                      {m.used_qty>0&&<span style={{fontSize:11,color:"#94A3B8"}}>{t("tasks.used")} <b style={{color:"#D97706"}}>{m.used_qty} {m.unit}</b></span>}
                     </div>
                   </div>
                 );
@@ -3962,7 +3942,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
           {!matLoading&&materials.length===0&&usedLog.length===0&&(
             <div style={{textAlign:"center",padding:"32px 0",color:"#94A3B8"}}>
               <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 8px",display:"block"}}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-              <div style={{fontSize:13}}>No material activity yet</div>
+              <div style={{fontSize:13}}>{t("tasks.no_material_activity_yet")}</div>
             </div>
           )}
         </div>
@@ -3973,18 +3953,18 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{width:3,height:18,borderRadius:2,background:"#2563EB"}}/>
-              <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Labour Attendance</span>
+              <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>{t("tasks.labour_attendance")}</span>
               {labours.length>0&&<span style={{background:"#DBEAFE",color:"#1D4ED8",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{labours.length}</span>}
             </div>
             <button onClick={()=>setShowLabForm(s=>!s)}
               style={{padding:"9px 16px",borderRadius:8,background:showLabForm?"#F1F5F9":"#2563EB",color:showLabForm?"#64748B":"white",border:"none",fontSize:13,fontWeight:600,cursor:"pointer",minHeight:40}}>
-              {showLabForm?"Cancel":"+ Add"}
+              {showLabForm?t("common.cancel"):t("mom.add")}
             </button>
           </div>
 
           {/* ── TYPE TABS ── */}
           <div style={{display:"flex",gap:0,background:"#F1F5F9",borderRadius:9,padding:3,marginBottom:12}}>
-            {[{v:"Direct",ic:"👷",l:"Company"},{v:"Subcon",ic:"🏗",l:"Subcon"},{v:"Vendor",ic:"🏢",l:"Vendor"}].map(t=>(
+            {[{v:"Direct",ic:"👷",l:t("common.company")},{v:"Subcon",ic:"🏗",l:t("common.subcon")},{v:"Vendor",ic:"🏢",l:t("common.vendor")}].map(t=>(
               <button key={t.v} onClick={()=>{setLabType(t.v);setLabCountRows([{role:"Mason",count:0,rate:0}]);}}
                 style={{flex:1,padding:"8px 6px",borderRadius:7,border:"none",background:labType===t.v?"white":"transparent",color:labType===t.v?"#2563EB":"#64748B",fontSize:12,fontWeight:labType===t.v?700:500,cursor:"pointer",transition:"all .15s",boxShadow:labType===t.v?"0 1px 4px rgba(0,0,0,.08)":"none"}}>
                 {t.ic} {t.l}
@@ -4022,7 +4002,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               {/* Day workers list */}
               {dayWorkers.length===0&&!showAddDayWorker&&(
                 <div style={{textAlign:"center",padding:"20px 0",color:"#94A3B8",fontSize:12}}>
-                  No workers added for this day
+                 {t("tasks.no_workers_added_for_this_day")}
                 </div>
               )}
               {dayWorkers.map((w,i)=>(
@@ -4057,7 +4037,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                           style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid #E2E8F0",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
                       </div>
                       <div style={{flex:1}}>
-                        <label style={{fontSize:9,fontWeight:600,color:"#94A3B8",display:"block",marginBottom:2}}>OT HRS</label>
+                        <label style={{fontSize:9,fontWeight:600,color:"#94A3B8",display:"block",marginBottom:2}}>{t("tasks.ot_hrs")}</label>
                         <input type="number" min={0} max={12} value={w.ot_hours}
                           onChange={e=>setDayWorkers(p=>p.map((x,j)=>j===i?{...x,ot_hours:parseFloat(e.target.value)||0}:x))}
                           style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid #E2E8F0",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
@@ -4075,7 +4055,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               {/* Add worker from library */}
               {showAddDayWorker&&(
                 <div style={{background:"#F8FAFC",borderRadius:10,padding:"10px",border:"1px solid #E2E8F0",marginBottom:8}}>
-                  <div style={{fontSize:11,fontWeight:600,color:"#64748B",marginBottom:6}}>Select from Library</div>
+                  <div style={{fontSize:11,fontWeight:600,color:"#64748B",marginBottom:6}}>{t("tasks.select_from_library")}</div>
                   <div style={{maxHeight:140,overflowY:"auto"}}>
                     {compLabLib.filter(w=>!dayWorkers.some(d=>d.name===w.name)).map((w,i)=>(
                       <div key={i} onMouseDown={()=>{setDayWorkers(p=>[...p,{lib_id:w.id,name:w.name,role:w.role||"Labour",daily_rate:w.daily_rate||0,status:"P",hours:8,ot_hours:0}]);setShowAddDayWorker(false);}}
@@ -4088,16 +4068,16 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                       </div>
                     ))}
                     {compLabLib.filter(w=>!dayWorkers.some(d=>d.name===w.name)).length===0&&(
-                      <div style={{textAlign:"center",padding:"12px",color:"#94A3B8",fontSize:11}}>All library workers already added</div>
+                      <div style={{textAlign:"center",padding:"12px",color:"#94A3B8",fontSize:11}}>{t("tasks.all_library_workers_already_added")}</div>
                     )}
                   </div>
-                  <button onClick={()=>setShowAddDayWorker(false)} style={{marginTop:6,fontSize:11,color:"#64748B",background:"none",border:"none",cursor:"pointer"}}>✕ Close</button>
+                  <button onClick={()=>setShowAddDayWorker(false)} style={{marginTop:6,fontSize:11,color:"#64748B",background:"none",border:"none",cursor:"pointer"}}>{t("tasks.close")}</button>
                 </div>
               )}
               <div style={{display:"flex",gap:7,marginBottom:10}}>
                 <button onClick={()=>setShowAddDayWorker(s=>!s)}
                   style={{flex:1,padding:"8px",borderRadius:8,border:"1.5px solid #2563EB",background:"#EFF6FF",color:"#2563EB",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                  + Add Worker
+                 {t("tasks.add_worker")}
                 </button>
               </div>
               {/* Day summary */}
@@ -4113,7 +4093,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 const totalOT=dayWorkers.reduce((s,w)=>s+(w.ot_hours||0),0);
                 return(
                   <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:10}}>
-                    {[{l:"Present",v:present.length,c:"#16A34A"},{l:"Absent",v:dayWorkers.filter(w=>w.status==="A").length,c:"#DC2626"},{l:"Half Day",v:half.length,c:"#D97706"},{l:"OT Hours",v:totalOT+"h",c:"#2563EB"},{l:"Day Wages",v:"₹"+Math.round(totalWage).toLocaleString(),c:"#16A34A"}].slice(0,4).map(k=>(
+                    {[{l:t("common.present"),v:present.length,c:"#16A34A"},{l:t("common.absent"),v:dayWorkers.filter(w=>w.status==="A").length,c:"#DC2626"},{l:t("common.half_day"),v:half.length,c:"#D97706"},{l:t("payroll.ot_hours"),v:totalOT+"h",c:"#2563EB"},{l:t("tasks.day_wages"),v:"₹"+Math.round(totalWage).toLocaleString(),c:"#16A34A"}].slice(0,4).map(k=>(
                       <div key={k.l} style={{background:"white",borderRadius:8,padding:"8px",border:"1px solid #E2E8F0",textAlign:"center"}}>
                         <div style={{fontSize:16,fontWeight:800,color:k.c}}>{k.v}</div>
                         <div style={{fontSize:9,color:"#94A3B8",marginTop:2}}>{k.l}</div>
@@ -4135,7 +4115,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   if(added.length>0){setLabours(p=>[...added,...p.filter(l=>l.work_date!==labDate||l.labour_type!=="Direct")]);setDayWorkers([]);}
                   setLabSaving(false);
                 }} style={{width:"100%",padding:"11px",borderRadius:8,background:"#2563EB",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",marginBottom:10}}>
-                  {labSaving?"Saving...":"✓ Save Attendance — "+new Date(labDate+"T00:00").toLocaleDateString("en-IN",{day:"numeric",month:"short"})}
+                  {labSaving?t("common.saving"):"✓ Save Attendance — "+new Date(labDate+"T00:00").toLocaleDateString("en-IN",{day:"numeric",month:"short"})}
                 </button>
               )}
             </div>
@@ -4151,11 +4131,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                     {ROLES.map(r=><option key={r}>{r}</option>)}
                   </select>
                   <input type="number" min={0} value={row.count} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,count:parseInt(e.target.value)||0}:r))}
-                    style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder="Count"/>
+                    style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder={t("tasks.count")}/>
                   {labCountRows.length>1&&<button onClick={()=>setLabCountRows(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:14}}>×</button>}
                 </div>
               ))}
-              <button onClick={()=>setLabCountRows(p=>[...p,{role:"Labour",count:0,rate:0}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:8}}>+ Add Row</button>
+              <button onClick={()=>setLabCountRows(p=>[...p,{role:"Labour",count:0,rate:0}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:8}}>{t("common.add_row")}</button>
               <button onClick={async()=>{
                 setLabSaving(true);const added=[];
                 for(const row of labCountRows){if(!row.count) continue;
@@ -4165,7 +4145,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 if(added.length>0){setLabours(p=>[...added,...p]);setLabCountRows([{role:"Mason",count:0,rate:0}]);setShowLabForm(false);}
                 setLabSaving(false);
               }} style={{width:"100%",padding:"10px",borderRadius:8,background:"#2563EB",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>
-                {labSaving?"Saving...":"Save Count"}
+                {labSaving?t("common.saving"):t("tasks.save_count")}
               </button>
             </div>
           )}
@@ -4175,10 +4155,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
             <div style={{background:"white",borderRadius:10,padding:"12px",border:"1px solid #E2E8F0",marginBottom:10}}>
               {/* Subcon selector */}
               <div style={{marginBottom:10}}>
-                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Subcontractor</label>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.subcontractor")}</label>
                 <select value={labDaySubcon} onChange={e=>{setLabDaySubcon(e.target.value);setDaySubconWorkers([]);}}
                   style={{width:"100%",padding:"9px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:13,outline:"none"}}>
-                  <option value="">— Select Subcontractor —</option>
+                  <option value="">{t("tasks.select_subcontractor")}</option>
                   {subconLib.map((s,i)=><option key={i} value={s.name||s.firm_name||s.party_name||s}>{s.name||s.firm_name||s.party_name||s}</option>)}
                 </select>
               </div>
@@ -4188,11 +4168,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   {labCountRows.map((row,i)=>(
                     <div key={i} style={{display:"flex",gap:7,alignItems:"center",marginBottom:7}}>
                       <select value={row.role} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,role:e.target.value}:r))} style={{flex:2,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none"}}>{ROLES.map(r=><option key={r}>{r}</option>)}</select>
-                      <input type="number" min={0} value={row.count} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,count:parseInt(e.target.value)||0}:r))} style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder="Count"/>
+                      <input type="number" min={0} value={row.count} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,count:parseInt(e.target.value)||0}:r))} style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder={t("tasks.count")}/>
                       {labCountRows.length>1&&<button onClick={()=>setLabCountRows(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:14}}>×</button>}
                     </div>
                   ))}
-                  <button onClick={()=>setLabCountRows(p=>[...p,{role:"Labour",count:0,rate:0}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:8}}>+ Add Row</button>
+                  <button onClick={()=>setLabCountRows(p=>[...p,{role:"Labour",count:0,rate:0}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:8}}>{t("common.add_row")}</button>
                 </>
               )}
               {labDaySubcon&&attSett.subcon.mode==="name"&&(
@@ -4211,7 +4191,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                       </div>
                     </div>
                   ))}
-                  <button onClick={()=>setDaySubconWorkers(p=>[...p,{name:"Worker "+(p.length+1),role:"Labour",status:"P"}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:8}}>+ Add Worker</button>
+                  <button onClick={()=>setDaySubconWorkers(p=>[...p,{name:"Worker "+(p.length+1),role:"Labour",status:"P"}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:8}}>{t("tasks.add_worker")}</button>
                 </>
               )}
               {labDaySubcon&&(
@@ -4229,7 +4209,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   if(added.length>0){setLabours(p=>[...added,...p]);setLabCountRows([{role:"Mason",count:0,rate:0}]);setDaySubconWorkers([]);setShowLabForm(false);}
                   setLabSaving(false);
                 }} style={{width:"100%",padding:"10px",borderRadius:8,background:"#2563EB",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>
-                  {labSaving?"Saving...":"Save Subcon Attendance"}
+                  {labSaving?t("common.saving"):t("tasks.save_subcon_attendance")}
                 </button>
               )}
             </div>
@@ -4240,10 +4220,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
             <div style={{background:"white",borderRadius:10,padding:"12px",border:"1px solid #E2E8F0",marginBottom:10}}>
               {/* Vendor selector */}
               <div style={{marginBottom:10}}>
-                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Labour Vendor</label>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.labour_vendor")}</label>
                 <select value={labDayVendor} onChange={e=>setLabDayVendor(e.target.value)}
                   style={{width:"100%",padding:"9px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:13,outline:"none"}}>
-                  <option value="">— Select Vendor —</option>
+                  <option value="">{t("tasks.select_vendor")}</option>
                   {vendorLib.map((v,i)=><option key={i} value={v.name||v.vendor_name||v.party_name||v}>{v.name||v.vendor_name||v.party_name||v}</option>)}
                 </select>
               </div>
@@ -4252,15 +4232,15 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   {labCountRows.map((row,i)=>(
                     <div key={i} style={{display:"flex",gap:7,alignItems:"center",marginBottom:7}}>
                       <select value={row.role} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,role:e.target.value}:r))} style={{flex:2,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none"}}>{ROLES.map(r=><option key={r}>{r}</option>)}</select>
-                      <input type="number" min={0} value={row.count} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,count:parseInt(e.target.value)||0}:r))} style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder="Count"/>
-                      <input type="number" min={0} value={row.rate} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,rate:parseInt(e.target.value)||0}:r))} style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder="₹/day"/>
+                      <input type="number" min={0} value={row.count} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,count:parseInt(e.target.value)||0}:r))} style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder={t("tasks.count")}/>
+                      <input type="number" min={0} value={row.rate} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,rate:parseInt(e.target.value)||0}:r))} style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder={t("tasks.day")}/>
                       {labCountRows.length>1&&<button onClick={()=>setLabCountRows(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:14}}>×</button>}
                     </div>
                   ))}
-                  <button onClick={()=>setLabCountRows(p=>[...p,{role:"Labour",count:0,rate:0}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:4}}>+ Add Row</button>
+                  <button onClick={()=>setLabCountRows(p=>[...p,{role:"Labour",count:0,rate:0}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:4}}>{t("common.add_row")}</button>
                   {attSett.vendor.trackPayment&&(
                     <div style={{background:"#F0FDF4",borderRadius:8,padding:"8px 10px",marginBottom:8,fontSize:12}}>
-                      <span style={{color:"#64748B"}}>Day total due: </span>
+                      <span style={{color:"#64748B"}}>{t("tasks.day_total_due")} </span>
                       <span style={{fontWeight:700,color:"#16A34A"}}>₹{labCountRows.reduce((s,r)=>s+r.count*r.rate,0).toLocaleString()}</span>
                     </div>
                   )}
@@ -4272,7 +4252,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                     if(added.length>0){setLabours(p=>[...added,...p]);setLabCountRows([{role:"Mason",count:0,rate:0}]);setShowLabForm(false);}
                     setLabSaving(false);
                   }} style={{width:"100%",padding:"10px",borderRadius:8,background:"#2563EB",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>
-                    {labSaving?"Saving...":"Save Vendor Attendance"}
+                    {labSaving?t("common.saving"):t("tasks.save_vendor_attendance")}
                   </button>
                 </>
               )}
@@ -4280,14 +4260,14 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
           )}
 
           {/* ── HISTORY ── */}
-          {labLoading&&<div style={{textAlign:"center",padding:"20px 0",color:"#94A3B8",fontSize:13}}>Loading...</div>}
+          {labLoading&&<div style={{textAlign:"center",padding:"20px 0",color:"#94A3B8",fontSize:13}}>{t("common.loading")}</div>}
           {!labLoading&&labours.length>0&&(()=>{
             // Group by date
             const byDate={};
             labours.forEach(l=>{const d=l.work_date||"";if(!byDate[d])byDate[d]=[];byDate[d].push(l);});
             return(
               <div style={{marginTop:4}}>
-                <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Attendance History</div>
+                <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>{t("attendance.attendance_history")}</div>
                 {Object.entries(byDate).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,entries])=>(
                   <div key={date} style={{marginBottom:10}}>
                     <div style={{fontSize:10,fontWeight:700,color:"#64748B",marginBottom:5,display:"flex",alignItems:"center",gap:6}}>
@@ -4306,8 +4286,8 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                           </div>
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          {l.status&&<span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4,background:l.status==="P"?"#DCFCE7":l.status==="A"?"#FEE2E2":"#FEF3C7",color:l.status==="P"?"#16A34A":l.status==="A"?"#DC2626":"#D97706"}}>{l.status==="P"?"Present":l.status==="A"?"Absent":"Half Day"}</span>}
-                          <span style={{fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:4,background:l.labour_type==="Direct"?"#DCFCE7":l.labour_type==="Subcon"?"#DBEAFE":"#F1F5F9",color:l.labour_type==="Direct"?"#16A34A":l.labour_type==="Subcon"?"#2563EB":"#475569"}}>{l.labour_type==="Direct"?"Company":l.labour_type}</span>
+                          {l.status&&<span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4,background:l.status==="P"?"#DCFCE7":l.status==="A"?"#FEE2E2":"#FEF3C7",color:l.status==="P"?"#16A34A":l.status==="A"?"#DC2626":"#D97706"}}>{l.status==="P"?t("common.present"):l.status==="A"?t("common.absent"):t("common.half_day")}</span>}
+                          <span style={{fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:4,background:l.labour_type==="Direct"?"#DCFCE7":l.labour_type==="Subcon"?"#DBEAFE":"#F1F5F9",color:l.labour_type==="Direct"?"#16A34A":l.labour_type==="Subcon"?"#2563EB":"#475569"}}>{l.labour_type==="Direct"?t("common.company"):l.labour_type}</span>
                           <button onClick={async()=>{const r=await api.del("/tasks/"+task.id+"/labour/"+l.id);if(r.success)setLabours(p=>p.filter(x=>x.id!==l.id));}}
                             style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:4,display:"flex"}}>
                             <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
@@ -4321,20 +4301,20 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
             );
           })()}
           {!labLoading&&labours.length===0&&(
-            <div style={{textAlign:"center",padding:"28px 0",color:"#94A3B8",fontSize:12}}>No attendance entries yet</div>
+            <div style={{textAlign:"center",padding:"28px 0",color:"#94A3B8",fontSize:12}}>{t("tasks.no_attendance_entries_yet")}</div>
           )}
           {false&&(
             <div>
               {/* ── Name — library searchable ── */}
               <div style={{marginBottom:12,position:"relative"}}>
                 <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>
-                  {labForm.labour_type==="Direct"?"Worker Name *":labForm.labour_type==="Subcon"?"Subcontractor *":"Labour Vendor *"}
+                  {labForm.labour_type==="Direct"?t("tasks.worker_name"):labForm.labour_type==="Subcon"?t("common.subcontractor_2"):t("tasks.labour_vendor")}
                 </label>
                 {(labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name) ? (
                   <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderRadius:8,border:"1.5px solid #2563EB",background:"#DBEAFE"}}>
                     <span style={{flex:1,fontSize:13,color:"#1E40AF",fontWeight:600}}>{labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name}</span>
                     {labIsNew&&labForm.labour_type==="Direct"&&(
-                      <span style={{fontSize:10,fontWeight:600,color:"#16A34A",background:"#DCFCE7",padding:"2px 7px",borderRadius:8,whiteSpace:"nowrap"}}>New → Library</span>
+                      <span style={{fontSize:10,fontWeight:600,color:"#16A34A",background:"#DCFCE7",padding:"2px 7px",borderRadius:8,whiteSpace:"nowrap"}}>{t("tasks.new_library")}</span>
                     )}
                     <button onClick={()=>{setLabForm(p=>({...p,labour_name:"",vendor_name:""}));setLabIsNew(false);setLabSearchQ("");setShowCreateLab(false);}} style={{background:"none",border:"none",cursor:"pointer",color:"#64748B",fontSize:18,lineHeight:1,padding:0}}>×</button>
                   </div>
@@ -4342,7 +4322,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   <>
                     <input value={labSearchQ} onChange={e=>{setLabSearchQ(e.target.value);setLabSearchOpen(true);}}
                       onFocus={()=>setLabSearchOpen(true)}
-                      placeholder={labForm.labour_type==="Direct"?"Search or type worker name…":labForm.labour_type==="Subcon"?"Search subcontractor…":"Search vendor…"}
+                      placeholder={labForm.labour_type==="Direct"?t("tasks.search_or_type_worker_name"):labForm.labour_type==="Subcon"?t("tasks.search_subcontractor"):t("tasks.search_vendor")}
                       style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                     {labSearchOpen&&(
                       <div style={{position:"absolute",top:"100%",left:0,right:0,background:"white",border:"1px solid #E2E8F0",borderRadius:8,zIndex:50,marginTop:2,boxShadow:"0 4px 16px rgba(0,0,0,.12)",maxHeight:160,overflowY:"auto"}}>
@@ -4363,14 +4343,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                           style={{padding:"9px 12px",fontSize:12,color:"#2563EB",fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,borderTop:"1px solid #E2E8F0"}}
                           onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"}
                           onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                          <span style={{fontSize:16,lineHeight:1}}>+</span> Create new {labForm.labour_type==="Direct"?"worker":labForm.labour_type==="Subcon"?"subcontractor":"vendor"}…
-                        </div>
+                          <span style={{fontSize:16,lineHeight:1}}>+</span>{t("tasks.create_new_labform", { labForm: labForm.labour_type==="Direct"?"worker":labForm.labour_type==="Subcon"?"subcontractor":"vendor" })}</div>
                       </div>
                     )}
                     {showCreateLab&&(
                       <div style={{marginTop:6,display:"flex",gap:6}}>
                         <input value={newLabName} onChange={e=>setNewLabName(e.target.value)} autoFocus
-                          placeholder="Enter name..."
+                          placeholder={t("tasks.enter_name")}
                           style={{flex:1,padding:"9px",borderRadius:8,border:"1.5px solid #2563EB",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
                         <button onClick={()=>{
                           if(!newLabName.trim()) return;
@@ -4378,7 +4357,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                           setLabForm(p=>labForm.labour_type==="Direct"?{...p,labour_name:n}:{...p,vendor_name:n});
                           setLabIsNew(true);
                           setShowCreateLab(false);setNewLabName("");
-                        }} style={{padding:"9px 14px",borderRadius:8,background:"#2563EB",color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>Add</button>
+                        }} style={{padding:"9px 14px",borderRadius:8,background:"#2563EB",color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.add")}</button>
                         <button onClick={()=>{setShowCreateLab(false);setNewLabName("");}} style={{padding:"9px 12px",borderRadius:8,background:"#F1F5F9",color:"#64748B",border:"none",fontSize:12,cursor:"pointer"}}>✕</button>
                       </div>
                     )}
@@ -4388,9 +4367,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               {/* ── Skill-wise Count rows ── */}
               <div style={{marginBottom:12}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>Skill-wise Count</label>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>{t("tasks.skill_wise_count")}</label>
                   <button onClick={()=>setLabSkillRows(p=>[...p,{role:"Labour",count:1}])}
-                    style={{padding:"3px 10px",borderRadius:6,background:"#EFF6FF",color:"#2563EB",border:"1px solid #BFDBFE",fontSize:11,fontWeight:600,cursor:"pointer"}}>+ Add Row</button>
+                    style={{padding:"3px 10px",borderRadius:6,background:"#EFF6FF",color:"#2563EB",border:"1px solid #BFDBFE",fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("common.add_row")}</button>
                 </div>
                 {labSkillRows.map((row,i)=>(
                   <div key={i} style={{display:"flex",gap:7,alignItems:"center",marginBottom:6}}>
@@ -4409,25 +4388,23 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                     )}
                   </div>
                 ))}
-                <div style={{fontSize:10,color:"#94A3B8",marginTop:2}}>
-                  Total: {labSkillRows.reduce((s,r)=>s+r.count,0)} workers
-                </div>
+                <div style={{fontSize:10,color:"#94A3B8",marginTop:2}}>{t("tasks.total_labskillrows_workers", { labSkillRows: labSkillRows.reduce((s,r)=>s+r.count,0) })}</div>
               </div>
               {/* ── Date / Hours / Remark ── */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
                 <div>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Date</label>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.date")}</label>
                   <input type="date" value={labForm.work_date} onChange={e=>setLabForm(p=>({...p,work_date:e.target.value}))}
                     style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
                 <div>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Hours/Day</label>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("tasks.hours_day")}</label>
                   <input type="number" min={1} max={24} value={labForm.hours} onChange={e=>setLabForm(p=>({...p,hours:parseFloat(e.target.value)||8}))}
                     style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
                 <div style={{gridColumn:"1/-1"}}>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Remark</label>
-                  <input value={labForm.remark} onChange={e=>setLabForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.remark")}</label>
+                  <input value={labForm.remark} onChange={e=>setLabForm(p=>({...p,remark:e.target.value}))} placeholder={t("common.optional")}
                     style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               </div>
@@ -4453,9 +4430,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   setLabForm({labour_type:"Direct",labour_name:"",vendor_name:"",work_date:new Date().toISOString().split("T")[0],hours:8,remark:""});
                   setLabSkillRows([{role:"Mason",count:1}]);
                   setLabSearchQ("");setShowCreateLab(false);setNewLabName("");setLabIsNew(false);setShowLabForm(false);
-                } else alert("Failed to save");
+                } else alert(t("tasks.failed_to_save"));
               }} style={{width:"100%",padding:"13px",borderRadius:9,background:"#2563EB",color:"white",fontSize:14,fontWeight:700,border:"none",cursor:"pointer"}}>
-                + Add Labour Entry
+               {t("tasks.add_labour_entry")}
               </button>
             </div>
           )}
@@ -4471,12 +4448,12 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{width:3,height:18,borderRadius:2,background:"#EA580C"}}/>
-              <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Photos</span>
+              <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.photos")}</span>
               {photos.length>0&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{photos.length}</span>}
             </div>
             <label style={{padding:"9px 16px",borderRadius:8,background:uploading?"#94A3B8":"#EA580C",color:"white",fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,minHeight:40,boxSizing:"border-box"}}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
-              {uploading?"Uploading...":"📷 Add Photo"}
+              {uploading?t("common.uploading"):t("tasks.add_photo")}
               <input type="file" accept="image/*" capture="environment" style={{display:"none"}} disabled={uploading} onChange={async(e)=>{
                 const file=e.target.files[0]; if(!file) return;
                 setUploading(true);
@@ -4488,17 +4465,17 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   const cd=await uploadToCloudinary(file,"site_photos");
                   const res=await api.post("/tasks/"+task.id+"/photos",{photo_url:cd.secure_url,caption:"",lat,lng});
                   if(res.success) setPhotos(p=>[res.data,...p]);
-                }catch(e){alert("Upload failed");}
+                }catch(e){alert(t("common.upload_failed"));}
                 setUploading(false);e.target.value="";
               }}/>
             </label>
           </div>
-          {phLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>Loading photos...</div>}
+          {phLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>{t("tasks.loading_photos")}</div>}
           {!phLoading&&photos.length===0&&(
             <div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8"}}>
               <svg width={44} height={44} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{marginBottom:8}}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
-              <div style={{fontSize:13}}>No photos yet</div>
-              <div style={{fontSize:11,marginTop:4,color:"#CBD5E1"}}>Tap "Add Photo" to upload</div>
+              <div style={{fontSize:13}}>{t("tasks.no_photos_yet")}</div>
+              <div style={{fontSize:11,marginTop:4,color:"#CBD5E1"}}>{t("tasks.tap_add_photo_to_upload")}</div>
             </div>
           )}
           {!phLoading&&photos.length>0&&(
@@ -4514,7 +4491,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   </div>
                   <div style={{padding:"7px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{fontSize:10.5,color:"#94A3B8"}}>{new Date(p.created_at).toLocaleDateString("en-IN")}</span>
-                    <button onClick={async e=>{e.stopPropagation();if(await window.confirmAsync("Delete photo?")){const r=await api.del("/tasks/"+task.id+"/photos/"+p.id);if(r.success)setPhotos(prev=>prev.filter(x=>x.id!==p.id));}}}
+                    <button onClick={async e=>{e.stopPropagation();if(await window.confirmAsync(t("tasks.delete_photo"))){const r=await api.del("/tasks/"+task.id+"/photos/"+p.id);if(r.success)setPhotos(prev=>prev.filter(x=>x.id!==p.id));}}}
                       style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:4,display:"flex"}}>
                       <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                     </button>
@@ -4530,28 +4507,28 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{width:3,height:18,borderRadius:2,background:"#DC2626"}}/>
-              <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Issues</span>
+              <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.issues")}</span>
               {issues.length>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{issues.filter(i=>i.status==="Open"||i.status==="In Progress").length} open</span>}
             </div>
             <button onClick={()=>setShowIssueForm(s=>!s)}
               style={{padding:"9px 16px",borderRadius:8,background:showIssueForm?"#F1F5F9":"#DC2626",color:showIssueForm?"#64748B":"white",border:"none",fontSize:13,fontWeight:600,cursor:"pointer",minHeight:40}}>
-              {showIssueForm?"Cancel":"+ Issue"}
+              {showIssueForm?t("common.cancel"):t("grn_issue.issue")}
             </button>
           </div>
           {showIssueForm&&(
             <div style={{background:"white",borderRadius:12,padding:"16px",border:"1.5px solid #FECACA",marginBottom:12}}>
               <div style={{marginBottom:10}}>
-                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Title *</label>
-                <input value={issueForm.title} onChange={e=>setIssueForm(p=>({...p,title:e.target.value}))} placeholder="Describe the issue"
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.title")}</label>
+                <input value={issueForm.title} onChange={e=>setIssueForm(p=>({...p,title:e.target.value}))} placeholder={t("tasks.describe_the_issue")}
                   style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
               <div style={{marginBottom:10}}>
-                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Description</label>
-                <textarea value={issueForm.description} onChange={e=>setIssueForm(p=>({...p,description:e.target.value}))} rows={2} placeholder="More details..."
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.description")}</label>
+                <textarea value={issueForm.description} onChange={e=>setIssueForm(p=>({...p,description:e.target.value}))} rows={2} placeholder={t("tasks.more_details")}
                   style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
               </div>
               <div style={{marginBottom:10}}>
-                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:6,textTransform:"uppercase"}}>Priority</label>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:6,textTransform:"uppercase"}}>{t("common.priority")}</label>
                 <div style={{display:"flex",gap:6}}>
                   {PRIORITIES.map(p=>(
                     <button key={p} onClick={()=>setIssueForm(prev=>({...prev,priority:p}))}
@@ -4563,43 +4540,43 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:12}}>
                 <div>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Assign To</label>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("mom.assign_to")}</label>
                   <SearchSelect value={issueForm.assigned_to} options={issueTeam}
-                    onChange={v=>setIssueForm(p=>({...p,assigned_to:v}))} placeholder="-- Select --"/>
+                    onChange={v=>setIssueForm(p=>({...p,assigned_to:v}))} placeholder={t("tasks.select")}/>
                 </div>
                 <div>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Category</label>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{t("common.category")}</label>
                   <SearchSelect value={issueForm.work_category} options={issueWorkCats}
-                    onChange={v=>setIssueForm(p=>({...p,work_category:v}))} placeholder="-- Select --"/>
+                    onChange={v=>setIssueForm(p=>({...p,work_category:v}))} placeholder={t("tasks.select")}/>
                 </div>
               </div>
               {/* Photo upload */}
               <label style={{display:"flex",alignItems:"center",gap:7,padding:"9px 14px",borderRadius:8,border:"1.5px dashed #E2E8F0",cursor:"pointer",marginBottom:12,color:"#64748B",fontSize:12,fontWeight:500}}>
                 <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#EA580C" strokeWidth={2}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
-                {issueUploading?"Uploading...":"Attach a photo (optional)"}
+                {issueUploading?t("common.uploading"):t("tasks.attach_a_photo_optional")}
                 <input type="file" accept="image/*" style={{display:"none"}} disabled={issueUploading} onChange={async(e)=>{
                   const file=e.target.files[0]; if(!file) return;
                   setIssueUploading(true);
-                  try{const cd=await uploadToCloudinary(file,"issue_photos");setIssueForm(p=>({...p,photo_url:cd.secure_url}));}catch{alert("Upload failed");}
+                  try{const cd=await uploadToCloudinary(file,"issue_photos");setIssueForm(p=>({...p,photo_url:cd.secure_url}));}catch{alert(t("common.upload_failed"));}
                   setIssueUploading(false);e.target.value="";
                 }}/>
               </label>
               {issueForm.photo_url&&<img src={issueForm.photo_url} style={{width:"100%",borderRadius:8,marginBottom:12,maxHeight:160,objectFit:"cover"}}/>}
               <button onClick={async()=>{
-                if(!issueForm.title.trim()) return alert("Title required");
+                if(!issueForm.title.trim()) return alert(t("design.title_required"));
                 const res=await api.post("/tasks/"+task.id+"/issues",issueForm);
                 if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});setShowIssueForm(false);}
                 else alert(res.message||"Failed");
               }} style={{width:"100%",padding:"13px",borderRadius:9,background:"#DC2626",color:"white",fontSize:14,fontWeight:700,border:"none",cursor:"pointer"}}>
-                + Create Issue
+               {t("material_flow.create_issue")}
               </button>
             </div>
           )}
-          {issLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>Loading issues...</div>}
+          {issLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>{t("projects.loading_issues")}</div>}
           {!issLoading&&issues.length===0&&!showIssueForm&&(
             <div style={{textAlign:"center",padding:"32px 0",color:"#94A3B8"}}>
               <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{marginBottom:8}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
-              <div style={{fontSize:13}}>No issues logged</div>
+              <div style={{fontSize:13}}>{t("tasks.no_issues_logged")}</div>
             </div>
           )}
           {issues.map(issue=>{
@@ -4640,7 +4617,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                     {issue.photo_url&&<img src={issue.photo_url} style={{width:"100%",borderRadius:8,marginBottom:10,cursor:"zoom-in",maxHeight:180,objectFit:"cover"}} onClick={()=>setFullPhoto({photo_url:issue.photo_url})}/>}
                     <TaskIssueChat issueId={issue.id}/>
                     <div style={{marginBottom:9}}>
-                      <div style={{fontSize:10,fontWeight:600,color:"#94A3B8",marginBottom:6,textTransform:"uppercase",letterSpacing:".4px"}}>Change Status</div>
+                      <div style={{fontSize:10,fontWeight:600,color:"#94A3B8",marginBottom:6,textTransform:"uppercase",letterSpacing:".4px"}}>{t("tasks.change_status")}</div>
                       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                         {ISSUE_STATUS.map(s=>(
                           <button key={s} onClick={async()=>{const r=await api.put("/tasks/"+task.id+"/issues/"+issue.id,{status:s});if(r.success)setIssues(p=>p.map(x=>x.id===issue.id?{...x,status:s}:x));}}
@@ -4650,8 +4627,8 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                         ))}
                       </div>
                     </div>
-                    <button onClick={async()=>{if(await window.confirmAsync("Delete issue?")){const r=await api.del("/tasks/"+task.id+"/issues/"+issue.id);if(r.success){setIssues(p=>p.filter(x=>x.id!==issue.id));setExpandedIssue(null);}}}}
-                      style={{fontSize:11,color:"#EF4444",background:"none",border:"none",cursor:"pointer",padding:0}}>Delete Issue</button>
+                    <button onClick={async()=>{if(await window.confirmAsync(t("tasks.delete_issue"))){const r=await api.del("/tasks/"+task.id+"/issues/"+issue.id);if(r.success){setIssues(p=>p.filter(x=>x.id!==issue.id));setExpandedIssue(null);}}}}
+                      style={{fontSize:11,color:"#EF4444",background:"none",border:"none",cursor:"pointer",padding:0}}>{t("tasks.delete_issue_2")}</button>
                   </div>
                 )}
               </div>
@@ -4672,7 +4649,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   {(c.user_name||"?").charAt(0)}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <span style={{fontSize:11,fontWeight:600,color:"#1E293B"}}>{c.user_name||"User"} </span>
+                  <span style={{fontSize:11,fontWeight:600,color:"#1E293B"}}>{c.user_name||t("common.user")} </span>
                   <span style={{fontSize:10,color:"#94A3B8"}}>{new Date(c.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}</span>
                   <div style={{fontSize:12.5,color:"#334155",marginTop:1,lineHeight:1.4}}>{c.text}</div>
                 </div>
@@ -4682,7 +4659,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
         )}
         <div style={{display:"flex",gap:8,padding:"8px 12px 10px",alignItems:"center"}}>
           <input value={commentText} onChange={e=>setCommentText(e.target.value)}
-            placeholder="Add a comment..."
+            placeholder={t("tasks.add_a_comment")}
             onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendComment();}}}
             style={{flex:1,padding:"10px 14px",borderRadius:22,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"#F8FAFC",outline:"none",fontFamily:"inherit"}}
             onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
@@ -4731,7 +4708,7 @@ function PTOverrideModal({task,onClose,onSaved}){
     <div style={{position:"fixed",left:"50%",top:"50%",transform:"translate(-50%,-50%)",width:"min(440px,94vw)",maxHeight:"90vh",overflowY:"auto",background:T.bg,borderRadius:12,zIndex:401,boxShadow:"0 20px 60px rgba(0,0,0,0.28)",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:"#0D1B2A",padding:"12px 16px",borderRadius:"12px 12px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
-          <div style={{fontSize:13,fontWeight:700,color:"white"}}>Override Progress</div>
+          <div style={{fontSize:13,fontWeight:700,color:"white"}}>{t("tasks.override_progress_2")}</div>
           <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",fontFamily:"monospace",marginTop:1}}>{task.no} — {String(task.name||"").slice(0,32)}</div>
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
@@ -4743,16 +4720,16 @@ function PTOverrideModal({task,onClose,onSaved}){
         {/* What the children actually say */}
         <div style={{display:"flex",gap:10,marginBottom:14}}>
           <div style={{flex:1,padding:"10px 12px",borderRadius:8,background:T.surface,border:`1px solid ${T.b1}`}}>
-            <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Auto (children)</div>
+            <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("tasks.auto_children")}</div>
             <div style={{fontSize:20,fontWeight:800,color:T.t1,lineHeight:1}}>{auto===null?"—":auto+"%"}</div>
           </div>
           <div style={{flex:1,padding:"10px 12px",borderRadius:8,background:"#EEF2FF",border:"1px solid #C7D2FE"}}>
-            <div style={{fontSize:9,color:"#4B45C4",textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Manual</div>
+            <div style={{fontSize:9,color:"#4B45C4",textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.manual")}</div>
             <div style={{fontSize:20,fontWeight:800,color:"#4B45C4",lineHeight:1}}>{pct}%</div>
           </div>
         </div>
 
-        <label style={L}>Manual progress</label>
+        <label style={L}>{t("tasks.manual_progress")}</label>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
           <input type="range" min={0} max={100} step={1} value={pct} onChange={e=>setPct(Number(e.target.value))}
             style={{flex:1,accentColor:"#4B45C4"}}/>
@@ -4761,25 +4738,23 @@ function PTOverrideModal({task,onClose,onSaved}){
             style={{width:56,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:13,fontWeight:700,color:T.t1,background:T.surface,outline:"none",textAlign:"right",fontFamily:"inherit"}}/>
         </div>
         {drift>10&&(
-          <div style={{fontSize:10.5,color:"#B45309",background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:6,padding:"6px 9px",marginBottom:12}}>
-            Children {auto}% keh rahe hain — {drift} points ka farak hai. Note me wajah zaroor likhein.
-          </div>
+          <div style={{fontSize:10.5,color:"#B45309",background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:6,padding:"6px 9px",marginBottom:12}}>{t("tasks.children_auto_keh_rahe_hain_drift", { auto, drift })}</div>
         )}
         {drift<=10&&<div style={{height:12}}/>}
 
-        <label style={L}>Reason <span style={{color:"#DC2626"}}>*</span></label>
+        <label style={L}>{t("common.reason")} <span style={{color:"#DC2626"}}>*</span></label>
         <select value={reason} onChange={e=>setReason(e.target.value)}
           style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1.5px solid ${reason?T.b1:"#FCA5A5"}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:12}}>
-          <option value="">Select reason…</option>
+          <option value="">{t("tasks.select_reason")}</option>
           {Object.entries(PT_OVERRIDE_REASONS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
         </select>
 
-        <label style={L}>Note <span style={{color:"#DC2626"}}>*</span></label>
+        <label style={L}>{t("common.note")} <span style={{color:"#DC2626"}}>*</span></label>
         <textarea value={note} onChange={e=>setNote(e.target.value)} rows={3}
-          placeholder="Kya aur kyun — e.g. footing complete, backfill pending; consultant ne 60% certify kiya"
+          placeholder={t("tasks.kya_aur_kyun_e_g_footing")}
           style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1.5px solid ${noteShort?"#FCA5A5":T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
         <div style={{fontSize:10,color:noteShort?"#DC2626":T.t4,marginTop:4,marginBottom:12}}>
-          {noteShort?`Kam se kam ${PT_OVERRIDE_MIN_NOTE} characters (${note.trim().length}/${PT_OVERRIDE_MIN_NOTE})`:"Yeh note audit log me save hoga."}
+          {noteShort?`Kam se kam ${PT_OVERRIDE_MIN_NOTE} characters (${note.trim().length}/${PT_OVERRIDE_MIN_NOTE})`:t("tasks.yeh_note_audit_log_me_save")}
         </div>
 
         {error&&<div style={{fontSize:11,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,padding:"7px 10px",marginBottom:10}}>{error}</div>}
@@ -4788,16 +4763,16 @@ function PTOverrideModal({task,onClose,onSaved}){
           {ptIsOverridden(task)&&(
             <button onClick={reset} disabled={busy}
               style={{padding:"10px 12px",borderRadius:8,background:"white",color:T.t3,border:`1.5px solid ${T.b1}`,fontSize:12,fontWeight:600,cursor:busy?"default":"pointer",whiteSpace:"nowrap"}}>
-              Reset to Auto
+             {t("tasks.reset_to_auto")}
             </button>
           )}
           <button onClick={onClose} disabled={busy}
             style={{flex:1,padding:"10px",borderRadius:8,background:"white",color:T.t3,border:`1.5px solid ${T.b1}`,fontSize:12.5,fontWeight:600,cursor:busy?"default":"pointer"}}>
-            Cancel
+           {t("common.cancel")}
           </button>
           <button onClick={save} disabled={!canSave}
             style={{flex:1,padding:"10px",borderRadius:8,background:canSave?"#4B45C4":"#C7D2FE",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:canSave?"pointer":"default"}}>
-            {busy?"Saving…":"Save Override"}
+            {busy?t("common.saving_2"):t("tasks.save_override")}
           </button>
         </div>
       </div>
@@ -4844,16 +4819,16 @@ function PTEditTask({task,allTasks,projectId,onClose,onSave}){
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:350,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(480px,95vw)",background:T.bg,zIndex:351,boxShadow:"-6px 0 32px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
       <div style={{background:"#0D1B2A",padding:"12px 16px",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div><div style={{fontSize:13,fontWeight:700,color:"white"}}>Edit Task</div><div style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"monospace",marginTop:1}}>{task.no} — {task.name.slice(0,30)}</div></div>
+        <div><div style={{fontSize:13,fontWeight:700,color:"white"}}>{t("tasks.edit_task")}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"monospace",marginTop:1}}>{task.no} — {task.name.slice(0,30)}</div></div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"13px 16px"}}>
         {/* Name */}
-        <div style={{marginBottom:10}}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Task Name</label>
+        <div style={{marginBottom:10}}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.task_name")}</label>
           <input value={form.name} onChange={upd("name")} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/></div>
         {/* Category + Tag */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
-          {[{l:"Category",k:"category",type:"select",opts:["Civil","Electrical","Plumbing","Finishing","Custom"]},{l:"Tag",k:"tag",type:"input",ph:"e.g. critical"}].map(f=>(
+          {[{l:t("common.category"),k:"category",type:"select",opts:["Civil","Electrical","Plumbing","Finishing","Custom"]},{l:t("tasks.tag"),k:"tag",type:"input",ph:"e.g. critical"}].map(f=>(
             <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
               {f.type==="select"
                 ?<SearchSelect value={form[f.k]} options={f.opts} onChange={v=>setForm(p=>({...p,[f.k]:v}))} placeholder={`Select ${f.l.toLowerCase()}...`}/>
@@ -4863,21 +4838,21 @@ function PTEditTask({task,allTasks,projectId,onClose,onSave}){
         </div>
         {/* Assignee + Status */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
-          {[{l:"Assigned To",k:"assignee",opts:TEAM_PT},{l:"Status",k:"status",opts:["Not Started","Ongoing","Hold","Completed"]}].map(f=>(
+          {[{l:t("common.assigned_to"),k:"assignee",opts:TEAM_PT},{l:t("common.status"),k:"status",opts:["Not Started","Ongoing","Hold","Completed"]}].map(f=>(
             <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
               <SearchSelect value={form[f.k]} options={f.opts} onChange={v=>setForm(p=>({...p,[f.k]:v}))} placeholder={`Select ${f.l.toLowerCase()}...`}/>
             </div>
           ))}
         </div>
         {/* Progress — derived on a summary row, so it is shown but not editable here */}
-        <div style={{marginBottom:10}}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>Progress — {form.progress}%</label>
+        <div style={{marginBottom:10}}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>{t("tasks.progress_progress", { progress: form.progress })}</label>
           {isSummary?(
             <div style={{padding:"9px 11px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`}}>
               <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginBottom:6}}><div style={{height:"100%",width:`${form.progress}%`,background:Number(form.progress)===100?T.grn:T.blu,borderRadius:2}}/></div>
               <div style={{fontSize:10.5,color:T.t4}}>
                 {ptIsOverridden(task)
                   ? `Manually pinned at ${task.progress_override}%${task.progress_auto!=null?` (children ${task.progress_auto}%)`:""}. Right-click the row → Reset to Auto.`
-                  : "Children se auto-calculated (duration-weighted). Manual value ke liye row par right-click → Override Progress."}
+                  : t("tasks.children_se_auto_calculated_duration_weighted_2")}
               </div>
             </div>
           ):(<>
@@ -4892,10 +4867,10 @@ function PTEditTask({task,allTasks,projectId,onClose,onSave}){
             completion qty me hoga (% khud niklega); hata do to wapas % par. */}
         {!isSummary&&(
           <div style={{display:"grid",gridTemplateColumns:"1fr 110px",gap:9,marginBottom:10}}>
-            <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Scope qty (khali = % mode)</label>
-              <input type="number" min="0" step="any" value={form.scopeQty} onChange={upd("scopeQty")} placeholder="jaise 963"
+            <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.scope_qty_khali_mode")}</label>
+              <input type="number" min="0" step="any" value={form.scopeQty} onChange={upd("scopeQty")} placeholder={t("tasks.jaise_963")}
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
-            <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Unit</label>
+            <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.unit")}</label>
               <input value={form.unit} onChange={upd("unit")} placeholder="RMT"
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
           </div>
@@ -4903,41 +4878,41 @@ function PTEditTask({task,allTasks,projectId,onClose,onSave}){
         {/* Tender links — only for a site that belongs to a tender */}
         {!!boqOpts.length && (
           <div style={{marginBottom:12, padding:"11px 12px", borderRadius:8, background:T.indL, border:`1px solid ${T.ind}22`}}>
-            <div style={{fontSize:9.5,fontWeight:700,color:T.ind,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Tender se jodo (bill aur map ke liye)</div>
+            <div style={{fontSize:9.5,fontWeight:700,color:T.ind,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("tasks.tender_se_jodo_bill_aur_map")}</div>
             <div style={{marginBottom:8}}>
-              <label style={{fontSize:10.5,color:T.t3,display:"block",marginBottom:3}}>BOQ item</label>
+              <label style={{fontSize:10.5,color:T.t3,display:"block",marginBottom:3}}>{t("tasks.boq_item")}</label>
               <select value={boqItemId} onChange={e=>setBoqItemId(e.target.value)}
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:boqItemId?T.t1:T.t4,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                <option value="">— nahi juda —</option>
+                <option value="">{t("tasks.nahi_juda")}</option>
                 {boqOpts.map(b=>(<option key={b.id} value={b.id}>{b.item_no} · {String(b.description||"").slice(0,50)} ({b.unit})</option>))}
               </select>
             </div>
             {!!lineOpts.length && (
               <div>
-                <label style={{fontSize:10.5,color:T.t3,display:"block",marginBottom:3}}>Pipeline line (optional)</label>
+                <label style={{fontSize:10.5,color:T.t3,display:"block",marginBottom:3}}>{t("tasks.pipeline_line_optional")}</label>
                 <select value={alignId} onChange={e=>setAlignId(e.target.value)}
                   style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:alignId?T.t1:T.t4,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                  <option value="">— koi nahi —</option>
+                  <option value="">{t("tasks.koi_nahi_2")}</option>
                   {lineOpts.map(a=>(<option key={a.id} value={a.id}>{a.name}</option>))}
                 </select>
               </div>
             )}
             <div style={{fontSize:10.5,color:T.t4,marginTop:7,lineHeight:1.5}}>
-              Judne ke baad is task par darj kiya gaya kaam MB Draft me apne aap aayega, aur chuni hui line map par green hogi. Scope quantity Budget tab me set hoti hai.
+             {t("tasks.judne_ke_baad_is_task_par")}
             </div>
           </div>
         )}
 
         {/* Dates + Duration (bidirectional) */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 0.8fr",gap:9,marginBottom:5}}>
-          <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Baseline Start</label>
+          <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.baseline_start")}</label>
             <input type="date" value={form.baseStart} onChange={e=>setStart(e.target.value)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
-          <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Baseline End</label>
+          <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.baseline_end")}</label>
             <input type="date" value={form.baseEnd} onChange={e=>setEnd(e.target.value)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
-          <div><label style={{fontSize:9.5,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Duration (din)</label>
+          <div><label style={{fontSize:9.5,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.duration_din")}</label>
             <input type="number" min={0} value={form.duration||""} onChange={e=>setDur(e.target.value)} placeholder="0" style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,fontWeight:700,color:T.blu,background:T.bluL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
         </div>
-        <div style={{fontSize:10,color:T.t4,marginBottom:10}}>💡 Duration daalo → End apne aap; ya Start/End badlo → Duration auto.</div>
+        <div style={{fontSize:10,color:T.t4,marginBottom:10}}>{t("tasks.duration_daalo_end_apne_aap_ya")}</div>
         {/* Actual dates (P3) — auto-captured from progress, editable here */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:4}}>
           {[["Actual Start","actualStart"],["Actual End","actualEnd"]].map(([l,k])=>(
@@ -4945,31 +4920,31 @@ function PTEditTask({task,allTasks,projectId,onClose,onSave}){
               <input type="date" value={form[k]} onChange={upd(k)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid #A5F3FC`,fontSize:12.5,color:T.t1,background:"#F0FDFF",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
           ))}
         </div>
-        <div style={{fontSize:10,color:T.t4,marginBottom:10}}>Actual dates progress update karne pe apne aap bharti hain — yahan correct bhi kar sakte ho.</div>
+        <div style={{fontSize:10,color:T.t4,marginBottom:10}}>{t("tasks.actual_dates_progress_update_karne_pe")}</div>
         {/* P4: Delay reason + note */}
         <div style={{marginBottom:10,padding:"9px 11px",background:form.delayReason?"#FFF7ED":T.surfaceB,border:`1px solid ${form.delayReason?"#FED7AA":T.b1}`,borderRadius:7}}>
-          <label style={{fontSize:9.5,fontWeight:600,color:form.delayReason?"#9A3412":T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>Delay ka kaaron (agar late)</label>
+          <label style={{fontSize:9.5,fontWeight:600,color:form.delayReason?"#9A3412":T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>{t("tasks.delay_ka_kaaron_agar_late")}</label>
           <select value={form.delayReason} onChange={upd("delayReason")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${form.delayReason?"#FDBA74":T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",marginBottom:form.delayReason?7:0}}>
-            <option value="">— koi nahi —</option>
+            <option value="">{t("tasks.koi_nahi_2")}</option>
             {PT_DELAY_REASONS.map(r=><option key={r.key} value={r.key}>{r.label}</option>)}
           </select>
-          {form.delayReason&&<input value={form.delayNote} onChange={upd("delayNote")} placeholder="Detail / note (optional) — e.g. cement supply 5 din late" style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid #FDBA74",fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
+          {form.delayReason&&<input value={form.delayNote} onChange={upd("delayNote")} placeholder={t("tasks.detail_note_optional_e_g_cement")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid #FDBA74",fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
         </div>
         {/* Dependencies with search */}
         <div style={{marginBottom:10}}>
           <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>
-            Dependencies {form.dependencies.length>0&&<span style={{marginLeft:5,background:T.blu,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{form.dependencies.length}</span>}
+            {t("tasks.dependencies")} {form.dependencies.length>0&&<span style={{marginLeft:5,background:T.blu,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{form.dependencies.length}</span>}
           </label>
           {/* Search box */}
           <div style={{position:"relative",marginBottom:5}}>
             <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
-            <input value={depSrch} onChange={e=>setDepSrch(e.target.value)} placeholder="Search task to link as dependency..."
+            <input value={depSrch} onChange={e=>setDepSrch(e.target.value)} placeholder={t("tasks.search_task_to_link_as_dependency")}
               style={{width:"100%",height:30,padding:"0 8px 0 25px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
               onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
             {depSrch&&<button onClick={()=>setDepSrch("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex"}}><svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg></button>}
           </div>
           <div style={{background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,padding:"7px 9px",maxHeight:130,overflowY:"auto"}}>
-            {filteredForDep.length===0?<div style={{fontSize:11,color:T.t4,textAlign:"center",padding:"6px 0"}}>No tasks match "{depSrch}"</div>
+            {filteredForDep.length===0?<div style={{fontSize:11,color:T.t4,textAlign:"center",padding:"6px 0"}}>{t("tasks.no_tasks_match_depsrch", { depSrch })}</div>
             :filteredForDep.map(t=>{
               const sel=form.dependencies.includes(t.id);
               return(<button key={t.id} onClick={()=>toggleDep(t.id)}
@@ -4993,22 +4968,22 @@ function PTEditTask({task,allTasks,projectId,onClose,onSave}){
         {/* DHYAN RAKHEN */}
         <div style={{padding:"9px 11px",background:showDhyan?"#FEF3C7":T.surfaceB,border:`1px solid ${showDhyan?"#FDE68A":T.b1}`,borderRadius:7}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:showDhyan?8:0}}>
-            <span style={{fontSize:12,fontWeight:600,color:showDhyan?"#92400E":T.t2}}>DHYAN RAKHEN Alert</span>
+            <span style={{fontSize:12,fontWeight:600,color:showDhyan?"#92400E":T.t2}}>{t("tasks.dhyan_rakhen_alert")}</span>
             <button onClick={()=>{setShowDhyan(s=>!s);if(showDhyan)setForm(p=>({...p,dhyanRakhen:""}));}}
               style={{width:34,height:18,borderRadius:18,background:showDhyan?"#F59E0B":T.b2,border:"none",cursor:"pointer",position:"relative",transition:"background .2s"}}>
               <div style={{width:13,height:13,borderRadius:"50%",background:"white",position:"absolute",top:2.5,left:showDhyan?17:3,transition:"left .2s"}}/>
             </button>
           </div>
-          {showDhyan&&<textarea value={form.dhyanRakhen} onChange={upd("dhyanRakhen")} placeholder="Important alert shown as popup when task is opened..." rows={3}
+          {showDhyan&&<textarea value={form.dhyanRakhen} onChange={upd("dhyanRakhen")} placeholder={t("tasks.important_alert_shown_as_popup_when")} rows={3}
             style={{width:"100%",padding:"7px 9px",borderRadius:5,border:"1.5px solid #FDE68A",fontSize:12.5,color:"#92400E",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>}
         </div>
       </div>
       <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:7,flexShrink:0}}>
-        <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+        <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
         <button onClick={()=>onSave(task.id,{...form,dhyanRakhen:showDhyan?form.dhyanRakhen:null,
             boqItemId, alignId,
             ...(isSummary?{progress:undefined,status:undefined}:{progress:Number(form.progress)})})}
-          style={{flex:2,padding:"9px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>Save Changes</button>
+          style={{flex:2,padding:"9px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>{t("common.save_changes")}</button>
       </div>
     </div>
   </>);
@@ -5064,56 +5039,54 @@ function PTAddTask({parent,allTasks,onClose,onSave}){
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(480px,95vw)",maxHeight:"90vh",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:"#0D1B2A",padding:"12px 16px",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div><div style={{fontSize:13,fontWeight:700,color:"white"}}>{parent?`Add subtask under "${parent.name.slice(0,25)}"`: "Add New Task"}</div>{parent&&<div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:1}}>Level {parent.level+1} task</div>}</div>
+        <div><div style={{fontSize:13,fontWeight:700,color:"white"}}>{parent?`Add subtask under "${parent.name.slice(0,25)}"`: t("tasks.add_new_task")}</div>{parent&&<div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:1}}>{t("tasks.level_parent_task", { parent: parent.level+1 })}</div>}</div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"13px 16px"}}>
-        <div style={{marginBottom:10}}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Task Name *</label>
-          <input value={form.name} onChange={upd("name")} placeholder="e.g. RCC Foundation Casting" style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/></div>
+        <div style={{marginBottom:10}}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.task_name_2")}</label>
+          <input value={form.name} onChange={upd("name")} placeholder={t("tasks.e_g_rcc_foundation_casting")} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/></div>
         {/* ── Qty (kitna kaam) — isi se aage task update me qty bhari jayegi ── */}
         <div style={{marginBottom:10,padding:"9px 11px",background:_pLocked?"#FEF2F2":T.bluL,border:`1px solid ${_pLocked?"#FECACA":T.bluM}`,borderRadius:7}}>
           <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:9}}>
-            <div><label style={{fontSize:9.5,fontWeight:600,color:_pLocked?"#B91C1C":T.blu,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Qty — kitna kaam</label>
+            <div><label style={{fontSize:9.5,fontWeight:600,color:_pLocked?"#B91C1C":T.blu,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.qty_kitna_kaam")}</label>
               <input type="number" min={0} step="any" value={form.scopeQty} disabled={_pLocked} onChange={upd("scopeQty")} placeholder={_pQty?String(_pQty):"e.g. 780"}
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${_pLocked?"#FECACA":T.bluM}`,fontSize:13,fontWeight:700,color:_pLocked?T.t4:T.blu,background:_pLocked?T.surfaceB:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
-            <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Unit</label>
+            <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.unit")}</label>
               <input list="pt-unit-list" value={form.unit} disabled={_pLocked} onChange={upd("unit")} placeholder="RMT"
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:_pLocked?T.surfaceB:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               <datalist id="pt-unit-list">{["RMT","CUM","SQM","NOS","MT","KG","LTR","QTL"].map(u=><option key={u} value={u}/>)}</datalist></div>
           </div>
           {_pLocked
-            ? <div style={{fontSize:10.5,color:"#B91C1C",marginTop:6,lineHeight:1.45}}>Upar wale task par pehle se <b>{parent.done_qty} {parent.unit||""}</b> darj ho chuki hai — ab qty neeche nahi le ja sakte. Pehle wo entries dekh lo.</div>
+            ? <div style={{fontSize:10.5,color:"#B91C1C",marginTop:6,lineHeight:1.45}}>{t("tasks.upar_wale_task_par_pehle_se")} <b>{parent.done_qty} {parent.unit||""}</b> {t("tasks.darj_ho_chuki_hai_ab_qty")}</div>
             : _pMoves&&Number(form.scopeQty)>0
-              ? <div style={{fontSize:10.5,color:"#92400E",marginTop:6,lineHeight:1.45,background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:5,padding:"5px 8px"}}>Upar wale task ki qty (<b>{_pQty} {_pUnit}</b>) yahan aa jayegi — wo ab apne stages ka <b>jod</b> ban jayega. Qty hamesha sabse neeche wale task par hi rehti hai, warna kaam do baar gina jaata.</div>
-              : <div style={{fontSize:10.5,color:T.t4,marginTop:6,lineHeight:1.45}}>Qty bhar doge to task update me "kitna hua" likh sakoge — % apne aap nikal jayega. Khali chhodoge to ye task sirf naam ka rahega.</div>}
+              ? <div style={{fontSize:10.5,color:"#92400E",marginTop:6,lineHeight:1.45,background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:5,padding:"5px 8px"}}>{t("tasks.upar_wale_task_ki_qty")}<b>{_pQty} {_pUnit}</b>{t("tasks.yahan_aa_jayegi_wo_ab_apne")} <b>jod</b> {t("tasks.ban_jayega_qty_hamesha_sabse_neeche")}</div>
+              : <div style={{fontSize:10.5,color:T.t4,marginTop:6,lineHeight:1.45}}>{t("tasks.qty_bhar_doge_to_task_update")}</div>}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
-          {[{l:"Category",k:"category",type:"select",opts:["Civil","Electrical","Plumbing","Finishing","Custom"]},{l:"Tag",k:"tag",type:"input",ph:"e.g. critical"},{l:"Assigned To",k:"assignee",type:"select",opts:TEAM_PT}].map(f=>(
+          {[{l:t("common.category"),k:"category",type:"select",opts:["Civil","Electrical","Plumbing","Finishing","Custom"]},{l:t("tasks.tag"),k:"tag",type:"input",ph:"e.g. critical"},{l:t("common.assigned_to"),k:"assignee",type:"select",opts:TEAM_PT}].map(f=>(
             <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
               {f.type==="select"?<select value={form[f.k]} onChange={upd(f.k)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>{f.opts.map(o=><option key={o}>{o}</option>)}</select>
               :<input value={form[f.k]} onChange={upd(f.k)} placeholder={f.ph} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
             </div>
           ))}
-          <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Baseline Start</label>
+          <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.baseline_start")}</label>
             <input type="date" value={form.baseStart} onChange={e=>setStart(e.target.value)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
-          <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Baseline End</label>
+          <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.baseline_end")}</label>
             <input type="date" value={form.baseEnd} onChange={e=>setEnd(e.target.value)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
-          <div><label style={{fontSize:9.5,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Duration (din)</label>
+          <div><label style={{fontSize:9.5,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.duration_din")}</label>
             <input type="number" min={0} value={form.duration||""} onChange={e=>setDur(e.target.value)} placeholder="0" style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,fontWeight:700,color:T.blu,background:T.bluL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
         </div>
         {autoStart&&<div style={{fontSize:11,color:"#0E7490",fontWeight:600,marginBottom:10,padding:"4px 10px",background:"#ECFEFF",border:"1px solid #A5F3FC",borderRadius:5,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#0E7490" strokeWidth={2}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-          Dependency se auto start: <b>{autoStart}</b>
-          {form.baseStart!==autoStart&&<button onClick={()=>setForm(p=>({...p,baseStart:autoStart}))} style={{background:"#0E7490",color:"white",border:"none",borderRadius:4,fontSize:10,fontWeight:700,padding:"2px 7px",cursor:"pointer"}}>Use</button>}
-          <span style={{color:T.t4,fontWeight:400,fontSize:10}}>· edit kar sakte ho</span>
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#0E7490" strokeWidth={2}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg><Rich k="tasks.dependency_se_auto_start_autostart" params={{ autoStart }} />{form.baseStart!==autoStart&&<button onClick={()=>setForm(p=>({...p,baseStart:autoStart}))} style={{background:"#0E7490",color:"white",border:"none",borderRadius:4,fontSize:10,fontWeight:700,padding:"2px 7px",cursor:"pointer"}}>{t("tasks.use")}</button>}
+          <span style={{color:T.t4,fontWeight:400,fontSize:10}}>{t("tasks.edit_kar_sakte_ho")}</span>
         </div>}
-        {dur>0&&<div style={{fontSize:11,color:T.blu,fontWeight:600,marginBottom:10,padding:"3px 9px",background:T.bluL,borderRadius:5,display:"inline-block"}}>Duration: {dur} days</div>}
+        {dur>0&&<div style={{fontSize:11,color:T.blu,fontWeight:600,marginBottom:10,padding:"3px 9px",background:T.bluL,borderRadius:5,display:"inline-block"}}>{t("tasks.duration_dur_days", { dur })}</div>}
         {/* Dependencies with search */}
         <div style={{marginBottom:10}}>
-          <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>Dependencies {form.dependencies.length>0&&<span style={{marginLeft:5,background:T.blu,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{form.dependencies.length}</span>}</label>
+          <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>{t("tasks.dependencies")} {form.dependencies.length>0&&<span style={{marginLeft:5,background:T.blu,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{form.dependencies.length}</span>}</label>
           <div style={{position:"relative",marginBottom:5}}>
             <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
-            <input value={depSrch} onChange={e=>setDepSrch(e.target.value)} placeholder="Search task to link..."
+            <input value={depSrch} onChange={e=>setDepSrch(e.target.value)} placeholder={t("tasks.search_task_to_link")}
               style={{width:"100%",height:28,padding:"0 8px 0 24px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
               onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
           </div>
@@ -5130,19 +5103,19 @@ function PTAddTask({parent,allTasks,onClose,onSave}){
         {/* DHYAN RAKHEN */}
         <div style={{padding:"9px 11px",background:showDhyan?"#FEF3C7":T.surfaceB,border:`1px solid ${showDhyan?"#FDE68A":T.b1}`,borderRadius:7}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span style={{fontSize:12,fontWeight:600,color:showDhyan?"#92400E":T.t2}}>Add DHYAN RAKHEN Alert</span>
+            <span style={{fontSize:12,fontWeight:600,color:showDhyan?"#92400E":T.t2}}>{t("tasks.add_dhyan_rakhen_alert")}</span>
             <button onClick={()=>setShowDhyan(s=>!s)} style={{width:34,height:18,borderRadius:18,background:showDhyan?"#F59E0B":T.b2,border:"none",cursor:"pointer",position:"relative",transition:"background .2s"}}>
               <div style={{width:13,height:13,borderRadius:"50%",background:"white",position:"absolute",top:2.5,left:showDhyan?17:3,transition:"left .2s"}}/>
             </button>
           </div>
-          {showDhyan&&<textarea value={form.dhyanRakhen} onChange={upd("dhyanRakhen")} placeholder="Important instruction for this task..." rows={3}
+          {showDhyan&&<textarea value={form.dhyanRakhen} onChange={upd("dhyanRakhen")} placeholder={t("tasks.important_instruction_for_this_task")} rows={3}
             style={{width:"100%",marginTop:7,padding:"7px 9px",borderRadius:5,border:"1.5px solid #FDE68A",fontSize:12.5,color:"#92400E",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>}
         </div>
       </div>
       <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:7,flexShrink:0}}>
-        <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+        <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
         <button onClick={()=>{if(form.name.trim())onSave({...form,dhyanRakhen:showDhyan?form.dhyanRakhen:null});}} disabled={!form.name.trim()}
-          style={{flex:2,padding:"9px",borderRadius:6,background:form.name.trim()?T.blu:T.b1,color:form.name.trim()?"white":T.t4,fontSize:12,fontWeight:700,border:"none",cursor:form.name.trim()?"pointer":"not-allowed"}}>Add Task</button>
+          style={{flex:2,padding:"9px",borderRadius:6,background:form.name.trim()?T.blu:T.b1,color:form.name.trim()?"white":T.t4,fontSize:12,fontWeight:700,border:"none",cursor:form.name.trim()?"pointer":"not-allowed"}}>{t("tasks.add_task")}</button>
       </div>
     </div>
   </>);
@@ -5160,23 +5133,23 @@ function CascadePreviewModal({data,applying,onClose,onApply}){
       <div style={{background:"#92400E",padding:"13px 18px",flexShrink:0}}>
         <div style={{fontSize:14,fontWeight:700,color:"white",display:"flex",alignItems:"center",gap:7}}>
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-          Dependent tasks ko bhi shift karein?
+         {t("tasks.dependent_tasks_ko_bhi_shift_karein")}
         </div>
         <div style={{fontSize:11.5,color:"rgba(255,255,255,0.8)",marginTop:3,lineHeight:1.4}}>
-          <b>{changed.task_no} {changed.name}</b> ki date badalne se <b>{affected.length}</b> aage wale task khisak rahe hain (sab apni duration bachakar).
+          <b>{changed.task_no} {changed.name}</b> {t("tasks.ki_date_badalne_se")} <b>{affected.length}</b> {t("tasks.aage_wale_task_khisak_rahe_hain")}
         </div>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
         {/* changed task */}
         <div style={{background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:8,padding:"9px 12px",marginBottom:12}}>
-          <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>Aapne badla</div>
+          <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{t("tasks.aapne_badla")}</div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}><span style={{fontFamily:"monospace",fontSize:10,color:T.t4,marginRight:5}}>{changed.task_no}</span>{changed.name}</div>
             <div style={{fontSize:11.5,color:T.t2}}>{fmtD(changed.old_start)}–{fmtD(changed.old_end)} <span style={{color:"#92400E",fontWeight:700}}>→ {fmtD(changed.new_start)}–{fmtD(changed.new_end)}</span></div>
           </div>
         </div>
         {/* affected list */}
-        <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Yeh {affected.length} task khisakenge</div>
+        <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("tasks.yeh_affected_task_khisakenge", { affected: affected.length })}</div>
         <div style={{border:`1px solid ${T.b1}`,borderRadius:8,overflow:"hidden"}}>
           {affected.map((a,i)=>(
             <div key={a.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 12px",background:i%2?T.surfaceB:T.surface,borderTop:i?`1px solid ${T.b1}`:"none"}}>
@@ -5193,8 +5166,8 @@ function CascadePreviewModal({data,applying,onClose,onApply}){
         </div>
       </div>
       <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:8,flexShrink:0}}>
-        <button onClick={onClose} disabled={applying} style={{flex:1,padding:"10px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:applying?"default":"pointer"}}>Sirf yeh task rakhein</button>
-        <button onClick={onApply} disabled={applying} style={{flex:1.6,padding:"10px",borderRadius:7,background:applying?T.b2:"#B45309",color:"white",fontSize:12,fontWeight:700,border:"none",cursor:applying?"default":"pointer"}}>{applying?"Shift ho raha hai…":`Haan, ${affected.length} tasks shift karein`}</button>
+        <button onClick={onClose} disabled={applying} style={{flex:1,padding:"10px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:applying?"default":"pointer"}}>{t("tasks.sirf_yeh_task_rakhein")}</button>
+        <button onClick={onApply} disabled={applying} style={{flex:1.6,padding:"10px",borderRadius:7,background:applying?T.b2:"#B45309",color:"white",fontSize:12,fontWeight:700,border:"none",cursor:applying?"default":"pointer"}}>{applying?t("tasks.shift_ho_raha_hai"):`Haan, ${affected.length} tasks shift karein`}</button>
       </div>
     </div>
   </>);

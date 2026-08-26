@@ -6,6 +6,7 @@ import MRDetailDrawer from "../components/MRDetailDrawer";
 import CompanyTransfersTab from "../components/CompanyTransfersTab";
 import GrnIssueBlock from "../components/GrnIssueBlock";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
+import { t, Rich } from "../i18n";
 
 // Vendor ko jaane wale message ka contacts wala hissa — WhatsApp / Email /
 // PO share, sab ek hi shakl me bhejein. Backend ka contactsWaBlock isi ka
@@ -93,10 +94,10 @@ const PO_PILL_LABEL={ PartiallyReceived:"Partial Rcvd" };
 // Combine approval + order status into single display label
 const displayPOStatus = (po) => {
   if (po.approval !== "Approved") return po.approval;
-  if (po.orderStatus === "Ordered") return "Ordered";
-  if (po.orderStatus === "PartiallyReceived") return "PartiallyReceived";
-  if (po.orderStatus === "Received") return "Received";
-  return "Approved";
+  if (po.orderStatus === "Ordered") return t("common.ordered");
+  if (po.orderStatus === "PartiallyReceived") return t("procurement.partiallyreceived");
+  if (po.orderStatus === "Received") return t("common.received");
+  return t("common.approved");
 };
 const RFQ_STATUS={
   Published:{c:T.blu,bg:T.bluL,brd:T.bluM},
@@ -104,12 +105,12 @@ const RFQ_STATUS={
 };
 
 const MR_TAB_META={
-  Pending: {label:"Pending",   c:T.amb, bg:T.ambL, brd:T.ambM},
-  Approved:{label:"Approved",  c:T.blu, bg:T.bluL, brd:T.bluM},
-  Ordered: {label:"Ordered",   c:T.pur, bg:T.purL, brd:T.purM},
-  Received:{label:"Received",  c:T.grn, bg:T.grnL, brd:T.grnM},
-  Rejected:{label:"Rejected",  c:T.red, bg:T.redL, brd:T.redM},
-  Closed:  {label:"Closed",    c:T.t3,  bg:"#F1F5F9", brd:"#CBD5E0"},
+  Pending: {get label() { return t("procurement.pending"); },   c:T.amb, bg:T.ambL, brd:T.ambM},
+  Approved:{get label() { return t("common.approved"); },  c:T.blu, bg:T.bluL, brd:T.bluM},
+  Ordered: {get label() { return t("common.ordered"); },   c:T.pur, bg:T.purL, brd:T.purM},
+  Received:{get label() { return t("common.received"); },  c:T.grn, bg:T.grnL, brd:T.grnM},
+  Rejected:{get label() { return t("common.rejected"); },  c:T.red, bg:T.redL, brd:T.redM},
+  Closed:  {get label() { return t("common.closed"); },    c:T.t3,  bg:"#F1F5F9", brd:"#CBD5E0"},
 };
 
 // ── SHARED COMPONENTS ─────────────────────────────────────────────────
@@ -181,45 +182,43 @@ function ApproveMRModal({mr,onSave,onClose}){
   const [note,setNote]=useState("");
   return(
     <Modal onClose={onClose} width={400}>
-      <MHead title="Approve Material Request" sub={`${mr.id} · ${mr.item}`} onClose={onClose}/>
+      <MHead title={t("procurement.approve_material_request")} sub={`${mr.id} · ${mr.item}`} onClose={onClose}/>
       <MBody>
         <div style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:14}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{fontSize:11,color:T.t3}}>Requested by</span>
+            <span style={{fontSize:11,color:T.t3}}>{t("common.requested_by")}</span>
             <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{mr.requestedBy}</span>
           </div>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{fontSize:11,color:T.t3}}>Project</span>
+            <span style={{fontSize:11,color:T.t3}}>{t("common.project")}</span>
             <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{mr.project}</span>
           </div>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{fontSize:11,color:T.t3}}>Requested Qty</span>
+            <span style={{fontSize:11,color:T.t3}}>{t("procurement.requested_qty")}</span>
             <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{mr.qty} {mr.unit}</span>
           </div>
           {mr.inStock>0&&(
             <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderTop:`1px solid ${T.b1}`,marginTop:4}}>
-              <span style={{fontSize:11,color:T.t3}}>In Stock</span>
+              <span style={{fontSize:11,color:T.t3}}>{t("procurement.in_stock")}</span>
               <span style={{fontSize:12,fontWeight:600,color:T.grn}}>{mr.inStock} {mr.unit}</span>
             </div>
           )}
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <Fld label="Approved Quantity" required>
+          <Fld label={t("procurement.approved_quantity")} required>
             <Inp type="number" value={qty} onChange={e=>setQty(e.target.value)} min="0" max={String(mr.qty)} placeholder={String(mr.qty)}/>
             {qty&&Number(qty)<mr.qty&&(
-              <div style={{marginTop:4,fontSize:10.5,color:T.amb,padding:"3px 8px",background:T.ambL,borderRadius:5,border:`1px solid ${T.ambM}`}}>
-                Quantity reduced from {mr.qty} to {qty} {mr.unit}
-              </div>
+              <div style={{marginTop:4,fontSize:10.5,color:T.amb,padding:"3px 8px",background:T.ambL,borderRadius:5,border:`1px solid ${T.ambM}`}}>{t("procurement.quantity_reduced_from_qty_to_qty2", { qty: mr.qty, qty2: qty, unit: mr.unit })}</div>
             )}
           </Fld>
-          <Fld label="Note (Optional)">
-            <Inp value={note} onChange={e=>setNote(e.target.value)} placeholder="Any remarks for site team..."/>
+          <Fld label={t("procurement.note_optional")}>
+            <Inp value={note} onChange={e=>setNote(e.target.value)} placeholder={t("procurement.any_remarks_for_site_team")}/>
           </Fld>
         </div>
       </MBody>
       <MFoot>
-        <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
-        <Btn onClick={()=>onSave(mr.id,Number(qty)||mr.qty,note)} disabled={!qty||Number(qty)<=0} color={T.grn} full icon={<IcChk size={14} color="white"/>}>Approve MR</Btn>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
+        <Btn onClick={()=>onSave(mr.id,Number(qty)||mr.qty,note)} disabled={!qty||Number(qty)<=0} color={T.grn} full icon={<IcChk size={14} color="white"/>}>{t("procurement.approve_mr")}</Btn>
       </MFoot>
     </Modal>
   );
@@ -230,19 +229,19 @@ function RejectMRModal({mr,onSave,onClose}){
   const [reason,setReason]=useState("");
   return(
     <Modal onClose={onClose} width={380}>
-      <MHead title="Reject Material Request" sub={`${mr.id} · ${mr.item}`} onClose={onClose}/>
+      <MHead title={t("procurement.reject_material_request")} sub={`${mr.id} · ${mr.item}`} onClose={onClose}/>
       <MBody>
         <div style={{background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,padding:"9px 12px",marginBottom:14,fontSize:11.5,color:T.red}}>
-          This MR will be rejected. Site team will be notified.
+         {t("procurement.this_mr_will_be_rejected_site")}
         </div>
-        <Fld label="Reason for Rejection" required>
-          <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={3} placeholder="e.g. Item not in BOQ, use alternate material..."
+        <Fld label={t("procurement.reason_for_rejection")} required>
+          <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={3} placeholder={t("procurement.e_g_item_not_in_boq")}
             style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
         </Fld>
       </MBody>
       <MFoot>
-        <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
-        <Btn onClick={()=>onSave(mr.id,reason)} disabled={!reason.trim()} color={T.red} full icon={<IcBan size={14} color="white"/>}>Reject MR</Btn>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
+        <Btn onClick={()=>onSave(mr.id,reason)} disabled={!reason.trim()} color={T.red} full icon={<IcBan size={14} color="white"/>}>{t("procurement.reject_mr")}</Btn>
       </MFoot>
     </Modal>
   );
@@ -387,8 +386,8 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
     <Modal onClose={onClose} width={560}>
       <MHead title={`Order ${items.length} item${items.length>1?"s":""}`}
         sub={itemsWithWH.length > 0
-          ? (allCoveredByWarehouse ? "Sab warehouse se issue ho jayenge" : "Step 1: warehouse · Step 2: vendor")
-          : "Select order medium"}
+          ? (allCoveredByWarehouse ? t("procurement.sab_warehouse_se_issue_ho_jayenge") : t("procurement.step_1_warehouse_step_2_vendor"))
+          : t("procurement.select_order_medium")}
         onClose={onClose}/>
       <MBody>
         {/* ── STEP 1 — Warehouse issue (highlighted primary action) ── */}
@@ -398,12 +397,10 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
               <span style={{fontSize:22,lineHeight:1}}>🏬</span>
               <div style={{flex:1}}>
                 <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-                  <span style={{fontSize:9.5,fontWeight:800,color:"white",background:T.grn,padding:"2px 8px",borderRadius:4,letterSpacing:".5px",textTransform:"uppercase"}}>Recommended</span>
-                  <span style={{fontSize:13,fontWeight:800,color:T.grn}}>Warehouse stock available</span>
+                  <span style={{fontSize:9.5,fontWeight:800,color:"white",background:T.grn,padding:"2px 8px",borderRadius:4,letterSpacing:".5px",textTransform:"uppercase"}}>{t("procurement.recommended")}</span>
+                  <span style={{fontSize:13,fontWeight:800,color:T.grn}}>{t("procurement.warehouse_stock_available")}</span>
                 </div>
-                <div style={{fontSize:11.5,color:T.t2,marginTop:3,lineHeight:1.4}}>
-                  {itemsWithWH.length} item{itemsWithWH.length>1?"s":""} warehouse se issue ho sakte hain — PO bachao, faster delivery, no vendor wait.
-                </div>
+                <div style={{fontSize:11.5,color:T.t2,marginTop:3,lineHeight:1.4}}>{t("procurement.itemswithwh_itemitemswithwh2_warehouse_se_issue_ho", { itemsWithWH: itemsWithWH.length, itemsWithWH2: itemsWithWH.length>1?"s":"" })}</div>
               </div>
             </div>
             <div style={{background:"white",borderRadius:7,padding:"6px 10px",border:`1px solid ${T.cynM}`}}>
@@ -417,12 +414,12 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
                 return (
                   <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 110px 90px 90px",gap:6,alignItems:"center",padding:"5px 0",borderBottom:i<itemsWithWH.length-1?`1px solid ${T.b1}`:"none"}}>
                     <div style={{fontSize:11.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{it.item}</div>
-                    <div style={{fontSize:10.5,color:T.t3}}>Avail: <b style={{color:avail>=reqQty?T.grn:T.amb}}>{avail}</b> {it.unit}</div>
+                    <div style={{fontSize:10.5,color:T.t3}}><Rich k="procurement.avail_avail_unit" params={{ avail, unit: it.unit }} /></div>
                     <input type="number" value={whTake[it.id]||0} max={Math.min(reqQty,avail)} min={0}
                       onChange={e=>setWhTake(p=>({...p,[it.id]:e.target.value}))}
-                      title="Warehouse se kitna lena hai"
+                      title={t("procurement.warehouse_se_kitna_lena_hai")}
                       style={{height:26,padding:"0 7px",borderRadius:5,border:`1px solid ${T.cynM}`,fontSize:11,outline:"none",fontFamily:"inherit",textAlign:"right",background:"white"}}/>
-                    <div style={{fontSize:10,color:T.t4,textAlign:"right"}}>{fromVendor>0?`+ vendor: ${fromVendor} ${it.unit}`:<span style={{color:T.grn,fontWeight:700}}>✓ full</span>}</div>
+                    <div style={{fontSize:10,color:T.t4,textAlign:"right"}}>{fromVendor>0?`+ vendor: ${fromVendor} ${it.unit}`:<span style={{color:T.grn,fontWeight:700}}>{t("procurement.full")}</span>}</div>
                   </div>
                 );
               })}
@@ -435,12 +432,10 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
                 display:"flex",alignItems:"center",justifyContent:"center",gap:8,
                 boxShadow:anyWHTake?`0 4px 12px ${T.grn}55`:"none",
                 letterSpacing:".3px"}}>
-              {issuingFromWH?"Creating warehouse MRs...":
-                <><span style={{fontSize:16}}>📦</span> Issue from Warehouse{totalWHTake>0?` · ${totalWHTake.toFixed(2)} units`:""}{allCoveredByWarehouse?" — Done":""}</>}
+              {issuingFromWH?t("procurement.creating_warehouse_mrs"):
+                <><span style={{fontSize:16}}>📦</span>{t("procurement.issue_from_warehousetotalwhtakeallcoveredbywarehouse", { totalWHTake: totalWHTake>0?` · ${totalWHTake.toFixed(2)} units`:"", allCoveredByWarehouse: allCoveredByWarehouse?t("procurement.done"):"" })}</>}
             </button>
-            <div style={{fontSize:10.5,color:T.t3,marginTop:7,textAlign:"center",lineHeight:1.4}}>
-              Click → Warehouse Requests me MR generate · procurement MR <b style={{color:T.grn}}>"Ordered"</b> tab me move{!allCoveredByWarehouse?` · ${remainingForVendor.length} bachay item ke liye neeche vendor order karo`:""}
-            </div>
+            <div style={{fontSize:10.5,color:T.t3,marginTop:7,textAlign:"center",lineHeight:1.4}}><Rich k="procurement.click_warehouse_requests_me_mr_generate" params={{ allCoveredByWarehouse: !allCoveredByWarehouse?` · ${remainingForVendor.length} bachay item ke liye neeche vendor order karo`:"" }} /></div>
           </div>
         )}
 
@@ -452,9 +447,9 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
         <div style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:16,overflow:"hidden"}}>
           <div style={{padding:"8px 12px",background:T.b1,display:"flex",alignItems:"center",gap:7}}>
             {itemsWithWH.length>0 && (
-              <span style={{fontSize:9,fontWeight:800,color:"white",background:T.blu,padding:"2px 7px",borderRadius:4,letterSpacing:".4px",textTransform:"uppercase"}}>Step 2</span>
+              <span style={{fontSize:9,fontWeight:800,color:"white",background:T.blu,padding:"2px 7px",borderRadius:4,letterSpacing:".4px",textTransform:"uppercase"}}>{t("procurement.step_2")}</span>
             )}
-            <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px"}}>{anyWHTake?"Remaining for vendor":"Selected Items"}</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px"}}>{anyWHTake?t("procurement.remaining_for_vendor"):t("procurement.selected_items")}</span>
           </div>
           {items.map((m,i)=>{
             const taken=Number(whTake[m.id]||0);
@@ -467,13 +462,13 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
                 <div style={{fontSize:12.5,fontWeight:600,color:T.t1,display:"flex",alignItems:"center",gap:7}}>
                   {m.item}
                   {m.isWarehouseRestock && (
-                    <span title="Warehouse team ne yeh stock restock ke liye request kiya — warehouse se issue nahi ho sakta, vendor se hi order karna hoga"
+                    <span title={t("procurement.warehouse_team_ne_yeh_stock_restock")}
                       style={{fontSize:9,fontWeight:800,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,padding:"1px 7px",borderRadius:10,textTransform:"uppercase",letterSpacing:".3px"}}>
-                      🏬 Warehouse Restock
+                     {t("procurement.warehouse_restock")}
                     </span>
                   )}
                 </div>
-                <div style={{fontSize:11,color:T.t3}}>{m.project} · {m.id}{taken>0?<span style={{color:T.cyn,marginLeft:6}}>· {taken} {m.unit} from warehouse</span>:""}</div>
+                <div style={{fontSize:11,color:T.t3}}>{m.project} · {m.id}{taken>0?<span style={{color:T.cyn,marginLeft:6}}>{t("procurement.taken_unit_from_warehouse", { taken, unit: m.unit })}</span>:""}</div>
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{remaining} <span style={{fontSize:10,color:T.t4}}>{m.unit}</span></div>
@@ -485,12 +480,12 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
 
         {/* Medium selector */}
         <div style={{marginBottom:14}}>
-          <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:8}}>Order Via</label>
+          <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:8}}>{t("procurement.order_via")}</label>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
             {[
-              {key:"po",   label:"Create PO",      sub:"Formal order",    icon:IcPO,    c:T.blu},
-              {key:"rfq",  label:"Create RFQ",     sub:"Compare quotes",  icon:IcRFQ,   c:T.pur},
-              {key:"manual",label:"Manual Order",  sub:"Call / WhatsApp", icon:IcWA,    c:T.grn},
+              {key:"po",   label:t("procurement.create_po"),      sub:t("procurement.formal_order"),    icon:IcPO,    c:T.blu},
+              {key:"rfq",  label:t("procurement.create_rfq"),     sub:t("procurement.compare_quotes"),  icon:IcRFQ,   c:T.pur},
+              {key:"manual",label:t("procurement.manual_order"),  sub:t("procurement.call_whatsapp"), icon:IcWA,    c:T.grn},
             ].map(opt=>(
               <button key={opt.key} onClick={()=>setMedium(opt.key)}
                 style={{padding:"12px 10px",borderRadius:8,border:`2px solid ${medium===opt.key?opt.c:T.b1}`,background:medium===opt.key?opt.c+"12":T.surface,cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}>
@@ -506,18 +501,18 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
             fill hone ka step next modal me hota hai. */}
         {medium==="po"&&(
           <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",fontSize:11.5,color:T.blu}}>
-            Next step: vendor, delivery date aur items rate Create PO modal me bharo.
+           {t("procurement.next_step_vendor_delivery_date_aur")}
           </div>
         )}
         {medium==="rfq"&&(
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             <div style={{background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7,padding:"9px 12px",fontSize:11.5,color:T.pur}}>
-              RFQ Draft banega — vendors select karo, publish karke quotes collect karo, best quote lock karke PO banao.
+             {t("procurement.rfq_draft_banega_vendors_select_karo")}
             </div>
-            <Fld label="Invite Vendors (2+ recommended)" required>
+            <Fld label={t("procurement.invite_vendors_2_recommended")} required>
               <SearchSelect value={rfqVendorPick}
                 options={(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS).filter(n=>!rfqVendors.includes(n))}
-                onChange={addRfqVendor} placeholder="Vendor add karo..."/>
+                onChange={addRfqVendor} placeholder={t("procurement.vendor_add_karo")}/>
             </Fld>
             {rfqVendors.length>0&&(
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -529,34 +524,34 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
                 ))}
               </div>
             )}
-            <Fld label="Bid End Date">
+            <Fld label={t("procurement.bid_end_date")}>
               <Inp type="date" value={delivery} onChange={e=>setDelivery(e.target.value)}/>
             </Fld>
           </div>
         )}
         {medium==="manual"&&(
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            <Fld label="Vendor" required>
+            <Fld label={t("common.vendor")} required>
               <SearchSelect value={vendor}
                 options={(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS)}
-                onChange={v=>setVendor(v)} placeholder="Select vendor..."/>
+                onChange={v=>setVendor(v)} placeholder={t("payment_request.select_vendor")}/>
             </Fld>
-            <Fld label="Expected Delivery" required>
+            <Fld label={t("common.expected_delivery")} required>
               <Inp type="date" value={delivery} onChange={e=>setDelivery(e.target.value)}/>
             </Fld>
-            <Fld label="Receiving Person" required>
+            <Fld label={t("procurement.receiving_person")} required>
               <div style={{fontSize:10.5,color:T.t4,marginBottom:6,lineHeight:1.45}}>
-                Site par maal pahunchne par vendor kise call karega — naam aur number order ke saath jaayega.
+               {t("procurement.site_par_maal_pahunchne_par_vendor")}
               </div>
               <ReceivingContacts projectIds={contactProjectIds} value={contacts} onChange={setContacts} theme={T}/>
             </Fld>
             {vendor&&delivery&&hasReceivingContact(contacts)&&(
               <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,padding:"10px 12px"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                  <span style={{fontSize:11,fontWeight:600,color:T.grn}}>WhatsApp Template</span>
-                  <button onClick={()=>{const num=prompt("Vendor phone (10 digits):");if(num)window.open(`https://wa.me/91${num.replace(/\D/g,"")}?text=${encodeURIComponent(buildWA())}`);}}
+                  <span style={{fontSize:11,fontWeight:600,color:T.grn}}>{t("crm.whatsapp_template")}</span>
+                  <button onClick={()=>{const num=prompt(t("procurement.vendor_phone_10_digits"));if(num)window.open(`https://wa.me/91${num.replace(/\D/g,"")}?text=${encodeURIComponent(buildWA())}`);}}
                     style={{display:"flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:5,background:"#25D366",border:"none",color:"white",fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
-                    <IcWA size={11} color="white"/> Send
+                    <IcWA size={11} color="white"/> {t("common.send")}
                   </button>
                 </div>
                 <div style={{fontSize:10.5,color:T.grn,whiteSpace:"pre-line",lineHeight:1.6}}>{buildWA()}</div>
@@ -567,7 +562,7 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
         </>)}
       </MBody>
       <MFoot>
-        <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
         {allCoveredByWarehouse ? (
           // Single-step flow — Issue from Warehouse button up top is the
           // entire submit. Hide the duplicate vendor CTA.
@@ -579,7 +574,7 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
             color={medium==="po"?T.blu:medium==="rfq"?T.pur:T.grn}
             full
             icon={medium==="po"?<IcPO size={14} color="white"/>:medium==="rfq"?<IcRFQ size={14} color="white"/>:<IcWA size={14} color="white"/>}>
-            {medium==="po"?"Create PO":medium==="rfq"?"Create RFQ":"Mark as Ordered"}
+            {medium==="po"?t("procurement.create_po"):medium==="rfq"?t("procurement.create_rfq"):t("procurement.mark_as_ordered")}
           </Btn>
         )}
       </MFoot>
@@ -594,29 +589,27 @@ function MarkReceivedModal({mr,onSave,onClose}){
   const isPartial=parseFloat(rQty)<(mr.approvedQty||mr.qty);
   return(
     <Modal onClose={onClose} width={400}>
-      <MHead title="Mark as Received" sub={`${mr.id} · ${mr.item}`} onClose={onClose}/>
+      <MHead title={t("procurement.mark_as_received")} sub={`${mr.id} · ${mr.item}`} onClose={onClose}/>
       <MBody>
         <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,padding:"9px 12px",marginBottom:14}}>
-          <div style={{fontSize:11,color:T.grn}}>Ordered: <strong>{mr.approvedQty||mr.qty} {mr.unit}</strong>{mr.vendor?` from ${mr.vendor}`:""}</div>
+          <div style={{fontSize:11,color:T.grn}}><Rich k="procurement.ordered_qty_unit_mr" params={{ qty: mr.approvedQty||mr.qty, unit: mr.unit, mr: mr.vendor?` from ${mr.vendor}`:"" }} /></div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <Fld label="Quantity Received" required>
+          <Fld label={t("procurement.quantity_received")} required>
             <Inp type="number" value={rQty} onChange={e=>setRQty(e.target.value)} max={String(mr.approvedQty||mr.qty)}/>
             {isPartial&&parseFloat(rQty)>0&&(
-              <div style={{marginTop:4,fontSize:10.5,color:T.amb,padding:"3px 8px",background:T.ambL,borderRadius:5,border:`1px solid ${T.ambM}`}}>
-                Partial — {(mr.approvedQty||mr.qty)-parseFloat(rQty)} {mr.unit} still pending
-              </div>
+              <div style={{marginTop:4,fontSize:10.5,color:T.amb,padding:"3px 8px",background:T.ambL,borderRadius:5,border:`1px solid ${T.ambM}`}}>{t("procurement.partial_mr_unit_still_pending", { mr: (mr.approvedQty||mr.qty)-parseFloat(rQty), unit: mr.unit })}</div>
             )}
           </Fld>
-          <Fld label="Challan / DC No." required>
-            <Inp value={challan} onChange={e=>setChallan(e.target.value)} placeholder="Supplier delivery challan number"/>
+          <Fld label={t("procurement.challan_dc_no")} required>
+            <Inp value={challan} onChange={e=>setChallan(e.target.value)} placeholder={t("procurement.supplier_delivery_challan_number")}/>
           </Fld>
         </div>
       </MBody>
       <MFoot>
-        <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
         <Btn onClick={()=>onSave(mr.id,parseFloat(rQty),challan)} disabled={!rQty||!challan} color={T.grn} full icon={<IcChk size={14} color="white"/>}>
-          {isPartial?"Mark Partial Received":"Mark Fully Received"}
+          {isPartial?t("procurement.mark_partial_received"):t("procurement.mark_fully_received")}
         </Btn>
       </MFoot>
     </Modal>
@@ -636,38 +629,38 @@ function GRNModal({po,onClose,onSave}){
   const canSubmit = !!challan.trim() && !!effectiveVendor;
   return(
     <Modal onClose={onClose} width={500}>
-      <MHead title="Goods Receipt Note" sub={`${po.id} · ${po.vendor||"— vendor missing —"}`} onClose={onClose}/>
+      <MHead title={t("procurement.goods_receipt_note")} sub={`${po.id} · ${po.vendor||"— vendor missing —"}`} onClose={onClose}/>
       <MBody>
         {!po.vendor&&(
           <div style={{marginBottom:12,padding:"9px 11px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,fontSize:11.5,color:T.red}}>
-            ⚠ Source PO has no vendor set. Type vendor name below to continue.
+           {t("procurement.source_po_has_no_vendor_set")}
           </div>
         )}
         {!po.vendor&&(
           <div style={{marginBottom:12}}>
-            <Fld label="Vendor *" required>
-              <Inp value={vendorOverride} onChange={e=>setVendorOverride(e.target.value)} placeholder="Vendor name"/>
+            <Fld label={t("common.vendor_2")} required>
+              <Inp value={vendorOverride} onChange={e=>setVendorOverride(e.target.value)} placeholder={t("procurement.vendor_name")}/>
             </Fld>
           </div>
         )}
         <div style={{marginBottom:12}}>
-          <Fld label="Challan / DC Number" required>
-            <Inp value={challan} onChange={e=>setChallan(e.target.value)} placeholder="Supplier challan number"/>
+          <Fld label={t("procurement.challan_dc_number")} required>
+            <Inp value={challan} onChange={e=>setChallan(e.target.value)} placeholder={t("procurement.supplier_challan_number")}/>
           </Fld>
         </div>
         {po.items.map((it,i)=>(
           <div key={i} style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:10}}>
-            <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:10}}>{it.desc} <span style={{fontSize:11,color:T.t4,fontWeight:400}}>({it.qty} {it.unit} ordered)</span></div>
+            <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:10}}>{it.desc} <span style={{fontSize:11,color:T.t4,fontWeight:400}}>{t("procurement.qty_unit_ordered", { qty: it.qty, unit: it.unit })}</span></div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10}}>
               <div>
-                <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Qty Received</label>
+                <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("procurement.qty_received")}</label>
                 <input type="number" value={rows[i].qty} onChange={e=>{const r=[...rows];r[i]={...r[i],qty:e.target.value};setRows(r);}} max={it.qty}
                   style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                {parseFloat(rows[i].qty)<it.qty&&parseFloat(rows[i].qty)>0&&<div style={{fontSize:9.5,color:T.amb,marginTop:3}}>Partial — {it.qty-parseFloat(rows[i].qty)} pending</div>}
+                {parseFloat(rows[i].qty)<it.qty&&parseFloat(rows[i].qty)>0&&<div style={{fontSize:9.5,color:T.amb,marginTop:3}}>{t("procurement.partial_it_pending", { it: it.qty-parseFloat(rows[i].qty) })}</div>}
               </div>
               <div>
-                <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Remark</label>
-                <input value={rows[i].remark} onChange={e=>{const r=[...rows];r[i]={...r[i],remark:e.target.value};setRows(r);}} placeholder="Optional..."
+                <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.remark")}</label>
+                <input value={rows[i].remark} onChange={e=>{const r=[...rows];r[i]={...r[i],remark:e.target.value};setRows(r);}} placeholder={t("procurement.optional")}
                   style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
             </div>
@@ -675,14 +668,14 @@ function GRNModal({po,onClose,onSave}){
         ))}
         {isPartial&&<div style={{padding:"9px 12px",background:T.ambL,borderRadius:7,border:`1px solid ${T.ambM}`,display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
           <IcAlert size={14} color={T.amb}/>
-          <span style={{fontSize:11.5,color:T.amb,fontWeight:500}}>Partial GRN — PO stays open for remaining delivery</span>
+          <span style={{fontSize:11.5,color:T.amb,fontWeight:500}}>{t("procurement.partial_grn_po_stays_open_for")}</span>
         </div>}
         <GrnIssueBlock value={issues} onChange={setIssues}/>
       </MBody>
       <MFoot>
-        <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
         <Btn onClick={()=>onSave(po.id,challan,rows,effectiveVendor,issues)} disabled={!canSubmit} color={T.grn} full icon={<IcGRN size={14} color="white"/>}>
-          {isPartial?"Confirm Partial GRN":"Confirm Full GRN"}
+          {isPartial?t("procurement.confirm_partial_grn"):t("procurement.confirm_full_grn")}
         </Btn>
       </MFoot>
     </Modal>
@@ -763,7 +756,7 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
           <Pill label={d.poStatus} c={ps.c} bg={ps.bg} brd={ps.brd}/>
           <Pill label={PO_PILL_LABEL[dispLbl]||dispLbl} c={as.c} bg={as.bg} brd={as.brd}/>
           <span style={{background:"rgba(255,255,255,0.12)",color:"white",fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20}}>₹{fmtN(totalAmt)}</span>
-          {fetching&&<span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>loading...</span>}
+          {fetching&&<span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>{t("procurement.loading")}</span>}
         </div>
       </div>
 
@@ -790,7 +783,7 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
               site team ko bhi saamne dikhna chahiye ki call kis par aayegi. */}
           {(d.receivingContacts||[]).length>0&&(
             <div style={{padding:"7px 11px",borderTop:"1px solid "+T.b1}}>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:4}}>Receiving Person</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:4}}>{t("procurement.receiving_person")}</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                 {(d.receivingContacts||[]).map((c,i)=>(
                   <span key={i} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 9px",borderRadius:13,background:T.bluL,border:`1px solid ${T.bluM}`,fontSize:11,color:T.blu}}>
@@ -804,7 +797,7 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
           )}
           {d.reviewNote&&(d.approval==="Revision"||d.approval==="Rejected")&&(
             <div style={{padding:"7px 11px",borderTop:"1px solid "+T.b1,background:d.approval==="Rejected"?T.redL:"#EFF6FF"}}>
-              <span style={{fontSize:9.5,fontWeight:700,color:d.approval==="Rejected"?T.red:"#1D4ED8",textTransform:"uppercase",letterSpacing:".3px"}}>{d.approval==="Rejected"?"❌ Rejected":"↻ Revision requested"}</span>
+              <span style={{fontSize:9.5,fontWeight:700,color:d.approval==="Rejected"?T.red:"#1D4ED8",textTransform:"uppercase",letterSpacing:".3px"}}>{d.approval==="Rejected"?t("procurement.rejected"):t("procurement.revision_requested")}</span>
               <div style={{fontSize:11.5,color:T.t2,fontStyle:"italic",marginTop:2}}>"{d.reviewNote}"</div>
             </div>
           )}
@@ -813,12 +806,12 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
         {/* Items table */}
         <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden"}}>
           <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>Items ({d.items?.length||0})</span>
-            <span style={{fontSize:11,color:T.t4}}>Qty · Rate · Amount</span>
+            <span style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>{t("procurement.items_d", { d: d.items?.length||0 })}</span>
+            <span style={{fontSize:11,color:T.t4}}>{t("procurement.qty_rate_amount")}</span>
           </div>
           {(!d.items||d.items.length===0)&&(
             <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:12}}>
-              {fetching?"Loading items...":"No items found — enter rate while creating PO"}
+              {fetching?t("procurement.loading_items"):t("procurement.no_items_found_enter_rate_while")}
             </div>
           )}
           {(d.items||[]).map((it,i)=>{
@@ -838,11 +831,11 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
                       {lineSite}
                     </div>
                   )}
-                  {it.hsn&&it.hsn!=="—"&&<div style={{fontSize:10.5,color:T.t4,marginTop:2}}>HSN: {it.hsn}</div>}
+                  {it.hsn&&it.hsn!=="—"&&<div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{t("procurement.hsn_hsn", { hsn: it.hsn })}</div>}
                 </div>
                 <div style={{textAlign:"right",flexShrink:0,marginLeft:12}}>
                   <div style={{fontSize:15,fontWeight:700,color:it.amount>0?T.t1:T.t4}}>
-                    {it.amount>0?"₹"+fmtN(it.amount):"Rate pending"}
+                    {it.amount>0?"₹"+fmtN(it.amount):t("procurement.rate_pending")}
                   </div>
                 </div>
               </div>
@@ -867,7 +860,7 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
           })}
           {/* Total row */}
           <div style={{padding:"12px 14px",background:"#0D1B2A",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:12,fontWeight:600,color:"rgba(255,255,255,0.6)"}}>PO Total</span>
+            <span style={{fontSize:12,fontWeight:600,color:"rgba(255,255,255,0.6)"}}>{t("procurement.po_total")}</span>
             <span style={{fontSize:18,fontWeight:700,color:"white",letterSpacing:"-.5px"}}>₹{fmtN(totalAmt)}</span>
           </div>
         </div>
@@ -875,35 +868,35 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
         {/* Rate notice if ₹0 */}
         {totalAmt===0&&!fetching&&(
           <div style={{background:T.ambL,border:"1px solid "+T.ambM,borderRadius:7,padding:"10px 13px",fontSize:12,color:T.amb}}>
-            Rate enter nahi ki gayi thi PO bante waqt. GRN ke baad Finance mein invoice entry pe rate add karo.
+           {t("procurement.rate_enter_nahi_ki_gayi_thi")}
           </div>
         )}
       </div>
 
       {/* Action footer — context-aware: Approve / Edit / SendToVendor / GRN / Close */}
       <div style={{padding:"10px 14px",borderTop:"1px solid "+T.b1,background:T.surface,display:"flex",gap:6,flexShrink:0,flexWrap:"wrap"}}>
-        {d.approval==="Draft"&&<button onClick={()=>onApprove(d.id)} style={{flex:"1 1 100px",padding:"8px",borderRadius:7,background:T.grnL,color:T.grn,border:"1px solid "+T.grnM,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><IcApprv size={12} color={T.grn}/> Approve</button>}
+        {d.approval==="Draft"&&<button onClick={()=>onApprove(d.id)} style={{flex:"1 1 100px",padding:"8px",borderRadius:7,background:T.grnL,color:T.grn,border:"1px solid "+T.grnM,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><IcApprv size={12} color={T.grn}/> {t("common.approve_2")}</button>}
         {/* Edit — for Draft / Revision / Rejected (not after sent) */}
         {d.poStatus!=="Cancelled"&&d.orderStatus!=="Ordered"&&d.orderStatus!=="Received"&&onEdit&&(
-          <button onClick={()=>onEdit(d)} title="Edit PO — change vendor, items, rates"
+          <button onClick={()=>onEdit(d)} title={t("procurement.edit_po_change_vendor_items_rates")}
             style={{flex:"1 1 100px",padding:"8px",borderRadius:7,background:d.approval==="Revision"?"#DBEAFE":T.surfaceB,color:d.approval==="Revision"?"#1D4ED8":T.t2,border:`1px solid ${d.approval==="Revision"?"#93C5FD":T.b1}`,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-            ✏️ {d.approval==="Revision"?"Edit & Resubmit":"Edit"}
+            ✏️ {d.approval==="Revision"?t("procurement.edit_resubmit"):t("common.edit_2")}
           </button>
         )}
         {/* Send to Vendor — Approved & not yet ordered */}
         {d.approval==="Approved"&&d.orderStatus==="NotOrdered"&&d.poStatus!=="Cancelled"&&onSendToVendor&&(
           <button onClick={()=>onSendToVendor(d)} style={{flex:"1 1 130px",padding:"8px",borderRadius:7,background:T.bluL,color:T.blu,border:"1.5px solid "+T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-            📤 Send to Vendor
+           {t("procurement.send_to_vendor")}
           </button>
         )}
         {/* Record GRN — only after ordered */}
         {d.poStatus==="Open"&&d.approval==="Approved"&&d.orderStatus==="Ordered"&&(
           <button onClick={()=>onGRN(d)} style={{flex:"1 1 110px",padding:"8px",borderRadius:7,background:T.ambL,color:T.amb,border:"1.5px solid "+T.amb,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-            <IcGRN size={12} color={T.amb}/> Record GRN
+            <IcGRN size={12} color={T.amb}/> {t("common.record_grn")}
           </button>
         )}
         {/* Share — secondary, available anytime for sharing PO copy */}
-        <button onClick={()=>onShare(d)} title="Share PO link" style={{flex:"0 0 38px",padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t3,border:"1px solid "+T.b1,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcShare size={13} color={T.t3}/></button>
+        <button onClick={()=>onShare(d)} title={t("procurement.share_po_link")} style={{flex:"0 0 38px",padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t3,border:"1px solid "+T.b1,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcShare size={13} color={T.t3}/></button>
         {/* Close PO — cancel for any non-cancelled status */}
         {d.poStatus!=="Cancelled"&&onCancel&&(
           <button onClick={async()=>{
@@ -914,7 +907,7 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
               setCancelling(false);
             }}
             disabled={cancelling}
-            style={{flex:"0 0 38px",padding:"8px",borderRadius:7,background:T.redL,color:T.red,border:"1px solid "+T.redM,fontSize:11.5,fontWeight:700,cursor:cancelling?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:cancelling?.6:1}} title="Close (Cancel) PO">
+            style={{flex:"0 0 38px",padding:"8px",borderRadius:7,background:T.redL,color:T.red,border:"1px solid "+T.redM,fontSize:11.5,fontWeight:700,cursor:cancelling?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:cancelling?.6:1}} title={t("procurement.close_cancel_po")}>
             ✕
           </button>
         )}
@@ -940,14 +933,14 @@ function RFQDetailDrawer({rfq,onClose,onPunch,onLock,onPublish,onCreatePO}){
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <Pill label={rfq.status} c={rs.c} bg={rs.bg} brd={rs.brd}/>
-          {rfq.bidEnd&&<span style={{fontSize:10.5,color:"rgba(255,255,255,0.5)"}}>Bidding: {rfq.bidStart} → {rfq.bidEnd}</span>}
-          {rfq.locked&&<span style={{background:"rgba(5,150,105,0.25)",color:"#6EE7B7",fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20}}>Locked: {rfq.locked}</span>}
+          {rfq.bidEnd&&<span style={{fontSize:10.5,color:"rgba(255,255,255,0.5)"}}>{t("procurement.bidding_bidstart_bidend", { bidStart: rfq.bidStart, bidEnd: rfq.bidEnd })}</span>}
+          {rfq.locked&&<span style={{background:"rgba(5,150,105,0.25)",color:"#6EE7B7",fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20}}>{t("procurement.locked_locked", { locked: rfq.locked })}</span>}
         </div>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
         {/* Items */}
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:12}}>
-          <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>Items Requested</span></div>
+          <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>{t("procurement.items_requested")}</span></div>
           {rfq.items.map((it,i)=>(
             <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 80px 60px 70px 110px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center"}}>
               <span style={{fontSize:12.5,color:T.t1}}>{it.desc}</span>
@@ -961,16 +954,16 @@ function RFQDetailDrawer({rfq,onClose,onPunch,onLock,onPublish,onCreatePO}){
         {/* Rate comparison */}
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:12}}>
           <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span style={{fontSize:11,fontWeight:700,color:T.t1}}>Rate Comparison</span>
+            <span style={{fontSize:11,fontWeight:700,color:T.t1}}>{t("procurement.rate_comparison")}</span>
             <div style={{display:"flex",gap:8}}>
-              <span style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:T.grn}}><span style={{width:8,height:8,borderRadius:2,background:T.grn,display:"inline-block"}}/>Cheapest</span>
-              <span style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:T.red}}><span style={{width:8,height:8,borderRadius:2,background:T.red,display:"inline-block"}}/>Expensive</span>
+              <span style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:T.grn}}><span style={{width:8,height:8,borderRadius:2,background:T.grn,display:"inline-block"}}/>{t("procurement.cheapest")}</span>
+              <span style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:T.red}}><span style={{width:8,height:8,borderRadius:2,background:T.red,display:"inline-block"}}/>{t("procurement.expensive")}</span>
             </div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:`140px repeat(${rfq.items.length},1fr) 100px`,padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
-            <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Vendor</span>
+            <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("common.vendor")}</span>
             {rfq.items.map((it,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{it.desc.split(" ").slice(0,2).join(" ")}</span>)}
-            <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign:"right"}}>Total</span>
+            <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign:"right"}}>{t("common.total")}</span>
           </div>
           {rfq.vendors.map((v,vi)=>{
             const vTotal=totalByVendor(v);
@@ -989,26 +982,26 @@ function RFQDetailDrawer({rfq,onClose,onPunch,onLock,onPublish,onCreatePO}){
                   {remark&&<div style={{fontSize:9.5,color:T.t4,marginTop:1}}>{remark}</div>}
                 </div>);
               })}
-              <div style={{textAlign:"right"}}>{v.status==="Submitted"?<span style={{fontSize:13,fontWeight:700,color:isBest?T.grn:isWorst?T.red:T.t1,background:isBest?T.grnL:isWorst?T.redL:"none",padding:"2px 7px",borderRadius:5,display:"inline-block"}}>₹{fmtN(vTotal)}</span>:<span style={{fontSize:11,color:T.t4}}>Pending</span>}</div>
+              <div style={{textAlign:"right"}}>{v.status==="Submitted"?<span style={{fontSize:13,fontWeight:700,color:isBest?T.grn:isWorst?T.red:T.t1,background:isBest?T.grnL:isWorst?T.redL:"none",padding:"2px 7px",borderRadius:5,display:"inline-block"}}>₹{fmtN(vTotal)}</span>:<span style={{fontSize:11,color:T.t4}}>{t("common.pending")}</span>}</div>
             </div>);
           })}
         </div>
         {/* Vendor actions */}
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-          <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>Vendor Actions</span></div>
+          <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>{t("procurement.vendor_actions")}</span></div>
           {rfq.vendors.map((v,vi)=>(
             <div key={vi} style={{padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
               <span style={{flex:1,fontSize:12.5,fontWeight:500,color:T.t1}}>{v.name}</span>
-              <button onClick={()=>onPunch(vi)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.purL,border:`1px solid ${T.purM}`,color:T.pur,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcPen size={12} color={T.pur}/> Punch Quote</button>
-              {!rfq.locked&&v.status==="Submitted"&&<button onClick={()=>onLock(v.name)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcLock size={12} color={T.grn}/> Lock Quote</button>}
+              <button onClick={()=>onPunch(vi)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.purL,border:`1px solid ${T.purM}`,color:T.pur,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcPen size={12} color={T.pur}/> {t("procurement.punch_quote")}</button>
+              {!rfq.locked&&v.status==="Submitted"&&<button onClick={()=>onLock(v.name)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcLock size={12} color={T.grn}/> {t("procurement.lock_quote")}</button>}
             </div>
           ))}
         </div>
       </div>
       <div style={{padding:"12px 16px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:7,flexShrink:0}}>
-        {rfq.status==="Draft"&&<button onClick={()=>onPublish(rfq.id)} style={{flex:1,padding:"8px",borderRadius:7,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:12,fontWeight:600,cursor:"pointer"}}>Publish RFQ</button>}
-        {rfq.locked&&<button onClick={()=>onCreatePO&&onCreatePO(rfq)} style={{flex:1,padding:"8px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcPO size={13} color="white"/> Create PO</button>}
-        <button onClick={onClose} style={{flex:1,padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t3,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,cursor:"pointer"}}>Close</button>
+        {rfq.status==="Draft"&&<button onClick={()=>onPublish(rfq.id)} style={{flex:1,padding:"8px",borderRadius:7,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("procurement.publish_rfq")}</button>}
+        {rfq.locked&&<button onClick={()=>onCreatePO&&onCreatePO(rfq)} style={{flex:1,padding:"8px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcPO size={13} color="white"/> {t("procurement.create_po")}</button>}
+        <button onClick={onClose} style={{flex:1,padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t3,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.close")}</button>
       </div>
     </div>
   </>);
@@ -1020,23 +1013,23 @@ function PunchQuoteModal({rfq,vendorIndex,onSave,onClose}){
   const [rates,setRates]=useState(rfq.items.map((_,i)=>({rate:vendor?.rates[i]?.rate||"",remark:vendor?.rates[i]?.remarks||""})));
   return(
     <Modal onClose={onClose} width={460}>
-      <MHead title="Punch Quotation" sub={`On behalf of: ${vendor?.name}`} onClose={onClose}/>
+      <MHead title={t("procurement.punch_quotation")} sub={`On behalf of: ${vendor?.name}`} onClose={onClose}/>
       <MBody>
-        <div style={{background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,padding:"8px 12px",marginBottom:12,fontSize:11.5,color:T.amb}}>Admin entering rates on vendor's behalf.</div>
+        <div style={{background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,padding:"8px 12px",marginBottom:12,fontSize:11.5,color:T.amb}}>{t("procurement.admin_entering_rates_on_vendor_s")}</div>
         {rfq.items.map((item,i)=>(
           <div key={i} style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:10}}>
             <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:2}}>{item.desc}</div>
-            <div style={{fontSize:10.5,color:T.t4,marginBottom:10}}>HSN: {item.hsn} · {item.qty} {item.unit}</div>
+            <div style={{fontSize:10.5,color:T.t4,marginBottom:10}}>{t("procurement.hsn_hsn_qty_unit", { hsn: item.hsn, qty: item.qty, unit: item.unit })}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <div>
-                <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Rate per {item.unit} (₹)</label>
-                <input type="number" value={rates[i].rate} onChange={e=>{const r=[...rates];r[i]={...r[i],rate:e.target.value};setRates(r);}} placeholder="Enter rate..."
+                <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("procurement.rate_per_unit", { unit: item.unit })}</label>
+                <input type="number" value={rates[i].rate} onChange={e=>{const r=[...rates];r[i]={...r[i],rate:e.target.value};setRates(r);}} placeholder={t("procurement.enter_rate")}
                   style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                {rates[i].rate&&<div style={{fontSize:10.5,color:T.grn,marginTop:3}}>Total: ₹{fmtN(Number(rates[i].rate)*item.qty)}</div>}
+                {rates[i].rate&&<div style={{fontSize:10.5,color:T.grn,marginTop:3}}>{t("procurement.total_fmtn", { fmtN: fmtN(Number(rates[i].rate)*item.qty) })}</div>}
               </div>
               <div>
-                <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Remarks</label>
-                <input value={rates[i].remark} onChange={e=>{const r=[...rates];r[i]={...r[i],remark:e.target.value};setRates(r);}} placeholder="Optional..."
+                <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.remarks")}</label>
+                <input value={rates[i].remark} onChange={e=>{const r=[...rates];r[i]={...r[i],remark:e.target.value};setRates(r);}} placeholder={t("procurement.optional")}
                   style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
             </div>
@@ -1044,8 +1037,8 @@ function PunchQuoteModal({rfq,vendorIndex,onSave,onClose}){
         ))}
       </MBody>
       <MFoot>
-        <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
-        <Btn onClick={()=>onSave(vendorIndex,rates)} color={T.blu} full icon={<IcChk size={14} color="white"/>}>Save Quotation</Btn>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
+        <Btn onClick={()=>onSave(vendorIndex,rates)} color={T.blu} full icon={<IcChk size={14} color="white"/>}>{t("procurement.save_quotation")}</Btn>
       </MFoot>
     </Modal>
   );
@@ -1074,27 +1067,27 @@ function CreateRFQModal({onClose,onSave,dbProjects,dbVendors=[]}){
   const canSave=validItems.length>0&&vendors.length>0;
   return(
     <Modal onClose={onClose} width={620}>
-      <MHead title="New RFQ" sub="Vendors se quotes compare karne ke liye" onClose={onClose}/>
+      <MHead title={t("procurement.new_rfq")} sub={t("procurement.vendors_se_quotes_compare_karne_ke")} onClose={onClose}/>
       <MBody>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-          <Fld label="Project">
+          <Fld label={t("common.project")}>
             <SearchSelect value={form.projectId}
               options={(dbProjects||[]).map(p=>({key:String(p.id),label:p.name}))}
               onChange={v=>{const proj=(dbProjects||[]).find(p=>String(p.id)===String(v));setForm(p=>({...p,projectId:v,project:proj?.name||""}));}}
-              placeholder="Select project..."/>
+              placeholder={t("common.select_project")}/>
           </Fld>
-          <Fld label="Bid End Date">
+          <Fld label={t("procurement.bid_end_date")}>
             <Inp type="date" value={form.bidEnd} onChange={e=>setForm(p=>({...p,bidEnd:e.target.value}))}/>
           </Fld>
         </div>
         <div style={{padding:"10px 12px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:12}}>
-          <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Items</div>
+          <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>{t("common.items")}</div>
           {form.items.map((it,i)=>(
             <div key={i} style={{display:"grid",gridTemplateColumns:"2.2fr 80px 90px 28px",gap:7,alignItems:"center",marginBottom:6}}>
-              <LibrarySelect type="material" value={it.desc} onChange={v=>updItem(i,"desc",v||"")} placeholder="Pick material..." compact hideAddNew/>
-              <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder="Qty"
+              <LibrarySelect type="material" value={it.desc} onChange={v=>updItem(i,"desc",v||"")} placeholder={t("procurement.pick_material")} compact hideAddNew/>
+              <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder={t("common.qty")}
                 style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-              <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>
+              <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
               <button onClick={()=>{if(form.items.length===1)return;setForm(p=>({...p,items:p.items.filter((_,j)=>j!==i)}));}} disabled={form.items.length===1}
                 style={{width:26,height:26,borderRadius:6,background:form.items.length===1?"transparent":T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.4:1}}>
                 <IcX size={12} color={T.red}/>
@@ -1103,13 +1096,13 @@ function CreateRFQModal({onClose,onSave,dbProjects,dbVendors=[]}){
           ))}
           <button onClick={()=>setForm(p=>({...p,items:[...p.items,{desc:"",qty:"",unit:""}]}))}
             style={{marginTop:4,width:"100%",padding:"8px",borderRadius:7,background:"transparent",border:`1.5px dashed ${T.purM}`,color:T.pur,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            <IcAdd size={13} color={T.pur}/> Add item
+            <IcAdd size={13} color={T.pur}/> {t("procurement.add_item")}
           </button>
         </div>
-        <Fld label="Invite Vendors (2+ recommended)" required>
+        <Fld label={t("procurement.invite_vendors_2_recommended")} required>
           <SearchSelect value={vendorPick}
             options={(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS).filter(n=>!vendors.includes(n))}
-            onChange={addVendor} placeholder="Vendor add karo..."/>
+            onChange={addVendor} placeholder={t("procurement.vendor_add_karo")}/>
         </Fld>
         {vendors.length>0&&(
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
@@ -1123,14 +1116,14 @@ function CreateRFQModal({onClose,onSave,dbProjects,dbVendors=[]}){
         )}
       </MBody>
       <MFoot>
-        <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
         <Btn onClick={async()=>{
           if(!canSave||savingRef.current)return;
           savingRef.current=true;setSaving(true);
           try{ await onSave(form,validItems,vendors); }
           finally{ savingRef.current=false;setSaving(false); }
         }} disabled={!canSave||saving} color={T.pur} full icon={<IcRFQ size={14} color="white"/>}>
-          {saving?"Creating…":"Create RFQ (Draft)"}
+          {saving?t("common.creating"):t("procurement.create_rfq_draft")}
         </Btn>
       </MFoot>
     </Modal>
@@ -1230,7 +1223,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
     const name=(newMat.name||"").trim();
     if(!name) return;
     if(matLib.some(m=>(m.name||"").trim().toLowerCase()===name.toLowerCase())){
-      alert("Yeh material library me already hai");
+      alert(t("procurement.yeh_material_library_me_already_hai"));
       return;
     }
     setSavingMat(true);
@@ -1342,8 +1335,8 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
 
   return(
     <Modal onClose={onClose} width={680}>
-      <MHead title={isEdit?`Edit PO ${editPo?.poNum||""}`:"Create Purchase Order"}
-        sub={isEdit?`${editPo?.approval==="Revision"?"Revision requested — change & resubmit":"Edit PO details"}`:(fromMR?`Direct PO · ${autoProjectName}`:"Direct PO — vendor library + material library")}
+      <MHead title={isEdit?`Edit PO ${editPo?.poNum||""}`:t("procurement.create_purchase_order")}
+        sub={isEdit?`${editPo?.approval==="Revision"?"Revision requested — change & resubmit":"Edit PO details"}`:(fromMR?`Direct PO · ${autoProjectName}`:t("procurement.direct_po_vendor_library_material_library"))}
         onClose={onClose}/>
       <MBody>
         {/* ── Top-right: Add new material vendor to Library ───────── */}
@@ -1352,56 +1345,56 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.purL,border:`1.5px solid ${T.purM}`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
             onMouseEnter={e=>e.currentTarget.style.background=T.purM+"66"}
             onMouseLeave={e=>e.currentTarget.style.background=T.purL}>
-            <IcAdd size={12} color={T.pur}/> {showAddVendor?"Cancel":"Add new material vendor to Library"}
+            <IcAdd size={12} color={T.pur}/> {showAddVendor?t("common.cancel"):t("procurement.add_new_material_vendor_to_library")}
           </button>
         </div>
         {showAddVendor&&(
           <div style={{padding:"11px 12px",background:T.purL,border:`1.5px solid ${T.purM}`,borderRadius:8,marginBottom:11}}>
-            <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:8,letterSpacing:".3px"}}>🆕 Add new material vendor to Library</div>
+            <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:8,letterSpacing:".3px"}}>{t("procurement.add_new_material_vendor_to_library_2")}</div>
             <div style={{display:"grid",gridTemplateColumns:"2.5fr 110px 110px auto",gap:7,alignItems:"center"}}>
-              <input value={newVendor.name} onChange={e=>setNewVendor(p=>({...p,name:e.target.value}))} placeholder="Vendor name *" autoFocus
+              <input value={newVendor.name} onChange={e=>setNewVendor(p=>({...p,name:e.target.value}))} placeholder={t("procurement.vendor_name_2")} autoFocus
                 style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-              <input value={newVendor.phone} onChange={e=>setNewVendor(p=>({...p,phone:e.target.value}))} placeholder="Phone"
+              <input value={newVendor.phone} onChange={e=>setNewVendor(p=>({...p,phone:e.target.value}))} placeholder={t("common.phone")}
                 style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-              <input value={newVendor.city} onChange={e=>setNewVendor(p=>({...p,city:e.target.value}))} placeholder="City"
+              <input value={newVendor.city} onChange={e=>setNewVendor(p=>({...p,city:e.target.value}))} placeholder={t("common.city")}
                 style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
               <button onClick={saveNewVendor} disabled={!newVendor.name.trim()||savingVendor}
                 style={{padding:"7px 14px",borderRadius:6,background:newVendor.name.trim()?T.pur:T.b1,color:newVendor.name.trim()?"white":T.t4,border:"none",fontSize:12,fontWeight:700,cursor:newVendor.name.trim()?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap"}}>
-                {savingVendor?"...":"Save"}
+                {savingVendor?"...":t("common.save")}
               </button>
             </div>
-            <div style={{fontSize:10,color:T.pur,marginTop:6,opacity:.75}}>Save par Vendor field me auto-select ho jayega.</div>
+            <div style={{fontSize:10,color:T.pur,marginTop:6,opacity:.75}}>{t("procurement.save_par_vendor_field_me_auto")}</div>
           </div>
         )}
 
         {/* ── Section 1: Vendor + Project ─────────────────────────── */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-          <Fld label="Vendor *">
+          <Fld label={t("common.vendor_2")}>
             <LibrarySelect type="supplier" value={form.vendor}
               onChange={v=>upd("vendor",v||"")}
-              placeholder="Vendor library se pick"
+              placeholder={t("procurement.vendor_library_se_pick")}
               hideAddNew/>
           </Fld>
-          <Fld label="Project *">
+          <Fld label={t("common.project_2")}>
             {fromMR
               ? <div style={{padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.grnM}`,background:T.grnL,fontSize:12.5,color:T.grn,fontWeight:600,display:"flex",alignItems:"center",gap:6,height:36,boxSizing:"border-box"}}>
                   <span style={{fontSize:11,opacity:.7}}>🔒</span>
                   <span>{autoProjectName}</span>
-                  <span style={{fontSize:10,fontWeight:500,color:T.grn,opacity:.7,marginLeft:"auto"}}>from MR</span>
+                  <span style={{fontSize:10,fontWeight:500,color:T.grn,opacity:.7,marginLeft:"auto"}}>{t("procurement.from_mr")}</span>
                 </div>
               : <SearchSelect value={form.projectId}
                   options={(dbProjects.length>0?dbProjects:[]).map(p=>({key:String(p.id),label:p.name}))}
-                  onChange={handleProjectChange} placeholder="Select project..."/>
+                  onChange={handleProjectChange} placeholder={t("common.select_project")}/>
             }
           </Fld>
         </div>
 
         {/* ── Section 2: Delivery Site + Expected Delivery ───────── */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-          <Fld label={<>Delivery Site <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500,marginLeft:4}}>(auto-filled)</span></>}>
-            <Inp value={form.deliverySite} onChange={e=>upd("deliverySite",e.target.value)} placeholder="Delivery site name"/>
+          <Fld label={<>{t("procurement.delivery_site")} <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500,marginLeft:4}}>{t("procurement.auto_filled")}</span></>}>
+            <Inp value={form.deliverySite} onChange={e=>upd("deliverySite",e.target.value)} placeholder={t("procurement.delivery_site_name")}/>
           </Fld>
-          <Fld label="Expected Delivery">
+          <Fld label={t("common.expected_delivery")}>
             <Inp type="date" value={form.delivery} onChange={e=>upd("delivery",e.target.value)}/>
           </Fld>
         </div>
@@ -1411,9 +1404,9 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
             kise call kare — wo yahan se jaata hai. Multi-site PO me team
             har line ke project ki milti hai. */}
         <div style={{marginBottom:16}}>
-          <Fld label="Receiving Person" required>
+          <Fld label={t("procurement.receiving_person")} required>
             <div style={{fontSize:10.5,color:T.t4,marginBottom:6,lineHeight:1.45}}>
-              Maal site par aane par vendor kise call karega — naam aur number PO ke saath vendor tak jaayega.
+             {t("procurement.maal_site_par_aane_par_vendor")}
             </div>
             <ReceivingContacts theme={T} value={contacts} onChange={setContacts}
               projectIds={[form.projectId,...form.items.map(it=>it.project_id)].filter(Boolean)}/>
@@ -1424,37 +1417,37 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
         <div style={{padding:"11px 13px",background:T.surfaceB,borderRadius:9,border:`1px solid ${T.b1}`,marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
             <div>
-              <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>Items</div>
-              <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>Material library se pick karein · unit auto-locked</div>
+              <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.items")}</div>
+              <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{t("procurement.material_library_se_pick_karein_unit")}</div>
             </div>
             <button onClick={()=>{ setShowAddMat(s=>!s); if(!showAddMat) setNewMat({name:"",unit:"",hsn:""}); }}
               style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:showAddMat?T.purL:T.purL,border:`1.5px solid ${T.purM}`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
               onMouseEnter={e=>e.currentTarget.style.background=T.purM+"66"}
               onMouseLeave={e=>e.currentTarget.style.background=T.purL}>
-              <IcAdd size={12} color={T.pur}/> {showAddMat?"Cancel":"Add new material to Library"}
+              <IcAdd size={12} color={T.pur}/> {showAddMat?t("common.cancel"):t("procurement.add_new_material_to_library")}
             </button>
           </div>
 
           {/* Inline Add-new-material form */}
           {showAddMat&&(
             <div style={{padding:"11px 12px",background:T.purL,border:`1.5px solid ${T.purM}`,borderRadius:8,marginBottom:10}}>
-              <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:8,letterSpacing:".3px"}}>🆕 Add new material to Library</div>
+              <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:8,letterSpacing:".3px"}}>{t("procurement.add_new_material_to_library_2")}</div>
               <div style={{display:"grid",gridTemplateColumns:"2.5fr 90px 110px auto",gap:7,alignItems:"center"}}>
-                <input value={newMat.name} onChange={e=>setNewMat(p=>({...p,name:e.target.value}))} placeholder="Material name *" autoFocus
+                <input value={newMat.name} onChange={e=>setNewMat(p=>({...p,name:e.target.value}))} placeholder={t("common.material_name")} autoFocus
                   style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                 <select value={newMat.unit} onChange={e=>setNewMat(p=>({...p,unit:e.target.value}))}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}>
-                  <option value="">Unit</option>
+                  <option value="">{t("common.unit")}</option>
                   {UNITS.map(u=><option key={u}>{u}</option>)}
                 </select>
-                <input value={newMat.hsn} onChange={e=>setNewMat(p=>({...p,hsn:e.target.value}))} placeholder="HSN (optional)"
+                <input value={newMat.hsn} onChange={e=>setNewMat(p=>({...p,hsn:e.target.value}))} placeholder={t("procurement.hsn_optional")}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                 <button onClick={saveNewMaterial} disabled={!newMat.name.trim()||savingMat}
                   style={{padding:"7px 14px",borderRadius:6,background:newMat.name.trim()?T.pur:T.b1,color:newMat.name.trim()?"white":T.t4,border:"none",fontSize:12,fontWeight:700,cursor:newMat.name.trim()?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap"}}>
-                  {savingMat?"...":"Save"}
+                  {savingMat?"...":t("common.save")}
                 </button>
               </div>
-              <div style={{fontSize:10,color:T.pur,marginTop:6,opacity:.75}}>Save par item rows me bhi available hoga.</div>
+              <div style={{fontSize:10,color:T.pur,marginTop:6,opacity:.75}}>{t("procurement.save_par_item_rows_me_bhi")}</div>
             </div>
           )}
 
@@ -1475,32 +1468,32 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
                 <LibrarySelect type="material" value={it.desc}
                   inputRef={el=>{ if(el) matRefs.current[i]=el; }}
                   onChange={v=>updItem(i,"desc",v||"")}
-                  placeholder="Pick material..."
+                  placeholder={t("procurement.pick_material")}
                   compact hideAddNew/>
                 <input value={it.hsn} onChange={e=>updItem(i,"hsn",e.target.value)} placeholder="HSN"
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder="Qty"
-                  title={it._d==="qty"?"Auto: Total ÷ Rate — type karke fix kar sakte ho":(it._pick==="qty"?"Selected — Total adjust karoge to Qty badlega":undefined)}
+                <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder={t("common.qty")}
+                  title={it._d==="qty"?t("finance.auto_total_rate_type_karke_fix"):(it._pick==="qty"?t("finance.selected_total_adjust_karoge_to_qty"):undefined)}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="qty"?"dashed":"solid"} ${T.b1}`,fontSize:12,color:it._d==="qty"?T.t2:T.t1,background:it._d==="qty"?T.surfaceB:(it._pick==="qty"?T.ambL:T.surface),boxShadow:it._pick==="qty"&&it._d!=="qty"?`inset 0 0 0 1.5px ${T.amb}`:"none",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>{e.target.style.borderColor=T.blu;pickItem(i,"qty");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 {isLocked
-                  ? <div title="Unit Material Library se aata hai — change karne ke liye Library → Materials me edit karein"
+                  ? <div title={t("procurement.unit_material_library_se_aata_hai")}
                       style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surfaceB,fontFamily:"inherit",fontWeight:700,display:"flex",alignItems:"center",gap:5,justifyContent:"center",cursor:"not-allowed",boxSizing:"border-box"}}>
                       <span style={{fontSize:9,opacity:.55}}>🔒</span>{u}
                     </div>
-                  : <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>
+                  : <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
                 }
-                <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder="Rate"
-                  title={it._d==="rate"?"Auto: Total ÷ Qty":(it._pick==="rate"?"Selected — Total adjust karoge to Rate badlega":undefined)}
+                <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder={t("common.rate")}
+                  title={it._d==="rate"?t("finance.auto_total_qty"):(it._pick==="rate"?t("finance.selected_total_adjust_karoge_to_rate"):undefined)}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="rate"?"dashed":"solid"} ${T.b1}`,fontSize:12,color:it._d==="rate"?T.t2:T.t1,background:it._d==="rate"?T.surfaceB:(it._pick==="rate"?T.ambL:T.surface),boxShadow:it._pick==="rate"&&it._d!=="rate"?`inset 0 0 0 1.5px ${T.amb}`:"none",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>{e.target.style.borderColor=T.blu;pickItem(i,"rate");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                <input type="number" value={it.total} onChange={e=>updItem(i,"total",e.target.value)} placeholder="Total"
-                  title={it._d==="total"?"Auto: Qty × Rate — final total yahin type bhi kar sakte ho":"Entered total"}
+                <input type="number" value={it.total} onChange={e=>updItem(i,"total",e.target.value)} placeholder={t("common.total")}
+                  title={it._d==="total"?t("finance.auto_qty_rate_final_total_yahin"):t("procurement.entered_total")}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="total"?"dashed":"solid"} ${it._d==="total"?T.b1:T.bluM}`,fontSize:12,fontWeight:700,color:Number(it.total)>0?T.blu:T.t4,background:it._d==="total"?T.surfaceB:T.bluL,textAlign:"right",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=it._d==="total"?T.b1:T.bluM}/>
                 <button onClick={()=>removeItem(i)} disabled={form.items.length===1}
-                  title={form.items.length===1?"At least one item required":"Remove row"}
+                  title={form.items.length===1?t("procurement.at_least_one_item_required"):t("procurement.remove_row")}
                   style={{width:26,height:26,borderRadius:6,background:form.items.length===1?"transparent":T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.4:1}}>
                   <IcX size={12} color={T.red}/>
                 </button>
@@ -1513,7 +1506,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
             style={{marginTop:9,width:"100%",padding:"9px 12px",borderRadius:7,background:"transparent",border:`1.5px dashed ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .12s"}}
             onMouseEnter={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.borderStyle="solid";}}
             onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderStyle="dashed";}}>
-            <IcAdd size={13} color={T.blu}/> Add row
+            <IcAdd size={13} color={T.blu}/> {t("procurement.add_row")}
           </button>
         </div>
 
@@ -1521,8 +1514,8 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
         {total>0&&(
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:`linear-gradient(90deg, ${T.bluL} 0%, ${T.surface} 100%)`,borderRadius:9,border:`1.5px solid ${T.bluM}`,marginBottom:12}}>
             <div>
-              <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>PO Total</div>
-              <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>{form.items.filter(it=>Number(it.qty)>0&&Number(it.rate)>0).length} items priced</div>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("procurement.po_total")}</div>
+              <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>{t("procurement.form_items_priced", { form: form.items.filter(it=>Number(it.qty)>0&&Number(it.rate)>0).length })}</div>
             </div>
             <div style={{fontSize:18,fontWeight:800,color:T.blu,letterSpacing:"-0.3px"}}>
               ₹{total.toLocaleString("en-IN")}
@@ -1531,16 +1524,16 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
         )}
 
         {/* ── Section 4: Notes ─────────────────────────────────────── */}
-        <Fld label={<>Notes <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500,marginLeft:4}}>(optional)</span></>}>
+        <Fld label={<>{t("common.notes")} <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500,marginLeft:4}}>{t("procurement.optional_2")}</span></>}>
           <textarea value={form.notes} onChange={e=>upd("notes",e.target.value)} rows={2}
-            placeholder="Special instructions, delivery preferences..."
+            placeholder={t("procurement.special_instructions_delivery_preferences")}
             style={{width:"100%",padding:"9px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical",lineHeight:1.45}}
             onFocus={e=>e.target.style.borderColor=T.blu}
             onBlur={e=>e.target.style.borderColor=T.b1}/>
         </Fld>
       </MBody>
       <MFoot>
-        <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
         <Btn onClick={async()=>{
           if(!form.vendor||!form.project||!hasReceivingContact(contacts))return;
           // Hard guard — prevents double-fire even before re-render
@@ -1570,7 +1563,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
           };
           try { await onSave(newPO); }
           finally { submittingRef.current = false; setSubmitting(false); }
-        }} disabled={!form.vendor||!form.project||!hasReceivingContact(contacts)||submitting} color={T.blu} full icon={<IcPO size={14} color="white"/>}>{submitting?(isEdit?"Saving…":"Creating…"):(isEdit?"💾 Save & Resubmit":"Create PO (Draft)")}</Btn>
+        }} disabled={!form.vendor||!form.project||!hasReceivingContact(contacts)||submitting} color={T.blu} full icon={<IcPO size={14} color="white"/>}>{submitting?(isEdit?t("common.saving_2"):t("common.creating")):(isEdit?t("procurement.save_resubmit"):t("procurement.create_po_draft"))}</Btn>
       </MFoot>
     </Modal>
   );
@@ -1613,35 +1606,35 @@ function SendToVendorModal({po,onClose,onSent}){
   };
 
   const channels = [
-    {label:"WhatsApp",  via:"whatsapp", c:"#25D366", bg:"#E8FDF1", Icon:IcWA,
+    {label:t("common.whatsapp"),  via:"whatsapp", c:"#25D366", bg:"#E8FDF1", Icon:IcWA,
       action:()=>open(`https://wa.me/?text=${encodeURIComponent(waMsg)}`,"whatsapp")},
-    {label:"Email",     via:"email",    c:T.blu, bg:T.bluL, Icon:IcMail,
+    {label:t("common.email"),     via:"email",    c:T.blu, bg:T.bluL, Icon:IcMail,
       action:()=>open(`mailto:?subject=${encodeURIComponent(emailSubj)}&body=${encodeURIComponent(emailBody)}`,"email")},
-    {label:"Print/PDF", via:"pdf",      c:T.pur, bg:T.purL, Icon:IcShare,
+    {label:t("procurement.print_pdf"), via:"pdf",      c:T.pur, bg:T.purL, Icon:IcShare,
       action:()=>{ window.print(); setSentVia("pdf"); }},
     {label:copied?"Copied!":"Copy Link", via:"copy_link", c:T.slt, bg:T.sltL, Icon:IcCopy, action:copyLink},
   ];
 
   return(
     <Modal onClose={onClose} width={460}>
-      <MHead title="Send PO to Vendor" sub={`${po.poNum||"PO-"+po.id} · ${po.vendor||"Vendor"}`} onClose={onClose}/>
+      <MHead title={t("procurement.send_po_to_vendor")} sub={`${po.poNum||"PO-"+po.id} · ${po.vendor||"Vendor"}`} onClose={onClose}/>
       <MBody>
         <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",marginBottom:12,fontSize:11.5,color:T.blu,lineHeight:1.5}}>
-          PO ko WhatsApp / Email / PDF se vendor tak bhejo. Send hone ke baad <b>"Mark as Sent"</b> click karo — PO Order Stage me chala jaayega aur GRN record kar sakte ho.
+         {t("procurement.po_ko_whatsapp_email_pdf_se")} <b>{t("procurement.mark_as_sent")}</b> {t("procurement.click_karo_po_order_stage_me")}
         </div>
         {/* PO summary card */}
         <div style={{background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
           <div style={{fontSize:11,color:T.t4,fontWeight:600,marginBottom:3}}>VENDOR</div>
           <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:8}}>{po.vendor||"—"}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:11}}>
-            <div><span style={{color:T.t4}}>Items: </span><b style={{color:T.t1}}>{(po.items||[]).length}</b></div>
-            <div><span style={{color:T.t4}}>Total: </span><b style={{color:T.t1}}>₹{(po.amount||0).toLocaleString("en-IN")}</b></div>
-            <div style={{gridColumn:"1 / 3"}}><span style={{color:T.t4}}>Delivery: </span><b style={{color:T.t1}}>{po.deliverySite}</b> · <span style={{color:T.t4}}>by</span> <b style={{color:T.t1}}>{po.delivery||"TBD"}</b></div>
+            <div><span style={{color:T.t4}}>{t("procurement.items")} </span><b style={{color:T.t1}}>{(po.items||[]).length}</b></div>
+            <div><span style={{color:T.t4}}>{t("common.total_2")} </span><b style={{color:T.t1}}>₹{(po.amount||0).toLocaleString("en-IN")}</b></div>
+            <div style={{gridColumn:"1 / 3"}}><span style={{color:T.t4}}>{t("procurement.delivery")} </span><b style={{color:T.t1}}>{po.deliverySite}</b> · <span style={{color:T.t4}}>by</span> <b style={{color:T.t1}}>{po.delivery||"TBD"}</b></div>
             <div style={{gridColumn:"1 / 3"}}>
-              <span style={{color:T.t4}}>Receiving: </span>
+              <span style={{color:T.t4}}>{t("procurement.receiving")} </span>
               {(po.receivingContacts||[]).length
                 ? <b style={{color:T.t1}}>{(po.receivingContacts||[]).map(c=>`${c.name} (${c.phone})`).join(", ")}</b>
-                : <span style={{color:T.amb}}>koi contact nahi — Edit karke jodo</span>}
+                : <span style={{color:T.amb}}>{t("procurement.koi_contact_nahi_edit_karke_jodo")}</span>}
             </div>
           </div>
         </div>
@@ -1659,14 +1652,14 @@ function SendToVendorModal({po,onClose,onSent}){
         </div>
         {sentVia&&(
           <div style={{padding:"7px 11px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:6,fontSize:11.5,color:T.grn,marginBottom:10}}>
-            ✓ Sent via <b>{channels.find(c=>c.via===sentVia)?.label}</b> — ab "Mark as Sent" click karo
+           {t("procurement.sent_via")} <b>{channels.find(c=>c.via===sentVia)?.label}</b> {t("procurement.ab_mark_as_sent_click_karo")}
           </div>
         )}
       </MBody>
       <MFoot>
-        <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
+        <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
         <Btn onClick={markSent} disabled={sending} color={T.grn} full icon={<IcApprv size={14} color="white"/>}>
-          {sending?"Marking…":"Mark as Sent → Order Stage"}
+          {sending?t("procurement.marking"):t("procurement.mark_as_sent_order_stage")}
         </Btn>
       </MFoot>
     </Modal>
@@ -1678,10 +1671,10 @@ function ShareModal({rfq,onClose}){
   const fakeLink=`https://gbuildcon.in/rfq/${rfq.id}?token=xK9mP`;
   return(
     <Modal onClose={onClose} width={440}>
-      <MHead title="Share Vendor Link" sub={`${rfq.id} · ${rfq.project}`} onClose={onClose}/>
+      <MHead title={t("procurement.share_vendor_link")} sub={`${rfq.id} · ${rfq.project}`} onClose={onClose}/>
       <MBody>
-        <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",marginBottom:14,fontSize:11.5,color:T.blu}}>Each vendor gets a unique link. No login required.</div>
-        {rfq.vendors.length===0&&<div style={{fontSize:12,color:T.t4,textAlign:"center",padding:"20px"}}>No vendors added yet.</div>}
+        <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",marginBottom:14,fontSize:11.5,color:T.blu}}>{t("procurement.each_vendor_gets_a_unique_link")}</div>
+        {rfq.vendors.length===0&&<div style={{fontSize:12,color:T.t4,textAlign:"center",padding:"20px"}}>{t("procurement.no_vendors_added_yet")}</div>}
         {rfq.vendors.map((v,i)=>(
           <div key={i} style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:8,padding:"10px 12px"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -1690,7 +1683,7 @@ function ShareModal({rfq,onClose}){
             </div>
             <div style={{fontSize:10.5,color:T.t4,background:T.surface,borderRadius:5,padding:"6px 9px",fontFamily:"monospace",marginBottom:8,wordBreak:"break-all"}}>{fakeLink}&v={i+1}</div>
             <div style={{display:"flex",gap:6}}>
-              {[{Icon:IcWA,label:"WhatsApp",c:"#25D366",bg:"#E8FDF1"},{Icon:IcMail,label:"Email",c:T.blu,bg:T.bluL},{Icon:IcSMS,label:"SMS",c:T.pur,bg:T.purL},{Icon:IcCopy,label:copied===i?"Copied!":"Copy",c:T.slt,bg:T.sltL}].map((btn,j)=>(
+              {[{Icon:IcWA,label:t("common.whatsapp"),c:"#25D366",bg:"#E8FDF1"},{Icon:IcMail,label:t("common.email"),c:T.blu,bg:T.bluL},{Icon:IcSMS,label:"SMS",c:T.pur,bg:T.purL},{Icon:IcCopy,label:copied===i?"Copied!":"Copy",c:T.slt,bg:T.sltL}].map((btn,j)=>(
                 <button key={j} onClick={()=>setCopied(i)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:6,background:btn.bg,border:`1px solid ${btn.c}22`,color:btn.c,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
                   <btn.Icon size={12} color="currentColor"/> {btn.label}
                 </button>
@@ -1698,7 +1691,7 @@ function ShareModal({rfq,onClose}){
             </div>
           </div>
         ))}
-        <Btn onClick={onClose} color={T.blu} full>Done</Btn>
+        <Btn onClick={onClose} color={T.blu} full>{t("common.done")}</Btn>
       </MBody>
     </Modal>
   );
@@ -1998,7 +1991,7 @@ function ProcurementModule(){
     }
   };
   const resubmitPO=async(po)=>{
-    if(!await window.confirmAsync(`PO ${po.poNum} ko revise karke fir approval ke liye bhejein?`)) return;
+    if(!await window.confirmAsync(t("procurement.po_ponum_ko_revise_karke_fir", { poNum: po.poNum }))) return;
     const res = await api.patch("/procurement/pos/"+po.id+"/resubmit",{});
     if(res.success){
       setPOs(p=>p.map(x=>x.id===po.id?{...x,approval:"Draft",reviewNote:null,reviewedBy:null}:x));
@@ -2023,7 +2016,7 @@ function ProcurementModule(){
   // PO links back to (and flips) the source MRs on creation.
   const [createPOVendor,setCreatePOVendor]=useState("");
   const createPOFromRFQ=(rfq)=>{
-    if(!rfq?.locked){alert("Pehle ek vendor ka quote lock karo");return;}
+    if(!rfq?.locked){alert(t("procurement.pehle_ek_vendor_ka_quote_lock"));return;}
     const winner=rfq.vendors.find(v=>v.name===rfq.locked);
     const prefill=rfq.items.map((it,i)=>({
       id:it.linked_mr_id||null,           // MR back-link (null for manual RFQ items)
@@ -2094,9 +2087,9 @@ function ProcurementModule(){
   // Close an ordered MR with a reason → moves to the Closed tab.
   const closeMR=async(m)=>{
     setRowMenu(null);
-    const reason=await window.promptAsync(`Close ${m.id} — ${m.item}?\n\nKis reason se order cancel kar rahe ho? (compulsory)`);
+    const reason=await window.promptAsync(t("procurement.close_id_item_kis_reason_se", { id: m.id, item: m.item }));
     if(reason===null) return;
-    if(!reason.trim()){ window.alert("Reason zaroori hai"); return; }
+    if(!reason.trim()){ window.alert(t("payroll.reason_zaroori_hai")); return; }
     try{
       const r=await api.put("/procurement/mrs/"+m.id,{mr_status:"Closed",closed_reason:reason.trim()});
       if(r?.success===false){ window.alert(r.message||"Close failed"); return; }
@@ -2106,7 +2099,7 @@ function ProcurementModule(){
   const saveGRN=async(poId,challan,rows,vendorOverride,issues)=>{
     const po=pos.find(p=>p.id===poId);
     const vendor = (vendorOverride && vendorOverride.trim()) || po?.vendor || "";
-    if(!vendor){alert("Vendor name compulsory hai");return;}
+    if(!vendor){alert(t("procurement.vendor_name_compulsory_hai"));return;}
     try{
       const grnPayload={
         po_id:       poId,
@@ -2198,22 +2191,22 @@ function ProcurementModule(){
   // ── Stat tiles ──
   const TILES={
     mr:[
-      {l:"Pending Approval",v:mrTabCounts.Pending,sub:"Awaiting admin",c:T.amb},
-      {l:"Ready to Order",  v:mrTabCounts.Approved,sub:"Approved MRs",c:T.blu},
-      {l:"In Transit",      v:mrTabCounts.Ordered,sub:"Ordered",c:T.pur},
-      {l:"Received",        v:mrTabCounts.Received,sub:"At site",c:T.grn},
+      {l:t("common.pending_approval"),v:mrTabCounts.Pending,sub:t("procurement.awaiting_admin"),c:T.amb},
+      {l:t("procurement.ready_to_order"),  v:mrTabCounts.Approved,sub:t("procurement.approved_mrs"),c:T.blu},
+      {l:t("common.in_transit"),      v:mrTabCounts.Ordered,sub:t("common.ordered"),c:T.pur},
+      {l:t("common.received"),        v:mrTabCounts.Received,sub:t("procurement.at_site"),c:T.grn},
     ],
     po:[
-      {l:"Total POs",    v:pos.length,sub:`${pos.filter(p=>p.poStatus==="Open").length} open`,c:T.blu},
-      {l:"Pending Appr.",v:pos.filter(p=>p.approval==="Draft"||p.approval==="Revision").length,sub:"Need sign-off / revise",c:T.amb},
-      {l:"PO Value",     v:`₹${fmt(pos.reduce((s,p)=>s+p.amount,0))}`,sub:"Combined",c:T.grn},
-      {l:"Open MRs",     v:pendingMRs,sub:"Need ordering",c:T.red},
+      {l:t("procurement.total_pos"),    v:pos.length,sub:t("procurement.length_open", { length: pos.filter(p=>p.poStatus==="Open").length }),c:T.blu},
+      {l:t("procurement.pending_appr"),v:pos.filter(p=>p.approval==="Draft"||p.approval==="Revision").length,sub:t("procurement.need_sign_off_revise"),c:T.amb},
+      {l:t("procurement.po_value"),     v:`₹${fmt(pos.reduce((s,p)=>s+p.amount,0))}`,sub:t("procurement.combined"),c:T.grn},
+      {l:t("procurement.open_mrs"),     v:pendingMRs,sub:t("procurement.need_ordering"),c:T.red},
     ],
     rfq:[
-      {l:"Active RFQs",    v:rfqs.filter(r=>r.status==="Published").length,sub:"Live bidding",c:T.blu},
-      {l:"Draft RFQs",     v:rfqs.filter(r=>r.status==="Draft").length,sub:"Not published",c:T.slt},
-      {l:"Locked Quotes",  v:rfqs.filter(r=>r.locked).length,sub:"Ready for PO",c:T.grn},
-      {l:"Pending Response",v:rfqs.flatMap(r=>r.vendors).filter(v=>v.status==="Pending").length,sub:"Awaiting rates",c:T.amb},
+      {l:t("procurement.active_rfqs"),    v:rfqs.filter(r=>r.status==="Published").length,sub:t("procurement.live_bidding"),c:T.blu},
+      {l:t("procurement.draft_rfqs"),     v:rfqs.filter(r=>r.status==="Draft").length,sub:t("procurement.not_published"),c:T.slt},
+      {l:t("procurement.locked_quotes"),  v:rfqs.filter(r=>r.locked).length,sub:t("procurement.ready_for_po"),c:T.grn},
+      {l:t("procurement.pending_response"),v:rfqs.flatMap(r=>r.vendors).filter(v=>v.status==="Pending").length,sub:t("procurement.awaiting_rates"),c:T.amb},
     ],
   };
   const curTiles=TILES[tab]||TILES.mr;
@@ -2222,7 +2215,7 @@ function ProcurementModule(){
     {id:"mr", label:`Material Requests${pendingMRs>0?` (${pendingMRs})`:""}` },
     {id:"po", label:`Purchase Orders${pos.filter(p=>p.approval==="Draft").length>0?` (${pos.filter(p=>p.approval==="Draft").length})`:""}`},
     {id:"rfq",label:`RFQ${rfqs.filter(r=>r.status==="Published").length>0?` (${rfqs.filter(r=>r.status==="Published").length})`:""}`},
-    {id:"transfer",label:"Transfers"},
+    {id:"transfer",label:t("common.transfers")},
   ];
 
   return(
@@ -2256,8 +2249,8 @@ function ProcurementModule(){
             ))}
           </div>
           <div style={{display:"flex",gap:6}}>
-            {tab==="po"&&<button onClick={()=>{setCreatePOPrefill(null);setShowCreatePO(true);}} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}><IcAdd size={13} color="white"/> Create PO</button>}
-            {tab==="rfq"&&<button onClick={()=>setShowCreateRFQ(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}><IcAdd size={13} color="white"/> New RFQ</button>}
+            {tab==="po"&&<button onClick={()=>{setCreatePOPrefill(null);setShowCreatePO(true);}} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}><IcAdd size={13} color="white"/> {t("procurement.create_po")}</button>}
+            {tab==="rfq"&&<button onClick={()=>setShowCreateRFQ(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}><IcAdd size={13} color="white"/> {t("procurement.new_rfq")}</button>}
           </div>
         </div>
       </div>
@@ -2265,7 +2258,7 @@ function ProcurementModule(){
       {/* Tab content */}
       <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",padding:"10px 18px 14px"}}>
 
-        {loading&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,color:T.t4,fontSize:13}}>Loading...</div>}
+        {loading&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,color:T.t4,fontSize:13}}>{t("common.loading")}</div>}
 
         {/* ═══════════ MR TAB ═══════════ */}
         {!loading&&tab==="mr"&&(
@@ -2291,36 +2284,35 @@ function ProcurementModule(){
             <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8,flexShrink:0,flexWrap:"wrap"}}>
               <div style={{position:"relative",flex:1,minWidth:200}}>
                 <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                <input value={mrSearch} onChange={e=>setMrSearch(e.target.value)} placeholder="Search material, project, MR# or requester..."
+                <input value={mrSearch} onChange={e=>setMrSearch(e.target.value)} placeholder={t("procurement.search_material_project_mr_or_requester")}
                   style={{width:"100%",height:32,padding:"0 8px 0 30px",borderRadius:6,border:`1.5px solid ${mrSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:mrSearch?T.bluL:T.surface}}/>
               </div>
               <div style={{minWidth:160}}>
                 <SearchSelect value={mrProject} compact
-                  options={[{key:"All",label:"All Projects"},
+                  options={[{key:"All",label:t("common.all_projects")},
                     ...(dbProjects.length>0
                       ?dbProjects.map(p=>({key:String(p.id),label:p.name}))
                       :[...new Set(mrs.map(m=>m.project).filter(Boolean))].map(n=>({key:n,label:n})))]}
-                  onChange={v=>setMrProject(v||"All")} placeholder="All Projects"/>
+                  onChange={v=>setMrProject(v||"All")} placeholder={t("common.all_projects")}/>
               </div>
               <div style={{minWidth:160}}>
                 <SearchSelect value={mrMaterial} compact
-                  options={[{key:"All",label:"All Materials"},
+                  options={[{key:"All",label:t("procurement.all_materials")},
                     ...materialOptions.map(n=>({key:n,label:n}))]}
-                  onChange={v=>setMrMaterial(v||"All")} placeholder="All Materials"/>
+                  onChange={v=>setMrMaterial(v||"All")} placeholder={t("procurement.all_materials")}/>
               </div>
               <span style={{fontSize:11,color:T.t4,whiteSpace:"nowrap"}}>{filteredMRs.length} items</span>
               {(mrProject!=="All"||mrMaterial!=="All"||mrSearch)&&(
                 <button onClick={()=>{setMrProject("All");setMrMaterial("All");setMrSearch("");}}
                   style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                  Clear
+                 {t("common.clear")}
                 </button>
               )}
               {/* Bulk order button */}
               {selectedItems.length>0&&(
                 <button onClick={()=>setShowBulkOrder(true)}
                   style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",boxShadow:`0 2px 8px ${T.blu}44`}}>
-                  <IcFlow size={13} color="white"/> Order {selectedItems.length} item{selectedItems.length>1?"s":""}
-                </button>
+                  <IcFlow size={13} color="white"/>{t("procurement.order_selecteditems_itemselecteditems2", { selectedItems: selectedItems.length, selectedItems2: selectedItems.length>1?"s":"" })}</button>
               )}
             </div>
 
@@ -2329,15 +2321,15 @@ function ProcurementModule(){
               const ordered=mrs.filter(m=>!isClosed(m)&&m.matStatus==="Ordered");
               const cnt=chip=>ordered.filter(m=>_etaMatch(m.etaRaw,chip)).length;
               const chips=[
-                {k:"All",     l:"All",         c:T.t3},
-                {k:"Overdue", l:"Overdue",     c:T.red},
-                {k:"Today",   l:"Today",       c:T.amb},
-                {k:"3d",      l:"Next 3 days", c:T.blu},
-                {k:"7d",      l:"Next 7 days", c:T.pur},
+                {k:"All",     l:t("common.all"),         c:T.t3},
+                {k:"Overdue", l:t("common.overdue"),     c:T.red},
+                {k:"Today",   l:t("common.today"),       c:T.amb},
+                {k:"3d",      l:t("procurement.next_3_days"), c:T.blu},
+                {k:"7d",      l:t("procurement.next_7_days"), c:T.pur},
               ];
               return(
                 <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10,flexWrap:"wrap",flexShrink:0}}>
-                  <span style={{fontSize:10.5,color:T.t4,fontWeight:600,marginRight:2}}>Delivery</span>
+                  <span style={{fontSize:10.5,color:T.t4,fontWeight:600,marginRight:2}}>{t("procurement.delivery_2")}</span>
                   {chips.map(ch=>{
                     const act=etaChip===ch.k; const n=ch.k==="All"?ordered.length:cnt(ch.k);
                     return(
@@ -2358,7 +2350,7 @@ function ProcurementModule(){
               {/* Pending tab: simple list with approve/reject */}
               {mrTab==="Pending"&&(
                 <>
-                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcMR size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>No pending requests</div></div>}
+                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcMR size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>{t("procurement.no_pending_requests")}</div></div>}
                   {filteredMRs.map((m,idx)=>(
                     <div key={m.id} style={{display:"grid",gridTemplateColumns:"54px 1fr 110px 130px 110px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:12,transition:"background 0.1s",cursor:"pointer"}}
                       onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
@@ -2376,21 +2368,21 @@ function ProcurementModule(){
                       </div>
                       {/* Total */}
                       <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:9.5,color:T.t4,fontWeight:600,letterSpacing:".3px",textTransform:"uppercase"}}>Total</div>
+                        <div style={{fontSize:9.5,color:T.t4,fontWeight:600,letterSpacing:".3px",textTransform:"uppercase"}}>{t("common.total")}</div>
                         <div style={{fontSize:15,fontWeight:800,color:T.t1,letterSpacing:"-.3px",lineHeight:1.1}}>{m.qty}<span style={{fontSize:10,color:T.t4,fontWeight:600,marginLeft:3}}>{m.unit}</span></div>
                       </div>
                       {/* Stock pill */}
                       <div style={{textAlign:"center"}}>
                         {m.inStock>0
-                          ?<span style={{fontSize:10.5,fontWeight:600,color:T.grn,background:T.grnL,padding:"3px 9px",borderRadius:10,border:`1px solid ${T.grnM}`}}>In Stock: {m.inStock}</span>
-                          :<span style={{fontSize:10.5,color:T.t4}}>No stock</span>}
+                          ?<span style={{fontSize:10.5,fontWeight:600,color:T.grn,background:T.grnL,padding:"3px 9px",borderRadius:10,border:`1px solid ${T.grnM}`}}>{t("procurement.in_stock_instock", { inStock: m.inStock })}</span>
+                          :<span style={{fontSize:10.5,color:T.t4}}>{t("procurement.no_stock")}</span>}
                       </div>
                       <div style={{display:"flex",gap:5,justifyContent:"flex-end"}}>
-                        <button onClick={()=>setApproveTgt(m)} title="Approve"
+                        <button onClick={()=>setApproveTgt(m)} title={t("common.approve_2")}
                           style={{width:28,height:28,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                           <IcChk size={13} color={T.grn}/>
                         </button>
-                        <button onClick={()=>setRejectTgt(m)} title="Reject"
+                        <button onClick={()=>setRejectTgt(m)} title={t("common.reject_2")}
                           style={{width:28,height:28,borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                           <IcX size={13} color={T.red}/>
                         </button>
@@ -2404,13 +2396,13 @@ function ProcurementModule(){
               {/* Approved tab: grouped by project, with checkboxes + Create PO button */}
               {mrTab==="Approved"&&(
                 <>
-                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcMR size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>No approved MRs pending order</div></div>}
+                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcMR size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>{t("procurement.no_approved_mrs_pending_order")}</div></div>}
                   {filteredMRs.length>0&&(
                     // Select all header
                     <div style={{display:"flex",alignItems:"center",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
                       <input type="checkbox" checked={filteredMRs.length>0&&filteredMRs.every(m=>selected[m.id])} onChange={toggleSelectAll}
                         style={{width:15,height:15,cursor:"pointer",marginRight:10,accentColor:T.blu}}/>
-                      <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px"}}>Select All ({filteredMRs.length} items)</span>
+                      <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px"}}>{t("procurement.select_all_filteredmrs_items", { filteredMRs: filteredMRs.length })}</span>
                       {selectedItems.length>0&&<span style={{marginLeft:"auto",fontSize:11,color:T.blu,fontWeight:600}}>{selectedItems.length} selected</span>}
                     </div>
                   )}
@@ -2423,7 +2415,7 @@ function ProcurementModule(){
                         <span style={{fontSize:12,fontWeight:700,color:T.t1}}>{project}</span>
                         <span style={{fontSize:10,color:T.t4,background:T.surface,padding:"1px 7px",borderRadius:10,border:`1px solid ${T.b1}`}}>{items.length} item{items.length>1?"s":""}</span>
                         <button onClick={()=>{setCreatePOPrefill(items);setShowCreatePO(true);}} style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
-                          <IcPO size={11} color={T.blu}/> Create PO
+                          <IcPO size={11} color={T.blu}/> {t("procurement.create_po")}
                         </button>
                       </div>
                       {items.map((m,idx)=>(
@@ -2443,16 +2435,16 @@ function ProcurementModule(){
                             </div>
                           </div>
                           <div style={{textAlign:"right"}}>
-                            <div style={{fontSize:9.5,color:T.t4,fontWeight:600,letterSpacing:".3px",textTransform:"uppercase"}}>Total</div>
+                            <div style={{fontSize:9.5,color:T.t4,fontWeight:600,letterSpacing:".3px",textTransform:"uppercase"}}>{t("common.total")}</div>
                             <div style={{fontSize:15,fontWeight:800,color:T.t1,letterSpacing:"-.3px",lineHeight:1.1}}>{m.approvedQty||m.qty}<span style={{fontSize:10,color:T.t4,fontWeight:600,marginLeft:3}}>{m.unit}</span></div>
-                            {m.approvedQty&&m.approvedQty<m.qty&&<div style={{fontSize:9.5,color:T.amb}}>req: {m.qty}</div>}
+                            {m.approvedQty&&m.approvedQty<m.qty&&<div style={{fontSize:9.5,color:T.amb}}>{t("procurement.req_qty", { qty: m.qty })}</div>}
                           </div>
                           <div style={{textAlign:"center"}}>
-                            {m.inStock>0?<span style={{fontSize:10.5,fontWeight:600,color:T.grn,background:T.grnL,padding:"3px 9px",borderRadius:10,border:`1px solid ${T.grnM}`}}>Stock: {m.inStock}</span>:<span style={{fontSize:10.5,color:T.t4}}>No stock</span>}
+                            {m.inStock>0?<span style={{fontSize:10.5,fontWeight:600,color:T.grn,background:T.grnL,padding:"3px 9px",borderRadius:10,border:`1px solid ${T.grnM}`}}>{t("procurement.stock_instock", { inStock: m.inStock })}</span>:<span style={{fontSize:10.5,color:T.t4}}>{t("procurement.no_stock")}</span>}
                           </div>
                           <div style={{display:"flex",gap:5,justifyContent:"flex-end"}}>
                             <button onClick={()=>{setSelected({[String(m.id)]:true});setShowBulkOrder(true);}} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:5,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                              <IcTruck size={11} color={T.amb}/> Order
+                              <IcTruck size={11} color={T.amb}/> {t("procurement.order")}
                             </button>
                           </div>
                         </div>
@@ -2465,7 +2457,7 @@ function ProcurementModule(){
               {/* Ordered tab */}
               {mrTab==="Ordered"&&(
                 <>
-                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcTruck size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>No ordered items</div></div>}
+                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcTruck size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>{t("procurement.no_ordered_items")}</div></div>}
                   <div style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 80px 1fr 120px",padding:"7px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
                     {["MR#","Material","Qty","Unit","Vendor · ETA","Action"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
                   </div>
@@ -2487,10 +2479,10 @@ function ProcurementModule(){
                         <div style={{fontSize:12,fontWeight:500,color:m.isFromWarehouse?T.cyn:T.pur,display:"flex",alignItems:"center",gap:4}}>
                           {m.isFromWarehouse&&<span style={{fontSize:10}}>🏭</span>}{m.vendor||"—"}
                         </div>
-                        <div style={{fontSize:10.5,color:T.t4}}>{m.isFromWarehouse?"From warehouse stock":`ETA: ${m.expectedDelivery||"TBD"}`}</div>
+                        <div style={{fontSize:10.5,color:T.t4}}>{m.isFromWarehouse?t("procurement.from_warehouse_stock"):`ETA: ${m.expectedDelivery||"TBD"}`}</div>
                       </div>
                       <div style={{position:"relative",display:"flex",justifyContent:"flex-end"}}>
-                        <button onClick={(e)=>{e.stopPropagation();setRowMenu(rowMenu===m.id?null:m.id);}} title="Actions"
+                        <button onClick={(e)=>{e.stopPropagation();setRowMenu(rowMenu===m.id?null:m.id);}} title={t("common.actions")}
                           style={{width:30,height:30,borderRadius:6,background:rowMenu===m.id?T.surfaceB:"none",border:`1px solid ${rowMenu===m.id?T.b1:"transparent"}`,color:T.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,lineHeight:1,fontWeight:700}}>⋮</button>
                         {rowMenu===m.id&&(<>
                           <div onClick={(e)=>{e.stopPropagation();setRowMenu(null);}} style={{position:"fixed",inset:0,zIndex:50}}/>
@@ -2498,13 +2490,13 @@ function ProcurementModule(){
                             <button onClick={(e)=>{e.stopPropagation();setRowMenu(null);setMarkRecvTgt(m);}}
                               style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",background:"none",color:T.grn,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
                               onMouseEnter={e=>e.currentTarget.style.background=T.grnL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                              <IcChk size={14} color={T.grn}/> Mark Received
+                              <IcChk size={14} color={T.grn}/> {t("procurement.mark_received")}
                             </button>
                             <div style={{height:1,background:T.b1}}/>
                             <button onClick={(e)=>{e.stopPropagation();closeMR(m);}}
                               style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",background:"none",color:T.red,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
                               onMouseEnter={e=>e.currentTarget.style.background=T.redL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                              <IcX size={13} color={T.red}/> Close with reason
+                              <IcX size={13} color={T.red}/> {t("procurement.close_with_reason")}
                             </button>
                           </div>
                         </>)}
@@ -2517,7 +2509,7 @@ function ProcurementModule(){
               {/* Received tab — with partial color coding */}
               {mrTab==="Received"&&(
                 <>
-                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcChk size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>No received items</div></div>}
+                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcChk size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>{t("procurement.no_received_items")}</div></div>}
                   <div style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 1fr 140px",padding:"7px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
                     {["MR#","Material","Qty","Project","Status"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
                   </div>
@@ -2552,18 +2544,17 @@ function ProcurementModule(){
                               <div style={{height:4,background:T.b1,borderRadius:2,width:100,overflow:"hidden"}}>
                                 <div style={{height:"100%",width:`${pct}%`,background:T.amb,borderRadius:2}}/>
                               </div>
-                              <div style={{fontSize:9.5,color:T.amb,marginTop:2}}>{pct}% received</div>
+                              <div style={{fontSize:9.5,color:T.amb,marginTop:2}}>{t("procurement.pct_received", { pct })}</div>
                             </div>
                           )}
                         </div>
                         <div>
                           {isPartial?(
                             <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:11,fontWeight:600,color:T.amb}}>
-                              <IcHalf size={11} color={T.amb}/> Partial {pct}%
-                            </span>
+                              <IcHalf size={11} color={T.amb}/>{t("procurement.partial_pct", { pct })}</span>
                           ):(
                             <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,background:T.grnL,border:`1px solid ${T.grnM}`,fontSize:11,fontWeight:600,color:T.grn}}>
-                              <IcChk size={11} color={T.grn}/> Received
+                              <IcChk size={11} color={T.grn}/> {t("common.received")}
                             </span>
                           )}
                         </div>
@@ -2576,7 +2567,7 @@ function ProcurementModule(){
               {/* Rejected tab */}
               {mrTab==="Rejected"&&(
                 <>
-                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcBan size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>No rejected requests</div></div>}
+                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcBan size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>{t("procurement.no_rejected_requests")}</div></div>}
                   {filteredMRs.map(m=>(
                     <div key={m.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 1fr",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${T.red}`,transition:"background 0.1s",cursor:"pointer"}}
                       onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
@@ -2594,7 +2585,7 @@ function ProcurementModule(){
                         <div style={{fontSize:10,color:T.t4}}>{m.unit}</div>
                       </div>
                       <div style={{padding:"5px 10px",background:T.redL,borderRadius:6,border:`1px solid ${T.redM}`}}>
-                        <div style={{fontSize:11,color:T.red}}>{m.rejectedReason||"Rejected"}</div>
+                        <div style={{fontSize:11,color:T.red}}>{m.rejectedReason||t("common.rejected")}</div>
                       </div>
                     </div>
                   ))}
@@ -2602,7 +2593,7 @@ function ProcurementModule(){
               )}
               {mrTab==="Closed"&&(
                 <>
-                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><div style={{fontSize:28,marginBottom:6}}>⊘</div><div style={{marginTop:6,fontSize:13,color:T.t3}}>No closed requests</div><div style={{fontSize:11,color:T.t4,marginTop:4}}>MRs that were manually closed before being received will appear here with the reason.</div></div>}
+                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><div style={{fontSize:28,marginBottom:6}}>⊘</div><div style={{marginTop:6,fontSize:13,color:T.t3}}>{t("procurement.no_closed_requests")}</div><div style={{fontSize:11,color:T.t4,marginTop:4}}>{t("procurement.mrs_that_were_manually_closed_before")}</div></div>}
                   {filteredMRs.map(m=>(
                     <div key={m.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 1.5fr 90px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${T.t3}`,transition:"background 0.1s",cursor:"pointer",gap:8}}
                       onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
@@ -2620,11 +2611,11 @@ function ProcurementModule(){
                         <div style={{fontSize:10,color:T.t4}}>{m.unit}</div>
                       </div>
                       <div style={{padding:"6px 10px",background:"#FEF3C7",borderRadius:6,border:"1px solid #FDE68A"}}>
-                        <div style={{fontSize:9,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>Reason</div>
+                        <div style={{fontSize:9,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>{t("common.reason")}</div>
                         <div style={{fontSize:11,color:"#92400E",lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.closed_reason || "—"}</div>
                       </div>
                       <div style={{textAlign:"right"}}>
-                        {m.closed_at && <div style={{fontSize:10,color:T.t4}}>Closed</div>}
+                        {m.closed_at && <div style={{fontSize:10,color:T.t4}}>{t("common.closed")}</div>}
                         {m.closed_at && <div style={{fontSize:11,color:T.t3,fontWeight:500}}>{new Date(m.closed_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</div>}
                       </div>
                     </div>
@@ -2642,7 +2633,7 @@ function ProcurementModule(){
             <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:8,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
               <div style={{position:"relative",flex:1,minWidth:160}}>
                 <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                <input value={poSearch} onChange={e=>setPoSearch(e.target.value)} placeholder="Search PO#, vendor, project..."
+                <input value={poSearch} onChange={e=>setPoSearch(e.target.value)} placeholder={t("procurement.search_po_vendor_project")}
                   style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:6,border:`1.5px solid ${poSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:poSearch?T.bluL:T.surface}}/>
               </div>
               {[{val:poStatusF,set:setPoStatusF,opts:["All","Open","Closed"],def:"Status"},{val:poApprovalF,set:setPoApprovalF,opts:["All","Draft","Approved"],def:"Approval"}].map(({val,set,opts,def},i)=>(
@@ -2653,7 +2644,7 @@ function ProcurementModule(){
                   <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
                 </div>
               ))}
-              <span style={{fontSize:11,color:T.t4}}>{filteredPOs.length} POs</span>
+              <span style={{fontSize:11,color:T.t4}}>{t("procurement.filteredpos_pos", { filteredPOs: filteredPOs.length })}</span>
             </div>
             {/* PO list */}
             <div style={{flex:1,overflowY:"auto",overflowX:"hidden",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
@@ -2676,21 +2667,21 @@ function ProcurementModule(){
                     <Pill label={PO_PILL_LABEL[dispLbl]||dispLbl} c={as.c} bg={as.bg} brd={as.brd}/>
                     <span style={{fontSize:13,fontWeight:600,color:T.t1}}>₹{fmtN(po.amount)}</span>
                     <div style={{display:"flex",gap:4}}>
-                      {po.approval==="Draft"&&<button onClick={e=>{e.stopPropagation();approvePO(po.id);}} title="Approve PO" style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
-                      {po.approval==="Revision"&&<button onClick={e=>{e.stopPropagation();setEditPo(po);setShowCreatePO(true);}} title="Edit PO and Resubmit for Approval" style={{height:26,padding:"0 9px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:3,color:"#1D4ED8",fontSize:10.5,fontWeight:700}}>✏️ Edit & Resubmit</button>}
+                      {po.approval==="Draft"&&<button onClick={e=>{e.stopPropagation();approvePO(po.id);}} title={t("procurement.approve_po")} style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
+                      {po.approval==="Revision"&&<button onClick={e=>{e.stopPropagation();setEditPo(po);setShowCreatePO(true);}} title={t("procurement.edit_po_and_resubmit_for_approval")} style={{height:26,padding:"0 9px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:3,color:"#1D4ED8",fontSize:10.5,fontWeight:700}}>{t("procurement.edit_resubmit_2")}</button>}
                       {po.poStatus==="Open"&&po.approval==="Approved"&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title="GRN" style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
                     </div>
                   </div>
                   {po.reviewNote&&(po.approval==="Revision"||po.approval==="Rejected")&&(
                     <div style={{padding:"6px 14px 10px",borderBottom:`1px solid ${T.b1}`,borderLeft:`3px solid ${borderC}`,background:po.approval==="Rejected"?T.redL:"#EFF6FF"}}>
-                      <span style={{fontSize:9.5,fontWeight:700,color:po.approval==="Rejected"?T.red:"#1D4ED8",textTransform:"uppercase",letterSpacing:".3px",marginRight:6}}>{po.approval==="Rejected"?"❌ Rejected":"↻ Revision requested"}</span>
+                      <span style={{fontSize:9.5,fontWeight:700,color:po.approval==="Rejected"?T.red:"#1D4ED8",textTransform:"uppercase",letterSpacing:".3px",marginRight:6}}>{po.approval==="Rejected"?t("procurement.rejected"):t("procurement.revision_requested")}</span>
                       <span style={{fontSize:11,color:T.t2,fontStyle:"italic"}}>"{po.reviewNote}"</span>
-                      {po.reviewedBy&&<span style={{fontSize:10,color:T.t4,marginLeft:6}}>— by {po.reviewedBy}</span>}
+                      {po.reviewedBy&&<span style={{fontSize:10,color:T.t4,marginLeft:6}}>{t("procurement.by_reviewedby", { reviewedBy: po.reviewedBy })}</span>}
                     </div>
                   )}
                 </div>);
               })}
-              {filteredPOs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcPO size={32} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>No POs match filters</div></div>}
+              {filteredPOs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcPO size={32} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>{t("procurement.no_pos_match_filters")}</div></div>}
             </div>
           </div>
         )}
@@ -2707,10 +2698,10 @@ function ProcurementModule(){
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
                       <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{rfq.id}</span>
                       <Pill label={rfq.status} c={rs.c} bg={rs.bg} brd={rs.brd}/>
-                      {rfq.locked&&<span style={{background:T.grnL,color:T.grn,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:20,border:`1px solid ${T.grnM}`}}>Locked: {rfq.locked}</span>}
+                      {rfq.locked&&<span style={{background:T.grnL,color:T.grn,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:20,border:`1px solid ${T.grnM}`}}>{t("procurement.locked_locked", { locked: rfq.locked })}</span>}
                     </div>
                     <div style={{fontSize:11.5,color:T.t3}}>{rfq.project} · {rfq.items.length} item{rfq.items.length>1?"s":""}</div>
-                    {rfq.bidEnd&&<div style={{fontSize:10.5,color:T.t4}}>Bidding: {rfq.bidStart} → {rfq.bidEnd}</div>}
+                    {rfq.bidEnd&&<div style={{fontSize:10.5,color:T.t4}}>{t("procurement.bidding_bidstart_bidend", { bidStart: rfq.bidStart, bidEnd: rfq.bidEnd })}</div>}
                   </div>
                   <div style={{textAlign:"right"}}>
                     <div style={{fontSize:11.5,color:T.t3}}>{submitted}/{rfq.vendors.length} responded</div>
@@ -2718,8 +2709,8 @@ function ProcurementModule(){
                       <div style={{height:"100%",width:rfq.vendors.length?`${(submitted/rfq.vendors.length)*100}%`:"0%",background:T.blu,borderRadius:2}}/>
                     </div>
                     <div style={{display:"flex",gap:5,marginTop:6,justifyContent:"flex-end"}}>
-                      {rfq.status==="Draft"&&<button onClick={e=>{e.stopPropagation();publishRFQ(rfq.id);}} style={{padding:"3px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Publish</button>}
-                      {rfq.locked&&<button onClick={e=>{e.stopPropagation();createPOFromRFQ(rfq);}} style={{padding:"3px 10px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>→ Create PO</button>}
+                      {rfq.status==="Draft"&&<button onClick={e=>{e.stopPropagation();publishRFQ(rfq.id);}} style={{padding:"3px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("procurement.publish")}</button>}
+                      {rfq.locked&&<button onClick={e=>{e.stopPropagation();createPOFromRFQ(rfq);}} style={{padding:"3px 10px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("procurement.create_po_2")}</button>}
                     </div>
                   </div>
                 </div>

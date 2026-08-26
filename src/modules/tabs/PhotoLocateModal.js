@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
+import { t, Rich } from "../../i18n";
 
 /* ────────────────────────────────────────────────────────────────────
    PHOTO SE JAGAH — "ye photo kaunsi line ki hai?"
@@ -51,7 +52,7 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
         photoUrl = cr.secure_url;
         setUrl(photoUrl);
       }
-      if (!photoUrl) { setErr("Photo chuno ya uska link daalo"); setBusy(""); return; }
+      if (!photoUrl) { setErr(t("photo_locate.photo_chuno_ya_uska_link_daalo")); setBusy(""); return; }
       setBusy("Jagah dhoondi ja rahi hai…");
       const r = await api.post(`/tenders/${tenderId}/photo-locate`, { photo_url: photoUrl }, { timeoutMs: 90000 });
       setBusy("");
@@ -87,9 +88,9 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
         maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.b1}` }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>Photo se jagah</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{t("photo_locate.photo_se_jagah")}</div>
           <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>
-            Site ki photo daalo — usme chhapi GPS se system khud bata dega kaunsi line ka kaam hai.
+           {t("photo_locate.site_ki_photo_daalo_usme_chhapi")}
           </div>
         </div>
 
@@ -97,12 +98,12 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
           <label style={{ display: "block", padding: "14px", borderRadius: 9, cursor: "pointer",
             border: `1.5px dashed ${file ? "#059669" : T.b2}`, background: file ? "#ECFDF5" : T.surfaceB,
             textAlign: "center", fontSize: 12.5, color: file ? "#065F46" : T.t3 }}>
-            {file ? `✓ ${file.name}` : "Photo chuno (JPG)"}
+            {file ? `✓ ${file.name}` : t("photo_locate.photo_chuno_jpg")}
             <input type="file" accept="image/*" style={{ display: "none" }}
               onChange={(e) => { setFile(e.target.files?.[0] || null); setRes(null); setErr(""); }} />
           </label>
 
-          <div style={{ fontSize: 11, color: T.t4, textAlign: "center", margin: "9px 0" }}>ya photo ka link</div>
+          <div style={{ fontSize: 11, color: T.t4, textAlign: "center", margin: "9px 0" }}>{t("photo_locate.ya_photo_ka_link")}</div>
           <input value={url} onChange={(e) => { setUrl(e.target.value); setRes(null); }}
             placeholder="https://res.cloudinary.com/..."
             style={{ width: "100%", boxSizing: "border-box", padding: "8px 11px", borderRadius: 7,
@@ -121,11 +122,11 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
                 📍 <b>{res.lat}, {res.lng}</b>
                 <span style={{ color: "#047857" }}> — {SRC_LABEL[res.source] || res.source}</span>
                 {res.place && <div style={{ fontSize: 11.5, marginTop: 2 }}>{res.place}</div>}
-                {res.taken_at && <div style={{ fontSize: 11, color: "#047857" }}>Photo ki date: {res.taken_at}</div>}
+                {res.taken_at && <div style={{ fontSize: 11, color: "#047857" }}>{t("photo_locate.photo_ki_date_taken_at", { taken_at: res.taken_at })}</div>}
               </div>
 
               <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase",
-                letterSpacing: ".4px", margin: "12px 0 5px" }}>Sabse paas</div>
+                letterSpacing: ".4px", margin: "12px 0 5px" }}>{t("photo_locate.sabse_paas")}</div>
 
               {(res.matches || []).map((m, i) => {
                 const on = pick?.alignment_id === m.alignment_id;
@@ -139,14 +140,14 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
                       minWidth: 58, fontVariantNumeric: "tabular-nums" }}>
                       {fmtD(m.distance_m)}
                       {i === 0 && <span style={{ display: "block", fontSize: 8.5, fontWeight: 700,
-                        color: "#059669", letterSpacing: ".3px" }}>SABSE PAAS</span>}
+                        color: "#059669", letterSpacing: ".3px" }}>{t("photo_locate.sabse_paas_2")}</span>}
                     </span>
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ display: "block", fontSize: 12.5, color: T.t1, fontWeight: 600,
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
                       <span style={{ display: "block", fontSize: 10.5, color: T.t4, marginTop: 1 }}>
-                        {m.project_name}{m.kind === "point" ? " · structure" : ""}
-                        {m.task ? ` · task: ${m.task.name}` : " · is line par abhi task nahi"}
+                        {m.project_name}{m.kind === "point" ? t("photo_locate.structure") : ""}
+                        {m.task ? ` · task: ${m.task.name}` : t("photo_locate.is_line_par_abhi_task_nahi")}
                       </span>
                     </span>
                   </button>
@@ -155,19 +156,14 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
 
               {pick && (res.matches || [])[0] && pick.alignment_id !== res.matches[0].alignment_id && (
                 <div style={{ marginTop: 4, background: "#FFFBEB", border: "1px solid #FCD34D",
-                  color: "#92400E", borderRadius: 8, padding: "9px 12px", fontSize: 11.5, lineHeight: 1.6 }}>
-                  ⚠ Ye sabse paas wali line <b>nahi</b> hai — photo isse <b>{fmtD(pick.distance_m)}</b> door hai.
-                  Sabse paas <b>{res.matches[0].name}</b> ({fmtD(res.matches[0].distance_m)}) hai
-                  {res.matches[0].task
+                  color: "#92400E", borderRadius: 8, padding: "9px 12px", fontSize: 11.5, lineHeight: 1.6 }}><Rich k="photo_locate.ye_sabse_paas_wali_line_nahi" params={{ fmtD: fmtD(pick.distance_m), name: res.matches[0].name, fmtD2: fmtD(res.matches[0].distance_m), res: res.matches[0].task
                     ? "."
-                    : ", par us par abhi koi task nahi — pehle Tasks tab me “Map se plan lao” chalao."}
-                </div>
+                    : ", par us par abhi koi task nahi — pehle Tasks tab me “Map se plan lao” chalao." }} /></div>
               )}
 
               {!(res.matches || []).some((m) => m.task) && (
                 <div style={{ fontSize: 11.5, color: T.amb, lineHeight: 1.6, marginTop: 4 }}>
-                  ⚠ In lines par abhi koi task nahi hai, isliye photo kahin lag nahi sakti.
-                  Pehle site ke Tasks tab me <b>"Map se plan lao"</b> se plan bana lo.
+                 {t("photo_locate.in_lines_par_abhi_koi_task")} <b>{t("photo_locate.map_se_plan_lao")}</b> {t("photo_locate.se_plan_bana_lo")}
                 </div>
               )}
             </div>
@@ -176,23 +172,23 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", borderTop: `1px solid ${T.b1}` }}>
           <div style={{ flex: 1, fontSize: 11, color: T.t4 }}>
-            {res ? "Line chuno — photo usi ke task par lagegi" : "EXIF ya chhapi patti, dono padhi jaati hain"}
+            {res ? t("photo_locate.line_chuno_photo_usi_ke_task") : t("photo_locate.exif_ya_chhapi_patti_dono_padhi")}
           </div>
           <button onClick={onClose} style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${T.b1}`,
-            background: T.surface, color: T.t2, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+            background: T.surface, color: T.t2, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
           {!res ? (
             <button onClick={run} disabled={!!busy || (!file && !url.trim())}
               style={{ padding: "7px 16px", borderRadius: 7, border: "none",
                 background: (file || url.trim()) ? T.ind : T.b2, color: "#fff", fontSize: 12, fontWeight: 700,
                 cursor: (file || url.trim()) ? "pointer" : "default", fontFamily: "inherit" }}>
-              {busy ? "…" : "Jagah dhoondo"}
+              {busy ? "…" : t("photo_locate.jagah_dhoondo")}
             </button>
           ) : (
             <button onClick={attach} disabled={!!busy || !pick?.task}
               style={{ padding: "7px 16px", borderRadius: 7, border: "none",
                 background: pick?.task ? T.ind : T.b2, color: "#fff", fontSize: 12, fontWeight: 700,
                 cursor: pick?.task ? "pointer" : "default", fontFamily: "inherit" }}>
-              {busy ? "…" : "Yahan lagao"}
+              {busy ? "…" : t("photo_locate.yahan_lagao")}
             </button>
           )}
         </div>

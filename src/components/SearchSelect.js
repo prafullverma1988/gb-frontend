@@ -29,6 +29,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { t } from "../i18n";
 
 // Default theme tokens — keep in sync with module-level T objects
 const C = {
@@ -296,7 +297,7 @@ export default function SearchSelect({
                   textAlign: "center",
                 }}
               >
-                {list.length === 0 ? "No options yet" : "No match found"}
+                {list.length === 0 ? t("search_select.no_options_yet") : t("search_select.no_match_found")}
               </div>
             )}
             {filtered.map((opt, i) => {

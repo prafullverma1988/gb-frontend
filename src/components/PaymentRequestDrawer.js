@@ -18,6 +18,7 @@ import apiCache from "../utils/apiCache";
 import SearchSelect from "./SearchSelect";
 import LibrarySelect from "./LibrarySelect";
 import { Credit, fmtTimeAgo } from "./Credit";
+import { t } from "../i18n";
 
 const T = {
   bg: "#F4F6F9",
@@ -47,10 +48,10 @@ const T = {
 };
 
 const TYPES = [
-  { id: "subcon",  label: "Subcontractor", icon: "M2 18h20M4 18v-6a8 8 0 0116 0v6", c: T.amb,  bg: T.ambL,  brd: T.ambM,  desc: "Pay a subcon for completed work" },
-  { id: "labour",  label: "Site Labour",   icon: "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8z", c: T.blu, bg: T.bluL, brd: T.bluM, desc: "Daily wage / weekly worker payment" },
-  { id: "expense", label: "Site Expense",  icon: "M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6", c: T.grn, bg: T.grnL, brd: T.grnM, desc: "Material, transport, misc cash expense" },
-  { id: "other",   label: "Other",         icon: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5", c: T.pur, bg: T.purL, brd: T.purM, desc: "Other payment need" },
+  { id: "subcon",  get label() { return t("payment_request.subcontractor"); }, icon: "M2 18h20M4 18v-6a8 8 0 0116 0v6", c: T.amb,  bg: T.ambL,  brd: T.ambM,  get desc() { return t("payment_request.pay_a_subcon_for_completed_work"); } },
+  { id: "labour",  get label() { return t("payment_request.site_labour"); },   icon: "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8z", c: T.blu, bg: T.bluL, brd: T.bluM, get desc() { return t("payment_request.daily_wage_weekly_worker_payment"); } },
+  { id: "expense", get label() { return t("payment_request.site_expense"); },  icon: "M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6", c: T.grn, bg: T.grnL, brd: T.grnM, get desc() { return t("payment_request.material_transport_misc_cash_expense"); } },
+  { id: "other",   get label() { return t("common.other"); },         icon: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5", c: T.pur, bg: T.purL, brd: T.purM, get desc() { return t("payment_request.other_payment_need"); } },
 ];
 
 const PRIORITIES = [
@@ -178,10 +179,10 @@ export default function PaymentRequestDrawer({
       || parties.find(p => String(p.id) === String(partyId))?.name
       || prefillParty?.name
       || "";
-    if (!resolvedName) { setErr("Please specify the beneficiary by name"); return; }
-    if (!purpose.trim()) { setErr("Purpose is required"); return; }
+    if (!resolvedName) { setErr(t("payment_request.please_specify_the_beneficiary_by_name")); return; }
+    if (!purpose.trim()) { setErr(t("payment_request.purpose_is_required")); return; }
     const amt = parseFloat(amount);
-    if (!amt || amt <= 0) { setErr("Enter a valid amount"); return; }
+    if (!amt || amt <= 0) { setErr(t("payment_request.enter_a_valid_amount")); return; }
 
     submittingRef.current = true;
     setSaving(true);
@@ -236,7 +237,7 @@ export default function PaymentRequestDrawer({
         <div style={{ padding: "13px 16px", background: "#0D1B2A", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
             {mode === "form" && (
-              <button onClick={() => setMode("list")} title="Back to list"
+              <button onClick={() => setMode("list")} title={t("lead_design.back_to_list")}
                 style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", color: "rgba(255,255,255,0.7)", padding: "5px 9px", borderRadius: 6, display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: "inherit", flexShrink: 0, transition: "background .12s" }}
                 onMouseEnter={el => el.currentTarget.style.background = "rgba(255,255,255,0.12)"}
                 onMouseLeave={el => el.currentTarget.style.background = "rgba(255,255,255,0.06)"}>
@@ -244,25 +245,25 @@ export default function PaymentRequestDrawer({
               </button>
             )}
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: "white" }}>{mode === "form" ? "New Payment Request" : "Payment Requests"}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: "white" }}>{mode === "form" ? t("payment_request.new_payment_request") : t("common.payment_requests")}</div>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {project?.name || ""}
-                {mode === "form" && " · Sent for admin approval"}
+                {mode === "form" && t("payment_request.sent_for_admin_approval")}
                 {mode === "list" && requests.length > 0 && ` · ${requests.length} ${requests.length === 1 ? "request" : "requests"}`}
               </div>
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
             {mode === "list" && (
-              <button onClick={() => { setMode("form"); setErr(""); }} title="New request"
+              <button onClick={() => { setMode("form"); setErr(""); }} title={t("payment_request.new_request")}
                 style={{ padding: "6px 12px", borderRadius: 6, background: T.blu, border: "none", color: "white", fontSize: 11.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit", transition: "background .12s" }}
                 onMouseEnter={el => el.currentTarget.style.background = "#1D4ED8"}
                 onMouseLeave={el => el.currentTarget.style.background = T.blu}>
                 <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                New Request
+               {t("common.new_request")}
               </button>
             )}
-            <button onClick={onClose} title="Close"
+            <button onClick={onClose} title={t("common.close")}
               style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", padding: 6, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", transition: "background .12s" }}
               onMouseEnter={el => el.currentTarget.style.background = "rgba(255,255,255,0.1)"}
               onMouseLeave={el => el.currentTarget.style.background = "none"}>
@@ -302,7 +303,7 @@ export default function PaymentRequestDrawer({
             {/* List body */}
             <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px" }}>
               {loadingList ? (
-                <div style={{ padding: "32px", textAlign: "center", color: T.t4, fontSize: 12 }}>Loading...</div>
+                <div style={{ padding: "32px", textAlign: "center", color: T.t4, fontSize: 12 }}>{t("common.loading")}</div>
               ) : (() => {
                 const filtered = requests.filter(r => statusFilter === "All" || (r.status || "Pending") === statusFilter);
                 if (filtered.length === 0) {
@@ -314,10 +315,10 @@ export default function PaymentRequestDrawer({
                         </svg>
                       </div>
                       <div style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>
-                        {statusFilter === "All" ? "No payment requests yet" : `No ${statusFilter.toLowerCase()} requests`}
+                        {statusFilter === "All" ? t("payment_request.no_payment_requests_yet") : `No ${statusFilter.toLowerCase()} requests`}
                       </div>
                       <div style={{ fontSize: 11.5, color: T.t3, maxWidth: 320, lineHeight: 1.5 }}>
-                        Click <b>+ New Request</b> at top right to raise a payment request for subcon, labour or expense.
+                       {t("common.click")} <b>{t("payment_request.new_request_2")}</b> {t("payment_request.at_top_right_to_raise_a")}
                       </div>
                     </div>
                   );
@@ -372,7 +373,7 @@ export default function PaymentRequestDrawer({
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                             <span style={{ fontSize: 13, fontWeight: 700, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{partyDisplay}</span>
-                            <span style={{ fontSize: 9.5, color: T.t4, fontFamily: "monospace", flexShrink: 0 }}>PR-{r.id}</span>
+                            <span style={{ fontSize: 9.5, color: T.t4, fontFamily: "monospace", flexShrink: 0 }}>{t("payment_request.pr_id", { id: r.id })}</span>
                           </div>
                           <div style={{ fontSize: 11, color: T.t3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {tMeta.label} · {cleanPurpose || r.note || "—"}
@@ -394,10 +395,10 @@ export default function PaymentRequestDrawer({
                           )}
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "center" }}>
                             {(r.requested_by_name || r.requested_by || r.created_by_name) && (
-                              <Credit label="Requested by" name={r.requested_by_name || r.requested_by || r.created_by_name} time={r.created_at || r.requested_at} />
+                              <Credit label={t("common.requested_by")} name={r.requested_by_name || r.requested_by || r.created_by_name} time={r.created_at || r.requested_at} />
                             )}
                             {(r.approved_by_name || r.approved_by) && (r.status === "Approved" || r.status === "Paid") && (
-                              <Credit label="Approved by" name={r.approved_by_name || r.approved_by} time={r.approved_at || r.updated_at} />
+                              <Credit label={t("payment_request.approved_by")} name={r.approved_by_name || r.approved_by} time={r.approved_at || r.updated_at} />
                             )}
                             {r.priority && r.priority !== "Medium" && (
                               <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 10, textTransform: "uppercase", letterSpacing: ".4px", color: PRIORITIES.find(p => p.id === r.priority)?.c || T.t3, background: PRIORITIES.find(p => p.id === r.priority)?.bg || T.surfaceB, border: `1px solid ${PRIORITIES.find(p => p.id === r.priority)?.brd || T.b1}` }}>
@@ -407,11 +408,11 @@ export default function PaymentRequestDrawer({
                             {canDelete(r) && (
                               <button onClick={(e) => { e.stopPropagation(); onDelete(r); }}
                                 style={{ marginLeft: "auto", padding: "5px 10px", borderRadius: 6, border: `1px solid ${T.redM}`, background: T.redL, color: T.red, fontSize: 11, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit" }}
-                                title="Delete this payment request">
+                                title={t("payment_request.delete_this_payment_request")}>
                                 <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
                                   <polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                                 </svg>
-                                Delete
+                               {t("common.delete")}
                               </button>
                             )}
                           </div>
@@ -431,7 +432,7 @@ export default function PaymentRequestDrawer({
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px" }}>
           {/* Type — visual chip cards */}
           <div style={{ marginBottom: 16 }}>
-            <label style={lbl}>What is this for? *</label>
+            <label style={lbl}>{t("payment_request.what_is_this_for")}</label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {TYPES.map(t => {
                 const active = type === t.id;
@@ -475,7 +476,7 @@ export default function PaymentRequestDrawer({
 
           {/* Beneficiary */}
           <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>{type === "subcon" ? "Subcontractor *" : type === "labour" ? "Worker / Group *" : type === "expense" ? "Vendor / Recipient *" : "Beneficiary *"}</label>
+            <label style={lbl}>{type === "subcon" ? t("common.subcontractor_2") : type === "labour" ? t("payment_request.worker_group") : type === "expense" ? t("payment_request.vendor_recipient") : t("payment_request.beneficiary")}</label>
             {/* Prefilled party — show as locked pill (e.g. came from Subcon tab) */}
             {prefillParty?.name && partyName === prefillParty.name ? (
               <div style={{
@@ -489,7 +490,7 @@ export default function PaymentRequestDrawer({
                 <span style={{flex:1,fontSize:13,fontWeight:700,color:T.grn,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{partyName}</span>
                 <button type="button" onClick={()=>{ setPartyName(""); setPartyId(null); }}
                   style={{padding:"3px 8px",background:"none",border:`1px solid ${T.grnM}`,borderRadius:5,color:T.grn,fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
-                  Change
+                 {t("common.change")}
                 </button>
               </div>
             ) : type === "labour" ? (
@@ -499,7 +500,7 @@ export default function PaymentRequestDrawer({
                 type="worker"
                 value={partyName}
                 onChange={(v) => { setPartyName(v || ""); setPartyId(null); }}
-                placeholder="Worker library se pick karein..."
+                placeholder={t("payment_request.worker_library_se_pick_karein")}
               />
             ) : (type === "subcon" || type === "expense") && partyOptions.length > 0 ? (
               <SearchSelect
@@ -510,11 +511,11 @@ export default function PaymentRequestDrawer({
                   const p = parties.find(x => String(x.id) === String(v));
                   setPartyName(p?.name || "");
                 }}
-                placeholder={type === "subcon" ? "Select subcontractor..." : "Select vendor..."}
+                placeholder={type === "subcon" ? t("payment_request.select_subcontractor") : t("payment_request.select_vendor")}
               />
             ) : (
               <input value={partyName} onChange={e => setPartyName(e.target.value)}
-                placeholder="Type beneficiary name..."
+                placeholder={t("payment_request.type_beneficiary_name")}
                 style={inp} onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
             )}
           </div>
@@ -522,14 +523,14 @@ export default function PaymentRequestDrawer({
           {/* Amount + Priority */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
             <div>
-              <label style={lbl}>Amount (₹) *</label>
+              <label style={lbl}>{t("common.amount")}</label>
               <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
                 placeholder="e.g. 25000"
                 style={{ ...inp, fontSize: 14, fontWeight: 600 }}
                 onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
             </div>
             <div>
-              <label style={lbl}>Priority</label>
+              <label style={lbl}>{t("common.priority")}</label>
               <div style={{ display: "flex", gap: 4, padding: 2, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 7 }}>
                 {PRIORITIES.map(p => {
                   const active = priority === p.id;
@@ -550,26 +551,26 @@ export default function PaymentRequestDrawer({
 
           {/* Purpose */}
           <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>Purpose / Reason *</label>
+            <label style={lbl}>{t("payment_request.purpose_reason")}</label>
             <input value={purpose} onChange={e => setPurpose(e.target.value)}
-              placeholder={type === "subcon" ? "e.g. Brickwork bill — Block A" : type === "labour" ? "e.g. Mason wages — week of 21 Apr" : "e.g. Cement transport"}
+              placeholder={type === "subcon" ? t("payment_request.e_g_brickwork_bill_block_a") : type === "labour" ? t("payment_request.e_g_mason_wages_week_of") : t("payment_request.e_g_cement_transport")}
               style={inp} onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
           </div>
 
           {/* Needed By (kab tak chahiye) */}
           <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>Payment Needed By</label>
+            <label style={lbl}>{t("payment_request.payment_needed_by")}</label>
             <input type="date" value={neededBy} onChange={e => setNeededBy(e.target.value)}
               min={new Date().toISOString().slice(0, 10)}
               style={inp} onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
-            <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>Approver ko bata do kab tak fund chahiye</div>
+            <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>{t("payment_request.approver_ko_bata_do_kab_tak")}</div>
           </div>
 
           {/* Note */}
           <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>Additional Notes (optional)</label>
+            <label style={lbl}>{t("payment_request.additional_notes_optional")}</label>
             <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
-              placeholder="Any context for the approver..."
+              placeholder={t("payment_request.any_context_for_the_approver")}
               style={{ ...inp, padding: "9px 11px", height: "auto", resize: "vertical", lineHeight: 1.5 }}
               onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
           </div>
@@ -590,7 +591,7 @@ export default function PaymentRequestDrawer({
         <div style={{ padding: "12px 18px", borderTop: `1px solid ${T.b1}`, display: "flex", gap: 8, justifyContent: "flex-end", flexShrink: 0, background: T.surfaceB }}>
           <button onClick={()=>setMode("list")} disabled={saving}
             style={{ padding: "9px 16px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b2}`, color: T.t2, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-            Cancel
+           {t("common.cancel")}
           </button>
           <button onClick={handleSave} disabled={saving}
             style={{
@@ -599,7 +600,7 @@ export default function PaymentRequestDrawer({
               fontSize: 12.5, fontWeight: 700, cursor: saving ? "wait" : "pointer",
               boxShadow: `0 2px 8px ${T.blu}40`, fontFamily: "inherit", opacity: saving ? 0.7 : 1,
             }}>
-            {saving ? "Sending..." : "Send Request"}
+            {saving ? t("lead_design.sending") : t("lead_design.send_request")}
           </button>
         </div>
         </>)}

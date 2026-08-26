@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
+import { t } from "../../i18n";
 
 /* ────────────────────────────────────────────────────────────────────
    FILES — construction site ka kaagaz-ghar
@@ -92,7 +93,7 @@ export default function TabProjectFiles({ projectId }) {
     load();
   };
 
-  if (hub === null) return <div style={{ textAlign: "center", padding: 60, color: T.t4, fontSize: 12.5 }}>Files aa rahi hain…</div>;
+  if (hub === null) return <div style={{ textAlign: "center", padding: 60, color: T.t4, fontSize: 12.5 }}>{t("project_files.files_aa_rahi_hain")}</div>;
 
   const isPhotoView = sel === "photos" || sel === "issues";
 
@@ -100,24 +101,24 @@ export default function TabProjectFiles({ projectId }) {
     <div style={{ padding: "14px 0" }}>
       {/* ── upar ki patti: ginti + archive + upload ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        <Kpi label="Documents" n={docs.length} on={sel === "docs" || cats.some((c) => c.id === sel)}
+        <Kpi label={t("common.documents")} n={docs.length} on={sel === "docs" || cats.some((c) => c.id === sel)}
           onClick={() => setSel("docs")} color={T.blu} />
-        <Kpi label="Site photos" n={photos.length} on={sel === "photos"}
+        <Kpi label={t("project_files.site_photos")} n={photos.length} on={sel === "photos"}
           onClick={() => setSel("photos")} color={T.grn} />
-        <Kpi label="Issue photos" n={issues.length} on={sel === "issues"}
+        <Kpi label={t("project_files.issue_photos")} n={issues.length} on={sel === "issues"}
           onClick={() => setSel("issues")} color={T.red} />
         <div style={{ flex: 1 }} />
         <button onClick={() => { setArch(!arch); setSel(sel === "issues" ? "docs" : sel); }}
           style={{ padding: "7px 13px", borderRadius: 7, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
             fontFamily: "inherit", border: `1px solid ${arch ? T.amb : T.b1}`,
             background: arch ? T.ambL : T.surface, color: arch ? T.amb : T.t3 }}>
-          {arch ? "← Chaalu files" : "🗄 Archive"}
+          {arch ? t("project_files.chaalu_files") : t("project_files.archive")}
         </button>
         {!arch && (
           <button onClick={() => setUp({ kind: "document", category: "other", title: "", file: null })}
             style={{ padding: "7px 14px", borderRadius: 7, border: "none", background: T.blu, color: "#fff",
               fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-            ＋ File daalo
+           {t("project_files.file_daalo")}
           </button>
         )}
       </div>
@@ -125,7 +126,7 @@ export default function TabProjectFiles({ projectId }) {
       {arch && (
         <div style={{ marginBottom: 10, background: T.ambL, border: `1px solid ${T.ambM}`, color: "#92400E",
           borderRadius: 8, padding: "8px 12px", fontSize: 11.5 }}>
-          🗄 Ye archive hai — hatai gayi cheezein yahan padi rehti hain, mitti nahi. Kabhi bhi wapas la sakte ho.
+         {t("project_files.ye_archive_hai_hatai_gayi_cheezein")}
         </div>
       )}
       {!!err && (
@@ -136,15 +137,15 @@ export default function TabProjectFiles({ projectId }) {
       <div style={{ display: "grid", gridTemplateColumns: "190px 1fr", gap: 12, alignItems: "start" }}>
         {/* ── baayen: shreni ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <Rail active={sel === "docs"} onClick={() => setSel("docs")} ic="🗂" label="Sab documents" n={docs.length} color={T.blu} />
+          <Rail active={sel === "docs"} onClick={() => setSel("docs")} ic="🗂" label={t("project_files.sab_documents")} n={docs.length} color={T.blu} />
           {cats.map((c) => (
             <Rail key={c.id} active={sel === c.id} onClick={() => setSel(sel === c.id ? "docs" : c.id)}
               ic={cs(c.id).ic} label={c.label} n={c.count} color={cs(c.id).c} dim={!c.count} />
           ))}
           <div style={{ height: 6 }} />
-          <Rail active={sel === "photos"} onClick={() => setSel("photos")} ic="📷" label="Site photos" n={photos.length} color={T.grn} />
+          <Rail active={sel === "photos"} onClick={() => setSel("photos")} ic="📷" label={t("project_files.site_photos")} n={photos.length} color={T.grn} />
           {!arch && (
-            <Rail active={sel === "issues"} onClick={() => setSel("issues")} ic="⚠" label="Issue photos" n={issues.length} color={T.red} dim={!issues.length} />
+            <Rail active={sel === "issues"} onClick={() => setSel("issues")} ic="⚠" label={t("project_files.issue_photos")} n={issues.length} color={T.red} dim={!issues.length} />
           )}
         </div>
 
@@ -203,7 +204,7 @@ function Rail({ active, onClick, ic, label, n, color, dim }) {
 function DocList({ items, arch, canRemove, busy, onRemove, onRestore }) {
   if (!items.length) {
     return <div style={{ padding: "34px 16px", textAlign: "center", color: T.t4, fontSize: 12 }}>
-      {arch ? "Archive khali hai." : "Yahan abhi koi document nahi. Upar ＋ File daalo se chadha do — mobile se daale hue kaagaz bhi yahin dikhte hain."}
+      {arch ? t("project_files.archive_khali_hai") : t("project_files.yahan_abhi_koi_document_nahi_upar")}
     </div>;
   }
   return (
@@ -211,7 +212,7 @@ function DocList({ items, arch, canRemove, busy, onRemove, onRestore }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 150px 116px 96px", padding: "7px 14px",
         background: T.surfaceB, borderBottom: `1px solid ${T.b1}`, fontSize: 9.5, fontWeight: 700,
         color: T.t4, textTransform: "uppercase", letterSpacing: ".5px" }}>
-        <span>Naam</span><span>Shreni</span><span>Kisne / kab</span><span style={{ textAlign: "right" }}>Kaam</span>
+        <span>{t("common.naam")}</span><span>{t("project_files.shreni")}</span><span>{t("project_files.kisne_kab")}</span><span style={{ textAlign: "right" }}>{t("project_files.kaam")}</span>
       </div>
       {items.map((f) => {
         const st = cs(f.category);
@@ -231,15 +232,15 @@ function DocList({ items, arch, canRemove, busy, onRemove, onRestore }) {
               {f.by || "—"}<br />{dt(f.created_at)}
             </span>
             <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-              <a href={f.url} target="_blank" rel="noreferrer" style={miniBtn(T.blu, T.bluL, T.bluM)}>Kholo</a>
+              <a href={f.url} target="_blank" rel="noreferrer" style={miniBtn(T.blu, T.bluL, T.bluM)}>{t("machinery.kholo")}</a>
               {arch ? (
                 <button onClick={() => onRestore(f.ref)} disabled={busy === f.ref} style={{ ...miniBtn(T.grn, T.grnL, T.grnM), cursor: "pointer" }}>
-                  {busy === f.ref ? "…" : "Wapas"}
+                  {busy === f.ref ? "…" : t("project_files.wapas")}
                 </button>
               ) : canRemove ? (
-                <button onClick={() => onRemove(f.ref)} disabled={busy === f.ref} title="Archive me daalo"
+                <button onClick={() => onRemove(f.ref)} disabled={busy === f.ref} title={t("project_files.archive_me_daalo")}
                   style={{ ...miniBtn(T.red, T.redL, T.redM), cursor: "pointer" }}>
-                  {busy === f.ref ? "…" : "Hatao"}
+                  {busy === f.ref ? "…" : t("common.hatao")}
                 </button>
               ) : null}
             </div>
@@ -254,9 +255,9 @@ function DocList({ items, arch, canRemove, busy, onRemove, onRestore }) {
 function PhotoGrid({ items, arch, canRemove, busy, onOpen, onRemove, onRestore, isIssue }) {
   if (!items.length) {
     return <div style={{ padding: "34px 16px", textAlign: "center", color: T.t4, fontSize: 12 }}>
-      {arch ? "Archive me koi photo nahi." : isIssue
-        ? "Kisi issue ke saath abhi koi photo nahi lagi."
-        : "Is site ki koi photo nahi. Mobile se li gayi photo — Overview se ya task ke andar se — dono yahin aati hain."}
+      {arch ? t("project_files.archive_me_koi_photo_nahi") : isIssue
+        ? t("project_files.kisi_issue_ke_saath_abhi_koi")
+        : t("project_files.is_site_ki_koi_photo_nahi")}
     </div>;
   }
   return (
@@ -272,7 +273,7 @@ function PhotoGrid({ items, arch, canRemove, busy, onOpen, onRemove, onRestore, 
               {m.task_name || m.caption || dt(m.created_at)}
             </div>
             {m.lat != null && (
-              <span title="Is photo par jagah likhi hai" style={{ position: "absolute", top: 5, left: 5, fontSize: 9,
+              <span title={t("project_files.is_photo_par_jagah_likhi_hai")} style={{ position: "absolute", top: 5, left: 5, fontSize: 9,
                 background: "rgba(5,150,105,.92)", color: "#fff", padding: "1px 5px", borderRadius: 20, fontWeight: 700 }}>📍</span>
             )}
             {isIssue && m.status && (
@@ -284,7 +285,7 @@ function PhotoGrid({ items, arch, canRemove, busy, onOpen, onRemove, onRestore, 
             <button onClick={() => onRestore(m.ref)} disabled={busy === m.ref}
               style={{ position: "absolute", top: 5, right: 5, ...roundBtn("rgba(5,150,105,.92)") }}>↩</button>
           ) : canRemove ? (
-            <button onClick={() => onRemove(m.ref)} disabled={busy === m.ref} title="Archive me daalo"
+            <button onClick={() => onRemove(m.ref)} disabled={busy === m.ref} title={t("project_files.archive_me_daalo")}
               style={{ position: "absolute", top: 5, right: 5, ...roundBtn("rgba(15,23,42,.62)") }}>✕</button>
           ) : null)}
         </div>
@@ -313,19 +314,19 @@ function PhotoViewer({ items, index, onIndex, onClose, onRemove, busy }) {
         padding: "12px 18px", color: "#fff", flexShrink: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {m.task_name || m.caption || "Site photo"}
+            {m.task_name || m.caption || t("overview.site_photo")}
           </div>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,.55)", marginTop: 2 }}>
             {dt(m.created_at)}{m.by ? ` · ${m.by}` : ""} · {index + 1}/{items.length}
             {m.lat != null && m.lng != null ? ` · 📍 ${Number(m.lat).toFixed(5)}, ${Number(m.lng).toFixed(5)}` : ""}
           </div>
         </div>
-        <a href={m.url} target="_blank" rel="noreferrer" style={{ ...vBtn, textDecoration: "none" }}>Asli kholo</a>
+        <a href={m.url} target="_blank" rel="noreferrer" style={{ ...vBtn, textDecoration: "none" }}>{t("project_files.asli_kholo")}</a>
         {onRemove && (
           <button onClick={() => onRemove(m.ref)} disabled={busy === m.ref}
-            style={{ ...vBtn, background: "rgba(220,38,38,.85)" }}>{busy === m.ref ? "…" : "Hatao"}</button>
+            style={{ ...vBtn, background: "rgba(220,38,38,.85)" }}>{busy === m.ref ? "…" : t("common.hatao")}</button>
         )}
-        <button onClick={onClose} style={vBtn}>Band</button>
+        <button onClick={onClose} style={vBtn}>{t("common.band")}</button>
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ flex: 1, overflow: "hidden", display: "flex",
         alignItems: "center", justifyContent: "center" }}>
@@ -334,9 +335,9 @@ function PhotoViewer({ items, index, onIndex, onClose, onRemove, busy }) {
       <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", justifyContent: "center", gap: 16,
         padding: "10px 0 16px", flexShrink: 0 }}>
         <button onClick={() => index > 0 && onIndex(index - 1)} disabled={index === 0}
-          style={{ ...vBtn, opacity: index === 0 ? 0.35 : 1 }}>← Pichhla</button>
+          style={{ ...vBtn, opacity: index === 0 ? 0.35 : 1 }}>{t("overview.pichhla")}</button>
         <button onClick={() => index < items.length - 1 && onIndex(index + 1)} disabled={index === items.length - 1}
-          style={{ ...vBtn, opacity: index === items.length - 1 ? 0.35 : 1 }}>Agla →</button>
+          style={{ ...vBtn, opacity: index === items.length - 1 ? 0.35 : 1 }}>{t("overview.agla")}</button>
       </div>
     </div>
   );
@@ -349,7 +350,7 @@ function UploadModal({ state, setState, projectId, cats, onDone }) {
   const set = (k, v) => setState({ ...state, [k]: v });
 
   const go = async () => {
-    if (!state.file) { setErr("Pehle file chuno"); return; }
+    if (!state.file) { setErr(t("project_files.pehle_file_chuno")); return; }
     setErr(""); setBusy("Upload ho rahi hai…");
     try {
       const fd = new FormData();
@@ -376,7 +377,7 @@ function UploadModal({ state, setState, projectId, cats, onDone }) {
         alignItems: "center", justifyContent: "center", padding: 18 }}>
       <div style={{ background: T.surface, borderRadius: 12, width: "min(460px,100%)", overflow: "hidden" }}>
         <div style={{ padding: "13px 17px", borderBottom: `1px solid ${T.b1}`, fontSize: 14, fontWeight: 800, color: T.t1 }}>
-          Nayi file
+         {t("project_files.nayi_file")}
         </div>
         <div style={{ padding: "14px 17px" }}>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -390,23 +391,23 @@ function UploadModal({ state, setState, projectId, cats, onDone }) {
 
           {state.kind === "document" && (
             <>
-              <Lbl>Shreni</Lbl>
+              <Lbl>{t("project_files.shreni")}</Lbl>
               <select value={state.category} onChange={(e) => set("category", e.target.value)} style={inp}>
-                {(cats.length ? cats : [{ id: "other", label: "Other Documents" }]).map((c) => (
+                {(cats.length ? cats : [{ id: "other", label: t("project_files.other_documents") }]).map((c) => (
                   <option key={c.id} value={c.id}>{c.label}</option>
                 ))}
               </select>
             </>
           )}
 
-          <Lbl>Naam <span style={{ color: T.t4, fontWeight: 400 }}>(chhod do to file ka naam lag jayega)</span></Lbl>
+          <Lbl>{t("common.naam")} <span style={{ color: T.t4, fontWeight: 400 }}>{t("project_files.chhod_do_to_file_ka_naam")}</span></Lbl>
           <input value={state.title} onChange={(e) => set("title", e.target.value)}
-            placeholder="जैसे: RA-2 bill, GFC drawing rev-3" style={inp} />
+            placeholder={t("project_files.जैसे_ra_2_bill_gfc_drawing")} style={inp} />
 
           <label style={{ display: "block", marginTop: 12, padding: 14, borderRadius: 9, cursor: "pointer",
             border: `1.5px dashed ${state.file ? T.grn : T.b2}`, background: state.file ? T.grnL : T.surfaceB,
             textAlign: "center", fontSize: 12.5, color: state.file ? "#065F46" : T.t3 }}>
-            {state.file ? `✓ ${state.file.name}` : (state.kind === "photo" ? "Photo chuno" : "File chuno (PDF / image / Excel)")}
+            {state.file ? `✓ ${state.file.name}` : (state.kind === "photo" ? t("project_files.photo_chuno") : t("project_files.file_chuno_pdf_image_excel"))}
             <input type="file" style={{ display: "none" }}
               accept={state.kind === "photo" ? "image/*" : undefined}
               onChange={(e) => set("file", e.target.files?.[0] || null)} />
@@ -418,11 +419,11 @@ function UploadModal({ state, setState, projectId, cats, onDone }) {
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: "11px 16px", borderTop: `1px solid ${T.b1}` }}>
           <button onClick={() => setState(null)} style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${T.b1}`,
-            background: T.surface, color: T.t2, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+            background: T.surface, color: T.t2, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
           <button onClick={go} disabled={!!busy || !state.file}
             style={{ padding: "7px 16px", borderRadius: 7, border: "none", fontSize: 12, fontWeight: 700,
               fontFamily: "inherit", color: "#fff", background: state.file ? T.blu : T.b2,
-              cursor: state.file ? "pointer" : "default" }}>{busy ? "…" : "Chadha do"}</button>
+              cursor: state.file ? "pointer" : "default" }}>{busy ? "…" : t("project_files.chadha_do")}</button>
         </div>
       </div>
     </div>

@@ -24,6 +24,7 @@ import api from "../config/api";
 import LibrarySelect from "./LibrarySelect";
 import uploadManager from "../utils/uploadManager";
 import ActivityLog from "./ActivityLog";
+import { t } from "../i18n";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -110,7 +111,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
 
   const handleGrnSave = async () => {
     if (grnSaving) return;
-    if (!grnEditNote.trim()) { setErr("Edit reason compulsory hai — log me record hoga"); return; }
+    if (!grnEditNote.trim()) { setErr(t("material_flow.edit_reason_compulsory_hai_log_me")); return; }
     setGrnSaving(true); setErr("");
     try {
       const payload = {
@@ -138,7 +139,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
 
   const handleRaiseIssue = async () => {
     if (issueSaving) return;
-    if (!issueNote.trim()) { setErr("Issue note compulsory hai"); return; }
+    if (!issueNote.trim()) { setErr(t("material_flow.issue_note_compulsory_hai")); return; }
     setIssueSaving(true); setErr("");
     try {
       const res = await api.post(`/procurement/grns/${grnId}/issues`, {
@@ -155,7 +156,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
   };
 
   const handleResolveIssue = async (issueId) => {
-    const note = await window.promptAsync("Resolution note (kya kiya issue solve karne ke liye):");
+    const note = await window.promptAsync(t("material_flow.resolution_note_kya_kiya_issue_solve"));
     if (note == null) return;
     try {
       const res = await api.patch(`/procurement/grns/issues/${issueId}/resolve`, { resolution_note: note });
@@ -168,7 +169,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
     if (grnDeleting) return;
     const reason = await window.promptAsync(`Delete GRN ${data?.grn?.grn_number}?\n\nYe inventory se bhi qty hata dega. Reason batao (compulsory):`);
     if (reason == null) return;
-    if (!reason.trim()) { setErr("Delete reason compulsory hai"); return; }
+    if (!reason.trim()) { setErr(t("material_flow.delete_reason_compulsory_hai")); return; }
     setGrnDeleting(true); setErr("");
     try {
       const res = await api.del("/procurement/grns/" + grnId, { reason: reason.trim() });
@@ -208,7 +209,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
       icon: "📝",
       color: T.amb,
       bg: T.ambL,
-      title: "Material Requested",
+      title: t("material_flow.material_requested"),
       who: mr.requested_by || "Site Team",
       lines: [
         `${mr.item_name} · ${mr.quantity} ${mr.unit}`,
@@ -227,7 +228,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
         icon: "✓",
         color: T.blu,
         bg: T.bluL,
-        title: "Approved",
+        title: t("common.approved"),
         who: a.user_name || "Admin",
         lines: [(() => { try { const d = JSON.parse(a.details || "{}"); return d.approved_qty ? `Approved qty: ${d.approved_qty}` : null; } catch { return null; } })()].filter(Boolean),
       });
@@ -238,7 +239,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
         icon: "✕",
         color: T.red,
         bg: T.redL,
-        title: "Rejected",
+        title: t("common.rejected"),
         who: a.user_name || "Admin",
         lines: [],
       });
@@ -249,7 +250,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
         icon: "🚚",
         color: T.pur,
         bg: T.purL,
-        title: "Ordered",
+        title: t("common.ordered"),
         who: a.user_name || "Admin",
         lines: [],
       });
@@ -263,7 +264,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
       icon: "🚚",
       color: T.pur,
       bg: T.purL,
-      title: "Ordered",
+      title: t("common.ordered"),
       who: "Admin",
       lines: [
         `Vendor: ${mr.linked_vendor}`,
@@ -282,7 +283,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
       icon: "🧾",
       color: T.red,
       bg: T.redL,
-      title: "Bill Raised",
+      title: t("material_flow.bill_raised"),
       who: b.party_name || "Vendor",
       lines: [
         `Amount: ₹${fmtN(b.amount)}`,
@@ -299,7 +300,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
       icon: "🔧",
       color: T.t3,
       bg: T.b1,
-      title: "Material Used",
+      title: t("material_flow.material_used"),
       who: u.used_by || "Site",
       lines: [
         `${u.material_name}: ${u.used_qty} ${u.unit || ""}`,
@@ -325,12 +326,10 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
         <div style={{ background: "#0D1B2A", padding: "16px 20px", color: "#fff", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3, fontWeight: 600, letterSpacing: ".4px", textTransform: "uppercase" }}>
-                Material Flow {grn?.grn_number ? `· ${grn.grn_number}` : ""}
-              </div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3, fontWeight: 600, letterSpacing: ".4px", textTransform: "uppercase" }}>{t("material_flow.material_flow_grn", { grn: grn?.grn_number ? `· ${grn.grn_number}` : "" })}</div>
               <div style={{ fontSize: 17, fontWeight: 700, color: "#fff", letterSpacing: "-.3px",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {items[0]?.description || mr?.item_name || "Material"}
+                {items[0]?.description || mr?.item_name || t("common.material")}
                 {items.length > 1 && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginLeft: 6, fontWeight: 500 }}>+ {items.length - 1} more</span>}
               </div>
               <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.55)", marginTop: 4 }}>
@@ -349,7 +348,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
             <div style={{ padding: "40px 0", textAlign: "center", color: T.t4, fontSize: 13 }}>
               <div style={{ width: 28, height: 28, border: "3px solid #E2E8F0", borderTopColor: T.blu,
                 borderRadius: "50%", animation: "matSpin 0.7s linear infinite", margin: "0 auto 10px" }}/>
-              Loading flow...
+             {t("material_flow.loading_flow")}
             </div>
           )}
           {err && !loading && (
@@ -381,9 +380,9 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
               <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
                 {/* MR Request Summary */}
                 <Section
-                  color={T.amb} bg={T.ambL} icon="📝" title="Material Request"
+                  color={T.amb} bg={T.ambL} icon="📝" title={t("material_flow.material_request")}
                   empty={!mr}
-                  emptyText="No MR linked — direct GRN entry"
+                  emptyText={t("material_flow.no_mr_linked_direct_grn_entry")}
                   rows={mr ? [
                     ["MR #",       `MR-${mr.id}`],
                     ["Material",   `${mr.item_name} · ${mr.quantity} ${mr.unit}`],
@@ -401,7 +400,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                   color={rejectEntry ? T.red : T.blu}
                   bg={rejectEntry ? T.redL : T.bluL}
                   icon={rejectEntry ? "✕" : "✓"}
-                  title={rejectEntry ? "Rejection" : "Approval"}
+                  title={rejectEntry ? t("material_flow.rejection") : t("common.approval")}
                   empty={!mr || (mr.mr_status !== "Approved" && mr.mr_status !== "Rejected" && !approvalEntry && !rejectEntry)}
                   emptyText={mr ? `Currently ${mr.mr_status || "Pending"}` : "—"}
                   rows={(approvalEntry || rejectEntry) ? [
@@ -422,9 +421,9 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                     truly direct GRNs (no MR + no PO + no order audit) we
                     still surface vendor info from the GRN itself. */}
                 <Section
-                  color={T.pur} bg={T.purL} icon="🚚" title="Order Placed"
+                  color={T.pur} bg={T.purL} icon="🚚" title={t("material_flow.order_placed")}
                   empty={!mr?.linked_vendor && !po && !orderEntry && !grn?.vendor_name}
-                  emptyText="Not ordered yet"
+                  emptyText={t("material_flow.not_ordered_yet")}
                   rows={[
                     ["Type",            (!mr && !po && !orderEntry && grn?.vendor_name) ? "Direct GRN (no MR/PO)" : orderType],
                     ...(po ? [["PO #", po.po_number]] : []),
@@ -440,7 +439,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                 {/* GRN / Receipt Summary — read-only OR inline edit form */}
                 {grn && !grnEditing && (
                   <Section
-                    color={T.grn} bg={T.grnL} icon="📦" title="GRN Received"
+                    color={T.grn} bg={T.grnL} icon="📦" title={t("common.grn_received")}
                     rows={[
                       ["GRN #",          grn.grn_number],
                       ["Vendor",         grn.vendor_name],
@@ -465,36 +464,36 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                   <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${T.grn}`, borderRadius: 8, padding: "12px 14px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
                       <span style={{ width: 22, height: 22, borderRadius: "50%", background: T.grnL, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>📦</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: T.grn }}>Edit GRN — {grn.grn_number}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: T.grn }}>{t("material_flow.edit_grn_grn_number", { grn_number: grn.grn_number })}</span>
                     </div>
                     <div style={{ padding: "8px 10px", background: "#FFFBEB", border: `1px solid #FDE68A`, borderRadius: 7, marginBottom: 10 }}>
                       <div style={{ fontSize: 9.5, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>
-                        Edit Reason * <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>(compulsory)</span>
+                       {t("material_flow.edit_reason")} <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>{t("material_flow.compulsory")}</span>
                       </div>
                       <textarea value={grnEditNote} onChange={e => setGrnEditNote(e.target.value)} rows={2}
-                        placeholder="e.g. Vendor naam galat tha, theek kar raha hu"
+                        placeholder={t("material_flow.e_g_vendor_naam_galat_tha")}
                         style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: `1.5px solid #FDE68A`, fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", background: "#fff" }}/>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                       <div>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>Material Vendor</div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>{t("material_flow.material_vendor")}</div>
                         <LibrarySelect type="supplier" value={grnForm.vendor_name}
                           onChange={v => setGrnForm(p => ({ ...p, vendor_name: v }))}/>
                       </div>
-                      <FInput label="Challan No." value={grnForm.challan_no} onChange={v => setGrnForm(p => ({ ...p, challan_no: v }))}/>
-                      <FInput label="Received On" type="date" value={grnForm.received_date} onChange={v => setGrnForm(p => ({ ...p, received_date: v }))}/>
-                      <FInput label="Received By" value={grnForm.received_by} onChange={v => setGrnForm(p => ({ ...p, received_by: v }))}/>
+                      <FInput label={t("material_flow.challan_no")} value={grnForm.challan_no} onChange={v => setGrnForm(p => ({ ...p, challan_no: v }))}/>
+                      <FInput label={t("material_flow.received_on")} type="date" value={grnForm.received_date} onChange={v => setGrnForm(p => ({ ...p, received_date: v }))}/>
+                      <FInput label={t("common.received_by")} value={grnForm.received_by} onChange={v => setGrnForm(p => ({ ...p, received_by: v }))}/>
                     </div>
                     {(grnForm.items || []).map((it, idx) => (
                       <div key={it.id || idx} style={{ display: "grid", gridTemplateColumns: "1.6fr 80px 70px", gap: 6, marginBottom: 6 }}>
                         <div>
-                          {idx === 0 && <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>Material</div>}
+                          {idx === 0 && <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>{t("common.material")}</div>}
                           <LibrarySelect type="material" value={it.description}
                             onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, description: v } : x) }))}/>
                         </div>
-                        <FInput label={idx === 0 ? "Qty" : ""} type="number" value={it.received_qty}
+                        <FInput label={idx === 0 ? t("common.qty") : ""} type="number" value={it.received_qty}
                           onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, received_qty: v } : x) }))}/>
-                        <FInput label={idx === 0 ? "Unit" : ""} value={it.unit}
+                        <FInput label={idx === 0 ? t("common.unit") : ""} value={it.unit}
                           onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, unit: v } : x) }))}/>
                       </div>
                     ))}
@@ -505,14 +504,12 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                 <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${openIssueCount > 0 ? T.red : T.t3}`, borderRadius: 8, padding: "10px 13px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
                     <span style={{ width: 22, height: 22, borderRadius: "50%", background: openIssueCount > 0 ? T.redL : T.b1, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>⚠️</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: openIssueCount > 0 ? T.red : T.t3 }}>
-                      Issues {issues.length > 0 ? `(${openIssueCount} open / ${issues.length} total)` : ""}
-                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: openIssueCount > 0 ? T.red : T.t3 }}>{t("material_flow.issues_issues", { issues: issues.length > 0 ? `(${openIssueCount} open / ${issues.length} total)` : "" })}</span>
                     <div style={{ flex: 1 }}/>
                     {!showIssueForm && grn && (
                       <button onClick={() => setShowIssueForm(true)}
                         style={{ padding: "4px 10px", borderRadius: 5, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
-                        + Create Issue
+                       {t("material_flow.create_issue")}
                       </button>
                     )}
                   </div>
@@ -528,7 +525,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                         ))}
                       </div>
                       <textarea value={issueNote} onChange={e => setIssueNote(e.target.value)} autoFocus rows={2}
-                        placeholder="Issue describe karo — kya problem hai? (compulsory)"
+                        placeholder={t("material_flow.issue_describe_karo_kya_problem_hai")}
                         style={{ width: "100%", padding: "7px 9px", borderRadius: 5, border: `1.5px solid ${T.redM}`, fontSize: 11.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", marginBottom: 7, background: "white" }}/>
                       {/* Issue photo — proof of damage / quality problem */}
                       <div style={{ display: "flex", gap: 6, marginBottom: 7, alignItems: "center" }}>
@@ -541,7 +538,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                         ) : (
                           <label style={{ width: 50, height: 50, borderRadius: 5, border: `1.5px dashed ${T.redM}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 9, color: T.red, fontWeight: 700, flexDirection: "column", gap: 1, background: "white" }}>
                             <span style={{ fontSize: 14 }}>📷</span>
-                            <span>Add</span>
+                            <span>{t("common.add")}</span>
                             <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
                               onChange={e => {
                                 const file = e.target.files?.[0];
@@ -556,24 +553,24 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                           </label>
                         )}
                         <span style={{ fontSize: 10, color: T.t4, fontStyle: "italic" }}>
-                          {issuePhoto ? "Photo attached — proof of issue" : "Photo lagao (optional) — quality/damage proof"}
+                          {issuePhoto ? t("material_flow.photo_attached_proof_of_issue") : t("material_flow.photo_lagao_optional_quality_damage_proof")}
                         </span>
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => { setShowIssueForm(false); setIssueNote(""); setErr(""); }} disabled={issueSaving}
                           style={{ flex: 1, padding: "6px", borderRadius: 5, background: "white", border: `1px solid ${T.b1}`, color: T.t3, fontSize: 11, fontWeight: 600, cursor: issueSaving ? "not-allowed" : "pointer" }}>
-                          Cancel
+                         {t("common.cancel")}
                         </button>
                         <button onClick={handleRaiseIssue} disabled={issueSaving || !issueNote.trim()}
                           style={{ flex: 2, padding: "6px", borderRadius: 5, background: issueSaving || !issueNote.trim() ? "#9CA3AF" : T.red, border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: issueSaving || !issueNote.trim() ? "not-allowed" : "pointer" }}>
-                          {issueSaving ? "Saving..." : "⚠ Raise Issue"}
+                          {issueSaving ? t("common.saving") : t("material_flow.raise_issue")}
                         </button>
                       </div>
                     </div>
                   )}
 
                   {issues.length === 0 && !showIssueForm && (
-                    <div style={{ fontSize: 11, color: T.t4, fontStyle: "italic", paddingLeft: 29 }}>No issues raised — quality OK</div>
+                    <div style={{ fontSize: 11, color: T.t4, fontStyle: "italic", paddingLeft: 29 }}>{t("material_flow.no_issues_raised_quality_ok")}</div>
                   )}
 
                   {issues.length > 0 && (
@@ -584,7 +581,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                           <div key={iss.id} style={{ padding: "7px 9px", background: resolved ? "#F1F5F9" : "#FEF2F2", borderRadius: 6, border: `1px solid ${resolved ? T.b1 : T.redM}` }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
                               <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, background: resolved ? T.t3 : T.red, color: "white" }}>{iss.issue_type}</span>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: resolved ? T.t3 : T.red, textTransform: "uppercase" }}>{resolved ? "Resolved" : "Open"}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: resolved ? T.t3 : T.red, textTransform: "uppercase" }}>{resolved ? t("material_flow.resolved") : t("material_flow.open")}</span>
                               <div style={{ flex: 1 }}/>
                               <span style={{ fontSize: 10, color: T.t4 }}>{fmtDateTime(iss.created_at)}</span>
                             </div>
@@ -594,17 +591,17 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                                 onError={e => { e.target.style.display = "none"; }}
                                 style={{ display: "block", width: 80, height: 80, objectFit: "cover", borderRadius: 5, border: `1px solid ${resolved ? T.b1 : T.redM}`, marginBottom: 4, cursor: "zoom-in" }}/>
                             )}
-                            <div style={{ fontSize: 10.5, color: T.t3 }}>👤 Raised by {iss.raised_by_name || "—"}</div>
+                            <div style={{ fontSize: 10.5, color: T.t3 }}>{t("material_flow.raised_by_iss", { iss: iss.raised_by_name || "—" })}</div>
                             {resolved && (
                               <div style={{ marginTop: 4, padding: "5px 7px", background: "white", borderRadius: 4, border: `1px solid ${T.b1}` }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: T.grn, marginBottom: 2 }}>✓ Resolved by {iss.resolved_by_name} · {fmtDateTime(iss.resolved_at)}</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: T.grn, marginBottom: 2 }}>{t("material_flow.resolved_by_resolved_by_name_fmtdatetime", { resolved_by_name: iss.resolved_by_name, fmtDateTime: fmtDateTime(iss.resolved_at) })}</div>
                                 {iss.resolution_note && <div style={{ fontSize: 11, color: T.t2 }}>{iss.resolution_note}</div>}
                               </div>
                             )}
                             {!resolved && isAdmin && (
                               <button onClick={() => handleResolveIssue(iss.id)}
                                 style={{ marginTop: 5, padding: "3px 9px", borderRadius: 4, background: T.grn, border: "none", color: "white", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                                ✓ Mark Resolved
+                               {t("material_flow.mark_resolved")}
                               </button>
                             )}
                           </div>
@@ -653,28 +650,28 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
               <>
                 <button onClick={() => { setGrnEditing(false); setGrnEditNote(""); setErr(""); }} disabled={grnSaving}
                   style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, color: T.t3, fontSize: 12, fontWeight: 600, cursor: grnSaving ? "not-allowed" : "pointer" }}>
-                  Cancel
+                 {t("common.cancel")}
                 </button>
                 <button onClick={handleGrnSave} disabled={grnSaving}
                   style={{ flex: 2, padding: "9px", borderRadius: 7, background: grnSaving ? "#9CA3AF" : T.grn, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: grnSaving ? "not-allowed" : "pointer" }}>
-                  {grnSaving ? "Saving..." : "✓ Save GRN"}
+                  {grnSaving ? t("common.saving") : t("material_flow.save_grn")}
                 </button>
               </>
             ) : (
               <>
                 <button onClick={() => setGrnEditing(true)}
                   style={{ padding: "9px 12px", borderRadius: 7, background: T.grnL, border: `1px solid ${T.grnM}`, color: T.grn, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  ✏ Edit GRN
+                 {t("material_flow.edit_grn")}
                 </button>
                 <button onClick={handleGrnDelete} disabled={grnDeleting}
                   style={{ padding: "9px 12px", borderRadius: 7, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12, fontWeight: 700, cursor: grnDeleting ? "not-allowed" : "pointer" }}>
-                  {grnDeleting ? "Deleting..." : "🗑 Delete GRN"}
+                  {grnDeleting ? t("common.deleting") : t("material_flow.delete_grn")}
                 </button>
                 <div style={{ flex: 1 }}/>
                 {mr && onEditMR && (
                   <button onClick={() => onEditMR(mr)}
                     style={{ padding: "9px 14px", borderRadius: 7, background: T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                    ✏ Edit MR
+                   {t("material_flow.edit_mr")}
                   </button>
                 )}
               </>

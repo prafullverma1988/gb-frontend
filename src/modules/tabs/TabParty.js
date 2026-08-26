@@ -3,6 +3,7 @@ import api from "../../config/api";
 import { CreateTransactionModal } from "../FinanceModule";
 import { T, fmt, fmtN } from "../shared/tokens";
 import { Pill, Panel, PHead, THead, AddBtn, SecBtn } from "../shared/ui";
+import { t } from "../../i18n";
 
 function AddPartyModal({ open, onClose, onSaved }) {
   // Sirf name + type compulsory; baki sabhi optional. Backend
@@ -29,7 +30,7 @@ function AddPartyModal({ open, onClose, onSaved }) {
   const set = (k) => (e) => setForm(p => ({...p, [k]: e.target.value}));
 
   const submit = async () => {
-    if (!form.name.trim()) { setErr("Party name zaroori hai"); return; }
+    if (!form.name.trim()) { setErr(t("party.party_name_zaroori_hai")); return; }
     setSaving(true); setErr("");
     try {
       const payload = {
@@ -53,7 +54,7 @@ function AddPartyModal({ open, onClose, onSaved }) {
       // roles go on the roles field). If it's genuinely a different person who
       // happens to share the name, the user can confirm and force it.
       if (r?.code === "duplicate_party") {
-        const ok = window.confirm(`${r.message}\n\nKya yeh ALAG insaan/firm hai jiska naam same hai? OK dabao to phir bhi ban jaayegi.`);
+        const ok = window.confirm(t("party.message_kya_yeh_alag_insaan_firm", { message: r.message }));
         if (!ok) { setErr(r.message); setSaving(false); return; }
         r = await api.post("/finance/parties", { ...payload, force: true });
       }
@@ -78,8 +79,8 @@ function AddPartyModal({ open, onClose, onSaved }) {
           boxShadow:"0 12px 40px rgba(0,0,0,0.25)", borderTop:`4px solid ${T.blu}`}}>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14}}>
           <div>
-            <div style={{fontSize:15, fontWeight:700, color:T.t1}}>Add New Party</div>
-            <div style={{fontSize:11, color:T.t4, marginTop:2}}>Sirf Name + Type compulsory · baki sab optional</div>
+            <div style={{fontSize:15, fontWeight:700, color:T.t1}}>{t("finance.add_new_party")}</div>
+            <div style={{fontSize:11, color:T.t4, marginTop:2}}>{t("party.sirf_name_type_compulsory_baki_sab")}</div>
           </div>
           <button onClick={onClose} style={{background:"none", border:"none", cursor:"pointer", fontSize:20, color:T.t4, lineHeight:1}}>×</button>
         </div>
@@ -88,7 +89,7 @@ function AddPartyModal({ open, onClose, onSaved }) {
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12}}>
           <div>
             {lbl("Party Name *")}
-            <input value={form.name} onChange={set("name")} placeholder="e.g. abhay traders" autoFocus style={ip}/>
+            <input value={form.name} onChange={set("name")} placeholder={t("party.e_g_abhay_traders")} autoFocus style={ip}/>
           </div>
           <div>
             {lbl("Type *")}
@@ -102,31 +103,31 @@ function AddPartyModal({ open, onClose, onSaved }) {
         {/* Toggle optional sections */}
         <button onClick={()=>setShowOptional(s=>!s)}
           style={{width:"100%", padding:"7px 10px", marginBottom:12, borderRadius:7, border:`1px dashed ${T.b1}`, background:T.surfaceB, color:T.blu, fontSize:11.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit"}}>
-          {showOptional ? "− Hide optional details" : "+ Add optional details (contact, GST, bank, etc)"}
+          {showOptional ? t("party.hide_optional_details") : t("party.add_optional_details_contact_gst_bank")}
         </button>
 
         {showOptional && (
           <>
-            <div style={{fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:.5, marginBottom:6}}>Contact & Tax</div>
+            <div style={{fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:.5, marginBottom:6}}>{t("party.contact_tax")}</div>
             <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:8}}>
-              <div>{lbl("Phone")}<input value={form.phone} onChange={set("phone")} placeholder="10-digit" style={ip}/></div>
+              <div>{lbl("Phone")}<input value={form.phone} onChange={set("phone")} placeholder={t("payroll.10_digit")} style={ip}/></div>
               <div>{lbl("Email")}<input value={form.email} onChange={set("email")} placeholder="optional" style={ip}/></div>
-              <div>{lbl("GSTIN")}<input value={form.gstin} onChange={set("gstin")} placeholder="15-char GSTIN" style={ip}/></div>
+              <div>{lbl("GSTIN")}<input value={form.gstin} onChange={set("gstin")} placeholder={t("party.15_char_gstin")} style={ip}/></div>
               <div>{lbl("PAN")}<input value={form.pan} onChange={set("pan")} placeholder="optional" style={ip}/></div>
             </div>
             <div style={{display:"grid", gridTemplateColumns:"2fr 1fr", gap:10, marginBottom:14}}>
-              <div>{lbl("Address")}<input value={form.address} onChange={set("address")} placeholder="street / locality" style={ip}/></div>
+              <div>{lbl("Address")}<input value={form.address} onChange={set("address")} placeholder={t("party.street_locality")} style={ip}/></div>
               <div>{lbl("City")}<input value={form.city} onChange={set("city")} placeholder="optional" style={ip}/></div>
             </div>
 
-            <div style={{fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:.5, marginBottom:6}}>Bank (optional)</div>
+            <div style={{fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:.5, marginBottom:6}}>{t("party.bank_optional")}</div>
             <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:14}}>
-              <div>{lbl("Bank Name")}<input value={form.bank_name} onChange={set("bank_name")} placeholder="e.g. HDFC" style={ip}/></div>
+              <div>{lbl("Bank Name")}<input value={form.bank_name} onChange={set("bank_name")} placeholder={t("party.e_g_hdfc")} style={ip}/></div>
               <div>{lbl("Account No.")}<input value={form.bank_account} onChange={set("bank_account")} placeholder="account" style={ip}/></div>
-              <div>{lbl("IFSC")}<input value={form.ifsc} onChange={set("ifsc")} placeholder="branch IFSC" style={ip}/></div>
+              <div>{lbl("IFSC")}<input value={form.ifsc} onChange={set("ifsc")} placeholder={t("party.branch_ifsc")} style={ip}/></div>
             </div>
 
-            <div style={{fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:.5, marginBottom:6}}>Finance (optional)</div>
+            <div style={{fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:.5, marginBottom:6}}>{t("party.finance_optional")}</div>
             <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12}}>
               <div>
                 {lbl("Opening Balance (₹)")}
@@ -136,24 +137,24 @@ function AddPartyModal({ open, onClose, onSaved }) {
               <div>
                 {lbl("Credit Days")}
                 <input type="number" value={form.credit_days} onChange={set("credit_days")} placeholder="7" style={ip}/>
-                <div style={{fontSize:10, color:T.t4, marginTop:3}}>Default 7 din — bill ka due-date is se calculate hota hai</div>
+                <div style={{fontSize:10, color:T.t4, marginTop:3}}>{t("party.default_7_din_bill_ka_due")}</div>
               </div>
             </div>
           </>
         )}
 
         <div style={{fontSize:10.5, color:T.t4, background:T.surfaceB, padding:"7px 10px", borderRadius:6, border:`1px solid ${T.b1}`, marginBottom:12}}>
-          Party banane ke baad iss tab me appear hone ke liye iske saath at-least ek transaction (Receipt / Payment / Bill) is project pe karna padega.
+         {t("party.party_banane_ke_baad_iss_tab")}
         </div>
 
         {err && <div style={{marginBottom:10, padding:"8px 10px", borderRadius:6, background:T.redL, border:`1px solid ${T.redM}`, color:T.red, fontSize:11.5}}>{err}</div>}
 
         <div style={{display:"flex", gap:8}}>
           <button onClick={onClose} disabled={saving}
-            style={{flex:1, padding:"9px", border:`1px solid ${T.b2}`, borderRadius:7, background:T.surface, color:T.t3, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit"}}>Cancel</button>
+            style={{flex:1, padding:"9px", border:`1px solid ${T.b2}`, borderRadius:7, background:T.surface, color:T.t3, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit"}}>{t("common.cancel")}</button>
           <button onClick={submit} disabled={saving}
             style={{flex:2, padding:"9px", border:"none", borderRadius:7, background:T.blu, color:"#fff", fontSize:12.5, fontWeight:700, cursor:saving?"wait":"pointer", fontFamily:"inherit", opacity:saving?0.7:1}}>
-            {saving ? "Saving..." : "Add Party"}
+            {saving ? t("common.saving") : t("master_library.add_party")}
           </button>
         </div>
       </div>
@@ -369,7 +370,7 @@ function TabParty({ projectId, projectName }) {
                      isVendor ? (lastBal>0 ? "Cr" : "Dr")
                               : (lastBal>0 ? "Dr" : "Cr");
     const w = window.open("", "_blank");
-    if (!w) { window.alert("Print window blocked — allow pop-ups for this site."); return; }
+    if (!w) { window.alert(t("party.print_window_blocked_allow_pop_ups")); return; }
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"/>
       <title>${escapeHTML(party.name)} — ${escapeHTML(project||"Project")}</title>
       <style>
@@ -439,15 +440,15 @@ function TabParty({ projectId, projectName }) {
     const isVendor = String(party?.type||"").toLowerCase();
     const isSupplier = isVendor.includes("supplier") || (isVendor.includes("material") && !isVendor.includes("subcon"));
     const isSubcon = isVendor.includes("subcon") || isVendor.includes("sub-con");
-    if (kind === "receipt") return "Payment Received";
-    if (kind === "payment") return "Payment Made";
+    if (kind === "receipt") return t("common.payment_received");
+    if (kind === "payment") return t("common.payment_made");
     // bill kind → choose between Material Purchase Bill / Sub-Con Bill / Sales Invoice
     if (kind === "bill") {
-      if (isSubcon) return "Sub-Con Bill";
-      if (isSupplier) return "Material Purchase Bill";
-      return "Sales Invoice";  // client → invoice
+      if (isSubcon) return t("common.sub_con_bill");
+      if (isSupplier) return t("common.material_purchase_bill");
+      return t("common.sales_invoice");  // client → invoice
     }
-    return "Payment Made";
+    return t("common.payment_made");
   };
 
   return (
@@ -472,14 +473,14 @@ function TabParty({ projectId, projectName }) {
       )}
       <div style={{width:290, flexShrink:0}}>
         <Panel style={{overflow:"hidden"}}>
-          <PHead title={`Parties (${partyRows.length})`} action={<AddBtn label="Add Party" onClick={()=>setShowAddParty(true)}/>}/>
+          <PHead title={`Parties (${partyRows.length})`} action={<AddBtn label={t("master_library.add_party")} onClick={()=>setShowAddParty(true)}/>}/>
           {loading && (
-            <div style={{padding:"30px 16px", textAlign:"center", color:T.t4, fontSize:12}}>Loading parties...</div>
+            <div style={{padding:"30px 16px", textAlign:"center", color:T.t4, fontSize:12}}>{t("party.loading_parties")}</div>
           )}
           {!loading && partyRows.length === 0 && (
             <div style={{padding:"30px 16px", textAlign:"center", color:T.t4, fontSize:12}}>
-              No parties with activity on this project yet.
-              <div style={{fontSize:10.5, marginTop:4}}>Create a transaction tagged to this project to add a party here.</div>
+             {t("party.no_parties_with_activity_on_this")}
+              <div style={{fontSize:10.5, marginTop:4}}>{t("party.create_a_transaction_tagged_to_this")}</div>
             </div>
           )}
           {partyRows.map(p=>{
@@ -507,7 +508,7 @@ function TabParty({ projectId, projectName }) {
         <Panel style={{height:"100%", overflow:"hidden", display:"flex", flexDirection:"column"}}>
           {selP?(
             <>
-              <PHead title={`${selP.name}  ·  ${projectName||"Project"}`} action={<SecBtn label="Export PDF" onClick={()=>exportPartyLedgerPDF(selP, projectName)}/>}/>
+              <PHead title={`${selP.name}  ·  ${projectName||"Project"}`} action={<SecBtn label={t("mom.export_pdf")} onClick={()=>exportPartyLedgerPDF(selP, projectName)}/>}/>
               <div style={{padding:"8px 15px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", gap:20}}>
                 {[["Type",selP.type],["Balance",`₹${fmtN(selP.balance)}`],["Status",selP.balLabel]].map(([l,v])=>(
                   <div key={l} style={{display:"flex", gap:6, alignItems:"center"}}>
@@ -515,9 +516,7 @@ function TabParty({ projectId, projectName }) {
                     <span style={{fontSize:12.5, fontWeight:600, color:T.t1}}>{v}</span>
                   </div>
                 ))}
-                <div style={{marginLeft:"auto", fontSize:10.5, color:T.t4, fontStyle:"italic"}}>
-                  Ledger for this project only · {selP.txnRows.length} txn(s)
-                </div>
+                <div style={{marginLeft:"auto", fontSize:10.5, color:T.t4, fontStyle:"italic"}}>{t("party.ledger_for_this_project_only_selp", { selP: selP.txnRows.length })}</div>
               </div>
               <div style={{flex:1, overflowY:"auto"}}>
                 {(() => {
@@ -531,7 +530,7 @@ function TabParty({ projectId, projectName }) {
                         <div style={{display:"grid", gridTemplateColumns:COLS, padding:"7px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", background:T.surfaceB}}>
                           <span style={{fontSize:11, color:T.t4, fontStyle:"italic"}}>—</span>
                           <span style={{fontSize:11, color:T.t4, fontStyle:"italic"}}>—</span>
-                          <span style={{fontSize:12, color:T.t3, fontStyle:"italic", fontWeight:500}}>Opening Balance</span>
+                          <span style={{fontSize:12, color:T.t3, fontStyle:"italic", fontWeight:500}}>{t("common.opening_balance")}</span>
                           <span style={{fontSize:10.5, color:T.t4, fontStyle:"italic"}}>—</span>
                           <span style={{fontSize:12, color:T.t4, textAlign:"right"}}>—</span>
                           <span style={{fontSize:12, color:T.t4, textAlign:"right"}}>—</span>
@@ -587,7 +586,7 @@ function TabParty({ projectId, projectName }) {
                           <div style={{display:"grid", gridTemplateColumns:COLS, padding:"10px 15px", borderTop:`2px solid ${T.b2}`, alignItems:"center", background:T.surfaceB, fontWeight:700}}>
                             <span/>
                             <span/>
-                            <span style={{fontSize:12, color:T.t2, fontWeight:700, textTransform:"uppercase", letterSpacing:.3}}>Closing Balance</span>
+                            <span style={{fontSize:12, color:T.t2, fontWeight:700, textTransform:"uppercase", letterSpacing:.3}}>{t("finance.closing_balance")}</span>
                             <span/>
                             <span style={{fontSize:12.5, color:T.grn, fontVariantNumeric:"tabular-nums", textAlign:"right"}}>₹{fmtN(totalCR)}</span>
                             <span style={{fontSize:12.5, color:T.red, fontVariantNumeric:"tabular-nums", textAlign:"right"}}>₹{fmtN(totalDR)}</span>
@@ -597,23 +596,23 @@ function TabParty({ projectId, projectName }) {
                           </div>
                         );
                       })()}
-                      {selP.txnRows.length===0&&<div style={{padding:"40px 20px", textAlign:"center", color:T.t4, fontSize:13}}>No transactions on this project</div>}
+                      {selP.txnRows.length===0&&<div style={{padding:"40px 20px", textAlign:"center", color:T.t4, fontSize:13}}>{t("party.no_transactions_on_this_project")}</div>}
                     </>
                   );
                 })()}
               </div>
               <div style={{padding:"9px 15px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:8}}>
                 <button onClick={()=>setTxnModal({type:txnTypeFor("receipt", selP), partyName:selP.name})}
-                  style={{flex:1, padding:"7px", border:`1px solid ${T.grnM}`, borderRadius:6, background:T.grnL, color:T.grn, fontSize:12, fontWeight:600, cursor:"pointer"}}>+ Receipt</button>
+                  style={{flex:1, padding:"7px", border:`1px solid ${T.grnM}`, borderRadius:6, background:T.grnL, color:T.grn, fontSize:12, fontWeight:600, cursor:"pointer"}}>{t("party.receipt")}</button>
                 <button onClick={()=>setTxnModal({type:txnTypeFor("payment", selP), partyName:selP.name})}
-                  style={{flex:1, padding:"7px", border:`1px solid ${T.redM}`, borderRadius:6, background:T.redL, color:T.red, fontSize:12, fontWeight:600, cursor:"pointer"}}>+ Payment</button>
+                  style={{flex:1, padding:"7px", border:`1px solid ${T.redM}`, borderRadius:6, background:T.redL, color:T.red, fontSize:12, fontWeight:600, cursor:"pointer"}}>{t("party.payment")}</button>
                 <button onClick={()=>setTxnModal({type:txnTypeFor("bill", selP), partyName:selP.name})}
-                  style={{flex:1, padding:"7px", border:`1px solid ${T.b2}`, borderRadius:6, background:T.surface, color:T.t2, fontSize:12, fontWeight:600, cursor:"pointer"}}>+ Bill</button>
+                  style={{flex:1, padding:"7px", border:`1px solid ${T.b2}`, borderRadius:6, background:T.surface, color:T.t2, fontSize:12, fontWeight:600, cursor:"pointer"}}>{t("party.bill")}</button>
               </div>
             </>
           ):(
             <div style={{display:"flex", alignItems:"center", justifyContent:"center", flex:1, color:T.t4, fontSize:13}}>
-              {partyRows.length === 0 ? "Add a party to start" : "Select a party to view its project-scoped ledger"}
+              {partyRows.length === 0 ? t("party.add_a_party_to_start") : t("party.select_a_party_to_view_its")}
             </div>
           )}
         </Panel>

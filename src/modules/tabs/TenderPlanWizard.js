@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
+import { t } from "../../i18n";
 
 /* ────────────────────────────────────────────────────────────────────
    TENDER SE PLAN — package ko is site par utaaro
@@ -76,7 +77,7 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
   const chosen = rows.filter((r) => r.take && Number(r.qty) > 0);
 
   const create = async () => {
-    if (!chosen.length) { setErr("Kam se kam ek item chuno"); return; }
+    if (!chosen.length) { setErr(t("tender_plan_wizard.kam_se_kam_ek_item_chuno")); return; }
     setBusy(true); setErr("");
     const r = await api.post(`/tasks/project/${projectId}/tender-plan`, {
       package_id: pkgId,
@@ -103,27 +104,27 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
     <div style={wrap} onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
       <div style={card}>
         <div style={{ padding: "13px 16px", borderBottom: `1px solid ${T.b1}` }}>
-          <div style={{ fontSize: 14.5, fontWeight: 800, color: T.t1 }}>Tender se plan lao</div>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: T.t1 }}>{t("tasks.tender_se_plan_lao")}</div>
           <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>
             {pkg ? `"${pkg.name}" — jo items is site par karne hain wo chuno`
-                 : "Package chuno — uske BOQ items is site ke task tree me utar jayenge"}
+                 : t("tender_plan_wizard.package_chuno_uske_boq_items_is")}
           </div>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
-          {!data && !err && <div style={{ padding: "24px 0", textAlign: "center", fontSize: 12.5, color: T.t3 }}>Load ho raha hai…</div>}
+          {!data && !err && <div style={{ padding: "24px 0", textAlign: "center", fontSize: 12.5, color: T.t3 }}>{t("map_plan_wizard.load_ho_raha_hai")}</div>}
 
           {data && !data.tender_id && (
             <div style={{ padding: "20px 0", textAlign: "center", fontSize: 12.5, color: T.t3, lineHeight: 1.6 }}>
-              Ye site kisi tender se judi nahi hai.<br />
-              <span style={{ fontSize: 11.5, color: T.t4 }}>Tender ke Sites tab se jodo, phir yahan package aa jayenge.</span>
+             {t("tender_plan_wizard.ye_site_kisi_tender_se_judi")}<br />
+              <span style={{ fontSize: 11.5, color: T.t4 }}>{t("tender_plan_wizard.tender_ke_sites_tab_se_jodo")}</span>
             </div>
           )}
 
           {data?.tender_id && !data.packages.length && (
             <div style={{ padding: "20px 0", textAlign: "center", fontSize: 12.5, color: T.t3, lineHeight: 1.6 }}>
-              Is tender me abhi koi work package nahi bana.<br />
-              <span style={{ fontSize: 11.5, color: T.t4 }}>Tenders → BOQ tab me "Packages banao" dabao — BOQ apne aap bant jayegi.</span>
+             {t("tender_plan_wizard.is_tender_me_abhi_koi_work")}<br />
+              <span style={{ fontSize: 11.5, color: T.t4 }}>{t("tender_plan_wizard.tenders_boq_tab_me_packages_banao")}</span>
             </div>
           )}
 
@@ -143,9 +144,7 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: T.t1,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
-                    <span style={{ display: "block", fontSize: 10.5, color: T.t4, marginTop: 1 }}>
-                      {p.total_items} item · {p.pending_items ? `${p.pending_items} abhi plan me nahi` : "sab pehle se plan me hain"}
-                    </span>
+                    <span style={{ display: "block", fontSize: 10.5, color: T.t4, marginTop: 1 }}>{t("tender_plan_wizard.total_items_item_p", { total_items: p.total_items, p: p.pending_items ? `${p.pending_items} abhi plan me nahi` : "sab pehle se plan me hain" })}</span>
                   </span>
                 </button>
               ))}
@@ -158,10 +157,10 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
               <thead>
                 <tr>
                   <th style={{ ...th, width: 30 }}></th>
-                  <th style={{ ...th, width: 52 }}>Item</th>
-                  <th style={th}>Task ka naam</th>
-                  <th style={{ ...th, width: 120, textAlign: "right" }}>Is site ka scope</th>
-                  {!!aligns.length && <th style={{ ...th, width: 150 }}>Stretch</th>}
+                  <th style={{ ...th, width: 52 }}>{t("common.item")}</th>
+                  <th style={th}>{t("map_plan_wizard.task_ka_naam")}</th>
+                  <th style={{ ...th, width: 120, textAlign: "right" }}>{t("tender_plan_wizard.is_site_ka_scope")}</th>
+                  {!!aligns.length && <th style={{ ...th, width: 150 }}>{t("tender_plan_wizard.stretch")}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -178,7 +177,7 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
                           outline: "none", fontFamily: "inherit" }} />
                       <div style={{ fontSize: 10, color: T.t4, marginTop: 2, overflow: "hidden",
                         textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.description}>{r.description}</div>
-                      {r.already && <div style={{ fontSize: 10, color: T.amb, marginTop: 1 }}>Is site par pehle se plan me hai</div>}
+                      {r.already && <div style={{ fontSize: 10, color: T.amb, marginTop: 1 }}>{t("tender_plan_wizard.is_site_par_pehle_se_plan")}</div>}
                     </td>
                     <td style={{ ...td, textAlign: "right" }}>
                       <input type="number" value={r.qty} onChange={(e) => upd(i, { qty: e.target.value })} disabled={!r.take}
@@ -189,7 +188,7 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
                         BOQ {fmtQty(r.qty_total ?? r.qty + r.planned_elsewhere)} {r.unit}
                         {r.planned_elsewhere > 0 && ` · ${fmtQty(r.planned_elsewhere)} kahin aur`}
                         {r.site_qty != null && (
-                          <span style={{ color: "#059669", fontWeight: 700 }}> · is site ka hissa</span>
+                          <span style={{ color: "#059669", fontWeight: 700 }}> {t("tender_plan_wizard.is_site_ka_hissa")}</span>
                         )}
                       </div>
                     </td>
@@ -198,7 +197,7 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
                         <select value={r.alignment_id} onChange={(e) => upd(i, { alignment_id: e.target.value })} disabled={!r.take}
                           style={{ width: "100%", padding: "5px 7px", borderRadius: 6, border: `1px solid ${T.b1}`,
                             fontSize: 11, color: T.t2, background: T.surface, outline: "none", fontFamily: "inherit" }}>
-                          <option value="">— koi nahi —</option>
+                          <option value="">{t("tasks.koi_nahi_2")}</option>
                           {aligns.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                         </select>
                       </td>
@@ -214,20 +213,18 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
 
         <div style={{ padding: "11px 16px", borderTop: `1px solid ${T.b1}`, display: "flex",
           alignItems: "center", gap: 9, justifyContent: "flex-end" }}>
-          {pkg && <span style={{ marginRight: "auto", fontSize: 11.5, color: T.t4 }}>
-            {chosen.length} item chune — "{pkg.name.slice(0, 34)}" ke neeche banenge
-          </span>}
+          {pkg && <span style={{ marginRight: "auto", fontSize: 11.5, color: T.t4 }}>{t("tender_plan_wizard.chosen_item_chune_pkg_ke_neeche", { chosen: chosen.length, pkg: pkg.name.slice(0, 34) })}</span>}
           {pkg && <button onClick={() => { setPkgId(null); setRows([]); }}
             style={{ padding: "7px 13px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface,
-              fontSize: 12, color: T.t2, cursor: "pointer", fontFamily: "inherit" }}>Peeche</button>}
+              fontSize: 12, color: T.t2, cursor: "pointer", fontFamily: "inherit" }}>{t("common.peeche")}</button>}
           <button onClick={onClose}
             style={{ padding: "7px 13px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface,
-              fontSize: 12, color: T.t2, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+              fontSize: 12, color: T.t2, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
           {pkg && <button onClick={create} disabled={busy || !chosen.length}
             style={{ padding: "7px 15px", borderRadius: 7, border: "none", background: T.ind, color: "#fff",
               fontSize: 12, fontWeight: 700, cursor: busy || !chosen.length ? "default" : "pointer",
               opacity: busy || !chosen.length ? 0.6 : 1, fontFamily: "inherit" }}>
-            {busy ? "Ban raha hai…" : `${chosen.length} task banao`}
+            {busy ? t("common.ban_raha_hai") : `${chosen.length} task banao`}
           </button>}
         </div>
       </div>

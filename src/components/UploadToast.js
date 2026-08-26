@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from "react";
 import uploadManager from "../utils/uploadManager";
+import { t } from "../i18n";
 
 const S = {
   blu: "#2563EB", grn: "#059669", red: "#DC2626", amb: "#D97706",
@@ -56,9 +57,9 @@ export default function UploadToast() {
               </div>
               <div style={{ fontSize: 10, color: S.t4, marginTop: 1 }}>
                 {item.status === "uploading" ? `Uploading... ${item.pct}%`
-                  : item.status === "done" ? "Upload complete"
+                  : item.status === "done" ? t("upload_toast.upload_complete")
                   : item.status === "error" ? item.error
-                  : "Queued"}
+                  : t("upload_toast.queued")}
               </div>
             </div>
 
@@ -67,13 +68,13 @@ export default function UploadToast() {
               {item.status === "uploading" && (
                 <button onClick={() => uploadManager.cancel(item.id)}
                   style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: S.t4, padding: 2 }}
-                  title="Cancel">✕</button>
+                  title={t("common.cancel")}>✕</button>
               )}
               {item.status === "error" && (
                 <>
                   <button onClick={() => uploadManager.retry(item.id)}
                     style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: S.blu, padding: "2px 4px", fontWeight: 600 }}>
-                    Retry
+                    {t("common.retry")}
                   </button>
                   <button onClick={() => uploadManager.dismiss(item.id)}
                     style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: S.t4, padding: 2 }}>✕</button>

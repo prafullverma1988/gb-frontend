@@ -3,6 +3,7 @@ import api from "../../config/api";
 import SearchSelect from "../../components/SearchSelect";
 import { T } from "../shared/tokens";
 import { Pill, Panel, AddBtn } from "../shared/ui";
+import { t } from "../../i18n";
 
 function TabTodo({projectId}) {
   const CATS=["Civil","Electrical","Plumbing","Finishing","Documentation","Admin","Other"];
@@ -114,9 +115,9 @@ function TabTodo({projectId}) {
 
   // Inverse of progressFromStatus — derive status from checklist completion %.
   const statusFromPct=(pct)=>{
-    if(pct>=100) return "Completed";
-    if(pct>0)    return "In Progress";
-    return "Not Started";
+    if(pct>=100) return t("common.completed");
+    if(pct>0)    return t("projects.in_progress");
+    return t("common.not_started");
   };
 
   // Toggle a checklist item — emits canonical {text, done} on write AND
@@ -211,7 +212,7 @@ function TabTodo({projectId}) {
   if(loading) return(
     <div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:13}}>
       <div style={{width:22,height:22,border:"2.5px solid "+T.b1,borderTopColor:T.blu,borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto 10px"}}/>
-      Loading todos...
+     {t("todo.loading_todos")}
     </div>
   );
 
@@ -220,7 +221,7 @@ function TabTodo({projectId}) {
       {/* Header row */}
       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:8,alignItems:"center",flex:1}}>
-          {[{l:"Pending",v:todos.filter(t=>!t.done).length,c:T.amb},{l:"Done",v:todos.filter(t=>t.done).length,c:T.grn},{l:"Total",v:todos.length,c:T.slt}].map(x=>(
+          {[{l:t("common.pending"),v:todos.filter(t=>!t.done).length,c:T.amb},{l:t("common.done"),v:todos.filter(t=>t.done).length,c:T.grn},{l:t("common.total"),v:todos.length,c:T.slt}].map(x=>(
             <div key={x.l} style={{display:"flex",alignItems:"center",gap:5,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:20,padding:"4px 11px"}}>
               <div style={{width:7,height:7,borderRadius:"50%",background:x.c}}/>
               <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{x.v}</span>
@@ -230,31 +231,31 @@ function TabTodo({projectId}) {
         </div>
         <select value={fCat} onChange={e=>setFCat(e.target.value)}
           style={{height:30,padding:"0 10px",borderRadius:6,border:`1.5px solid ${fCat!=="All"?T.blu:T.b1}`,background:fCat!=="All"?T.bluL:T.surface,fontSize:11.5,color:fCat!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-          <option value="All">All Categories</option>
+          <option value="All">{t("common.all_categories")}</option>
           {CATS.map(c=><option key={c}>{c}</option>)}
         </select>
         <select value={fPri} onChange={e=>setFPri(e.target.value)}
           style={{height:30,padding:"0 10px",borderRadius:6,border:`1.5px solid ${fPri!=="All"?T.blu:T.b1}`,background:fPri!=="All"?T.bluL:T.surface,fontSize:11.5,color:fPri!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-          <option value="All">All Priority</option>
+          <option value="All">{t("todo.all_priority")}</option>
           {PRIS.map(p=><option key={p}>{p}</option>)}
         </select>
-        <AddBtn label="Add Todo" onClick={()=>setShowAdd(!showAdd)}/>
+        <AddBtn label={t("todo.add_todo")} onClick={()=>setShowAdd(!showAdd)}/>
       </div>
 
       {/* Add form */}
       {showAdd&&(
         <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,padding:"13px 15px",marginBottom:12}}>
-          <div style={{fontSize:11.5,fontWeight:700,color:T.blu,marginBottom:10}}>New Todo Item</div>
+          <div style={{fontSize:11.5,fontWeight:700,color:T.blu,marginBottom:10}}>{t("todo.new_todo_item")}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
             <div style={{gridColumn:"1/-1"}}>
-              <textarea value={newForm.text} onChange={e=>setNewForm(p=>({...p,text:e.target.value}))} placeholder="What needs to be done?" rows={2}
+              <textarea value={newForm.text} onChange={e=>setNewForm(p=>({...p,text:e.target.value}))} placeholder={t("mom.what_needs_to_be_done")} rows={2}
                 style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.blu}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
             </div>
             {[
-              {l:"Category",key:"cat",opts:CATS.map(c=>({key:c,label:c})),type:"search"},
-              {l:"Priority",key:"priority",opts:PRIS.map(p=>({key:p,label:p})),type:"search"},
-              {l:"Assigned To",key:"assigneeId",opts:team.map(m=>({key:String(m.id),label:m.name})),type:"search"},
-              {l:"Due Date",key:"due",type:"date"},
+              {l:t("common.category"),key:"cat",opts:CATS.map(c=>({key:c,label:c})),type:"search"},
+              {l:t("common.priority"),key:"priority",opts:PRIS.map(p=>({key:p,label:p})),type:"search"},
+              {l:t("common.assigned_to"),key:"assigneeId",opts:team.map(m=>({key:String(m.id),label:m.name})),type:"search"},
+              {l:t("common.due_date"),key:"due",type:"date"},
             ].map(f=>(
               <div key={f.key}>
                 <div style={{fontSize:9.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{f.l}</div>
@@ -262,14 +263,14 @@ function TabTodo({projectId}) {
                   ?<input type="date" value={newForm[f.key]} onChange={e=>setNewForm(p=>({...p,[f.key]:e.target.value}))}
                       style={{width:"100%",height:30,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface}}/>
                   :<SearchSelect value={newForm[f.key]} options={f.opts} compact
-                      onChange={v=>setNewForm(p=>({...p,[f.key]:v}))} placeholder="Select..."/>
+                      onChange={v=>setNewForm(p=>({...p,[f.key]:v}))} placeholder={t("reports.select")}/>
                 }
               </div>
             ))}
           </div>
           {/* Checklist builder */}
           <div style={{marginBottom:10}}>
-            <div style={{fontSize:9.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Checklist (optional)</div>
+            <div style={{fontSize:9.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("todo.checklist_optional")}</div>
             {newForm.checklist.map((c,i)=>(
               <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                 <div style={{width:14,height:14,borderRadius:3,background:T.grnL,border:`1px solid ${T.grnM}`,flexShrink:0}}/>
@@ -278,21 +279,21 @@ function TabTodo({projectId}) {
               </div>
             ))}
             <div style={{display:"flex",gap:6}}>
-              <input value={newCheckText} onChange={e=>setNewCheckText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addCheck()} placeholder="Add checklist item..."
+              <input value={newCheckText} onChange={e=>setNewCheckText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addCheck()} placeholder={t("todo.add_checklist_item")}
                 style={{flex:1,height:28,padding:"0 8px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",background:T.surface}}/>
-              <button onClick={addCheck} style={{padding:"0 10px",borderRadius:5,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600}}>Add</button>
+              <button onClick={addCheck} style={{padding:"0 10px",borderRadius:5,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600}}>{t("common.add")}</button>
             </div>
           </div>
           <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>setShowAdd(false)} style={{flex:1,padding:"7px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-            <button onClick={addTodo} disabled={saving} style={{flex:2,padding:"7px",borderRadius:6,background:saving?"#93C5FD":T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"wait":"pointer"}}>{saving?"Saving...":"Add Todo"}</button>
+            <button onClick={()=>setShowAdd(false)} style={{flex:1,padding:"7px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
+            <button onClick={addTodo} disabled={saving} style={{flex:2,padding:"7px",borderRadius:6,background:saving?"#93C5FD":T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"wait":"pointer"}}>{saving?t("common.saving"):t("todo.add_todo")}</button>
           </div>
         </div>
       )}
 
       {/* Pending todos */}
       <Panel style={{marginBottom:8}}>
-        {pending.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:13}}>{todos.length===0?"No todos yet — add your first one!":"No pending items"+(fCat!=="All"||fPri!=="All"?" matching filters":"")}</div>}
+        {pending.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:13}}>{todos.length===0?t("todo.no_todos_yet_add_your_first"):"No pending items"+(fCat!=="All"||fPri!=="All"?" matching filters":"")}</div>}
         {pending.map(todo=>{
           const ps=priS[todo.priority]||priS["Medium"];
           const cc=catC[todo.cat]||T.slt;
@@ -312,7 +313,7 @@ function TabTodo({projectId}) {
                     <Pill label={todo.cat} c={cc} bg={cc+"18"}/>
                     <Pill label={todo.priority} c={ps.c} bg={ps.bg}/>
                     <span style={{fontSize:11,color:T.t4}}>@{(todo.assignee||"").split(" ")[0]||"--"}</span>
-                    {todo.due&&<span style={{fontSize:11,color:T.t4}}>Due {new Date(todo.due).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</span>}
+                    {todo.due&&<span style={{fontSize:11,color:T.t4}}>{t("todo.due_vnew", { vnew: new Date(todo.due).toLocaleDateString("en-IN",{day:"numeric",month:"short"}) })}</span>}
                     {todo.checklist.length>0&&(
                       <span style={{fontSize:10.5,color:checkDone===todo.checklist.length?T.grn:T.t4,fontWeight:600}}>
                         ☑ {checkDone}/{todo.checklist.length}
@@ -324,7 +325,7 @@ function TabTodo({projectId}) {
                       {/* Raised-by row — created_by_name + created_at (mobile parity) */}
                       {(todo.raisedBy||todo.raisedAt)&&(
                         <div style={{fontSize:11,color:T.t4,marginBottom:8}}>
-                          <span style={{fontWeight:600,color:T.t3}}>🙋 Raised by</span>{" "}
+                          <span style={{fontWeight:600,color:T.t3}}>{t("projects.raised_by")}</span>{" "}
                           {todo.raisedBy||"—"}{todo.raisedAt?" · "+fmtCreatedAt(todo.raisedAt):""}
                           {todo._source==="company_todo"&&(
                             <span style={{marginLeft:6,padding:"1px 6px",borderRadius:8,background:T.purL,color:T.pur,fontSize:9.5,fontWeight:700,letterSpacing:".3px"}}>COMPANY</span>
@@ -345,7 +346,7 @@ function TabTodo({projectId}) {
                         return (
                           <div style={{marginBottom:todo.assigneeId?8:0}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-                              <div style={{fontSize:10,fontWeight:700,color:T.t4,letterSpacing:".4px"}}>☑ CHECKLIST</div>
+                              <div style={{fontSize:10,fontWeight:700,color:T.t4,letterSpacing:".4px"}}>{t("projects.checklist")}</div>
                               <span style={{fontSize:10.5,fontWeight:700,color:cPct===100?T.grn:T.blu}}>{cDone}/{cTotal}</span>
                             </div>
                             {/* Progress bar — drives status via toggleCheck */}
@@ -357,7 +358,7 @@ function TabTodo({projectId}) {
                                 <div style={{width:14,height:14,borderRadius:3,background:c.done?T.grn:T.surface,border:`1.5px solid ${c.done?T.grn:T.b2}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
                                   {c.done&&<svg width={8} height={8} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.5}><path d="M2 5l2.5 2.5L8 3"/></svg>}
                                 </div>
-                                <span style={{fontSize:12,color:c.done?T.t4:T.t1,textDecoration:c.done?"line-through":"none"}}>{c.text||c.t||"Item"}</span>
+                                <span style={{fontSize:12,color:c.done?T.t4:T.t1,textDecoration:c.done?"line-through":"none"}}>{c.text||c.t||t("common.item")}</span>
                               </div>
                             ))}
                           </div>
@@ -369,7 +370,7 @@ function TabTodo({projectId}) {
                         <button onClick={(e)=>{e.stopPropagation();handlePing(todo);}}
                           disabled={pinging===todo.id}
                           style={{padding:"5px 10px",borderRadius:6,border:"none",background:T.amb,color:"white",fontSize:11,fontWeight:700,cursor:pinging===todo.id?"wait":"pointer",display:"inline-flex",alignItems:"center",gap:4,opacity:pinging===todo.id?0.7:1}}>
-                          <span>{pinging===todo.id?"Pinging…":"Ping"}</span>
+                          <span>{pinging===todo.id?t("projects.pinging"):t("projects.ping")}</span>
                           {pinging!==todo.id&&<span>🔔</span>}
                         </button>
                       )}
@@ -377,7 +378,7 @@ function TabTodo({projectId}) {
                   )}
                 </div>
                 <div style={{display:"flex",gap:2,flexShrink:0,marginTop:1}}>
-                  <button onClick={()=>deleteTodo(todo.id)} title="Delete"
+                  <button onClick={()=>deleteTodo(todo.id)} title={t("common.delete")}
                     style={{background:"none",border:"none",cursor:"pointer",color:T.t4,padding:3,opacity:.5,transition:"opacity .15s"}}
                     onMouseEnter={e=>e.currentTarget.style.opacity=1}
                     onMouseLeave={e=>e.currentTarget.style.opacity=.5}>
@@ -399,7 +400,7 @@ function TabTodo({projectId}) {
       {/* Completed */}
       {done.length>0&&(
         <>
-          <div style={{fontSize:10.5,fontWeight:600,color:T.t4,letterSpacing:".5px",textTransform:"uppercase",margin:"12px 0 7px"}}>Completed ({done.length})</div>
+          <div style={{fontSize:10.5,fontWeight:600,color:T.t4,letterSpacing:".5px",textTransform:"uppercase",margin:"12px 0 7px"}}>{t("todo.completed_done", { done: done.length })}</div>
           <Panel>
             {done.map(todo=>(
               <div key={todo.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,opacity:.6,transition:"background .1s"}}
@@ -411,7 +412,7 @@ function TabTodo({projectId}) {
                 <span style={{flex:1,fontSize:12.5,color:T.t3,textDecoration:"line-through"}}>{todo.text}</span>
                 <span style={{fontSize:10.5,color:T.t4}}>@{(todo.assignee||"").split(" ")[0]||"--"}</span>
                 {todo.checklist.length>0&&<span style={{fontSize:10,color:T.grn}}>✓ {todo.checklist.length}/{todo.checklist.length}</span>}
-                <button onClick={()=>deleteTodo(todo.id)} title="Delete"
+                <button onClick={()=>deleteTodo(todo.id)} title={t("common.delete")}
                   style={{background:"none",border:"none",cursor:"pointer",color:T.t4,padding:3,opacity:.4,flexShrink:0}}
                   onMouseEnter={e=>e.currentTarget.style.opacity=1}
                   onMouseLeave={e=>e.currentTarget.style.opacity=.4}>

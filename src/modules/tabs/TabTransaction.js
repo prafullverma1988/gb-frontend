@@ -3,6 +3,7 @@ import api from "../../config/api";
 import { CreateTransactionModal } from "../FinanceModule";
 import { T, fmtN } from "../shared/tokens";
 import { Pill, Panel, AddBtn } from "../shared/ui";
+import { t } from "../../i18n";
 
 const D = { invoices:[] };
 // Shared grid template so the header and every row column stay aligned.
@@ -136,10 +137,10 @@ function TabTransaction({projectId, projectName}) {
       {/* KPI row */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:12}}>
         {[
-          {l:"Total Inflow",  v:`₹${fmtN(tIn)}`,   c:T.grn},
-          {l:"Total Outflow", v:`₹${fmtN(tOut)}`,   c:T.red},
-          {l:"Net",           v:`₹${fmtN(tNet)}`,   c:tNet>=0?T.grn:T.red},
-          {l:"Unpaid Bills",  v:`₹${fmtN(tUnpaid)}`,c:T.amb},
+          {l:t("transaction.total_inflow"),  v:`₹${fmtN(tIn)}`,   c:T.grn},
+          {l:t("transaction.total_outflow"), v:`₹${fmtN(tOut)}`,   c:T.red},
+          {l:t("common.net"),           v:`₹${fmtN(tNet)}`,   c:tNet>=0?T.grn:T.red},
+          {l:t("finance.unpaid_bills"),  v:`₹${fmtN(tUnpaid)}`,c:T.amb},
         ].map((s,i)=>(
           <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{s.l}</div>
@@ -155,7 +156,7 @@ function TabTransaction({projectId, projectName}) {
           {/* Text search */}
           <div style={{position:"relative",minWidth:160,flex:1}}>
             <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search party or note..."
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("transaction.search_party_or_note")}
               style={{width:"100%",height:30,padding:"0 8px 0 27px",borderRadius:6,border:`1.5px solid ${search?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:search?T.bluL:T.surface}}/>
           </div>
           {/* Party dropdown */}
@@ -169,36 +170,36 @@ function TabTransaction({projectId, projectName}) {
             {["All","Payment In","Material Purchase","Site Expense"].map(tp=>(
               <button key={tp} onClick={()=>setFType(tp===fType?"All":tp)}
                 style={{padding:"4px 10px",borderRadius:20,border:`1px solid ${fType===tp?T.blu:T.b1}`,background:fType===tp?T.bluL:T.surface,color:fType===tp?T.blu:T.t3,fontSize:11,fontWeight:fType===tp?700:400,cursor:"pointer",whiteSpace:"nowrap"}}>
-                {tp==="All"?"All Types":tp}
+                {tp==="All"?t("common.all_types"):tp}
               </button>
             ))}
           </div>
           <button onClick={()=>setShowFilters(!showFilters)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:6,border:`1.5px solid ${(showFilters||activeFilters>0)?T.blu:T.b1}`,background:(showFilters||activeFilters>0)?T.bluL:T.surface,color:(showFilters||activeFilters>0)?T.blu:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",flexShrink:0}}>
             <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3"/></svg>
-            More{activeFilters>0&&<span style={{background:T.blu,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{activeFilters}</span>}
+            {t("common.more")}{activeFilters>0&&<span style={{background:T.blu,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{activeFilters}</span>}
           </button>
           {/* Add Transaction dropdown */}
           <div style={{position:"relative"}}>
-            <AddBtn label="Add Transaction" onClick={()=>setShowCreateTxn(v=>!v)}/>
+            <AddBtn label={t("transaction.add_transaction")} onClick={()=>setShowCreateTxn(v=>!v)}/>
             {showCreateTxn&&(<>
               <div onClick={()=>setShowCreateTxn(false)} style={{position:"fixed",inset:0,zIndex:140}}/>
               <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:T.surface,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:`1px solid ${T.b1}`,zIndex:150,width:265,overflow:"hidden"}}>
                 {[
                   {section:"Cash & Bank",items:[
-                    {l:"Payment Received",    sub:"Client payment in",      c:T.grn, bg:T.grnL},
-                    {l:"Payment Made",        sub:"Pay vendor / labour",    c:T.red, bg:T.redL},
-                    {l:"Petty Cash Expense",  sub:"Site / misc expense",    c:T.amb, bg:T.ambL},
+                    {l:t("common.payment_received"),    sub:t("finance.client_payment_in"),      c:T.grn, bg:T.grnL},
+                    {l:t("common.payment_made"),        sub:t("finance.pay_vendor_labour"),    c:T.red, bg:T.redL},
+                    {l:t("finance.petty_cash_expense"),  sub:t("finance.site_misc_expense"),    c:T.amb, bg:T.ambL},
                   ]},
                   {section:"Billing & Purchases",items:[
-                    {l:"Material Purchase Bill", sub:"Record supplier bill", c:T.blu, bg:T.bluL},
-                    {l:"Sales Invoice",           sub:"Raise client invoice", c:T.grn, bg:T.grnL},
-                    {l:"Sub-Con Bill",            sub:"Labour / subcon work", c:T.slt, bg:T.sltL},
-                    {l:"Advance Payment",         sub:"Advance to party",     c:T.pur, bg:T.purL},
+                    {l:t("common.material_purchase_bill"), sub:t("finance.record_supplier_bill"), c:T.blu, bg:T.bluL},
+                    {l:t("common.sales_invoice"),           sub:t("finance.raise_client_invoice"), c:T.grn, bg:T.grnL},
+                    {l:t("common.sub_con_bill"),            sub:t("finance.labour_subcon_work"), c:T.slt, bg:T.sltL},
+                    {l:t("finance.advance_payment"),         sub:t("finance.advance_to_party"),     c:T.pur, bg:T.purL},
                   ]},
                   {section:"Adjustments",items:[
-                    {l:"Journal Entry", sub:"Manual debit / credit", c:T.slt, bg:T.sltL},
-                    {l:"Credit Note",   sub:"Party balance adjust",  c:T.pur, bg:T.purL},
+                    {l:t("finance.journal_entry"), sub:t("finance.manual_debit_credit"), c:T.slt, bg:T.sltL},
+                    {l:t("finance.credit_note"),   sub:t("finance.party_balance_adjust"),  c:T.pur, bg:T.purL},
                   ]},
                 ].map((grp,gi)=>(
                   <div key={gi}>
@@ -225,17 +226,17 @@ function TabTransaction({projectId, projectName}) {
               </div>
             </>)}
           </div>
-          {activeFilters>0&&<button onClick={clearAll} style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>Clear ×</button>}
+          {activeFilters>0&&<button onClick={clearAll} style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>{t("finance.clear")}</button>}
         </div>
 
         {/* Expanded filters */}
         {showFilters&&(
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr) 1.4fr",gap:8,marginTop:10,paddingTop:10,borderTop:`1px solid ${T.b1}`}}>
             {[
-              {label:"Account",val:fAcct,set:setFAcct,opts:ACCOUNTS,def:"All Accounts"},
-              {label:"Status", val:fStatus,set:setFStatus,opts:STATUSES,def:"All Status"},
-              {label:"Invoice",val:fInvoice,set:setFInvoice,opts:INVOICES,def:"All Invoices"},
-              {label:"Type",   val:fType,set:setFType,opts:TYPES,def:"All Types"},
+              {label:t("transaction_detail.account"),val:fAcct,set:setFAcct,opts:ACCOUNTS,def:"All Accounts"},
+              {label:t("common.status"), val:fStatus,set:setFStatus,opts:STATUSES,def:"All Status"},
+              {label:t("transaction.invoice"),val:fInvoice,set:setFInvoice,opts:INVOICES,def:"All Invoices"},
+              {label:t("common.type"),   val:fType,set:setFType,opts:TYPES,def:"All Types"},
             ].map(({label,val,set,opts,def},i)=>(
               <div key={i}>
                 <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{label}</div>
@@ -246,12 +247,12 @@ function TabTransaction({projectId, projectName}) {
               </div>
             ))}
             <div>
-              <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>Amount Range (₹)</div>
+              <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{t("transaction.amount_range")}</div>
               <div style={{display:"flex",gap:5,alignItems:"center"}}>
-                <input type="number" value={amtMin} onChange={e=>setAmtMin(e.target.value)} placeholder="Min"
+                <input type="number" value={amtMin} onChange={e=>setAmtMin(e.target.value)} placeholder={t("transaction.min")}
                   style={{flex:1,height:29,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",background:T.surface}}/>
                 <span style={{fontSize:11,color:T.t4}}>—</span>
-                <input type="number" value={amtMax} onChange={e=>setAmtMax(e.target.value)} placeholder="Max"
+                <input type="number" value={amtMax} onChange={e=>setAmtMax(e.target.value)} placeholder={t("transaction.max")}
                   style={{flex:1,height:29,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",background:T.surface}}/>
               </div>
             </div>
@@ -268,7 +269,7 @@ function TabTransaction({projectId, projectName}) {
             <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px",textAlign:i>=5?"right":"left"}}>{h}</span>
           ))}
         </div>
-        {filtered.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:13}}>No transactions match filters</div>}
+        {filtered.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:13}}>{t("transaction.no_transactions_match_filters")}</div>}
         {filtered.map(txn=>{
           const ts=typeS[txn.type]||{c:T.slt,bg:T.sltL};
           const st=txn.status||"paid";

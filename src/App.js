@@ -8,6 +8,7 @@ import { ConfirmProvider } from "./components/ConfirmDialog";
 import { PromptProvider } from "./components/PromptDialog";
 import NotificationBell from "./components/NotificationBell";
 import AppErrorBoundary from "./components/AppErrorBoundary";
+import { t, setLang, getLang, LANGS } from "./i18n";
 
 // ── LAZY + PRELOAD: shared promise so prefetch & React.lazy use same cache ──
 // When preload() resolves, React.lazy gets already-resolved promise = NO spinner
@@ -157,7 +158,7 @@ function ModuleLoader(){
   return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",minHeight:300,flexDirection:"column",gap:12}}>
       <div style={{width:36,height:36,border:"3px solid #E5E7EB",borderTopColor:"#2563EB",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
-      <div style={{fontSize:13,color:"#9CA3AF",fontWeight:500}}>Loading module...</div>
+      <div style={{fontSize:13,color:"#9CA3AF",fontWeight:500}}>{t("app.loading_module")}</div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
@@ -185,30 +186,30 @@ const toModuleMap=(rows)=>{
 // ── NAV GROUPS ────────────────────────────────────────────────────────
 const NAV_GROUPS=[
   {section:null,items:[
-    {id:"dashboard", label:"Dashboard",    Icon:IcHome, sc:"H"},
-    {id:"projects",  label:"Projects",     Icon:IcProj, sc:"J"},
+    {id:"dashboard", get label() { return t("common.dashboard"); },    Icon:IcHome, sc:"H"},
+    {id:"projects",  get label() { return t("common.projects"); },     Icon:IcProj, sc:"J"},
     {id:"crm",       label:"CRM",          Icon:IcCRM,  sc:"C"},
     {id:"mom",       label:"MOM",          Icon:IcMOM,  sc:"M"},
-    {id:"team",      label:"My Team",      Icon:IcTeam, sc:"T"},
-    {id:"sahayak",   label:"Sahayak AI",   Icon:IcHelp},
+    {id:"team",      get label() { return t("app.my_team"); },      Icon:IcTeam, sc:"T"},
+    {id:"sahayak",   get label() { return t("app.sahayak_ai"); },   Icon:IcHelp},
   ]},
   {section:"FINANCE & OPS",items:[
-    {id:"design",      label:"Design",      Icon:IcDes,  sc:"D"},
-    {id:"finance",     label:"Finance",     Icon:IcFin,  sc:"F"},
-    {id:"procurement", label:"Procurement", Icon:IcProc, sc:"P"},
-    {id:"warehouse",   label:"Warehouse",   Icon:IcWH,   sc:"W"},
-    {id:"fuel",        label:"Fuel",        Icon:IcFuel},
-    {id:"machinery",   label:"Machinery",   Icon:IcMach},
-    {id:"township",    label:"Township CRM",Icon:IcTown, sc:"G"},
-    {id:"payroll",     label:"Team & HR",   Icon:IcPay,  sc:"Y"},
-    {id:"tenders",     label:"Tenders",     Icon:IcGavel},
+    {id:"design",      get label() { return t("common.design"); },      Icon:IcDes,  sc:"D"},
+    {id:"finance",     get label() { return t("common.finance"); },     Icon:IcFin,  sc:"F"},
+    {id:"procurement", get label() { return t("common.procurement"); }, Icon:IcProc, sc:"P"},
+    {id:"warehouse",   get label() { return t("common.warehouse"); },   Icon:IcWH,   sc:"W"},
+    {id:"fuel",        get label() { return t("app.fuel"); },        Icon:IcFuel},
+    {id:"machinery",   get label() { return t("app.machinery"); },   Icon:IcMach},
+    {id:"township",    get label() { return t("app.township_crm"); },Icon:IcTown, sc:"G"},
+    {id:"payroll",     get label() { return t("app.team_hr"); },   Icon:IcPay,  sc:"Y"},
+    {id:"tenders",     get label() { return t("app.tenders"); },     Icon:IcGavel},
   ]},
   {section:"REPORTS",items:[
-    {id:"reports",  label:"Reports",    Icon:IcRep, sc:"B"},
-    {id:"library",  label:"Library",    Icon:IcLib, sc:"L"},
-    {id:"settings", label:"Settings",   Icon:IcSet, sc:"S"},
-    {id:"saas",     label:"SaaS Admin", Icon:IcStar,badge:"SA",bc:"#7C3AED"},
-    {id:"saas-leads", label:"SaaS Leads", Icon:IcFilter, badge:"NEW", bc:"#0891B2"},
+    {id:"reports",  get label() { return t("common.reports"); },    Icon:IcRep, sc:"B"},
+    {id:"library",  get label() { return t("common.library"); },    Icon:IcLib, sc:"L"},
+    {id:"settings", get label() { return t("common.settings"); },   Icon:IcSet, sc:"S"},
+    {id:"saas",     get label() { return t("app.saas_admin"); }, Icon:IcStar,badge:"SA",bc:"#7C3AED"},
+    {id:"saas-leads", get label() { return t("app.saas_leads"); }, Icon:IcFilter, badge:"NEW", bc:"#0891B2"},
   ]},
 ];
 
@@ -217,10 +218,10 @@ const ALWAYS_ON = ["dashboard","projects","finance","procurement","reports","lib
 
 // Primary tabs pinned to the mobile bottom bar
 const BOTTOM_TABS = [
-  {id:"dashboard",   label:"Home",     Icon:IcHome},
-  {id:"projects",    label:"Projects", Icon:IcProj},
-  {id:"finance",     label:"Finance",  Icon:IcFin },
-  {id:"procurement", label:"Purchase", Icon:IcProc},
+  {id:"dashboard",   get label() { return t("app.home"); },     Icon:IcHome},
+  {id:"projects",    get label() { return t("common.projects"); }, Icon:IcProj},
+  {id:"finance",     get label() { return t("common.finance"); },  Icon:IcFin },
+  {id:"procurement", get label() { return t("app.purchase"); }, Icon:IcProc},
 ];
 
 
@@ -281,7 +282,7 @@ function CashFlowChart({data,height=110}){
       <div style={{width:36,height:36,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
         <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round"><path d="M3 3v18h18M7 14l3-3 3 3 4-5"/></svg>
       </div>
-      <div style={{fontSize:11.5,color:T.t3,fontWeight:600}}>No transactions yet</div>
+      <div style={{fontSize:11.5,color:T.t3,fontWeight:600}}>{t("app.no_transactions_yet")}</div>
     </div>
   );
   const maxVal=Math.max(...data.flatMap(d=>[d.in,d.out]),1);
@@ -308,7 +309,7 @@ function ProjectMiniCard({p,onClick}){
   const sm=STATUS_META[p.status]||STATUS_META["Ongoing"];
   const margin=p.boq-p.expense; const marginPct=p.boq>0?((margin/p.boq)*100).toFixed(0):0;
   const progressColor=p.progress===100?T.grn:p.progress>60?T.blu:p.progress>30?T.amb:T.red;
-  return(<div onClick={onClick} style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,padding:"11px 13px",cursor:"pointer",transition:"box-shadow 0.15s",borderLeft:`3px solid ${sm.c}`}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,0.1)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}><div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:7}}><div style={{flex:1,paddingRight:8}}><div style={{fontSize:12.5,fontWeight:600,color:T.t1,lineHeight:1.3,marginBottom:2}}>{p.name}</div><div style={{fontSize:10.5,color:T.t4}}>{p.client} · {p.city}</div></div><Pill label={p.status} c={sm.c} bg={sm.bg} brd={sm.brd}/></div><div style={{marginBottom:7}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:10,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px"}}>Progress</span><span style={{fontSize:11,fontWeight:700,color:progressColor}}>{p.progress}%</span></div><Bar pct={p.progress} color={progressColor}/></div><div style={{display:"flex",gap:10}}><div style={{flex:1}}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:1}}>BOQ</div><div style={{fontSize:12,fontWeight:600,color:T.t1}}>₹{fmt(p.boq)}</div></div><div style={{flex:1}}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:1}}>Spent</div><div style={{fontSize:12,fontWeight:600,color:T.amb}}>₹{fmt(p.expense)}</div></div><div style={{flex:1}}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:1}}>Margin</div><div style={{fontSize:12,fontWeight:700,color:margin>0?T.grn:T.red}}>{marginPct}%</div></div><div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:1}}>PM</div><div style={{fontSize:11,fontWeight:500,color:T.t3}}>{p.pm.split(" ")[0]}</div></div></div></div>);
+  return(<div onClick={onClick} style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,padding:"11px 13px",cursor:"pointer",transition:"box-shadow 0.15s",borderLeft:`3px solid ${sm.c}`}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,0.1)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}><div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:7}}><div style={{flex:1,paddingRight:8}}><div style={{fontSize:12.5,fontWeight:600,color:T.t1,lineHeight:1.3,marginBottom:2}}>{p.name}</div><div style={{fontSize:10.5,color:T.t4}}>{p.client} · {p.city}</div></div><Pill label={p.status} c={sm.c} bg={sm.bg} brd={sm.brd}/></div><div style={{marginBottom:7}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:10,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px"}}>{t("common.progress")}</span><span style={{fontSize:11,fontWeight:700,color:progressColor}}>{p.progress}%</span></div><Bar pct={p.progress} color={progressColor}/></div><div style={{display:"flex",gap:10}}><div style={{flex:1}}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:1}}>BOQ</div><div style={{fontSize:12,fontWeight:600,color:T.t1}}>₹{fmt(p.boq)}</div></div><div style={{flex:1}}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:1}}>{t("app.spent")}</div><div style={{fontSize:12,fontWeight:600,color:T.amb}}>₹{fmt(p.expense)}</div></div><div style={{flex:1}}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:1}}>{t("common.margin")}</div><div style={{fontSize:12,fontWeight:700,color:margin>0?T.grn:T.red}}>{marginPct}%</div></div><div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:1}}>PM</div><div style={{fontSize:11,fontWeight:500,color:T.t3}}>{p.pm.split(" ")[0]}</div></div></div></div>);
 }
 
 
@@ -371,7 +372,7 @@ function LoginScreen({onLogin}){
   // Stage 1 → Stage 2: validate mobile
   const handleMobileNext=()=>{
     resetMsgs();
-    if(!/^[6-9]\d{9}$/.test(mobile)){setError("Enter a valid 10-digit mobile number");return;}
+    if(!/^[6-9]\d{9}$/.test(mobile)){setError(t("app.enter_a_valid_10_digit_mobile"));return;}
     setStage("choose");
   };
 
@@ -390,21 +391,21 @@ function LoginScreen({onLogin}){
       }else{ setDevOtp(res.dev_otp||""); }
       setStage("otp");
       setInfo("OTP sent to your mobile");
-    }catch(err){setError("OTP could not be sent. Please try again.");}
+    }catch(err){setError(t("app.otp_could_not_be_sent_please"));}
     setLoading(false);
   };
 
   // Stage 3a: password login
   const handlePasswordLogin=async()=>{
     resetMsgs();
-    if(!pass){setError("Enter password");return;}
+    if(!pass){setError(t("app.enter_password"));return;}
     setLoading(true);
     try{
       const res=await api.loginPassword(mobile,pass);
       if(res.success&&res.multi_company){ setPickerOptions(res.options||[]); setPendingTok(res.pending); setPickerVia("password"); resetMsgs(); setStage("picker"); }
       else if(res.success){ completeLogin(res,"password"); }
       else{setError(res.message||"Login failed");}
-    }catch(err){setError("Server not reachable. Please try again.");}
+    }catch(err){setError(t("app.server_not_reachable_please_try_again"));}
     setLoading(false);
   };
 
@@ -413,7 +414,7 @@ function LoginScreen({onLogin}){
   // token instead of re-calling widgetVerifyOtp which fails with "already verified".
   const handleOtpLogin=async()=>{
     resetMsgs();
-    if(!/^\d{4,6}$/.test(otp)){setError("Enter the OTP");return;}
+    if(!/^\d{4,6}$/.test(otp)){setError(t("app.enter_the_otp"));return;}
     setLoading(true);
     try{
       let res;
@@ -423,7 +424,7 @@ function LoginScreen({onLogin}){
         if(!token){
           const d=await widgetVerifyOtp(otp);    // one-time MSG91 call
           token=extractAccessToken(d);
-          if(!token){setError("Invalid OTP");setLoading(false);return;}
+          if(!token){setError(t("app.invalid_otp"));setLoading(false);return;}
           window.__otpTokenCache[mobile]=token;   // cache for retry
         }
         res=await api.loginOtp(mobile,otp,token);
@@ -441,14 +442,14 @@ function LoginScreen({onLogin}){
   // Forced first-login password change (after admin reset → must_change_password)
   const handleForceChange=async()=>{
     resetMsgs();
-    if(np1.length<6){setError("New password kam se kam 6 characters ka ho");return;}
-    if(np1!==np2){setError("Dono passwords match nahi kar rahe");return;}
+    if(np1.length<6){setError(t("app.new_password_kam_se_kam_6"));return;}
+    if(np1!==np2){setError(t("app.dono_passwords_match_nahi_kar_rahe"));return;}
     setLoading(true);
     try{
       const res=await api.put("/auth/change-password",{current_password:pass,new_password:np1});
       if(res&&res.success){ const c=chgPending; setChgPending(null); onLogin(c.user,c.companies); }
       else{ setError((res&&res.message)||"Password change nahi hua"); }
-    }catch(err){setError("Server not reachable. Please try again.");}
+    }catch(err){setError(t("app.server_not_reachable_please_try_again"));}
     setLoading(false);
   };
 
@@ -467,7 +468,7 @@ function LoginScreen({onLogin}){
       const res=await api.loginSelect(pendingTok,opt.user_id,opt.company_id);
       if(res&&res.success&&res.token){ completeLogin(res,pickerVia); }
       else{ setError((res&&res.message)||"Company select nahi hua"); }
-    }catch(err){setError("Server not reachable. Please try again.");}
+    }catch(err){setError(t("app.server_not_reachable_please_try_again"));}
     setLoading(false);
   };
 
@@ -481,92 +482,92 @@ function LoginScreen({onLogin}){
       <div style={{background:"rgba(255,255,255,0.97)",borderRadius:20,padding:"44px 40px",width:400,boxShadow:"0 32px 80px rgba(0,0,0,0.35)"}}>
         <div style={{textAlign:"center",marginBottom:32}}>
           <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:62,height:62,borderRadius:16,background:`linear-gradient(135deg,${C.p},${C.a})`,marginBottom:14}}><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"><path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/></svg></div>
-          <div style={{fontSize:21,fontWeight:800,color:C.t}}>Sanchalan</div>
-          <div style={{fontSize:12,color:C.tl,marginTop:3}}>Business Management Platform</div>
+          <div style={{fontSize:21,fontWeight:800,color:C.t}}>{t("app.sanchalan")}</div>
+          <div style={{fontSize:12,color:C.tl,marginTop:3}}>{t("app.business_management_platform")}</div>
         </div>
 
         {error&&<div style={{background:T.redL,color:T.red,padding:"10px 14px",borderRadius:8,fontSize:12.5,marginBottom:16,border:`1px solid ${T.redM}`}}>{error}</div>}
         {info&&<div style={{background:"#E8F5E9",color:"#2E7D32",padding:"10px 14px",borderRadius:8,fontSize:12.5,marginBottom:16,border:"1px solid #A5D6A7"}}>{info}</div>}
-        {devOtp&&stage==="otp"&&<div style={{background:"#FFF8E1",color:"#795548",padding:"10px 14px",borderRadius:8,fontSize:12,marginBottom:16,border:"1px dashed #FFB300"}}>DEV OTP: <b>{devOtp}</b></div>}
+        {devOtp&&stage==="otp"&&<div style={{background:"#FFF8E1",color:"#795548",padding:"10px 14px",borderRadius:8,fontSize:12,marginBottom:16,border:"1px dashed #FFB300"}}>{t("app.dev_otp")} <b>{devOtp}</b></div>}
 
         {stage==="mobile"&&(
           <>
             <div style={{marginBottom:26}}>
-              <label style={labelStyle}>Mobile Number</label>
-              <input type="tel" inputMode="numeric" maxLength={10} placeholder="10-digit mobile" value={mobile} onChange={e=>setMobile(e.target.value.replace(/\D/g,""))} style={inputStyle} onKeyDown={e=>e.key==="Enter"&&handleMobileNext()} autoFocus/>
+              <label style={labelStyle}>{t("app.mobile_number")}</label>
+              <input type="tel" inputMode="numeric" maxLength={10} placeholder={t("app.10_digit_mobile")} value={mobile} onChange={e=>setMobile(e.target.value.replace(/\D/g,""))} style={inputStyle} onKeyDown={e=>e.key==="Enter"&&handleMobileNext()} autoFocus/>
             </div>
-            <button onClick={handleMobileNext} style={primaryBtn(false)}>Next</button>
+            <button onClick={handleMobileNext} style={primaryBtn(false)}>{t("app.next")}</button>
           </>
         )}
 
         {stage==="choose"&&(
           <>
-            <div style={{fontSize:13,color:C.tm,textAlign:"center",marginBottom:20}}>+91 {mobile} <button onClick={()=>{setStage("mobile");resetMsgs();}} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:6}}>Change</button></div>
-            <button onClick={()=>{setStage("password");resetMsgs();}} style={primaryBtn(false)}>Login with Password</button>
-            <button onClick={handleRequestOtp} disabled={loading} style={secondaryBtn}>{loading?"Sending OTP...":"Login with OTP"}</button>
+            <div style={{fontSize:13,color:C.tm,textAlign:"center",marginBottom:20}}>+91 {mobile} <button onClick={()=>{setStage("mobile");resetMsgs();}} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:6}}>{t("common.change")}</button></div>
+            <button onClick={()=>{setStage("password");resetMsgs();}} style={primaryBtn(false)}>{t("app.login_with_password")}</button>
+            <button onClick={handleRequestOtp} disabled={loading} style={secondaryBtn}>{loading?t("app.sending_otp"):t("app.login_with_otp")}</button>
           </>
         )}
 
         {stage==="password"&&(
           <>
-            <div style={{fontSize:13,color:C.tm,textAlign:"center",marginBottom:20}}>+91 {mobile} <button onClick={goBack} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:6}}>Change</button></div>
+            <div style={{fontSize:13,color:C.tm,textAlign:"center",marginBottom:20}}>+91 {mobile} <button onClick={goBack} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:6}}>{t("common.change")}</button></div>
             <div style={{marginBottom:22}}>
-              <label style={labelStyle}>Password</label>
+              <label style={labelStyle}>{t("app.password")}</label>
               <div style={{position:"relative"}}>
                 <input type={show?"text":"password"} value={pass} onChange={e=>setPass(e.target.value)} style={{...inputStyle,padding:"11px 40px 11px 14px"}} onKeyDown={e=>e.key==="Enter"&&handlePasswordLogin()} autoFocus/>
                 <button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:C.tl,display:"flex"}}>{show?<IcEyeX size={17}/>:<IcEye size={17}/>}</button>
               </div>
             </div>
-            <button onClick={handlePasswordLogin} disabled={loading} style={primaryBtn(loading)}>{loading?"Logging in...":"Login"}</button>
+            <button onClick={handlePasswordLogin} disabled={loading} style={primaryBtn(loading)}>{loading?t("app.logging_in"):t("app.login")}</button>
           </>
         )}
 
         {stage==="change"&&(
           <>
-            <div style={{fontSize:14,fontWeight:700,color:C.t,textAlign:"center",marginBottom:6}}>Set a new password</div>
-            <div style={{fontSize:11.5,color:C.tl,textAlign:"center",marginBottom:20}}>Aapka password abhi default hai — surakshit ke liye naya password set karein.</div>
+            <div style={{fontSize:14,fontWeight:700,color:C.t,textAlign:"center",marginBottom:6}}>{t("app.set_a_new_password")}</div>
+            <div style={{fontSize:11.5,color:C.tl,textAlign:"center",marginBottom:20}}>{t("app.aapka_password_abhi_default_hai_surakshit")}</div>
             <div style={{marginBottom:14}}>
-              <label style={labelStyle}>New Password</label>
-              <input type={show?"text":"password"} value={np1} onChange={e=>setNp1(e.target.value)} placeholder="Min 6 characters" style={inputStyle} autoFocus/>
+              <label style={labelStyle}>{t("app.new_password")}</label>
+              <input type={show?"text":"password"} value={np1} onChange={e=>setNp1(e.target.value)} placeholder={t("app.min_6_characters")} style={inputStyle} autoFocus/>
             </div>
             <div style={{marginBottom:20}}>
-              <label style={labelStyle}>Confirm Password</label>
+              <label style={labelStyle}>{t("app.confirm_password")}</label>
               <input type={show?"text":"password"} value={np2} onChange={e=>setNp2(e.target.value)} style={inputStyle} onKeyDown={e=>e.key==="Enter"&&handleForceChange()}/>
             </div>
-            <button onClick={handleForceChange} disabled={loading} style={primaryBtn(loading)}>{loading?"Saving...":"Set New Password & Continue"}</button>
+            <button onClick={handleForceChange} disabled={loading} style={primaryBtn(loading)}>{loading?t("common.saving"):t("app.set_new_password_continue")}</button>
           </>
         )}
 
         {stage==="picker"&&(
           <>
-            <div style={{fontSize:14,fontWeight:700,color:C.t,textAlign:"center",marginBottom:4}}>Select company</div>
-            <div style={{fontSize:11.5,color:C.tl,textAlign:"center",marginBottom:18}}>Aapka mobile in companies me registered hai — kisi se bhi shuru karo. Login ke baad app ke andar se baaki companies me bina dobara login kiye switch kar sakte ho.</div>
+            <div style={{fontSize:14,fontWeight:700,color:C.t,textAlign:"center",marginBottom:4}}>{t("app.select_company")}</div>
+            <div style={{fontSize:11.5,color:C.tl,textAlign:"center",marginBottom:18}}>{t("app.aapka_mobile_in_companies_me_registered")}</div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {pickerOptions.map((o,i)=>(
                 <button key={i} onClick={()=>handleSelectCompany(o)} disabled={loading}
                   style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"13px 16px",borderRadius:10,border:`1.5px solid ${C.b}`,background:T.sltL,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
                   <div>
-                    <div style={{fontSize:14,fontWeight:700,color:C.t}}>{o.company_name||"Company"}</div>
+                    <div style={{fontSize:14,fontWeight:700,color:C.t}}>{o.company_name||t("common.company")}</div>
                     <div style={{fontSize:11,color:C.tm,marginTop:2}}>{(o.role||"").replace(/_/g," ")}{o.domain_label?" · "+o.domain_label:""}</div>
                   </div>
                   <span style={{color:C.p,fontSize:20,fontWeight:700}}>›</span>
                 </button>
               ))}
             </div>
-            <button onClick={()=>{setStage("password");resetMsgs();}} style={{...secondaryBtn,marginTop:14}}>Back</button>
+            <button onClick={()=>{setStage("password");resetMsgs();}} style={{...secondaryBtn,marginTop:14}}>{t("common.back")}</button>
           </>
         )}
 
         {stage==="otp"&&(
           <>
-            <div style={{fontSize:13,color:C.tm,textAlign:"center",marginBottom:20}}>+91 {mobile} <button onClick={goBack} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:6}}>Change</button></div>
+            <div style={{fontSize:13,color:C.tm,textAlign:"center",marginBottom:20}}>+91 {mobile} <button onClick={goBack} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:6}}>{t("common.change")}</button></div>
             <div style={{marginBottom:22}}>
-              <label style={labelStyle}>Enter OTP (4-digit)</label>
+              <label style={labelStyle}>{t("app.enter_otp_4_digit")}</label>
               <input type="tel" inputMode="numeric" maxLength={6} placeholder="••••••" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,"").slice(0,6))} style={{...inputStyle,letterSpacing:"8px",textAlign:"center",fontSize:18,fontWeight:700}} onKeyDown={e=>e.key==="Enter"&&handleOtpLogin()} autoFocus/>
             </div>
-            <button onClick={handleOtpLogin} disabled={loading} style={primaryBtn(loading)}>{loading?"Verifying...":"Verify & Login"}</button>
+            <button onClick={handleOtpLogin} disabled={loading} style={primaryBtn(loading)}>{loading?t("app.verifying"):t("app.verify_login")}</button>
             <div style={{textAlign:"center",marginTop:14}}>
-              <button onClick={handleRequestOtp} disabled={loading} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:loading?"not-allowed":"pointer"}}>Resend OTP</button>
+              <button onClick={handleRequestOtp} disabled={loading} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:loading?"not-allowed":"pointer"}}>{t("app.resend_otp")}</button>
             </div>
           </>
         )}
@@ -577,22 +578,22 @@ function LoginScreen({onLogin}){
 
 // ── QUICK SEARCH (Ctrl+K) ─────────────────────────────────────────────
 const SEARCH_ITEMS=[
-  {id:"dashboard", label:"Dashboard",     icon:"M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z", sc:"Alt+H", section:"Navigation"},
-  {id:"projects",  label:"Projects",      icon:"M3 7h18M3 12h18M3 17h18",                                 sc:"Alt+J", section:"Navigation"},
-  {id:"finance",   label:"Finance",       icon:"M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6",  sc:"Alt+F", section:"Finance & Ops"},
-  {id:"procurement",label:"Procurement",  icon:"M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18",  sc:"Alt+P", section:"Finance & Ops"},
-  {id:"warehouse", label:"Warehouse",     icon:"M3 21V8l9-5 9 5v13M9 21v-6h6v6",                          sc:"Alt+W", section:"Finance & Ops"},
-  {id:"fuel",      label:"Fuel",          icon:"M12 2.7s6 6.3 6 10.3a6 6 0 01-12 0c0-4 6-10.3 6-10.3z",   section:"Finance & Ops"},
-  {id:"machinery", label:"Machinery",     icon:"M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z", section:"Finance & Ops"},
-  {id:"township",  label:"Township CRM",  icon:"M3 21h18M5 21V7l6-4v18M19 21V11l-6-4",                    sc:"Alt+G", section:"Finance & Ops"},
-  {id:"payroll",   label:"Team & HR",     icon:"M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2",    sc:"Alt+Y", section:"Finance & Ops"},
+  {id:"dashboard", get label() { return t("common.dashboard"); },     icon:"M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z", sc:"Alt+H", section:"Navigation"},
+  {id:"projects",  get label() { return t("common.projects"); },      icon:"M3 7h18M3 12h18M3 17h18",                                 sc:"Alt+J", section:"Navigation"},
+  {id:"finance",   get label() { return t("common.finance"); },       icon:"M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6",  sc:"Alt+F", section:"Finance & Ops"},
+  {id:"procurement",get label() { return t("common.procurement"); },  icon:"M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18",  sc:"Alt+P", section:"Finance & Ops"},
+  {id:"warehouse", get label() { return t("common.warehouse"); },     icon:"M3 21V8l9-5 9 5v13M9 21v-6h6v6",                          sc:"Alt+W", section:"Finance & Ops"},
+  {id:"fuel",      get label() { return t("app.fuel"); },          icon:"M12 2.7s6 6.3 6 10.3a6 6 0 01-12 0c0-4 6-10.3 6-10.3z",   section:"Finance & Ops"},
+  {id:"machinery", get label() { return t("app.machinery"); },     icon:"M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z", section:"Finance & Ops"},
+  {id:"township",  get label() { return t("app.township_crm"); },  icon:"M3 21h18M5 21V7l6-4v18M19 21V11l-6-4",                    sc:"Alt+G", section:"Finance & Ops"},
+  {id:"payroll",   get label() { return t("app.team_hr"); },     icon:"M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2",    sc:"Alt+Y", section:"Finance & Ops"},
   {id:"crm",       label:"CRM",           icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+C", section:"Navigation"},
-  {id:"design",    label:"Design",        icon:"M12 19l7-7 3 3-7 7-3-3z",                                 sc:"Alt+D", section:"Navigation"},
-  {id:"team",      label:"My Team", icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+T", section:"Navigation"},
+  {id:"design",    get label() { return t("common.design"); },        icon:"M12 19l7-7 3 3-7 7-3-3z",                                 sc:"Alt+D", section:"Navigation"},
+  {id:"team",      get label() { return t("app.my_team"); }, icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+T", section:"Navigation"},
   {id:"mom",       label:"MOM",           icon:"M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7",    sc:"Alt+M", section:"Navigation"},
-  {id:"reports",   label:"Reports",       icon:"M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5",           sc:"Alt+B", section:"Reports"},
-  {id:"library",   label:"Library",       icon:"M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5",            sc:"Alt+L", section:"Reports"},
-  {id:"settings",  label:"Settings",      icon:"M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0", sc:"Alt+S", section:"Reports"},
+  {id:"reports",   get label() { return t("common.reports"); },       icon:"M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5",           sc:"Alt+B", section:"Reports"},
+  {id:"library",   get label() { return t("common.library"); },       icon:"M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5",            sc:"Alt+L", section:"Reports"},
+  {id:"settings",  get label() { return t("common.settings"); },      icon:"M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0", sc:"Alt+S", section:"Reports"},
 ];
 
 function QuickSearch({onNavigate, onClose}){
@@ -625,13 +626,13 @@ function QuickSearch({onNavigate, onClose}){
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
         <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={2} strokeLinecap="round"><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
         <input ref={inputRef} value={q} onChange={e=>{setQ(e.target.value);}}
-          placeholder="Search modules... (↑↓ navigate, Enter select)"
+          placeholder={t("app.search_modules_navigate_enter_select")}
           style={{flex:1,background:"none",border:"none",outline:"none",color:"white",fontSize:14,fontFamily:"inherit",caretColor:"#3B82F6"}}/>
         <span style={{fontSize:10,color:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.07)",padding:"2px 7px",borderRadius:5,fontWeight:600}}>ESC</span>
       </div>
       {/* Results */}
       <div style={{maxHeight:360,overflowY:"auto",padding:"6px 0"}}>
-        {filtered.length===0&&<div style={{padding:"28px 0",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:13}}>No results for "{q}"</div>}
+        {filtered.length===0&&<div style={{padding:"28px 0",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:13}}>{t("app.no_results_for_q", { q })}</div>}
         {filtered.map((item,i)=>(
           <div key={item.id} onClick={()=>onNavigate(item.id)}
             style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",cursor:"pointer",background:i===idx?"rgba(59,130,246,0.2)":"none",transition:"background 0.1s",borderLeft:i===idx?"3px solid #3B82F6":"3px solid transparent"}}
@@ -654,7 +655,7 @@ function QuickSearch({onNavigate, onClose}){
             <span style={{background:"rgba(255,255,255,0.08)",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:600,color:"rgba(255,255,255,0.4)"}}>{k}</span>{l}
           </span>
         ))}
-        <span style={{marginLeft:"auto",fontSize:10,color:"rgba(255,255,255,0.2)"}}>Ctrl+K to open anytime</span>
+        <span style={{marginLeft:"auto",fontSize:10,color:"rgba(255,255,255,0.2)"}}>{t("app.ctrl_k_to_open_anytime")}</span>
       </div>
     </div>
   </>);
@@ -700,22 +701,22 @@ function ShortcutCheatsheet({onClose}){
       {/* Header */}
       <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
-          <div style={{fontSize:15,fontWeight:700,color:"white"}}>Keyboard Shortcuts</div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",marginTop:2}}>Sanchalan — Press ? to toggle</div>
+          <div style={{fontSize:15,fontWeight:700,color:"white"}}>{t("app.keyboard_shortcuts")}</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",marginTop:2}}>{t("app.sanchalan_press_to_toggle")}</div>
         </div>
         <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:7,padding:"5px 10px",color:"rgba(255,255,255,0.5)",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>ESC</button>
       </div>
       {/* Content */}
       <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:20,maxHeight:"70vh",overflowY:"auto"}}>
-        <Section title="General" items={GENERAL} color="#60A5FA"/>
+        <Section title={t("app.general")} items={GENERAL} color="#60A5FA"/>
         <div style={{height:1,background:"rgba(255,255,255,0.06)"}}/>
-        <Section title="Global Navigation (Alt + Key)" items={GLOBAL} color="#34D399"/>
+        <Section title={t("app.global_navigation_alt_key")} items={GLOBAL} color="#34D399"/>
         <div style={{height:1,background:"rgba(255,255,255,0.06)"}}/>
-        <Section title="Project Detail Tabs (Ctrl + Key)" items={PROJ} color="#F59E0B"/>
+        <Section title={t("app.project_detail_tabs_ctrl_key")} items={PROJ} color="#F59E0B"/>
       </div>
       {/* Footer */}
       <div style={{padding:"10px 20px",borderTop:"1px solid rgba(255,255,255,0.06)",textAlign:"center"}}>
-        <span style={{fontSize:10.5,color:"rgba(255,255,255,0.2)"}}>Shortcuts are disabled when typing in input fields</span>
+        <span style={{fontSize:10.5,color:"rgba(255,255,255,0.2)"}}>{t("app.shortcuts_are_disabled_when_typing_in")}</span>
       </div>
     </div>
   </>);
@@ -750,12 +751,12 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
   const domainIcons={"surya_ghar":"☀️","surya_ghar_plus":"☀️","solar_commercial":"⚡","construction_individual":"🏗️","housing_projects":"🏠","government_contractor":"🏛️"};
   const domainColors={"surya_ghar":"#E65100","surya_ghar_plus":"#FF8F00","solar_commercial":"#1565C0","construction_individual":"#2E7D32","housing_projects":"#6A1B9A","government_contractor":"#4B45C4"};
   const DOMAINS=[
-    {id:"surya_ghar",label:"Surya Ghar Yojana"},
-    {id:"surya_ghar_plus",label:"Surya Ghar + Other Solar"},
-    {id:"solar_commercial",label:"Commercial Solar"},
-    {id:"construction_individual",label:"Individual Contractor"},
-    {id:"housing_projects",label:"Housing Projects"},
-    {id:"government_contractor",label:"Government Contractor"},
+    {id:"surya_ghar",label:t("app.surya_ghar_yojana")},
+    {id:"surya_ghar_plus",label:t("app.surya_ghar_other_solar")},
+    {id:"solar_commercial",label:t("app.commercial_solar")},
+    {id:"construction_individual",label:t("app.individual_contractor")},
+    {id:"housing_projects",label:t("app.housing_projects")},
+    {id:"government_contractor",label:t("app.government_contractor")},
   ];
   const activeDomain = user?.company_domain || "construction_individual";
   const activeIcon = domainIcons[activeDomain] || "🏗️";
@@ -839,8 +840,8 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
             {activeLogo&&<img src={activeLogo} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",background:"#fff"}} onError={e=>{e.currentTarget.style.display="none";}}/>}
           </div>
           {showLabel&&<div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-            <span style={{color:"#fff",fontWeight:700,fontSize:13.5,letterSpacing:"-.1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.company_name||"Company"}</span>
-            <span style={{color:"rgba(255,255,255,0.4)",fontSize:9.5,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(DOMAINS.find(d=>d.id===activeDomain)||{}).label||"Construction"}</span>
+            <span style={{color:"#fff",fontWeight:700,fontSize:13.5,letterSpacing:"-.1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.company_name||t("common.company")}</span>
+            <span style={{color:"rgba(255,255,255,0.4)",fontSize:9.5,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(DOMAINS.find(d=>d.id===activeDomain)||{}).label||t("app.construction")}</span>
           </div>}
           {showLabel&&<svg width={12} height={12} viewBox="0 0 12 12" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={1.5}><path d={showSwitcher?"M2 8l4-4 4 4":"M2 4l4 4 4-4"}/></svg>}
         </div>
@@ -848,7 +849,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
         {/* Company switcher dropdown */}
         {showSwitcher&&showLabel&&(
           <div style={{position:"absolute",top:"100%",left:8,right:8,background:"#1E293B",borderRadius:10,boxShadow:"0 12px 40px rgba(0,0,0,0.5)",zIndex:250,border:"1px solid rgba(255,255,255,0.1)",overflow:"hidden",animation:"fadeIn .15s ease"}}>
-            <div style={{padding:"8px 10px 4px",fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.3)",letterSpacing:"1px",textTransform:"uppercase"}}>Your Companies</div>
+            <div style={{padding:"8px 10px 4px",fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.3)",letterSpacing:"1px",textTransform:"uppercase"}}>{t("app.your_companies")}</div>
             {(companies||[]).map(co=>{
               const isActive=co.id===user?.company_id;
               const clr=domainColors[co.domain]||C.p;
@@ -876,21 +877,21 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
                   onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="white";}}
                   onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.5)";}}>
                   <div style={{width:28,height:28,borderRadius:7,border:"1.5px dashed rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>+</div>
-                  Create New Company
+                 {t("app.create_new_company")}
                 </button>
               ):(
                 <div style={{padding:"8px 6px"}}>
-                  <input value={newCo.name} onChange={e=>setNewCo(p=>({...p,name:e.target.value}))} placeholder="Company name"
+                  <input value={newCo.name} onChange={e=>setNewCo(p=>({...p,name:e.target.value}))} placeholder={t("app.company_name")}
                     style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.06)",color:"white",fontSize:12,outline:"none",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}/>
                   <select value={newCo.domain} onChange={e=>setNewCo(p=>({...p,domain:e.target.value}))}
                     style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.06)",color:"white",fontSize:12,outline:"none",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}>
                     {DOMAINS.map(d=><option key={d.id} value={d.id}>{domainIcons[d.id]} {d.label}</option>)}
                   </select>
-                  <input value={newCo.city} onChange={e=>setNewCo(p=>({...p,city:e.target.value}))} placeholder="City (optional)"
+                  <input value={newCo.city} onChange={e=>setNewCo(p=>({...p,city:e.target.value}))} placeholder={t("app.city_optional")}
                     style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.06)",color:"white",fontSize:12,outline:"none",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}/>
                   <div style={{display:"flex",gap:6}}>
-                    <button onClick={()=>setShowCreateCo(false)} style={{flex:1,padding:"6px",borderRadius:6,background:"rgba(255,255,255,0.08)",border:"none",color:"rgba(255,255,255,0.5)",fontSize:11,cursor:"pointer"}}>Cancel</button>
-                    <button onClick={handleCreate} disabled={creating} style={{flex:2,padding:"6px",borderRadius:6,background:"#3B82F6",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:creating?"wait":"pointer"}}>{creating?"Creating...":"Create"}</button>
+                    <button onClick={()=>setShowCreateCo(false)} style={{flex:1,padding:"6px",borderRadius:6,background:"rgba(255,255,255,0.08)",border:"none",color:"rgba(255,255,255,0.5)",fontSize:11,cursor:"pointer"}}>{t("common.cancel")}</button>
+                    <button onClick={handleCreate} disabled={creating} style={{flex:2,padding:"6px",borderRadius:6,background:"#3B82F6",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:creating?"wait":"pointer"}}>{creating?t("app.creating"):t("common.create")}</button>
                   </div>
                 </div>
               )}
@@ -930,7 +931,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
                   >
                     <item.Icon size={isMobile?19:17} color="currentColor"/>
                     {showLabel&&<span style={{fontSize:isMobile?14:13,fontWeight:isA?600:450,flex:1,whiteSpace:"nowrap",letterSpacing:".1px"}}>{item.label}</span>}
-                    {showLabel&&!isMobile&&item.sc&&!item.badge&&<span style={{fontSize:9,color:isA?"rgba(255,255,255,0.45)":"rgba(255,255,255,0.25)",fontWeight:500,fontVariantNumeric:"tabular-nums",flexShrink:0}}>Alt+{item.sc}</span>}
+                    {showLabel&&!isMobile&&item.sc&&!item.badge&&<span style={{fontSize:9,color:isA?"rgba(255,255,255,0.45)":"rgba(255,255,255,0.25)",fontWeight:500,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{t("app.alt_sc", { sc: item.sc })}</span>}
                     {showLabel&&item.badge&&<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9.5:8.5,fontWeight:700,padding:"2px 7px",borderRadius:10,letterSpacing:typeof item.badge==="number"?0:".3px",fontVariantNumeric:"tabular-nums",flexShrink:0}}>{item.badge}</span>}
                     {isA&&!showLabel&&<div style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",width:3,height:22,background:"#3B82F6",borderRadius:"2px 0 0 2px"}}/>}
                   </button>
@@ -948,8 +949,8 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
           onMouseLeave={e=>{if(!showProfileMenu) e.currentTarget.style.background="transparent";}}>
           <div style={{width:32,height:32,borderRadius:"50%",background:`linear-gradient(135deg,${C.a},#FF8F00)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:13,fontWeight:700,color:"white"}}>{(user?.name||"U")[0].toUpperCase()}</div>
           {showLabel&&<div style={{flex:1,minWidth:0,overflow:"hidden"}}>
-            <div style={{color:"#fff",fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:"-.1px"}}>{user?.name||"User"}</div>
-            <div style={{color:"rgba(255,255,255,0.4)",fontSize:9.5,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.role||"User"}</div>
+            <div style={{color:"#fff",fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:"-.1px"}}>{user?.name||t("common.user")}</div>
+            <div style={{color:"rgba(255,255,255,0.4)",fontSize:9.5,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.role||t("common.user")}</div>
           </div>}
           {showLabel&&<svg width={12} height={12} viewBox="0 0 12 12" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={1.5}><path d={showProfileMenu?"M2 4l4 4 4-4":"M2 8l4-4 4 4"}/></svg>}
         </div>
@@ -958,7 +959,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
         {showProfileMenu&&showLabel&&(
           <div style={{position:"absolute",bottom:"100%",left:8,right:8,marginBottom:6,background:"#0F172A",borderRadius:9,boxShadow:"0 -8px 30px rgba(0,0,0,0.4)",border:"1px solid rgba(255,255,255,0.08)",overflow:"hidden",animation:"fadeIn .12s ease"}}>
             <div style={{padding:"10px 12px 8px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
-              <div style={{color:"#fff",fontSize:12,fontWeight:700}}>{user?.name||"User"}</div>
+              <div style={{color:"#fff",fontSize:12,fontWeight:700}}>{user?.name||t("common.user")}</div>
               <div style={{color:"rgba(255,255,255,0.45)",fontSize:10.5,marginTop:1}}>{user?.email||user?.phone||""}</div>
             </div>
             <button onClick={()=>{setShowProfileMenu(false);handleNav("profile");}}
@@ -966,22 +967,51 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
               onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#fff";}}
               onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.75)";}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <span>My Profile</span>
+              <span>{t("app.my_profile")}</span>
             </button>
             {["admin","super_admin"].includes(user?.role)&&<button onClick={()=>{setShowProfileMenu(false);handleNav("settings");}}
               style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.75)",fontSize:12,fontFamily:"inherit",textAlign:"left",transition:"background .12s"}}
               onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#fff";}}
               onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.75)";}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-              <span>Company Settings</span>
+              <span>{t("app.company_settings")}</span>
             </button>}
+            {/* ── Language ────────────────────────────────────
+                 setLang() reload karta hai — poori UI ek hi bhasha me aati
+                 hai. Backend call isliye ki setting device ke bahar bhi
+                 chale (naya login, Sahayak bot); wo fail ho jaye to bhi
+                 local setting lag chuki hoti hai. */}
+            <div style={{borderTop:"1px solid rgba(255,255,255,0.06)",padding:"9px 12px"}}>
+              <div style={{color:"rgba(255,255,255,0.45)",fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("more.language")}</div>
+              <div style={{display:"flex",gap:6}}>
+                {LANGS.map(l=>{
+                  const on=l.code===getLang();
+                  return (
+                    <button key={l.code}
+                      onClick={async()=>{
+                        setShowProfileMenu(false);
+                        if(on) return;
+                        try{ await api.put("/auth/language",{language:l.code}); }catch(_){}
+                        setLang(l.code);
+                      }}
+                      style={{flex:1,padding:"6px 4px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
+                        fontSize:11,fontWeight:on?700:500,
+                        background:on?"rgba(59,130,246,0.22)":"rgba(255,255,255,0.05)",
+                        color:on?"#93C5FD":"rgba(255,255,255,0.7)",
+                        border:"1px solid "+(on?"rgba(59,130,246,0.55)":"rgba(255,255,255,0.08)")}}>
+                      {l.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             {onLogout&&<div style={{borderTop:"1px solid rgba(255,255,255,0.06)"}}>
               <button onClick={()=>{setShowProfileMenu(false);onLogout();}}
                 style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"#F87171",fontSize:12,fontFamily:"inherit",fontWeight:600,textAlign:"left",transition:"background .12s"}}
                 onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,0.15)";}}
                 onMouseLeave={e=>{e.currentTarget.style.background="none";}}>
                 <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
-                <span>Logout</span>
+                <span>{t("app.logout")}</span>
               </button>
             </div>}
           </div>
@@ -999,18 +1029,18 @@ function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onSea
       {!isMobile&&<button onClick={()=>setCollapsed(!collapsed)} style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:7,borderRadius:7,display:"flex"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}><IcMenu size={19}/></button>}
       <div style={{flex:1}}><div style={{fontSize:isMobile?13.5:15,fontWeight:700,color:T.t1}}>{title}</div>{!isMobile&&sub&&<div style={{fontSize:11,color:T.t3}}>{sub}</div>}</div>
       {isMobile?(
-        <button onClick={onSearch} title="Search" style={{width:34,height:34,borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,display:"flex",alignItems:"center",justifyContent:"center"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background=T.bg}><IcSearch size={17}/></button>
+        <button onClick={onSearch} title={t("app.search")} style={{width:34,height:34,borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,display:"flex",alignItems:"center",justifyContent:"center"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background=T.bg}><IcSearch size={17}/></button>
       ):(
-        <button onClick={onSearch} title="Quick Search (Ctrl+K)"
+        <button onClick={onSearch} title={t("app.quick_search_ctrl_k")}
           style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,transition:"all 0.15s"}}
           onMouseEnter={e=>{e.currentTarget.style.background=T.sltL;e.currentTarget.style.borderColor=T.b2;}}
           onMouseLeave={e=>{e.currentTarget.style.background=T.bg;e.currentTarget.style.borderColor=T.b1;}}>
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round"><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
-          <span style={{fontSize:12,color:T.t4,whiteSpace:"nowrap"}}>Search...</span>
-          <span style={{fontSize:9.5,background:T.b1,borderRadius:4,padding:"1px 6px",color:T.t4,fontWeight:600,letterSpacing:"0.3px"}}>Ctrl+K</span>
+          <span style={{fontSize:12,color:T.t4,whiteSpace:"nowrap"}}>{t("common.search")}</span>
+          <span style={{fontSize:9.5,background:T.b1,borderRadius:4,padding:"1px 6px",color:T.t4,fontWeight:600,letterSpacing:"0.3px"}}>{t("app.ctrl_k")}</span>
         </button>
       )}
-      {!isMobile&&<button onClick={onCheatsheet} title="Keyboard Shortcuts (?)"
+      {!isMobile&&<button onClick={onCheatsheet} title={t("app.keyboard_shortcuts_2")}
         style={{width:32,height:32,borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,transition:"all 0.15s"}}
         onMouseEnter={e=>e.currentTarget.style.background=T.sltL}
         onMouseLeave={e=>e.currentTarget.style.background=T.bg}>?</button>}
@@ -1048,7 +1078,7 @@ function MobileBottomNav({active,setActive,enabledModules,user}){
       <div onClick={()=>setShowMore(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:290}}/>
       <div style={{position:"fixed",bottom:"calc(60px + env(safe-area-inset-bottom,0px))",left:0,right:0,background:"#1E293B",borderRadius:"16px 16px 0 0",boxShadow:"0 -8px 32px rgba(0,0,0,0.4)",zIndex:291,animation:"slideUp .2s ease"}}>
         <div style={{padding:"12px 16px 8px",borderBottom:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",letterSpacing:"1px",textTransform:"uppercase"}}>More Modules</span>
+          <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",letterSpacing:"1px",textTransform:"uppercase"}}>{t("app.more_modules")}</span>
           <button onClick={()=>setShowMore(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.4)",display:"flex",padding:4}}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",padding:"8px 0 12px"}}>
@@ -1072,7 +1102,7 @@ function MobileBottomNav({active,setActive,enabledModules,user}){
       })}
       <button onClick={()=>setShowMore(s=>!s)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"8px 0 10px",border:"none",cursor:"pointer",background:"none",color:(isMoreActive||showMore)?"#60A5FA":"rgba(255,255,255,0.45)",fontFamily:"inherit",borderTop:`2px solid ${(isMoreActive||showMore)?"#3B82F6":"transparent"}`,transition:"color .15s"}}>
         <IcMenu size={21} color="currentColor"/>
-        <span style={{fontSize:9.5,fontWeight:(isMoreActive||showMore)?700:500,letterSpacing:".2px"}}>More</span>
+        <span style={{fontSize:9.5,fontWeight:(isMoreActive||showMore)?700:500,letterSpacing:".2px"}}>{t("app.more")}</span>
       </button>
     </div>
     <style>{`@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
@@ -1087,11 +1117,11 @@ function ModuleDisabled({name}){
         <div style={{width:64,height:64,borderRadius:16,background:T.sltL,border:`1px solid ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}>
           <IcLock size={28} color={T.slt}/>
         </div>
-        <div style={{fontSize:17,fontWeight:700,color:T.t1,marginBottom:6}}>{name} — Module Disabled</div>
-        <div style={{fontSize:13,color:T.t3,lineHeight:1.6,marginBottom:20}}>This module is not enabled for your company. Contact your administrator to enable it from Settings &rarr; Module Access.</div>
+        <div style={{fontSize:17,fontWeight:700,color:T.t1,marginBottom:6}}>{t("app.name_module_disabled", { name })}</div>
+        <div style={{fontSize:13,color:T.t3,lineHeight:1.6,marginBottom:20}}>{t("app.this_module_is_not_enabled_for")}</div>
         <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 16px",borderRadius:8,background:T.bluL,border:`1px solid ${T.bluM}`,fontSize:12.5,color:T.blu,fontWeight:600}}>
           <IcSet size={14} color={T.blu}/>
-          Settings &rarr; Module Access
+         {t("app.settings_module_access")}
         </div>
       </div>
     </div>
@@ -1104,33 +1134,33 @@ function ProjectExpandedRow({p}){
   const spentPct=p.boq>0?((p.expense/p.boq)*100).toFixed(0):0;
   const sm=STATUS_META[p.status]||STATUS_META["Ongoing"];
   const progColor=p.progress===100?T.grn:p.progress>60?T.blu:p.progress>30?T.amb:T.red;
-  const expSlices=[{label:"Material",value:p.expense*0.46,color:T.blu},{label:"Sub-Con",value:p.expense*0.30,color:T.pur},{label:"Labour",value:p.expense*0.15,color:T.grn},{label:"Site Exp",value:p.expense*0.06,color:T.amb},{label:"Equip",value:p.expense*0.03,color:T.slt}].filter(s=>s.value>0);
+  const expSlices=[{label:t("common.material"),value:p.expense*0.46,color:T.blu},{label:t("app.sub_con"),value:p.expense*0.30,color:T.pur},{label:t("common.labour"),value:p.expense*0.15,color:T.grn},{label:t("app.site_exp"),value:p.expense*0.06,color:T.amb},{label:t("app.equip"),value:p.expense*0.03,color:T.slt}].filter(s=>s.value>0);
   return(
     <tr><td colSpan={10} style={{padding:0,background:T.bluL,borderBottom:`2px solid ${T.bluM}`}}>
       <div style={{padding:"14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr 1.2fr 1fr",gap:14}}>
         <div>
-          <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>Project Overview</div>
+          <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>{t("app.project_overview")}</div>
           <div style={{display:"flex",gap:10,marginBottom:10}}>
-            {[{l:"BOQ Value",v:`₹${fmt(p.boq)}`,c:T.slt},{l:"Spent",v:`₹${fmt(p.expense)}`,c:T.amb},{l:"Margin",v:`₹${fmt(margin)}`,c:margin>0?T.grn:T.red}].map((s,i)=>(
+            {[{l:t("app.boq_value"),v:`₹${fmt(p.boq)}`,c:T.slt},{l:t("app.spent"),v:`₹${fmt(p.expense)}`,c:T.amb},{l:t("common.margin"),v:`₹${fmt(margin)}`,c:margin>0?T.grn:T.red}].map((s,i)=>(
               <div key={i} style={{flex:1,padding:"8px 10px",background:T.surface,borderRadius:7,borderTop:`3px solid ${s.c}`}}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:3}}>{s.l}</div><div style={{fontSize:14,fontWeight:700,color:s.c}}>{s.v}</div></div>
             ))}
           </div>
-          <div style={{marginBottom:6}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:11,color:T.t3}}>Progress</span><span style={{fontSize:12,fontWeight:700,color:progColor}}>{p.progress}%</span></div><div style={{height:8,background:T.b1,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:progColor,borderRadius:4}}/></div></div>
-          <div><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:11,color:T.t3}}>Budget Used</span><span style={{fontSize:12,fontWeight:700,color:Number(spentPct)>90?T.red:T.t1}}>{spentPct}%</span></div><div style={{height:8,background:T.b1,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(spentPct,100)}%`,background:Number(spentPct)>90?T.red:Number(spentPct)>75?T.amb:T.blu,borderRadius:4}}/></div></div>
+          <div style={{marginBottom:6}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:11,color:T.t3}}>{t("common.progress")}</span><span style={{fontSize:12,fontWeight:700,color:progColor}}>{p.progress}%</span></div><div style={{height:8,background:T.b1,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:progColor,borderRadius:4}}/></div></div>
+          <div><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:11,color:T.t3}}>{t("app.budget_used")}</span><span style={{fontSize:12,fontWeight:700,color:Number(spentPct)>90?T.red:T.t1}}>{spentPct}%</span></div><div style={{height:8,background:T.b1,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(spentPct,100)}%`,background:Number(spentPct)>90?T.red:Number(spentPct)>75?T.amb:T.blu,borderRadius:4}}/></div></div>
         </div>
         <div>
-          <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>Expense Breakdown</div>
+          <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>{t("app.expense_breakdown")}</div>
           <div style={{display:"flex",gap:12,alignItems:"center"}}>
             <div style={{width:104,height:104,flexShrink:0}}><EChart option={eDonutMini(expSlices)} height={104}/></div>
             <div style={{flex:1}}>{expSlices.map((s,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}><div style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/><span style={{fontSize:10.5,color:T.t3,flex:1}}>{s.label}</span><span style={{fontSize:10.5,fontWeight:600,color:T.t1}}>₹{fmt(s.value)}</span></div>))}</div>
           </div>
         </div>
         <div>
-          <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>Monthly Spend Trend</div>
+          <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>{t("app.monthly_spend_trend")}</div>
           <EChart option={eBarMini([{month:"Oct",expense:p.expense*0.08},{month:"Nov",expense:p.expense*0.12},{month:"Dec",expense:p.expense*0.18},{month:"Jan",expense:p.expense*0.15},{month:"Feb",expense:p.expense*0.22},{month:"Mar",expense:p.expense*0.25}])} height={96}/>
         </div>
         <div>
-          <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>Details</div>
+          <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>{t("app.details")}</div>
           {[["Client",p.client],["City",p.city],["Type",p.type],["PM",p.pm],["Start",p.start],["End",p.end],["Margin",`${marginPct}% (${margin>=0?"profit":"loss"})`]].map(([k,v])=>(<div key={k} style={{display:"flex",gap:8,padding:"4px 0",borderBottom:`1px solid ${T.bluM}`}}><span style={{width:52,fontSize:10.5,color:T.t4,flexShrink:0}}>{k}</span><span style={{fontSize:11,fontWeight:500,color:T.t1}}>{v}</span></div>))}
         </div>
       </div>
@@ -1146,33 +1176,33 @@ function ProjectExpandedRow({p}){
 // ══════════════════════════════════════════════════════════════════════
 const EMPTY_OPS = {
   kpis: [
-    {label:"Active Projects",   value:0, sub:"0 total",        color:T.pur, Icon:IcProj},
-    {label:"Present Today",     value:0, sub:"attendance today", color:T.grn, Icon:IcTeam},
-    {label:"Active Tasks",      value:0, sub:"0 overdue",       color:T.amb, Icon:IcChk},
-    {label:"Pending Approvals", value:0, sub:"to review",       color:T.red, Icon:IcApprv},
-    {label:"Material Requests", value:0, sub:"pending",         color:T.blu, Icon:IcProc},
-    {label:"Low Stock Items",   value:0, sub:"reorder needed",  color:T.amb, Icon:IcWH},
+    {get label() { return t("app.active_projects"); },   value:0, get sub() { return t("app.0_total"); },        color:T.pur, Icon:IcProj},
+    {get label() { return t("app.present_today"); },     value:0, get sub() { return t("app.attendance_today"); }, color:T.grn, Icon:IcTeam},
+    {get label() { return t("app.active_tasks"); },      value:0, get sub() { return t("app.0_overdue"); },       color:T.amb, Icon:IcChk},
+    {get label() { return t("app.pending_approvals"); }, value:0, get sub() { return t("app.to_review"); },       color:T.red, Icon:IcApprv},
+    {get label() { return t("app.material_requests"); }, value:0, sub:"pending",         color:T.blu, Icon:IcProc},
+    {get label() { return t("app.low_stock_items"); },   value:0, get sub() { return t("app.reorder_needed"); },  color:T.amb, Icon:IcWH},
   ],
   projects: [], attendance: {present:0,absent:0,leave:0,total:0,byDept:[]}, team: [],
   pipeline: [], approvals: [], siteActivity: [], alerts: [],
 };
 const EMPTY_FIN_KPIS = [
-  {label:"Total BOQ",      value:"₹0", sub:"0 projects", color:T.slt, Icon:IcMargin},
-  {label:"Total Received", value:"₹0", sub:"received",   color:T.grn, Icon:IcCash},
-  {label:"Total Spent",    value:"₹0", sub:"spent",      color:T.amb, Icon:IcTruck},
-  {label:"Gross Margin",   value:"₹0", sub:"0% margin",  color:T.grn, Icon:IcTrend},
-  {label:"Receivables",    value:"₹0", sub:"outstanding", color:T.blu, Icon:IcPay},
-  {label:"Payables",       value:"₹0", sub:"on time",    color:T.red, Icon:IcAlert},
+  {get label() { return t("app.total_boq"); },      value:"₹0", get sub() { return t("app.0_projects"); }, color:T.slt, Icon:IcMargin},
+  {get label() { return t("app.total_received"); }, value:"₹0", sub:"received",   color:T.grn, Icon:IcCash},
+  {get label() { return t("app.total_spent"); },    value:"₹0", sub:"spent",      color:T.amb, Icon:IcTruck},
+  {get label() { return t("app.gross_margin"); },   value:"₹0", get sub() { return t("app.0_margin"); },  color:T.grn, Icon:IcTrend},
+  {get label() { return t("app.receivables"); },    value:"₹0", sub:"outstanding", color:T.blu, Icon:IcPay},
+  {get label() { return t("app.payables"); },       value:"₹0", get sub() { return t("app.on_time"); },    color:T.red, Icon:IcAlert},
 ];
 
 // ── ECharts option builders (GB theme) ───────────────────────────────
 const _EAX={axisLine:{lineStyle:{color:T.b1}},axisTick:{show:false},axisLabel:{color:T.t4,fontSize:10}};
-const _ETB={right:6,top:-3,feature:{saveAsImage:{title:"Save"}},iconStyle:{borderColor:T.t4}};
+const _ETB={right:6,top:-3,feature:{saveAsImage:{get title() { return t("app.save"); }}},iconStyle:{borderColor:T.t4}};
 function eBarOption(data){
   return {
     tooltip:{trigger:"axis",axisPointer:{type:"shadow"},valueFormatter:v=>"₹"+fmt(v)},
     legend:{data:["Revenue","Expense"],bottom:0,itemWidth:10,itemHeight:10,textStyle:{color:T.t3,fontSize:11}},
-    toolbox:{..._ETB,feature:{magicType:{type:["bar","line"]},saveAsImage:{title:"Save"}}},
+    toolbox:{..._ETB,feature:{magicType:{type:["bar","line"]},saveAsImage:{title:t("common.save")}}},
     grid:{left:46,right:12,top:18,bottom:34},
     xAxis:{type:"category",data:data.map(d=>d.month),..._EAX},
     yAxis:{type:"value",axisLabel:{color:T.t4,fontSize:10,formatter:v=>fmt(v)},splitLine:{lineStyle:{color:T.b1,type:"dashed"}}},
@@ -1239,7 +1269,7 @@ function eLineOption(cf){
     ],
   };
 }
-const EChartEmpty=({msg})=>(<div style={{height:180,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:12.5}}>{msg||"No data yet"}</div>);
+const EChartEmpty=({msg})=>(<div style={{height:180,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:12.5}}>{msg||t("app.no_data_yet")}</div>);
 
 function DashboardModule(){
   const [view,setView]=useState("finance"); // finance | operations
@@ -1263,7 +1293,7 @@ function DashboardModule(){
   // ── Finance / Operations switch (shared header) ──
   const Switch=(
     <div style={{display:"inline-flex",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:3,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",marginBottom:14}}>
-      {[{v:"finance",l:"Finance",Icon:IcFin,c:T.blu},{v:"operations",l:"Operations & Team",Icon:IcProj,c:T.pur}].map(t=>(
+      {[{v:"finance",l:t("common.finance"),Icon:IcFin,c:T.blu},{v:"operations",l:t("app.operations_team"),Icon:IcProj,c:T.pur}].map(t=>(
         <button key={t.v} onClick={()=>setView(t.v)}
           style={{display:"flex",alignItems:"center",gap:7,padding:"8px 20px",border:"none",background:view===t.v?t.c:"transparent",color:view===t.v?"#fff":T.t3,borderRadius:8,fontSize:12.5,fontWeight:700,cursor:"pointer",transition:"all .15s"}}>
           <t.Icon size={15} color={view===t.v?"#fff":T.t3}/> {t.l}
@@ -1275,12 +1305,12 @@ function DashboardModule(){
   // ── Operations data: attach presentational icons/colours to server data ──
   const opsData = o ? {
     kpis: [
-      {label:"Active Projects",   value:o.kpis.activeProjects, sub:`${o.projects.length} total`,            color:T.pur, Icon:IcProj},
-      {label:"Present Today",     value:o.kpis.presentToday,   sub:"attendance today",                      color:T.grn, Icon:IcTeam},
-      {label:"Active Tasks",      value:o.kpis.openTasks,      sub:`${o.kpis.overdueTasks} overdue`,         color:T.amb, Icon:IcChk},
-      {label:"Pending Approvals", value:o.kpis.pendingApprovals, sub:"to review",                           color:T.red, Icon:IcApprv},
-      {label:"Material Requests", value:o.kpis.materialRequests, sub:"pending",                             color:T.blu, Icon:IcProc},
-      {label:"Low Stock Items",   value:o.kpis.lowStock,       sub:"reorder needed",                        color:T.amb, Icon:IcWH},
+      {label:t("app.active_projects"),   value:o.kpis.activeProjects, sub:t("app.length_total", { length: o.projects.length }),            color:T.pur, Icon:IcProj},
+      {label:t("app.present_today"),     value:o.kpis.presentToday,   sub:t("app.attendance_today"),                      color:T.grn, Icon:IcTeam},
+      {label:t("app.active_tasks"),      value:o.kpis.openTasks,      sub:t("app.overduetasks_overdue", { overdueTasks: o.kpis.overdueTasks }),         color:T.amb, Icon:IcChk},
+      {label:t("common.pending_approvals"), value:o.kpis.pendingApprovals, sub:t("app.to_review"),                           color:T.red, Icon:IcApprv},
+      {label:t("common.material_requests"), value:o.kpis.materialRequests, sub:"pending",                             color:T.blu, Icon:IcProc},
+      {label:t("app.low_stock_items"),   value:o.kpis.lowStock,       sub:t("app.reorder_needed"),                        color:T.amb, Icon:IcWH},
     ],
     projects:o.projects, attendance:o.attendance, team:o.team,
     pipeline:(o.pipeline||[]).map((s,i)=>({...s,color:[T.blu,T.pur,T.grn][i]||T.slt})),
@@ -1315,12 +1345,12 @@ function DashboardModule(){
   // Finance KPI tiles from real data (icons/colours presentational)
   const k=f&&f.kpis;
   const finKpis = k ? [
-    {label:"Total BOQ",      value:`₹${fmt(k.totalBOQ)}`,   sub:`${o?o.projects.length:0} projects`, color:T.slt, Icon:IcMargin},
-    {label:"Total Received", value:`₹${fmt(k.received)}`,    sub:k.totalBOQ>0?`${Math.round(k.received/k.totalBOQ*100)}% of BOQ`:"received", color:T.grn, Icon:IcCash},
-    {label:"Total Spent",    value:`₹${fmt(k.spent)}`,       sub:k.totalBOQ>0?`${Math.round(k.spent/k.totalBOQ*100)}% of BOQ`:"spent", color:T.amb, Icon:IcTruck},
-    {label:"Gross Margin",   value:`₹${fmt(k.grossMargin)}`, sub:`${k.totalBOQ>0?((k.grossMargin/k.totalBOQ)*100).toFixed(1):0}% margin`, color:k.grossMargin>=0?T.grn:T.red, Icon:IcTrend},
-    {label:"Receivables",    value:`₹${fmt(k.receivables)}`, sub:"outstanding", color:T.blu, Icon:IcPay},
-    {label:"Payables",       value:`₹${fmt(k.payables)}`,    sub:k.payablesOverdue>0?`₹${fmt(k.payablesOverdue)} overdue`:"on time", color:T.red, Icon:IcAlert},
+    {label:t("app.total_boq"),      value:`₹${fmt(k.totalBOQ)}`,   sub:`${o?o.projects.length:0} projects`, color:T.slt, Icon:IcMargin},
+    {label:t("app.total_received"), value:`₹${fmt(k.received)}`,    sub:k.totalBOQ>0?`${Math.round(k.received/k.totalBOQ*100)}% of BOQ`:"received", color:T.grn, Icon:IcCash},
+    {label:t("app.total_spent"),    value:`₹${fmt(k.spent)}`,       sub:k.totalBOQ>0?`${Math.round(k.spent/k.totalBOQ*100)}% of BOQ`:"spent", color:T.amb, Icon:IcTruck},
+    {label:t("app.gross_margin"),   value:`₹${fmt(k.grossMargin)}`, sub:`${k.totalBOQ>0?((k.grossMargin/k.totalBOQ)*100).toFixed(1):0}% margin`, color:k.grossMargin>=0?T.grn:T.red, Icon:IcTrend},
+    {label:t("app.receivables"),    value:`₹${fmt(k.receivables)}`, sub:"outstanding", color:T.blu, Icon:IcPay},
+    {label:t("app.payables"),       value:`₹${fmt(k.payables)}`,    sub:k.payablesOverdue>0?`₹${fmt(k.payablesOverdue)} overdue`:"on time", color:T.red, Icon:IcAlert},
   ] : EMPTY_FIN_KPIS;
   const projectsArr=dd.projects||PROJECTS_DATA;
   const cashflowArr=dd.cashflow||CASHFLOW_DATA;
@@ -1335,7 +1365,7 @@ function DashboardModule(){
   const totalIn=cfData.reduce((s,d)=>s+(d.in||0),0);
   const totalOut=cfData.reduce((s,d)=>s+(d.out||0),0);
   const financeBarData=cashflowArr.map(d=>({month:d.month,sales:Math.round((d.in||0)*(selProject==="All"?1:0.35)),expense:Math.round((d.out||0)*(selProject==="All"?1:0.35))}));
-  const expSlices=dd.expense_breakdown||[{label:"Material Purchase",value:totalExp*0.46,color:T.blu},{label:"Sub-Contractor",value:totalExp*0.30,color:T.pur},{label:"Direct Labour",value:totalExp*0.15,color:T.grn},{label:"Site Expenses",value:totalExp*0.06,color:T.amb},{label:"Equipment",value:totalExp*0.03,color:T.slt}].filter(s=>s.value>0);
+  const expSlices=dd.expense_breakdown||[{label:t("common.material_purchase"),value:totalExp*0.46,color:T.blu},{label:t("app.sub_contractor"),value:totalExp*0.30,color:T.pur},{label:t("app.direct_labour"),value:totalExp*0.15,color:T.grn},{label:t("app.site_expenses"),value:totalExp*0.06,color:T.amb},{label:t("common.equipment"),value:totalExp*0.03,color:T.slt}].filter(s=>s.value>0);
   const activityToShow=showAllActivity?activityArr:activityArr.slice(0,4);
   const actionsToShow=showAllActions?pendingArr:pendingArr.slice(0,4);
 
@@ -1348,16 +1378,16 @@ function DashboardModule(){
       </div>
       {/* Charts row */}
       <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr 1fr",gap:12,marginBottom:12}}>
-        <Panel title="Finance Overview" action={<div style={{display:"flex",gap:4}}>{["week","month","quarter"].map(r=>(<button key={r} onClick={()=>setRange(r)} style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${range===r?T.blu:T.b1}`,background:range===r?T.blu:"none",color:range===r?"white":T.t3,fontSize:10.5,cursor:"pointer",fontWeight:range===r?600:400}}>{r.charAt(0).toUpperCase()+r.slice(1)}</button>))}</div>}>
+        <Panel title={t("app.finance_overview")} action={<div style={{display:"flex",gap:4}}>{["week","month","quarter"].map(r=>(<button key={r} onClick={()=>setRange(r)} style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${range===r?T.blu:T.b1}`,background:range===r?T.blu:"none",color:range===r?"white":T.t3,fontSize:10.5,cursor:"pointer",fontWeight:range===r?600:400}}>{r.charAt(0).toUpperCase()+r.slice(1)}</button>))}</div>}>
           <div style={{padding:"10px 10px 4px"}}>
             {financeBarData.length?<EChart option={eBarOption(financeBarData)} height={186}/>:<EChartEmpty msg="No revenue/expense data in range"/>}
-            <div style={{display:"flex",gap:16,padding:"4px 8px 6px"}}>{[{l:"Revenue",v:totalIn,c:T.blu},{l:"Expense",v:totalOut,c:T.red},{l:"Net",v:totalIn-totalOut,c:(totalIn-totalOut)>=0?T.grn:T.red}].map((s,i)=>(<div key={i}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:2}}>{s.l}</div><div style={{fontSize:13.5,fontWeight:700,color:s.c}}>₹{fmt(s.v)}</div></div>))}</div>
+            <div style={{display:"flex",gap:16,padding:"4px 8px 6px"}}>{[{l:t("app.revenue"),v:totalIn,c:T.blu},{l:t("app.expense"),v:totalOut,c:T.red},{l:t("common.net"),v:totalIn-totalOut,c:(totalIn-totalOut)>=0?T.grn:T.red}].map((s,i)=>(<div key={i}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:2}}>{s.l}</div><div style={{fontSize:13.5,fontWeight:700,color:s.c}}>₹{fmt(s.v)}</div></div>))}</div>
           </div>
         </Panel>
-        <Panel title="Expense Breakdown">
+        <Panel title={t("app.expense_breakdown")}>
           <div style={{padding:"8px 6px"}}>{expSlices.length?<EChart option={eDonutOption(expSlices)} height={212}/>:<EChartEmpty msg="No expenses recorded"/>}</div>
         </Panel>
-        <Panel title="Cash Flow Trend">
+        <Panel title={t("app.cash_flow_trend")}>
           <div style={{padding:"10px 10px 4px"}}>
             {cashflowArr.length?<EChart option={eLineOption(cashflowArr)} height={168}/>:<EChartEmpty msg="No cash-flow data yet"/>}
             <div style={{display:"flex",gap:16,padding:"4px 8px 6px"}}>{[{l:"IN",v:cashflowArr.reduce((s,d)=>s+(d.in||0),0),c:T.grn},{l:"OUT",v:cashflowArr.reduce((s,d)=>s+(d.out||0),0),c:T.red}].map((s,i)=>(<div key={i}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:2}}>{s.l}</div><div style={{fontSize:13.5,fontWeight:700,color:s.c}}>₹{fmt(s.v)}</div></div>))}</div>
@@ -1365,7 +1395,7 @@ function DashboardModule(){
         </Panel>
       </div>
       {/* Projects table */}
-      <Panel title="Projects Overview" action={<div style={{display:"flex",alignItems:"center",gap:8}}>
+      <Panel title={t("app.projects_overview")} action={<div style={{display:"flex",alignItems:"center",gap:8}}>
           <div style={{display:"inline-flex",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,padding:2}}>
             {[["summary","Summary"],["realtime","⚡ Real-time"]].map(([v,l])=>(
               <button key={v} onClick={()=>setFinProjView(v)} style={{padding:"4px 11px",borderRadius:5,border:"none",background:finProjView===v?T.blu:"none",color:finProjView===v?"#fff":T.t3,fontSize:11,fontWeight:finProjView===v?700:500,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>
@@ -1414,10 +1444,10 @@ function DashboardModule(){
       </Panel>
       {/* Actions + Activity */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:12,marginBottom:14}}>
-        <Panel title={<span>Pending Actions <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,marginLeft:5,border:`1px solid ${T.redM}`}}>{pendingCount}</span></span>} action={<button onClick={()=>setShowAllActions(!showAllActions)} style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>{showAllActions?"Less":"All"}</button>}>
+        <Panel title={<span>{t("app.pending_actions")} <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,marginLeft:5,border:`1px solid ${T.redM}`}}>{pendingCount}</span></span>} action={<button onClick={()=>setShowAllActions(!showAllActions)} style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>{showAllActions?t("app.less"):t("common.all")}</button>}>
           <div style={{overflowY:"auto",maxHeight:260}}>{actionsToShow.map((a,i)=>(<div key={a.id} style={{padding:"9px 14px",borderBottom:i<actionsToShow.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}><div style={{width:26,height:26,borderRadius:6,background:`${a.color}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><a.Icon size={12} color={a.color}/></div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1,marginBottom:1}}>{a.label}</div><div style={{fontSize:10.5,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.desc}</div></div><div style={{textAlign:"right",flexShrink:0}}>{a.amount&&<div style={{fontSize:12,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(a.amount)}</div>}<div style={{width:6,height:6,borderRadius:"50%",background:a.color,marginLeft:"auto",marginTop:a.amount?4:0}}/></div></div>))}</div>
         </Panel>
-        <Panel title="Recent Activity" action={<button onClick={()=>setShowAllActivity(!showAllActivity)} style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>{showAllActivity?"Collapse":"View all"}</button>}>
+        <Panel title={t("app.recent_activity")} action={<button onClick={()=>setShowAllActivity(!showAllActivity)} style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>{showAllActivity?t("common.collapse"):t("app.view_all")}</button>}>
           <div style={{overflowY:"auto",maxHeight:260}}>{activityToShow.map((a,i)=>(<div key={a.id} style={{padding:"9px 14px",borderBottom:i<activityToShow.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}><div style={{width:26,height:26,borderRadius:6,background:`${a.color}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><a.icon size={13} color={a.color}/></div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{a.title}</span>{a.dir&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,background:a.dir==="in"?T.grnL:a.dir==="pending"?T.ambL:T.redL,color:a.dir==="in"?T.grn:a.dir==="pending"?T.amb:T.red,border:`1px solid ${a.dir==="in"?T.grnM:a.dir==="pending"?T.ambM:T.redM}`,letterSpacing:".3px"}}>{a.dir==="in"?"IN":a.dir==="pending"?"PENDING":"OUT"}</span>}</div><div style={{fontSize:10.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:1}}>{a.desc}</div><div style={{fontSize:10,color:T.t4}}>{a.project} · {a.time}</div></div>{a.amount&&<div style={{fontSize:12.5,fontWeight:700,color:a.dir==="in"?T.grn:a.dir==="pending"?T.amb:T.red,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{a.dir==="in"?"+":"−"}₹{fmtN(a.amount)}</div>}</div>))}</div>
         </Panel>
       </div>
@@ -1431,7 +1461,7 @@ function OperationsDashboard({ops}){
   const att=ops.attendance;
   const pColorOf=(p)=>p>=100?T.grn:p>60?T.blu:p>30?T.amb:p>0?T.slt:T.t4;
   const priMeta={high:{c:T.red,bg:T.redL,brd:T.redM,l:"HIGH"},med:{c:T.amb,bg:T.ambL,brd:T.ambM,l:"MED"},low:{c:T.slt,bg:T.sltL,brd:T.b2,l:"LOW"}};
-  const stMeta={present:{c:T.grn,bg:T.grnL,l:"Present"},absent:{c:T.red,bg:T.redL,l:"Absent"},leave:{c:T.amb,bg:T.ambL,l:"On Leave"}};
+  const stMeta={present:{c:T.grn,bg:T.grnL,l:t("common.present")},absent:{c:T.red,bg:T.redL,l:t("common.absent")},leave:{c:T.amb,bg:T.ambL,l:t("app.on_leave")}};
   return(
     <div>
       {/* KPI row */}
@@ -1440,7 +1470,7 @@ function OperationsDashboard({ops}){
       </div>
       {/* Row 1: Project progress + Team attendance (named) */}
       <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:12,marginBottom:12}}>
-        <Panel title="Project Progress" action={<span style={{fontSize:11,color:T.t4}}>click for detail</span>}>
+        <Panel title={t("app.project_progress")} action={<span style={{fontSize:11,color:T.t4}}>{t("app.click_for_detail")}</span>}>
           <div style={{padding:"6px 0"}}>
             {ops.projects.map((p,i)=>{
               const isExp=expProj===p.id;
@@ -1455,7 +1485,7 @@ function OperationsDashboard({ops}){
                       {p.delay&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,background:T.redL,color:T.red,border:`1px solid ${T.redM}`}}>{p.delay}</span>}
                       {p.issues&&p.issues.length>0&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,background:T.ambL,color:T.amb}}>{p.issues.length} issue{p.issues.length>1?"s":""}</span>}
                     </div>
-                    <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{p.city} · {p.tasks} · PM {p.pm}</div>
+                    <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{t("app.city_tasks_pm_pm", { city: p.city, tasks: p.tasks, pm: p.pm })}</div>
                   </div>
                   <div style={{width:130}}>
                     <div style={{display:"flex",justifyContent:"flex-end",marginBottom:3}}><span style={{fontSize:10,fontWeight:700,color:pColorOf(p.progress)}}>{p.progress}%</span></div>
@@ -1467,23 +1497,23 @@ function OperationsDashboard({ops}){
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
                       {/* Last 7 days */}
                       <div>
-                        <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:6}}>Last 7 days</div>
+                        <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:6}}>{t("app.last_7_days")}</div>
                         {p.recent.length?p.recent.map((r,j)=>(
                           <div key={j} style={{display:"flex",gap:7,alignItems:"flex-start",marginBottom:6}}>
                             <IcChk size={12} color={T.grn} style={{marginTop:1,flexShrink:0}}/>
                             <div><div style={{fontSize:11.5,color:T.t1,fontWeight:500}}>{r.t}</div><div style={{fontSize:9.5,color:T.t4}}>{r.on} · {r.by}</div></div>
                           </div>
-                        )):<div style={{fontSize:11,color:T.t4}}>Koi recent task nahi</div>}
+                        )):<div style={{fontSize:11,color:T.t4}}>{t("app.koi_recent_task_nahi")}</div>}
                         {/* Next task */}
                         <div style={{marginTop:8,padding:"7px 10px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`}}>
-                          <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:.3}}>Next task</div>
+                          <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:.3}}>{t("app.next_task")}</div>
                           <div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{p.next.t}</div>
                           <div style={{fontSize:9.5,color:T.blu}}>due {p.next.due} · {p.next.by}</div>
                         </div>
                       </div>
                       {/* Pending issues + member + progress + hurdles */}
                       <div>
-                        <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:6}}>Pending issues</div>
+                        <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:6}}>{t("app.pending_issues")}</div>
                         {p.issues.length?p.issues.map((is,j)=>(
                           <div key={j} style={{padding:"8px 10px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`,marginBottom:7}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
@@ -1494,7 +1524,7 @@ function OperationsDashboard({ops}){
                             <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:T.t3}}><IcTeam size={10} color={T.t4}/>{is.member}</div>
                             {is.hurdle&&<div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:T.red,marginTop:3}}><IcAlert size={10} color={T.red}/>{is.hurdle}</div>}
                           </div>
-                        )):<div style={{fontSize:11,color:T.grn}}>✓ No pending issues</div>}
+                        )):<div style={{fontSize:11,color:T.grn}}>{t("app.no_pending_issues")}</div>}
                       </div>
                     </div>
                   </div>
@@ -1503,10 +1533,10 @@ function OperationsDashboard({ops}){
             );})}
           </div>
         </Panel>
-        <Panel title="Team Attendance — Today" action={<span style={{fontSize:11,fontWeight:700,color:T.grn}}>{att.present}/{att.total} present</span>}>
+        <Panel title={t("app.team_attendance_today")} action={<span style={{fontSize:11,fontWeight:700,color:T.grn}}>{att.present}/{att.total} present</span>}>
           <div style={{padding:"12px 14px 6px"}}>
             <div style={{display:"flex",gap:8,marginBottom:12}}>
-              {[{l:"Present",v:att.present,c:T.grn},{l:"Absent",v:att.absent,c:T.red},{l:"Leave",v:att.leave,c:T.amb}].map((s,i)=>(
+              {[{l:t("common.present"),v:att.present,c:T.grn},{l:t("common.absent"),v:att.absent,c:T.red},{l:t("app.leave"),v:att.leave,c:T.amb}].map((s,i)=>(
                 <div key={i} style={{flex:1,background:`${s.c}10`,border:`1px solid ${s.c}33`,borderRadius:9,padding:"8px 6px",textAlign:"center"}}>
                   <div style={{fontSize:18,fontWeight:800,color:s.c}}>{s.v}</div>
                   <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:.3}}>{s.l}</div>
@@ -1529,7 +1559,7 @@ function OperationsDashboard({ops}){
         </Panel>
       </div>
       {/* Row 2: Procurement pipeline (compact — MR → PO → GRN, numbers only) */}
-      <Panel title="Procurement Pipeline" style={{marginBottom:12}}>
+      <Panel title={t("app.procurement_pipeline")} style={{marginBottom:12}}>
         <div style={{padding:"14px 18px",display:"flex",alignItems:"center",gap:6}}>
           {ops.pipeline.map((s,i)=>(
             <Fragment key={i}>
@@ -1540,12 +1570,12 @@ function OperationsDashboard({ops}){
               {i<ops.pipeline.length-1&&<svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} style={{flexShrink:0}}><path d="M5 12h14M13 6l6 6-6 6"/></svg>}
             </Fragment>
           ))}
-          <div style={{flexShrink:0,paddingLeft:8,fontSize:10.5,color:T.amb,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><IcWH size={12} color={T.amb}/>3 low-stock</div>
+          <div style={{flexShrink:0,paddingLeft:8,fontSize:10.5,color:T.amb,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><IcWH size={12} color={T.amb}/>{t("app.3_low_stock")}</div>
         </div>
       </Panel>
       {/* Row 3: Site Activity (Pulse) + Pending Approvals */}
       <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:12,marginBottom:12}}>
-        <Panel title="Site Activity (Pulse)" action={<span style={{fontSize:11,color:T.t4}}>project-wise updates</span>}>
+        <Panel title={t("app.site_activity_pulse")} action={<span style={{fontSize:11,color:T.t4}}>{t("app.project_wise_updates")}</span>}>
           <div style={{overflowY:"auto",maxHeight:280}}>
             {ops.siteActivity.map((a,i)=>{const done=a.state==="done";return(
               <div key={a.id} style={{padding:"10px 14px",borderBottom:i<ops.siteActivity.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"flex-start",gap:10}}>
@@ -1561,7 +1591,7 @@ function OperationsDashboard({ops}){
             );})}
           </div>
         </Panel>
-        <Panel title={<span>Pending Approvals <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,marginLeft:5,border:`1px solid ${T.redM}`}}>{ops.approvals.length}</span></span>}>
+        <Panel title={<span>{t("common.pending_approvals")} <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,marginLeft:5,border:`1px solid ${T.redM}`}}>{ops.approvals.length}</span></span>}>
           <div style={{overflowY:"auto",maxHeight:280}}>
             {ops.approvals.map((a,i)=>{const pm=priMeta[a.pri]||priMeta.low;return(
               <div key={a.id} style={{padding:"9px 14px",borderBottom:i<ops.approvals.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10}}>
@@ -1576,7 +1606,7 @@ function OperationsDashboard({ops}){
         </Panel>
       </div>
       {/* Row 4: Dhyaan chahiye (operational alerts) */}
-      <Panel title="Dhyaan chahiye" style={{marginBottom:14}}>
+      <Panel title={t("app.dhyaan_chahiye")} style={{marginBottom:14}}>
         <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
           {ops.alerts.map(a=>{const c=a.level==="red"?T.red:T.amb;const bg=a.level==="red"?T.redL:T.ambL;return(
             <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 13px",background:bg,borderRadius:8,borderLeft:`3px solid ${c}`}}>
@@ -1601,9 +1631,9 @@ function RealtimeFinancials({projects}){
     const costPct=p.boq>0?(p.expense/p.boq)*100:0;
     const realized=p.invoiced-p.expense;
     const mPct=p.invoiced>0?(realized/p.invoiced)*100:0;
-    const health=costPct>p.progress+8?{c:T.red,bg:T.redL,l:"Cost overrun"}
-      :p.progress>billedPct+12?{c:T.amb,bg:T.ambL,l:"Under-billed"}
-      :{c:T.grn,bg:T.grnL,l:"On track"};
+    const health=costPct>p.progress+8?{c:T.red,bg:T.redL,l:t("app.cost_overrun")}
+      :p.progress>billedPct+12?{c:T.amb,bg:T.ambL,l:t("app.under_billed")}
+      :{c:T.grn,bg:T.grnL,l:t("common.on_track")};
     return {billedPct,costPct,realized,mPct,health};
   };
   const GC="2.2fr 130px 80px 80px 150px 110px 34px";
@@ -1627,13 +1657,13 @@ function RealtimeFinancials({projects}){
         // cash position donut: received / outstanding (invoiced−received) / unbilled (boq−invoiced)
         const outstanding=Math.max(0,p.invoiced-p.received);
         const unbilled=Math.max(0,p.boq-p.invoiced);
-        const cashSlices=[{label:"Received",value:p.received,color:T.grn},{label:"Outstanding",value:outstanding,color:T.amb},{label:"Unbilled",value:unbilled,color:T.slt}].filter(s=>s.value>0);
+        const cashSlices=[{label:t("common.received"),value:p.received,color:T.grn},{label:t("app.outstanding"),value:outstanding,color:T.amb},{label:t("common.unbilled"),value:unbilled,color:T.slt}].filter(s=>s.value>0);
         const cmpMax=Math.max(p.invoiced,p.received,p.expense,1);
         return(
           <Fragment key={p.id}>
             <div onClick={()=>setExp(isExp?null:p.id)} style={{display:"grid",gridTemplateColumns:GC,padding:"11px 14px",borderBottom:`1px solid ${isExp?T.bluM:T.b1}`,alignItems:"center",cursor:"pointer",background:isExp?T.bluL:"none",borderLeft:isExp?`3px solid ${T.blu}`:"3px solid transparent"}}
               onMouseEnter={e=>{if(!isExp)e.currentTarget.style.background=T.surfaceB;}} onMouseLeave={e=>{if(!isExp)e.currentTarget.style.background="none";}}>
-              <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:isExp?T.blu:T.t1}}>{p.name}</div><div style={{fontSize:10.5,color:T.t4}}>{p.city} · BOQ ₹{fmt(p.boq)}</div></div>
+              <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:isExp?T.blu:T.t1}}>{p.name}</div><div style={{fontSize:10.5,color:T.t4}}>{t("app.city_boq_fmt", { city: p.city, fmt: fmt(p.boq) })}</div></div>
               <div><div style={{display:"flex",justifyContent:"flex-end",marginBottom:2}}><span style={{fontSize:10,fontWeight:700,color:T.blu}}>{p.progress}%</span></div><div style={{height:5,background:T.b1,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:T.blu,borderRadius:3}}/></div></div>
               <span style={{fontSize:12,fontWeight:700,color:T.pur,textAlign:"center"}}>{Math.round(c.billedPct)}%</span>
               <span style={{fontSize:12,fontWeight:700,color:c.costPct>p.progress+8?T.red:T.amb,textAlign:"center"}}>{Math.round(c.costPct)}%</span>
@@ -1645,14 +1675,14 @@ function RealtimeFinancials({projects}){
               <div style={{padding:"14px 16px",background:T.bluL,borderBottom:`1px solid ${T.b1}`,borderLeft:`3px solid ${T.blu}`,display:"grid",gridTemplateColumns:"1.1fr 0.9fr 1fr",gap:18}}>
                 {/* Col 1 — progress vs billed vs cost bars */}
                 <div>
-                  <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8}}>Progress vs Billing vs Cost</div>
-                  <Bar label="Physical progress" pct={p.progress} color={T.blu}/>
-                  <Bar label="Billed (invoiced)" pct={c.billedPct} color={T.pur}/>
-                  <Bar label="Cost incurred"     pct={c.costPct} color={c.costPct>p.progress+8?T.red:T.amb}/>
+                  <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8}}>{t("app.progress_vs_billing_vs_cost")}</div>
+                  <Bar label={t("app.physical_progress")} pct={p.progress} color={T.blu}/>
+                  <Bar label={t("app.billed_invoiced")} pct={c.billedPct} color={T.pur}/>
+                  <Bar label={t("app.cost_incurred")}     pct={c.costPct} color={c.costPct>p.progress+8?T.red:T.amb}/>
                   {/* compare bars: invoiced / received / expense */}
                   <div style={{marginTop:12}}>
-                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8}}>Invoiced · Received · Expense</div>
-                    {[{l:"Invoiced",v:p.invoiced,c:T.blu},{l:"Received",v:p.received,c:T.grn},{l:"Expense",v:p.expense,c:T.amb}].map((b,i)=>(
+                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8}}>{t("app.invoiced_received_expense")}</div>
+                    {[{l:t("app.invoiced"),v:p.invoiced,c:T.blu},{l:t("common.received"),v:p.received,c:T.grn},{l:t("app.expense"),v:p.expense,c:T.amb}].map((b,i)=>(
                       <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                         <span style={{fontSize:10,color:T.t3,width:60,flexShrink:0}}>{b.l}</span>
                         <div style={{flex:1,height:9,background:T.surface,borderRadius:5,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.round((b.v/cmpMax)*100)}%`,background:b.c,borderRadius:5}}/></div>
@@ -1663,19 +1693,19 @@ function RealtimeFinancials({projects}){
                 </div>
                 {/* Col 2 — cash position donut */}
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-                  <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8,alignSelf:"flex-start"}}>Cash Position</div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8,alignSelf:"flex-start"}}>{t("app.cash_position")}</div>
                   {cashSlices.length?<><div style={{width:128,height:128}}><EChart option={eDonutMini(cashSlices)} height={128}/></div>
                   <div style={{width:"100%",marginTop:10}}>{cashSlices.map((s,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><div style={{width:9,height:9,borderRadius:2,background:s.color}}/><span style={{fontSize:10.5,color:T.t3,flex:1}}>{s.label}</span><span style={{fontSize:10.5,fontWeight:700,color:T.t1}}>₹{fmt(s.value)}</span></div>))}</div></>
-                  :<div style={{fontSize:11.5,color:T.t4,padding:"30px 0"}}>Billing abhi shuru nahi hui</div>}
+                  :<div style={{fontSize:11.5,color:T.t4,padding:"30px 0"}}>{t("app.billing_abhi_shuru_nahi_hui")}</div>}
                 </div>
                 {/* Col 3 — key metrics + next invoice */}
                 <div>
-                  <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8}}>Financials</div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8}}>{t("app.financials")}</div>
                   {[
-                    {l:"Invoiced till date",v:`₹${fmt(p.invoiced)}`,c:T.t1},
-                    {l:"Received",v:`₹${fmt(p.received)}`,c:T.grn},
-                    {l:"Expense till date",v:`₹${fmt(p.expense)}`,c:T.amb},
-                    {l:"Realized margin",v:`₹${fmt(c.realized)} (${c.mPct.toFixed(0)}%)`,c:c.realized>=0?T.grn:T.red},
+                    {l:t("app.invoiced_till_date"),v:`₹${fmt(p.invoiced)}`,c:T.t1},
+                    {l:t("common.received"),v:`₹${fmt(p.received)}`,c:T.grn},
+                    {l:t("app.expense_till_date"),v:`₹${fmt(p.expense)}`,c:T.amb},
+                    {l:t("app.realized_margin"),v:`₹${fmt(c.realized)} (${c.mPct.toFixed(0)}%)`,c:c.realized>=0?T.grn:T.red},
                   ].map((m,i)=>(
                     <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:i<3?`1px solid ${T.b1}`:"none"}}>
                       <span style={{fontSize:11,color:T.t3}}>{m.l}</span>
@@ -1683,7 +1713,7 @@ function RealtimeFinancials({projects}){
                     </div>
                   ))}
                   <div style={{marginTop:10,padding:"9px 11px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <div><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:.3}}>Next invoice · {p.next.milestone}</div><div style={{fontSize:10.5,color:T.t3}}>due {p.next.due}</div></div>
+                    <div><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:.3}}>{t("app.next_invoice_milestone", { milestone: p.next.milestone })}</div><div style={{fontSize:10.5,color:T.t3}}>due {p.next.due}</div></div>
                     <div style={{fontSize:15,fontWeight:800,color:T.blu}}>₹{fmt(p.next.value)}</div>
                   </div>
                 </div>
@@ -2022,27 +2052,27 @@ function App(){
   if(!loggedIn) return <ToastProvider><ConfirmProvider><PromptProvider><LoginScreen onLogin={(u,cos)=>{setUser(u);setCompanies(cos||getCompanies());}}/></PromptProvider></ConfirmProvider></ToastProvider>;
 
   const PAGES={
-    dashboard:{title:"Dashboard",sub:"Company Overview"},
-    projects:{title:"Projects",sub:"All Construction Projects"},
-    crm:{title:"CRM",sub:"Clients & Leads"},
-    mom:{title:"MOM",sub:"Minutes of Meeting"},
-    team:{title:"My Team",sub:"Gantt · Timesheets"},
-    design:{title:"Design",sub:"Drawings & Tasks"},
-    finance:{title:"Finance",sub:"Cash Book · Transactions"},
-    procurement:{title:"Procurement",sub:"PO · RFQ · Materials"},
-    warehouse:{title:"Warehouse",sub:"Central Stock"},
-    fuel:{title:"Fuel",sub:"Diesel, barrel stock & machine consumption"},
-    machinery:{title:"Machinery",sub:"Fleet health, service, documents & reminders"},
-    township:{title:"Township CRM",sub:"Real-Estate Projects & Sales"},
-    payroll:{title:"Payroll",sub:"Staff Payments"},
-    tenders:{title:"Tenders",sub:"Bid · EMD/BG · Agreement · DLP"},
-    reports:{title:"Reports",sub:"All Reports"},
-    library:{title:"Library",sub:"Master Data"},
-    settings:{title:"Settings",sub:"Configuration"},
-    profile:{title:"My Profile",sub:"Your Account"},
-    saas:{title:"SaaS Admin",sub:"Platform Management"},
-    "saas-leads":{title:"SaaS Leads",sub:"Sales Pipeline"},
-    sahayak:{title:"Sahayak AI",sub:"Aapka AI assistant — live data ke saath"},
+    dashboard:{title:t("common.dashboard"),sub:t("app.company_overview")},
+    projects:{title:t("common.projects"),sub:t("app.all_construction_projects")},
+    crm:{title:"CRM",sub:t("app.clients_leads")},
+    mom:{title:"MOM",sub:t("app.minutes_of_meeting")},
+    team:{title:t("app.my_team"),sub:t("app.gantt_timesheets")},
+    design:{title:t("common.design"),sub:t("app.drawings_tasks")},
+    finance:{title:t("common.finance"),sub:t("app.cash_book_transactions")},
+    procurement:{title:t("common.procurement"),sub:t("app.po_rfq_materials")},
+    warehouse:{title:t("common.warehouse"),sub:t("app.central_stock")},
+    fuel:{title:t("app.fuel"),sub:t("app.diesel_barrel_stock_machine_consumption")},
+    machinery:{title:t("app.machinery"),sub:t("app.fleet_health_service_documents_reminders")},
+    township:{title:t("app.township_crm"),sub:t("app.real_estate_projects_sales")},
+    payroll:{title:t("common.payroll"),sub:t("app.staff_payments")},
+    tenders:{title:t("app.tenders"),sub:t("app.bid_emd_bg_agreement_dlp")},
+    reports:{title:t("common.reports"),sub:t("app.all_reports")},
+    library:{title:t("common.library"),sub:t("app.master_data")},
+    settings:{title:t("common.settings"),sub:t("app.configuration")},
+    profile:{title:t("app.my_profile"),sub:t("app.your_account")},
+    saas:{title:t("app.saas_admin"),sub:t("app.platform_management")},
+    "saas-leads":{title:t("app.saas_leads"),sub:t("app.sales_pipeline")},
+    sahayak:{title:t("app.sahayak_ai"),sub:t("app.aapka_ai_assistant_live_data_ke")},
   };
 
   // Check if a module is enabled
@@ -2101,7 +2131,7 @@ function App(){
       `}</style>
       {switching&&<div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
         <div style={{width:32,height:32,border:"3px solid rgba(255,255,255,0.15)",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>
-        <div style={{color:"white",fontSize:14,fontWeight:600}}>Switching company...</div>
+        <div style={{color:"white",fontSize:14,fontWeight:600}}>{t("app.switching_company")}</div>
       </div>}
       {!hideAppShell && !isMobile && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany} ticketCount={ticketCount} sahayakNotifCount={sahayakNotifCount}/>}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -2129,7 +2159,7 @@ function App(){
           already inside Sahayak. */}
       {nav!=="sahayak"&&(
         <button onClick={()=>{setSahayakFrom(nav);setNav("sahayak");}}
-          title="Sahayak AI — kuch bhi poochein"
+          title={t("app.sahayak_ai_kuch_bhi_poochein")}
           style={{position:"fixed",right:isMobile?16:22,bottom:isMobile&&!hideAppShell?84:22,zIndex:120,
             width:52,height:52,borderRadius:"50%",border:"none",cursor:"pointer",
             background:T.blu,color:"#fff",boxShadow:`0 4px 16px ${T.blu}61`,

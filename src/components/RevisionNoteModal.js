@@ -12,6 +12,7 @@
 
 import { useState, useRef } from "react";
 import uploadManager from "../utils/uploadManager";
+import { t } from "../i18n";
 
 const T = {
   surface:"#FFFFFF", surfaceB:"#F8F9FB",
@@ -46,7 +47,7 @@ export default function RevisionNoteModal({ mode = "Revision", drawingTitle, onC
         setAttachments(prev => prev.map(a => a.name === f.name && a.uploading ? { name: f.name, url, uploading: false } : a));
       } catch (e) {
         setAttachments(prev => prev.filter(a => !(a.name === f.name && a.uploading)));
-        setErr(`Upload failed for ${f.name}: ${e.message}`);
+        setErr(t("revision_note.upload_failed_for_name_message", { name: f.name, message: e.message }));
       }
     }
   };
@@ -57,8 +58,8 @@ export default function RevisionNoteModal({ mode = "Revision", drawingTitle, onC
 
   const submit = async () => {
     if (submittingRef.current) return;
-    if (!note.trim()) { setErr("Note is required"); return; }
-    if (attachments.some(a => a.uploading)) { setErr("Wait for uploads to finish"); return; }
+    if (!note.trim()) { setErr(t("revision_note.note_is_required")); return; }
+    if (attachments.some(a => a.uploading)) { setErr(t("revision_note.wait_for_uploads_to_finish")); return; }
     submittingRef.current = true;
     setSubmitting(true);
     setErr("");
@@ -84,10 +85,10 @@ export default function RevisionNoteModal({ mode = "Revision", drawingTitle, onC
         <div style={{ padding: "14px 18px", background: accentC, color: "white", borderTopLeftRadius: 12, borderTopRightRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700 }}>
-              {isRevision ? "↻ Request Revision" : "✗ Reject Drawing"}
+              {isRevision ? t("revision_note.request_revision") : t("revision_note.reject_drawing")}
             </div>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>
-              {drawingTitle || "Drawing"}
+              {drawingTitle || t("common.drawing")}
             </div>
           </div>
           <button onClick={onCancel} style={{ background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 6, color: "white", fontSize: 16, width: 28, height: 28, cursor: "pointer" }}>×</button>
@@ -97,23 +98,23 @@ export default function RevisionNoteModal({ mode = "Revision", drawingTitle, onC
         <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px" }}>
           <div style={{ background: accentBg, border: `1px solid ${accentBrd}`, borderRadius: 7, padding: "8px 11px", marginBottom: 12, fontSize: 11.5, color: accentC, lineHeight: 1.4 }}>
             {isRevision
-              ? "📝 Design team ko clearly batao kya badalna hai. Note compulsory hai. Marked-up image ya PDF attach kar sakte ho."
-              : "❌ Drawing reject kar rahe ho — clearly reason batao. Note compulsory hai."}
+              ? t("revision_note.design_team_ko_clearly_batao_kya")
+              : t("revision_note.drawing_reject_kar_rahe_ho_clearly")}
           </div>
 
           {/* Note */}
           <label style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginBottom: 5 }}>
-            {isRevision ? "Revision Note" : "Rejection Reason"} <span style={{ color: T.red }}>*</span>
+            {isRevision ? t("revision_note.revision_note") : t("revision_note.rejection_reason")} <span style={{ color: T.red }}>*</span>
           </label>
           <textarea value={note} onChange={e => setNote(e.target.value)} rows={5}
             placeholder={isRevision
-              ? "e.g. Master bedroom 12x14 chahiye, parapet height 4ft, kitchen aage karo..."
-              : "e.g. Plot ka shape match nahi kar raha — re-do kar do"}
+              ? t("revision_note.e_g_master_bedroom_12x14_chahiye")
+              : t("revision_note.e_g_plot_ka_shape_match")}
             style={{ width: "100%", padding: "10px 11px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 12.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", lineHeight: 1.5 }} />
 
           {/* Attachments */}
           <label style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginTop: 12, marginBottom: 5 }}>
-            Attach Files (optional) — marked-up images / PDFs
+            {t("revision_note.attach_files_optional_marked_up_images")}
           </label>
           <label style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
@@ -122,7 +123,7 @@ export default function RevisionNoteModal({ mode = "Revision", drawingTitle, onC
           }}>
             <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" multiple style={{ display: "none" }}
               onChange={e => handleFiles(e.target.files)} />
-            📎 Click to add files (PDF / JPG / PNG)
+            {t("revision_note.click_to_add_files_pdf_jpg")}
           </label>
           {attachments.length > 0 && (
             <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -137,7 +138,7 @@ export default function RevisionNoteModal({ mode = "Revision", drawingTitle, onC
                     )}
                     <span style={{ fontSize: 11, color: T.t2, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>
                     {a.uploading
-                      ? <span style={{ fontSize: 10, color: T.blu }}>uploading…</span>
+                      ? <span style={{ fontSize: 10, color: T.blu }}>{t("revision_note.uploading")}</span>
                       : <button onClick={() => removeAttachment(i)}
                           style={{ background: "none", border: "none", color: T.t4, fontSize: 14, cursor: "pointer", padding: 0, lineHeight: 1 }}>×</button>}
                   </div>
@@ -153,11 +154,11 @@ export default function RevisionNoteModal({ mode = "Revision", drawingTitle, onC
         <div style={{ padding: "11px 18px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", gap: 8 }}>
           <button onClick={onCancel} disabled={submitting}
             style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, fontSize: 12.5, fontWeight: 600, color: T.t3, cursor: submitting ? "not-allowed" : "pointer" }}>
-            Cancel
+            {t("common.cancel")}
           </button>
           <button onClick={submit} disabled={submitting || !note.trim()}
             style={{ flex: 2, padding: "9px", borderRadius: 7, background: (submitting || !note.trim()) ? T.b1 : accentC, border: "none", color: "white", fontSize: 12.5, fontWeight: 700, cursor: (submitting || !note.trim()) ? "not-allowed" : "pointer" }}>
-            {submitting ? "Submitting…" : isRevision ? "↻ Send Revision Request" : "✗ Submit Rejection"}
+            {submitting ? t("common.submitting") : isRevision ? t("revision_note.send_revision_request") : t("revision_note.submit_rejection")}
           </button>
         </div>
       </div>

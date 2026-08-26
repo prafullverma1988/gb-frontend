@@ -3,6 +3,7 @@ import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import LiveTeamView from "../components/LiveTeamView";
 import ExportMenu from "../components/DataExport";
+import { t } from "../i18n";
 
 // ── ICONS ──────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -95,21 +96,21 @@ const isDueSoon=item=>item.dueDate&&item.status!=="Done"&&item.dueDate>=TODAY&&d
 // ── NAV ──────────────────────────────────────────────────────
 const NAV=[
   {sec:null,items:[
-    {id:"dashboard",l:"Dashboard",I:IcHome},
-    {id:"projects",l:"Projects",I:IcProj},
+    {id:"dashboard",get l() { return t("common.dashboard"); },I:IcHome},
+    {id:"projects",get l() { return t("common.projects"); },I:IcProj},
     {id:"crm",l:"CRM",I:IcCRM},
-    {id:"tasks",l:"Tasks",I:IcTask},
-    {id:"team",l:"Team Schedule",I:IcTeam},
+    {id:"tasks",get l() { return t("common.tasks"); },I:IcTask},
+    {id:"team",get l() { return t("common.team_schedule"); },I:IcTeam},
   ]},
   {sec:"FINANCE & OPS",items:[
-    {id:"finance",l:"Finance",I:IcFin},
-    {id:"procurement",l:"Procurement",I:IcProc},
-    {id:"warehouse",l:"Warehouse",I:IcWH},
-    {id:"payroll",l:"Payroll",I:IcPay},
+    {id:"finance",get l() { return t("common.finance"); },I:IcFin},
+    {id:"procurement",get l() { return t("common.procurement"); },I:IcProc},
+    {id:"warehouse",get l() { return t("common.warehouse"); },I:IcWH},
+    {id:"payroll",get l() { return t("common.payroll"); },I:IcPay},
   ]},
   {sec:"MORE",items:[
-    {id:"reports",l:"Reports",I:IcRep},
-    {id:"settings",l:"Settings",I:IcSet},
+    {id:"reports",get l() { return t("common.reports"); },I:IcRep},
+    {id:"settings",get l() { return t("common.settings"); },I:IcSet},
   ]},
 ];
 
@@ -238,7 +239,7 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
           </div>
           <div style={{display:"flex",gap:5}}>
             {isAdmin&&<button onClick={()=>setEditMode(!editMode)} style={{background:editMode?"rgba(37,99,235,0.4)":"rgba(255,255,255,0.12)",border:editMode?"1px solid rgba(37,99,235,0.6)":"1px solid rgba(255,255,255,0.2)",cursor:"pointer",color:"white",padding:"5px 9px",borderRadius:6,fontSize:11.5,display:"flex",alignItems:"center",gap:4}}>
-              <IcEdit size={12} color="white"/> {editMode?"Cancel":"Edit"}
+              <IcEdit size={12} color="white"/> {editMode?t("common.cancel"):t("common.edit_2")}
             </button>}
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={15}/></button>
           </div>
@@ -257,38 +258,38 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
         {editMode?(
           <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,padding:"13px 14px",marginBottom:12}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Assigned To</label>
-                <SearchSelect value={form.assignee} options={TEAM_MEMBERS.map(m=>({value:m.id,label:m.name}))} onChange={v=>setForm(p=>({...p,assignee:v}))} placeholder="Select member..."/>
+              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.assigned_to")}</label>
+                <SearchSelect value={form.assignee} options={TEAM_MEMBERS.map(m=>({value:m.id,label:m.name}))} onChange={v=>setForm(p=>({...p,assignee:v}))} placeholder={t("team_schedule.select_member")}/>
               </div>
-              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Site</label>
-                <SearchSelect value={form.site} options={SITES.map(s=>({value:s.id,label:s.name}))} onChange={v=>setForm(p=>({...p,site:v}))} placeholder="Select site..."/>
+              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.site")}</label>
+                <SearchSelect value={form.site} options={SITES.map(s=>({value:s.id,label:s.name}))} onChange={v=>setForm(p=>({...p,site:v}))} placeholder={t("team_schedule.select_site")}/>
               </div>
-              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Status</label>
-                <SearchSelect value={form.status} options={Object.keys(STATUS_META)} onChange={v=>setForm(p=>({...p,status:v}))} placeholder="Select status..."/>
+              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.status")}</label>
+                <SearchSelect value={form.status} options={Object.keys(STATUS_META)} onChange={v=>setForm(p=>({...p,status:v}))} placeholder={t("common.select_status")}/>
               </div>
-              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Priority</label>
-                <SearchSelect value={form.priority} options={["High","Medium","Low"]} onChange={v=>setForm(p=>({...p,priority:v}))} placeholder="Select priority..."/>
+              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.priority")}</label>
+                <SearchSelect value={form.priority} options={["High","Medium","Low"]} onChange={v=>setForm(p=>({...p,priority:v}))} placeholder={t("common.select_priority")}/>
               </div>
-              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Start Date</label>
+              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.start_date")}</label>
                 <input type="date" value={form.startDate} onChange={upd("startDate")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
-              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Due Date</label>
+              <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.due_date")}</label>
                 <input type="date" value={form.dueDate} onChange={upd("dueDate")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
             </div>
-            <div style={{marginBottom:10}}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Description</label>
+            <div style={{marginBottom:10}}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.description")}</label>
               <textarea value={form.description} onChange={upd("description")} rows={3} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
             </div>
             <div style={{display:"flex",gap:7}}>
-              <button onClick={()=>setEditMode(false)} style={{flex:1,padding:"8px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+              <button onClick={()=>setEditMode(false)} style={{flex:1,padding:"8px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
               <button onClick={save} style={{flex:2,padding:"8px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-                <IcChk size={13} color="white"/> Save Changes
+                <IcChk size={13} color="white"/> {t("common.save_changes")}
               </button>
             </div>
           </div>
         ):(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-            {[{l:"Assigned To",v:member?.name||"—"},{l:"Site",v:site?.name||"—"},{l:"Start Date",v:fmtDate(item.startDate)},{l:"Due Date",v:fmtDate(item.dueDate)},{l:"Created By",v:TEAM_MEMBERS.find(m=>m.id===item.createdBy)?.name||"—"},{l:"Created",v:fmtDate(item.createdAt)}].map(({l,v})=>(
+            {[{l:t("common.assigned_to"),v:member?.name||"—"},{l:t("common.site"),v:site?.name||"—"},{l:t("common.start_date"),v:fmtDate(item.startDate)},{l:t("common.due_date"),v:fmtDate(item.dueDate)},{l:t("team_schedule.created_by"),v:TEAM_MEMBERS.find(m=>m.id===item.createdBy)?.name||"—"},{l:t("common.created"),v:fmtDate(item.createdAt)}].map(({l,v})=>(
               <div key={l} style={{padding:"8px 11px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`}}>
                 <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{l}</div>
                 <div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{v}</div>
@@ -300,7 +301,7 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
         {/* Description */}
         {!editMode&&item.description&&(
           <div style={{padding:"10px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderLeft:`4px solid ${typeC.c}`,borderRadius:"0 8px 8px 0",marginBottom:12}}>
-            <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Description</div>
+            <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.description")}</div>
             <div style={{fontSize:12.5,color:T.t2,lineHeight:1.6}}>{item.description}</div>
           </div>
         )}
@@ -312,7 +313,7 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
 
         {/* Quick status change */}
         {!editMode&&<div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"10px 12px",marginBottom:12}}>
-          <div style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Move Status</div>
+          <div style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>{t("team_schedule.move_status")}</div>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
             {Object.entries(STATUS_META).map(([s,meta])=>(
               <button key={s} onClick={()=>onUpdate(item.id,{status:s})}
@@ -325,7 +326,7 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
 
         {/* Comments */}
         <div>
-          <div style={{fontSize:11,fontWeight:700,color:T.t2,marginBottom:8}}>Comments ({comments.length})</div>
+          <div style={{fontSize:11,fontWeight:700,color:T.t2,marginBottom:8}}>{t("team_schedule.comments_comments", { comments: comments.length })}</div>
           {comments.map((c,i)=>(
             <div key={c.id} style={{display:"flex",gap:9,marginBottom:10}}>
               <Avatar name={c.user} size={26} color={T.blu}/>
@@ -339,11 +340,11 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
             </div>
           ))}
           <div style={{display:"flex",gap:7,marginTop:6}}>
-            <input value={comment} onChange={e=>setComment(e.target.value)} placeholder="Add a comment..."
+            <input value={comment} onChange={e=>setComment(e.target.value)} placeholder={t("tasks.add_a_comment")}
               style={{flex:1,padding:"9px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}
               onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}
               onKeyDown={e=>e.key==="Enter"&&addComment()}/>
-            <button onClick={addComment} style={{padding:"9px 13px",borderRadius:7,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>Post</button>
+            <button onClick={addComment} style={{padding:"9px 13px",borderRadius:7,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>{t("team_schedule.post")}</button>
           </div>
         </div>
       </div>
@@ -353,9 +354,9 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
         <button onClick={()=>onUpdate(item.id,{status:"Done",completedAt:TODAY})}
           disabled={item.status==="Done"}
           style={{flex:1,padding:"9px",borderRadius:7,background:item.status==="Done"?T.grnL:T.grn,color:item.status==="Done"?T.grn:"white",border:`1px solid ${item.status==="Done"?T.grnM:"transparent"}`,fontSize:12.5,fontWeight:700,cursor:item.status==="Done"?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-          <IcChk size={13} color={item.status==="Done"?T.grn:"white"}/>{item.status==="Done"?"Completed":"Mark Done"}
+          <IcChk size={13} color={item.status==="Done"?T.grn:"white"}/>{item.status==="Done"?t("common.completed"):t("team_schedule.mark_done")}
         </button>
-        <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Close</button>
+        <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.close")}</button>
       </div>
     </div>
     <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
@@ -397,7 +398,7 @@ function CreateWorkModal({onClose,onSave,defaultType="Task",defaultAssignee="",d
       <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
         {/* Title */}
         <div style={{marginBottom:11}}>
-          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{form.type} Title *</label>
+          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("team_schedule.type_title", { type: form.type })}</label>
           <input value={form.title} onChange={upd("title")} placeholder={`Enter ${form.type.toLowerCase()} title...`}
             style={{width:"100%",padding:"10px 12px",borderRadius:7,border:`2px solid ${form.title?typeColor:T.b1}`,fontSize:13.5,fontWeight:form.title?600:400,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",transition:"border .2s"}}
             onFocus={e=>e.target.style.borderColor=typeColor} onBlur={e=>{if(!form.title)e.target.style.borderColor=T.b1;}}/>
@@ -407,7 +408,7 @@ function CreateWorkModal({onClose,onSave,defaultType="Task",defaultAssignee="",d
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:11}}>
           <div>
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>
-              <IcAssign size={10} color={T.t4}/> Assign To *
+              <IcAssign size={10} color={T.t4}/> {t("team_schedule.assign_to")}
             </label>
             <select value={form.assignee} onChange={upd("assignee")}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
@@ -416,7 +417,7 @@ function CreateWorkModal({onClose,onSave,defaultType="Task",defaultAssignee="",d
           </div>
           <div>
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>
-              <IcLoc size={10} color={T.t4}/> Site / Project
+              <IcLoc size={10} color={T.t4}/> {t("mom.site_project")}
             </label>
             <select value={form.site} onChange={upd("site")}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
@@ -428,7 +429,7 @@ function CreateWorkModal({onClose,onSave,defaultType="Task",defaultAssignee="",d
         {/* Priority + Status */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:11}}>
           <div>
-            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Priority</label>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.priority")}</label>
             <div style={{display:"flex",gap:5}}>
               {["High","Medium","Low"].map(p=>{
                 const pm=PRIORITY_META[p];
@@ -440,7 +441,7 @@ function CreateWorkModal({onClose,onSave,defaultType="Task",defaultAssignee="",d
             </div>
           </div>
           <div>
-            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Start Status</label>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("team_schedule.start_status")}</label>
             <select value={form.status} onChange={upd("status")}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
               {Object.keys(STATUS_META).map(s=><option key={s}>{s}</option>)}
@@ -450,7 +451,7 @@ function CreateWorkModal({onClose,onSave,defaultType="Task",defaultAssignee="",d
 
         {/* Dates */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:11}}>
-          {[{l:"Start Date",k:"startDate"},{l:"Due Date",k:"dueDate"}].map(f=>(
+          {[{l:t("common.start_date"),k:"startDate"},{l:t("common.due_date"),k:"dueDate"}].map(f=>(
             <div key={f.k}>
               <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
               <input type="date" value={form[f.k]} onChange={upd(f.k)}
@@ -461,26 +462,25 @@ function CreateWorkModal({onClose,onSave,defaultType="Task",defaultAssignee="",d
 
         {/* Description */}
         <div style={{marginBottom:11}}>
-          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Description</label>
-          <textarea value={form.description} onChange={upd("description")} rows={3} placeholder="Task details, instructions, what needs to be done..."
+          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("common.description")}</label>
+          <textarea value={form.description} onChange={upd("description")} rows={3} placeholder={t("team_schedule.task_details_instructions_what_needs_to")}
             style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}
             onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
         </div>
 
         {/* Tags */}
         <div>
-          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Tags (comma separated)</label>
-          <input value={form.tags} onChange={upd("tags")} placeholder="Civil, Urgent, Design..."
+          <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("crm.tags_comma_separated")}</label>
+          <input value={form.tags} onChange={upd("tags")} placeholder={t("team_schedule.civil_urgent_design")}
             style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
         </div>
       </div>
 
       <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
-        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
         <button onClick={()=>{if(form.title.trim()){onSave({...form,tags:form.tags?form.tags.split(",").map(t=>t.trim()).filter(Boolean):[]});onClose();}}} disabled={!form.title.trim()}
           style={{flex:2,padding:"10px",borderRadius:7,background:form.title.trim()?typeColor:T.b1,color:form.title.trim()?"white":T.t4,fontSize:13,fontWeight:700,border:"none",cursor:form.title.trim()?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-          <IcAdd size={14} color={form.title.trim()?"white":T.t4}/> Create {form.type}
-        </button>
+          <IcAdd size={14} color={form.title.trim()?"white":T.t4}/>{t("team_schedule.create_type", { type: form.type })}</button>
       </div>
     </div>
   </>);
@@ -512,7 +512,7 @@ function ScheduleGanttView({items}){
       <svg width={totalW} height={totalH} style={{display:"block",fontFamily:"'Segoe UI',sans-serif",minWidth:totalW}}>
         {/* Header */}
         <rect x={0} y={0} width={totalW} height={40} fill={T.sb}/>
-        <text x={10} y={24} fontSize={10} fill="rgba(255,255,255,0.5)" fontWeight="600">Team / Work Item</text>
+        <text x={10} y={24} fontSize={10} fill="rgba(255,255,255,0.5)" fontWeight="600">{t("team_schedule.team_work_item")}</text>
         {days.map((d,i)=>{
           const isToday=d.toISOString().startsWith(TODAY);
           const isSun=d.getDay()===0;
@@ -624,7 +624,7 @@ function MemberView({items,onOpen,onStatusChange,onCreateFor,isAdmin=false}){
             {isExp&&(
               <div style={{padding:"10px 14px",borderTop:`1px solid ${T.b1}`}}>
                 {memberItems.length===0?(
-                  <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>No tasks assigned</div>
+                  <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>{t("team_schedule.no_tasks_assigned")}</div>
                 ):(
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:8}}>
                     {["In Progress","Todo","Blocked","Review","Done"].map(status=>{
@@ -670,9 +670,9 @@ function SiteView({items,onOpen,onStatusChange,onCreateFor,isAdmin=false}){
               <div style={{width:10,height:10,borderRadius:"50%",background:site.color,flexShrink:0}}/>
               <div style={{flex:1}}>
                 <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{site.name}</div>
-                <div style={{fontSize:11,color:T.t4}}>{site.city} · {siteItems.length} work items</div>
+                <div style={{fontSize:11,color:T.t4}}>{t("team_schedule.city_siteitems_work_items", { city: site.city, siteItems: siteItems.length })}</div>
               </div>
-              {issues>0&&<span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,border:`1px solid ${T.redM}`}}>{issues} open issues</span>}
+              {issues>0&&<span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,border:`1px solid ${T.redM}`}}>{t("team_schedule.issues_open_issues", { issues })}</span>}
               {isAdmin&&["Task","Issue","Todo"].map(type=>(
                 <button key={type} onClick={e=>{e.stopPropagation();onCreateFor(site.id,type,"site");}}
                   style={{display:"flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:5,background:`${TYPES[type].c}18`,border:`1px solid ${TYPES[type].c}44`,color:TYPES[type].c,fontSize:10,fontWeight:700,cursor:"pointer"}}>
@@ -818,13 +818,13 @@ function TeamScheduleModule(){
 
   if(loading) return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",background:T.bg}}>
-      <div style={{textAlign:"center",padding:"60px 0",color:"#94A3B8"}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>
+      <div style={{textAlign:"center",padding:"60px 0",color:"#94A3B8"}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>{t("common.loading")}</div>
     </div>
   );
 
   if(error) return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",background:T.bg}}>
-      <div style={{textAlign:"center",padding:"60px 0",color:"#EF4444",fontSize:13}}>Failed to load. <span style={{color:"#3B82F6",cursor:"pointer",textDecoration:"underline"}} onClick={loadAll}>Retry</span></div>
+      <div style={{textAlign:"center",padding:"60px 0",color:"#EF4444",fontSize:13}}>{t("payroll.failed_to_load")} <span style={{color:"#3B82F6",cursor:"pointer",textDecoration:"underline"}} onClick={loadAll}>{t("common.retry")}</span></div>
     </div>
   );
 
@@ -850,19 +850,19 @@ function TeamScheduleModule(){
   const todayItems=all.filter(i=>i.dueDate===TODAY&&i.status!=="Done").length;
 
   const TILES=[
-    {l:"Total Items",v:all.length,sub:`${all.filter(i=>i.status!=="Done").length} active`,c:T.blu},
-    {l:"Urgent / Overdue",v:urgent,sub:"Needs attention",c:urgent>0?T.red:T.grn},
-    {l:"Due Today",v:todayItems,sub:new Date().toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"}),c:todayItems>0?T.amb:T.grn},
-    {l:"Issues Open",v:all.filter(i=>i.type==="Issue"&&i.status!=="Done").length,sub:"Unresolved issues",c:T.red},
+    {l:t("team_schedule.total_items"),v:all.length,sub:t("team_schedule.length_active", { length: all.filter(i=>i.status!=="Done").length }),c:T.blu},
+    {l:t("team_schedule.urgent_overdue"),v:urgent,sub:t("team_schedule.needs_attention"),c:urgent>0?T.red:T.grn},
+    {l:t("team_schedule.due_today"),v:todayItems,sub:new Date().toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"}),c:todayItems>0?T.amb:T.grn},
+    {l:t("team_schedule.issues_open"),v:all.filter(i=>i.type==="Issue"&&i.status!=="Done").length,sub:t("team_schedule.unresolved_issues"),c:T.red},
   ];
 
   const VIEWS=[
-    {id:"board",  l:"Board",  I:IcTask},
-    {id:"member", l:"Members",I:IcUser},
-    {id:"site",   l:"Sites",  I:IcLoc},
-    {id:"gantt",  l:"Gantt",  I:IcGantt},
-    {id:"list",   l:"List",   I:IcList},
-    {id:"live",   l:"Live",   I:IcLive},
+    {id:"board",  l:t("team_schedule.board"),  I:IcTask},
+    {id:"member", l:t("team_schedule.members"),I:IcUser},
+    {id:"site",   l:t("team_schedule.sites"),  I:IcLoc},
+    {id:"gantt",  l:t("team_schedule.gantt"),  I:IcGantt},
+    {id:"list",   l:t("team_schedule.list"),   I:IcList},
+    {id:"live",   l:t("team_schedule.live"),   I:IcLive},
   ];
 
   return(
@@ -897,30 +897,30 @@ function TeamScheduleModule(){
           {/* Search */}
           <div style={{position:"relative"}}>
             <span style={{position:"absolute",left:7,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={12} color="rgba(255,255,255,0.3)"/></span>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..."
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("common.search")}
               style={{height:28,padding:"0 8px 0 24px",borderRadius:6,border:"1px solid rgba(255,255,255,0.18)",background:"rgba(255,255,255,0.1)",fontSize:12,color:"white",outline:"none",width:140,boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
 
           {/* Filter button */}
           <button onClick={()=>setShowFilters(s=>!s)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:6,border:`1px solid ${activeF>0?"rgba(251,191,36,0.5)":"rgba(255,255,255,0.18)"}`,background:activeF>0?"rgba(251,191,36,0.15)":"rgba(255,255,255,0.07)",color:activeF>0?"#FDE68A":"rgba(255,255,255,0.7)",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-            <IcFilter size={12} color="currentColor"/> Filters {activeF>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{activeF}</span>}
+            <IcFilter size={12} color="currentColor"/> {t("common.filters")} {activeF>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{activeF}</span>}
           </button>
 
           {/* Export — Excel + PDF */}
           <ExportMenu
             filename="my-team"
-            title="My Team — Schedule"
+            title={t("team_schedule.my_team_schedule")}
             columns={[
-              {key:"type",label:"Type"},
-              {key:"title",label:"Title"},
-              {key:"assignee",label:"Assignee",get:r=>{const m=TEAM_MEMBERS.find(mm=>mm.id===r.assignee);return m?.name||r.assigneeName||"";}},
-              {key:"site",label:"Site",get:r=>{const s=SITES.find(ss=>ss.id===r.site);return s?.name||r.siteName||"";}},
-              {key:"status",label:"Status"},
-              {key:"priority",label:"Priority"},
-              {key:"startDate",label:"Start"},
-              {key:"dueDate",label:"Due"},
-              {key:"description",label:"Description"},
+              {key:"type",label:t("common.type")},
+              {key:"title",label:t("common.title_2")},
+              {key:"assignee",label:t("team_schedule.assignee"),get:r=>{const m=TEAM_MEMBERS.find(mm=>mm.id===r.assignee);return m?.name||r.assigneeName||"";}},
+              {key:"site",label:t("common.site"),get:r=>{const s=SITES.find(ss=>ss.id===r.site);return s?.name||r.siteName||"";}},
+              {key:"status",label:t("common.status")},
+              {key:"priority",label:t("common.priority")},
+              {key:"startDate",label:t("common.start")},
+              {key:"dueDate",label:t("common.due")},
+              {key:"description",label:t("common.description")},
             ]}
             rows={filteredItems}
             size="sm"
@@ -940,25 +940,25 @@ function TeamScheduleModule(){
           <div style={{background:T.surface,borderRadius:"0 0 9px 9px",border:`1px solid ${T.b1}`,borderTop:"none",padding:"11px 14px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
             {/* Member filter */}
             <div>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>Member</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{t("team_schedule.member")}</div>
               <select value={fMember} onChange={e=>setFMember(e.target.value)}
                 style={{height:30,padding:"0 9px",borderRadius:6,border:`1.5px solid ${fMember!=="All"?T.blu:T.b1}`,background:fMember!=="All"?T.bluL:T.surface,fontSize:12,color:fMember!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-                <option value="All">All Members</option>
+                <option value="All">{t("team_schedule.all_members")}</option>
                 {TEAM_MEMBERS.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
             {/* Site filter */}
             <div>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>Site</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{t("common.site")}</div>
               <select value={fSite} onChange={e=>setFSite(e.target.value)}
                 style={{height:30,padding:"0 9px",borderRadius:6,border:`1.5px solid ${fSite!=="All"?T.blu:T.b1}`,background:fSite!=="All"?T.bluL:T.surface,fontSize:12,color:fSite!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-                <option value="All">All Sites</option>
+                <option value="All">{t("common.all_sites")}</option>
                 {SITES.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
             {/* Type */}
             <div>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>Type</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{t("common.type")}</div>
               <div style={{display:"flex",gap:3}}>
                 {["All","Task","Issue","Todo"].map(t=>(
                   <button key={t} onClick={()=>setFType(t)}
@@ -970,7 +970,7 @@ function TeamScheduleModule(){
             </div>
             {/* Priority */}
             <div>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>Priority</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{t("common.priority")}</div>
               <div style={{display:"flex",gap:3}}>
                 {["All","High","Medium","Low"].map(p=>{
                   const pm=PRIORITY_META[p];
@@ -983,7 +983,7 @@ function TeamScheduleModule(){
             </div>
             {/* Date range */}
             <div>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>Date Range</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{t("team_schedule.date_range")}</div>
               <div style={{display:"flex",gap:4,alignItems:"center"}}>
                 <input type="date" value={fDateFrom} onChange={e=>setFDateFrom(e.target.value)}
                   style={{height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
@@ -994,7 +994,7 @@ function TeamScheduleModule(){
             </div>
             {/* Status */}
             <div>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>Show</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{t("team_schedule.show")}</div>
               <div style={{display:"flex",gap:3}}>
                 {["Active","All","Done"].map(s=>(
                   <button key={s} onClick={()=>setFStatus(s)}
@@ -1006,7 +1006,7 @@ function TeamScheduleModule(){
             </div>
             {activeF>0&&<button onClick={()=>{setFMember("All");setFSite("All");setFType("All");setFPriority("All");setFStatus("Active");}}
               style={{height:30,padding:"0 11px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surfaceB,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",alignSelf:"flex-end"}}>
-              Clear
+             {t("common.clear")}
             </button>}
             <span style={{fontSize:11,color:T.t4,alignSelf:"flex-end"}}>{filteredItems.length} items</span>
           </div>
@@ -1017,7 +1017,7 @@ function TeamScheduleModule(){
       <div style={{flex:1,overflowY:"auto",padding:"10px 18px 16px"}}>
 
         {/* Empty state (only for work-item views) */}
-        {items.length===0&&view!=="live"&&<div style={{textAlign:"center",padding:"80px 0"}}><div style={{fontSize:36,marginBottom:8}}>📅</div><div style={{color:"#64748B",fontSize:14,fontWeight:600}}>No work items yet</div><div style={{color:"#94A3B8",fontSize:12,marginTop:4}}>Create tasks, issues, or todos to get started</div></div>}
+        {items.length===0&&view!=="live"&&<div style={{textAlign:"center",padding:"80px 0"}}><div style={{fontSize:36,marginBottom:8}}>📅</div><div style={{color:"#64748B",fontSize:14,fontWeight:600}}>{t("team_schedule.no_work_items_yet")}</div><div style={{color:"#94A3B8",fontSize:12,marginTop:4}}>{t("team_schedule.create_tasks_issues_or_todos_to")}</div></div>}
 
         {/* BOARD VIEW — Kanban by status */}
         {view==="board"&&(
@@ -1032,7 +1032,7 @@ function TeamScheduleModule(){
                   </div>
                   <div style={{background:sm.bg,borderRadius:"0 0 8px 8px",border:`1px solid ${sm.brd}`,borderTop:"none",padding:"8px 8px",minHeight:120}}>
                     {colItems.map(item=><WorkCard key={item.id} item={item} onOpen={setSelItem} onStatusChange={updateItem}/>)}
-                    {colItems.length===0&&<div style={{textAlign:"center",padding:"20px 8px",color:`${sm.c}66`,fontSize:11.5}}>No items</div>}
+                    {colItems.length===0&&<div style={{textAlign:"center",padding:"20px 8px",color:`${sm.c}66`,fontSize:11.5}}>{t("common.no_items_2")}</div>}
                   </div>
                 </div>
               );
@@ -1089,7 +1089,7 @@ function TeamScheduleModule(){
                 </div>
               );
             })}
-            {filteredItems.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:13}}>No items match filters</div>}
+            {filteredItems.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:13}}>{t("team_schedule.no_items_match_filters")}</div>}
           </div>
         )}
       </div>

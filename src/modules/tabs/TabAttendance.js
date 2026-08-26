@@ -4,6 +4,7 @@ import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, THead } from "../shared/ui";
+import { t, Rich } from "../../i18n";
 
 function TabAttendance({ project, onRequestPayment }) {
   const projectId = project?.id || 1;
@@ -397,9 +398,9 @@ function TabAttendance({ project, onRequestPayment }) {
 
   // ── Rate badge sub-component ─────────────────────────────────────
   const RateBadge = ({worker}) => {
-    if(worker.rateStatus==="pending") return <span style={{padding:"2px 7px",background:T.ambL,color:T.amb,borderRadius:20,fontSize:10,fontWeight:600,border:`1px solid ${T.ambM}`}}>🟡 Pending</span>;
-    if(worker.rateStatus==="approved") return <span style={{padding:"2px 7px",background:T.grnL,color:T.grn,borderRadius:20,fontSize:10,fontWeight:600,border:`1px solid ${T.grnM}`}}>✓ Approved</span>;
-    return <span style={{padding:"2px 7px",background:T.sltL,color:T.slt,borderRadius:20,fontSize:10,fontWeight:600,border:`1px solid ${T.b2}`}}>📋 Rate Card</span>;
+    if(worker.rateStatus==="pending") return <span style={{padding:"2px 7px",background:T.ambL,color:T.amb,borderRadius:20,fontSize:10,fontWeight:600,border:`1px solid ${T.ambM}`}}>{t("attendance.pending")}</span>;
+    if(worker.rateStatus==="approved") return <span style={{padding:"2px 7px",background:T.grnL,color:T.grn,borderRadius:20,fontSize:10,fontWeight:600,border:`1px solid ${T.grnM}`}}>{t("attendance.approved")}</span>;
+    return <span style={{padding:"2px 7px",background:T.sltL,color:T.slt,borderRadius:20,fontSize:10,fontWeight:600,border:`1px solid ${T.b2}`}}>{t("attendance.rate_card")}</span>;
   };
 
   const historyRecs = (()=>{
@@ -448,18 +449,16 @@ function TabAttendance({ project, onRequestPayment }) {
           {labType==="company"&&<>
             <button onClick={()=>setShowWfPanel(p=>!p)}
               style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:showWfPanel?T.surfaceB:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              Workforce {showWfPanel?"▲":"▼"}
-            </button>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{t("attendance.workforce_showwfpanel", { showWfPanel: showWfPanel?"▲":"▼" })}</button>
             <button onClick={()=>{ setShowAddWf(true); setLibSearch(""); setSelectedLibIds(new Set()); setShowNewWf(false); setWfForm({name:"",role:"Labour",category:"Unskilled",dailyRate:"",phone:"",city:""}); }}
               style={{padding:"6px 13px",borderRadius:6,background:TYPE_COLORS[labType],color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-              Add Worker
+             {t("common.add_worker")}
             </button>
           </>}
           <button onClick={()=>setShowHistory(p=>!p)}
             style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${showHistory?TYPE_COLORS[labType]:T.b1}`,background:showHistory?TYPE_BG[labType]:T.surface,color:showHistory?TYPE_COLORS[labType]:T.t3,fontSize:11.5,cursor:"pointer"}}>
-            History
+           {t("common.history")}
           </button>
         </div>
       </div>
@@ -467,14 +466,14 @@ function TabAttendance({ project, onRequestPayment }) {
       {/* ── SUBCON SELECTOR (replaces workforce panel for subcon) ─────── */}
       {labType==="subcon"&&(
         <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-          <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",flexShrink:0}}>Subcontractor</span>
+          <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",flexShrink:0}}>{t("common.subcontractor")}</span>
           {!subconScoped && subconLib.length>0 && (
             <span style={{fontSize:10,color:T.amb,background:T.ambL,border:`1px solid ${T.amb}33`,padding:"2px 8px",borderRadius:10,flexShrink:0}}>
-              Is project ka koi Work Order nahi — saare subcon dikha rahe hain
+             {t("attendance.is_project_ka_koi_work_order")}
             </span>
           )}
           {subconLib.length===0
-            ?<span style={{fontSize:12,color:T.t4}}>No subcontractors in library. Add via <b>Master Library → Subcontractors</b>.</span>
+            ?<span style={{fontSize:12,color:T.t4}}>{t("attendance.no_subcontractors_in_library_add_via")} <b>{t("attendance.master_library_subcontractors")}</b>.</span>
             :<div style={{display:"flex",gap:6,flexWrap:"wrap",flex:1}}>
               {subconLib.map(s=>{
                 const sid = s.id||s.name;
@@ -503,7 +502,7 @@ function TabAttendance({ project, onRequestPayment }) {
                 onMouseEnter={el=>el.currentTarget.style.background="#1D4ED8"}
                 onMouseLeave={el=>el.currentTarget.style.background=T.blu}>
                 <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                Request Payment
+               {t("attendance.request_payment")}
               </button>
             );
           })()}
@@ -513,9 +512,9 @@ function TabAttendance({ project, onRequestPayment }) {
       {/* ── VENDOR SELECTOR (mirrors subcon flow + Add new vendor) ───── */}
       {labType==="vendor"&&(
         <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-          <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",flexShrink:0}}>Labour Vendor</span>
+          <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",flexShrink:0}}>{t("common.labour_vendor")}</span>
           {vendorLib.length===0
-            ?<span style={{fontSize:12,color:T.t4}}>No labour vendors yet. Click <b>Add Vendor</b> →</span>
+            ?<span style={{fontSize:12,color:T.t4}}>{t("attendance.no_labour_vendors_yet_click")} <b>{t("attendance.add_vendor")}</b> →</span>
             :<div style={{display:"flex",gap:6,flexWrap:"wrap",flex:1}}>
               {vendorLib.map(v=>{
                 const vid = v.id||v.name;
@@ -550,12 +549,12 @@ function TabAttendance({ project, onRequestPayment }) {
               setAddVendorMode(companyVendorLib.length ? "pick" : "new");
               setShowAddVendor(true);
             }}
-            title="Add a vendor to this project"
+            title={t("attendance.add_a_vendor_to_this_project")}
             style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t2,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",flexShrink:0,transition:"all .12s"}}
             onMouseEnter={el=>{el.currentTarget.style.background=T.surfaceB; el.currentTarget.style.borderColor=T.b2;}}
             onMouseLeave={el=>{el.currentTarget.style.background=T.surface; el.currentTarget.style.borderColor=T.b1;}}>
             <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}><path d="M12 5v14M5 12h14"/></svg>
-            Add Vendor
+           {t("attendance.add_vendor")}
           </button>
         </div>
       )}
@@ -568,10 +567,10 @@ function TabAttendance({ project, onRequestPayment }) {
           {/* Header */}
           <div style={{padding:"12px 16px",background:"#0D1B2A",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div>
-              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Registered Workforce</div>
-              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{TYPE_LABELS[labType]} · {currentWF.length} registered · Mode: {mode==="name"?"Name-wise":"Count-wise"}</div>
+              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>{t("attendance.registered_workforce")}</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{t("attendance.type_labels_currentwf_registered_mode_mode", { TYPE_LABELS: TYPE_LABELS[labType], currentWF: currentWF.length, mode: mode==="name"?"Name-wise":"Count-wise" })}</div>
             </div>
-            <button onClick={()=>setShowWfPanel(false)} title="Close"
+            <button onClick={()=>setShowWfPanel(false)} title={t("common.close")}
               style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",padding:6,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s"}}
               onMouseEnter={el=>el.currentTarget.style.background="rgba(255,255,255,0.1)"}
               onMouseLeave={el=>el.currentTarget.style.background="none"}>
@@ -581,11 +580,9 @@ function TabAttendance({ project, onRequestPayment }) {
           {/* Body */}
           <div style={{flex:1,overflowY:"auto"}}>
             {wfLoading
-              ?<div style={{padding:"32px 18px",textAlign:"center",color:T.t4,fontSize:12.5}}>Loading…</div>
+              ?<div style={{padding:"32px 18px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("common.loading_2")}</div>
               :currentWF.length===0
-                ?<div style={{padding:"40px 18px",textAlign:"center",color:T.t4,fontSize:12.5}}>
-                  No {TYPE_LABELS[labType]} registered yet.<br/>Click <b>"+ Add Worker"</b> above to register workforce for this project.
-                 </div>
+                ?<div style={{padding:"40px 18px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("attendance.no_type_labels_registered_yet", { TYPE_LABELS: TYPE_LABELS[labType] })}<br/><Rich k="attendance.click_t_above_to_register_workforce" params={{ t: t("attendance.add_worker") }} /></div>
                 :<>
                   <THead cols="2fr 1fr 90px 100px 100px" headers={["Name","Role","Daily Rate","Rate Status","Action"]}/>
                   {currentWF.map((w,i)=>(
@@ -598,7 +595,7 @@ function TabAttendance({ project, onRequestPayment }) {
                       <RateBadge worker={w}/>
                       <button onClick={()=>{setRateReqWorker(w);setNewRateVal("");setRateReason("");setShowRateModal(true);}}
                         style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${T.b2}`,background:T.surface,color:T.t3,fontSize:11,cursor:"pointer",width:"max-content",fontFamily:"inherit"}}>
-                        Change Rate
+                       {t("attendance.change_rate")}
                       </button>
                     </div>
                   ))}
@@ -620,13 +617,13 @@ function TabAttendance({ project, onRequestPayment }) {
           const labelColor = isSel ? TYPE_COLORS[labType] : (isWeekend ? T.t4 : T.t3);
           return(
             <button key={d} onClick={()=>setAttDate(d)}
-              title={isToday ? "Today" : (hasData ? "Attendance marked" : "")}
+              title={isToday ? t("common.today") : (hasData ? t("attendance.attendance_marked") : "")}
               style={{padding:"6px 11px 8px",borderRadius:7,border:`1.5px solid ${isSel?TYPE_COLORS[labType]:T.b1}`,background:isSel?TYPE_BG[labType]:T.surface,color:isSel?TYPE_COLORS[labType]:T.t2,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:1,minWidth:46,position:"relative",flexShrink:0,transition:"all .15s",boxShadow:isToday&&!isSel?`inset 0 -2px 0 ${T.blu}`:"none"}}>
               <span style={{fontSize:9.5,fontWeight:isSel?700:500,textTransform:"uppercase",color:labelColor,letterSpacing:".3px"}}>
                 {dd.toLocaleDateString("en-IN",{weekday:"short"})}
               </span>
               <span style={{fontSize:13,fontWeight:isSel?700:600,color:isSel?TYPE_COLORS[labType]:(isWeekend?T.t3:T.t1)}}>{dd.getDate()}</span>
-              {hasData&&<span title="Attendance marked" style={{width:5,height:5,borderRadius:"50%",background:T.grn,position:"absolute",top:5,right:5}}/>}
+              {hasData&&<span title={t("attendance.attendance_marked")} style={{width:5,height:5,borderRadius:"50%",background:T.grn,position:"absolute",top:5,right:5}}/>}
             </button>
           );
         })}
@@ -635,10 +632,10 @@ function TabAttendance({ project, onRequestPayment }) {
         {/* Legend */}
         <div style={{display:"flex",alignItems:"center",gap:10,marginLeft:"auto",fontSize:10.5,color:T.t4,flexShrink:0}}>
           <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
-            <span style={{width:6,height:6,borderRadius:"50%",background:T.grn}}/>Marked
+            <span style={{width:6,height:6,borderRadius:"50%",background:T.grn}}/>{t("attendance.marked")}
           </span>
           <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
-            <span style={{width:14,height:2,borderRadius:1,background:T.blu}}/>Today
+            <span style={{width:14,height:2,borderRadius:1,background:T.blu}}/>{t("common.today")}
           </span>
         </div>
       </div>
@@ -648,9 +645,9 @@ function TabAttendance({ project, onRequestPayment }) {
         /* Subcon: only present count per role, no wages tracking */
         ?<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
           {[
-            {l:"Total Present",v:presentCount,c:T.grn},
-            {l:"Roles Working", v:todayCountRows.filter(r=>r.present>0).length, c:T.blu},
-            {l:"Mode",         v:"Count-wise",c:T.slt},
+            {l:t("attendance.total_present"),v:presentCount,c:T.grn},
+            {l:t("attendance.roles_working"), v:todayCountRows.filter(r=>r.present>0).length, c:T.blu},
+            {l:t("common.mode"),         v:"Count-wise",c:T.slt},
           ].map((s,i)=>(
             <div key={i} style={{padding:"12px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,display:"flex",flexDirection:"column",gap:6}}>
               <div style={{display:"flex",alignItems:"center",gap:7}}>
@@ -664,10 +661,10 @@ function TabAttendance({ project, onRequestPayment }) {
         /* Company / Vendor: full KPI */
         :<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
           {[
-            {l:"Present",    v:presentCount,                                     c:T.grn},
-            {l:"Half Day",   v:halfCount,                                        c:T.amb},
-            {l:"Absent",     v:Math.max(0,totalCount-presentCount-halfCount),    c:T.red},
-            {l:"Daily Wages",v:`₹${fmtN(totalWages)}`,                           c:T.blu},
+            {l:t("common.present"),    v:presentCount,                                     c:T.grn},
+            {l:t("common.half_day"),   v:halfCount,                                        c:T.amb},
+            {l:t("common.absent"),     v:Math.max(0,totalCount-presentCount-halfCount),    c:T.red},
+            {l:t("attendance.daily_wages"),v:`₹${fmtN(totalWages)}`,                           c:T.blu},
           ].map((s,i)=>(
             <div key={i} style={{padding:"12px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,display:"flex",flexDirection:"column",gap:6}}>
               <div style={{display:"flex",alignItems:"center",gap:7}}>
@@ -688,9 +685,9 @@ function TabAttendance({ project, onRequestPayment }) {
           </span>
           <div style={{display:"flex",gap:7,alignItems:"center"}}>
             {labType==="subcon"&&!selSubconId
-              ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⬆ Pehle subcontractor select karo</span>
+              ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>{t("attendance.pehle_subcontractor_select_karo")}</span>
               :labType==="vendor"&&!selVendorId
-              ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⬆ Pehle labour vendor select karo</span>
+              ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>{t("attendance.pehle_labour_vendor_select_karo")}</span>
               :mode==="count"
               ?(()=>{
                 // ── Count-wise mode (subcon/vendor): simple Mark Attendance / Save toggle ──
@@ -704,23 +701,21 @@ function TabAttendance({ project, onRequestPayment }) {
                 });
                 if (!editingAtt) return(
                   <>
-                    {savedRecCount&&<span style={{fontSize:10.5,padding:"2px 8px",borderRadius:10,background:T.grnL,color:T.grn,fontWeight:700,border:`1px solid ${T.grnM}`}}>✓ SAVED</span>}
-                    {totalCount>0&&<span style={{fontSize:11.5,color:T.t3,fontWeight:600}}>Total: <b style={{color:T.grn}}>{totalCount}</b></span>}
+                    {savedRecCount&&<span style={{fontSize:10.5,padding:"2px 8px",borderRadius:10,background:T.grnL,color:T.grn,fontWeight:700,border:`1px solid ${T.grnM}`}}>{t("attendance.saved")}</span>}
+                    {totalCount>0&&<span style={{fontSize:11.5,color:T.t3,fontWeight:600}}>{t("common.total_2")} <b style={{color:T.grn}}>{totalCount}</b></span>}
                     <button onClick={()=>setEditingAtt(true)}
-                      style={{padding:"7px 16px",borderRadius:7,border:`1.5px solid ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-                      ✏️ {savedRecCount?"Edit":"Mark"} Attendance
-                    </button>
+                      style={{padding:"7px 16px",borderRadius:7,border:`1.5px solid ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{t("attendance.savedreccount_attendance", { savedRecCount: savedRecCount?"Edit":"Mark" })}</button>
                   </>
                 );
                 return(
                   <>
                     <button onClick={()=>{ setEditingAtt(false); /* reset rows */ }}
                       style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                      Cancel
+                     {t("common.cancel")}
                     </button>
                     <button onClick={saveAttendance} disabled={attSaving}
                       style={{padding:"7px 18px",borderRadius:7,border:"none",background:TYPE_COLORS[labType],color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:attSaving?.6:1,boxShadow:`0 2px 8px ${TYPE_COLORS[labType]}55`}}>
-                      {attSaving?"Saving…":`💾 Save${totalCount>0?` (${totalCount})`:""}`}
+                      {attSaving?t("common.saving_2"):`💾 Save${totalCount>0?` (${totalCount})`:""}`}
                     </button>
                   </>
                 );
@@ -735,7 +730,7 @@ function TabAttendance({ project, onRequestPayment }) {
                   return recDate===attDate&&r.type===labType&&!r.subcon_id&&!r.vendor_id;
                 });
                 const clearDate = async () => {
-                  if(!await window.confirmAsync(`${attDate} ki attendance delete karoge? Payroll mein bhi hatega.`)) return;
+                  if(!await window.confirmAsync(t("attendance.attdate_ki_attendance_delete_karoge_payroll", { attDate }))) return;
                   try {
                     const res = await api.del(`/projects/${projectId}/attendance?date=${attDate}&type=${labType}`);
                     if(res.success) {
@@ -764,31 +759,31 @@ function TabAttendance({ project, onRequestPayment }) {
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
                     <span style={{fontSize:11.5,color:isDirty?T.amb:T.t4,fontWeight:600}}>
                       {markedCount}/{total} marked
-                      {isDirty&&<span style={{marginLeft:6,padding:"1px 7px",borderRadius:10,background:T.ambL,color:T.amb,fontSize:9.5,fontWeight:700,border:`1px solid ${T.ambM}`}}>● UNSAVED</span>}
-                      {!isDirty&&savedRec&&<span style={{marginLeft:6,padding:"1px 7px",borderRadius:10,background:T.grnL,color:T.grn,fontSize:9.5,fontWeight:700,border:`1px solid ${T.grnM}`}}>✓ SAVED</span>}
+                      {isDirty&&<span style={{marginLeft:6,padding:"1px 7px",borderRadius:10,background:T.ambL,color:T.amb,fontSize:9.5,fontWeight:700,border:`1px solid ${T.ambM}`}}>{t("attendance.unsaved")}</span>}
+                      {!isDirty&&savedRec&&<span style={{marginLeft:6,padding:"1px 7px",borderRadius:10,background:T.grnL,color:T.grn,fontSize:9.5,fontWeight:700,border:`1px solid ${T.grnM}`}}>{t("attendance.saved")}</span>}
                     </span>
                     {labType==="company"&&currentWF.length>0&&markedCount<total&&(
                       <button onClick={()=>setTodayEntries(prev=>prev.map(e=>e.status?e:({...e,status:"P",hours:8})))}
                         style={{padding:"6px 12px",borderRadius:6,border:`1.5px solid ${T.grn}`,background:T.grnL,color:T.grn,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                        ✓ Mark Remaining Present
+                       {t("attendance.mark_remaining_present")}
                       </button>
                     )}
                     {savedRec&&!isDirty&&(
                       <button onClick={async()=>{
                         // Unfreeze: enable editing by clearing all statuses
-                        if(!await window.confirmAsync("Edit attendance for this date? Tum sab P/A/H phir se mark kar sakoge.")) return;
+                        if(!await window.confirmAsync(t("attendance.edit_attendance_for_this_date_tum"))) return;
                         setTodayEntries(prev=>prev.map(e=>({...e,status:"",hours:0,ot:0,remark:""})));
                       }}
-                        title="Re-mark attendance for this date"
+                        title={t("attendance.re_mark_attendance_for_this_date")}
                         style={{padding:"6px 12px",borderRadius:6,border:`1.5px solid ${T.blu}`,background:T.bluL,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                        ✏️ Edit Attendance
+                       {t("payroll.edit_attendance")}
                       </button>
                     )}
                     {markedCount>0&&(
                       <button onClick={saveAttendance} disabled={attSaving||!allMarked||!isDirty}
-                        title={!allMarked?"Mark all workers first":(!isDirty?"No changes to save":"Save attendance")}
+                        title={!allMarked?t("attendance.mark_all_workers_first"):(!isDirty?t("attendance.no_changes_to_save"):t("attendance.save_attendance"))}
                         style={{padding:"7px 18px",borderRadius:7,border:"none",background:(allMarked&&isDirty)?TYPE_COLORS[labType]:"#ccc",color:"white",fontSize:12.5,fontWeight:700,cursor:(allMarked&&isDirty)?"pointer":"not-allowed",opacity:attSaving?.6:1,boxShadow:(allMarked&&isDirty)?`0 2px 8px ${TYPE_COLORS[labType]}55`:"none"}}>
-                        {attSaving?"Saving…":!isDirty?"✓ Saved":allMarked?`💾 Save (${total})`:`Mark all first`}
+                        {attSaving?t("common.saving_2"):!isDirty?t("attendance.saved_2"):allMarked?`💾 Save (${total})`:`Mark all first`}
                       </button>
                     )}
                   </div>
@@ -819,22 +814,22 @@ function TabAttendance({ project, onRequestPayment }) {
           })();
           const isFrozen = !!savedRec2 && !isDirty2;
           return currentWF.length===0
-            ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>Register workforce first to mark name-wise attendance.</div>
+            ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("attendance.register_workforce_first_to_mark_name")}</div>
             :<div>
               {isFrozen&&(
                 <div style={{padding:"6px 14px",background:T.grnL,borderBottom:`1px solid ${T.grnM}`,fontSize:11,color:T.grn,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                  Saved & locked — click <b style={{margin:"0 2px"}}>Edit Attendance</b> above to change
+                 {t("attendance.saved_locked_click")} <b style={{margin:"0 2px"}}>{t("attendance.edit_attendance")}</b> {t("attendance.above_to_change")}
                 </div>
               )}
               {/* Worker search bar */}
               {currentWF.length>3 && (
                 <div style={{padding:"7px 14px 8px",borderBottom:`1px solid ${T.b1}`,background:T.surface,display:"flex",alignItems:"center",gap:8}}>
                   <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round"><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
-                  <input value={workerSearch} onChange={el=>setWorkerSearch(el.target.value)} placeholder="Search by name or role..."
+                  <input value={workerSearch} onChange={el=>setWorkerSearch(el.target.value)} placeholder={t("attendance.search_by_name_or_role")}
                     style={{flex:1,padding:"3px 0",border:"none",outline:"none",fontSize:12,color:T.t1,background:"transparent",fontFamily:"inherit"}}/>
                   {workerSearch && (
-                    <button onClick={()=>setWorkerSearch("")} title="Clear"
+                    <button onClick={()=>setWorkerSearch("")} title={t("common.clear")}
                       style={{padding:"2px 6px",border:"none",background:"transparent",color:T.t4,cursor:"pointer",fontSize:14,lineHeight:1,fontFamily:"inherit"}}>×</button>
                   )}
                 </div>
@@ -855,15 +850,15 @@ function TabAttendance({ project, onRequestPayment }) {
 
                   {/* Status — pill when frozen, buttons when editing */}
                   {isFrozen ? (
-                    <Pill label={e.status==="P"?"✓ Present":e.status==="H"?"½ Half Day":"✗ Absent"}
+                    <Pill label={e.status==="P"?t("attendance.present"):e.status==="H"?t("attendance.half_day"):t("attendance.absent")}
                       c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red}
                       bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
                   ) : (
                     <div style={{display:"inline-flex", padding:2, background:"#F1F5F9", border:`1px solid ${T.b1}`, borderRadius:8, gap:0}}>
                       {[
-                        {s:"P", label:"Present",  c:T.grn},
-                        {s:"A", label:"Absent",   c:T.red},
-                        {s:"H", label:"Half Day", c:T.amb},
+                        {s:"P", label:t("common.present"),  c:T.grn},
+                        {s:"A", label:t("common.absent"),   c:T.red},
+                        {s:"H", label:t("common.half_day"), c:T.amb},
                       ].map(opt=>{
                         const active = e.status === opt.s;
                         const dimmed = isLocked && !active;
@@ -897,22 +892,22 @@ function TabAttendance({ project, onRequestPayment }) {
 
                   {/* Edit/Lock indicator */}
                   {isFrozen
-                    ?<span title="Saved & locked" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:14,border:`1px solid ${T.grnM}`,background:T.grnL,color:T.grn,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>
+                    ?<span title={t("attendance.saved_locked")} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:14,border:`1px solid ${T.grnM}`,background:T.grnL,color:T.grn,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>
                         <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                        Saved
+                       {t("attendance.saved_3")}
                       </span>
                     :isLocked
                       ?<button onClick={()=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,status:"",hours:0,ot:0,remark:""}:en))}
-                          title="Edit / change status"
+                          title={t("attendance.edit_change_status")}
                           style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,border:`1px solid ${T.b2}`,background:T.surface,color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}
                           onMouseEnter={el=>{el.currentTarget.style.background=T.surfaceB; el.currentTarget.style.borderColor=T.b1; el.currentTarget.style.color=T.t2;}}
                           onMouseLeave={el=>{el.currentTarget.style.background=T.surface; el.currentTarget.style.borderColor=T.b2; el.currentTarget.style.color=T.t3;}}>
                           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                          Edit
+                         {t("common.edit_2")}
                         </button>
-                      :<span title="Not yet marked" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:14,border:`1px dashed ${T.b2}`,background:"transparent",color:T.t4,fontSize:10.5,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>
+                      :<span title={t("attendance.not_yet_marked")} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:14,border:`1px dashed ${T.b2}`,background:"transparent",color:T.t4,fontSize:10.5,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>
                           <span style={{width:6,height:6,borderRadius:"50%",border:`1.5px solid ${T.t4}`,display:"inline-block"}}/>
-                          Pending
+                         {t("common.pending")}
                         </span>
                   }
                 </div>
@@ -921,7 +916,7 @@ function TabAttendance({ project, onRequestPayment }) {
                   <div style={{padding:"2px 16px 10px 22px",borderBottom:`1px solid ${T.b1}`}}>
                     <input type="text" value={e.remark||""}
                       onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,remark:el.target.value}:en))}
-                      placeholder="Reason for absence (optional)"
+                      placeholder={t("attendance.reason_for_absence_optional")}
                       style={{width:"100%",maxWidth:380,padding:"5px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:T.surface,fontSize:11.5,color:T.t2,outline:"none",fontFamily:"inherit",boxSizing:"border-box",transition:"border-color .12s"}}
                       onFocus={el=>el.target.style.borderColor=T.t4}
                       onBlur={el=>el.target.style.borderColor=T.b1}/>
@@ -939,7 +934,7 @@ function TabAttendance({ project, onRequestPayment }) {
             {/* ── SUBCON: prompt to select subcon ── */}
             {labType==="subcon" && !selSubconId && (
               <div style={{padding:"30px 18px",textAlign:"center",color:T.t4,fontSize:13}}>
-                ⬆ Pehle subcontractor select karo, phir attendance mark kar sakte ho.
+               {t("attendance.pehle_subcontractor_select_karo_phir_attendance")}
               </div>
             )}
 
@@ -959,21 +954,21 @@ function TabAttendance({ project, onRequestPayment }) {
                     onMouseEnter={el=>{el.currentTarget.style.background=T.surfaceB; el.currentTarget.style.borderColor=T.b2; el.currentTarget.style.color=T.t1;}}
                     onMouseLeave={el=>{el.currentTarget.style.background=T.surface; el.currentTarget.style.borderColor=T.b1; el.currentTarget.style.color=T.t2;}}>
                     <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14"/></svg>
-                    Manage Skills
+                   {t("attendance.manage_skills")}
                   </button>
                 </div>
 
                 {subconSkills.length===0 ? (
                   <div style={{padding:"30px 18px",textAlign:"center",border:`1.5px dashed ${T.b1}`,borderRadius:10,background:T.surfaceB}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:5}}>🎯 No skills configured yet</div>
-                    <div style={{fontSize:11.5,color:T.t3,marginBottom:14}}>Click <b>"Manage Skills"</b> above to setup what this subcontractor supplies.</div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:5}}>{t("attendance.no_skills_configured_yet")}</div>
+                    <div style={{fontSize:11.5,color:T.t3,marginBottom:14}}>{t("common.click")} <b>{t("attendance.manage_skills_2")}</b> {t("attendance.above_to_setup_what_this_subcontractor")}</div>
                   </div>
                 ) : (
                   <>
                     {/* Header */}
                     <div style={{display:"grid",gridTemplateColumns:"2fr 130px",gap:10,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
-                      <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>Skill</div>
-                      <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",textAlign:"center"}}>Count Today</div>
+                      <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>{t("payroll.skill")}</div>
+                      <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",textAlign:"center"}}>{t("attendance.count_today")}</div>
                     </div>
                     {todayCountRows.map((row,i)=>(
                       <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 130px",gap:10,marginBottom:6,alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}>
@@ -986,7 +981,7 @@ function TabAttendance({ project, onRequestPayment }) {
                       </div>
                     ))}
                     {!editingAtt && todayCountRows.every(r=>!r.present) && (
-                      <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"18px 0"}}>No count marked yet. Click "Mark Attendance" to enter.</div>
+                      <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"18px 0"}}>{t("attendance.no_count_marked_yet_click_mark")}</div>
                     )}
                     {/* Total summary */}
                     {!editingAtt && todayCountRows.some(r=>r.present>0) && (()=>{
@@ -995,7 +990,7 @@ function TabAttendance({ project, onRequestPayment }) {
                         <div style={{marginTop:10,padding:"10px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                           <div style={{display:"flex",alignItems:"center",gap:7}}>
                             <span style={{width:6,height:6,borderRadius:"50%",background:T.grn}}/>
-                            <span style={{fontSize:10.5,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"}}>Total Labour Today</span>
+                            <span style={{fontSize:10.5,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"}}>{t("attendance.total_labour_today")}</span>
                           </div>
                           <span style={{fontSize:20,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{total}</span>
                         </div>
@@ -1026,9 +1021,9 @@ function TabAttendance({ project, onRequestPayment }) {
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
                     <div style={{display:"flex",alignItems:"center",gap:7}}>
                       <span style={{width:6,height:6,borderRadius:"50%",background:T.blu}}/>
-                      <span style={{fontSize:10.5,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"}}>Total Till Date — by Skill</span>
+                      <span style={{fontSize:10.5,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"}}>{t("attendance.total_till_date_by_skill")}</span>
                     </div>
-                    <span style={{fontSize:12,color:T.t3,fontWeight:600}}>Grand Total <b style={{color:T.t1,marginLeft:4,fontVariantNumeric:"tabular-nums"}}>{grandTotal}</b></span>
+                    <span style={{fontSize:12,color:T.t3,fontWeight:600}}>{t("common.grand_total")} <b style={{color:T.t1,marginLeft:4,fontVariantNumeric:"tabular-nums"}}>{grandTotal}</b></span>
                   </div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     {skillTotals.map(([skill,count])=>(
@@ -1052,9 +1047,9 @@ function TabAttendance({ project, onRequestPayment }) {
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:10}}>
                   <button onClick={()=>{ const rc=rateCard.find(r=>{const n=r.role||r.name||r.skill; return n && !(vd?.skills||[]).some(s=>s.skill===n);}); const sk=rc?(rc.role||rc.name||rc.skill):""; setSkillForm({skill:sk,rate:getRateForRole(sk)||""}); setShowAddSkill(v=>!v); }}
                     style={{padding:"4px 11px",borderRadius:6,border:`1px solid ${T.amb}`,background:showAddSkill?T.amb:T.ambL,color:showAddSkill?"white":T.amb,fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                    {showAddSkill?"× Cancel":"+ Add Skill"}
+                    {showAddSkill?t("attendance.cancel"):t("attendance.add_skill")}
                   </button>
-                  <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{vSkillsCount} skill{vSkillsCount!==1?"s":""} · rates locked at onboarding</span>
+                  <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{t("attendance.vskillscount_skillvskillscount2_rates_locked_at_onboarding", { vSkillsCount, vSkillsCount2: vSkillsCount!==1?"s":"" })}</span>
                 </div>
                 {showAddSkill&&(()=>{
                   const cr = getRateForRole(skillForm.skill);
@@ -1063,11 +1058,11 @@ function TabAttendance({ project, onRequestPayment }) {
                   <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,padding:"10px 12px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:8}}>
                     <select value={skillForm.skill} onChange={e=>{const sk=e.target.value; setSkillForm({skill:sk,rate:getRateForRole(sk)||""});}}
                       style={{flex:1,padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,fontFamily:"inherit",background:"white"}}>
-                      <option value="">— Select skill —</option>
-                      {rateCard.map(rc=>{const n=rc.role||rc.name||rc.skill; if(!n) return null; const has=(vd?.skills||[]).some(s=>s.skill===n); return <option key={rc.id} value={n} disabled={has}>{n}{has?" (added)":""}</option>;})}
+                      <option value="">{t("attendance.select_skill")}</option>
+                      {rateCard.map(rc=>{const n=rc.role||rc.name||rc.skill; if(!n) return null; const has=(vd?.skills||[]).some(s=>s.skill===n); return <option key={rc.id} value={n} disabled={has}>{n}{has?t("attendance.added"):""}</option>;})}
                     </select>
-                    <input type="number" value={cr||""} disabled placeholder="Card" title="Card rate" style={{width:78,padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,textAlign:"right",background:cr>0?T.grnL:T.surfaceB,color:cr>0?T.grn:T.t4,fontWeight:600,boxSizing:"border-box"}}/>
-                    <input type="number" value={skillForm.rate} onChange={e=>setSkillForm(f=>({...f,rate:e.target.value}))} placeholder="Rate" min={0}
+                    <input type="number" value={cr||""} disabled placeholder={t("attendance.card")} title={t("attendance.card_rate")} style={{width:78,padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,textAlign:"right",background:cr>0?T.grnL:T.surfaceB,color:cr>0?T.grn:T.t4,fontWeight:600,boxSizing:"border-box"}}/>
+                    <input type="number" value={skillForm.rate} onChange={e=>setSkillForm(f=>({...f,rate:e.target.value}))} placeholder={t("common.rate")} min={0}
                       style={{width:78,padding:"7px 8px",borderRadius:6,border:`1.5px solid ${differs?T.ambM:T.b1}`,fontSize:13,fontWeight:700,color:differs?T.amb:T.t1,textAlign:"right",fontFamily:"inherit",background:differs?"white":"white",boxSizing:"border-box"}}/>
                     <button disabled={addSkillSaving||!skillForm.skill||!(Number(skillForm.rate)>0)} onClick={async()=>{
                       setAddSkillSaving(true);
@@ -1077,22 +1072,22 @@ function TabAttendance({ project, onRequestPayment }) {
                         else alert(r?.message||"Add skill failed");
                       } catch(e){ alert("Error: "+e.message); }
                       setAddSkillSaving(false);
-                    }} style={{padding:"7px 13px",borderRadius:6,background:(!skillForm.skill||!(Number(skillForm.rate)>0))?"#ccc":T.amb,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",opacity:addSkillSaving?.7:1,whiteSpace:"nowrap"}}>{addSkillSaving?"...":"Add"}</button>
+                    }} style={{padding:"7px 13px",borderRadius:6,background:(!skillForm.skill||!(Number(skillForm.rate)>0))?"#ccc":T.amb,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",opacity:addSkillSaving?.7:1,whiteSpace:"nowrap"}}>{addSkillSaving?"...":t("common.add")}</button>
                   </div>);
                 })()}
 
                 {vSkillsCount===0?(
                   <div style={{padding:"30px 18px",textAlign:"center",border:`1.5px dashed ${T.b1}`,borderRadius:10,background:T.surfaceB,marginBottom:10}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:5}}>🎯 No skills configured yet</div>
-                    <div style={{fontSize:11.5,color:T.t3}}>Skills + agreed rates onboarding ke time set hote hain. Vendor list mein vendor edit karke skills add karo.</div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:5}}>{t("attendance.no_skills_configured_yet")}</div>
+                    <div style={{fontSize:11.5,color:T.t3}}>{t("attendance.skills_agreed_rates_onboarding_ke_time")}</div>
                   </div>
                 ):(<>
                 {/* Header row */}
                 <div style={{display:"grid",gridTemplateColumns:"1.5fr 110px 100px 110px",gap:10,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
-                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700}}>Skill</div>
-                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,textAlign:"center"}}>Count Today</div>
-                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,textAlign:"right"}}>Rate</div>
-                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,textAlign:"right"}}>Wages</div>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700}}>{t("payroll.skill")}</div>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,textAlign:"center"}}>{t("attendance.count_today")}</div>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,textAlign:"right"}}>{t("common.rate")}</div>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,textAlign:"right"}}>{t("attendance.wages")}</div>
                 </div>
                 {todayCountRows.map((row,i)=>{
                   const rate = Number(row.rate)||0;
@@ -1102,8 +1097,8 @@ function TabAttendance({ project, onRequestPayment }) {
                   <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 110px 100px 110px",gap:10,marginBottom:6,alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
                       <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{row.role}</span>
-                      {isPending&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,padding:"2px 7px",borderRadius:10,background:T.ambL,color:T.amb,fontWeight:700,border:`1px solid ${T.ambM}`}}><span style={{width:5,height:5,borderRadius:"50%",background:T.amb}}/>Rate Pending</span>}
-                      {row.rate_status==="approved"&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,padding:"2px 7px",borderRadius:10,background:T.grnL,color:T.grn,fontWeight:700,border:`1px solid ${T.grnM}`}}><svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Approved</span>}
+                      {isPending&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,padding:"2px 7px",borderRadius:10,background:T.ambL,color:T.amb,fontWeight:700,border:`1px solid ${T.ambM}`}}><span style={{width:5,height:5,borderRadius:"50%",background:T.amb}}/>{t("attendance.rate_pending")}</span>}
+                      {row.rate_status==="approved"&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,padding:"2px 7px",borderRadius:10,background:T.grnL,color:T.grn,fontWeight:700,border:`1px solid ${T.grnM}`}}><svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>{t("common.approved")}</span>}
                     </div>
                     <input type="number" value={row.present||""} disabled={!editingAtt} placeholder="0" min={0}
                       onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,present:Number(e.target.value),count:Number(e.target.value)}:rw))}
@@ -1117,7 +1112,7 @@ function TabAttendance({ project, onRequestPayment }) {
                   </div>
                 );})}
                 {!editingAtt&&todayCountRows.every(r=>!r.present)&&(
-                  <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"16px 0"}}>No count recorded yet. Click "Mark Attendance" to enter.</div>
+                  <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"16px 0"}}>{t("attendance.no_count_recorded_yet_click_mark")}</div>
                 )}
                 {/* Vendor wages summary */}
                 {!editingAtt&&todayCountRows.some(r=>r.present>0)&&(()=>{
@@ -1127,11 +1122,11 @@ function TabAttendance({ project, onRequestPayment }) {
                     <div style={{marginTop:12,padding:"10px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                       <div style={{display:"flex",alignItems:"center",gap:7}}>
                         <span style={{width:6,height:6,borderRadius:"50%",background:T.amb}}/>
-                        <span style={{fontSize:10.5,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"}}>Vendor Daily Total</span>
+                        <span style={{fontSize:10.5,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"}}>{t("attendance.vendor_daily_total")}</span>
                       </div>
                       <div style={{display:"flex",gap:20,alignItems:"baseline"}}>
-                        <span style={{display:"inline-flex",alignItems:"baseline",gap:6,fontSize:11,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>Labour <b style={{color:T.t1,fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{totalLab}</b></span>
-                        <span style={{display:"inline-flex",alignItems:"baseline",gap:6,fontSize:11,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>Wages <b style={{color:T.grn,fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>₹{totalWg.toLocaleString()}</b></span>
+                        <span style={{display:"inline-flex",alignItems:"baseline",gap:6,fontSize:11,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.labour")} <b style={{color:T.t1,fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{totalLab}</b></span>
+                        <span style={{display:"inline-flex",alignItems:"baseline",gap:6,fontSize:11,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>{t("attendance.wages")} <b style={{color:T.grn,fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>₹{totalWg.toLocaleString()}</b></span>
                       </div>
                     </div>
                   );
@@ -1151,10 +1146,10 @@ function TabAttendance({ project, onRequestPayment }) {
           {/* Header */}
           <div style={{padding:"12px 16px",background:"#0D1B2A",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div>
-              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Attendance History</div>
+              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>{t("attendance.attendance_history")}</div>
               <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{TYPE_LABELS[labType]} · {historyRecs.length} record{historyRecs.length!==1?"s":""}</div>
             </div>
-            <button onClick={()=>setShowHistory(false)} title="Close (Esc)"
+            <button onClick={()=>setShowHistory(false)} title={t("attendance.close_esc")}
               style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",padding:6,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s"}}
               onMouseEnter={el=>el.currentTarget.style.background="rgba(255,255,255,0.1)"}
               onMouseLeave={el=>el.currentTarget.style.background="none"}>
@@ -1164,7 +1159,7 @@ function TabAttendance({ project, onRequestPayment }) {
           {/* Body */}
           <div style={{flex:1,overflowY:"auto"}}>
           {historyRecs.length===0
-            ?<div style={{padding:"40px 18px",textAlign:"center",color:T.t4,fontSize:12.5}}>No history found.</div>
+            ?<div style={{padding:"40px 18px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("attendance.no_history_found")}</div>
             :historyRecs.map((rec,i)=>{
               const recMode = rec.mode || mode; // use record's own mode
               const rPresent=recMode==="name"?(rec.entries||[]).filter(e=>e.status==="P").length:(rec.entries||[]).reduce((s,r)=>s+(Number(r.present)||0),0);
@@ -1195,29 +1190,29 @@ function TabAttendance({ project, onRequestPayment }) {
                       })()}
                     </div>
                     <div style={{flex:1,display:"flex",gap:12,flexWrap:"wrap"}}>
-                      <span style={{fontSize:12,color:T.grn,fontWeight:600}}>✓ {rPresent} Present</span>
-                      {rHalf>0&&<span style={{fontSize:12,color:T.amb,fontWeight:600}}>½ {rHalf} Half</span>}
-                      <span style={{fontSize:12,color:T.red}}>✗ {Math.max(0,rTotal-rPresent-rHalf)} Absent</span>
+                      <span style={{fontSize:12,color:T.grn,fontWeight:600}}>{t("attendance.rpresent_present", { rPresent })}</span>
+                      {rHalf>0&&<span style={{fontSize:12,color:T.amb,fontWeight:600}}>{t("attendance.rhalf_half", { rHalf })}</span>}
+                      <span style={{fontSize:12,color:T.red}}>{t("attendance.math_absent", { Math: Math.max(0,rTotal-rPresent-rHalf) })}</span>
                       <span style={{fontSize:12,color:T.slt,fontWeight:600}}>₹{fmtN(rWages)}</span>
                     </div>
-                    <Pill label={recMode==="name"?"Name-wise":"Count-wise"} c={TYPE_COLORS[labType]} bg={TYPE_BG[labType]}/>
+                    <Pill label={recMode==="name"?t("attendance.name_wise"):t("attendance.count_wise")} c={TYPE_COLORS[labType]} bg={TYPE_BG[labType]}/>
                     <span style={{fontSize:11,color:T.t4,marginLeft:4}}>{isExpanded?"▲":"▼"}</span>
                   </div>
                   {isExpanded&&(
                     <div style={{padding:"10px 15px 14px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`}}>
                       {(rec.entries||[]).length===0
-                        ?<div style={{textAlign:"center",color:T.t4,fontSize:12,padding:"10px"}}>No entries recorded</div>
+                        ?<div style={{textAlign:"center",color:T.t4,fontSize:12,padding:"10px"}}>{t("attendance.no_entries_recorded")}</div>
                         :recMode==="name"
                           ?<>
                             <div style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 90px 65px 60px 90px",gap:8,padding:"6px 8px",borderBottom:`1px solid ${T.b1}`,fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>
-                              <div>Name</div><div>Role</div><div style={{textAlign:"center"}}>Status</div><div style={{textAlign:"center"}}>Hours</div><div style={{textAlign:"center"}}>OT</div><div style={{textAlign:"right"}}>Daily Rate</div>
+                              <div>{t("common.name_2")}</div><div>{t("attendance.role")}</div><div style={{textAlign:"center"}}>{t("common.status")}</div><div style={{textAlign:"center"}}>{t("machinery.hours")}</div><div style={{textAlign:"center"}}>OT</div><div style={{textAlign:"right"}}>{t("master_library.daily_rate")}</div>
                             </div>
                             {rec.entries.map((e,ei)=>(
                               <div key={ei}>
                                 <div style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 90px 65px 60px 90px",gap:8,padding:"7px 8px",borderBottom:e.remark?"none":`1px dashed ${T.b1}`,fontSize:12,alignItems:"center",borderLeft:`3px solid ${e.status==="P"?T.grn+"55":e.status==="H"?T.amb+"55":T.red+"55"}`}}>
                                   <span style={{fontWeight:600,color:T.t1}}>{e.name}</span>
                                   <span style={{color:T.t3}}>{e.role||"—"}</span>
-                                  <Pill label={e.status==="P"?"Present":e.status==="H"?"Half":"Absent"} c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red} bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
+                                  <Pill label={e.status==="P"?t("common.present"):e.status==="H"?t("attendance.half"):t("common.absent")} c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red} bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
                                   <span style={{textAlign:"center",color:e.status!=="A"?T.t1:T.t4}}>{e.hours>0?e.hours+"h":"—"}</span>
                                   <span style={{textAlign:"center",color:T.t4}}>{e.ot>0?e.ot+"h":"—"}</span>
                                   <span style={{textAlign:"right",fontWeight:600,color:T.t1}}>₹{e.dailyRate||0}</span>
@@ -1230,7 +1225,7 @@ function TabAttendance({ project, onRequestPayment }) {
                           </>
                           :<>
                             <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:8,padding:"6px 8px",borderBottom:`1px solid ${T.b1}`,fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>
-                              <div>Skill / Role</div><div style={{textAlign:"center"}}>Present</div><div style={{textAlign:"right"}}>Rate</div><div style={{textAlign:"right"}}>Wages</div>
+                              <div>{t("master_library.skill_role")}</div><div style={{textAlign:"center"}}>{t("common.present")}</div><div style={{textAlign:"right"}}>{t("common.rate")}</div><div style={{textAlign:"right"}}>{t("attendance.wages")}</div>
                             </div>
                             {rec.entries.map((e,ei)=>{
                               const wg = (Number(e.present)||0) * (Number(e.rate)||0);
@@ -1245,8 +1240,8 @@ function TabAttendance({ project, onRequestPayment }) {
                             })}
                           </>
                       }
-                      {rec.subcon_name&&<div style={{padding:"6px 8px",fontSize:11,color:T.t4}}>Subcontractor: <b style={{color:T.t2}}>{rec.subcon_name}</b></div>}
-                      {rec.vendor_name&&<div style={{padding:"6px 8px",fontSize:11,color:T.t4}}>Labour Vendor: <b style={{color:T.t2}}>{rec.vendor_name}</b></div>}
+                      {rec.subcon_name&&<div style={{padding:"6px 8px",fontSize:11,color:T.t4}}>{t("attendance.subcontractor")} <b style={{color:T.t2}}>{rec.subcon_name}</b></div>}
+                      {rec.vendor_name&&<div style={{padding:"6px 8px",fontSize:11,color:T.t4}}>{t("attendance.labour_vendor")} <b style={{color:T.t2}}>{rec.vendor_name}</b></div>}
                     </div>
                   )}
                 </div>
@@ -1264,8 +1259,8 @@ function TabAttendance({ project, onRequestPayment }) {
           {/* Header */}
           <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div>
-              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Appoint Labour to Project</div>
-              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>Tick workers from library → they appear in daily attendance</div>
+              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>{t("attendance.appoint_labour_to_project")}</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{t("attendance.tick_workers_from_library_they_appear")}</div>
             </div>
             <button onClick={()=>setShowAddWf(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -1274,7 +1269,7 @@ function TabAttendance({ project, onRequestPayment }) {
 
           {/* Search */}
           <div style={{padding:"12px 16px 8px",flexShrink:0,borderBottom:`1px solid ${T.b1}`}}>
-            <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder="Search by name or role…" autoFocus
+            <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder={t("attendance.search_by_name_or_role_2")} autoFocus
               style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surfaceB,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             {selectedLibIds.size>0&&<div style={{fontSize:11.5,color:T.blu,fontWeight:600,marginTop:6}}>{selectedLibIds.size} worker{selectedLibIds.size>1?"s":""} selected</div>}
           </div>
@@ -1290,9 +1285,9 @@ function TabAttendance({ project, onRequestPayment }) {
               );
               if(!filtered.length) return(
                 <div style={{padding:"24px 16px",textAlign:"center",color:T.t4,fontSize:12.5}}>
-                  No workers in library.
+                 {t("attendance.no_workers_in_library")}
                   <button onClick={()=>setShowNewWf(true)} style={{display:"block",margin:"10px auto 0",padding:"7px 16px",borderRadius:7,border:`1.5px dashed ${T.blu}`,background:T.bluL,color:T.blu,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                    + Add New Worker to Library
+                   {t("attendance.add_new_worker_to_library")}
                   </button>
                 </div>
               );
@@ -1322,12 +1317,12 @@ function TabAttendance({ project, onRequestPayment }) {
                     {/* Info */}
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{w.name}</div>
-                      <div style={{fontSize:11,color:T.t4}}>{w.role||w.trade||"Labour"}{w.category?" · "+w.category:""}</div>
+                      <div style={{fontSize:11,color:T.t4}}>{w.role||w.trade||t("common.labour")}{w.category?" · "+w.category:""}</div>
                     </div>
                     {/* Rate */}
                     <div style={{textAlign:"right",flexShrink:0}}>
                       {rate>0&&<div style={{fontSize:12.5,fontWeight:700,color:T.grn}}>₹{rate}/day</div>}
-                      {isAppointed&&<div style={{fontSize:10,color:T.t4,fontWeight:600}}>Already added</div>}
+                      {isAppointed&&<div style={{fontSize:10,color:T.t4,fontWeight:600}}>{t("attendance.already_added")}</div>}
                     </div>
                   </div>
                 );
@@ -1338,27 +1333,27 @@ function TabAttendance({ project, onRequestPayment }) {
           {/* Add New Worker inline form */}
           {showNewWf&&(
             <div style={{padding:"12px 16px",borderTop:`1.5px solid ${T.blu}`,background:T.bluL,flexShrink:0}}>
-              <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:8}}>NEW WORKER (saved to Library + appointed to project)</div>
+              <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:8}}>{t("attendance.new_worker_saved_to_library_appointed")}</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                <input value={wfForm.name} onChange={e=>setWfForm(p=>({...p,name:e.target.value}))} placeholder="Worker name *"
+                <input value={wfForm.name} onChange={e=>setWfForm(p=>({...p,name:e.target.value}))} placeholder={t("library_select.worker_name")}
                   style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",gridColumn:"1/-1"}}/>
                 <SearchSelect value={wfForm.role} options={ROLES}
-                  onChange={v=>setWfForm(p=>({...p,role:v,dailyRate:p.dailyRate||getRateForRole(v)||""}))} placeholder="Select role..."/>
+                  onChange={v=>setWfForm(p=>({...p,role:v,dailyRate:p.dailyRate||getRateForRole(v)||""}))} placeholder={t("master_library.select_role")}/>
                 <SearchSelect value={wfForm.category} options={["Unskilled","Semi-Skilled","Skilled","Highly Skilled"]}
-                  onChange={v=>setWfForm(p=>({...p,category:v}))} placeholder="Select category..."/>
+                  onChange={v=>setWfForm(p=>({...p,category:v}))} placeholder={t("common.select_category")}/>
                 <input type="number" value={wfForm.dailyRate} onChange={e=>setWfForm(p=>({...p,dailyRate:e.target.value}))}
                   placeholder={`Daily Rate ₹ (Card: ${getRateForRole(wfForm.role)||"—"})`}
                   style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
-                <input value={wfForm.phone} onChange={e=>setWfForm(p=>({...p,phone:e.target.value}))} placeholder="Phone (optional)"
+                <input value={wfForm.phone} onChange={e=>setWfForm(p=>({...p,phone:e.target.value}))} placeholder={t("attendance.phone_optional")}
                   style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
-                <input value={wfForm.city} onChange={e=>setWfForm(p=>({...p,city:e.target.value}))} placeholder="City (optional)"
+                <input value={wfForm.city} onChange={e=>setWfForm(p=>({...p,city:e.target.value}))} placeholder={t("app.city_optional")}
                   style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
               </div>
               <div style={{display:"flex",gap:7}}>
-                <button onClick={()=>setShowNewWf(false)} style={{flex:1,padding:"7px",borderRadius:6,border:`1px solid ${T.b1}`,background:"white",fontSize:12,cursor:"pointer",color:T.t3}}>Cancel</button>
+                <button onClick={()=>setShowNewWf(false)} style={{flex:1,padding:"7px",borderRadius:6,border:`1px solid ${T.b1}`,background:"white",fontSize:12,cursor:"pointer",color:T.t3}}>{t("common.cancel")}</button>
                 <button onClick={addNewWorker} disabled={wfSaving||!wfForm.name.trim()}
                   style={{flex:2,padding:"7px",borderRadius:6,border:"none",background:wfForm.name.trim()?T.blu:"#ccc",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",opacity:wfSaving?.7:1}}>
-                  {wfSaving?"Saving…":"Save & Appoint"}
+                  {wfSaving?t("common.saving_2"):t("attendance.save_appoint")}
                 </button>
               </div>
             </div>
@@ -1368,13 +1363,13 @@ function TabAttendance({ project, onRequestPayment }) {
           <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.surface}}>
             <button onClick={()=>setShowNewWf(p=>!p)}
               style={{padding:"7px 14px",borderRadius:7,border:`1.5px dashed ${T.blu}`,background:showNewWf?T.bluL:"transparent",color:T.blu,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-              + New Worker
+             {t("attendance.new_worker")}
             </button>
             <div style={{flex:1}}/>
-            <button onClick={()=>setShowAddWf(false)} style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t3,cursor:"pointer"}}>Cancel</button>
+            <button onClick={()=>setShowAddWf(false)} style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
             <button onClick={appointSelected} disabled={wfSaving||!selectedLibIds.size}
               style={{padding:"7px 18px",borderRadius:7,border:"none",background:selectedLibIds.size?T.blu:"#ccc",color:"white",fontSize:12,fontWeight:700,cursor:selectedLibIds.size?"pointer":"not-allowed",opacity:wfSaving?.7:1}}>
-              {wfSaving?"Appointing…":`Appoint${selectedLibIds.size?" ("+selectedLibIds.size+")":""}`}
+              {wfSaving?t("attendance.appointing"):`Appoint${selectedLibIds.size?" ("+selectedLibIds.size+")":""}`}
             </button>
           </div>
         </div>
@@ -1385,17 +1380,17 @@ function TabAttendance({ project, onRequestPayment }) {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.22)",zIndex:301,width:420,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden",maxHeight:"90vh",overflowY:"auto"}}>
           <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0}}>
-            <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Add {TYPE_LABELS[labType]} to Project</div>
+            <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>{t("attendance.add_type_labels_to_project", { TYPE_LABELS: TYPE_LABELS[labType] })}</div>
             <button onClick={()=>setShowAddWf(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </div>
           <div style={{padding:"14px 16px"}}>
             {[
-              {l:"Name *",key:"name",type:"text",ph:TYPE_LABELS[labType]+" name"},
-              {l:"Role",key:"role",type:"select",opts:ROLES},
-              {l:"Daily Rate (₹)",key:"dailyRate",type:"number",ph:`Rate Card: ₹${getRateForRole(wfForm.role)||"—"}`},
-              {l:"Phone",key:"phone",type:"text",ph:"Optional"},
+              {l:t("common.name"),key:"name",type:"text",ph:TYPE_LABELS[labType]+" name"},
+              {l:t("attendance.role"),key:"role",type:"select",opts:ROLES},
+              {l:t("master_library.daily_rate_2"),key:"dailyRate",type:"number",ph:`Rate Card: ₹${getRateForRole(wfForm.role)||"—"}`},
+              {l:t("common.phone"),key:"phone",type:"text",ph:"Optional"},
             ].map(f=>(
               <div key={f.key} style={{marginBottom:10}}>
                 <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>{f.l}</div>
@@ -1409,7 +1404,7 @@ function TabAttendance({ project, onRequestPayment }) {
               </div>
             ))}
             <div style={{display:"flex",gap:8,marginTop:6}}>
-              <button onClick={()=>setShowAddWf(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+              <button onClick={()=>setShowAddWf(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
               <button onClick={async()=>{
                 if(!wfForm.name.trim()) return; setWfSaving(true);
                 const cardRate=getRateForRole(wfForm.role);
@@ -1419,7 +1414,7 @@ function TabAttendance({ project, onRequestPayment }) {
                 setWfSaving(false);
               }} disabled={wfSaving||!wfForm.name.trim()}
                 style={{flex:2,padding:"9px",borderRadius:7,background:wfForm.name.trim()?TYPE_COLORS[labType]:"#ccc",color:"white",fontSize:12,fontWeight:700,border:"none",cursor:wfForm.name.trim()?"pointer":"not-allowed",opacity:wfSaving?.7:1}}>
-                {wfSaving?"Adding…":"Add to Workforce"}
+                {wfSaving?t("common.adding"):t("attendance.add_to_workforce")}
               </button>
             </div>
           </div>
@@ -1440,7 +1435,7 @@ function TabAttendance({ project, onRequestPayment }) {
               onMouseLeave={e=>e.currentTarget.style.background="none"}>
               <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
-            <div style={{fontSize:14.5,fontWeight:700,color:T.t1,letterSpacing:".3px"}}>SUBCON SKILLS</div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.t1,letterSpacing:".3px"}}>{t("attendance.subcon_skills")}</div>
             <button onClick={async()=>{
                 setSkillSaving(true);
                 const existingSkills = new Set(subconSkills.map(s=>s.skill));
@@ -1462,14 +1457,14 @@ function TabAttendance({ project, onRequestPayment }) {
                 setShowSkillDrawer(false);
               }} disabled={skillSaving}
               style={{padding:"7px 18px",borderRadius:7,border:"none",background:T.grn,color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:skillSaving?.6:1,boxShadow:`0 2px 8px ${T.grn}55`}}>
-              {skillSaving?"Saving…":"Save"}
+              {skillSaving?t("common.saving_2"):t("common.save")}
             </button>
           </div>
 
           {/* Search */}
           <div style={{padding:"14px 20px",flexShrink:0}}>
             <div style={{position:"relative"}}>
-              <input value={drawerSearch} onChange={e=>setDrawerSearch(e.target.value)} placeholder="Search Skill" autoFocus
+              <input value={drawerSearch} onChange={e=>setDrawerSearch(e.target.value)} placeholder={t("attendance.search_skill")} autoFocus
                 style={{width:"100%",padding:"10px 38px 10px 14px",borderRadius:9,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:T.surfaceB}}
                 onFocus={e=>e.target.style.borderColor=T.grn}
                 onBlur={e=>e.target.style.borderColor=T.b1}/>
@@ -1483,10 +1478,10 @@ function TabAttendance({ project, onRequestPayment }) {
           {/* Selection counter + Add new */}
           <div style={{padding:"0 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <span style={{fontSize:12,color:T.t3,fontWeight:600}}>
-              Select <b style={{color:T.grn}}>({drawerSelected.size})</b>
+             {t("attendance.select")} <b style={{color:T.grn}}>({drawerSelected.size})</b>
             </span>
             <button onClick={async ()=>{
-                const s = await window.promptAsync("New skill name:");
+                const s = await window.promptAsync(t("attendance.new_skill_name"));
                 if(s && s.trim()) {
                   setDrawerSelected(p=>new Set([...p, s.trim()]));
                   setDrawerNewSkill(s.trim());
@@ -1495,7 +1490,7 @@ function TabAttendance({ project, onRequestPayment }) {
               style={{background:"none",border:"none",color:T.grn,fontSize:12,fontWeight:600,cursor:"pointer",padding:"4px 8px",borderRadius:5,display:"flex",alignItems:"center",gap:4}}
               onMouseEnter={e=>e.currentTarget.style.background=T.grnL}
               onMouseLeave={e=>e.currentTarget.style.background="none"}>
-              <span style={{fontSize:14}}>+</span> New Skill
+              <span style={{fontSize:14}}>+</span> {t("attendance.new_skill")}
             </button>
           </div>
 
@@ -1511,9 +1506,7 @@ function TabAttendance({ project, onRequestPayment }) {
                 !drawerSearch.trim() || s.toLowerCase().includes(drawerSearch.toLowerCase())
               );
               if(!filtered.length) return(
-                <div style={{padding:"30px 12px",textAlign:"center",color:T.t4,fontSize:12.5}}>
-                  No skills match "{drawerSearch}"
-                </div>
+                <div style={{padding:"30px 12px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("attendance.no_skills_match_drawersearch", { drawerSearch })}</div>
               );
               return filtered.map((skill,i)=>{
                 const isSelected = drawerSelected.has(skill);
@@ -1546,10 +1539,10 @@ function TabAttendance({ project, onRequestPayment }) {
         <div style={{position:"fixed",top:0,right:0,height:"100vh",width:620,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.18)",zIndex:301,fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif",display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out"}}>
           <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div>
-              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Add Vendor to Project</div>
-              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:2}}>Pick from company vendors, or register a new one</div>
+              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>{t("attendance.add_vendor_to_project")}</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:2}}>{t("attendance.pick_from_company_vendors_or_register")}</div>
             </div>
-            <button onClick={()=>setShowAddVendor(false)} title="Close"
+            <button onClick={()=>setShowAddVendor(false)} title={t("common.close")}
               style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",padding:6,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s"}}
               onMouseEnter={el=>el.currentTarget.style.background="rgba(255,255,255,0.1)"}
               onMouseLeave={el=>el.currentTarget.style.background="none"}>
@@ -1570,10 +1563,10 @@ function TabAttendance({ project, onRequestPayment }) {
             const available = companyVendorLib.filter(v=>!onProject.has(String(v.id)));
             const toggle = id => setVendorPickSel(prev=>{ const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
             return(<>
-              <div style={{fontSize:11.5,color:T.t3,marginBottom:10}}>Is project pe kaun se vendor kaam karte hain — company master se select karo.</div>
+              <div style={{fontSize:11.5,color:T.t3,marginBottom:10}}>{t("attendance.is_project_pe_kaun_se_vendor")}</div>
               {available.length===0?(
                 <div style={{padding:"24px 16px",textAlign:"center",border:`1.5px dashed ${T.b1}`,borderRadius:10,background:T.surfaceB,fontSize:12.5,color:T.t3}}>
-                  {companyVendorLib.length===0?"Company me koi labour vendor register nahi — \"Register new\" se naya banao.":"Saare company vendors is project me already add hain."}
+                  {companyVendorLib.length===0?t("attendance.company_me_koi_labour_vendor_register"):t("attendance.saare_company_vendors_is_project_me")}
                 </div>
               ):available.map(v=>{
                 const sel = vendorPickSel.has(v.id);
@@ -1594,44 +1587,44 @@ function TabAttendance({ project, onRequestPayment }) {
             </>);
           })():(<>
             {/* Vendor info */}
-            <div style={{fontSize:11,fontWeight:700,color:T.amb,marginBottom:10,letterSpacing:".4px"}}>1. VENDOR DETAILS</div>
+            <div style={{fontSize:11,fontWeight:700,color:T.amb,marginBottom:10,letterSpacing:".4px"}}>{t("attendance.1_vendor_details")}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
               <div style={{gridColumn:"1/-1"}}>
-                <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>VENDOR / FIRM NAME *</div>
-                <input value={vForm.name} onChange={e=>setVForm(p=>({...p,name:e.target.value}))} placeholder="e.g. ABC Manpower Supply"
+                <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>{t("attendance.vendor_firm_name")}</div>
+                <input value={vForm.name} onChange={e=>setVForm(p=>({...p,name:e.target.value}))} placeholder={t("attendance.e_g_abc_manpower_supply")}
                   style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
               </div>
               <div>
-                <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>OWNER / CONTACT</div>
-                <input value={vForm.owner} onChange={e=>setVForm(p=>({...p,owner:e.target.value}))} placeholder="Owner name"
+                <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>{t("attendance.owner_contact")}</div>
+                <input value={vForm.owner} onChange={e=>setVForm(p=>({...p,owner:e.target.value}))} placeholder={t("common.owner_name")}
                   style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
               </div>
               <div>
                 <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>PHONE</div>
-                <input value={vForm.phone} onChange={e=>setVForm(p=>({...p,phone:e.target.value}))} placeholder="+91 XXXXX XXXXX"
+                <input value={vForm.phone} onChange={e=>setVForm(p=>({...p,phone:e.target.value}))} placeholder={t("common.91_xxxxx_xxxxx")}
                   style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
               </div>
               <div>
                 <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>CITY</div>
-                <input value={vForm.city} onChange={e=>setVForm(p=>({...p,city:e.target.value}))} placeholder="City"
+                <input value={vForm.city} onChange={e=>setVForm(p=>({...p,city:e.target.value}))} placeholder={t("common.city")}
                   style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
               </div>
               <div>
                 <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>GSTIN</div>
-                <input value={vForm.gstin} onChange={e=>setVForm(p=>({...p,gstin:e.target.value}))} placeholder="22AABC..."
+                <input value={vForm.gstin} onChange={e=>setVForm(p=>({...p,gstin:e.target.value}))} placeholder={t("master_library.22aabc")}
                   style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
               </div>
             </div>
 
             {/* Skills */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,paddingTop:6,borderTop:`1px solid ${T.b1}`}}>
-              <div style={{fontSize:11,fontWeight:700,color:T.amb,letterSpacing:".4px",marginTop:8}}>2. SKILLS SUPPLIED + RATES</div>
-              <span style={{fontSize:10.5,color:T.t4}}>Rate ≠ Card → admin approval needed</span>
+              <div style={{fontSize:11,fontWeight:700,color:T.amb,letterSpacing:".4px",marginTop:8}}>{t("attendance.2_skills_supplied_rates")}</div>
+              <span style={{fontSize:10.5,color:T.t4}}>{t("attendance.rate_card_admin_approval_needed")}</span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1.5fr 100px 100px 28px",gap:8,marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${T.b1}`}}>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px"}}>Skill</div>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",textAlign:"right"}}>Card Rate</div>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",textAlign:"right"}}>Vendor Rate</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px"}}>{t("payroll.skill")}</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",textAlign:"right"}}>{t("attendance.card_rate_2")}</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",textAlign:"right"}}>{t("attendance.vendor_rate")}</div>
               <div/>
             </div>
             {/* Available skills come from Labour Rate Card */}
@@ -1655,20 +1648,20 @@ function TabAttendance({ project, onRequestPayment }) {
                     style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",background:"white"}}>
                     {/* If current skill not in rate card, still keep it visible */}
                     {!rateCard.some(rc => (rc.role||rc.name||rc.skill) === s.skill) && s.skill && (
-                      <option value={s.skill}>{s.skill} (no card)</option>
+                      <option value={s.skill}>{t("attendance.skill_no_card", { skill: s.skill })}</option>
                     )}
-                    {rateCard.length === 0 && <option value="">— No rate card entries —</option>}
+                    {rateCard.length === 0 && <option value="">{t("attendance.no_rate_card_entries")}</option>}
                     {rateCard.map(rc => {
                       const rname = rc.role || rc.name || rc.skill;
                       if (!rname) return null;
                       const disabled = otherUsed.has(rname);
                       return <option key={rc.id} value={rname} disabled={disabled}>
-                        {rname}{disabled ? " (already added)" : ""}
+                        {rname}{disabled ? t("common.already_added") : ""}
                       </option>;
                     })}
                   </select>
                   <input type="number" value={cardRate||""} disabled placeholder="—"
-                    title="From Library → Labour Rate Card"
+                    title={t("attendance.from_library_labour_rate_card")}
                     style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,fontWeight:600,color:cardRate>0?T.grn:T.t4,outline:"none",fontFamily:"inherit",background:cardRate>0?T.grnL:T.surfaceB,boxSizing:"border-box",textAlign:"right"}}/>
                   <input type="number" value={s.rate||""} placeholder="0" min={0}
                     onChange={e=>setVSkills(prev=>prev.map((sx,idx)=>idx===i?{...sx,rate:Number(e.target.value)}:sx))}
@@ -1680,12 +1673,12 @@ function TabAttendance({ project, onRequestPayment }) {
             })}
             {rateCard.length === 0 && (
               <div style={{padding:"10px 13px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,marginTop:8,fontSize:12,color:T.red}}>
-                ⚠️ Labour Rate Card khali hai. Pehle <b>Library → Labour Rate Card</b> mein skills + rates add karo, phir vendor add karo.
+               {t("attendance.labour_rate_card_khali_hai_pehle")} <b>{t("payroll.library_labour_rate_card")}</b> {t("attendance.mein_skills_rates_add_karo_phir")}
               </div>
             )}
             {vSkills.some(s=>{ const cr=getRateForRole(s.skill); return cr>0 && Number(s.rate)!==cr; })&&(
               <div style={{padding:"7px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,marginTop:8,fontSize:11.5,color:T.amb}}>
-                ⚠️ Some rates differ from rate card — these will need admin approval before getting "approved" status
+               {t("attendance.some_rates_differ_from_rate_card")}
               </div>
             )}
             <button onClick={()=>{
@@ -1698,14 +1691,12 @@ function TabAttendance({ project, onRequestPayment }) {
                 const cardRate = skill ? getRateForRole(skill) : 0;
                 setVSkills(prev=>[...prev,{ skill, rate:cardRate, card_rate:cardRate }]);
               }} disabled={rateCard.length === 0}
-              style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${T.amb}`,background:T.ambL,color:T.amb,fontSize:12,fontWeight:600,cursor:rateCard.length?"pointer":"not-allowed",marginTop:8,opacity:rateCard.length?1:.5}}>
-              + Add Skill {rateCard.length === 0 ? "(rate card empty)" : ""}
-            </button>
+              style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${T.amb}`,background:T.ambL,color:T.amb,fontSize:12,fontWeight:600,cursor:rateCard.length?"pointer":"not-allowed",marginTop:8,opacity:rateCard.length?1:.5}}>{t("attendance.add_skill_ratecard", { rateCard: rateCard.length === 0 ? "(rate card empty)" : "" })}</button>
           </>)}
           </div>
           {/* Footer — mode-dependent */}
           <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,flexShrink:0,background:T.surface}}>
-            <button onClick={()=>setShowAddVendor(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+            <button onClick={()=>setShowAddVendor(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
             {addVendorMode==="pick"?(
               <button onClick={async()=>{
                 if(!vendorPickSel.size) return;
@@ -1721,13 +1712,13 @@ function TabAttendance({ project, onRequestPayment }) {
                 setPickSaving(false);
               }} disabled={pickSaving||!vendorPickSel.size}
                 style={{flex:2,padding:"9px",borderRadius:7,background:vendorPickSel.size?T.amb:"#ccc",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:vendorPickSel.size?"pointer":"not-allowed",opacity:pickSaving?.7:1}}>
-                {pickSaving?"Adding...":`Add ${vendorPickSel.size||""} to project`}
+                {pickSaving?t("common.adding_2"):`Add ${vendorPickSel.size||""} to project`}
               </button>
             ):(
               <button onClick={async()=>{
-                if(!vForm.name.trim()) return alert("Vendor name required");
+                if(!vForm.name.trim()) return alert(t("attendance.vendor_name_required"));
                 const validSkills = vSkills.filter(s=>s.skill && Number(s.rate)>0);
-                if(!validSkills.length) return alert("Add at least one skill with rate");
+                if(!validSkills.length) return alert(t("attendance.add_at_least_one_skill_with"));
                 setVSaving(true);
                 try {
                   const res = await api.post("/labour-vendors", {
@@ -1745,7 +1736,7 @@ function TabAttendance({ project, onRequestPayment }) {
                 setVSaving(false);
               }} disabled={vSaving||!vForm.name.trim()}
                 style={{flex:2,padding:"9px",borderRadius:7,background:vForm.name.trim()?T.amb:"#ccc",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:vForm.name.trim()?"pointer":"not-allowed",opacity:vSaving?.7:1}}>
-                {vSaving?"Saving...":"Save Vendor + Skills"}
+                {vSaving?t("common.saving"):t("attendance.save_vendor_skills")}
               </button>
             )}
           </div>
@@ -1757,7 +1748,7 @@ function TabAttendance({ project, onRequestPayment }) {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.22)",zIndex:301,width:380,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
           <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Request Rate Change</div>
+            <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>{t("attendance.request_rate_change")}</div>
             <button onClick={()=>setShowRateModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
@@ -1769,30 +1760,30 @@ function TabAttendance({ project, onRequestPayment }) {
                 <div style={{fontSize:11.5,color:T.t4}}>{rateReqWorker.role} · {TYPE_LABELS[labType]}</div>
               </div>
               <div style={{textAlign:"right"}}>
-                <div style={{fontSize:10.5,color:T.t4}}>Current Rate</div>
+                <div style={{fontSize:10.5,color:T.t4}}>{t("attendance.current_rate")}</div>
                 <div style={{fontSize:16,fontWeight:700,color:T.t1}}>₹{rateReqWorker.dailyRate||rateReqWorker.daily_rate||0}/day</div>
               </div>
             </div>
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>New Rate (₹/day) *</div>
-              <input type="number" value={newRateVal} onChange={e=>setNewRateVal(e.target.value)} placeholder="Enter new daily rate…"
+              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>{t("attendance.new_rate_day")}</div>
+              <input type="number" value={newRateVal} onChange={e=>setNewRateVal(e.target.value)} placeholder={t("attendance.enter_new_daily_rate")}
                 style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                 onFocus={e=>e.target.style.borderColor=T.amb} onBlur={e=>e.target.style.borderColor=T.b1}/>
             </div>
             <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>Reason (optional)</div>
-              <textarea value={rateReason} onChange={e=>setRateReason(e.target.value)} placeholder="Reason for rate change…" rows={2}
+              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>{t("attendance.reason_optional")}</div>
+              <textarea value={rateReason} onChange={e=>setRateReason(e.target.value)} placeholder={t("attendance.reason_for_rate_change")} rows={2}
                 style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}
                 onFocus={e=>e.target.style.borderColor=T.amb} onBlur={e=>e.target.style.borderColor=T.b1}/>
             </div>
             <div style={{padding:"8px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,marginBottom:12,fontSize:11.5,color:T.amb}}>
-              This request will be sent to admin for approval. Current rate continues to apply until approved.
+             {t("attendance.this_request_will_be_sent_to")}
             </div>
             <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>setShowRateModal(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+              <button onClick={()=>setShowRateModal(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
               <button onClick={submitRateApproval} disabled={rateSaving||!newRateVal}
                 style={{flex:2,padding:"9px",borderRadius:7,background:newRateVal?T.amb:"#ccc",color:"white",fontSize:12,fontWeight:700,border:"none",cursor:newRateVal?"pointer":"not-allowed",opacity:rateSaving?.7:1}}>
-                {rateSaving?"Sending…":"Submit for Approval"}
+                {rateSaving?t("common.sending"):t("common.submit_for_approval")}
               </button>
             </div>
           </div>

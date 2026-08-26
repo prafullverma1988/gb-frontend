@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import { t, Rich } from "../i18n";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -135,12 +136,12 @@ function Toolbar({ search, setSearch, count, label, onAdd, addLabel, filterEl, o
       {filterEl}
       {onImport && (
         <button onClick={onImport} style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 12, fontWeight: 600, color: T.textMid, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-          <IcUpload size={14} color={T.textMid} /> Import
+          <IcUpload size={14} color={T.textMid} /> {t("master_library.import")}
         </button>
       )}
       {onExport && (
         <button onClick={onExport} style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 12, fontWeight: 600, color: T.textMid, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-          <IcDownload size={14} color={T.textMid} /> Export
+          <IcDownload size={14} color={T.textMid} /> {t("common.export")}
         </button>
       )}
       <button onClick={onAdd} style={{ padding: "8px 16px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: `0 3px 10px ${T.blue}33`, whiteSpace: "nowrap" }}>
@@ -174,7 +175,7 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, n
       <div style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, padding: "50px 20px", textAlign: "center" }}>
         <IcSearch size={32} color={T.borderLight} />
         <div style={{ fontSize: 14, fontWeight: 600, color: T.textMid, marginTop: 10 }}>{emptyMsg}</div>
-        <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>Try changing your search or filters</div>
+        <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>{t("master_library.try_changing_your_search_or_filters")}</div>
       </div>
     );
   }
@@ -192,7 +193,7 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, n
                 <th key={c.key} style={{ textAlign: c.align || "left", padding: "12px 14px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap", minWidth: c.minW || "auto" }}>{c.label}</th>
               ))}
               {showActions && (
-                <th style={{ width: 80, borderBottom: `2px solid ${T.border}`, padding: "12px 14px", fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase" }}>Actions</th>
+                <th style={{ width: 80, borderBottom: `2px solid ${T.border}`, padding: "12px 14px", fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase" }}>{t("common.actions")}</th>
               )}
             </tr>
           </thead>
@@ -249,11 +250,11 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, n
             <div style={{ padding: "12px 20px", borderTop: `1px solid ${T.border}`, display: "flex", gap: 10 }}>
               <button onClick={() => { const tgt = detailRow; setDetailRow(null); onEdit(tgt); }}
                 style={{ flex: 1, padding: "9px", borderRadius: 8, background: T.blue, color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                <IcEdit size={15} color="white" /> Edit
+                <IcEdit size={15} color="white" /> {t("common.edit_2")}
               </button>
               <button onClick={async () => { if (await window.confirmAsync(`Delete "${drawerTitle(detailRow)}"?`)) { await onDelete(detailRow.id); setDetailRow(null); } }}
                 style={{ padding: "9px 16px", borderRadius: 8, background: T.redSoft, color: T.red, border: `1px solid ${T.red}44`, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-                <IcTrash size={15} color={T.red} /> Delete
+                <IcTrash size={15} color={T.red} /> {t("common.delete")}
               </button>
             </div>
           </div>
@@ -266,7 +267,7 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, n
 function ModalFooter({ onClose, onSave, saveLabel = "Save" }) {
   return (
     <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.borderLight}` }}>
-      <button onClick={onClose} style={{ padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 13, fontWeight: 600, color: T.textMid, cursor: "pointer" }}>Cancel</button>
+      <button onClick={onClose} style={{ padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 13, fontWeight: 600, color: T.textMid, cursor: "pointer" }}>{t("common.cancel")}</button>
       <button onClick={onSave} style={{ padding: "10px 24px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer" }}>{saveLabel}</button>
     </div>
   );
@@ -388,7 +389,7 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
   return (
     <Modal open={open} onClose={() => { onClose(); resetAll(); }}
       title={mode === "import" ? `Import ${sectionName}` : `Export ${sectionName}`}
-      desc={mode === "import" ? "Download template, fill your data, then upload" : "Download current data or blank template"}
+      desc={mode === "import" ? t("master_library.download_template_fill_your_data_then") : t("master_library.download_current_data_or_blank_template")}
       width={mode === "import" ? 660 : 520}>
 
       {mode === "export" ? (
@@ -403,8 +404,8 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                 <IcDownload size={20} color={T.blue} />
               </div>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Export Current Data</div>
-                <div style={{ fontSize: 12, color: T.textLight, marginTop: 2 }}>Download all {currentData?.length || 0} {sectionName.toLowerCase()} as CSV file</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{t("master_library.export_current_data")}</div>
+                <div style={{ fontSize: 12, color: T.textLight, marginTop: 2 }}>{t("master_library.download_all_currentdata_sectionname_as_csv", { currentData: currentData?.length || 0, sectionName: sectionName.toLowerCase() })}</div>
               </div>
             </div>
           </div>
@@ -419,14 +420,14 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                 <IcClipboard size={20} color={T.green} />
               </div>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Download Blank Template</div>
-                <div style={{ fontSize: 12, color: T.textLight, marginTop: 2 }}>CSV template with headers, sample data and empty rows to fill</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{t("master_library.download_blank_template")}</div>
+                <div style={{ fontSize: 12, color: T.textLight, marginTop: 2 }}>{t("master_library.csv_template_with_headers_sample_data")}</div>
               </div>
             </div>
           </div>
 
           <div style={{ marginTop: 16, padding: "12px 16px", background: T.borderLight, borderRadius: 8, fontSize: 12, color: T.textMid, lineHeight: 1.6 }}>
-            <span style={{ fontWeight: 700 }}>Tip:</span> Download the template, fill in your data, then use Import to upload it back.
+            <span style={{ fontWeight: 700 }}>{t("master_library.tip")}</span> {t("master_library.download_the_template_fill_in_your")}
           </div>
         </div>
       ) : (
@@ -434,8 +435,8 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
           {/* ─── Step indicator ─── */}
           <div style={{ display: "flex", gap: 0, marginBottom: 20 }}>
             {[
-              { n: 1, label: "Download Template" },
-              { n: 2, label: "Upload & Import" },
+              { n: 1, label: t("master_library.download_template") },
+              { n: 2, label: t("master_library.upload_import") },
             ].map((s, i) => (
               <div key={s.n} style={{ flex: 1, display: "flex", alignItems: "center", gap: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }} onClick={() => !result && setStep(s.n)}>
@@ -462,8 +463,8 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
               <div style={{ border: `2px solid ${T.blue}22`, borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
                 <div style={{ background: `linear-gradient(135deg, ${T.blue}08, ${T.blueSoft})`, padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>Sample Template — {sectionName}</div>
-                    <div style={{ fontSize: 12, color: T.textLight, marginTop: 3 }}>{tc.instructions || "Fill in data and upload back"}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{t("master_library.sample_template_sectionname", { sectionName })}</div>
+                    <div style={{ fontSize: 12, color: T.textLight, marginTop: 3 }}>{tc.instructions || t("master_library.fill_in_data_and_upload_back")}</div>
                   </div>
                   <button onClick={doTemplate}
                     style={{
@@ -476,15 +477,13 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                     }}
                     onMouseDown={e => e.currentTarget.style.transform = "scale(0.96)"}
                     onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}>
-                    <IcDownload size={16} color="white" /> Download CSV
+                    <IcDownload size={16} color="white" /> {t("master_library.download_csv")}
                   </button>
                 </div>
 
                 {/* Column preview */}
                 <div style={{ padding: "14px 20px", borderTop: `1px solid ${T.border}` }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10 }}>
-                    Template Columns ({tc.headers?.length || 0})
-                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10 }}>{t("master_library.template_columns_tc", { tc: tc.headers?.length || 0 })}</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {(tc.headers || []).map((h, i) => {
                       const isRequired = (tc.sampleRows?.[0]?.[i] !== undefined && tc.sampleRows?.[0]?.[i] !== "");
@@ -506,7 +505,7 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                 {tc.sampleRows && tc.sampleRows.length > 0 && (
                   <div style={{ padding: "0 20px 16px" }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
-                      Sample Data Preview
+                     {t("master_library.sample_data_preview")}
                     </div>
                     <div style={{ overflowX: "auto", borderRadius: 8, border: `1px solid ${T.border}` }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
@@ -534,11 +533,11 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
 
               <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ fontSize: 12, color: T.textLight }}>
-                  Download template, fill your data in Excel/Sheets, save as CSV
+                 {t("master_library.download_template_fill_your_data_in")}
                 </div>
                 <button onClick={() => setStep(2)}
                   style={{ padding: "10px 24px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-                  Next: Upload File <IcChevR size={14} color="white" />
+                 {t("master_library.next_upload_file")} <IcChevR size={14} color="white" />
                 </button>
               </div>
             </div>
@@ -550,11 +549,11 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
               {/* Quick template link at top */}
               <div style={{ background: T.borderLight, borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ fontSize: 12, color: T.textMid }}>
-                  Don't have a file yet?
+                 {t("master_library.don_t_have_a_file_yet")}
                 </div>
                 <button onClick={() => setStep(1)}
                   style={{ fontSize: 12, fontWeight: 600, color: T.blue, background: T.blueSoft, border: "none", padding: "5px 12px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-                  <IcDownload size={13} color={T.blue} /> Get Template
+                  <IcDownload size={13} color={T.blue} /> {t("master_library.get_template")}
                 </button>
               </div>
 
@@ -566,13 +565,13 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                   <div>
                     <IcCheck size={30} color={T.green} />
                     <div style={{ fontSize: 15, fontWeight: 700, color: T.green, marginTop: 8 }}>{file.name}</div>
-                    <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>{(file.size / 1024).toFixed(1)} KB — Click to change file</div>
+                    <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>{t("master_library.file_kb_click_to_change_file", { file: (file.size / 1024).toFixed(1) })}</div>
                   </div>
                 ) : (
                   <div>
                     <IcUpload size={30} color={T.textLight} />
-                    <div style={{ fontSize: 15, fontWeight: 600, color: T.textMid, marginTop: 8 }}>Click to upload your CSV file</div>
-                    <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>Supports .csv files — UTF-8 encoding recommended</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: T.textMid, marginTop: 8 }}>{t("master_library.click_to_upload_your_csv_file")}</div>
+                    <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>{t("master_library.supports_csv_files_utf_8_encoding")}</div>
                   </div>
                 )}
               </div>
@@ -581,9 +580,7 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
               {preview && preview.rows.length > 0 && !result && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>
-                      Preview — {preview.rows.filter(r => Object.values(r).some(v => v?.trim())).length} valid rows
-                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{t("master_library.preview_preview_valid_rows", { preview: preview.rows.filter(r => Object.values(r).some(v => v?.trim())).length })}</div>
                     <Badge text={`${preview.headers.length} columns detected`} color={T.blue} bg={T.blueSoft} />
                   </div>
                   <div style={{ overflowX: "auto", maxHeight: 180, border: `1px solid ${T.border}`, borderRadius: 8 }}>
@@ -600,7 +597,7 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                           </tr>
                         ))}
                         {preview.rows.length > 6 && (
-                          <tr><td colSpan={preview.headers.length} style={{ padding: "8px 10px", textAlign: "center", color: T.textLight, fontSize: 11, fontStyle: "italic" }}>...and {preview.rows.length - 6} more rows</td></tr>
+                          <tr><td colSpan={preview.headers.length} style={{ padding: "8px 10px", textAlign: "center", color: T.textLight, fontSize: 11, fontStyle: "italic" }}>{t("master_library.and_preview_more_rows", { preview: preview.rows.length - 6 })}</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -615,10 +612,8 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                     <IcCheck size={18} color="white" strokeWidth={3} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: T.green }}>Import Successful!</div>
-                    <div style={{ fontSize: 12.5, color: T.textMid, marginTop: 2 }}>
-                      {result.success} items imported
-                      {result.updated > 0 && <span> — {result.updated} existing updated</span>}
+                    <div style={{ fontSize: 14, fontWeight: 700, color: T.green }}>{t("master_library.import_successful")}</div>
+                    <div style={{ fontSize: 12.5, color: T.textMid, marginTop: 2 }}>{t("master_library.success_items_imported", { success: result.success })}{result.updated > 0 && <span>{t("master_library.updated_existing_updated", { updated: result.updated })}</span>}
                       {result.skipped > 0 && <span> — {result.skipped} skipped</span>}
                     </div>
                   </div>
@@ -629,7 +624,7 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
               <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
                 <button onClick={() => { if (result) { onClose(); resetAll(); } else setStep(1); }}
                   style={{ padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 13, fontWeight: 600, color: T.textMid, cursor: "pointer" }}>
-                  {result ? "Done" : "Back"}
+                  {result ? t("common.done") : t("common.back")}
                 </button>
                 {!result && (
                   <button onClick={doImport} disabled={!preview || !preview.rows.length || importing}
@@ -641,7 +636,7 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                       display: "flex", alignItems: "center", gap: 6,
                       boxShadow: (preview && !importing) ? `0 3px 12px ${T.green}33` : "none",
                     }}>
-                    {importing ? "Importing..." : <><IcUpload size={15} color="white" /> Import {preview?.rows.filter(r => Object.values(r).some(v => v?.trim())).length || 0} Items</>}
+                    {importing ? t("master_library.importing") : <><IcUpload size={15} color="white" />{t("master_library.import_preview_items", { preview: preview?.rows.filter(r => Object.values(r).some(v => v?.trim())).length || 0 })}</>}
                   </button>
                 )}
               </div>
@@ -670,10 +665,10 @@ function ToolbarWithIO({ search, setSearch, count, label, onAdd, addLabel, filte
         <Badge text={`${count} items`} color={T.textMid} bg={T.borderLight} />
         {filterEl}
         <button onClick={() => setIoMode("import")} style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.green}`, background: T.greenSoft, fontSize: 12, fontWeight: 600, color: T.green, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-          <IcUpload size={14} color={T.green} /> Import CSV
+          <IcUpload size={14} color={T.green} /> {t("master_library.import_csv")}
         </button>
         <button onClick={() => setIoMode("export")} style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 12, fontWeight: 600, color: T.textMid, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-          <IcDownload size={14} color={T.textMid} /> Export
+          <IcDownload size={14} color={T.textMid} /> {t("common.export")}
         </button>
         <button onClick={onAdd} style={{ padding: "8px 16px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: `0 3px 10px ${T.blue}33`, whiteSpace: "nowrap" }}>
           <IcPlus size={15} color="white" /> {addLabel}
@@ -781,10 +776,10 @@ function MaterialCategorySection() {
   };
 
   const columns = [
-    { key: "code", label: "Code", minW: 80, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 10px", borderRadius: 4 }}>{r.code}</code> },
-    { key: "name", label: "Category Name", minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "description", label: "Description", minW: 280, style: { fontSize: 12.5, color: T.textMid } },
-    { key: "item_count", label: "Materials", minW: 90, align: "center", render: r => <Badge text={`${r.item_count||0} items`} color={(r.item_count||0) > 0 ? T.blue : T.textLight} bg={(r.item_count||0) > 0 ? T.blueSoft : T.borderLight} /> },
+    { key: "code", label: t("common.code"), minW: 80, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 10px", borderRadius: 4 }}>{r.code}</code> },
+    { key: "name", label: t("master_library.category_name"), minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "description", label: t("common.description"), minW: 280, style: { fontSize: 12.5, color: T.textMid } },
+    { key: "item_count", label: t("common.materials"), minW: 90, align: "center", render: r => <Badge text={`${r.item_count||0} items`} color={(r.item_count||0) > 0 ? T.blue : T.textLight} bg={(r.item_count||0) > 0 ? T.blueSoft : T.borderLight} /> },
   ];
 
   return (
@@ -792,12 +787,12 @@ function MaterialCategorySection() {
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="categories" onAdd={openCreate} addLabel="Add Category"
         templateConfig={templateConfig} currentData={cats} onImportData={handleImport} />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} emptyMsg="No categories found" />
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Category" : "Add Category"} width={460}>
-        <FormField label="Category Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. Cement & Binding" required />
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_category") : t("common.add_category_2")} width={460}>
+        <FormField label={t("master_library.category_name")} value={form.name} onChange={v => upd("name", v)} placeholder={t("master_library.e_g_cement_binding")} required />
         <div style={{ height: 14 }} />
-        <FormField label="Code (Short)" value={form.code} onChange={v => upd("code", v.toUpperCase())} placeholder="e.g. CEM" />
+        <FormField label={t("master_library.code_short")} value={form.code} onChange={v => upd("code", v.toUpperCase())} placeholder={t("master_library.e_g_cem")} />
         <div style={{ height: 14 }} />
-        <FormTextarea label="Description" value={form.description||""} onChange={v => upd("description", v)} placeholder="What materials fall under this category?" rows={2} />
+        <FormTextarea label={t("common.description")} value={form.description||""} onChange={v => upd("description", v)} placeholder={t("master_library.what_materials_fall_under_this_category")} rows={2} />
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Create"} />
       </Modal>
     </div>
@@ -850,7 +845,7 @@ function MaterialMasterSection() {
     setShowModal(true);
   };
   const save = async () => {
-    if (!form.name.trim()) return alert("Material name required");
+    if (!form.name.trim()) return alert(t("master_library.material_name_required"));
     setSaving(true);
     // Find category_id from matCats
     const catObj = matCats.find(c => c.name === form.category);
@@ -903,15 +898,15 @@ function MaterialMasterSection() {
   };
 
   const columns = [
-    { key: "code", label: "Code", minW: 80, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code> },
-    { key: "name", label: "Material Name", minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "category", label: "Category", minW: 110, render: r => <Badge text={r.category_name || r.category} color={T.textMid} bg={T.borderLight} /> },
-    { key: "unit", label: "Unit", minW: 80 },
+    { key: "code", label: t("common.code"), minW: 80, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code> },
+    { key: "name", label: t("master_library.material_name"), minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "category", label: t("common.category"), minW: 110, render: r => <Badge text={r.category_name || r.category} color={T.textMid} bg={T.borderLight} /> },
+    { key: "unit", label: t("common.unit"), minW: 80 },
     { key: "hsnCode", label: "HSN", minW: 60, render: r => <span style={{ fontFamily: "monospace", fontSize: 12 }}>{r.hsnCode}</span> },
     { key: "gstRate", label: "GST", minW: 50, align: "center", render: r => <span style={{ fontWeight: 600, fontSize: 12 }}>{r.gstRate}%</span> },
-    { key: "baseRate", label: "Base Rate", minW: 80, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>Rs.{r.baseRate}</span> },
-    { key: "lastRate", label: "Last Rate", minW: 80, align: "right", render: r => <span style={{ fontWeight: 600, color: r.lastRate > r.baseRate ? T.red : T.green }}>Rs.{r.lastRate}</span> },
-    { key: "currentStock", label: "Stock", minW: 70, align: "right", render: r => (
+    { key: "baseRate", label: t("master_library.base_rate"), minW: 80, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>{t("master_library.rs_baserate", { baseRate: r.baseRate })}</span> },
+    { key: "lastRate", label: t("master_library.last_rate"), minW: 80, align: "right", render: r => <span style={{ fontWeight: 600, color: r.lastRate > r.baseRate ? T.red : T.green }}>{t("master_library.rs_lastrate", { lastRate: r.lastRate })}</span> },
+    { key: "currentStock", label: t("common.stock"), minW: 70, align: "right", render: r => (
       <span style={{ fontWeight: 600, color: r.currentStock <= r.minStock ? T.red : T.text }}>
         {(r.currentStock||0).toLocaleString()}
         {r.currentStock <= r.minStock && <span style={{ fontSize: 10, color: T.red, marginLeft: 4 }}>LOW</span>}
@@ -925,31 +920,31 @@ function MaterialMasterSection() {
         templateConfig={matTemplateConfig} currentData={materials} onImportData={handleMatImport}
         filterEl={
           <div style={{ minWidth: 180 }}>
-            <SearchSelect value={filterCat} options={allCats} onChange={setFilterCat} placeholder="Filter category..."/>
+            <SearchSelect value={filterCat} options={allCats} onChange={setFilterCat} placeholder={t("master_library.filter_category")}/>
           </div>
         }
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Material" : "Add Material"} desc="Enter material details, rates, and stock info" width={640}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_material") : t("master_library.add_material")} desc={t("master_library.enter_material_details_rates_and_stock")} width={640}>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Material Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. OPC Cement 53 Grade" half required />
-          <FormField label="Code" value={form.code} onChange={v => upd("code", v)} placeholder="MAT-001" half />
+          <FormField label={t("master_library.material_name")} value={form.name} onChange={v => upd("name", v)} placeholder={t("master_library.e_g_opc_cement_53_grade")} half required />
+          <FormField label={t("common.code")} value={form.code} onChange={v => upd("code", v)} placeholder={t("master_library.mat_001")} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Category" value={form.category} onChange={v => upd("category", v)} options={catNames} half required />
-          <FormSelect label="Unit" value={form.unit} onChange={v => upd("unit", v)} options={units} half required />
+          <FormSelect label={t("common.category")} value={form.category} onChange={v => upd("category", v)} options={catNames} half required />
+          <FormSelect label={t("common.unit")} value={form.unit} onChange={v => upd("unit", v)} options={units} half required />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="HSN Code" value={form.hsnCode} onChange={v => upd("hsnCode", v)} placeholder="e.g. 2523" half />
-          <FormSelect label="GST Rate" value={String(form.gstRate)} onChange={v => upd("gstRate", parseInt(v))} options={[{value:"0",label:"0%"},{value:"5",label:"5%"},{value:"12",label:"12%"},{value:"18",label:"18%"},{value:"28",label:"28%"}]} half />
+          <FormField label={t("master_library.hsn_code")} value={form.hsnCode} onChange={v => upd("hsnCode", v)} placeholder="e.g. 2523" half />
+          <FormSelect label={t("master_library.gst_rate")} value={String(form.gstRate)} onChange={v => upd("gstRate", parseInt(v))} options={[{value:"0",label:"0%"},{value:"5",label:"5%"},{value:"12",label:"12%"},{value:"18",label:"18%"},{value:"28",label:"28%"}]} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Base Rate (Rs.)" value={form.baseRate || ""} onChange={v => upd("baseRate", parseFloat(v) || 0)} type="number" half required />
-          <FormField label="Last Purchase Rate (Rs.)" value={form.lastRate || ""} onChange={v => upd("lastRate", parseFloat(v) || 0)} type="number" half />
+          <FormField label={t("master_library.base_rate_rs")} value={form.baseRate || ""} onChange={v => upd("baseRate", parseFloat(v) || 0)} type="number" half required />
+          <FormField label={t("master_library.last_purchase_rate_rs")} value={form.lastRate || ""} onChange={v => upd("lastRate", parseFloat(v) || 0)} type="number" half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Preferred Supplier" value={form.supplier} onChange={v => upd("supplier", v)} placeholder="Supplier name" half />
-          <FormField label="Minimum Stock Level" value={form.minStock || ""} onChange={v => upd("minStock", parseInt(v) || 0)} type="number" half />
+          <FormField label={t("master_library.preferred_supplier")} value={form.supplier} onChange={v => upd("supplier", v)} placeholder={t("common.supplier_name")} half />
+          <FormField label={t("master_library.minimum_stock_level")} value={form.minStock || ""} onChange={v => upd("minStock", parseInt(v) || 0)} type="number" half />
         </div>
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update Material" : "Add Material"} />
       </Modal>
@@ -991,14 +986,14 @@ function PartyMasterSection() {
   // A party can hold several roles (Material Vendor + Subcon + Transporter).
   // Staff is EXCLUSIVE — selecting it clears the others and vice-versa.
   const ROLE_OPTIONS = [
-    { key: "material_vendor",  label: "Material Vendor" },
-    { key: "equipment_vendor", label: "Equipment Vendor" },
-    { key: "client",           label: "Client" },
-    { key: "subcontractor",    label: "Subcontractor" },
-    { key: "labour_vendor",    label: "Labour Vendor" },
-    { key: "transporter",      label: "Transporter" },
-    { key: "consultant",       label: "Consultant" },
-    { key: "staff",            label: "Staff" },
+    { key: "material_vendor",  label: t("material_flow.material_vendor") },
+    { key: "equipment_vendor", label: t("master_library.equipment_vendor") },
+    { key: "client",           label: t("master_library.client") },
+    { key: "subcontractor",    label: t("common.subcontractor") },
+    { key: "labour_vendor",    label: t("common.labour_vendor") },
+    { key: "transporter",      label: t("master_library.transporter") },
+    { key: "consultant",       label: t("master_library.consultant") },
+    { key: "staff",            label: t("master_library.staff") },
   ];
   const ROLE_ALIAS = {
     "material vendor":"material_vendor","material supplier":"material_vendor","supplier":"material_vendor","vendor":"material_vendor","other vendor":"material_vendor",
@@ -1106,7 +1101,7 @@ function PartyMasterSection() {
         const res = await api.post("/finance/parties", payload);
         if (res.success) {
           setParties(prev => [res.data, ...prev]);
-          if (res.data?.is_staff) window.alert("Staff party banayi gayi — wallet ready hai");
+          if (res.data?.is_staff) window.alert(t("master_library.staff_party_banayi_gayi_wallet_ready"));
         } else {
           // Inline error — duplicate_staff_party gets a friendlier line
           setSaveErr(res.code === "duplicate_staff_party"
@@ -1157,21 +1152,21 @@ function PartyMasterSection() {
   };
 
   const columns = [
-    { key: "name", label: "Party Name", minW: 200, render: r => (
+    { key: "name", label: t("finance.party_name"), minW: 200, render: r => (
       <span style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
         <span style={{ fontWeight: 600 }}>{r.name}</span>
-        {r.is_staff ? <Badge text="Staff" color={T.teal} bg={T.tealSoft} /> : null}
+        {r.is_staff ? <Badge text={t("master_library.staff")} color={T.teal} bg={T.tealSoft} /> : null}
         {r.is_staff && r.is_linked ? (
-          <span title={r.user_is_active === 0 ? "User deactivated" : "Linked to user account"}
+          <span title={r.user_is_active === 0 ? t("master_library.user_deactivated") : t("master_library.linked_to_user_account")}
             style={{ fontSize: 10.5, fontWeight: 600, padding: "1px 6px", borderRadius: 10,
               background: r.user_is_active === 0 ? T.borderLight : T.blueSoft,
               color: r.user_is_active === 0 ? T.textLight : T.blue }}>
-            🔗 {r.user_is_active === 0 ? "User off" : "Linked"}
+            🔗 {r.user_is_active === 0 ? t("master_library.user_off") : t("master_library.linked")}
           </span>
         ) : null}
       </span>
     )},
-    { key: "type", label: "Roles", minW: 180, render: r => {
+    { key: "type", label: t("master_library.roles"), minW: 180, render: r => {
       // Multi-role: render one colored badge per role, separated by a " / "
       // divider so multiple roles read as "Material Vendor / Transporter".
       const keys = parsePartyRoles(r);
@@ -1191,15 +1186,15 @@ function PartyMasterSection() {
         </span>
       );
     }},
-    { key: "phone", label: "Phone", minW: 130, style: { fontFamily: "monospace", fontSize: 12 } },
-    { key: "city", label: "City", minW: 80 },
-    { key: "opening_balance", label: "Balance", minW: 100, align: "right", render: r => {
+    { key: "phone", label: t("common.phone"), minW: 130, style: { fontFamily: "monospace", fontSize: 12 } },
+    { key: "city", label: t("common.city"), minW: 80 },
+    { key: "opening_balance", label: t("common.balance"), minW: 100, align: "right", render: r => {
       const bal = Number(r.opening_balance) || 0;
       return <span style={{ fontWeight: 700, color: bal > 0 ? T.green : bal < 0 ? T.red : T.textMid }}>
         {bal !== 0 ? `${bal > 0 ? "+" : ""}Rs.${Math.abs(bal).toLocaleString()}` : "—"}
       </span>;
     }},
-    { key: "rating", label: "Rating", minW: 60, align: "center", render: r => r.rating > 0 ? (
+    { key: "rating", label: t("master_library.rating"), minW: 60, align: "center", render: r => r.rating > 0 ? (
       <div style={{ display: "flex", gap: 1, justifyContent: "center" }}>{[1,2,3,4,5].map(i => <IcStar key={i} size={12} color={i <= r.rating ? T.amber : T.borderLight} fill={i <= r.rating ? T.amber : "none"} strokeWidth={0} />)}</div>
     ) : <span style={{ color: T.textLight, fontSize: 11 }}>N/A</span> },
   ];
@@ -1208,7 +1203,7 @@ function PartyMasterSection() {
     <div>
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="parties" onAdd={openCreate} addLabel="Add Party"
         templateConfig={partyTemplateConfig} currentData={parties} onImportData={handlePartyImport}
-        filterEl={<div style={{minWidth:180}}><SearchSelect value={filterType} options={types} onChange={setFilterType} placeholder="Filter type..."/></div>}
+        filterEl={<div style={{minWidth:180}}><SearchSelect value={filterType} options={types} onChange={setFilterType} placeholder={t("master_library.filter_type")}/></div>}
       />
       {/* Row click opens the detail drawer; Actions column hidden
           (edit/delete now live inside the drawer). */}
@@ -1256,37 +1251,35 @@ function PartyMasterSection() {
                 {/* Balance highlight */}
                 {bal !== 0 && (
                   <div style={{ margin:"10px 0", padding:"10px 14px", borderRadius:8, background: bal>0?T.greenSoft:T.redSoft, border:`1px solid ${(bal>0?T.green:T.red)}33` }}>
-                    <div style={{ fontSize:10.5, fontWeight:700, color:T.textLight, textTransform:"uppercase" }}>Opening Balance</div>
-                    <div style={{ fontSize:18, fontWeight:800, color: bal>0?T.green:T.red, marginTop:2 }}>
-                      {bal>0?"+":"−"} Rs.{Math.abs(bal).toLocaleString("en-IN")}
-                    </div>
+                    <div style={{ fontSize:10.5, fontWeight:700, color:T.textLight, textTransform:"uppercase" }}>{t("common.opening_balance")}</div>
+                    <div style={{ fontSize:18, fontWeight:800, color: bal>0?T.green:T.red, marginTop:2 }}>{t("master_library.bal_rs_math", { bal: bal>0?"+":"−", Math: Math.abs(bal).toLocaleString("en-IN") })}</div>
                   </div>
                 )}
                 <div style={{ marginTop:6 }}>
-                  <Row label="Contact Person" value={p.contact_person} />
-                  <Row label="Phone" value={p.phone} mono />
-                  <Row label="Email" value={p.email} />
+                  <Row label={t("master_library.contact_person")} value={p.contact_person} />
+                  <Row label={t("common.phone")} value={p.phone} mono />
+                  <Row label={t("common.email")} value={p.email} />
                   <Row label="GSTIN" value={p.gstin} mono />
                   <Row label="PAN" value={p.pan} mono />
-                  <Row label="Address" value={p.address} />
-                  <Row label="City" value={p.city} />
-                  <Row label="Credit Days" value={p.credit_days != null ? `${p.credit_days} days` : ""} />
+                  <Row label={t("crm.address")} value={p.address} />
+                  <Row label={t("common.city")} value={p.city} />
+                  <Row label={t("master_library.credit_days")} value={p.credit_days != null ? `${p.credit_days} days` : ""} />
                 </div>
                 {/* Bank details */}
                 {(p.bank_name || p.bank_account || p.ifsc) && (
                   <div style={{ marginTop:14 }}>
-                    <div style={{ fontSize:11.5, fontWeight:700, color:T.text, marginBottom:4, textTransform:"uppercase", letterSpacing:".3px" }}>Bank Details</div>
-                    <Row label="Bank Name" value={p.bank_name} />
-                    <Row label="Account No" value={p.bank_account} mono />
+                    <div style={{ fontSize:11.5, fontWeight:700, color:T.text, marginBottom:4, textTransform:"uppercase", letterSpacing:".3px" }}>{t("common.bank_details")}</div>
+                    <Row label={t("common.bank_name")} value={p.bank_name} />
+                    <Row label={t("master_library.account_no")} value={p.bank_account} mono />
                     <Row label="IFSC" value={p.ifsc} mono />
                   </div>
                 )}
                 {p.is_staff ? (
                   <div style={{ marginTop:14 }}>
-                    <div style={{ fontSize:11.5, fontWeight:700, color:T.text, marginBottom:4, textTransform:"uppercase", letterSpacing:".3px" }}>Staff Info</div>
-                    <Row label="Subtype" value={p.staff_subtype} />
-                    <Row label="Designation" value={p.designation} />
-                    <Row label="Wallet Limit" value={p.wallet_limit != null ? `Rs.${Number(p.wallet_limit).toLocaleString("en-IN")}` : ""} />
+                    <div style={{ fontSize:11.5, fontWeight:700, color:T.text, marginBottom:4, textTransform:"uppercase", letterSpacing:".3px" }}>{t("master_library.staff_info")}</div>
+                    <Row label={t("master_library.subtype")} value={p.staff_subtype} />
+                    <Row label={t("master_library.designation")} value={p.designation} />
+                    <Row label={t("master_library.wallet_limit")} value={p.wallet_limit != null ? `Rs.${Number(p.wallet_limit).toLocaleString("en-IN")}` : ""} />
                   </div>
                 ) : null}
               </div>
@@ -1294,11 +1287,11 @@ function PartyMasterSection() {
               <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.border}`, display:"flex", gap:10 }}>
                 <button onClick={() => { const tgt = p; setDetailParty(null); openEdit(tgt); }}
                   style={{ flex:1, padding:"9px", borderRadius:8, background:T.blue, color:"white", border:"none", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-                  <IcEdit size={15} color="white" /> Edit
+                  <IcEdit size={15} color="white" /> {t("common.edit_2")}
                 </button>
-                <button onClick={async () => { if (await window.confirmAsync(`Delete "${p.name}"?`)) { await del(p.id); setDetailParty(null); } }}
+                <button onClick={async () => { if (await window.confirmAsync(t("master_library.delete_name", { name: p.name }))) { await del(p.id); setDetailParty(null); } }}
                   style={{ padding:"9px 16px", borderRadius:8, background:T.redSoft, color:T.red, border:`1px solid ${T.red}44`, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
-                  <IcTrash size={15} color={T.red} /> Delete
+                  <IcTrash size={15} color={T.red} /> {t("common.delete")}
                 </button>
               </div>
             </div>
@@ -1306,19 +1299,19 @@ function PartyMasterSection() {
         );
       })()}
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Party" : "Add Party"} desc="Party / supplier / client / staff details" width={660}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_party") : t("master_library.add_party")} desc={t("master_library.party_supplier_client_staff_details")} width={660}>
         {saveErr ? (
           <div style={{ background: T.redSoft, border: `1px solid ${T.red}55`, color: T.red, fontSize: 12.5, padding: "8px 12px", borderRadius: 8, marginBottom: 12 }}>{saveErr}</div>
         ) : null}
         <div style={{ marginBottom: 14 }}>
-          <FormField label="Party Name" value={form.name} onChange={v => upd("name", v)} placeholder="Full legal name" required disabled={editingLinkedStaff} />
+          <FormField label={t("finance.party_name")} value={form.name} onChange={v => upd("name", v)} placeholder={t("master_library.full_legal_name")} required disabled={editingLinkedStaff} />
         </div>
         {/* ── Multi-role selector ── ek party kai roles me ho sakti hai ── */}
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 6 }}>
-            Roles <span style={{ color: T.red }}>*</span>
+           {t("master_library.roles")} <span style={{ color: T.red }}>*</span>
             <span style={{ fontWeight: 400, color: T.textMid, fontSize: 11, marginLeft: 6 }}>
-              (ek se zyada select kar sakte ho — e.g. Material Vendor + Subcontractor)
+             {t("master_library.ek_se_zyada_select_kar_sakte")}
             </span>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -1346,13 +1339,13 @@ function PartyMasterSection() {
           </div>
           {isStaffForm && (
             <div style={{ fontSize: 10.5, color: T.textMid, marginTop: 6, fontStyle: "italic" }}>
-              Staff alag category hai (wallet + app-user) — ye dusre roles ke saath combine nahi hoti.
+             {t("master_library.staff_alag_category_hai_wallet_app")}
             </div>
           )}
         </div>
         {editingLinkedStaff ? (
           <div style={{ fontSize: 11, color: T.textMid, marginTop: -8, marginBottom: 12 }}>
-            Naam / phone / email linked staff pe yahan se nahi badalte — <b>Settings → Users</b> me edit karein.
+           {t("master_library.naam_phone_email_linked_staff_pe")} <b>{t("master_library.settings_users")}</b> {t("master_library.me_edit_karein")}
           </div>
         ) : null}
 
@@ -1361,13 +1354,13 @@ function PartyMasterSection() {
           <>
             {!editing ? (
               <div style={{ fontSize: 11.5, color: T.textMid, background: T.tealSoft, padding: "8px 12px", borderRadius: 8, marginBottom: 14 }}>
-                App users ko staff-party automatic milti hai. Yahan sirf <b>off-app casual staff</b> add karein.
+               {t("master_library.app_users_ko_staff_party_automatic")} <b>{t("master_library.off_app_casual_staff")}</b> {t("master_library.add_karein")}
               </div>
             ) : null}
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 6 }}>Staff Subtype <span style={{ color: T.red }}>*</span></div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 6 }}>{t("master_library.staff_subtype")} <span style={{ color: T.red }}>*</span></div>
               <div style={{ display: "flex", gap: 10 }}>
-                {[{ v: "office", l: "Office Staff (salaried)" }, { v: "wages", l: "Daily Wages Worker" }].map(o => (
+                {[{ v: "office", l: t("master_library.office_staff_salaried") }, { v: "wages", l: t("master_library.daily_wages_worker") }].map(o => (
                   <button key={o.v} type="button" onClick={() => upd("staff_subtype", o.v)}
                     style={{ flex: 1, padding: "9px 10px", borderRadius: 8, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
                       border: `1.5px solid ${form.staff_subtype === o.v ? T.teal : T.borderLight}`,
@@ -1379,53 +1372,53 @@ function PartyMasterSection() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-              <FormField label="Designation" value={form.designation} onChange={v => upd("designation", v)} placeholder='e.g. "Site Supervisor", "Mason", "Helper"' half />
-              <FormField label="Phone" value={form.phone} onChange={v => upd("phone", v)} placeholder="+91 XXXXX XXXXX" half disabled={editingLinkedStaff} />
+              <FormField label={t("master_library.designation")} value={form.designation} onChange={v => upd("designation", v)} placeholder={t("master_library.e_g_site_supervisor_mason_helper")} half />
+              <FormField label={t("common.phone")} value={form.phone} onChange={v => upd("phone", v)} placeholder={t("common.91_xxxxx_xxxxx")} half disabled={editingLinkedStaff} />
             </div>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-              <FormField label="Wallet Limit (₹)" value={form.wallet_limit} onChange={v => upd("wallet_limit", v)} placeholder="e.g. 5000" half />
-              <FormField label="Negative Limit Allowed (₹)" value={form.negative_limit} onChange={v => upd("negative_limit", v)} placeholder="e.g. 2000" half />
+              <FormField label={t("master_library.wallet_limit_2")} value={form.wallet_limit} onChange={v => upd("wallet_limit", v)} placeholder="e.g. 5000" half />
+              <FormField label={t("master_library.negative_limit_allowed")} value={form.negative_limit} onChange={v => upd("negative_limit", v)} placeholder="e.g. 2000" half />
             </div>
-            <FormField label="Address" value={form.address || ""} onChange={v => upd("address", v)} placeholder="Full address" />
+            <FormField label={t("crm.address")} value={form.address || ""} onChange={v => upd("address", v)} placeholder={t("master_library.full_address")} />
             <div style={{ height: 14 }} />
-            <FormField label="City" value={form.city} onChange={v => upd("city", v)} />
+            <FormField label={t("common.city")} value={form.city} onChange={v => upd("city", v)} />
           </>
         ) : (
         /* ── NON-STAFF FIELDS (unchanged) ── */
         <>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Contact Person" value={form.contact} onChange={v => upd("contact", v)} placeholder="Name" half />
-          <FormField label="Phone" value={form.phone} onChange={v => upd("phone", v)} placeholder="+91 XXXXX XXXXX" half />
+          <FormField label={t("master_library.contact_person")} value={form.contact} onChange={v => upd("contact", v)} placeholder={t("common.name_2")} half />
+          <FormField label={t("common.phone")} value={form.phone} onChange={v => upd("phone", v)} placeholder={t("common.91_xxxxx_xxxxx")} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Email" value={form.email} onChange={v => upd("email", v)} placeholder="email@company.com" half />
-          <FormField label="Category / Trade" value={form.category} onChange={v => upd("category", v)} placeholder="e.g. Cement, Electrical" half />
+          <FormField label={t("common.email")} value={form.email} onChange={v => upd("email", v)} placeholder={t("master_library.email_company_com")} half />
+          <FormField label={t("master_library.category_trade")} value={form.category} onChange={v => upd("category", v)} placeholder={t("master_library.e_g_cement_electrical")} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="GSTIN" value={form.gstin} onChange={v => upd("gstin", v)} placeholder="22AABC..." half />
-          <FormField label="PAN" value={form.pan || ""} onChange={v => upd("pan", v)} placeholder="AABC..." half />
+          <FormField label="GSTIN" value={form.gstin} onChange={v => upd("gstin", v)} placeholder={t("master_library.22aabc")} half />
+          <FormField label="PAN" value={form.pan || ""} onChange={v => upd("pan", v)} placeholder={t("master_library.aabc")} half />
         </div>
-        <FormField label="Address" value={form.address || ""} onChange={v => upd("address", v)} placeholder="Full address" />
+        <FormField label={t("crm.address")} value={form.address || ""} onChange={v => upd("address", v)} placeholder={t("master_library.full_address")} />
         <div style={{ height: 14 }} />
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="City" value={form.city} onChange={v => upd("city", v)} half />
-          <FormField label="Pincode" value={form.pincode || ""} onChange={v => upd("pincode", v)} half />
+          <FormField label={t("common.city")} value={form.city} onChange={v => upd("city", v)} half />
+          <FormField label={t("master_library.pincode")} value={form.pincode || ""} onChange={v => upd("pincode", v)} half />
         </div>
         {/* Payment terms */}
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Credit Days" value={String(form.credit_days ?? 7)} onChange={v => upd("credit_days", parseInt(v) || 7)} options={["7","15","30","45","60","90"]} half />
+          <FormSelect label={t("master_library.credit_days")} value={String(form.credit_days ?? 7)} onChange={v => upd("credit_days", parseInt(v) || 7)} options={["7","15","30","45","60","90"]} half />
           <div style={{ flex: 1, minWidth: 220, fontSize: 11.5, color: T.textMid, alignSelf: "flex-end", paddingBottom: 6 }}>
-            Bills se payment due date <b>credit days ke baad</b> auto-set hota hai. Override at billing.
+           {t("master_library.bills_se_payment_due_date")} <b>{t("master_library.credit_days_ke_baad")}</b> {t("master_library.auto_set_hota_hai_override_at")}
           </div>
         </div>
         {/* Bank details section */}
-        <div style={{ padding: "12px 0 4px", fontSize: 13, fontWeight: 700, color: T.text, borderTop: `1px solid ${T.borderLight}`, marginTop: 4 }}>Bank Details (for payment)</div>
+        <div style={{ padding: "12px 0 4px", fontSize: 13, fontWeight: 700, color: T.text, borderTop: `1px solid ${T.borderLight}`, marginTop: 4 }}>{t("master_library.bank_details_for_payment")}</div>
         <div style={{ height: 10 }} />
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Bank Name" value={form.bank_name || ""} onChange={v => upd("bank_name", v)} placeholder="e.g. SBI" half />
-          <FormField label="Account No." value={form.acc_no || ""} onChange={v => upd("acc_no", v)} placeholder="Account number" half />
+          <FormField label={t("common.bank_name")} value={form.bank_name || ""} onChange={v => upd("bank_name", v)} placeholder={t("master_library.e_g_sbi")} half />
+          <FormField label={t("master_library.account_no_2")} value={form.acc_no || ""} onChange={v => upd("acc_no", v)} placeholder={t("master_library.account_number")} half />
         </div>
-        <FormField label="IFSC Code" value={form.ifsc || ""} onChange={v => upd("ifsc", v)} placeholder="e.g. SBIN0005678" />
+        <FormField label={t("master_library.ifsc_code")} value={form.ifsc || ""} onChange={v => upd("ifsc", v)} placeholder={t("master_library.e_g_sbin0005678")} />
         </>
         )}
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update Party" : (isStaffForm ? "Add Staff" : "Add Party")} />
@@ -1462,7 +1455,7 @@ function WorkCategorySection() {
   const openCreate = () => { setEditing(null); setForm({ name: "", code: "", desc: "" }); setShowModal(true); };
   const openEdit = (c) => { setEditing(c); setForm({ name: c.name, code: c.code||"", desc: c.description||c.desc||"" }); setShowModal(true); };
   const save = async () => {
-    if (!form.name.trim()) return alert("Work category name required");
+    if (!form.name.trim()) return alert(t("master_library.work_category_name_required"));
     setSaving(true);
     // Send empty unit / 0 rate to keep backend payload shape stable.
     const res = await apiSave({
@@ -1503,24 +1496,24 @@ function WorkCategorySection() {
   };
 
   const columns = [
-    { key: "code", label: "Code", minW: 70, render: r => r.code
+    { key: "code", label: t("common.code"), minW: 70, render: r => r.code
         ? <code style={{ fontSize: 12, fontWeight: 600, color: T.purple, background: T.purpleSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code>
         : <span style={{ color: T.textLight }}>—</span> },
-    { key: "name",        label: "Work Category", minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "description", label: "Description",   minW: 260, render: r => <span style={{ fontSize: 12, color: T.textMid }}>{r.description || r.desc || "—"}</span> },
+    { key: "name",        label: t("master_library.work_category"), minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "description", label: t("common.description"),   minW: 260, render: r => <span style={{ fontSize: 12, color: T.textMid }}>{r.description || r.desc || "—"}</span> },
   ];
 
   return (
     <div>
-      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="work categories" onAdd={openCreate} addLabel="Add Work Category"
+      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label={t("master_library.work_categories")} onAdd={openCreate} addLabel="Add Work Category"
         templateConfig={workTemplateConfig} currentData={cats} onImportData={handleWorkImport} />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Work Category" : "Add Work Category"} width={520}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_work_category") : t("master_library.add_work_category")} width={520}>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Work Category Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. RCC Work" half required />
-          <FormField label="Code" value={form.code} onChange={v => upd("code", v.toUpperCase())} placeholder="e.g. RCC" half />
+          <FormField label={t("master_library.work_category_name")} value={form.name} onChange={v => upd("name", v)} placeholder={t("master_library.e_g_rcc_work")} half required />
+          <FormField label={t("common.code")} value={form.code} onChange={v => upd("code", v.toUpperCase())} placeholder={t("master_library.e_g_rcc")} half />
         </div>
-        <FormTextarea label="Description" value={form.desc} onChange={v => upd("desc", v)} placeholder="What work is included?" rows={2} />
+        <FormTextarea label={t("common.description")} value={form.desc} onChange={v => upd("desc", v)} placeholder={t("master_library.what_work_is_included")} rows={2} />
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Create"} />
       </Modal>
     </div>
@@ -1545,15 +1538,15 @@ function SubcontractorSection() {
   const del = (id) => apiDel(id);
 
   const columns = [
-    { key: "name", label: "Firm Name", minW: 150, render: r => (<div><div style={{ fontWeight: 600 }}>{r.name}</div><div style={{ fontSize: 11, color: T.textLight }}>{r.owner}</div></div>) },
-    { key: "trade", label: "Trade", minW: 110, render: r => <Badge text={r.trade} color={T.purple} bg={T.purpleSoft} /> },
-    { key: "phone", label: "Phone", minW: 120, style: { fontFamily: "monospace", fontSize: 12 } },
-    { key: "description", label: "City/Area", minW: 70, render: r => <span>{r.description||r.city||"—"}</span> },
-    { key: "labour_strength", label: "Labour", minW: 60, align: "center", render: r => <span style={{ fontWeight: 600 }}>{r.labour_strength}</span> },
-    { key: "rate", label: "Rate", minW: 100, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>Rs.{r.rate}/{r.rateType}</span> },
-    { key: "activeProjects", label: "Projects", minW: 60, align: "center", render: r => <Badge text={r.activeProjects} color={r.activeProjects > 0 ? T.green : T.textLight} bg={r.activeProjects > 0 ? T.greenSoft : T.borderLight} /> },
-    { key: "rating", label: "Rating", minW: 70, align: "center", render: r => r.rating > 0 ? <div style={{ display: "flex", gap: 1, justifyContent: "center" }}>{[1,2,3,4,5].map(i => <IcStar key={i} size={11} color={i <= r.rating ? T.amber : T.borderLight} fill={i <= r.rating ? T.amber : "none"} strokeWidth={0} />)}</div> : "—" },
-    { key: "status", label: "Status", minW: 70, render: r => <Badge text={r.status} color={r.status === "Active" ? T.green : T.red} bg={r.status === "Active" ? T.greenSoft : T.redSoft} /> },
+    { key: "name", label: t("master_library.firm_name"), minW: 150, render: r => (<div><div style={{ fontWeight: 600 }}>{r.name}</div><div style={{ fontSize: 11, color: T.textLight }}>{r.owner}</div></div>) },
+    { key: "trade", label: t("master_library.trade"), minW: 110, render: r => <Badge text={r.trade} color={T.purple} bg={T.purpleSoft} /> },
+    { key: "phone", label: t("common.phone"), minW: 120, style: { fontFamily: "monospace", fontSize: 12 } },
+    { key: "description", label: t("master_library.city_area"), minW: 70, render: r => <span>{r.description||r.city||"—"}</span> },
+    { key: "labour_strength", label: t("common.labour"), minW: 60, align: "center", render: r => <span style={{ fontWeight: 600 }}>{r.labour_strength}</span> },
+    { key: "rate", label: t("common.rate"), minW: 100, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>{t("master_library.rs_rate_ratetype", { rate: r.rate, rateType: r.rateType })}</span> },
+    { key: "activeProjects", label: t("common.projects"), minW: 60, align: "center", render: r => <Badge text={r.activeProjects} color={r.activeProjects > 0 ? T.green : T.textLight} bg={r.activeProjects > 0 ? T.greenSoft : T.borderLight} /> },
+    { key: "rating", label: t("master_library.rating"), minW: 70, align: "center", render: r => r.rating > 0 ? <div style={{ display: "flex", gap: 1, justifyContent: "center" }}>{[1,2,3,4,5].map(i => <IcStar key={i} size={11} color={i <= r.rating ? T.amber : T.borderLight} fill={i <= r.rating ? T.amber : "none"} strokeWidth={0} />)}</div> : "—" },
+    { key: "status", label: t("common.status"), minW: 70, render: r => <Badge text={r.status} color={r.status === "Active" ? T.green : T.red} bg={r.status === "Active" ? T.greenSoft : T.redSoft} /> },
   ];
 
   return (
@@ -1590,22 +1583,22 @@ function SubcontractorSection() {
         }}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Subcontractor" : "Add Subcontractor"} desc="Subcontractor firm details" width={580}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_subcontractor") : t("master_library.add_subcontractor")} desc={t("master_library.subcontractor_firm_details")} width={580}>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Firm / Company Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. Raj Construction" half required />
-          <FormField label="Owner / Contact Person" value={form.owner} onChange={v => upd("owner", v)} placeholder="Owner name" half />
+          <FormField label={t("master_library.firm_company_name")} value={form.name} onChange={v => upd("name", v)} placeholder={t("master_library.e_g_raj_construction")} half required />
+          <FormField label={t("master_library.owner_contact_person")} value={form.owner} onChange={v => upd("owner", v)} placeholder={t("common.owner_name")} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Trade / Specialty" value={form.trade} onChange={v => upd("trade", v)} options={["RCC & Civil","Electrical Work","Plumbing","Painting","Tiles & Flooring","Fabrication","Carpentry","Waterproofing","False Ceiling","HVAC","Landscaping","Demolition","Other"]} half required />
-          <FormField label="Phone" value={form.phone} onChange={v => upd("phone", v)} placeholder="+91 XXXXX XXXXX" half />
+          <FormSelect label={t("master_library.trade_specialty")} value={form.trade} onChange={v => upd("trade", v)} options={["RCC & Civil","Electrical Work","Plumbing","Painting","Tiles & Flooring","Fabrication","Carpentry","Waterproofing","False Ceiling","HVAC","Landscaping","Demolition","Other"]} half required />
+          <FormField label={t("common.phone")} value={form.phone} onChange={v => upd("phone", v)} placeholder={t("common.91_xxxxx_xxxxx")} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="City" value={form.city} onChange={v => upd("city", v)} half />
-          <FormField label="Labour Strength" value={form.labour_strength || ""} onChange={v => upd("labour_strength", parseInt(v) || 0)} type="number" half />
+          <FormField label={t("common.city")} value={form.city} onChange={v => upd("city", v)} half />
+          <FormField label={t("master_library.labour_strength")} value={form.labour_strength || ""} onChange={v => upd("labour_strength", parseInt(v) || 0)} type="number" half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="GSTIN" value={form.gstin} onChange={v => upd("gstin", v)} placeholder="If registered" half />
-          <FormSelect label="Status" value={form.status} onChange={v => upd("status", v)} options={["Active","Inactive","Blacklisted"]} half />
+          <FormField label="GSTIN" value={form.gstin} onChange={v => upd("gstin", v)} placeholder={t("master_library.if_registered")} half />
+          <FormSelect label={t("common.status")} value={form.status} onChange={v => upd("status", v)} options={["Active","Inactive","Blacklisted"]} half />
         </div>
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Add Subcontractor"} />
       </Modal>
@@ -1949,8 +1942,8 @@ function SubconRateCardSection() {
 
   // ── Package CRUD ───────────────────────────────────────────────────────
   const savePkg = async () => {
-    if (!pkgForm.name.trim()) return alert("Package name required");
-    if (!selTrade || !selType) return alert("Select trade category and construction type first");
+    if (!pkgForm.name.trim()) return alert(t("master_library.package_name_required"));
+    if (!selTrade || !selType) return alert(t("master_library.select_trade_category_and_construction_type"));
     setPkgSaving(true);
     const payload = {
       name: pkgForm.name.trim(), sqft_rate: parseFloat(pkgForm.sqft_rate)||0,
@@ -1979,8 +1972,8 @@ function SubconRateCardSection() {
     setShowItemModal(true);
   };
   const saveItem = async () => {
-    if (!itemForm.name.trim()) return alert("Item name required");
-    if (!selCity || !selType) return alert("Select city and construction type first");
+    if (!itemForm.name.trim()) return alert(t("master_library.item_name_required"));
+    if (!selCity || !selType) return alert(t("master_library.select_city_and_construction_type_first"));
     setItemSaving(true);
     const payload = {
       name:itemForm.name.trim(), unit:itemForm.unit, trade_category:itemForm.trade_category,
@@ -1995,7 +1988,7 @@ function SubconRateCardSection() {
     setShowItemModal(false); loadWorkItems();
   };
   const deleteItem = async (id) => {
-    if (!await window.confirmAsync("Delete this work item?")) return;
+    if (!await window.confirmAsync(t("master_library.delete_this_work_item"))) return;
     const r = await api.del(`/library/subcon-work-items/${id}`).catch(() => ({success:false}));
     if (r.success) setWorkItems(p => p.filter(x => x.id !== id));
     else alert(r.message||"Delete failed");
@@ -2128,8 +2121,8 @@ function SubconRateCardSection() {
       {/* ── Mode Toggle ─────────────────────────────────────────────────── */}
       <div style={{display:"flex",gap:8,marginBottom:18,alignItems:"center"}}>
         {[
-          {id:"package",   icon:"📐", label:"Floor Package Rates",  desc:"Sqft-based package — for full-floor work orders"},
-          {id:"item_wise", icon:"🔧", label:"Work Item Rates",       desc:"Unit-based items — for specialist work orders"},
+          {id:"package",   icon:"📐", label:t("master_library.floor_package_rates"),  desc:t("master_library.sqft_based_package_for_full_floor")},
+          {id:"item_wise", icon:"🔧", label:t("master_library.work_item_rates"),       desc:t("master_library.unit_based_items_for_specialist_work")},
         ].map(m => (
           <button key={m.id} onClick={()=>setMode(m.id)} style={{
             display:"flex", alignItems:"center", gap:8,
@@ -2144,26 +2137,26 @@ function SubconRateCardSection() {
         ))}
         <span style={{marginLeft:8,fontSize:11.5,color:T.textLight,alignSelf:"center"}}>
           {mode==="package"
-            ? "Entire floor given to one subcon — area × rate/sqft"
-            : "Specific items given to subcon — item × unit qty × rate"}
+            ? t("master_library.entire_floor_given_to_one_subcon")
+            : t("master_library.specific_items_given_to_subcon_item")}
         </span>
       </div>
 
       {/* ── Step 1: Construction Type ──────────────────────────────────── */}
       <div style={{background:"white",borderRadius:10,border:`1px solid ${T.border}`,padding:"14px 18px",marginBottom:12}}>
         <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"1px",marginBottom:10}}>
-          1 — CONSTRUCTION TYPE
+         {t("master_library.1_construction_type")}
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           {conTypes.map(ct => chipBtn(ct.name, selType?.id===ct.id, ()=>{setSelType(ct);setSelPkg(null);setSelTrade(null);}, T.blue))}
-          {!conTypes.length && <span style={{color:T.textLight,fontSize:12}}>No types yet — add from Client BOQ Rate → Construction Type</span>}
+          {!conTypes.length && <span style={{color:T.textLight,fontSize:12}}>{t("master_library.no_types_yet_add_from_client")}</span>}
         </div>
       </div>
 
       {selType && (
         <div style={{background:"white",borderRadius:10,border:`1px solid ${T.border}`,padding:"14px 18px",marginBottom:12}}>
           <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"1px",marginBottom:10}}>
-            2 — CITY
+           {t("master_library.2_city")}
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {cities.map(c => chipBtn(c.name, selCity?.id===c.id, ()=>setSelCity(c), T.teal))}
@@ -2177,7 +2170,7 @@ function SubconRateCardSection() {
         {/* Step 3: Trade Category */}
         <div style={{background:"white",borderRadius:10,border:`1px solid ${T.border}`,padding:"14px 18px",marginBottom:12}}>
           <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"1px",marginBottom:10}}>
-            3 — TRADE CATEGORY
+           {t("master_library.3_trade_category")}
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {TRADE_CATS.map(t => chipBtn(t, selTrade===t, ()=>setSelTrade(t), T.purple))}
@@ -2188,7 +2181,7 @@ function SubconRateCardSection() {
         {selTrade && (
           <div style={{background:"white",borderRadius:10,border:`1px solid ${T.border}`,padding:"14px 18px",marginBottom:16}}>
             <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"1px",marginBottom:12}}>
-              4 — RATE CARD
+             {t("master_library.4_rate_card")}
             </div>
             <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"stretch"}}>
               {packages.map(p => (
@@ -2209,7 +2202,7 @@ function SubconRateCardSection() {
               ))}
               <div onClick={()=>{setEditingPkg(null);setPkgForm({name:"",sqft_rate:"",description:""});setAddPkgModal(true);}}
                 style={{padding:"12px 16px",borderRadius:10,border:`2px dashed ${T.border}`,background:T.bg,cursor:"pointer",minWidth:130,display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:T.textLight,fontSize:13,fontWeight:600}}>
-                <IcPlus size={14} color={T.textLight}/> New Rate Card
+                <IcPlus size={14} color={T.textLight}/> {t("master_library.new_rate_card")}
               </div>
             </div>
           </div>
@@ -2223,37 +2216,37 @@ function SubconRateCardSection() {
                 {selType.name} — {selCity.name} — <span style={{color:T.purple}}>{selTrade}</span> — <span style={{color:T.blue}}>{selPkg.name}</span>
               </span>
               <div style={{fontSize:11,color:T.textLight,marginTop:2}}>
-                Click ✏ Edit on a section to modify rates · Save Rates to commit all changes
+               {t("master_library.click_edit_on_a_section_to")}
               </div>
             </div>
             <div style={{display:"flex",gap:8}}>
               {hasPendingEdits && (
                 <button onClick={()=>{setSectionEdits({});setItemEdits({});setPendingDelItems({});setEditingSections({});}}
                   style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"white",fontSize:12,fontWeight:600,color:T.textMid,cursor:"pointer"}}>
-                  ✕ Discard
+                 {t("master_library.discard")}
                 </button>
               )}
               <button onClick={saveRates} disabled={!hasPendingEdits||saving}
                 style={{padding:"8px 18px",borderRadius:8,background:hasPendingEdits&&!saving?T.blue:T.borderLight,color:hasPendingEdits&&!saving?"white":T.textLight,border:"none",fontSize:13,fontWeight:700,cursor:hasPendingEdits&&!saving?"pointer":"not-allowed"}}>
-                {saving?"Saving…":"💾 Save Rates"}
+                {saving?t("common.saving_2"):t("master_library.save_rates")}
               </button>
               <button onClick={()=>{setAddSecForm({name:"",default_qty:0,unit:"sqft",per_item_qty:false});setAddSecModal(true);}}
                 style={{padding:"8px 16px",borderRadius:8,background:"white",border:`1.5px solid ${T.blue}`,color:T.blue,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-                <IcPlus size={14} color={T.blue}/> Add Section
+                <IcPlus size={14} color={T.blue}/> {t("common.add_section_2")}
               </button>
             </div>
           </div>
 
           {saveError && (
             <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10,fontSize:12.5,color:"#DC2626"}}>
-              <span style={{fontWeight:700}}>⚠ Save Error:</span> {saveError}
+              <span style={{fontWeight:700}}>{t("master_library.save_error")}</span> {saveError}
               <button onClick={()=>setSaveError("")} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:"#DC2626",fontSize:16,lineHeight:1}}>×</button>
             </div>
           )}
 
           {pkgStructures.length===0 && (
             <div style={{textAlign:"center",padding:"48px 20px",background:"white",borderRadius:12,border:`1.5px dashed ${T.border}`,color:T.textLight,fontSize:14}}>
-              No sections yet — click + Add Section to build this rate card
+             {t("master_library.no_sections_yet_click_add_section")}
             </div>
           )}
 
@@ -2296,7 +2289,7 @@ function SubconRateCardSection() {
                     <div style={{display:"flex",alignItems:"center",gap:5}} onClick={e=>e.stopPropagation()}>
                       {noAreaHint && !editable && (
                         <span style={{fontSize:10,color:"rgba(245,158,11,0.85)",background:"rgba(245,158,11,0.15)",padding:"2px 7px",borderRadius:4,fontWeight:600}}>
-                          set area to see totals
+                         {t("master_library.set_area_to_see_totals")}
                         </span>
                       )}
                       {editable && (<>
@@ -2313,21 +2306,21 @@ function SubconRateCardSection() {
                   {/* Mode toggle button */}
                   {editable && (
                     <button onClick={e=>{e.stopPropagation();patchSection(sec.id,{per_item_qty:!perItem});}}
-                      title={perItem?"Switch to Uniform Area mode":"Switch to Per-item Qty mode"}
+                      title={perItem?t("master_library.switch_to_uniform_area_mode"):t("master_library.switch_to_per_item_qty_mode")}
                       style={{background:perItem?"rgba(245,158,11,0.22)":"rgba(255,255,255,0.10)",
                                border:"1px solid "+(perItem?"#F59E0B":"rgba(255,255,255,0.2)"),
                                color:perItem?"#FCD34D":"rgba(255,255,255,0.85)",
                                borderRadius:6,padding:"3px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
-                      {perItem?"Per-item Qty":"Uniform Area"}
+                      {perItem?t("common.per_item_qty"):t("master_library.uniform_area")}
                     </button>
                   )}
                   {!editable && perItem && (
-                    <span style={{fontSize:10,color:"#FCD34D",background:"rgba(245,158,11,0.2)",padding:"2px 7px",borderRadius:4,fontWeight:700}}>Per-item Qty</span>
+                    <span style={{fontSize:10,color:"#FCD34D",background:"rgba(245,158,11,0.2)",padding:"2px 7px",borderRadius:4,fontWeight:700}}>{t("common.per_item_qty")}</span>
                   )}
 
                   {/* Section total */}
                   {sCalc.total > 0 && (
-                    <span style={{fontSize:12,fontWeight:700,color:"#4ADE80"}}>Total ₹{Math.round(sCalc.total).toLocaleString("en-IN")}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:"#4ADE80"}}>{t("master_library.total_math", { Math: Math.round(sCalc.total).toLocaleString("en-IN") })}</span>
                   )}
                   {sCalc.perSqft > 0 && !perItem && (
                     <span style={{fontSize:10.5,color:"rgba(255,255,255,0.45)"}}>₹{Math.round(sCalc.perSqft).toLocaleString()}/sqft</span>
@@ -2335,7 +2328,7 @@ function SubconRateCardSection() {
 
                   <button onClick={e=>{e.stopPropagation();setEditingSections(p=>({...p,[sec.id]:!editable}));}}
                     style={{padding:"4px 12px",borderRadius:6,background:editable?"#1E40AF":"rgba(255,255,255,0.12)",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                    {editable?"✓ Done":"✏ Edit"}
+                    {editable?t("master_library.done"):t("common.edit")}
                   </button>
                 </div>
 
@@ -2344,7 +2337,7 @@ function SubconRateCardSection() {
                   <div style={{padding:"12px 16px"}}>
                     {secCats.length===0 && !editable && (
                       <div style={{textAlign:"center",padding:"20px",color:T.textLight,fontSize:12}}>
-                        No categories yet — click ✏ Edit then + Add Category to start
+                       {t("master_library.no_categories_yet_click_edit_then")}
                       </div>
                     )}
 
@@ -2364,13 +2357,13 @@ function SubconRateCardSection() {
                             </svg>
                             <span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>{cat.category_name}</span>
                             <span style={{fontSize:10.5,color:T.textLight}}>· {catRows.length} items</span>
-                            <span style={{fontSize:11,fontWeight:700,color:T.teal}}>Base ₹{Math.round(cCalc.base).toLocaleString("en-IN")}</span>
+                            <span style={{fontSize:11,fontWeight:700,color:T.teal}}>{t("master_library.base_math", { Math: Math.round(cCalc.base).toLocaleString("en-IN") })}</span>
                             {cCalc.addOn>0 && <span style={{fontSize:11,fontWeight:600,color:T.amber,marginLeft:4}}>+₹{Math.round(cCalc.addOn).toLocaleString("en-IN")}</span>}
                             {cCalc.total>0 && <span style={{fontSize:11,fontWeight:700,color:T.green,marginLeft:4}}>= ₹{Math.round(cCalc.total).toLocaleString("en-IN")}</span>}
                             {editable && (
                               <button onClick={e=>{e.stopPropagation();openAddItemDrawer(sec,cat);}}
                                 style={{marginLeft:8,padding:"2px 10px",borderRadius:5,background:T.blueSoft,border:`1px solid ${T.blue}44`,color:T.blue,fontSize:10.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                                + Add Item
+                               {t("common.add_item")}
                               </button>
                             )}
                           </div>
@@ -2440,7 +2433,7 @@ function SubconRateCardSection() {
                           )}
                           {!isCatCol && catRows.length===0 && editable && (
                             <div style={{textAlign:"center",padding:"10px",color:T.textLight,fontSize:11.5,background:"#F8FAFC",borderRadius:6,border:`1px dashed ${T.border}`}}>
-                              No items — click + Add Item above
+                             {t("master_library.no_items_click_add_item_above")}
                             </div>
                           )}
                         </div>
@@ -2451,8 +2444,7 @@ function SubconRateCardSection() {
                     {editable && (
                       <button onClick={()=>openAddCatDrawer(sec)}
                         style={{marginTop:8,width:"100%",padding:"8px",borderRadius:7,background:"white",border:`1.5px dashed ${T.blue}`,color:T.blue,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                        <IcPlus size={13} color={T.blue}/> Add Category to {getSecName(sec)}
-                      </button>
+                        <IcPlus size={13} color={T.blue}/>{t("master_library.add_category_to_getsecname", { getSecName: getSecName(sec) })}</button>
                     )}
                   </div>
                 )}
@@ -2464,10 +2456,10 @@ function SubconRateCardSection() {
           const grand = calcGrand();
           return grand.total > 0 ? (
             <div style={{background:"linear-gradient(135deg,#0F172A,#1E293B)",borderRadius:10,padding:"14px 20px",display:"flex",alignItems:"center",gap:20,marginTop:4}}>
-              <span style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.8px"}}>Grand Total</span>
+              <span style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.8px"}}>{t("common.grand_total")}</span>
               <span style={{flex:1}}/>
-              <span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>Base ₹{Math.round(grand.base).toLocaleString("en-IN")}</span>
-              {grand.addOn>0 && <span style={{fontSize:11,color:"rgba(245,158,11,0.8)"}}>+Add-on ₹{Math.round(grand.addOn).toLocaleString("en-IN")}</span>}
+              <span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>{t("master_library.base_math", { Math: Math.round(grand.base).toLocaleString("en-IN") })}</span>
+              {grand.addOn>0 && <span style={{fontSize:11,color:"rgba(245,158,11,0.8)"}}>{t("master_library.add_on_math", { Math: Math.round(grand.addOn).toLocaleString("en-IN") })}</span>}
               <span style={{fontSize:18,fontWeight:800,color:"#4ADE80"}}>₹{Math.round(grand.total).toLocaleString("en-IN")}</span>
             </div>
           ) : null;
@@ -2481,25 +2473,25 @@ function SubconRateCardSection() {
           <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",backdropFilter:"blur(4px)"}}/>
           <div style={{position:"relative",width:440,maxWidth:"94vw",background:"white",borderRadius:14,boxShadow:T.shadowLg,overflow:"hidden",fontFamily:T.font}} onClick={e=>e.stopPropagation()}>
             <div style={{padding:"18px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div style={{fontSize:15,fontWeight:700,color:T.text}}>Add Section</div>
+              <div style={{fontSize:15,fontWeight:700,color:T.text}}>{t("common.add_section_2")}</div>
               <button onClick={()=>setAddSecModal(false)} style={{background:"none",border:"none",cursor:"pointer",padding:4,display:"flex"}}><IcX size={18} color={T.textMid}/></button>
             </div>
             <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:14}}>
               <div>
-                <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Section Name <span style={{color:T.red}}>*</span></label>
-                <input value={addSecForm.name} onChange={e=>setAddSecForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Ground Floor, First Floor…"
+                <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>{t("master_library.section_name")} <span style={{color:T.red}}>*</span></label>
+                <input value={addSecForm.name} onChange={e=>setAddSecForm(p=>({...p,name:e.target.value}))} placeholder={t("master_library.e_g_ground_floor_first_floor")}
                   style={{width:"100%",padding:"10px 13px",borderRadius:8,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,outline:"none",boxSizing:"border-box",fontFamily:T.font}}
                   onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border} autoFocus/>
               </div>
               <div style={{display:"flex",gap:12}}>
                 <div style={{flex:1}}>
-                  <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Default Area / Qty</label>
+                  <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>{t("master_library.default_area_qty")}</label>
                   <input type="number" value={addSecForm.default_qty||""} onChange={e=>setAddSecForm(p=>({...p,default_qty:e.target.value}))} placeholder="0"
                     style={{width:"100%",padding:"10px 13px",borderRadius:8,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,outline:"none",boxSizing:"border-box",fontFamily:T.font}}
                     onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
                 </div>
                 <div style={{flex:1}}>
-                  <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Unit</label>
+                  <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>{t("common.unit")}</label>
                   <select value={addSecForm.unit} onChange={e=>setAddSecForm(p=>({...p,unit:e.target.value}))}
                     style={{width:"100%",padding:"10px 13px",borderRadius:8,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,outline:"none",background:"white",fontFamily:T.font}}>
                     {(uomOpts.length?uomOpts:["Sqft","Cft","Running Ft","Kg","Point","Unit","Lump Sum"]).map(u=><option key={u}>{u}</option>)}
@@ -2512,20 +2504,18 @@ function SubconRateCardSection() {
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
                   <input type="checkbox" checked={!!addSecForm.per_item_qty} onChange={()=>{}} style={{width:16,height:16,cursor:"pointer",accentColor:T.amber}}/>
                   <div>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>
-                      Per-item quantity {addSecForm.per_item_qty?"(enabled)":"(disabled — uniform area)"}
-                    </div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>{t("master_library.per_item_quantity_addsecform", { addSecForm: addSecForm.per_item_qty?"(enabled)":"(disabled — uniform area)" })}</div>
                     <div style={{fontSize:11.5,color:T.textMid,marginTop:2}}>
                       {addSecForm.per_item_qty
-                        ? "Each item will have its own quantity field (e.g. RCC: 100 cft, Plaster: 200 sqft)"
-                        : "All items share the section's area value (e.g. GF = 1200 sqft)"}
+                        ? t("master_library.each_item_will_have_its_own")
+                        : t("master_library.all_items_share_the_section_s")}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
             <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,justifyContent:"flex-end"}}>
-              <button onClick={()=>setAddSecModal(false)} style={{padding:"9px 18px",borderRadius:8,border:`1px solid ${T.border}`,background:"white",fontSize:13,fontWeight:600,color:T.textMid,cursor:"pointer"}}>Cancel</button>
+              <button onClick={()=>setAddSecModal(false)} style={{padding:"9px 18px",borderRadius:8,border:`1px solid ${T.border}`,background:"white",fontSize:13,fontWeight:600,color:T.textMid,cursor:"pointer"}}>{t("common.cancel")}</button>
               <button disabled={!addSecForm.name?.trim()||addSecSaving} onClick={async()=>{
                 if(!addSecForm.name?.trim()||!selPkg) return;
                 setAddSecSaving(true);
@@ -2542,7 +2532,7 @@ function SubconRateCardSection() {
                 } else alert(r?.message||"Failed to add section");
               }}
                 style={{padding:"9px 22px",borderRadius:8,background:!addSecForm.name?.trim()||addSecSaving?T.borderLight:`linear-gradient(135deg,${T.blue},${T.blueMid})`,color:!addSecForm.name?.trim()||addSecSaving?T.textLight:"white",border:"none",fontSize:13,fontWeight:700,cursor:!addSecForm.name?.trim()||addSecSaving?"not-allowed":"pointer"}}>
-                {addSecSaving?"Adding…":"Add Section"}
+                {addSecSaving?t("common.adding"):t("common.add_section_2")}
               </button>
             </div>
           </div>
@@ -2553,7 +2543,7 @@ function SubconRateCardSection() {
       {mode==="item_wise" && selType && selCity && (
         <div>
           <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-            <span style={{fontSize:11,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:".5px",alignSelf:"center"}}>Category:</span>
+            <span style={{fontSize:11,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:".5px",alignSelf:"center"}}>{t("master_library.category")}</span>
             {["All",...TRADE_CATS].map(t=>(
               <button key={t} onClick={()=>setTradeFilter(t)}
                 style={{padding:"5px 14px",borderRadius:20,border:`1.5px solid ${tradeFilter===t?T.blue:T.border}`,background:tradeFilter===t?T.blue:"white",color:tradeFilter===t?"white":T.textMid,fontSize:12,fontWeight:600,cursor:"pointer"}}>
@@ -2562,16 +2552,16 @@ function SubconRateCardSection() {
             ))}
             <button onClick={openAddItem}
               style={{marginLeft:"auto",padding:"8px 18px",borderRadius:8,background:`linear-gradient(135deg,${T.blue},${T.blueMid})`,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,boxShadow:`0 3px 10px ${T.blue}33`}}>
-              <IcPlus size={14} color="white"/> Add Work Item
+              <IcPlus size={14} color="white"/> {t("finance.add_work_item")}
             </button>
           </div>
 
-          {itemsLoading && <div style={{textAlign:"center",padding:"40px",color:T.textLight}}>Loading…</div>}
+          {itemsLoading && <div style={{textAlign:"center",padding:"40px",color:T.textLight}}>{t("common.loading_2")}</div>}
 
           {!itemsLoading && workItems.length===0 && (
             <div style={{textAlign:"center",padding:"48px 20px",background:"white",borderRadius:12,border:`1.5px dashed ${T.border}`,color:T.textLight}}>
-              <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>No items yet for {selType.name} × {selCity.name}</div>
-              <div style={{fontSize:12}}>Click + Add Work Item to build the rate library for this city/type combo</div>
+              <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>{t("master_library.no_items_yet_for_name_name2", { name: selType.name, name2: selCity.name })}</div>
+              <div style={{fontSize:12}}>{t("master_library.click_add_work_item_to_build")}</div>
             </div>
           )}
 
@@ -2586,11 +2576,11 @@ function SubconRateCardSection() {
                 </div>
                 <DataTable
                   columns={[
-                    {key:"name",    label:"Work Item",                  minW:200, render:r=><span style={{fontWeight:600}}>{r.name}</span>},
-                    {key:"unit",    label:"Unit",                       minW:80},
-                    {key:"rate",    label:`Rate — ${selCity.name}`,     minW:140, align:"right",
+                    {key:"name",    label:t("master_library.work_item"),                  minW:200, render:r=><span style={{fontWeight:600}}>{r.name}</span>},
+                    {key:"unit",    label:t("common.unit"),                       minW:80},
+                    {key:"rate",    label:t("master_library.rate_name", { name: selCity.name }),     minW:140, align:"right",
                      render:r=><span style={{fontWeight:700,color:T.blue}}>₹{Number(r.rate||0).toLocaleString("en-IN")}/{r.unit}</span>},
-                    {key:"description", label:"Description / Scope",   minW:200,
+                    {key:"description", label:t("master_library.description_scope"),   minW:200,
                      render:r=><span style={{fontSize:12,color:T.textLight}}>{r.description||"—"}</span>},
                   ]}
                   data={items}
@@ -2607,19 +2597,19 @@ function SubconRateCardSection() {
       {/* Prompt to select type/city */}
       {(!selType || !selCity) && (
         <div style={{textAlign:"center",padding:"40px 20px",background:"white",borderRadius:12,border:`1.5px dashed ${T.border}`,marginTop:8,color:T.textLight}}>
-          {!selType ? "Select a Construction Type to start" : "Select a City to view rates"}
+          {!selType ? t("master_library.select_a_construction_type_to_start") : t("master_library.select_a_city_to_view_rates")}
         </div>
       )}
 
       {/* ── Add/Edit Rate Card (Package) Modal ────────────────────────── */}
       <Modal open={addPkgModal} onClose={()=>{setAddPkgModal(false);setEditingPkg(null);}}
-        title={editingPkg?"Edit Rate Card":"New Rate Card"}
+        title={editingPkg?t("master_library.edit_rate_card"):t("master_library.new_rate_card")}
         desc={`${selTrade||""}${selType?" — "+selType.name:""}`} width={480}>
-        <FormField label="Rate Card Name *" value={pkgForm.name} onChange={v=>setPkgForm(p=>({...p,name:v}))}
-          placeholder="e.g. Civil Full, Civil Basic, Electrical Standard" required/>
+        <FormField label={t("master_library.rate_card_name")} value={pkgForm.name} onChange={v=>setPkgForm(p=>({...p,name:v}))}
+          placeholder={t("master_library.e_g_civil_full_civil_basic")} required/>
         <div style={{display:"flex",gap:14,margin:"14px 0"}}>
-          <FormField label="Indicative Rate (₹/sqft)" value={pkgForm.sqft_rate} onChange={v=>setPkgForm(p=>({...p,sqft_rate:v}))} type="number" half placeholder="e.g. 800"/>
-          <FormField label="Description" value={pkgForm.description} onChange={v=>setPkgForm(p=>({...p,description:v}))} half placeholder="Optional"/>
+          <FormField label={t("master_library.indicative_rate_sqft")} value={pkgForm.sqft_rate} onChange={v=>setPkgForm(p=>({...p,sqft_rate:v}))} type="number" half placeholder="e.g. 800"/>
+          <FormField label={t("common.description")} value={pkgForm.description} onChange={v=>setPkgForm(p=>({...p,description:v}))} half placeholder={t("common.optional")}/>
         </div>
         <ModalFooter onClose={()=>{setAddPkgModal(false);setEditingPkg(null);}} onSave={savePkg}
           saveLabel={pkgSaving?"Saving…":editingPkg?"Update Rate Card":"Create Rate Card"}/>
@@ -2627,18 +2617,18 @@ function SubconRateCardSection() {
 
       {/* ── Add/Edit Work Item Modal ────────────────────────────────────── */}
       <Modal open={showItemModal} onClose={()=>setShowItemModal(false)}
-        title={editingItem?"Edit Work Item":"Add Work Item"}
+        title={editingItem?t("master_library.edit_work_item"):t("finance.add_work_item")}
         desc={`${selType?.name||""}${selCity?" × "+selCity.name:""}`} width={500}>
-        <FormField label="Item Name *" value={itemForm.name} onChange={v=>setItemForm(p=>({...p,name:v}))}
-          placeholder="e.g. Brick Masonry, RCC Slab, Plastering" required/>
+        <FormField label={t("master_library.item_name")} value={itemForm.name} onChange={v=>setItemForm(p=>({...p,name:v}))}
+          placeholder={t("master_library.e_g_brick_masonry_rcc_slab")} required/>
         <div style={{display:"flex",gap:14,margin:"14px 0"}}>
-          <FormSelect label="Trade Category" value={itemForm.trade_category} onChange={v=>setItemForm(p=>({...p,trade_category:v}))} options={TRADE_CATS} half/>
-          <FormSelect label="Unit" value={itemForm.unit} onChange={v=>setItemForm(p=>({...p,unit:v}))} options={uomOpts} half/>
+          <FormSelect label={t("master_library.trade_category")} value={itemForm.trade_category} onChange={v=>setItemForm(p=>({...p,trade_category:v}))} options={TRADE_CATS} half/>
+          <FormSelect label={t("common.unit")} value={itemForm.unit} onChange={v=>setItemForm(p=>({...p,unit:v}))} options={uomOpts} half/>
         </div>
         <div style={{display:"flex",gap:14,marginBottom:14}}>
           <FormField label={`Rate in ${selCity?.name||"City"} (₹/${itemForm.unit||"unit"}) *`}
             value={itemForm.rate} onChange={v=>setItemForm(p=>({...p,rate:v}))} type="number" half placeholder="e.g. 45" required/>
-          <FormField label="Description / Scope" value={itemForm.description} onChange={v=>setItemForm(p=>({...p,description:v}))} half placeholder="Optional notes"/>
+          <FormField label={t("master_library.description_scope")} value={itemForm.description} onChange={v=>setItemForm(p=>({...p,description:v}))} half placeholder={t("master_library.optional_notes")}/>
         </div>
         <ModalFooter onClose={()=>setShowItemModal(false)} onSave={saveItem}
           saveLabel={itemSaving?"Saving…":editingItem?"Update Item":"Add Item"}/>
@@ -2654,19 +2644,19 @@ function SubconRateCardSection() {
           <div style={{position:"fixed",right:0,top:0,height:"100vh",width:480,maxWidth:"95vw",background:T.card,zIndex:9001,boxShadow:"-8px 0 40px rgba(0,0,0,0.25)",display:"flex",flexDirection:"column"}}>
             <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:"#0F172A"}}>
               <div>
-                <div style={{fontSize:14,fontWeight:700,color:"white"}}>Add Category</div>
-                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>Section: {addCatDrawer.section_name}</div>
+                <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("common.add_category_2")}</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{t("master_library.section_section_name", { section_name: addCatDrawer.section_name })}</div>
               </div>
               <button onClick={closeAddCatDrawer} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer"}}>×</button>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"16px 20px"}}>
               {/* Pick from existing Work Categories */}
               <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>
-                Pick from Work Categories
+               {t("master_library.pick_from_work_categories")}
               </div>
               {available.length===0 && (
                 <div style={{padding:"12px",color:T.textLight,fontSize:12,background:T.bg,borderRadius:7,marginBottom:14}}>
-                  All work categories already added to this section
+                 {t("master_library.all_work_categories_already_added_to")}
                 </div>
               )}
               <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:16}}>
@@ -2689,25 +2679,25 @@ function SubconRateCardSection() {
               {/* Create new category */}
               <div style={{borderTop:`1px solid ${T.border}`,paddingTop:14}}>
                 <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>
-                  Or Create New Category
+                 {t("master_library.or_create_new_category")}
                 </div>
                 {addCatNewForm===null ? (
                   <button onClick={()=>setAddCatNewForm({name:"",code:"",desc:""})}
                     style={{padding:"8px 16px",borderRadius:7,border:`1.5px dashed ${T.border}`,background:"white",color:T.textMid,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-                    <IcPlus size={13} color={T.textMid}/> New Category
+                    <IcPlus size={13} color={T.textMid}/> {t("master_library.new_category")}
                   </button>
                 ) : (
                   <div style={{background:T.bg,borderRadius:8,padding:12,border:`1px solid ${T.border}`}}>
-                    <FormField label="Category Name *" value={addCatNewForm.name} onChange={v=>setAddCatNewForm(p=>({...p,name:v}))} placeholder="e.g. Civil Structure" required/>
+                    <FormField label={t("master_library.category_name_2")} value={addCatNewForm.name} onChange={v=>setAddCatNewForm(p=>({...p,name:v}))} placeholder={t("master_library.e_g_civil_structure")} required/>
                     <div style={{display:"flex",gap:10,marginTop:10}}>
-                      <FormField label="Code" value={addCatNewForm.code} onChange={v=>setAddCatNewForm(p=>({...p,code:v}))} placeholder="e.g. CIV" half/>
-                      <FormField label="Description" value={addCatNewForm.desc} onChange={v=>setAddCatNewForm(p=>({...p,desc:v}))} half placeholder="Optional"/>
+                      <FormField label={t("common.code")} value={addCatNewForm.code} onChange={v=>setAddCatNewForm(p=>({...p,code:v}))} placeholder={t("master_library.e_g_civ")} half/>
+                      <FormField label={t("common.description")} value={addCatNewForm.desc} onChange={v=>setAddCatNewForm(p=>({...p,desc:v}))} half placeholder={t("common.optional")}/>
                     </div>
                     <div style={{display:"flex",gap:8,marginTop:12}}>
-                      <button onClick={()=>setAddCatNewForm(null)} style={{flex:1,padding:"8px",borderRadius:6,border:`1px solid ${T.border}`,background:"white",fontSize:12,cursor:"pointer"}}>Cancel</button>
+                      <button onClick={()=>setAddCatNewForm(null)} style={{flex:1,padding:"8px",borderRadius:6,border:`1px solid ${T.border}`,background:"white",fontSize:12,cursor:"pointer"}}>{t("common.cancel")}</button>
                       <button onClick={createAndAddCat} disabled={addCatSaving||!addCatNewForm.name.trim()}
                         style={{flex:2,padding:"8px",borderRadius:6,background:T.blue,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                        {addCatSaving?"Creating…":"Create & Add"}
+                        {addCatSaving?t("common.creating"):t("master_library.create_add")}
                       </button>
                     </div>
                   </div>
@@ -2715,10 +2705,10 @@ function SubconRateCardSection() {
               </div>
             </div>
             <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,background:T.bg}}>
-              <button onClick={closeAddCatDrawer} style={{flex:1,padding:"10px",borderRadius:8,border:`1px solid ${T.border}`,background:"white",fontSize:13,cursor:"pointer"}}>Cancel</button>
+              <button onClick={closeAddCatDrawer} style={{flex:1,padding:"10px",borderRadius:8,border:`1px solid ${T.border}`,background:"white",fontSize:13,cursor:"pointer"}}>{t("common.cancel")}</button>
               <button onClick={confirmAddCats} disabled={addCatSaving||addCatPicks.length===0}
                 style={{flex:2,padding:"10px",borderRadius:8,background:addCatPicks.length>0?T.blue:T.borderLight,color:addCatPicks.length>0?"white":T.textLight,border:"none",fontSize:13,fontWeight:700,cursor:addCatPicks.length>0?"pointer":"not-allowed"}}>
-                {addCatSaving?"Adding…":`Add ${addCatPicks.length} Categor${addCatPicks.length===1?"y":"ies"}`}
+                {addCatSaving?t("common.adding"):`Add ${addCatPicks.length} Categor${addCatPicks.length===1?"y":"ies"}`}
               </button>
             </div>
           </div>
@@ -2742,20 +2732,18 @@ function SubconRateCardSection() {
             <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,background:"#0F172A"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <div>
-                  <div style={{fontSize:14,fontWeight:700,color:"white"}}>Add Item</div>
+                  <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("common.add_item_2")}</div>
                   <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{addItemDrawer.section_name} › {addItemDrawer.category_name}</div>
                 </div>
                 <button onClick={closeAddItemDrawer} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer"}}>×</button>
               </div>
               <input value={addItemSearch} onChange={e=>setAddItemSearch(e.target.value)} autoFocus
-                placeholder="Search BOQ items…"
+                placeholder={t("master_library.search_boq_items")}
                 style={{width:"100%",padding:"8px 12px",borderRadius:7,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.1)",color:"white",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"10px 16px"}}>
               {addItemPicks.length>0 && (
-                <div style={{marginBottom:10,padding:"6px 10px",background:T.blueSoft,borderRadius:6,fontSize:11.5,color:T.blue,fontWeight:600}}>
-                  {addItemPicks.length} item{addItemPicks.length>1?"s":""} selected — click Save to add
-                </div>
+                <div style={{marginBottom:10,padding:"6px 10px",background:T.blueSoft,borderRadius:6,fontSize:11.5,color:T.blue,fontWeight:600}}>{t("master_library.additempicks_itemadditempicks2_selected_click_save_to", { addItemPicks: addItemPicks.length, addItemPicks2: addItemPicks.length>1?"s":"" })}</div>
               )}
               {filtered.map(item => {
                 const picked = addItemPicks.includes(item.id);
@@ -2775,31 +2763,31 @@ function SubconRateCardSection() {
               })}
               {filtered.length===0 && (
                 <div style={{textAlign:"center",padding:"20px",color:T.textLight,fontSize:12}}>
-                  {addItemSearch ? `No items matching "${addItemSearch}"` : "All items already added"}
+                  {addItemSearch ? `No items matching "${addItemSearch}"` : t("master_library.all_items_already_added")}
                 </div>
               )}
 
               {/* Create new BOQ item */}
               <div style={{borderTop:`1px solid ${T.border}`,paddingTop:14,marginTop:14}}>
-                <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>Create New Item</div>
+                <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>{t("master_library.create_new_item")}</div>
                 {addItemNewForm===null ? (
                   <button onClick={()=>setAddItemNewForm({name:"",unit:"Sqft",base_rate:"",category:addItemDrawer.category_name,description:""})}
                     style={{padding:"7px 14px",borderRadius:6,border:`1.5px dashed ${T.border}`,background:"white",color:T.textMid,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-                    <IcPlus size={13} color={T.textMid}/> New Item
+                    <IcPlus size={13} color={T.textMid}/> {t("master_library.new_item")}
                   </button>
                 ) : (
                   <div style={{background:T.bg,borderRadius:8,padding:12,border:`1px solid ${T.border}`}}>
-                    <FormField label="Item Name *" value={addItemNewForm.name} onChange={v=>setAddItemNewForm(p=>({...p,name:v}))} placeholder="e.g. RCC M20 Grade Slab" required/>
+                    <FormField label={t("master_library.item_name")} value={addItemNewForm.name} onChange={v=>setAddItemNewForm(p=>({...p,name:v}))} placeholder={t("master_library.e_g_rcc_m20_grade_slab")} required/>
                     <div style={{display:"flex",gap:10,margin:"10px 0"}}>
-                      <FormField label="Unit" value={addItemNewForm.unit} onChange={v=>setAddItemNewForm(p=>({...p,unit:v}))} half placeholder="Sqft"/>
-                      <FormField label="Base Rate (₹)" value={addItemNewForm.base_rate} onChange={v=>setAddItemNewForm(p=>({...p,base_rate:v}))} type="number" half placeholder="0"/>
+                      <FormField label={t("common.unit")} value={addItemNewForm.unit} onChange={v=>setAddItemNewForm(p=>({...p,unit:v}))} half placeholder={t("master_library.sqft")}/>
+                      <FormField label={t("master_library.base_rate_2")} value={addItemNewForm.base_rate} onChange={v=>setAddItemNewForm(p=>({...p,base_rate:v}))} type="number" half placeholder="0"/>
                     </div>
-                    <FormField label="Description" value={addItemNewForm.description} onChange={v=>setAddItemNewForm(p=>({...p,description:v}))} placeholder="Optional scope notes"/>
+                    <FormField label={t("common.description")} value={addItemNewForm.description} onChange={v=>setAddItemNewForm(p=>({...p,description:v}))} placeholder={t("master_library.optional_scope_notes")}/>
                     <div style={{display:"flex",gap:8,marginTop:12}}>
-                      <button onClick={()=>setAddItemNewForm(null)} style={{flex:1,padding:"8px",borderRadius:6,border:`1px solid ${T.border}`,background:"white",fontSize:12,cursor:"pointer"}}>Cancel</button>
+                      <button onClick={()=>setAddItemNewForm(null)} style={{flex:1,padding:"8px",borderRadius:6,border:`1px solid ${T.border}`,background:"white",fontSize:12,cursor:"pointer"}}>{t("common.cancel")}</button>
                       <button onClick={createAndAddItem} disabled={addItemSaving||!addItemNewForm.name.trim()}
                         style={{flex:2,padding:"8px",borderRadius:6,background:T.blue,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                        {addItemSaving?"Creating…":"Create & Add"}
+                        {addItemSaving?t("common.creating"):t("master_library.create_add")}
                       </button>
                     </div>
                   </div>
@@ -2807,11 +2795,9 @@ function SubconRateCardSection() {
               </div>
             </div>
             <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,background:T.bg}}>
-              <button onClick={closeAddItemDrawer} style={{flex:1,padding:"10px",borderRadius:8,border:`1px solid ${T.border}`,background:"white",fontSize:13,cursor:"pointer"}}>Cancel</button>
+              <button onClick={closeAddItemDrawer} style={{flex:1,padding:"10px",borderRadius:8,border:`1px solid ${T.border}`,background:"white",fontSize:13,cursor:"pointer"}}>{t("common.cancel")}</button>
               <button onClick={confirmAddItems} disabled={addItemPicks.length===0}
-                style={{flex:2,padding:"10px",borderRadius:8,background:addItemPicks.length>0?T.blue:T.borderLight,color:addItemPicks.length>0?"white":T.textLight,border:"none",fontSize:13,fontWeight:700,cursor:addItemPicks.length>0?"pointer":"not-allowed"}}>
-                Add {addItemPicks.length>0?`${addItemPicks.length} Item${addItemPicks.length>1?"s":""}`:""} — then Save Rates
-              </button>
+                style={{flex:2,padding:"10px",borderRadius:8,background:addItemPicks.length>0?T.blue:T.borderLight,color:addItemPicks.length>0?"white":T.textLight,border:"none",fontSize:13,fontWeight:700,cursor:addItemPicks.length>0?"pointer":"not-allowed"}}>{t("master_library.add_additempicks_then_save_rates", { addItemPicks: addItemPicks.length>0?`${addItemPicks.length} Item${addItemPicks.length>1?"s":""}`:"" })}</button>
             </div>
           </div>
         </>);
@@ -3208,7 +3194,7 @@ function ClientBOQSection() {
     cancelRenameCat();
   };
   const deleteCategory = async (cat) => {
-    if (!await window.confirmAsync(`Delete category "${cat.category_name}" and all its items in this section?`)) return;
+    if (!await window.confirmAsync(t("master_library.delete_category_category_name_and_all", { category_name: cat.category_name }))) return;
     const r = await api.del("/library/categories/" + cat.id);
     if (r?.success) {
       await loadCategories(selPkg.id);
@@ -3520,7 +3506,7 @@ function ClientBOQSection() {
     } else {
       // Full success → re-lock every section (zero-friction default state).
       setEditingSections({});
-      alert("Rates saved!");
+      alert(t("master_library.rates_saved"));
     }
   };
 
@@ -3532,15 +3518,15 @@ function ClientBOQSection() {
     setAdding(true);
     let res;
     if (addModal === "type") {
-      if (!addForm.name?.trim()) { setAdding(false); return alert("Name required"); }
+      if (!addForm.name?.trim()) { setAdding(false); return alert(t("master_library.name_required")); }
       res = await api.post("/library/construction-types", { name: addForm.name.trim(), color: addForm.color || "#2563EB" });
       if (res.success) { await loadTypes(); setSelType(res.data); }
     } else if (addModal === "city") {
-      if (!addForm.name?.trim()) { setAdding(false); return alert("Name required"); }
+      if (!addForm.name?.trim()) { setAdding(false); return alert(t("master_library.name_required")); }
       res = await api.post("/library/cities", { name: addForm.name.trim(), state: addForm.state || "Chhattisgarh" });
       if (res.success) { await loadCities(); setSelCity(res.data); }
     } else if (addModal === "pkg") {
-      if (!addForm.name?.trim()) { setAdding(false); return alert("Name required"); }
+      if (!addForm.name?.trim()) { setAdding(false); return alert(t("master_library.name_required")); }
       if (addForm._editingId) {
         res = await api.put("/library/rate-packages/" + addForm._editingId, {
           name:        addForm.name.trim(),
@@ -3885,7 +3871,7 @@ function ClientBOQSection() {
 
       {/* ─── LEVEL 1: Construction Type ──────────────────────────────── */}
       <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>1 — Construction Type</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>{t("master_library.1_construction_type_2")}</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {conTypes.map(ct => {
             const active = selType?.id === ct.id;
@@ -3902,7 +3888,7 @@ function ClientBOQSection() {
                 {ct.name}
                 {active && (
                   <button onClick={(e) => { e.stopPropagation(); openTypeEdit(ct); }}
-                    title="Edit construction type"
+                    title={t("master_library.edit_construction_type")}
                     style={{ position: "absolute", right: 6, top: 6,
                              background: "rgba(255,255,255,0.2)", border: "none",
                              borderRadius: 4, color: "white", cursor: "pointer",
@@ -3918,7 +3904,7 @@ function ClientBOQSection() {
           })}
           <button onClick={() => openAdd("type")}
             style={{ padding: "9px 14px", borderRadius: 8, border: "2px dashed #D1D5DB", background: "transparent", color: "#6B7280", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-            + New Type
+           {t("master_library.new_type")}
           </button>
         </div>
       </div>
@@ -3926,7 +3912,7 @@ function ClientBOQSection() {
       {/* ─── LEVEL 2: City ──────────────────────────────────────────── */}
       {selType && (
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>2 — City</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>{t("master_library.2_city_2")}</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {cities.map(city => {
               const active = selCity?.id === city.id;
@@ -3943,7 +3929,7 @@ function ClientBOQSection() {
                   {city.name}
                   {active && (
                     <button onClick={(e) => { e.stopPropagation(); openCityEdit(city); }}
-                      title="Edit city"
+                      title={t("master_library.edit_city")}
                       style={{ position: "absolute", right: 6, top: 6,
                                background: "rgba(255,255,255,0.2)", border: "none",
                                borderRadius: 4, color: "white", cursor: "pointer",
@@ -3959,7 +3945,7 @@ function ClientBOQSection() {
             })}
             <button onClick={() => openAdd("city")}
               style={{ padding: "9px 14px", borderRadius: 8, border: "2px dashed #D1D5DB", background: "transparent", color: "#6B7280", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-              + New City
+             {t("master_library.new_city")}
             </button>
           </div>
         </div>
@@ -3968,7 +3954,7 @@ function ClientBOQSection() {
       {/* ─── LEVEL 3: Package ──────────────────────────────────────── */}
       {selType && selCity && (
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>3 — Package</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>{t("master_library.3_package")}</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {typePkgs.map(pkg => {
               const active = selPkg?.id === pkg.id;
@@ -3980,11 +3966,11 @@ function ClientBOQSection() {
                     color: active ? "white" : "#374151",
                     fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all .15s" }}>
                   <div>{pkg.name}</div>
-                  {pkg.sqft_rate > 0 && <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85 }}>Rs.{inr(pkg.sqft_rate)}/sqft</div>}
+                  {pkg.sqft_rate > 0 && <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85 }}>{t("master_library.rs_inr_sqft", { inr: inr(pkg.sqft_rate) })}</div>}
                   {/* Pencil — only on the active tile. Opens Package Edit drawer. */}
                   {active && (
                     <button onClick={(e) => { e.stopPropagation(); openEditPkg(pkg); }}
-                      title="Edit package"
+                      title={t("master_library.edit_package")}
                       style={{ position: "absolute", right: 6, top: 6,
                                background: "rgba(255,255,255,0.18)", border: "none",
                                borderRadius: 4, color: "white", cursor: "pointer",
@@ -4000,7 +3986,7 @@ function ClientBOQSection() {
             })}
             <button onClick={() => openAdd("pkg")}
               style={{ padding: "9px 14px", borderRadius: 8, border: "2px dashed #D1D5DB", background: "transparent", color: "#6B7280", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-              + New Package
+             {t("master_library.new_package")}
             </button>
           </div>
         </div>
@@ -4017,14 +4003,14 @@ function ClientBOQSection() {
                         justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 13, color: "#1E40AF" }}>
               <strong>{selType.name}</strong> — <strong>{selPkg.name}</strong> — <strong>{selCity.name}</strong>
-              {hasChanged && <span style={{ marginLeft: 10, color: "#D97706", fontWeight: 600 }}>● Unsaved changes</span>}
+              {hasChanged && <span style={{ marginLeft: 10, color: "#D97706", fontWeight: 600 }}>{t("master_library.unsaved_changes")}</span>}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={openAddSection}
                 style={{ padding: "8px 14px", background: "white", color: COL_DARK,
                          border: "1.5px solid " + COL_DARK, borderRadius: 7,
                          fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
-                + Add Section
+               {t("common.add_section")}
               </button>
               <button onClick={saveRates} disabled={saving || !hasChanged}
                 style={{ padding: "8px 20px",
@@ -4032,7 +4018,7 @@ function ClientBOQSection() {
                          color: "white", border: "none", borderRadius: 7,
                          fontSize: 13, fontWeight: 700,
                          cursor: (saving || !hasChanged) ? "default" : "pointer" }}>
-                {saving ? "Saving..." : "Save Rates"}
+                {saving ? t("common.saving") : t("master_library.save_rates_2")}
               </button>
             </div>
           </div>
@@ -4040,7 +4026,7 @@ function ClientBOQSection() {
           {/* ── EMPTY STATE: no sections yet ── */}
           {pkgStructures.length === 0 && (
             <div style={{ textAlign: "center", padding: "40px 0", color: "#9CA3AF", fontSize: 14 }}>
-              No sections in this package yet. Click <strong>+ Add Section</strong> above to start.
+             {t("master_library.no_sections_in_this_package_yet")} <strong>{t("common.add_section")}</strong> {t("master_library.above_to_start")}
             </div>
           )}
 
@@ -4090,7 +4076,7 @@ function ClientBOQSection() {
                     </>
                   ) : (
                     <span onClick={editable ? () => startRenameSection(sec) : undefined}
-                      title={editable ? "Click to rename" : "Click Edit to unlock"}
+                      title={editable ? t("master_library.click_to_rename") : t("master_library.click_edit_to_unlock")}
                       style={{ fontWeight: 700, fontSize: 14, color: "white",
                                cursor: editable ? "pointer" : "default" }}>
                       {getSecName(sec)}
@@ -4104,7 +4090,7 @@ function ClientBOQSection() {
                     <span style={{ marginLeft: 6, padding: "2px 8px", fontSize: 10.5, fontWeight: 600,
                                    background: "rgba(252,211,77,0.18)", color: "#FCD34D",
                                    borderRadius: 4, border: "1px solid rgba(252,211,77,0.35)" }}>
-                      set area to see totals
+                     {t("master_library.set_area_to_see_totals")}
                     </span>
                   )}
 
@@ -4116,33 +4102,31 @@ function ClientBOQSection() {
                                 fontSize: 11.5, fontWeight: 600 }}>
                     {!perItem && (
                       <>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Base <strong style={{ color: "white" }}>Rs.{inr(sCalc.base)}</strong></span>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Add-on <strong style={{ color: COL_AMBER }}>Rs.{inr(sCalc.addOn)}</strong></span>
+                        <span style={{ color: "rgba(255,255,255,0.6)" }}>{t("common.base")} <strong style={{ color: "white" }}>{t("master_library.rs_inr", { inr: inr(sCalc.base) })}</strong></span>
+                        <span style={{ color: "rgba(255,255,255,0.6)" }}>{t("common.add_on")} <strong style={{ color: COL_AMBER }}>{t("master_library.rs_inr", { inr: inr(sCalc.addOn) })}</strong></span>
                         <span style={{ padding: "3px 9px", background: COL_TEAL_BG, color: COL_TEAL,
-                                       borderRadius: 4, fontWeight: 700 }}>
-                          Rs.{inr(sCalc.perSqft)}/{sec.unit || "sqft"}
-                        </span>
+                                       borderRadius: 4, fontWeight: 700 }}>{t("master_library.rs_inr_sec", { inr: inr(sCalc.perSqft), sec: sec.unit || "sqft" })}</span>
                       </>
                     )}
                     {/* Per-item qty toggle (only when section is editable) */}
                     {editable && (
                       <button onClick={() => patchSection(sec.id, { per_item_qty: !perItem })}
                         title={perItem
-                          ? "Per-item qty mode is ON. Each item has its own quantity. Click to switch to uniform area."
-                          : "Uniform area mode. All items share the section's Area. Click to switch to per-item qty."}
+                          ? t("master_library.per_item_qty_mode_is_on")
+                          : t("master_library.uniform_area_mode_all_items_share")}
                         style={{ background: perItem ? "rgba(245,158,11,0.22)" : "rgba(255,255,255,0.10)",
                                  border: "1px solid " + (perItem ? "#F59E0B" : "rgba(255,255,255,0.2)"),
                                  color: perItem ? "#FCD34D" : "rgba(255,255,255,0.85)",
                                  borderRadius: 4, padding: "3px 9px", fontSize: 10.5, fontWeight: 700,
                                  cursor: "pointer", letterSpacing: ".3px", textTransform: "uppercase" }}>
-                        {perItem ? "Per-item Qty" : "Uniform Area"}
+                        {perItem ? t("common.per_item_qty") : t("master_library.uniform_area")}
                       </button>
                     )}
                     {/* Area — input/text in uniform mode; in per-item mode, hidden
                         (each row carries its own qty in the table below). */}
                     {!perItem && (
                       <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, textTransform: "uppercase" }}>Area</span>
+                        <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, textTransform: "uppercase" }}>{t("common.area")}</span>
                         {editable ? (
                           <input type="number"
                             value={sectionEdits[sec.id]?.default_qty ?? (sec.default_qty || 0)}
@@ -4162,12 +4146,12 @@ function ClientBOQSection() {
                         )}
                       </span>
                     )}
-                    <span style={{ color: "rgba(255,255,255,0.6)" }}>Total <strong style={{ color: COL_TEAL_BG, fontSize: 13 }}>Rs.{inr(sCalc.total)}</strong></span>
+                    <span style={{ color: "rgba(255,255,255,0.6)" }}>{t("common.total")} <strong style={{ color: COL_TEAL_BG, fontSize: 13 }}>{t("master_library.rs_inr", { inr: inr(sCalc.total) })}</strong></span>
 
                     {/* Edit / Done toggle — switches the entire section between
                         locked (read-only displays) and editable. Default = locked. */}
                     <button onClick={() => setEditingSections(p => ({ ...p, [sec.id]: !p[sec.id] }))}
-                      title={editable ? "Lock section" : "Unlock to edit"}
+                      title={editable ? t("master_library.lock_section") : t("master_library.unlock_to_edit")}
                       style={{ background: editable ? "#10B981" : "rgba(255,255,255,0.14)",
                                border: "none", color: "white",
                                borderRadius: 5, padding: "4px 10px", fontSize: 11, fontWeight: 700,
@@ -4177,7 +4161,7 @@ function ClientBOQSection() {
                           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                             <polyline points="20 6 9 17 4 12"/>
                           </svg>
-                          Done
+                         {t("common.done")}
                         </>
                       ) : (
                         <>
@@ -4185,7 +4169,7 @@ function ClientBOQSection() {
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                           </svg>
-                          Edit
+                         {t("common.edit_2")}
                         </>
                       )}
                     </button>
@@ -4193,7 +4177,7 @@ function ClientBOQSection() {
                     {/* × delete — only visible when section is unlocked */}
                     {editable && (
                       <button onClick={() => deleteSection(sec)}
-                        title="Delete section"
+                        title={t("estimate_builder.delete_section")}
                         style={{ background: "rgba(239,68,68,0.18)", border: "none", color: "#FCA5A5",
                                  borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: "pointer", lineHeight: 1 }}>
                         ×
@@ -4207,7 +4191,7 @@ function ClientBOQSection() {
                   <div style={{ padding: 10 }}>
                     {cats.length === 0 && (
                       <div style={{ padding: "18px 12px", textAlign: "center", color: "#9CA3AF", fontSize: 12.5 }}>
-                        No categories in this section yet.
+                       {t("master_library.no_categories_in_this_section_yet")}
                       </div>
                     )}
                     {cats.map(cat => {
@@ -4239,7 +4223,7 @@ function ClientBOQSection() {
                                          background: "white", outline: "none", fontFamily: "inherit", minWidth: 180 }}/>
                             ) : (
                               <span onClick={editable ? () => startRenameCat(cat) : undefined}
-                                title={editable ? "Click to rename (section-scoped)" : "Click Edit on section to unlock"}
+                                title={editable ? t("master_library.click_to_rename_section_scoped") : t("master_library.click_edit_on_section_to_unlock")}
                                 style={{ fontWeight: 700, fontSize: 12.5, color: "#0F172A",
                                          cursor: editable ? "pointer" : "default" }}>
                                 {cat.category_name}
@@ -4255,14 +4239,14 @@ function ClientBOQSection() {
                                   Total renders. Items below keep their own rates. */}
                               {!perItem && (
                                 <>
-                                  <span style={{ color: "#64748B" }}>Base <strong style={{ color: "#0F172A" }}>Rs.{inr(cCalc.base)}</strong></span>
-                                  <span style={{ color: "#64748B" }}>Add-on <strong style={{ color: COL_AMBER }}>Rs.{inr(cCalc.addOn)}</strong></span>
+                                  <span style={{ color: "#64748B" }}>{t("common.base")} <strong style={{ color: "#0F172A" }}>{t("master_library.rs_inr", { inr: inr(cCalc.base) })}</strong></span>
+                                  <span style={{ color: "#64748B" }}>{t("common.add_on")} <strong style={{ color: COL_AMBER }}>{t("master_library.rs_inr", { inr: inr(cCalc.addOn) })}</strong></span>
                                 </>
                               )}
-                              <span style={{ color: "#64748B" }}>Total <strong style={{ color: COL_GREEN }}>Rs.{inr(cCalc.total)}</strong></span>
+                              <span style={{ color: "#64748B" }}>{t("common.total")} <strong style={{ color: COL_GREEN }}>{t("master_library.rs_inr", { inr: inr(cCalc.total) })}</strong></span>
                               {editable && (
                                 <button onClick={() => deleteCategory(cat)}
-                                  title="Delete category"
+                                  title={t("estimate_builder.delete_category")}
                                   style={{ background: "transparent", border: "none", color: COL_RED, cursor: "pointer", fontSize: 14, padding: 2, lineHeight: 1 }}>
                                   ×
                                 </button>
@@ -4276,13 +4260,13 @@ function ClientBOQSection() {
                               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                 <thead>
                                   <tr style={{ background: "#FAFAFA" }}>
-                                    <th style={{ padding: "7px 12px", textAlign: "left",  fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>Item</th>
-                                    <th style={{ padding: "7px 12px", textAlign: "center", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 60 }}>Unit</th>
-                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 95 }}>Base</th>
-                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: COL_AMBER, textTransform: "uppercase", width: 95 }}>Add-on</th>
-                                    <th style={{ padding: "7px 12px", textAlign: "left",  fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>Description</th>
-                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: COL_TEAL, textTransform: "uppercase", width: 70 }}>{perItem ? "Qty" : "Area"}</th>
-                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: COL_GREEN, textTransform: "uppercase", width: 105 }}>Total</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "left",  fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>{t("common.item")}</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "center", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 60 }}>{t("common.unit")}</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 95 }}>{t("common.base")}</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: COL_AMBER, textTransform: "uppercase", width: 95 }}>{t("common.add_on")}</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "left",  fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>{t("common.description")}</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: COL_TEAL, textTransform: "uppercase", width: 70 }}>{perItem ? t("common.qty") : t("common.area")}</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: COL_GREEN, textTransform: "uppercase", width: 105 }}>{t("common.total")}</th>
                                     <th style={{ width: 36 }}/>
                                   </tr>
                                 </thead>
@@ -4290,7 +4274,7 @@ function ClientBOQSection() {
                                   {rows.length === 0 && (
                                     <tr>
                                       <td colSpan={8} style={{ padding: "12px", textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>
-                                        No items in this category yet.
+                                       {t("master_library.no_items_in_this_category_yet")}
                                       </td>
                                     </tr>
                                   )}
@@ -4349,7 +4333,7 @@ function ClientBOQSection() {
                                           {editable ? (
                                             <input type="text" value={getRowDesc(sec.id, r)}
                                               onChange={e => patchRow(sec.id, r.item_id, { description: e.target.value })}
-                                              placeholder="Optional note"
+                                              placeholder={t("common.optional_note")}
                                               style={{ width: "100%", padding: "5px 9px", borderRadius: 5,
                                                        fontFamily: "inherit", fontSize: 11.5,
                                                        border: "1.5px solid " + (hasEdit ? COL_BLUE : "#E5E7EB"),
@@ -4369,7 +4353,7 @@ function ClientBOQSection() {
                                               value={getRowQty(sec.id, r)}
                                               onChange={e => patchRow(sec.id, r.item_id, { qty: e.target.value })}
                                               placeholder="0"
-                                              title="Item-specific quantity (per-item mode)"
+                                              title={t("master_library.item_specific_quantity_per_item_mode")}
                                               style={{ width: 70, padding: "5px 7px", borderRadius: 5, textAlign: "right",
                                                        fontFamily: "inherit", fontSize: 12.5,
                                                        border: "1.5px solid " + (itemEdits[sec.id]?.[r.item_id]?.qty !== undefined ? COL_AMBER : "#E5E7EB"),
@@ -4379,13 +4363,11 @@ function ClientBOQSection() {
                                             inr(perItem ? getRowQty(sec.id, r) : area)
                                           )}
                                         </td>
-                                        <td style={{ padding: "8px 12px", textAlign: "right", fontSize: 13, fontWeight: 700, color: COL_GREEN }}>
-                                          Rs.{inr(calc.total)}
-                                        </td>
+                                        <td style={{ padding: "8px 12px", textAlign: "right", fontSize: 13, fontWeight: 700, color: COL_GREEN }}>{t("master_library.rs_inr", { inr: inr(calc.total) })}</td>
                                         <td style={{ padding: "8px 6px", textAlign: "center" }}>
                                           {editable && (
                                             <button onClick={() => removeItemRow(sec.id, r.item_id)}
-                                              title="Remove from this section"
+                                              title={t("master_library.remove_from_this_section")}
                                               style={{ background: "transparent", border: "none", color: COL_RED, cursor: "pointer", fontSize: 14, padding: 2, lineHeight: 1 }}>
                                               ×
                                             </button>
@@ -4402,9 +4384,7 @@ function ClientBOQSection() {
                                   <button onClick={() => openAddItemDrawer(sec, cat)}
                                     style={{ background: "transparent", border: "1px dashed #BFDBFE",
                                              color: COL_BLUE, borderRadius: 5,
-                                             padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
-                                    + Add Item to {cat.category_name}
-                                  </button>
+                                             padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{t("master_library.add_item_to_category_name", { category_name: cat.category_name })}</button>
                                 </div>
                               )}
                             </>
@@ -4420,7 +4400,7 @@ function ClientBOQSection() {
                           style={{ background: "white", border: "1px dashed #94A3B8",
                                    color: "#475569", borderRadius: 6,
                                    padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                          + Add Category
+                         {t("common.add_category")}
                         </button>
                       </div>
                     )}
@@ -4437,13 +4417,13 @@ function ClientBOQSection() {
                           display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".4px",
                              textTransform: "uppercase", color: "rgba(255,255,255,0.7)" }}>
-                Grand Total
+               {t("common.grand_total")}
               </span>
               {/* Base + Add-on hidden by design — each section has its own area,
                   so summing per-sqft rates across sections would be meaningless.
                   Only the Total (which is Σ section.total) is comparable. */}
               <div style={{ display: "flex", alignItems: "center", fontSize: 13, fontWeight: 600 }}>
-                <span style={{ color: "rgba(255,255,255,0.6)" }}>Total <strong style={{ color: COL_TEAL_BG, fontSize: 18 }}>Rs.{inr(grand.total)}</strong></span>
+                <span style={{ color: "rgba(255,255,255,0.6)" }}>{t("common.total")} <strong style={{ color: COL_TEAL_BG, fontSize: 18 }}>{t("master_library.rs_inr", { inr: inr(grand.total) })}</strong></span>
               </div>
             </div>
           )}
@@ -4464,10 +4444,8 @@ function ClientBOQSection() {
             <div style={{ background: COL_DARK, padding: "13px 18px", borderRadius: "12px 12px 0 0",
                           display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>Add Section</div>
-                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>
-                  Package: {selPkg?.name}
-                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>{t("common.add_section_2")}</div>
+                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>{t("master_library.package_name", { name: selPkg?.name })}</div>
               </div>
               <button onClick={closeAddSection} disabled={addSectionSaving}
                 style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)",
@@ -4475,17 +4453,17 @@ function ClientBOQSection() {
             </div>
             <div style={{ padding: 18 }}>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Name *</label>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>{t("common.name")}</label>
                 <input autoFocus value={addSectionForm.name}
                   onChange={e => setAddSectionForm(p => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. Ground Floor, First Floor, Other Civil Work"
+                  placeholder={t("master_library.e_g_ground_floor_first_floor_2")}
                   style={{ width: "100%", padding: "9px 11px", borderRadius: 7,
                            border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
                            outline: "none", boxSizing: "border-box" }}/>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
                 <div>
-                  <label style={{ fontSize: 10.5, fontWeight: 700, color: COL_TEAL, display: "block", marginBottom: 4, textTransform: "uppercase" }}>Area / Qty *</label>
+                  <label style={{ fontSize: 10.5, fontWeight: 700, color: COL_TEAL, display: "block", marginBottom: 4, textTransform: "uppercase" }}>{t("master_library.area_qty")}</label>
                   <input type="number" value={addSectionForm.default_qty}
                     onChange={e => setAddSectionForm(p => ({ ...p, default_qty: e.target.value }))}
                     placeholder="0"
@@ -4495,17 +4473,17 @@ function ClientBOQSection() {
                              background: "#F0FDFA" }}/>
                 </div>
                 <div>
-                  <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Unit</label>
+                  <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>{t("common.unit")}</label>
                   <select value={addSectionForm.unit}
                     onChange={e => setAddSectionForm(p => ({ ...p, unit: e.target.value }))}
                     style={{ width: "100%", padding: "9px 11px", borderRadius: 7,
                              border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
                              outline: "none", boxSizing: "border-box", background: "white" }}>
                     <option value="sqft">sqft</option>
-                    <option value="lump_sum">lump sum</option>
+                    <option value="lump_sum">{t("common.lump_sum")}</option>
                     <option value="rft">rft</option>
                     <option value="nos">nos</option>
-                    <option value="cubic_ft">cubic ft</option>
+                    <option value="cubic_ft">{t("common.cubic_ft")}</option>
                   </select>
                 </div>
               </div>
@@ -4522,19 +4500,17 @@ function ClientBOQSection() {
                   <input type="checkbox" checked={!!addSectionForm.per_item_qty} onChange={() => {}}
                     style={{ width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}/>
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>
-                      Per-item quantity {addSectionForm.per_item_qty ? "(enabled)" : "(disabled — uniform area)"}
-                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>{t("master_library.per_item_quantity_addsectionform", { addSectionForm: addSectionForm.per_item_qty ? "(enabled)" : "(disabled — uniform area)" })}</div>
                     <div style={{ fontSize: 10.5, color: "#6B7280", marginTop: 2 }}>
                       {addSectionForm.per_item_qty
-                        ? "Each item in this section will have its own Qty input. Section Area is ignored for totals."
-                        : "All items share the section's Area above. Best for floors / uniform-rate sections."}
+                        ? t("master_library.each_item_in_this_section_will")
+                        : t("master_library.all_items_share_the_section_s_2")}
                     </div>
                   </div>
                 </label>
               </div>
               <div style={{ padding: "8px 10px", background: "#F9FAFB", borderRadius: 5, fontSize: 11, color: "#6B7280" }}>
-                💡 Lump-sum / mixed sections: enable "Per-item quantity" above. Each item gets its own count (hutment ×1, fixtures ×6, etc.).
+               {t("master_library.lump_sum_mixed_sections_enable_per")}
               </div>
             </div>
             <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
@@ -4542,14 +4518,14 @@ function ClientBOQSection() {
                 style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB",
                          background: "white", fontSize: 13, color: "#374151",
                          cursor: addSectionSaving ? "not-allowed" : "pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={saveAddSection} disabled={addSectionSaving || !addSectionForm.name?.trim()}
                 style={{ flex: 2, padding: "9px", borderRadius: 7,
                          background: (addSectionSaving || !addSectionForm.name?.trim()) ? "#9CA3AF" : COL_BLUE,
                          color: "white", border: "none", fontSize: 13, fontWeight: 700,
                          cursor: (addSectionSaving || !addSectionForm.name?.trim()) ? "not-allowed" : "pointer" }}>
-                {addSectionSaving ? "Adding…" : "Add Section"}
+                {addSectionSaving ? t("common.adding") : t("common.add_section_2")}
               </button>
             </div>
           </div>
@@ -4575,10 +4551,8 @@ function ClientBOQSection() {
               <div style={{ background: COL_DARK, padding: "13px 16px", color: "white",
                             display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>Add Category</div>
-                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>
-                    Section: {addCatDrawer.section_name}
-                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{t("common.add_category_2")}</div>
+                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>{t("master_library.section_section_name", { section_name: addCatDrawer.section_name })}</div>
                 </div>
                 <button onClick={closeAddCatDrawer}
                   style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)",
@@ -4602,7 +4576,7 @@ function ClientBOQSection() {
                         style={{ width: 16, height: 16 }}/>
                       {/* Pick-order badge — first tick = 1, second tick = 2, ... */}
                       {isPicked && (
-                        <span title="Pick order — this is the position the new category will land in the section"
+                        <span title={t("master_library.pick_order_this_is_the_position")}
                           style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
                                    width: 20, height: 20, borderRadius: "50%", background: "#2563EB",
                                    color: "white", fontSize: 10.5, fontWeight: 700, flexShrink: 0 }}>
@@ -4613,7 +4587,7 @@ function ClientBOQSection() {
                         <span style={{ fontSize: 12.5, fontWeight: 600, color: "#0F172A" }}>{c.name}</span>
                         {c.code && <code style={{ marginLeft: 6, fontSize: 10, color: "#7C3AED",
                                                   background: "#EDE9FE", padding: "1px 6px", borderRadius: 3 }}>{c.code}</code>}
-                        {exists && <span style={{ marginLeft: 8, fontSize: 10, color: "#9CA3AF" }}>(already added)</span>}
+                        {exists && <span style={{ marginLeft: 8, fontSize: 10, color: "#9CA3AF" }}>{t("common.already_added")}</span>}
                       </span>
                     </label>
                   );
@@ -4626,25 +4600,25 @@ function ClientBOQSection() {
                       style={{ width: "100%", padding: "8px 12px", background: "#F0FDF4",
                                border: "1px dashed " + COL_GREEN, color: COL_GREEN,
                                borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                      + Create new category
+                     {t("common.create_new_category")}
                     </button>
                   ) : (
                     <div style={{ padding: 10, background: "#F9FAFB", borderRadius: 6, border: "1px solid #E5E7EB" }}>
                       <input autoFocus value={addCatNewForm.name}
                         onChange={e => setAddCatNewForm(p => ({ ...p, name: e.target.value }))}
-                        placeholder="Name (e.g. Electrical)"
+                        placeholder={t("master_library.name_e_g_electrical")}
                         style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
                                  border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 6,
                                  outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
                       <input value={addCatNewForm.code}
                         onChange={e => setAddCatNewForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
-                        placeholder="Code (optional)"
+                        placeholder={t("common.code_optional")}
                         style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
                                  border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 6,
                                  outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
                       <input value={addCatNewForm.desc}
                         onChange={e => setAddCatNewForm(p => ({ ...p, desc: e.target.value }))}
-                        placeholder="Description (optional)"
+                        placeholder={t("master_library.description_optional")}
                         style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
                                  border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 8,
                                  outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
@@ -4652,7 +4626,7 @@ function ClientBOQSection() {
                         <button onClick={() => setAddCatNewForm(null)}
                           style={{ flex: 1, padding: 6, borderRadius: 5, background: "white",
                                    border: "1px solid #D1D5DB", fontSize: 11.5, color: "#6B7280", cursor: "pointer" }}>
-                          Cancel
+                         {t("common.cancel")}
                         </button>
                         <button onClick={createAndAddCat}
                           disabled={addCatSaving || !addCatNewForm.name?.trim()}
@@ -4660,7 +4634,7 @@ function ClientBOQSection() {
                                    background: (addCatSaving || !addCatNewForm.name?.trim()) ? "#9CA3AF" : COL_GREEN,
                                    color: "white", border: "none", fontSize: 11.5, fontWeight: 700,
                                    cursor: (addCatSaving || !addCatNewForm.name?.trim()) ? "not-allowed" : "pointer" }}>
-                          {addCatSaving ? "Saving…" : "Create + Add"}
+                          {addCatSaving ? t("common.saving_2") : t("common.create_add")}
                         </button>
                       </div>
                     </div>
@@ -4672,14 +4646,14 @@ function ClientBOQSection() {
                   style={{ flex: 1, padding: "8px", borderRadius: 6, border: "1px solid #D1D5DB",
                            background: "white", fontSize: 12, color: "#374151",
                            cursor: addCatSaving ? "not-allowed" : "pointer" }}>
-                  Cancel
+                 {t("common.cancel")}
                 </button>
                 <button onClick={confirmAddCats} disabled={addCatSaving}
                   style={{ flex: 2, padding: "8px", borderRadius: 6,
                            background: addCatSaving ? "#9CA3AF" : COL_BLUE,
                            color: "white", border: "none", fontSize: 12, fontWeight: 700,
                            cursor: addCatSaving ? "not-allowed" : "pointer" }}>
-                  {addCatSaving ? "Adding…" : `Add Selected (${addCatPicks.length})`}
+                  {addCatSaving ? t("common.adding") : `Add Selected (${addCatPicks.length})`}
                 </button>
               </div>
             </div>
@@ -4719,7 +4693,7 @@ function ClientBOQSection() {
               <div style={{ background: COL_DARK, padding: "13px 16px", color: "white",
                             display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>Add Item</div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{t("common.add_item_2")}</div>
                   <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1,
                                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {addItemDrawer.section_name} › {addItemDrawer.category_name}
@@ -4732,7 +4706,7 @@ function ClientBOQSection() {
               <div style={{ padding: "10px 14px", borderBottom: "1px solid #E5E7EB", background: "#F9FAFB" }}>
                 <input value={addItemSearch}
                   onChange={e => setAddItemSearch(e.target.value)}
-                  placeholder="Search items by name or category…"
+                  placeholder={t("master_library.search_items_by_name_or_category")}
                   style={{ width: "100%", padding: "7px 11px", borderRadius: 6,
                            border: "1.5px solid #E5E7EB", fontSize: 12.5, outline: "none",
                            fontFamily: "inherit", boxSizing: "border-box" }}/>
@@ -4761,7 +4735,7 @@ function ClientBOQSection() {
                             style={{ width: 16, height: 16 }}/>
                           {/* Pick-order badge */}
                           {isPicked && (
-                            <span title="Pick order — this is the position the item will land in the section"
+                            <span title={t("master_library.pick_order_this_is_the_position_2")}
                               style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
                                        width: 20, height: 20, borderRadius: "50%", background: "#2563EB",
                                        color: "white", fontSize: 10.5, fontWeight: 700, flexShrink: 0 }}>
@@ -4771,11 +4745,9 @@ function ClientBOQSection() {
                           <span style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 12.5, fontWeight: 600, color: "#0F172A" }}>
                               {i.name}
-                              {here && <span style={{ marginLeft: 8, fontSize: 10, color: "#9CA3AF" }}>(already here)</span>}
+                              {here && <span style={{ marginLeft: 8, fontSize: 10, color: "#9CA3AF" }}>{t("common.already_here")}</span>}
                             </div>
-                            <div style={{ fontSize: 10.5, color: "#64748B", marginTop: 1 }}>
-                              base Rs.{inr(i.base_rate)} · {i.unit}
-                            </div>
+                            <div style={{ fontSize: 10.5, color: "#64748B", marginTop: 1 }}>{t("master_library.base_rs_inr_unit", { inr: inr(i.base_rate), unit: i.unit })}</div>
                           </span>
                         </label>
                       );
@@ -4791,13 +4763,13 @@ function ClientBOQSection() {
                       style={{ width: "100%", padding: "8px 12px", background: "#F0FDF4",
                                border: "1px dashed " + COL_GREEN, color: COL_GREEN,
                                borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                      + Create new item
+                     {t("common.create_new_item")}
                     </button>
                   ) : (
                     <div style={{ padding: 10, background: "#F9FAFB", borderRadius: 6, border: "1px solid #E5E7EB" }}>
                       <input autoFocus value={addItemNewForm.name}
                         onChange={e => setAddItemNewForm(p => ({ ...p, name: e.target.value }))}
-                        placeholder="Item name"
+                        placeholder={t("common.item_name")}
                         style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
                                  border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 6,
                                  outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
@@ -4819,7 +4791,7 @@ function ClientBOQSection() {
                       </div>
                       <input type="number" value={addItemNewForm.base_rate}
                         onChange={e => setAddItemNewForm(p => ({ ...p, base_rate: e.target.value }))}
-                        placeholder="Base rate"
+                        placeholder={t("common.base_rate")}
                         style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
                                  border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 8,
                                  outline: "none", fontFamily: "inherit", boxSizing: "border-box", textAlign: "right" }}/>
@@ -4827,7 +4799,7 @@ function ClientBOQSection() {
                         <button onClick={() => setAddItemNewForm(null)}
                           style={{ flex: 1, padding: 6, borderRadius: 5, background: "white",
                                    border: "1px solid #D1D5DB", fontSize: 11.5, color: "#6B7280", cursor: "pointer" }}>
-                          Cancel
+                         {t("common.cancel")}
                         </button>
                         <button onClick={createAndAddItem}
                           disabled={addItemSaving || !addItemNewForm.name?.trim()}
@@ -4835,7 +4807,7 @@ function ClientBOQSection() {
                                    background: (addItemSaving || !addItemNewForm.name?.trim()) ? "#9CA3AF" : COL_GREEN,
                                    color: "white", border: "none", fontSize: 11.5, fontWeight: 700,
                                    cursor: (addItemSaving || !addItemNewForm.name?.trim()) ? "not-allowed" : "pointer" }}>
-                          {addItemSaving ? "Saving…" : "Create + Add to this section"}
+                          {addItemSaving ? t("common.saving_2") : t("master_library.create_add_to_this_section")}
                         </button>
                       </div>
                     </div>
@@ -4846,14 +4818,12 @@ function ClientBOQSection() {
                 <button onClick={closeAddItemDrawer}
                   style={{ flex: 1, padding: "8px", borderRadius: 6, border: "1px solid #D1D5DB",
                            background: "white", fontSize: 12, color: "#374151", cursor: "pointer" }}>
-                  Cancel
+                 {t("common.cancel")}
                 </button>
                 <button onClick={confirmAddItems}
                   style={{ flex: 2, padding: "8px", borderRadius: 6,
                            background: COL_BLUE, color: "white", border: "none",
-                           fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  Add Selected ({addItemPicks.length})
-                </button>
+                           fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{t("master_library.add_selected_additempicks", { addItemPicks: addItemPicks.length })}</button>
               </div>
             </div>
           </>
@@ -4883,12 +4853,8 @@ function ClientBOQSection() {
             <div style={{ background: COL_DARK, padding: "13px 18px", color: "white",
                           display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  Edit Package: {pkgDrawer.name}
-                </div>
-                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>
-                  {selType?.name} · Package #{pkgDrawer.id}
-                  {pkgHasChanged && <span style={{ marginLeft: 8, color: "#FCD34D", fontWeight: 600 }}>● Unsaved</span>}
+                <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("master_library.edit_package_name", { name: pkgDrawer.name })}</div>
+                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>{t("master_library.name_package_id", { name: selType?.name, id: pkgDrawer.id })}{pkgHasChanged && <span style={{ marginLeft: 8, color: "#FCD34D", fontWeight: 600 }}>{t("master_library.unsaved")}</span>}
                 </div>
               </div>
               <button onClick={closePkgDrawer} disabled={pkgSaving}
@@ -4904,10 +4870,10 @@ function ClientBOQSection() {
                             border: "1px solid #E5E7EB", borderRadius: 8, background: "#FAFBFC" }}>
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280",
                               textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 10 }}>
-                  1 — Package Basics
+                 {t("master_library.1_package_basics")}
                 </div>
                 <div style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Name *</label>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{t("common.name")}</label>
                   <input value={pkgDraft.name || ""}
                     onChange={e => setPkgDraft(p => ({ ...p, name: e.target.value }))}
                     style={{ width: "100%", padding: "8px 11px", borderRadius: 6,
@@ -4916,7 +4882,7 @@ function ClientBOQSection() {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 10, marginBottom: 10 }}>
                   <div>
-                    <label style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Per-sqft rate (Rs.)</label>
+                    <label style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{t("master_library.per_sqft_rate_rs")}</label>
                     <input type="number" value={pkgDraft.sqft_rate ?? 0}
                       onChange={e => setPkgDraft(p => ({ ...p, sqft_rate: e.target.value }))}
                       style={{ width: "100%", padding: "8px 11px", borderRadius: 6,
@@ -4924,30 +4890,30 @@ function ClientBOQSection() {
                                outline: "none", boxSizing: "border-box", textAlign: "right" }}/>
                   </div>
                   <div>
-                    <label style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Description</label>
+                    <label style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 3, textTransform: "uppercase" }}>{t("common.description")}</label>
                     <input value={pkgDraft.description || ""}
                       onChange={e => setPkgDraft(p => ({ ...p, description: e.target.value }))}
-                      placeholder="Optional"
+                      placeholder={t("common.optional")}
                       style={{ width: "100%", padding: "8px 11px", borderRadius: 6,
                                border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
                                outline: "none", boxSizing: "border-box" }}/>
                   </div>
                 </div>
                 <div style={{ fontSize: 10.5, color: "#9CA3AF", fontStyle: "italic" }}>
-                  Per-sqft rate is informational on the package tile. Per-section rates live inside the BOQ tree.
+                 {t("master_library.per_sqft_rate_is_informational_on")}
                 </div>
               </div>
 
               {/* ── TIER B: SECTIONS ── */}
               <div style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280",
                             textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 8, marginTop: 4 }}>
-                2 — Sections, Categories &amp; Items
+               {t("master_library.2_sections_categories_items")}
               </div>
 
               {pkgStructures.length === 0 && (
                 <div style={{ padding: "18px 12px", textAlign: "center", color: "#9CA3AF",
                               fontSize: 12.5, border: "1px dashed #E5E7EB", borderRadius: 8 }}>
-                  No sections in this package yet. Add one from the main BOQ tree.
+                 {t("master_library.no_sections_in_this_package_yet_2")}
                 </div>
               )}
 
@@ -4982,7 +4948,7 @@ function ClientBOQSection() {
                                  border: "1.5px solid " + (pkgSecEdits[sec.id]?.name !== undefined ? COL_AMBER : "rgba(255,255,255,0.18)"),
                                  background: pkgSecEdits[sec.id]?.name !== undefined ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.08)",
                                  color: "white", outline: "none", fontFamily: "inherit" }}/>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>Area</span>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>{t("common.area")}</span>
                       <input type="number" value={secAreaVal}
                         onChange={e => pkgPatchSec(sec.id, { default_qty: e.target.value })}
                         style={{ width: 80, padding: "5px 8px", borderRadius: 5, textAlign: "right",
@@ -4997,7 +4963,7 @@ function ClientBOQSection() {
                       <div style={{ padding: 10 }}>
                         {cats.length === 0 && (
                           <div style={{ padding: "12px", textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>
-                            No categories in this section.
+                           {t("master_library.no_categories_in_this_section")}
                           </div>
                         )}
                         {cats.map(cat => {
@@ -5019,7 +4985,7 @@ function ClientBOQSection() {
                                             borderBottom: "1px solid #E5E7EB" }}>
                                 <input value={catNameVal}
                                   onChange={e => setPkgCatRenames(p => ({ ...p, [cat.id]: e.target.value }))}
-                                  title="Section-scoped rename (only this package)"
+                                  title={t("master_library.section_scoped_rename_only_this_package")}
                                   style={{ flex: 1, padding: "4px 8px", fontSize: 12, fontWeight: 700,
                                            borderRadius: 4,
                                            border: "1.5px solid " + (catDirty ? COL_AMBER : "#CBD5E1"),
@@ -5034,15 +5000,15 @@ function ClientBOQSection() {
                               {/* Items — master edit */}
                               {rows.length === 0 ? (
                                 <div style={{ padding: "10px", textAlign: "center", color: "#9CA3AF", fontSize: 11.5 }}>
-                                  No items.
+                                 {t("common.no_items")}
                                 </div>
                               ) : (
                                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                   <thead>
                                     <tr style={{ background: "#FAFAFA" }}>
-                                      <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 9.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>Item Name</th>
-                                      <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 9.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 90 }}>Unit</th>
-                                      <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 90 }}>Master Base</th>
+                                      <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 9.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>{t("master_library.item_name_2")}</th>
+                                      <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 9.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 90 }}>{t("common.unit")}</th>
+                                      <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 90 }}>{t("master_library.master_base")}</th>
                                       <th style={{ width: 36 }}/>
                                     </tr>
                                   </thead>
@@ -5095,7 +5061,7 @@ function ClientBOQSection() {
                                           </td>
                                           <td style={{ padding: "5px 6px", textAlign: "center" }}>
                                             <button onClick={() => pkgToggleDelete(r.item_id)}
-                                              title={deleted ? "Undo delete" : "Delete from master library"}
+                                              title={deleted ? t("master_library.undo_delete") : t("master_library.delete_from_master_library")}
                                               style={{ background: deleted ? COL_RED : "transparent",
                                                        color: deleted ? "white" : COL_RED,
                                                        border: deleted ? "none" : "1px solid #FCA5A5",
@@ -5121,9 +5087,7 @@ function ClientBOQSection() {
               })}
 
               <div style={{ padding: "8px 10px", background: "#FFFBEB", border: "1px dashed #FCD34D",
-                            borderRadius: 6, fontSize: 11, color: "#92400E", marginTop: 4 }}>
-                ⚠️ Item rename / unit / base_rate edits affect the <strong>master library</strong> — every package using this item sees the change. Delete is a soft-delete from the master library.
-              </div>
+                            borderRadius: 6, fontSize: 11, color: "#92400E", marginTop: 4 }}><Rich k="master_library.item_rename_unit_base_rate_edits" params={{ t: t("master_library.master_library"), t2: t("master_library.every_package_using_this_item_sees") }} /></div>
 
               {/* ── DANGER ZONE — Delete Package ───────────────────────
                   Two-step type-to-confirm guard so a stray click can't
@@ -5134,10 +5098,10 @@ function ClientBOQSection() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontSize: 11.5, fontWeight: 700, color: "#991B1B", textTransform: "uppercase", letterSpacing: ".4px" }}>
-                      Danger Zone
+                     {t("common.danger_zone")}
                     </div>
                     <div style={{ fontSize: 11, color: "#7F1D1D", marginTop: 3 }}>
-                      Delete this package and all its sections, categories &amp; rate rows. Existing quotations stay readable.
+                     {t("master_library.delete_this_package_and_all_its")}
                     </div>
                   </div>
                   {!pkgDangerOpen && (
@@ -5146,14 +5110,14 @@ function ClientBOQSection() {
                       style={{ padding: "7px 14px", borderRadius: 6, background: "white", border: "1.5px solid #DC2626",
                                color: "#DC2626", fontSize: 12, fontWeight: 700,
                                cursor: (pkgSaving || pkgDeleting) ? "not-allowed" : "pointer" }}>
-                      Delete Package…
+                     {t("master_library.delete_package")}
                     </button>
                   )}
                 </div>
                 {pkgDangerOpen && (
                   <div style={{ marginTop: 12, padding: 12, background: "white", border: "1px solid #FECACA", borderRadius: 6 }}>
                     <div style={{ fontSize: 11.5, color: "#7F1D1D", marginBottom: 6, lineHeight: 1.45 }}>
-                      To confirm, type <strong>{pkgDrawer.name}</strong> below:
+                     {t("master_library.to_confirm_type")} <strong>{pkgDrawer.name}</strong> {t("master_library.below")}
                     </div>
                     <input value={pkgDeleteText}
                       onChange={e => setPkgDeleteText(e.target.value)}
@@ -5169,7 +5133,7 @@ function ClientBOQSection() {
                         style={{ flex: 1, padding: "8px", borderRadius: 5, background: "white",
                                  border: "1px solid #D1D5DB", fontSize: 12, color: "#374151",
                                  cursor: pkgDeleting ? "not-allowed" : "pointer" }}>
-                        Cancel
+                       {t("common.cancel")}
                       </button>
                       <button onClick={deletePackage}
                         disabled={pkgDeleting || pkgDeleteText.trim() !== pkgDrawer.name}
@@ -5177,7 +5141,7 @@ function ClientBOQSection() {
                                  background: (pkgDeleting || pkgDeleteText.trim() !== pkgDrawer.name) ? "#FCA5A5" : "#DC2626",
                                  color: "white", border: "none", fontSize: 12, fontWeight: 700,
                                  cursor: (pkgDeleting || pkgDeleteText.trim() !== pkgDrawer.name) ? "not-allowed" : "pointer" }}>
-                        {pkgDeleting ? "Deleting…" : "I understand, delete this package"}
+                        {pkgDeleting ? t("common.deleting_2") : t("master_library.i_understand_delete_this_package")}
                       </button>
                     </div>
                   </div>
@@ -5192,7 +5156,7 @@ function ClientBOQSection() {
                 style={{ flex: 1, padding: "9px", borderRadius: 6, border: "1px solid #D1D5DB",
                          background: "white", fontSize: 13, color: "#374151",
                          cursor: pkgSaving ? "not-allowed" : "pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={savePackageEdit}
                 disabled={pkgSaving || !pkgHasChanged || !pkgDraft.name?.trim()}
@@ -5200,7 +5164,7 @@ function ClientBOQSection() {
                          background: (pkgSaving || !pkgHasChanged || !pkgDraft.name?.trim()) ? "#9CA3AF" : COL_BLUE,
                          color: "white", border: "none", fontSize: 13, fontWeight: 700,
                          cursor: (pkgSaving || !pkgHasChanged || !pkgDraft.name?.trim()) ? "not-allowed" : "pointer" }}>
-                {pkgSaving ? "Saving All…" : "Save All"}
+                {pkgSaving ? t("master_library.saving_all") : t("master_library.save_all")}
               </button>
             </div>
           </div>
@@ -5220,9 +5184,9 @@ function ClientBOQSection() {
             <div style={{ padding: "14px 18px", borderBottom: "1px solid #E5E7EB",
                           display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#0F172A" }}>
-                {addModal === "type" ? "New Construction Type"
-                 : addModal === "city" ? "New City"
-                 : (addForm._editingId ? "Edit Package" : "New Package")}
+                {addModal === "type" ? t("master_library.new_construction_type")
+                 : addModal === "city" ? t("master_library.new_city_2")
+                 : (addForm._editingId ? t("common.edit_package_2") : t("master_library.new_package_2"))}
               </div>
               <button onClick={() => setAddModal(null)}
                 style={{ background: "none", border: "none", fontSize: 18, color: "#6B7280", cursor: "pointer" }}>×</button>
@@ -5230,14 +5194,14 @@ function ClientBOQSection() {
             <div style={{ padding: "16px 18px" }}>
               <input autoFocus value={addForm.name || ""}
                 onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}
-                placeholder="Name"
+                placeholder={t("common.name_2")}
                 style={{ width: "100%", padding: "9px 11px", borderRadius: 7,
                          border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
                          outline: "none", boxSizing: "border-box", marginBottom: 10 }}/>
               {addModal === "pkg" && (
                 <input type="number" value={addForm.sqft_rate || ""}
                   onChange={e => setAddForm(p => ({ ...p, sqft_rate: e.target.value }))}
-                  placeholder="Per-sqft rate (informational)"
+                  placeholder={t("master_library.per_sqft_rate_informational")}
                   style={{ width: "100%", padding: "9px 11px", borderRadius: 7,
                            border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
                            outline: "none", boxSizing: "border-box", marginBottom: 10 }}/>
@@ -5247,13 +5211,13 @@ function ClientBOQSection() {
               <button onClick={() => setAddModal(null)}
                 style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB",
                          background: "white", fontSize: 13, color: "#374151", cursor: "pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={handleAdd} disabled={adding}
                 style={{ flex: 2, padding: "9px", borderRadius: 7,
                          background: adding ? "#9CA3AF" : COL_BLUE,
                          color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                {adding ? "Saving…" : "Save"}
+                {adding ? t("common.saving_2") : t("common.save")}
               </button>
             </div>
           </div>
@@ -5265,7 +5229,7 @@ function ClientBOQSection() {
       ───────────────────────────────────────────────────────────── */}
       {!selPkg && selType && selCity && (
         <div style={{ textAlign: "center", padding: "40px 0", color: "#9CA3AF", fontSize: 13 }}>
-          Pick a Package above to start building the BOQ.
+         {t("master_library.pick_a_package_above_to_start")}
         </div>
       )}
 
@@ -5283,7 +5247,7 @@ function ClientBOQSection() {
             <div style={{ background: COL_DARK, padding: "13px 18px", borderRadius: "12px 12px 0 0",
                           display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>Edit Construction Type</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>{t("master_library.edit_construction_type_2")}</div>
                 <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>{typeEdit.name}</div>
               </div>
               <button onClick={closeTypeEdit} disabled={typeSaving}
@@ -5291,13 +5255,13 @@ function ClientBOQSection() {
             </div>
             <div style={{ padding: 18 }}>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Name *</label>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>{t("common.name")}</label>
                 <input autoFocus value={typeForm.name || ""}
                   onChange={e => setTypeForm(p => ({ ...p, name: e.target.value }))}
                   style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
               </div>
               <div style={{ marginBottom: 6 }}>
-                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Color</label>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>{t("master_library.color")}</label>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {COLORS.map(c => (
                     <div key={c} onClick={() => setTypeForm(p => ({ ...p, color: c }))}
@@ -5311,23 +5275,23 @@ function ClientBOQSection() {
               <div style={{ marginTop: 18, padding: 12, background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 8 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#991B1B", textTransform: "uppercase", letterSpacing: ".4px" }}>Danger Zone</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#991B1B", textTransform: "uppercase", letterSpacing: ".4px" }}>{t("common.danger_zone")}</div>
                     <div style={{ fontSize: 10.5, color: "#7F1D1D", marginTop: 2 }}>
-                      Delete this construction type. Packages tied to it will lose their type filter.
+                     {t("master_library.delete_this_construction_type_packages_tied")}
                     </div>
                   </div>
                   {!typeDangerOpen && (
                     <button onClick={() => { setTypeDangerOpen(true); setTypeDeleteText(""); }}
                       disabled={typeSaving}
                       style={{ padding: "6px 12px", borderRadius: 5, background: "white", border: "1.5px solid #DC2626", color: "#DC2626", fontSize: 11.5, fontWeight: 700, cursor: typeSaving ? "not-allowed" : "pointer" }}>
-                      Delete…
+                     {t("master_library.delete")}
                     </button>
                   )}
                 </div>
                 {typeDangerOpen && (
                   <div style={{ marginTop: 10, padding: 10, background: "white", border: "1px solid #FECACA", borderRadius: 6 }}>
                     <div style={{ fontSize: 11, color: "#7F1D1D", marginBottom: 5 }}>
-                      Type <strong>{typeEdit.name}</strong> to confirm:
+                     {t("common.type")} <strong>{typeEdit.name}</strong> {t("master_library.to_confirm")}
                     </div>
                     <input value={typeDeleteText}
                       onChange={e => setTypeDeleteText(e.target.value)}
@@ -5337,7 +5301,7 @@ function ClientBOQSection() {
                       <button onClick={() => { setTypeDangerOpen(false); setTypeDeleteText(""); }}
                         disabled={typeSaving}
                         style={{ flex: 1, padding: 6, borderRadius: 5, background: "white", border: "1px solid #D1D5DB", fontSize: 11.5, color: "#374151", cursor: typeSaving ? "not-allowed" : "pointer" }}>
-                        Cancel
+                       {t("common.cancel")}
                       </button>
                       <button onClick={deleteType}
                         disabled={typeSaving || typeDeleteText.trim() !== typeEdit.name}
@@ -5345,7 +5309,7 @@ function ClientBOQSection() {
                                  background: (typeSaving || typeDeleteText.trim() !== typeEdit.name) ? "#FCA5A5" : "#DC2626",
                                  color: "white", border: "none", fontSize: 11.5, fontWeight: 700,
                                  cursor: (typeSaving || typeDeleteText.trim() !== typeEdit.name) ? "not-allowed" : "pointer" }}>
-                        {typeSaving ? "Deleting…" : "Delete construction type"}
+                        {typeSaving ? t("common.deleting_2") : t("master_library.delete_construction_type")}
                       </button>
                     </div>
                   </div>
@@ -5355,14 +5319,14 @@ function ClientBOQSection() {
             <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8, background: "#F9FAFB" }}>
               <button onClick={closeTypeEdit} disabled={typeSaving}
                 style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB", background: "white", fontSize: 13, color: "#374151", cursor: typeSaving ? "not-allowed" : "pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={saveTypeEdit} disabled={typeSaving || !typeForm.name?.trim()}
                 style={{ flex: 2, padding: "9px", borderRadius: 7,
                          background: (typeSaving || !typeForm.name?.trim()) ? "#9CA3AF" : COL_BLUE,
                          color: "white", border: "none", fontSize: 13, fontWeight: 700,
                          cursor: (typeSaving || !typeForm.name?.trim()) ? "not-allowed" : "pointer" }}>
-                {typeSaving ? "Saving…" : "Save"}
+                {typeSaving ? t("common.saving_2") : t("common.save")}
               </button>
             </div>
           </div>
@@ -5383,7 +5347,7 @@ function ClientBOQSection() {
             <div style={{ background: COL_DARK, padding: "13px 18px", borderRadius: "12px 12px 0 0",
                           display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>Edit City</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>{t("master_library.edit_city_2")}</div>
                 <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>{cityEdit.name}</div>
               </div>
               <button onClick={closeCityEdit} disabled={citySaving}
@@ -5391,16 +5355,16 @@ function ClientBOQSection() {
             </div>
             <div style={{ padding: 18 }}>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Name *</label>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>{t("common.name")}</label>
                 <input autoFocus value={cityForm.name || ""}
                   onChange={e => setCityForm(p => ({ ...p, name: e.target.value }))}
                   style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
               </div>
               <div>
-                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>State</label>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>{t("master_library.state")}</label>
                 <input value={cityForm.state || ""}
                   onChange={e => setCityForm(p => ({ ...p, state: e.target.value }))}
-                  placeholder="Chhattisgarh"
+                  placeholder={t("master_library.chhattisgarh")}
                   style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
               </div>
 
@@ -5408,23 +5372,23 @@ function ClientBOQSection() {
               <div style={{ marginTop: 18, padding: 12, background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 8 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#991B1B", textTransform: "uppercase", letterSpacing: ".4px" }}>Danger Zone</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#991B1B", textTransform: "uppercase", letterSpacing: ".4px" }}>{t("common.danger_zone")}</div>
                     <div style={{ fontSize: 10.5, color: "#7F1D1D", marginTop: 2 }}>
-                      Delete this city. Leads + rates tied to it will lose their city tag.
+                     {t("master_library.delete_this_city_leads_rates_tied")}
                     </div>
                   </div>
                   {!cityDangerOpen && (
                     <button onClick={() => { setCityDangerOpen(true); setCityDeleteText(""); }}
                       disabled={citySaving}
                       style={{ padding: "6px 12px", borderRadius: 5, background: "white", border: "1.5px solid #DC2626", color: "#DC2626", fontSize: 11.5, fontWeight: 700, cursor: citySaving ? "not-allowed" : "pointer" }}>
-                      Delete…
+                     {t("master_library.delete")}
                     </button>
                   )}
                 </div>
                 {cityDangerOpen && (
                   <div style={{ marginTop: 10, padding: 10, background: "white", border: "1px solid #FECACA", borderRadius: 6 }}>
                     <div style={{ fontSize: 11, color: "#7F1D1D", marginBottom: 5 }}>
-                      Type <strong>{cityEdit.name}</strong> to confirm:
+                     {t("common.type")} <strong>{cityEdit.name}</strong> {t("master_library.to_confirm")}
                     </div>
                     <input value={cityDeleteText}
                       onChange={e => setCityDeleteText(e.target.value)}
@@ -5434,7 +5398,7 @@ function ClientBOQSection() {
                       <button onClick={() => { setCityDangerOpen(false); setCityDeleteText(""); }}
                         disabled={citySaving}
                         style={{ flex: 1, padding: 6, borderRadius: 5, background: "white", border: "1px solid #D1D5DB", fontSize: 11.5, color: "#374151", cursor: citySaving ? "not-allowed" : "pointer" }}>
-                        Cancel
+                       {t("common.cancel")}
                       </button>
                       <button onClick={deleteCity}
                         disabled={citySaving || cityDeleteText.trim() !== cityEdit.name}
@@ -5442,7 +5406,7 @@ function ClientBOQSection() {
                                  background: (citySaving || cityDeleteText.trim() !== cityEdit.name) ? "#FCA5A5" : "#DC2626",
                                  color: "white", border: "none", fontSize: 11.5, fontWeight: 700,
                                  cursor: (citySaving || cityDeleteText.trim() !== cityEdit.name) ? "not-allowed" : "pointer" }}>
-                        {citySaving ? "Deleting…" : "Delete city"}
+                        {citySaving ? t("common.deleting_2") : t("master_library.delete_city")}
                       </button>
                     </div>
                   </div>
@@ -5452,14 +5416,14 @@ function ClientBOQSection() {
             <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8, background: "#F9FAFB" }}>
               <button onClick={closeCityEdit} disabled={citySaving}
                 style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB", background: "white", fontSize: 13, color: "#374151", cursor: citySaving ? "not-allowed" : "pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={saveCityEdit} disabled={citySaving || !cityForm.name?.trim()}
                 style={{ flex: 2, padding: "9px", borderRadius: 7,
                          background: (citySaving || !cityForm.name?.trim()) ? "#9CA3AF" : COL_BLUE,
                          color: "white", border: "none", fontSize: 13, fontWeight: 700,
                          cursor: (citySaving || !cityForm.name?.trim()) ? "not-allowed" : "pointer" }}>
-                {citySaving ? "Saving…" : "Save"}
+                {citySaving ? t("common.saving_2") : t("common.save")}
               </button>
             </div>
           </div>
@@ -5497,7 +5461,7 @@ function BoqItemLibrarySection() {
   const closeForm  = () => { setShowAdd(false); setEditing(null); setForm(emptyForm); };
 
   const save = async () => {
-    if (!form.name.trim()) return alert("Item name required");
+    if (!form.name.trim()) return alert(t("master_library.item_name_required"));
     setSaving(true);
     const res = await apiSave({
       name: form.name.trim(),
@@ -5535,13 +5499,13 @@ function BoqItemLibrarySection() {
       <div style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, minWidth: 240 }}>
           <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search items by name, category, or description…"
+            placeholder={t("master_library.search_items_by_name_category_or")}
             style={{ flex: 1, maxWidth: 360, padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 12.5, outline: "none", fontFamily: "inherit" }}/>
           <span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} / {rows.length} items</span>
         </div>
         <button onClick={openCreate}
           style={{ background: "#10B981", color: "white", border: "none", borderRadius: 7, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          + Add Item
+         {t("common.add_item")}
         </button>
       </div>
 
@@ -5565,21 +5529,21 @@ function BoqItemLibrarySection() {
 
       {/* Table */}
       {loading ? (
-        <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Loading…</div>
+        <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>{t("common.loading_2")}</div>
       ) : filtered.length === 0 ? (
         <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
-          No items found. Click <strong>+ Add Item</strong> to create one.
+         {t("master_library.no_items_found_click")} <strong>{t("common.add_item")}</strong> {t("master_library.to_create_one")}
         </div>
       ) : (
         <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "#F9FAFB" }}>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Item</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 140 }}>Category</th>
-                <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 80 }}>Unit</th>
-                <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 120 }}>Base Rate</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Description</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>{t("common.item")}</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 140 }}>{t("common.category")}</th>
+                <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 80 }}>{t("common.unit")}</th>
+                <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 120 }}>{t("master_library.base_rate")}</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>{t("common.description")}</th>
                 <th style={{ padding: "10px 8px",  textAlign: "center", width: 80 }}></th>
               </tr>
             </thead>
@@ -5591,14 +5555,14 @@ function BoqItemLibrarySection() {
                     <span style={{ fontSize: 11, fontWeight: 600, color: "#7C3AED", background: "#EDE9FE", padding: "2px 8px", borderRadius: 4 }}>{r.category || "—"}</span>
                   </td>
                   <td style={{ padding: "9px 14px", textAlign: "center", fontSize: 12, color: "#6B7280" }}>{r.unit || "—"}</td>
-                  <td style={{ padding: "9px 14px", textAlign: "right", fontSize: 13, fontWeight: 600, color: "#374151" }}>Rs.{Number(r.base_rate || 0).toLocaleString()}</td>
+                  <td style={{ padding: "9px 14px", textAlign: "right", fontSize: 13, fontWeight: 600, color: "#374151" }}>{t("master_library.rs_number", { Number: Number(r.base_rate || 0).toLocaleString() })}</td>
                   <td style={{ padding: "9px 14px", fontSize: 12, color: "#6B7280" }}>{r.description || "—"}</td>
                   <td style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }}>
-                    <button onClick={() => openEdit(r)} title="Edit"
+                    <button onClick={() => openEdit(r)} title={t("common.edit_2")}
                       style={{ background: "none", border: "none", color: "#6B7280", cursor: "pointer", padding: 4, marginRight: 2 }}>
                       <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
-                    <button onClick={() => del(r)} title="Delete"
+                    <button onClick={() => del(r)} title={t("common.delete")}
                       style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", padding: 4 }}>
                       <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                     </button>
@@ -5618,43 +5582,43 @@ function BoqItemLibrarySection() {
             style={{ background: "white", borderRadius: 12, width: "min(540px, 95vw)", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
             <div style={{ background: "#0F172A", padding: "13px 18px", borderRadius: "12px 12px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>{editing ? "Edit BOQ Item" : "New BOQ Item"}</div>
-                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>Master library — used by Client BOQ Rate's picker.</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>{editing ? t("master_library.edit_boq_item") : t("master_library.new_boq_item")}</div>
+                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>{t("master_library.master_library_used_by_client_boq")}</div>
               </div>
               <button onClick={closeForm} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>×</button>
             </div>
             <div style={{ padding: 16 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div style={{ gridColumn: "1 / 3" }}>
-                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Item Name *</label>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>{t("master_library.item_name")}</label>
                   <input value={form.name} onChange={e => upd("name", e.target.value)} autoFocus
-                    placeholder="e.g. RCC Footing M25"
+                    placeholder={t("master_library.e_g_rcc_footing_m25")}
                     style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Category *</label>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>{t("master_library.category_2")}</label>
                   <select value={form.category} onChange={e => upd("category", e.target.value)}
                     style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
                     {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Unit</label>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>{t("common.unit")}</label>
                   <select value={form.unit} onChange={e => upd("unit", e.target.value)}
                     style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
                     {uomOptions.map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Base Rate (Rs.)</label>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>{t("master_library.base_rate_rs")}</label>
                   <input type="number" value={form.base_rate || ""} onChange={e => upd("base_rate", parseFloat(e.target.value) || 0)}
                     placeholder="0"
                     style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Description / Scope</label>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>{t("master_library.description_scope")}</label>
                   <input value={form.description} onChange={e => upd("description", e.target.value)}
-                    placeholder="Optional"
+                    placeholder={t("common.optional")}
                     style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
                 </div>
               </div>
@@ -5662,11 +5626,11 @@ function BoqItemLibrarySection() {
             <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
               <button onClick={closeForm}
                 style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #E5E7EB", background: "white", fontSize: 12, cursor: "pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={save} disabled={saving || !form.name.trim()}
                 style={{ flex: 2, padding: "9px", borderRadius: 7, background: (saving || !form.name.trim()) ? "#9CA3AF" : "#2563EB", color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: (saving || !form.name.trim()) ? "not-allowed" : "pointer" }}>
-                {saving ? "Saving…" : editing ? "Save Changes" : "Add Item"}
+                {saving ? t("common.saving_2") : editing ? t("common.save_changes") : t("common.add_item_2")}
               </button>
             </div>
           </div>
@@ -5695,17 +5659,17 @@ function LabourRateSection() {
   const catColors = { Skilled: { c: T.blue, bg: T.blueSoft }, "Semi-Skilled": { c: T.amber, bg: T.amberSoft }, Unskilled: { c: T.textMid, bg: T.borderLight }, Staff: { c: T.green, bg: T.greenSoft } };
 
   const columns = [
-    { key: "role", label: "Labour Type / Skill", minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.role||r.skill}</span> },
-    { key: "category", label: "Category", minW: 100, render: r => { const cc = catColors[r.category] || catColors.Skilled; return <Badge text={r.category||"Skilled"} color={cc.c} bg={cc.bg} />; }},
-    { key: "rate", label: "Daily Rate", minW: 90, align: "right", render: r => <span style={{ fontWeight: 700 }}>Rs.{r.rate||r.dailyRate||0}</span> },
-    { key: "overtime_rate", label: "OT/Hour", minW: 70, align: "right", render: r => (r.overtime_rate||r.otRate)>0 ? <span style={{ fontWeight: 600, color: T.amber }}>Rs.{r.overtime_rate||r.otRate}</span> : "—" },
-    { key: "monthly", label: "Monthly (26d)", minW: 100, align: "right", render: r => <span style={{ fontWeight: 600, color: T.green }}>Rs.{((r.rate||r.dailyRate||0) * 26).toLocaleString()}</span> },
-    { key: "description", label: "City/Area", minW: 70, render: r => <span>{r.description||r.city||"—"}</span> },
+    { key: "role", label: t("master_library.labour_type_skill"), minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.role||r.skill}</span> },
+    { key: "category", label: t("common.category"), minW: 100, render: r => { const cc = catColors[r.category] || catColors.Skilled; return <Badge text={r.category||t("master_library.skilled")} color={cc.c} bg={cc.bg} />; }},
+    { key: "rate", label: t("master_library.daily_rate"), minW: 90, align: "right", render: r => <span style={{ fontWeight: 700 }}>{t("master_library.rs_r", { r: r.rate||r.dailyRate||0 })}</span> },
+    { key: "overtime_rate", label: t("master_library.ot_hour"), minW: 70, align: "right", render: r => (r.overtime_rate||r.otRate)>0 ? <span style={{ fontWeight: 600, color: T.amber }}>{t("master_library.rs_otrate", { otRate: r.overtime_rate||r.otRate })}</span> : "—" },
+    { key: "monthly", label: t("master_library.monthly_26d"), minW: 100, align: "right", render: r => <span style={{ fontWeight: 600, color: T.green }}>{t("master_library.rs_r", { r: ((r.rate||r.dailyRate||0) * 26).toLocaleString() })}</span> },
+    { key: "description", label: t("master_library.city_area"), minW: 70, render: r => <span>{r.description||r.city||"—"}</span> },
   ];
 
   return (
     <div>
-      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="labour rates" onAdd={openCreate} addLabel="Add Labour Rate"
+      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label={t("master_library.labour_rates")} onAdd={openCreate} addLabel="Add Labour Rate"
         templateConfig={{
           headers: ["Skill / Labour Type","Category","Daily Rate (Rs.)","OT Rate/Hour (Rs.)","City/Area"],
           sampleRows: [["Mason (Mistri)","Skilled","800","120","Raipur"],["Helper (Mazdoor)","Unskilled","450","70","Raipur"]],
@@ -5717,16 +5681,16 @@ function LabourRateSection() {
         onImportData={(rows) => { /* CSV import */ }}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Labour Rate" : "Add Labour Rate"} width={480}>
-        <FormField label="Role / Labour Type" value={form.role||form.skill||""} onChange={v => upd("role", v)} placeholder="e.g. Mason (Mistri)" required />
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_labour_rate") : t("master_library.add_labour_rate")} width={480}>
+        <FormField label={t("master_library.role_labour_type")} value={form.role||form.skill||""} onChange={v => upd("role", v)} placeholder={t("master_library.e_g_mason_mistri")} required />
         <div style={{ height: 14 }} />
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Category" value={form.category} onChange={v => upd("category", v)} options={["Skilled","Semi-Skilled","Unskilled","Staff"]} half />
-          <FormField label="City / Area" value={form.city} onChange={v => upd("city", v)} half />
+          <FormSelect label={t("common.category")} value={form.category} onChange={v => upd("category", v)} options={["Skilled","Semi-Skilled","Unskilled","Staff"]} half />
+          <FormField label={t("master_library.city_area_2")} value={form.city} onChange={v => upd("city", v)} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <FormField label="Daily Rate (Rs.)" value={form.rate || ""} onChange={v => upd("rate", parseFloat(v) || 0)} type="number" half required />
-          <FormField label="OT Rate / Hour (Rs.)" value={form.overtime_rate || ""} onChange={v => upd("overtime_rate", parseFloat(v) || 0)} type="number" half />
+          <FormField label={t("master_library.daily_rate_rs")} value={form.rate || ""} onChange={v => upd("rate", parseFloat(v) || 0)} type="number" half required />
+          <FormField label={t("master_library.ot_rate_hour_rs")} value={form.overtime_rate || ""} onChange={v => upd("overtime_rate", parseFloat(v) || 0)} type="number" half />
         </div>
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Add"} />
       </Modal>
@@ -5777,7 +5741,7 @@ function UOMMasterSection() {
   };
 
   const del = async (id) => {
-    if (!await window.confirmAsync("Delete this unit?")) return;
+    if (!await window.confirmAsync(t("master_library.delete_this_unit"))) return;
     await api.del("/library/uom/"+id);
     reload();
   };
@@ -5796,9 +5760,9 @@ function UOMMasterSection() {
   };
 
   const columns = [
-    { key:"symbol", label:"Symbol", minW:80, render: r=><code style={{fontSize:12,fontWeight:700,color:T.blue,background:T.blueSoft,padding:"2px 8px",borderRadius:4}}>{r.symbol||"—"}</code> },
-    { key:"name",   label:"Unit Name", minW:160, render: r=><span style={{fontWeight:600}}>{r.name}</span> },
-    { key:"type",   label:"Type", minW:100, render: r=><Badge text={r.type||"—"} color={typeColors[r.type]||T.textMid} bg={(typeColors[r.type]||T.blue)+"15"}/> },
+    { key:"symbol", label:t("master_library.symbol"), minW:80, render: r=><code style={{fontSize:12,fontWeight:700,color:T.blue,background:T.blueSoft,padding:"2px 8px",borderRadius:4}}>{r.symbol||"—"}</code> },
+    { key:"name",   label:t("master_library.unit_name"), minW:160, render: r=><span style={{fontWeight:600}}>{r.name}</span> },
+    { key:"type",   label:t("common.type"), minW:100, render: r=><Badge text={r.type||"—"} color={typeColors[r.type]||T.textMid} bg={(typeColors[r.type]||T.blue)+"15"}/> },
   ];
 
   return (
@@ -5807,16 +5771,16 @@ function UOMMasterSection() {
         onAdd={openCreate} addLabel="Add Unit"
         templateConfig={{ headers:["Unit Name","Symbol","Type"], sampleRows:[["Kilogram","Kg","Weight"],["Square Feet","Sqft","Area"],["Piece","Pcs","Count"]], filename:"gb_uom_export.csv", templateFilename:"gb_template_uom.csv", instructions:"Type: Weight, Area, Volume, Length, Count, Work, Time, Transport, Bulk, Flat", mapRow:u=>[u.name,u.symbol||"",u.type||""] }}
         currentData={uoms} onImportData={handleImport}/>
-      {loading?<div style={{padding:"40px",textAlign:"center",color:T.textLight}}>Loading...</div>
+      {loading?<div style={{padding:"40px",textAlign:"center",color:T.textLight}}>{t("common.loading")}</div>
         :<DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} emptyMsg="No units found"/>}
-      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?"Edit Unit":"Add Unit"} width={400}>
-        <FormField label="Unit Name *" value={form.name} onChange={v=>upd("name",v)} placeholder="e.g. Kilogram" required/>
+      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?t("master_library.edit_unit"):t("master_library.add_unit")} width={400}>
+        <FormField label={t("master_library.unit_name_2")} value={form.name} onChange={v=>upd("name",v)} placeholder={t("master_library.e_g_kilogram")} required/>
         <div style={{height:12}}/>
-        <FormField label="Symbol" value={form.symbol} onChange={v=>upd("symbol",v)} placeholder="e.g. Kg"/>
+        <FormField label={t("master_library.symbol")} value={form.symbol} onChange={v=>upd("symbol",v)} placeholder={t("master_library.e_g_kg")}/>
         <div style={{height:12}}/>
         <div>
-          <label style={{fontSize:11,fontWeight:600,color:T.textMid,display:"block",marginBottom:5}}>Type</label>
-          <SearchSelect value={form.type} options={TYPES} onChange={v=>upd("type",v)} placeholder="Select type..."/>
+          <label style={{fontSize:11,fontWeight:600,color:T.textMid,display:"block",marginBottom:5}}>{t("common.type")}</label>
+          <SearchSelect value={form.type} options={TYPES} onChange={v=>upd("type",v)} placeholder={t("common.select_type")}/>
         </div>
         <ModalFooter onClose={()=>setShowModal(false)} onSave={save} saveLabel={editing?"Update":"Add"}/>
       </Modal>
@@ -5832,10 +5796,10 @@ function ExpenseHeadSection() {
   const groupColors = { "Direct Cost": T.blue, "Site Overhead": T.amber, "Admin Overhead": T.purple, Quality: T.green, Other: T.textMid };
 
   const columns = [
-    { key: "code", label: "Code", minW: 70, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code> },
-    { key: "name", label: "Expense Head", minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "type", label: "Type", minW: 110, render: r => <Badge text={r.type||r.group||"Other"} color={groupColors[r.type||r.group] || T.textMid} bg={(groupColors[r.type||r.group] || T.textMid) + "18"} /> },
-    { key: "description", label: "Description", minW: 200, style: { fontSize: 12, color: T.textMid } },
+    { key: "code", label: t("common.code"), minW: 70, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code> },
+    { key: "name", label: t("master_library.expense_head"), minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "type", label: t("common.type"), minW: 110, render: r => <Badge text={r.type||r.group||t("common.other")} color={groupColors[r.type||r.group] || T.textMid} bg={(groupColors[r.type||r.group] || T.textMid) + "18"} /> },
+    { key: "description", label: t("common.description"), minW: 200, style: { fontSize: 12, color: T.textMid } },
   ];
 
   const [showModal, setShowModal] = useState(false);
@@ -5849,7 +5813,7 @@ function ExpenseHeadSection() {
 
   return (
     <div>
-      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="expense heads" onAdd={openCreate} addLabel="Add Head"
+      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label={t("master_library.expense_heads")} onAdd={openCreate} addLabel="Add Head"
         templateConfig={{
           headers: ["Expense Head","Code","Group","Tax Deductible"],
           sampleRows: [["Material Purchase","EH-001","Direct Cost","Yes"],["Labour Wages","EH-002","Direct Cost","Yes"],["Site Petty Cash","EH-006","Site Overhead","No"]],
@@ -5861,14 +5825,14 @@ function ExpenseHeadSection() {
         onImportData={() => {}}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Expense Head" : "Add Expense Head"} width={440}>
-        <FormField label="Expense Head Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. Material Purchase" required />
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_expense_head") : t("master_library.add_expense_head")} width={440}>
+        <FormField label={t("master_library.expense_head_name")} value={form.name} onChange={v => upd("name", v)} placeholder={t("master_library.e_g_material_purchase")} required />
         <div style={{ height: 12 }} />
-        <FormField label="Code" value={form.code} onChange={v => upd("code", v)} placeholder="e.g. EH-001" />
+        <FormField label={t("common.code")} value={form.code} onChange={v => upd("code", v)} placeholder={t("master_library.e_g_eh_001")} />
         <div style={{ height: 12 }} />
-        <FormSelect label="Type" value={form.type} onChange={v => upd("type", v)} options={["Material","Labour","Equipment","Overhead","Other"]} />
+        <FormSelect label={t("common.type")} value={form.type} onChange={v => upd("type", v)} options={["Material","Labour","Equipment","Overhead","Other"]} />
         <div style={{ height: 12 }} />
-        <FormTextarea label="Description" value={form.description||""} onChange={v => upd("description", v)} rows={2} />
+        <FormTextarea label={t("common.description")} value={form.description||""} onChange={v => upd("description", v)} rows={2} />
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Create"} />
       </Modal>
     </div>
@@ -5998,13 +5962,13 @@ function DesignLibrarySection() {
       {/* Sub-tab switcher */}
       <div style={{ display: "flex", gap: 8, marginBottom: 18, background: "#F3F4F6", padding: 6, borderRadius: 10, width: "fit-content" }}>
         <button style={tabStyle("categories")} onClick={() => switchTab("categories")}>
-          Drawing Categories <span style={{ marginLeft: 6, background: subTab==="categories"?"rgba(255,255,255,0.3)":"#E5E7EB", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{categories.length}</span>
+         {t("master_library.drawing_categories")} <span style={{ marginLeft: 6, background: subTab==="categories"?"rgba(255,255,255,0.3)":"#E5E7EB", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{categories.length}</span>
         </button>
         <button style={tabStyle("types")} onClick={() => switchTab("types")}>
-          Drawing Types <span style={{ marginLeft: 6, background: subTab==="types"?"rgba(255,255,255,0.3)":"#E5E7EB", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{drawTypes.length}</span>
+         {t("master_library.drawing_types")} <span style={{ marginLeft: 6, background: subTab==="types"?"rgba(255,255,255,0.3)":"#E5E7EB", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{drawTypes.length}</span>
         </button>
         <button style={tabStyle("titles")} onClick={() => switchTab("titles")}>
-          Drawing Titles <span style={{ marginLeft: 6, background: subTab==="titles"?"rgba(255,255,255,0.3)":"#E5E7EB", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{titles.length}</span>
+         {t("master_library.drawing_titles")} <span style={{ marginLeft: 6, background: subTab==="titles"?"rgba(255,255,255,0.3)":"#E5E7EB", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{titles.length}</span>
         </button>
       </div>
 
@@ -6017,7 +5981,7 @@ function DesignLibrarySection() {
           {/* Category filter for titles */}
           {subTab === "titles" && (
             <div style={{minWidth:180}}>
-              <SearchSelect value={catFilter} options={["All",...catNames]} onChange={setCatFilter} placeholder="Filter category..."/>
+              <SearchSelect value={catFilter} options={["All",...catNames]} onChange={setCatFilter} placeholder={t("master_library.filter_category")}/>
             </div>
           )}
         </div>
@@ -6028,13 +5992,13 @@ function DesignLibrarySection() {
             else openCreate({ title: "", category: catNames[0] || "", type: typeNames[0] || "", description: "" });
           }}
           style={{ padding: "9px 20px", background: "#2563EB", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-          + {subTab === "categories" ? "Add Category" : subTab === "types" ? "Add Type" : "Add Title"}
+          + {subTab === "categories" ? t("common.add_category_2") : subTab === "types" ? t("master_library.add_type") : t("master_library.add_title")}
         </button>
       </div>
 
       {/* Content */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: 50, color: "#9CA3AF" }}>Loading...</div>
+        <div style={{ textAlign: "center", padding: 50, color: "#9CA3AF" }}>{t("common.loading")}</div>
       ) : subTab === "categories" ? (
         /* ── Categories grid ── */
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px,1fr))", gap: 10 }}>
@@ -6057,7 +6021,7 @@ function DesignLibrarySection() {
               </div>
             </div>
           ))}
-          {filteredCats.length === 0 && <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "#9CA3AF" }}>No categories found</div>}
+          {filteredCats.length === 0 && <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "#9CA3AF" }}>{t("master_library.no_categories_found")}</div>}
         </div>
       ) : subTab === "types" ? (
         /* ── Drawing Types grid ── */
@@ -6078,16 +6042,16 @@ function DesignLibrarySection() {
               </div>
             </div>
           ))}
-          {filteredTypes.length === 0 && <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "#9CA3AF" }}>No drawing types found</div>}
+          {filteredTypes.length === 0 && <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "#9CA3AF" }}>{t("master_library.no_drawing_types_found")}</div>}
         </div>
       ) : (
         /* ── Drawing Titles table ── */
         <DataTable
           columns={[
-            { key: "title",    label: "Drawing Title", minW: 220, render: r => <span style={{ fontWeight: 600 }}>{r.title}</span> },
-            { key: "category", label: "Category",      minW: 130, render: r => r.category ? <Badge text={r.category} color="#2563EB" bg="#DBEAFE" /> : <span style={{ color: "#9CA3AF" }}>—</span> },
-            { key: "type",     label: "Drawing Type",  minW: 110, render: r => r.type ? <Badge text={r.type} color="#7C3AED" bg="#EDE9FE" /> : <span style={{ color: "#9CA3AF" }}>—</span> },
-            { key: "description", label: "Description", minW: 200, render: r => <span style={{ fontSize: 12, color: "#6B7280" }}>{r.description || "—"}</span> },
+            { key: "title",    label: t("master_library.drawing_title"), minW: 220, render: r => <span style={{ fontWeight: 600 }}>{r.title}</span> },
+            { key: "category", label: t("common.category"),      minW: 130, render: r => r.category ? <Badge text={r.category} color="#2563EB" bg="#DBEAFE" /> : <span style={{ color: "#9CA3AF" }}>—</span> },
+            { key: "type",     label: t("master_library.drawing_type"),  minW: 110, render: r => r.type ? <Badge text={r.type} color="#7C3AED" bg="#EDE9FE" /> : <span style={{ color: "#9CA3AF" }}>—</span> },
+            { key: "description", label: t("common.description"), minW: 200, render: r => <span style={{ fontSize: 12, color: "#6B7280" }}>{r.description || "—"}</span> },
           ]}
           data={filteredTitles}
           onEdit={t => { setEditing(t); setForm({ title: t.title, category: t.category||"", type: t.type||"", description: t.description||"" }); setErrMsg(""); setShowModal(true); }}
@@ -6099,29 +6063,29 @@ function DesignLibrarySection() {
       {/* ── Modal ─────────────────────────────────────────────────────── */}
       <Modal open={showModal} onClose={closeModal}
         title={
-          subTab === "categories" ? (editing ? "Edit Category" : "Add Drawing Category") :
-          subTab === "types"      ? (editing ? "Edit Drawing Type" : "Add Drawing Type") :
-                                    (editing ? "Edit Drawing Title" : "Add Drawing Title")
+          subTab === "categories" ? (editing ? t("master_library.edit_category") : t("master_library.add_drawing_category")) :
+          subTab === "types"      ? (editing ? t("master_library.edit_drawing_type") : t("master_library.add_drawing_type")) :
+                                    (editing ? t("master_library.edit_drawing_title") : t("master_library.add_drawing_title"))
         } width={460}>
         {(subTab === "categories" || subTab === "types") && (
           <>
-            <FormField label="Name" value={form.name||""} onChange={v => upd("name", v)}
-              placeholder={subTab === "categories" ? "e.g. Architectural, Structural" : "e.g. Plan, Elevation, Section"}
+            <FormField label={t("common.name_2")} value={form.name||""} onChange={v => upd("name", v)}
+              placeholder={subTab === "categories" ? t("master_library.e_g_architectural_structural") : t("master_library.e_g_plan_elevation_section")}
               required />
             <div style={{ height: 12 }} />
-            <FormField label="Description (optional)" value={form.description||""} onChange={v => upd("description", v)} placeholder="Brief description" />
+            <FormField label={t("master_library.description_optional")} value={form.description||""} onChange={v => upd("description", v)} placeholder={t("master_library.brief_description")} />
           </>
         )}
         {subTab === "titles" && (
           <>
-            <FormField label="Drawing Title" value={form.title||""} onChange={v => upd("title", v)} placeholder="e.g. Ground Floor Plan" required />
+            <FormField label={t("master_library.drawing_title")} value={form.title||""} onChange={v => upd("title", v)} placeholder={t("master_library.e_g_ground_floor_plan")} required />
             <div style={{ height: 12 }} />
             <div style={{ display: "flex", gap: 16 }}>
-              <FormSelect label="Category" value={form.category||""} onChange={v => upd("category", v)} options={catNames} half />
-              <FormSelect label="Drawing Type" value={form.type||""} onChange={v => upd("type", v)} options={typeNames} half />
+              <FormSelect label={t("common.category")} value={form.category||""} onChange={v => upd("category", v)} options={catNames} half />
+              <FormSelect label={t("master_library.drawing_type")} value={form.type||""} onChange={v => upd("type", v)} options={typeNames} half />
             </div>
             <div style={{ height: 12 }} />
-            <FormField label="Description (optional)" value={form.description||""} onChange={v => upd("description", v)} placeholder="Brief description" />
+            <FormField label={t("master_library.description_optional")} value={form.description||""} onChange={v => upd("description", v)} placeholder={t("master_library.brief_description")} />
           </>
         )}
         {errMsg && <div style={{ color: "#EF4444", fontSize: 12, marginTop: 8 }}>{errMsg}</div>}
@@ -6163,7 +6127,7 @@ function WorkersSection() {
   const openEdit   = (w) => { setEditing(w); setForm({ name:w.name||"", role:w.role||"Mason", category:w.category||"Skilled", daily_rate:w.daily_rate||0, phone:w.phone||"", city:w.city||"", address:w.address||"", id_number:w.id_number||"", status:w.status||"Active" }); setShowModal(true); };
 
   const save = async () => {
-    if (!form.name.trim()) return alert("Worker name required");
+    if (!form.name.trim()) return alert(t("master_library.worker_name_required"));
     setSaving(true);
     const res = await apiSave({ ...form, daily_rate: parseFloat(form.daily_rate)||0 }, editing?.id);
     setSaving(false);
@@ -6215,7 +6179,7 @@ function WorkersSection() {
   workers.forEach(w => { roleSummary[w.role] = (roleSummary[w.role]||0)+1; });
 
   const columns = [
-    { key:"name",       label:"Worker Name",   minW:180, render: w => (
+    { key:"name",       label:t("master_library.worker_name"),   minW:180, render: w => (
       <div style={{display:"flex",alignItems:"center",gap:9}}>
         <div style={{width:30,height:30,borderRadius:"50%",background:T.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:T.blue,flexShrink:0}}>
           {(w.name||"?")[0].toUpperCase()}
@@ -6226,23 +6190,23 @@ function WorkersSection() {
         </div>
       </div>
     )},
-    { key:"role",       label:"Skill / Role",  minW:120, render: w => {
+    { key:"role",       label:t("master_library.skill_role"),  minW:120, render: w => {
       const cc = catC[w.category||"Unskilled"] || catC.Unskilled;
-      return <Badge text={w.role||"Labour"} color={cc.c} bg={cc.bg} />;
+      return <Badge text={w.role||t("common.labour")} color={cc.c} bg={cc.bg} />;
     }},
-    { key:"category",   label:"Category",      minW:100, render: w => {
+    { key:"category",   label:t("common.category"),      minW:100, render: w => {
       const cc = catC[w.category||"Unskilled"] || catC.Unskilled;
-      return <span style={{fontSize:11,color:cc.c,fontWeight:600}}>{w.category||"Unskilled"}</span>;
+      return <span style={{fontSize:11,color:cc.c,fontWeight:600}}>{w.category||t("master_library.unskilled")}</span>;
     }},
-    { key:"daily_rate", label:"Daily Rate",     minW:90, align:"right", render: w => (
+    { key:"daily_rate", label:t("master_library.daily_rate"),     minW:90, align:"right", render: w => (
       <span style={{fontWeight:700,color:T.green}}>₹{(w.daily_rate||0).toLocaleString()}</span>
     )},
-    { key:"monthly",    label:"Monthly (26d)",  minW:100, align:"right", render: w => (
+    { key:"monthly",    label:t("master_library.monthly_26d"),  minW:100, align:"right", render: w => (
       <span style={{fontWeight:600,color:T.textMid}}>₹{((w.daily_rate||0)*26).toLocaleString()}</span>
     )},
-    { key:"city",       label:"City",           minW:80,  render: w => <span style={{color:T.textMid}}>{w.city||"—"}</span>},
-    { key:"status",     label:"Status",         minW:70,  render: w => (
-      <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:10,background:w.status==="Active"?T.greenSoft:T.borderLight,color:w.status==="Active"?T.green:T.textMid}}>{w.status||"Active"}</span>
+    { key:"city",       label:t("common.city"),           minW:80,  render: w => <span style={{color:T.textMid}}>{w.city||"—"}</span>},
+    { key:"status",     label:t("common.status"),         minW:70,  render: w => (
+      <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:10,background:w.status==="Active"?T.greenSoft:T.borderLight,color:w.status==="Active"?T.green:T.textMid}}>{w.status||t("common.active")}</span>
     )},
   ];
 
@@ -6264,7 +6228,7 @@ function WorkersSection() {
               </div>
             );
           })}
-          {filterRole!=="All"&&<button onClick={()=>setFilterRole("All")} style={{padding:"6px 12px",borderRadius:20,border:`1px solid ${T.border}`,background:"white",color:T.textMid,fontSize:11,cursor:"pointer"}}>✕ Clear</button>}
+          {filterRole!=="All"&&<button onClick={()=>setFilterRole("All")} style={{padding:"6px 12px",borderRadius:20,border:`1px solid ${T.border}`,background:"white",color:T.textMid,fontSize:11,cursor:"pointer"}}>{t("master_library.clear")}</button>}
         </div>
       )}
 
@@ -6272,59 +6236,59 @@ function WorkersSection() {
         templateConfig={templateConfig} currentData={workers} onImportData={handleImport} />
 
       {loading ? (
-        <div style={{textAlign:"center",padding:"40px 0",color:T.textLight}}>Loading...</div>
+        <div style={{textAlign:"center",padding:"40px 0",color:T.textLight}}>{t("common.loading")}</div>
       ) : (
         <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={id=>apiDel(id)}
           emptyMsg={search||filterRole!=="All" ? "No workers match your filter" : "No workers yet — add your first worker"} />
       )}
 
-      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?"Edit Worker":"Add Worker"} desc="Register worker with skill and daily rate" width={560}>
+      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?t("master_library.edit_worker"):t("common.add_worker")} desc={t("master_library.register_worker_with_skill_and_daily")} width={560}>
         {/* Name */}
-        <FormField label="Full Name" value={form.name} onChange={v=>upd("name",v)} placeholder="e.g. Ramesh Kumar" required />
+        <FormField label={t("master_library.full_name")} value={form.name} onChange={v=>upd("name",v)} placeholder={t("master_library.e_g_ramesh_kumar")} required />
         <div style={{height:14}}/>
         {/* Role + Category */}
         <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:14}}>
           <div style={{flex:1,minWidth:180}}>
-            <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Skill / Role <span style={{color:T.red}}>*</span></label>
+            <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>{t("master_library.skill_role")} <span style={{color:T.red}}>*</span></label>
             <SearchSelect value={form.role} options={WORKER_ROLES}
               onChange={v=>{upd("role",v);upd("category",ROLE_CAT_MAP[v]||"Semi-Skilled");}}
-              placeholder="Select role..."/>
+              placeholder={t("master_library.select_role")}/>
           </div>
           <div style={{flex:1,minWidth:180}}>
-            <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Category</label>
-            <SearchSelect value={form.category} options={WORKER_CATS} onChange={v=>upd("category",v)} placeholder="Select category..."/>
+            <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>{t("common.category")}</label>
+            <SearchSelect value={form.category} options={WORKER_CATS} onChange={v=>upd("category",v)} placeholder={t("common.select_category")}/>
           </div>
         </div>
         {/* Rate */}
         <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:14}}>
-          <FormField label="Daily Rate (₹)" value={form.daily_rate||""} onChange={v=>upd("daily_rate",v)} type="number" placeholder="e.g. 650" half required />
+          <FormField label={t("master_library.daily_rate_2")} value={form.daily_rate||""} onChange={v=>upd("daily_rate",v)} type="number" placeholder="e.g. 650" half required />
           <div style={{flex:1,minWidth:180}}>
-            <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Status</label>
-            <SearchSelect value={form.status} options={["Active","Inactive","Blacklisted"]} onChange={v=>upd("status",v)} placeholder="Select status..."/>
+            <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>{t("common.status")}</label>
+            <SearchSelect value={form.status} options={["Active","Inactive","Blacklisted"]} onChange={v=>upd("status",v)} placeholder={t("common.select_status")}/>
           </div>
         </div>
         {/* Contact */}
         <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:14}}>
-          <FormField label="Phone" value={form.phone} onChange={v=>upd("phone",v)} placeholder="Mobile number" type="tel" half />
-          <FormField label="City / Area" value={form.city} onChange={v=>upd("city",v)} placeholder="e.g. Raipur" half />
+          <FormField label={t("common.phone")} value={form.phone} onChange={v=>upd("phone",v)} placeholder={t("finance.mobile_number")} type="tel" half />
+          <FormField label={t("master_library.city_area_2")} value={form.city} onChange={v=>upd("city",v)} placeholder={t("master_library.e_g_raipur")} half />
         </div>
         {/* ID */}
-        <FormField label="Aadhar / ID Number" value={form.id_number} onChange={v=>upd("id_number",v)} placeholder="Optional — for identity verification" />
+        <FormField label={t("master_library.aadhar_id_number")} value={form.id_number} onChange={v=>upd("id_number",v)} placeholder={t("master_library.optional_for_identity_verification")} />
         <div style={{height:14}}/>
-        <FormTextarea label="Address" value={form.address} onChange={v=>upd("address",v)} placeholder="Optional" rows={2} />
+        <FormTextarea label={t("crm.address")} value={form.address} onChange={v=>upd("address",v)} placeholder={t("common.optional")} rows={2} />
         {/* Rate preview */}
         {form.daily_rate>0&&(
           <div style={{marginTop:14,padding:"10px 14px",borderRadius:8,background:T.greenSoft,border:`1px solid ${T.green}22`,display:"flex",gap:20}}>
             <div style={{textAlign:"center"}}>
-              <div style={{fontSize:11,color:T.textMid,marginBottom:2}}>Daily</div>
+              <div style={{fontSize:11,color:T.textMid,marginBottom:2}}>{t("master_library.daily")}</div>
               <div style={{fontSize:15,fontWeight:700,color:T.green}}>₹{parseFloat(form.daily_rate||0).toLocaleString()}</div>
             </div>
             <div style={{textAlign:"center"}}>
-              <div style={{fontSize:11,color:T.textMid,marginBottom:2}}>Weekly (6d)</div>
+              <div style={{fontSize:11,color:T.textMid,marginBottom:2}}>{t("master_library.weekly_6d")}</div>
               <div style={{fontSize:15,fontWeight:700,color:T.green}}>₹{(parseFloat(form.daily_rate||0)*6).toLocaleString()}</div>
             </div>
             <div style={{textAlign:"center"}}>
-              <div style={{fontSize:11,color:T.textMid,marginBottom:2}}>Monthly (26d)</div>
+              <div style={{fontSize:11,color:T.textMid,marginBottom:2}}>{t("master_library.monthly_26d")}</div>
               <div style={{fontSize:15,fontWeight:700,color:T.green}}>₹{(parseFloat(form.daily_rate||0)*26).toLocaleString()}</div>
             </div>
           </div>
@@ -6337,24 +6301,24 @@ function WorkersSection() {
 
 const masterSections = [
   // ── ITEM LIBRARY ──────────────────────────────────────────────────
-  { id: "work_cat",      label: "Work Category",       Icon: IcTool,      Comp: WorkCategorySection,      section: "ITEM LIBRARY", countKey: "work_categories", color: T.purple },
-  { id: "material_cat",  label: "Material Category",   Icon: IcFolder,    Comp: MaterialCategorySection,  section: null, countKey: "material_categories", color: T.blue },
-  { id: "materials",     label: "Material Master",     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, countKey: "materials", color: T.teal },
-  { id: "boq_items",     label: "BOQ Item Library",    Icon: IcBox,       Comp: BoqItemLibrarySection,    section: null, countKey: null, color: T.purple },
+  { id: "work_cat",      get label() { return t("master_library.work_category"); },       Icon: IcTool,      Comp: WorkCategorySection,      section: "ITEM LIBRARY", countKey: "work_categories", color: T.purple },
+  { id: "material_cat",  get label() { return t("master_library.material_category"); },   Icon: IcFolder,    Comp: MaterialCategorySection,  section: null, countKey: "material_categories", color: T.blue },
+  { id: "materials",     get label() { return t("master_library.material_master"); },     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, countKey: "materials", color: T.teal },
+  { id: "boq_items",     get label() { return t("master_library.boq_item_library"); },    Icon: IcBox,       Comp: BoqItemLibrarySection,    section: null, countKey: null, color: T.purple },
   // ── PEOPLE ────────────────────────────────────────────────────────
-  { id: "party",         label: "Party / Supplier",    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green },
-  { id: "subcon",        label: "Subcontractors",      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber },
-  { id: "workers",       label: "Workers",             Icon: IcHardHat,   Comp: WorkersSection,           section: null, countKey: "workers", color: T.blue },
+  { id: "party",         get label() { return t("master_library.party_supplier"); },    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green },
+  { id: "subcon",        get label() { return t("master_library.subcontractors"); },      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber },
+  { id: "workers",       get label() { return t("master_library.workers"); },             Icon: IcHardHat,   Comp: WorkersSection,           section: null, countKey: "workers", color: T.blue },
   // ── RATES & BOQ ───────────────────────────────────────────────────
-  { id: "subcon_rate",   label: "Subcon Rate Card",    Icon: IcDollar,    Comp: SubconRateCardSection,    section: "RATES & BOQ", countKey: null, color: T.teal },
-  { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
-  { id: "client_boq",    label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: null, countKey: null, color: T.indigo },
+  { id: "subcon_rate",   get label() { return t("master_library.subcon_rate_card"); },    Icon: IcDollar,    Comp: SubconRateCardSection,    section: "RATES & BOQ", countKey: null, color: T.teal },
+  { id: "labour",        get label() { return t("master_library.labour_rate_card"); },    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
+  { id: "client_boq",    get label() { return t("master_library.client_boq_rate"); },     Icon: IcClipboard, Comp: ClientBOQSection,         section: null, countKey: null, color: T.indigo },
   // Equipment / Machinery ab apne Machinery module me hai. Yahan se hataya
   // gaya taaki ek machine do jagah edit na ho — register wahi ek rahe.
   // ── OTHER ─────────────────────────────────────────────────────────
-  { id: "design_library", label: "Design Library",     Icon: IcLayers,    Comp: DesignLibrarySection,     section: "OTHER", countKey: null, color: T.purple },
-  { id: "uom",           label: "Units (UOM)",         Icon: IcRuler,     Comp: UOMMasterSection,         section: null, countKey: "uom", color: T.teal },
-  { id: "expense_head",  label: "Expense Heads",       Icon: IcDollar,    Comp: ExpenseHeadSection,       section: null, count: "14", color: T.amber },
+  { id: "design_library", get label() { return t("master_library.design_library"); },     Icon: IcLayers,    Comp: DesignLibrarySection,     section: "OTHER", countKey: null, color: T.purple },
+  { id: "uom",           get label() { return t("master_library.units_uom"); },         Icon: IcRuler,     Comp: UOMMasterSection,         section: null, countKey: "uom", color: T.teal },
+  { id: "expense_head",  get label() { return t("master_library.expense_heads"); },       Icon: IcDollar,    Comp: ExpenseHeadSection,       section: null, count: "14", color: T.amber },
 ];
 
 export default function MasterLibraryModule() {
@@ -6378,8 +6342,8 @@ export default function MasterLibraryModule() {
               <IcGrid size={18} color="white" />
             </div>
             <div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: T.text, letterSpacing: "-0.3px" }}>Master Library</div>
-              <div style={{ fontSize: 11, color: T.textLight }}>Central Data Repository</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: T.text, letterSpacing: "-0.3px" }}>{t("master_library.master_library_2")}</div>
+              <div style={{ fontSize: 11, color: T.textLight }}>{t("master_library.central_data_repository")}</div>
             </div>
           </div>
         </div>
@@ -6403,7 +6367,7 @@ export default function MasterLibraryModule() {
             );
           })}
         </nav>
-        <div style={{ padding: "14px 20px", borderTop: `1px solid ${T.border}`, fontSize: 11, color: T.textLight }}>Construction Manager v2.1</div>
+        <div style={{ padding: "14px 20px", borderTop: `1px solid ${T.border}`, fontSize: 11, color: T.textLight }}>{t("master_library.construction_manager_v2_1")}</div>
       </div>
 
       {/* Content */}
@@ -6412,20 +6376,20 @@ export default function MasterLibraryModule() {
           <div>
             <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>{active?.label}</div>
             <div style={{ fontSize: 12, color: T.textLight, marginTop: 2 }}>
-              {activeSection === "materials" && "Central material database with rates, HSN codes, and stock levels"}
-              {activeSection === "material_cat" && "Organize materials into categories and subcategories"}
-              {activeSection === "party" && "Suppliers, clients, transporters, and other business parties"}
-              {activeSection === "work_cat" && "Types of construction work with base rates"}
-              {activeSection === "subcon" && "Subcontractor firms, trade specialties, and rate cards"}
-              {activeSection === "boq" && "Project-wise client BOQ with cost vs client rate comparison"}
-              {activeSection === "workers" && "Register individual workers with skill, daily rate, and contact info"}
-              {activeSection === "labour" && "Daily wages and overtime rates for all skill levels"}
-              {activeSection === "uom" && "Standard units of measurement used across the system"}
-              {activeSection === "expense_head" && "Expense categories for accounting and reporting"}
+              {activeSection === "materials" && t("master_library.central_material_database_with_rates_hsn")}
+              {activeSection === "material_cat" && t("master_library.organize_materials_into_categories_and_subcategories")}
+              {activeSection === "party" && t("master_library.suppliers_clients_transporters_and_other_business")}
+              {activeSection === "work_cat" && t("master_library.types_of_construction_work_with_base")}
+              {activeSection === "subcon" && t("master_library.subcontractor_firms_trade_specialties_and_rate")}
+              {activeSection === "boq" && t("master_library.project_wise_client_boq_with_cost")}
+              {activeSection === "workers" && t("master_library.register_individual_workers_with_skill_daily")}
+              {activeSection === "labour" && t("master_library.daily_wages_and_overtime_rates_for")}
+              {activeSection === "uom" && t("master_library.standard_units_of_measurement_used_across")}
+              {activeSection === "expense_head" && t("master_library.expense_categories_for_accounting_and_reporting")}
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.textLight }}>
-            <span>Master Library</span><IcChevR size={12} color={T.textLight} /><span style={{ color: T.blue, fontWeight: 600 }}>{active?.label}</span>
+            <span>{t("master_library.master_library_2")}</span><IcChevR size={12} color={T.textLight} /><span style={{ color: T.blue, fontWeight: 600 }}>{active?.label}</span>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>

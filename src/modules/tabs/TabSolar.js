@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import api, { API_BASE } from "../../config/api";
 import { T } from "../shared/tokens";
 import { Panel } from "../shared/ui";
+import { t } from "../../i18n";
 
 // Stage status colors (solar)
 const SOLAR_STAGE_S = {
@@ -209,7 +210,7 @@ function TabSuryaGhar({ projectId }) {
       fd.append("folder", "gb_buildcon/install_photos");
       const cld = await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/image/upload", { method: "POST", body: fd });
       const cldData = await cld.json();
-      if (!cldData.secure_url) { setErr("Upload failed"); setPhotoUploading(null); return; }
+      if (!cldData.secure_url) { setErr(t("common.upload_failed")); setPhotoUploading(null); return; }
       const res = await api.put(`/solar/projects/${projectId}/install-photos/${stepNum}`, { photo_url: cldData.secure_url });
       if (res.success) {
         setInstallPhotos(p => p.map(s => s.step_number === stepNum ? res.data : s));
@@ -228,7 +229,7 @@ function TabSuryaGhar({ projectId }) {
       fd.append("folder", "gb_buildcon/net_meter_docs");
       const cld = await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/auto/upload", { method: "POST", body: fd });
       const cldData = await cld.json();
-      if (!cldData.secure_url) { setErr("Upload failed"); setNmDocUploading(null); return; }
+      if (!cldData.secure_url) { setErr(t("common.upload_failed")); setNmDocUploading(null); return; }
       // Save as stage 16 document
       const res = await api.post(`/solar/projects/${projectId}/stages/16/documents`, {
         document_name: docName, document_type: "net_meter_doc", file_url: cldData.secure_url
@@ -302,7 +303,7 @@ function TabSuryaGhar({ projectId }) {
   };
 
   if (loading) return (
-    <div style={{textAlign:"center",padding:"60px 0",color:T.t4}}>Loading stages...</div>
+    <div style={{textAlign:"center",padding:"60px 0",color:T.t4}}>{t("solar.loading_stages")}</div>
   );
 
   const completed = stages.filter(s => s.status === "completed").length;
@@ -315,13 +316,13 @@ function TabSuryaGhar({ projectId }) {
       {/* Progress header */}
       <div style={{background:T.surface,borderRadius:10,padding:"14px 16px",border:`1px solid ${T.b1}`,marginBottom:14}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.t1}}>PM Surya Ghar Progress</div>
-          <div style={{fontSize:14,fontWeight:800,color:T.grn}}>{pct}% Complete</div>
+          <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("solar.pm_surya_ghar_progress")}</div>
+          <div style={{fontSize:14,fontWeight:800,color:T.grn}}>{t("solar.pct_complete", { pct })}</div>
         </div>
         <div style={{height:6,background:T.b1,borderRadius:6,overflow:"hidden"}}>
           <div style={{height:"100%",width:`${pct}%`,background:pct===100?T.grn:T.blu,borderRadius:6,transition:"width .5s"}}/>
         </div>
-        <div style={{fontSize:11,color:T.t4,marginTop:6}}>{completed} of {stages.length} stages completed</div>
+        <div style={{fontSize:11,color:T.t4,marginTop:6}}>{t("solar.completed_of_stages_stages_completed", { completed, stages: stages.length })}</div>
         {solar && (
           <div style={{display:"flex",gap:16,marginTop:10,paddingTop:10,borderTop:`1px solid ${T.b1}`,flexWrap:"wrap",alignItems:"center"}}>
             {[
@@ -337,7 +338,7 @@ function TabSuryaGhar({ projectId }) {
             ))}
             {/* Loan Toggle */}
             <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:10,fontWeight:600,color:T.t3}}>Bank Loan</span>
+              <span style={{fontSize:10,fontWeight:600,color:T.t3}}>{t("solar.bank_loan")}</span>
               <button onClick={toggleLoan}
                 style={{width:44,height:22,borderRadius:11,padding:2,border:"none",cursor:"pointer",
                   background:solar.loan_required?"#059669":"#D1D5DB",transition:"background .2s",
@@ -347,7 +348,7 @@ function TabSuryaGhar({ projectId }) {
                   transition:"transform .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
               </button>
               <span style={{fontSize:10,fontWeight:700,color:solar.loan_required?T.grn:T.t4}}>
-                {solar.loan_required?"Required":"Not Required"}
+                {solar.loan_required?t("crm.required"):t("solar.not_required")}
               </span>
             </div>
           </div>
@@ -388,13 +389,13 @@ function TabSuryaGhar({ projectId }) {
                 <div style={{flex:1}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
                     <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{stage.stage_name}</span>
-                    {stage.is_skippable===1&&<span style={{fontSize:9,color:T.blu,background:T.bluL,padding:"1px 6px",borderRadius:10,border:`1px solid ${T.bluM}`}}>Optional</span>}
+                    {stage.is_skippable===1&&<span style={{fontSize:9,color:T.blu,background:T.bluL,padding:"1px 6px",borderRadius:10,border:`1px solid ${T.bluM}`}}>{t("common.optional")}</span>}
                     <span style={{fontSize:9.5,fontWeight:700,background:ss.bg,color:ss.c,padding:"1px 8px",borderRadius:10,border:`1px solid ${ss.bdr}`,marginLeft:"auto"}}>{stage.status.replace("_"," ")}</span>
                   </div>
                   {isActive && STAGE_HINTS[stage.stage_number] && (
                     <div style={{fontSize:10.5,color:T.blu,marginTop:2}}>💡 {STAGE_HINTS[stage.stage_number]}</div>
                   )}
-                  {stage.completed_date&&<div style={{fontSize:10.5,color:T.t4}}>Completed: {new Date(stage.completed_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</div>}
+                  {stage.completed_date&&<div style={{fontSize:10.5,color:T.t4}}>{t("solar.completed_vnew", { vnew: new Date(stage.completed_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) })}</div>}
                   {stage.notes&&<div style={{fontSize:11,color:T.t3,marginTop:2,fontStyle:"italic"}}>"{stage.notes}"</div>}
                   {/* Documents */}
                   {docList.length>0&&(
@@ -406,7 +407,7 @@ function TabSuryaGhar({ projectId }) {
                             📎 {name}
                           </a>
                           {!isDone&&!isSkipped&&idList[i]&&(
-                            <label title="Replace this document" style={{display:"inline-flex",alignItems:"center",padding:"2px 6px",background:"#FEF3C7",borderLeft:`1px solid ${T.bluM}`,cursor:uploading?"not-allowed":"pointer",fontSize:10,color:"#92400E"}}>
+                            <label title={t("solar.replace_this_document")} style={{display:"inline-flex",alignItems:"center",padding:"2px 6px",background:"#FEF3C7",borderLeft:`1px solid ${T.bluM}`,cursor:uploading?"not-allowed":"pointer",fontSize:10,color:"#92400E"}}>
                               <input type="file" accept="image/*,application/pdf" style={{display:"none"}} disabled={uploading}
                                 onChange={e=>{const f=e.target.files[0];if(f)replaceDoc(f,idList[i]);e.target.value="";}}/>
                               🔄
@@ -429,8 +430,8 @@ function TabSuryaGhar({ projectId }) {
                         <div style={{padding:"8px 12px",background:"#FFFBEB",display:"flex",alignItems:"center",gap:8}}>
                           <span style={{fontSize:16}}>📋</span>
                           <div style={{flex:1}}>
-                            <div style={{fontSize:11.5,fontWeight:700,color:"#D97706"}}>Net Metering — Document Checklist</div>
-                            <div style={{fontSize:10,color:"#D9770699"}}>{available}/{total} ready · {pct}%</div>
+                            <div style={{fontSize:11.5,fontWeight:700,color:"#D97706"}}>{t("solar.net_metering_document_checklist")}</div>
+                            <div style={{fontSize:10,color:"#D9770699"}}>{t("solar.available_total_ready_pct", { available, total, pct })}</div>
                           </div>
                           <div style={{width:60,height:6,borderRadius:3,background:"#FDE68A44"}}>
                             <div style={{width:`${pct}%`,height:"100%",borderRadius:3,background:pct===100?"#059669":"#D97706",transition:"width .3s"}}/>
@@ -453,7 +454,7 @@ function TabSuryaGhar({ projectId }) {
                                 <div style={{flex:1,minWidth:0}}>
                                   <div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{i+1}. {doc.name}</div>
                                   <div style={{fontSize:9.5,color:hasFile?(fromPrev?"#059669":"#2563EB"):"#DC2626",fontWeight:500,marginTop:1}}>
-                                    {hasFile?(fromPrev?`✅ ${doc.source_label}`:"✅ Uploaded"):`❌ ${doc.source_label}`}
+                                    {hasFile?(fromPrev?`✅ ${doc.source_label}`:t("solar.uploaded")):`❌ ${doc.source_label}`}
                                   </div>
                                 </div>
                                 {/* View / Upload actions */}
@@ -461,13 +462,13 @@ function TabSuryaGhar({ projectId }) {
                                   {hasFile&&(
                                     <a href={doc.file_url} target="_blank" rel="noreferrer"
                                       style={{padding:"3px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10,fontWeight:600,textDecoration:"none"}}>
-                                      View
+                                     {t("common.view_2")}
                                     </a>
                                   )}
                                   {!isDone16&&(
                                     <label style={{padding:"3px 10px",borderRadius:5,background:hasFile?"#FEF3C7":"#FEE2E2",border:`1px solid ${hasFile?"#FDE68A":"#FECACA"}`,
                                       color:hasFile?"#D97706":"#DC2626",fontSize:10,fontWeight:600,cursor:"pointer"}}>
-                                      {nmDocUploading===doc.name?"...":(hasFile?"Replace":"Upload")}
+                                      {nmDocUploading===doc.name?"...":(hasFile?t("crm.replace"):t("solar.upload"))}
                                       <input type="file" accept="image/*,.pdf" style={{display:"none"}}
                                         onChange={e=>{if(e.target.files[0])uploadNetMeterDoc(doc.name,e.target.files[0]);}}/>
                                     </label>
@@ -480,9 +481,9 @@ function TabSuryaGhar({ projectId }) {
                         {/* Footer summary */}
                         <div style={{padding:"6px 12px 8px",borderTop:"1px solid #FDE68A44",background:"#FFFBEB88",display:"flex",justifyContent:"space-between"}}>
                           <span style={{fontSize:10,fontWeight:600,color:pct===100?"#059669":"#DC2626"}}>
-                            {pct===100?"✅ All documents ready":`⚠ ${total-available} document${total-available>1?"s":""} missing`}
+                            {pct===100?t("solar.all_documents_ready"):`⚠ ${total-available} document${total-available>1?"s":""} missing`}
                           </span>
-                          <span style={{fontSize:9,color:"#D9770088"}}>Upload missing docs to proceed</span>
+                          <span style={{fontSize:9,color:"#D9770088"}}>{t("solar.upload_missing_docs_to_proceed")}</span>
                         </div>
                       </div>
                     );
@@ -493,25 +494,25 @@ function TabSuryaGhar({ projectId }) {
                       <div style={{padding:"8px 12px",background:"#F3E8FF",display:"flex",alignItems:"center",gap:8}}>
                         <span style={{fontSize:16}}>🔧</span>
                         <div style={{flex:1}}>
-                          <div style={{fontSize:11.5,fontWeight:700,color:"#7C3AED"}}>Installation Team Details</div>
+                          <div style={{fontSize:11.5,fontWeight:700,color:"#7C3AED"}}>{t("solar.installation_team_details")}</div>
                         </div>
                       </div>
                       <div style={{padding:"10px 12px"}}>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                           <div>
-                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>Team / Subcontractor</div>
+                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>{t("solar.team_subcontractor")}</div>
                             <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{solar.installer_name}</div>
                           </div>
                           <div>
-                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>Contact</div>
+                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>{t("solar.contact")}</div>
                             <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{solar.installer_phone||"—"}</div>
                           </div>
                           <div>
-                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>Installation Date</div>
+                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>{t("solar.installation_date")}</div>
                             <div style={{fontSize:12,fontWeight:600,color:T.blu}}>{solar.installation_date?new Date(solar.installation_date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):"—"}</div>
                           </div>
                           <div>
-                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>Notes</div>
+                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>{t("common.notes")}</div>
                             <div style={{fontSize:11,color:T.t2}}>{solar.installation_notes||"—"}</div>
                           </div>
                         </div>
@@ -530,8 +531,8 @@ function TabSuryaGhar({ projectId }) {
                         <div style={{padding:"8px 12px",background:"#EFF6FF",display:"flex",alignItems:"center",gap:8}}>
                           <span style={{fontSize:16}}>📸</span>
                           <div style={{flex:1}}>
-                            <div style={{fontSize:11.5,fontWeight:700,color:"#2563EB"}}>Installation Photos</div>
-                            <div style={{fontSize:10,color:"#2563EB99"}}>{uploaded}/{total} uploaded · {pct}%</div>
+                            <div style={{fontSize:11.5,fontWeight:700,color:"#2563EB"}}>{t("solar.installation_photos")}</div>
+                            <div style={{fontSize:10,color:"#2563EB99"}}>{t("solar.uploaded_total_uploaded_pct", { uploaded, total, pct })}</div>
                           </div>
                           <div style={{width:60,height:6,borderRadius:3,background:"#93C5FD44"}}>
                             <div style={{width:`${pct}%`,height:"100%",borderRadius:3,background:pct===100?"#059669":"#2563EB",transition:"width .3s"}}/>
@@ -551,11 +552,11 @@ function TabSuryaGhar({ projectId }) {
                               ):(
                                 <label style={{display:"flex",alignItems:"center",justifyContent:"center",height:80,background:T.sltL,cursor:isDone?"default":"pointer",flexDirection:"column",gap:2}}>
                                   {photoUploading===step.step_number?(
-                                    <span style={{fontSize:10,color:T.blu,fontWeight:600}}>Uploading...</span>
+                                    <span style={{fontSize:10,color:T.blu,fontWeight:600}}>{t("common.uploading")}</span>
                                   ):(
                                     <>
                                       <span style={{fontSize:20,color:T.t4}}>📷</span>
-                                      <span style={{fontSize:9,color:T.t4}}>Click to upload</span>
+                                      <span style={{fontSize:9,color:T.t4}}>{t("solar.click_to_upload")}</span>
                                     </>
                                   )}
                                   {!isDone&&<input type="file" accept="image/*" style={{display:"none"}}
@@ -574,9 +575,9 @@ function TabSuryaGhar({ projectId }) {
                               <div style={{padding:"5px 7px",borderTop:`1px solid ${step.photo_url?T.grnM:T.b1}`}}>
                                 <div style={{fontSize:9.5,fontWeight:700,color:T.t1,lineHeight:1.2}}>{step.step_number}. {step.step_name}</div>
                                 <div style={{fontSize:8.5,color:step.photo_url?T.grn:T.t4,fontWeight:600,marginTop:1}}>
-                                  {step.photo_url?"✓ Uploaded":"⏳ Required"}
+                                  {step.photo_url?t("solar.uploaded_2"):t("solar.required")}
                                 </div>
-                                {step.is_ocr_step===1&&<div style={{fontSize:8,color:"#D97706",marginTop:1}}>⚡ OCR</div>}
+                                {step.is_ocr_step===1&&<div style={{fontSize:8,color:"#D97706",marginTop:1}}>{t("solar.ocr")}</div>}
                               </div>
                             </div>
                           ))}
@@ -585,11 +586,11 @@ function TabSuryaGhar({ projectId }) {
                         {!isDone&&(
                           <div style={{padding:"6px 10px 8px",borderTop:"1px solid #93C5FD44",background:"#F8FAFF",display:"flex",gap:6,alignItems:"center"}}>
                             <input value={addStepName} onChange={e=>setAddStepName(e.target.value)}
-                              placeholder="Add custom photo step..."
+                              placeholder={t("solar.add_custom_photo_step")}
                               style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
                             <button onClick={addCustomStep} disabled={addingStep||!addStepName.trim()}
                               style={{padding:"5px 12px",borderRadius:6,background:addingStep||!addStepName.trim()?T.b1:T.blu,border:"none",color:"white",fontSize:10.5,fontWeight:700,cursor:addingStep?"not-allowed":"pointer"}}>
-                              {addingStep?"Adding...":"+ Add Step"}
+                              {addingStep?t("common.adding_2"):t("solar.add_step")}
                             </button>
                           </div>
                         )}
@@ -607,8 +608,8 @@ function TabSuryaGhar({ projectId }) {
                     }[stage.stage_number]||[];
                     if(!stageMrs.length&&!mrs.length) return(
                       <div style={{marginTop:8,padding:"10px 12px",borderRadius:8,background:"#FFF7ED",border:"1px dashed #FDBA74",textAlign:"center"}}>
-                        <div style={{fontSize:11,color:"#EA580C",fontWeight:600}}>📦 No material requests yet</div>
-                        <div style={{fontSize:10,color:"#FB923C",marginTop:2}}>Complete Stage 10 to auto-generate 3 kits</div>
+                        <div style={{fontSize:11,color:"#EA580C",fontWeight:600}}>{t("solar.no_material_requests_yet")}</div>
+                        <div style={{fontSize:10,color:"#FB923C",marginTop:2}}>{t("solar.complete_stage_10_to_auto_generate")}</div>
                       </div>
                     );
                     // Progress calc
@@ -625,7 +626,7 @@ function TabSuryaGhar({ projectId }) {
                           <span style={{fontSize:16}}>{sc.icon}</span>
                           <div style={{flex:1}}>
                             <div style={{fontSize:11.5,fontWeight:700,color:sc.c}}>
-                              {stage.stage_number===11?"Material Requests":stage.stage_number===12?"Order & Dispatch":"GRN — Goods Received"}
+                              {stage.stage_number===11?t("common.material_requests"):stage.stage_number===12?t("solar.order_dispatch"):t("solar.grn_goods_received")}
                             </div>
                             <div style={{fontSize:10,color:sc.c+"BB"}}>{progress.done}/{progress.total} {progress.label} · {pct}%</div>
                           </div>
@@ -640,19 +641,19 @@ function TabSuryaGhar({ projectId }) {
                             // Status chip per stage
                             const chip=(()=>{
                               if(stage.stage_number===11){
-                                if(mr.mr_status==="Approved") return {t:"Approved",bg:"#DCFCE7",c:"#16A34A",bdr:"#86EFAC"};
-                                if(mr.mr_status==="Rejected") return {t:"Rejected",bg:"#FEE2E2",c:"#DC2626",bdr:"#FCA5A5"};
-                                return {t:"Pending",bg:"#FEF9C3",c:"#CA8A04",bdr:"#FDE047"};
+                                if(mr.mr_status==="Approved") return {t:t("common.approved"),bg:"#DCFCE7",c:"#16A34A",bdr:"#86EFAC"};
+                                if(mr.mr_status==="Rejected") return {t:t("common.rejected"),bg:"#FEE2E2",c:"#DC2626",bdr:"#FCA5A5"};
+                                return {t:t("common.pending"),bg:"#FEF9C3",c:"#CA8A04",bdr:"#FDE047"};
                               }
                               if(stage.stage_number===12){
-                                if(mr.mat_status==="Received") return {t:"Delivered",bg:"#DCFCE7",c:"#16A34A",bdr:"#86EFAC"};
+                                if(mr.mat_status==="Received") return {t:t("projects.delivered"),bg:"#DCFCE7",c:"#16A34A",bdr:"#86EFAC"};
                                 if(mr.mat_status==="Ordered"||mr.mat_status==="Dispatched") return {t:mr.mat_status,bg:"#DBEAFE",c:"#2563EB",bdr:"#93C5FD"};
-                                return {t:"Awaiting PO",bg:"#FEF9C3",c:"#CA8A04",bdr:"#FDE047"};
+                                return {t:t("solar.awaiting_po"),bg:"#FEF9C3",c:"#CA8A04",bdr:"#FDE047"};
                               }
                               // stage 13
-                              if(mr.mat_status==="Received") return {t:"✓ Received",bg:"#DCFCE7",c:"#16A34A",bdr:"#86EFAC"};
-                              if(mr.mat_status==="PartialReceived") return {t:"Partial",bg:"#FEF9C3",c:"#CA8A04",bdr:"#FDE047"};
-                              return {t:"Pending GRN",bg:"#EFF6FF",c:"#2563EB",bdr:"#93C5FD"};
+                              if(mr.mat_status==="Received") return {t:t("common.received_2"),bg:"#DCFCE7",c:"#16A34A",bdr:"#86EFAC"};
+                              if(mr.mat_status==="PartialReceived") return {t:t("common.partial"),bg:"#FEF9C3",c:"#CA8A04",bdr:"#FDE047"};
+                              return {t:t("solar.pending_grn"),bg:"#EFF6FF",c:"#2563EB",bdr:"#93C5FD"};
                             })();
                             const canReceive=stage.stage_number===13&&(mr.mat_status==="Ordered"||mr.mat_status==="Dispatched");
                             const isReceived=mr.mat_status==="Received";
@@ -672,43 +673,43 @@ function TabSuryaGhar({ projectId }) {
                                   {canReceive&&(
                                     <button onClick={()=>{setGrnFor(grnFor===mr.id?null:mr.id);setGrnChallan("");setGrnQty(String(mr.quantity||""));}}
                                       style={{padding:"4px 10px",borderRadius:6,background:"linear-gradient(135deg,#059669,#10B981)",color:"white",border:"none",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",boxShadow:"0 1px 3px rgba(5,150,105,0.3)"}}>
-                                      📥 Receive GRN
+                                     {t("solar.receive_grn")}
                                     </button>
                                   )}
                                 </div>
                                 {/* Received info */}
                                 {isReceived&&(
                                   <div style={{padding:"0 10px 6px",display:"flex",gap:10,fontSize:9.5,color:T.t4}}>
-                                    {mr.challan_no&&<span>📄 DC: {mr.challan_no}</span>}
-                                    <span>✅ Received</span>
+                                    {mr.challan_no&&<span>{t("solar.dc_challan_no", { challan_no: mr.challan_no })}</span>}
+                                    <span>{t("solar.received")}</span>
                                     <span style={{fontSize:9,color:T.t4}}>{mr.mr_number}</span>
                                   </div>
                                 )}
                                 {/* GRN Form — only in Stage 13 for ordered materials */}
                                 {grnFor===mr.id&&stage.stage_number===13&&(
                                   <div style={{padding:"8px 10px 10px",borderTop:`1px solid ${T.b1}`,background:"linear-gradient(180deg,#F0FDF4,#ECFDF5)"}}>
-                                    <div style={{fontSize:11,fontWeight:700,color:T.grn,marginBottom:6}}>📥 Receive Material — GRN</div>
+                                    <div style={{fontSize:11,fontWeight:700,color:T.grn,marginBottom:6}}>{t("solar.receive_material_grn")}</div>
                                     <div style={{display:"grid",gridTemplateColumns:"1fr 80px",gap:6,marginBottom:8}}>
                                       <div>
-                                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Challan / DC Number</label>
-                                        <input value={grnChallan} onChange={e=>setGrnChallan(e.target.value)} placeholder="e.g. DC-2024-001"
+                                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>{t("procurement.challan_dc_number")}</label>
+                                        <input value={grnChallan} onChange={e=>setGrnChallan(e.target.value)} placeholder={t("solar.e_g_dc_2024_001")}
                                           style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.grnM}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}/>
                                       </div>
                                       <div>
-                                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Qty ({mr.unit})</label>
+                                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>{t("solar.qty_unit", { unit: mr.unit })}</label>
                                         <input type="number" value={grnQty} onChange={e=>setGrnQty(e.target.value)} placeholder={String(mr.quantity)}
                                           style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.grnM}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}/>
                                       </div>
                                     </div>
                                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                                      <span style={{fontSize:10,color:T.t4}}>Ordered: {mr.quantity} {mr.unit}</span>
-                                      {grnQty&&parseFloat(grnQty)<parseFloat(mr.quantity)&&<span style={{fontSize:10,color:"#D97706",fontWeight:600}}>⚠ Partial receipt</span>}
+                                      <span style={{fontSize:10,color:T.t4}}>{t("solar.ordered_quantity_unit", { quantity: mr.quantity, unit: mr.unit })}</span>
+                                      {grnQty&&parseFloat(grnQty)<parseFloat(mr.quantity)&&<span style={{fontSize:10,color:"#D97706",fontWeight:600}}>{t("solar.partial_receipt")}</span>}
                                       <div style={{flex:1}}/>
                                       <button onClick={()=>setGrnFor(null)}
-                                        style={{padding:"6px 12px",borderRadius:6,background:"white",border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                                        style={{padding:"6px 12px",borderRadius:6,background:"white",border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
                                       <button onClick={()=>receiveGrn(mr.id)} disabled={grnSaving}
                                         style={{padding:"6px 16px",borderRadius:6,background:grnSaving?T.b1:"linear-gradient(135deg,#059669,#10B981)",color:"white",border:"none",fontSize:11.5,fontWeight:700,cursor:grnSaving?"not-allowed":"pointer",boxShadow:"0 2px 6px rgba(5,150,105,0.3)"}}>
-                                        {grnSaving?"Processing...":"✓ Confirm GRN"}
+                                        {grnSaving?t("solar.processing"):t("solar.confirm_grn")}
                                       </button>
                                     </div>
                                   </div>
@@ -722,7 +723,7 @@ function TabSuryaGhar({ projectId }) {
                           <span style={{fontSize:10,fontWeight:600,color:sc.c}}>
                             {pct===100?`✅ All ${progress.label}`:`⏳ ${progress.total-progress.done} pending`}
                           </span>
-                          <span style={{fontSize:9,color:sc.c+"99"}}>{mrs.length} total items · {mrs.map(m=>m.mr_number).filter(Boolean).join(", ")}</span>
+                          <span style={{fontSize:9,color:sc.c+"99"}}>{t("solar.mrs_total_items_mrs2", { mrs: mrs.length, mrs2: mrs.map(m=>m.mr_number).filter(Boolean).join(", ") })}</span>
                         </div>
                       </div>
                     );
@@ -735,19 +736,19 @@ function TabSuryaGhar({ projectId }) {
                 <div style={{padding:"8px 13px 10px 51px",display:"flex",gap:7,flexWrap:"wrap",alignItems:"center",borderTop:`1px solid ${T.b1}`,background:T.surfaceB}}>
                   {stage.stage_number===1&&(
                     <>
-                      <input value={portalMobile} onChange={e=>setPortalMobile(e.target.value)} placeholder="Portal Mobile No."
+                      <input value={portalMobile} onChange={e=>setPortalMobile(e.target.value)} placeholder={t("solar.portal_mobile_no")}
                         style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",width:140}}/>
-                      <input value={bpNumber} onChange={e=>setBpNumber(e.target.value)} placeholder="BP Number"
+                      <input value={bpNumber} onChange={e=>setBpNumber(e.target.value)} placeholder={t("solar.bp_number")}
                         style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",width:130}}/>
                     </>
                   )}
                   {/* ══ Stage 14 — Installation Team Selection ══ */}
                   {stage.stage_number===14&&(
                     <div style={{width:"100%",marginBottom:6}}>
-                      <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:6}}>🔧 Installation Team Setup</div>
+                      <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:6}}>{t("solar.installation_team_setup")}</div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
                         <div>
-                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Installation Team / Subcontractor *</label>
+                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>{t("solar.installation_team_subcontractor")}</label>
                           <select value={installerSubconId} onChange={e=>{
                             const id=e.target.value;
                             setInstallerSubconId(id);
@@ -757,17 +758,17 @@ function TabSuryaGhar({ projectId }) {
                             } else { setInstallerName("");setInstallerPhone(""); }
                           }}
                             style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.purL?T.b1:T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}>
-                            <option value="">— Select from Library —</option>
+                            <option value="">{t("solar.select_from_library")}</option>
                             {subcons.map(sc=>(
                               <option key={sc.id} value={sc.id}>{sc.name}{sc.trade?` (${sc.trade})`:""}{sc.city?` — ${sc.city}`:""}</option>
                             ))}
-                            <option value="__manual__">✏️ Enter Manually</option>
+                            <option value="__manual__">{t("solar.enter_manually")}</option>
                           </select>
                         </div>
                         <div>
-                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Team Name *</label>
+                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>{t("solar.team_name")}</label>
                           <input value={installerName} onChange={e=>setInstallerName(e.target.value)}
-                            placeholder="Installer / Team name"
+                            placeholder={t("solar.installer_team_name")}
                             readOnly={installerSubconId && installerSubconId!=="__manual__"}
                             style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",
                               background:installerSubconId&&installerSubconId!=="__manual__"?T.sltL:"white"}}/>
@@ -775,23 +776,23 @@ function TabSuryaGhar({ projectId }) {
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
                         <div>
-                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Contact Number {installerSubconId&&installerSubconId!=="__manual__"?"(auto-fetched)":"*"}</label>
+                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>{t("solar.contact_number_installersubconid", { installerSubconId: installerSubconId&&installerSubconId!=="__manual__"?"(auto-fetched)":"*" })}</label>
                           <input value={installerPhone} onChange={e=>setInstallerPhone(e.target.value)}
-                            placeholder="Phone number"
+                            placeholder={t("solar.phone_number")}
                             readOnly={installerSubconId && installerSubconId!=="__manual__" && !!installerPhone}
                             style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",
                               background:installerSubconId&&installerSubconId!=="__manual__"&&installerPhone?T.sltL:"white"}}/>
                         </div>
                         <div>
-                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Installation Date *</label>
+                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>{t("solar.installation_date_2")}</label>
                           <input type="date" value={installDate} onChange={e=>setInstallDate(e.target.value)}
                             style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                         </div>
                       </div>
                       <div>
-                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Installation Notes *</label>
+                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>{t("solar.installation_notes")}</label>
                         <textarea value={installNotes} onChange={e=>setInstallNotes(e.target.value)}
-                          placeholder="Roof type, access details, special instructions..."
+                          placeholder={t("solar.roof_type_access_details_special_instructions")}
                           rows={2}
                           style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",resize:"vertical"}}/>
                       </div>
@@ -815,26 +816,26 @@ function TabSuryaGhar({ projectId }) {
                       }catch(e){alert("Download failed: "+e.message);}
                     }}
                       style={{padding:"5px 14px",borderRadius:6,background:"linear-gradient(135deg,#7C3AED,#9333EA)",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                      📄 Download Agreement
+                     {t("solar.download_agreement")}
                     </button>
                   )}
                   <button onClick={()=>markStage(stage.stage_number,"completed")} disabled={isActing}
                     style={{padding:"5px 14px",borderRadius:6,background:isActing?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:isActing?"not-allowed":"pointer"}}>
-                    {isActing?"...":"✓ Mark Complete"}
+                    {isActing?"...":t("solar.mark_complete")}
                   </button>
                   {stage.is_skippable===1&&(
                     <button onClick={()=>markStage(stage.stage_number,"skipped")} disabled={isActing}
                       style={{padding:"5px 12px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                      Skip (No Loan)
+                     {t("solar.skip_no_loan")}
                     </button>
                   )}
                   <button onClick={()=>setNoteFor(noteFor===stage.stage_number?null:stage.stage_number)}
                     style={{padding:"5px 10px",borderRadius:6,background:"none",border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,cursor:"pointer"}}>
-                    + Note
+                   {t("solar.note")}
                   </button>
                   <button onClick={()=>setDocFor(docFor===stage.stage_number?null:stage.stage_number)}
                     style={{padding:"5px 10px",borderRadius:6,background:"none",border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,cursor:"pointer"}}>
-                    📎 Upload Doc
+                   {t("solar.upload_doc")}
                   </button>
                 </div>
               )}
@@ -842,11 +843,11 @@ function TabSuryaGhar({ projectId }) {
               {/* Note input */}
               {noteFor===stage.stage_number&&(
                 <div style={{padding:"8px 51px 10px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:6}}>
-                  <input value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder="Stage note..."
+                  <input value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder={t("solar.stage_note")}
                     style={{flex:1,padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
                   <button onClick={()=>markStage(stage.stage_number,"completed")}
                     style={{padding:"6px 12px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                    Save & Complete
+                   {t("solar.save_complete")}
                   </button>
                 </div>
               )}
@@ -855,7 +856,7 @@ function TabSuryaGhar({ projectId }) {
               {docFor===stage.stage_number&&(
                 <div style={{padding:"8px 51px 10px",borderTop:`1px solid ${T.b1}`}}>
                   <div style={{display:"flex",gap:6,marginBottom:6}}>
-                    <input value={docName} onChange={e=>setDocName(e.target.value)} placeholder="Document name (e.g. DISCOM Feasibility)"
+                    <input value={docName} onChange={e=>setDocName(e.target.value)} placeholder={t("solar.document_name_e_g_discom_feasibility")}
                       style={{flex:1,padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
                   </div>
                   <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -868,14 +869,14 @@ function TabSuryaGhar({ projectId }) {
                             uploadFile(f,stage.stage_number);
                           }
                         }}/>
-                      {uploading?"Uploading...":"📎 Upload File"}
+                      {uploading?t("common.uploading"):t("solar.upload_file")}
                     </label>
-                    <span style={{fontSize:10,color:T.t4}}>or paste URL:</span>
+                    <span style={{fontSize:10,color:T.t4}}>{t("solar.or_paste_url")}</span>
                     <input value={docUrl} onChange={e=>setDocUrl(e.target.value)} placeholder="https://..."
                       style={{flex:1,padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
                     <button onClick={()=>addDoc(stage.stage_number)} disabled={!docUrl.trim()}
                       style={{padding:"6px 12px",borderRadius:6,background:docUrl.trim()?T.grn:T.b1,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:docUrl.trim()?"pointer":"not-allowed"}}>
-                      Save
+                     {t("common.save")}
                     </button>
                   </div>
                 </div>
@@ -936,22 +937,21 @@ function TabSolarBOQ({ projectId }) {
   const KIT_LABELS = { A:"Solar Kit", B:"Structure", C:"Electrical" };
   const KIT_COLORS = { A:{c:"#D97706",bg:"#FFFBEB",bdr:"#FDE68A"}, B:{c:"#059669",bg:"#ECFDF5",bdr:"#A7F3D0"}, C:{c:"#2563EB",bg:"#EFF6FF",bdr:"#BFDBFE"} };
 
-  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>Loading BOQ...</div>;
+  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>{t("solar.loading_boq")}</div>;
 
   return (
     <div style={{padding:"16px 0"}}>
       {/* System size tabs */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-        <span style={{fontSize:11,color:T.t4,fontWeight:600}}>System Size:</span>
+        <span style={{fontSize:11,color:T.t4,fontWeight:600}}>{t("solar.system_size")}</span>
         {kws.map(kw=>(
           <button key={kw} onClick={()=>setActiveKw(kw)}
             style={{padding:"5px 14px",borderRadius:20,border:`1.5px solid ${activeKw===kw?"#F59E0B":"#E5E7EB"}`,
               background:activeKw===kw?"#FFFBEB":"#fff",color:activeKw===kw?"#D97706":T.t3,
-              fontSize:12,fontWeight:activeKw===kw?700:400,cursor:"pointer"}}>
-            {kw}kW {solar?.system_kw===kw && <span style={{fontSize:9}}>(This Project)</span>}
+              fontSize:12,fontWeight:activeKw===kw?700:400,cursor:"pointer"}}>{t("solar.kwkw", { kw })}{solar?.system_kw===kw && <span style={{fontSize:9}}>{t("solar.this_project")}</span>}
           </button>
         ))}
-        <span style={{fontSize:10,color:T.t4,marginLeft:4}}>* Edit preset → applies to all future projects of same size</span>
+        <span style={{fontSize:10,color:T.t4,marginLeft:4}}>{t("solar.edit_preset_applies_to_all_future")}</span>
       </div>
 
       {/* Kit tabs */}
@@ -964,9 +964,7 @@ function TabSolarBOQ({ projectId }) {
                 background:activeKit===kit?kc.bg:"none",
                 color:activeKit===kit?kc.c:T.t3,
                 fontSize:12,fontWeight:activeKit===kit?700:400,cursor:"pointer",
-                borderBottom:activeKit===kit?`2px solid ${kc.c}`:"2px solid transparent"}}>
-              Kit {kit} — {KIT_LABELS[kit]}
-            </button>
+                borderBottom:activeKit===kit?`2px solid ${kc.c}`:"2px solid transparent"}}>{t("solar.kit_kit_kit_labels", { kit, KIT_LABELS: KIT_LABELS[kit] })}</button>
           );
         })}
       </div>
@@ -975,12 +973,12 @@ function TabSolarBOQ({ projectId }) {
       {currentPreset ? (
         <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           <div style={{padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
-            <div style={{fontSize:13,fontWeight:700,color:T.t1}}>Kit {activeKit} — {KIT_LABELS[activeKit]} | {activeKw}kW</div>
+            <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("solar.kit_activekit_kit_labels_activekwkw", { activeKit, KIT_LABELS: KIT_LABELS[activeKit], activeKw })}</div>
             {!editing
-              ? <button onClick={startEdit} style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,fontWeight:600,color:T.t2,cursor:"pointer"}}>✏ Edit Items</button>
+              ? <button onClick={startEdit} style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,fontWeight:600,color:T.t2,cursor:"pointer"}}>{t("solar.edit_items")}</button>
               : <div style={{display:"flex",gap:6}}>
-                  <button onClick={()=>setEditing(false)} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,color:T.t3,cursor:"pointer"}}>Cancel</button>
-                  <button onClick={saveEdit} disabled={saving} style={{padding:"5px 14px",borderRadius:6,background:saving?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{saving?"Saving...":"Save"}</button>
+                  <button onClick={()=>setEditing(false)} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
+                  <button onClick={saveEdit} disabled={saving} style={{padding:"5px 14px",borderRadius:6,background:saving?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{saving?t("common.saving"):t("common.save")}</button>
                 </div>
             }
           </div>
@@ -1023,13 +1021,13 @@ function TabSolarBOQ({ projectId }) {
             <div style={{padding:"10px 14px",borderTop:`1px solid ${T.b1}`}}>
               <button onClick={()=>setEditItems(p=>[...p,{item_name:"",brand:"",quantity:"",unit:"Nos"}])}
                 style={{padding:"6px 14px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                + Add Item
+               {t("common.add_item")}
               </button>
             </div>
           )}
         </div>
       ) : (
-        <div style={{textAlign:"center",padding:"40px",color:T.t4}}>No preset found for {activeKw}kW Kit {activeKit}</div>
+        <div style={{textAlign:"center",padding:"40px",color:T.t4}}>{t("solar.no_preset_found_for_activekwkw_kit", { activeKw, activeKit })}</div>
       )}
     </div>
   );
@@ -1047,7 +1045,7 @@ function TabSolarDocs({ projectId }) {
     }).catch(() => setLoading(false));
   }, [projectId]);
 
-  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>Loading docs...</div>;
+  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>{t("solar.loading_docs")}</div>;
 
   const allDocs = stages.flatMap(s => {
     const names = s.doc_names ? s.doc_names.split("||").filter(Boolean) : [];
@@ -1058,8 +1056,8 @@ function TabSolarDocs({ projectId }) {
   if (allDocs.length === 0) return (
     <div style={{textAlign:"center",padding:"80px 0"}}>
       <div style={{fontSize:36,marginBottom:8}}>📂</div>
-      <div style={{fontSize:14,fontWeight:600,color:T.t2}}>No documents yet</div>
-      <div style={{fontSize:12,color:T.t4,marginTop:4}}>Documents uploaded in Surya Ghar stages will appear here</div>
+      <div style={{fontSize:14,fontWeight:600,color:T.t2}}>{t("solar.no_documents_yet")}</div>
+      <div style={{fontSize:12,color:T.t4,marginTop:4}}>{t("solar.documents_uploaded_in_surya_ghar_stages")}</div>
     </div>
   );
 
@@ -1075,7 +1073,7 @@ function TabSolarDocs({ projectId }) {
     <div style={{padding:"16px 0"}}>
       {Object.entries(byStage).map(([stageName, docs]) => (
         <div key={stageName} style={{marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:7}}>Stage {stageName}</div>
+          <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:7}}>{t("solar.stage_stagename", { stageName })}</div>
           <div style={{display:"flex",flexDirection:"column",gap:5}}>
             {docs.map((doc, i) => (
               <div key={i} style={{background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`,padding:"9px 13px",display:"flex",alignItems:"center",gap:10}}>
@@ -1085,7 +1083,7 @@ function TabSolarDocs({ projectId }) {
                 </div>
                 <a href={doc.url} target="_blank" rel="noreferrer"
                   style={{padding:"4px 12px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,textDecoration:"none"}}>
-                  View
+                 {t("common.view_2")}
                 </a>
               </div>
             ))}
@@ -1174,7 +1172,7 @@ function TabSolarInstall({ projectId }) {
   // Find first uploaded photo date as installation date reference
   const firstPhotoDate = steps.filter(s=>s.uploaded_at).map(s=>s.uploaded_at).sort()[0];
 
-  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>Loading...</div>;
+  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>{t("common.loading")}</div>;
 
   return (
     <div style={{padding:"16px 0"}}>
@@ -1183,38 +1181,36 @@ function TabSolarInstall({ projectId }) {
         <div style={{background:T.surface,borderRadius:9,border:`1.5px solid #C084FC`,overflow:"hidden",marginBottom:14}}>
           <div style={{padding:"10px 14px",background:"#F3E8FF",display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:16}}>🔧</span>
-            <span style={{fontSize:13,fontWeight:700,color:"#7C3AED"}}>Installation Team Details</span>
+            <span style={{fontSize:13,fontWeight:700,color:"#7C3AED"}}>{t("solar.installation_team_details")}</span>
           </div>
           <div style={{padding:"12px 14px"}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               {solar.installer_name&&(
                 <div>
-                  <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>Team / Subcontractor</div>
+                  <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>{t("solar.team_subcontractor")}</div>
                   <div style={{fontSize:13,fontWeight:700,color:T.t1,marginTop:2}}>{solar.installer_name}</div>
                 </div>
               )}
               {solar.installer_phone&&(
                 <div>
-                  <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>Contact Number</div>
+                  <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>{t("solar.contact_number")}</div>
                   <div style={{fontSize:13,fontWeight:600,color:T.t1,marginTop:2}}>
                     <a href={`tel:${solar.installer_phone}`} style={{color:T.blu,textDecoration:"none"}}>{solar.installer_phone}</a>
                   </div>
                 </div>
               )}
               <div>
-                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>Installation Date</div>
+                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>{t("solar.installation_date")}</div>
                 <div style={{fontSize:13,fontWeight:700,color:T.blu,marginTop:2}}>
                   {solar.installation_date?new Date(solar.installation_date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):"—"}
                 </div>
                 {firstPhotoDate&&(
-                  <div style={{fontSize:9.5,color:T.t4,marginTop:1}}>
-                    📷 First photo: {new Date(firstPhotoDate).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}
-                  </div>
+                  <div style={{fontSize:9.5,color:T.t4,marginTop:1}}>{t("solar.first_photo_vnew", { vnew: new Date(firstPhotoDate).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}) })}</div>
                 )}
               </div>
               {solar.installation_notes&&(
                 <div>
-                  <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>Notes</div>
+                  <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.notes")}</div>
                   <div style={{fontSize:12,color:T.t2,marginTop:2}}>{solar.installation_notes}</div>
                 </div>
               )}
@@ -1222,15 +1218,15 @@ function TabSolarInstall({ projectId }) {
             {/* Consumer info row */}
             <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${T.b1}`,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
               <div>
-                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>Consumer</div>
+                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>{t("solar.consumer")}</div>
                 <div style={{fontSize:12,fontWeight:600,color:T.t1,marginTop:1}}>{solar.consumer_name||"—"}</div>
               </div>
               <div>
-                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>System</div>
-                <div style={{fontSize:12,fontWeight:600,color:T.t1,marginTop:1}}>{solar.system_kw||3} kW {solar.system_type||"Residential"}</div>
+                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>{t("solar.system")}</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.t1,marginTop:1}}>{t("solar.solar_kw_solar2", { solar: solar.system_kw||3, solar2: solar.system_type||"Residential" })}</div>
               </div>
               <div>
-                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>Site</div>
+                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>{t("common.site")}</div>
                 <div style={{fontSize:11,color:T.t2,marginTop:1}}>{solar.consumer_address?solar.consumer_address.substring(0,60):"—"}</div>
               </div>
             </div>
@@ -1241,7 +1237,7 @@ function TabSolarInstall({ projectId }) {
       {/* ══ Progress bar ══ */}
       <div style={{background:T.surface,borderRadius:9,padding:"12px 14px",border:`1px solid ${T.b1}`,marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-          <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Installation Photos</span>
+          <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("solar.installation_photos")}</span>
           <span style={{fontSize:13,fontWeight:700,color:completed===steps.length?T.grn:T.amb}}>{completed}/{steps.length} uploaded</span>
         </div>
         <div style={{height:5,background:T.b1,borderRadius:5,overflow:"hidden"}}>
@@ -1252,11 +1248,11 @@ function TabSolarInstall({ projectId }) {
       {/* ══ Serial numbers section ══ */}
       {serials.length > 0 && (
         <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:9,padding:"12px 14px",marginBottom:14}}>
-          <div style={{fontSize:12,fontWeight:700,color:"#D97706",marginBottom:8}}>☀ Serial Numbers Extracted ({serials.length})</div>
+          <div style={{fontSize:12,fontWeight:700,color:"#D97706",marginBottom:8}}>{t("solar.serial_numbers_extracted_serials", { serials: serials.length })}</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {serials.map(s=>(
               <div key={s.id} style={{background:"white",border:"1px solid #FDE68A",borderRadius:5,padding:"3px 9px",fontSize:11,color:"#92400E"}}>
-                <span style={{fontWeight:700}}>{s.component_type==="panel"?"Panel":"Inverter"}:</span> {s.brand?s.brand+" — ":""}{s.serial_number}
+                <span style={{fontWeight:700}}>{s.component_type==="panel"?t("solar.panel"):t("solar.inverter")}:</span> {s.brand?s.brand+" — ":""}{s.serial_number}
               </div>
             ))}
           </div>
@@ -1266,18 +1262,18 @@ function TabSolarInstall({ projectId }) {
       {/* ══ Serial edit modal ══ */}
       {showSerialEdit && (
         <div style={{background:T.surface,border:`1.5px solid ${T.blu}`,borderRadius:10,padding:"14px",marginBottom:14}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:10}}>Review OCR Extracted Serial Numbers</div>
+          <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:10}}>{t("solar.review_ocr_extracted_serial_numbers")}</div>
           {editSerials.map((s,i)=>(
             <div key={i} style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 24px",gap:6,marginBottom:6,alignItems:"center"}}>
               <select value={s.component_type} onChange={e=>setEditSerials(p=>p.map((x,j)=>j===i?{...x,component_type:e.target.value}:x))}
                 style={{padding:"4px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}>
-                <option value="panel">Panel</option>
-                <option value="inverter">Inverter</option>
+                <option value="panel">{t("solar.panel")}</option>
+                <option value="inverter">{t("solar.inverter")}</option>
               </select>
               <input value={s.brand||""} onChange={e=>setEditSerials(p=>p.map((x,j)=>j===i?{...x,brand:e.target.value}:x))}
-                placeholder="Brand (e.g. Adani)" style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
+                placeholder={t("solar.brand_e_g_adani")} style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
               <input value={s.serial_number} onChange={e=>setEditSerials(p=>p.map((x,j)=>j===i?{...x,serial_number:e.target.value}:x))}
-                placeholder="Serial number" style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
+                placeholder={t("solar.serial_number")} style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
               <button onClick={()=>setEditSerials(p=>p.filter((_,j)=>j!==i))}
                 style={{background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:13}}>✕</button>
             </div>
@@ -1285,11 +1281,11 @@ function TabSolarInstall({ projectId }) {
           <div style={{display:"flex",gap:6,marginTop:8}}>
             <button onClick={()=>setEditSerials(p=>[...p,{component_type:"panel",brand:"",serial_number:""}])}
               style={{padding:"5px 12px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,cursor:"pointer"}}>
-              + Add Row
+             {t("common.add_row")}
             </button>
             <button onClick={saveSerials} disabled={saving}
               style={{padding:"5px 16px",borderRadius:6,background:saving?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-              {saving?"Saving...":"✓ Confirm & Save"}
+              {saving?t("common.saving"):t("solar.confirm_save")}
             </button>
           </div>
         </div>
@@ -1305,7 +1301,7 @@ function TabSolarInstall({ projectId }) {
               </div>
               <div style={{flex:1}}>
                 <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{step.step_name}</div>
-                {step.is_ocr_step===1&&<div style={{fontSize:10,color:"#D97706",marginTop:1}}>⚡ OCR Serial Number Extraction</div>}
+                {step.is_ocr_step===1&&<div style={{fontSize:10,color:"#D97706",marginTop:1}}>{t("solar.ocr_serial_number_extraction")}</div>}
                 {step.uploaded_at&&<div style={{fontSize:9.5,color:T.t4,marginTop:1}}>📷 {new Date(step.uploaded_at).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div>}
               </div>
               {step.photo_url && (
@@ -1315,7 +1311,7 @@ function TabSolarInstall({ projectId }) {
               )}
               {/* Upload / Replace button — file picker */}
               <label style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${step.photo_url?T.grnM:T.b1}`,background:step.photo_url?T.grnL:"none",color:step.photo_url?T.grn:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                {uploadFor===step.step_number&&saving?"Uploading...":(step.photo_url?"Replace":"Upload")}
+                {uploadFor===step.step_number&&saving?t("common.uploading"):(step.photo_url?t("crm.replace"):t("solar.upload"))}
                 <input type="file" accept="image/*" style={{display:"none"}}
                   onChange={e=>{if(e.target.files[0])uploadPhotoFile(step.step_number,e.target.files[0]);}}/>
               </label>
@@ -1329,17 +1325,17 @@ function TabSolarInstall({ projectId }) {
         <div style={{padding:"10px 14px",background:solar?.feedback_video_url?"#F5F3FF":T.surfaceB,display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:16}}>🎥</span>
           <div style={{flex:1}}>
-            <div style={{fontSize:12.5,fontWeight:700,color:solar?.feedback_video_url?"#7C3AED":T.t2}}>Consumer Feedback Video</div>
-            <div style={{fontSize:10,color:T.t4}}>{solar?.feedback_video_url?"Video uploaded":"Optional — record consumer testimonial"}</div>
+            <div style={{fontSize:12.5,fontWeight:700,color:solar?.feedback_video_url?"#7C3AED":T.t2}}>{t("solar.consumer_feedback_video")}</div>
+            <div style={{fontSize:10,color:T.t4}}>{solar?.feedback_video_url?t("solar.video_uploaded"):t("solar.optional_record_consumer_testimonial")}</div>
           </div>
           {solar?.feedback_video_url&&(
             <a href={solar.feedback_video_url} target="_blank" rel="noreferrer"
               style={{padding:"4px 12px",borderRadius:6,background:"#7C3AED",color:"white",fontSize:11,fontWeight:600,textDecoration:"none"}}>
-              ▶ Play
+             {t("solar.play")}
             </a>
           )}
           <label style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:videoUploading?"not-allowed":"pointer"}}>
-            {videoUploading?"Uploading...":(solar?.feedback_video_url?"Replace Video":"Upload Video")}
+            {videoUploading?t("common.uploading"):(solar?.feedback_video_url?t("solar.replace_video"):t("solar.upload_video"))}
             <input type="file" accept="video/*" style={{display:"none"}} disabled={videoUploading}
               onChange={e=>{if(e.target.files[0])uploadFeedbackVideo(e.target.files[0]);}}/>
           </label>
@@ -1378,12 +1374,12 @@ function TabSolarSubsidy({ projectId }) {
     setSaving(false);
   };
 
-  const SUBSIDY_S = { not_applied:{c:T.t3,bg:T.sltL,l:"Not Applied"}, applied:{c:T.amb,bg:T.ambL,l:"Applied"}, approved:{c:T.blu,bg:T.bluL,l:"Approved"}, disbursed:{c:T.grn,bg:T.grnL,l:"Disbursed"} };
+  const SUBSIDY_S = { not_applied:{c:T.t3,bg:T.sltL,l:t("solar.not_applied")}, applied:{c:T.amb,bg:T.ambL,l:t("solar.applied")}, approved:{c:T.blu,bg:T.bluL,l:t("common.approved")}, disbursed:{c:T.grn,bg:T.grnL,l:t("solar.disbursed")} };
   const kw = solar?.system_kw||0;
   // PM Surya Ghar subsidy calculation
   const subsidyCalc = kw <= 2 ? kw*18000 : kw <= 3 ? 2*18000+(kw-2)*9000 : 36000+9000;
 
-  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>Loading...</div>;
+  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>{t("common.loading")}</div>;
 
   const ss = SUBSIDY_S[solar?.subsidy_status||"not_applied"]||SUBSIDY_S.not_applied;
 
@@ -1392,23 +1388,23 @@ function TabSolarSubsidy({ projectId }) {
       {/* Subsidy card */}
       <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"16px",marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.t1}}>Subsidy Details</div>
+          <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("solar.subsidy_details")}</div>
           {!editing
-            ? <button onClick={()=>setEditing(true)} style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,fontWeight:600,color:T.t2,cursor:"pointer"}}>✏ Edit</button>
+            ? <button onClick={()=>setEditing(true)} style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,fontWeight:600,color:T.t2,cursor:"pointer"}}>{t("common.edit")}</button>
             : <div style={{display:"flex",gap:6}}>
-                <button onClick={()=>setEditing(false)} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,color:T.t3,cursor:"pointer"}}>Cancel</button>
-                <button onClick={save} disabled={saving} style={{padding:"5px 14px",borderRadius:6,background:saving?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{saving?"Saving...":"Save"}</button>
+                <button onClick={()=>setEditing(false)} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
+                <button onClick={save} disabled={saving} style={{padding:"5px 14px",borderRadius:6,background:saving?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{saving?t("common.saving"):t("common.save")}</button>
               </div>
           }
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <div style={{background:"#FFF8E1",borderRadius:7,padding:"10px 12px",border:"1px solid #FFD54F"}}>
-            <div style={{fontSize:10,color:"#E65100",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Estimated Subsidy ({kw}kW)</div>
+            <div style={{fontSize:10,color:"#E65100",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{t("solar.estimated_subsidy_kwkw", { kw })}</div>
             <div style={{fontSize:18,fontWeight:800,color:"#E65100"}}>₹{subsidyCalc.toLocaleString("en-IN")}</div>
-            <div style={{fontSize:10,color:"#BF360C",marginTop:2}}>₹18k/kW (≤2kW) + ₹9k/kW (next 1kW)</div>
+            <div style={{fontSize:10,color:"#BF360C",marginTop:2}}>{t("solar.18k_kw_2kw_9k_kw_next")}</div>
           </div>
           <div style={{background:ss.bg,borderRadius:7,padding:"10px 12px",border:`1px solid ${ss.c}33`}}>
-            <div style={{fontSize:10,color:ss.c,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Subsidy Status</div>
+            <div style={{fontSize:10,color:ss.c,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{t("solar.subsidy_status")}</div>
             {editing
               ? <select value={form.subsidy_status} onChange={e=>setForm(p=>({...p,subsidy_status:e.target.value}))}
                   style={{padding:"6px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:13,width:"100%",outline:"none",fontFamily:"inherit"}}>
@@ -1418,7 +1414,7 @@ function TabSolarSubsidy({ projectId }) {
             }
           </div>
           <div>
-            <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Actual Subsidy Amount</div>
+            <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{t("solar.actual_subsidy_amount")}</div>
             {editing
               ? <input type="number" value={form.subsidy_amount} onChange={e=>setForm(p=>({...p,subsidy_amount:e.target.value}))} placeholder="₹"
                   style={{width:"100%",padding:"7px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
@@ -1430,14 +1426,14 @@ function TabSolarSubsidy({ projectId }) {
 
       {/* Loan card */}
       <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"16px"}}>
-        <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:12}}>Loan Details</div>
+        <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:12}}>{t("solar.loan_details")}</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           {[
-            {l:"Loan Required",v:solar?.loan_required?"Yes":"No"},
-            {l:"Bank",v:solar?.loan_bank||"—"},
-            {l:"Sanction Amount",v:solar?.loan_sanction_amount?`₹${Number(solar.loan_sanction_amount).toLocaleString("en-IN")}`:"—"},
-            {l:"Disbursed 70%",v:solar?.loan_disbursed_70?`₹${Number(solar.loan_disbursed_70).toLocaleString("en-IN")}`:"—"},
-            {l:"Disbursed 30%",v:solar?.loan_disbursed_30?`₹${Number(solar.loan_disbursed_30).toLocaleString("en-IN")}`:"—"},
+            {l:t("solar.loan_required"),v:solar?.loan_required?"Yes":"No"},
+            {l:t("solar.bank"),v:solar?.loan_bank||"—"},
+            {l:t("solar.sanction_amount"),v:solar?.loan_sanction_amount?`₹${Number(solar.loan_sanction_amount).toLocaleString("en-IN")}`:"—"},
+            {l:t("solar.disbursed_70"),v:solar?.loan_disbursed_70?`₹${Number(solar.loan_disbursed_70).toLocaleString("en-IN")}`:"—"},
+            {l:t("solar.disbursed_30"),v:solar?.loan_disbursed_30?`₹${Number(solar.loan_disbursed_30).toLocaleString("en-IN")}`:"—"},
           ].map(({l,v})=>(
             <div key={l}>
               <div style={{fontSize:10,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{l}</div>

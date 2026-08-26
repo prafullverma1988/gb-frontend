@@ -15,6 +15,7 @@
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { API_BASE, getToken } from "../config/api";
+import { t, Rich } from "../i18n";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -283,9 +284,9 @@ const Modal = ({ open, onClose, title, sub, width = 700, children, footer }) => 
 // REFUELLING ENTRY — one form, three paths
 // ══════════════════════════════════════════════════════════════════
 const PATHS = [
-  { id: "pump_machine", l: "Pump → Machine", sub: "Tanker/pump se seedha machine me", I: IcTruck },
-  { id: "pump_store",   l: "Pump → Barrel",  sub: "Bulk diesel drum me bhara",        I: IcDrum },
-  { id: "store_machine",l: "Barrel → Machine", sub: "Drum se machine me — paisa nahi hilta", I: IcDrop },
+  { id: "pump_machine", get l() { return t("fuel.pump_machine"); }, get sub() { return t("fuel.tanker_pump_se_seedha_machine_me"); }, I: IcTruck },
+  { id: "pump_store",   get l() { return t("fuel.pump_barrel"); },  get sub() { return t("fuel.bulk_diesel_drum_me_bhara"); },        I: IcDrum },
+  { id: "store_machine",get l() { return t("fuel.barrel_machine"); }, get sub() { return t("fuel.drum_se_machine_me_paisa_nahi"); }, I: IcDrop },
 ];
 
 function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projects }) {
@@ -378,7 +379,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           lines.push(`(${r.data.derived.join(", ")} parchi par nahi tha — baaki do se nikala gaya)`);
         }
         lines.push("Save karte waqt ye aapke type kiye hue se milaya jayega — farq hua to Cross-check me dikhega.");
-        setSlipMsg({ warn: r.data.confidence !== "high", title: "Parchi padh li — jaanch lein", lines });
+        setSlipMsg({ warn: r.data.confidence !== "high", title: t("fuel.parchi_padh_li_jaanch_lein"), lines });
       }
     } catch (e) {
       setSlipMsg({ bad: true, title: (e && e.message) || "Network error" });
@@ -388,15 +389,15 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
 
   const save = async () => {
     setError("");
-    if (!litres) { setError("Litres bharein"); return; }
-    if (!isIssue && !rate) { setError("Rate bharein"); return; }
-    if (!isIssue && !f.vendor_party_id) { setError("Pump / vendor chunein"); return; }
-    if (path !== "pump_store" && !f.equipment_id) { setError("Machine chunein"); return; }
-    if (path !== "pump_machine" && !f.store_id) { setError("Barrel chunein"); return; }
+    if (!litres) { setError(t("fuel.litres_bharein")); return; }
+    if (!isIssue && !rate) { setError(t("fuel.rate_bharein")); return; }
+    if (!isIssue && !f.vendor_party_id) { setError(t("fuel.pump_vendor_chunein")); return; }
+    if (path !== "pump_store" && !f.equipment_id) { setError(t("fuel.machine_chunein")); return; }
+    if (path !== "pump_machine" && !f.store_id) { setError(t("fuel.barrel_chunein")); return; }
     // Warehouse ka barrel kisi ek project ka nahi hota. Diesel jis site par
     // pi liya gaya, kharcha wahin jaata hai — aur wo sirf yahin pata chalta hai.
     if (isIssue && store && !store.project_id && !f.project_id) {
-      setError("Warehouse ke barrel se nikaal rahe hain — project chunein (kharcha usi par jayega)"); return;
+      setError(t("fuel.warehouse_ke_barrel_se_nikaal_rahe")); return;
     }
     if (isIssue && store && litres > Number(store.litres) + 0.001) {
       setError(`${store.name} me sirf ${fmtL(store.litres)} hai`); return;
@@ -406,20 +407,20 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
     // dikh jaye.
     if (path !== "pump_store") {
       if (!f.meter_missing && !f.meter_reading) {
-        setError("Machine ka meter reading daalein. Meter kharab ya hai hi nahi, to \"Meter nahi de sakta\" chunein."); return;
+        setError(t("fuel.machine_ka_meter_reading_daalein_meter")); return;
       }
       if (f.meter_missing && !f.meter_missing_reason) {
-        setError("Meter na dene ki wajah chunein"); return;
+        setError(t("fuel.meter_na_dene_ki_wajah_chunein")); return;
       }
     }
     // Meter lazmi jab diesel machine me ja raha ho. Server par bhi yahi rok
     // hai — ye sirf site par ek round-trip bachati hai.
     if (path !== "pump_store") {
       if (!f.meter_missing && !f.meter_reading) {
-        setError('Machine ka meter reading bharein. Meter kharab ya hai hi nahi, to "Meter nahi de sakta" tick karein.'); return;
+        setError(t("fuel.machine_ka_meter_reading_bharein_meter")); return;
       }
       if (f.meter_missing && !f.meter_missing_reason) {
-        setError("Meter na dene ki wajah chunein"); return;
+        setError(t("fuel.meter_na_dene_ki_wajah_chunein")); return;
       }
     }
 
@@ -465,11 +466,11 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Refuelling entry"
-      sub="Diesel kahan se kahan gaya — wahi chunein"
+    <Modal open={open} onClose={onClose} title={t("fuel.refuelling_entry")}
+      sub={t("fuel.diesel_kahan_se_kahan_gaya_wahi")}
       footer={<>
-        <Btn ghost onClick={onClose}>Cancel</Btn>
-        <Btn onClick={save} disabled={busy}>{busy ? "Saving..." : isIssue ? "Issue karein" : "Purchase save karein"}</Btn>
+        <Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={busy}>{busy ? t("common.saving") : isIssue ? t("fuel.issue_karein") : t("fuel.purchase_save_karein")}</Btn>
       </>}>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 16 }}>
@@ -492,7 +493,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
 
       {isIssue && (
         <div style={{ padding: "9px 12px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 7, fontSize: 11.5, color: T.ind, fontWeight: 600, marginBottom: 14 }}>
-          Barrel se nikaalne par koi naya kharcha nahi banta — diesel pehle hi khareeda ja chuka hai. Rate drum ke average se apne aap lagta hai.
+         {t("fuel.barrel_se_nikaalne_par_koi_naya")}
         </div>
       )}
 
@@ -502,21 +503,21 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
             "drum 3258" jaise naam se koi nahi bata sakta ki wo kaunsa hai. */}
         {path !== "pump_machine" && (
           <>
-            <Field label="Barrel kahan ka">
+            <Field label={t("fuel.barrel_kahan_ka")}>
               <select value={f.store_scope || ""} onChange={(e) => { upd("store_scope", e.target.value); upd("store_id", ""); }} style={inp}>
-                <option value="">— Chunein —</option>
-                <option value="warehouse">Warehouse (central store)</option>
+                <option value="">{t("fuel.chunein")}</option>
+                <option value="warehouse">{t("fuel.warehouse_central_store")}</option>
                 {projectsWithStores.map((p) => <option key={p.id} value={"p" + p.id}>{p.name}</option>)}
               </select>
             </Field>
-            <Field label="Barrel / store">
+            <Field label={t("fuel.barrel_store")}>
               <select value={f.store_id || ""} onChange={(e) => upd("store_id", e.target.value)} style={inp}
                 disabled={!f.store_scope}>
-                <option value="">{f.store_scope ? "— Chunein —" : "— pehle upar wala chunein —"}</option>
+                <option value="">{f.store_scope ? t("fuel.chunein") : t("fuel.pehle_upar_wala_chunein")}</option>
                 {scopedStores.map((s) => <option key={s.id} value={s.id}>{s.name} — {fmtL(s.litres)}</option>)}
               </select>
               {f.store_scope && scopedStores.length === 0 && (
-                <div style={{ fontSize: 11, color: T.t4, marginTop: 4 }}>Yahan koi barrel nahi hai.</div>
+                <div style={{ fontSize: 11, color: T.t4, marginTop: 4 }}>{t("fuel.yahan_koi_barrel_nahi_hai")}</div>
               )}
             </Field>
           </>
@@ -526,58 +527,58 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
             pi liya gaya, kharcha wahin jaata hai — aur wo baat sirf isi pal
             pata chalti hai, isliye yahin poochi jaati hai. */}
         {isIssue && store && (
-          <Field label="Kis project ka kaam" span={2}
+          <Field label={t("fuel.kis_project_ka_kaam")} span={2}
             hint={store.project_id
-              ? "Diesel jis site par pi liya gaya, kharcha wahi project uthata hai. Doosra project chuna to kharcha wahan TRANSFER ho jayega."
-              : "Warehouse ka diesel hai — jitna nikla, utna kharcha isi project par jayega."}>
+              ? t("fuel.diesel_jis_site_par_pi_liya")
+              : t("fuel.warehouse_ka_diesel_hai_jitna_nikla")}>
             <select value={f.project_id || (store.project_id ? String(store.project_id) : "")}
               onChange={(e) => upd("project_id", e.target.value)} style={inp}>
-              <option value="">— Chunein —</option>
+              <option value="">{t("fuel.chunein")}</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
         )}
 
         {path !== "pump_store" && (
-          <Field label="Machine" hint={blocked > 0 ? `${blocked} machine list me nahi — unka kiraya diesel ke saath hai` : null}>
+          <Field label={t("fuel.machine")} hint={blocked > 0 ? `${blocked} machine list me nahi — unka kiraya diesel ke saath hai` : null}>
             <select value={f.equipment_id || ""} onChange={(e) => upd("equipment_id", e.target.value)} style={inp}>
-              <option value="">— Chunein —</option>
+              <option value="">{t("fuel.chunein")}</option>
               {eligible.map((e) => <option key={e.id} value={e.id}>{e.name}{e.code ? ` (${e.code})` : ""}</option>)}
             </select>
           </Field>
         )}
 
         {!isIssue && (
-          <Field label="Pump / fuel vendor" hint="Free-text naam nahi chalega — party master me hona chahiye">
+          <Field label={t("fuel.pump_fuel_vendor")} hint={t("fuel.free_text_naam_nahi_chalega_party")}>
             <select value={f.vendor_party_id || ""} onChange={(e) => upd("vendor_party_id", e.target.value)} style={inp}>
-              <option value="">— Chunein —</option>
+              <option value="">{t("fuel.chunein")}</option>
               {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
           </Field>
         )}
 
         {path === "pump_machine" && (
-          <Field label="Project">
+          <Field label={t("common.project")}>
             <select value={f.project_id || ""} onChange={(e) => upd("project_id", e.target.value)} style={inp}>
-              <option value="">— Koi nahi —</option>
+              <option value="">{t("fuel.koi_nahi")}</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
         )}
 
-        <Field label="Litres">
+        <Field label={t("fuel.litres")}>
           <input value={f.litres || ""} inputMode="decimal" placeholder="0"
             onChange={(e) => upd("litres", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
         </Field>
 
         {!isIssue && (
-          <Field label="Rate (₹ / litre)">
+          <Field label={t("fuel.rate_litre")}>
             <input value={f.rate || ""} inputMode="decimal" placeholder="0"
               onChange={(e) => upd("rate", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
           </Field>
         )}
 
-        <Field label={isIssue ? "Kab nikala" : "Kab bhara"}>
+        <Field label={isIssue ? t("fuel.kab_nikala") : t("fuel.kab_bhara")}>
           <input type="datetime-local" value={f.filled_at || ""} onChange={(e) => upd("filled_at", e.target.value)} style={inp} />
         </Field>
 
@@ -588,26 +589,26 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
         {path !== "pump_store" && (
           <Field
             label={machine?.meter_unit === "km"
-              ? "Machine ka apna ODOMETER (km) *" : "Machine ka apna HOUR-METER *"}
-            hint={f.meter_missing ? "Wajah ke saath chhoot mil jayegi, par report me alag dikhega."
-              : "Machine ke apne meter ka number — pump wali machine ka NAHI. Bharne se pehle ya baad, dono barabar (machine to band khadi hai)."}>
+              ? t("fuel.machine_ka_apna_odometer_km") : t("fuel.machine_ka_apna_hour_meter")}
+            hint={f.meter_missing ? t("fuel.wajah_ke_saath_chhoot_mil_jayegi")
+              : t("fuel.machine_ke_apne_meter_ka_number")}>
             {!f.meter_missing && (
               <input value={f.meter_reading || ""} inputMode="decimal"
-                placeholder={machine?.meter_unit === "km" ? "gaadi ka odometer, e.g. 84,210" : "machine ka hour-meter, e.g. 4,318"}
+                placeholder={machine?.meter_unit === "km" ? t("fuel.gaadi_ka_odometer_e_g_84") : t("fuel.machine_ka_hour_meter_e_g")}
                 onChange={(e) => upd("meter_reading", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
             )}
             <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: f.meter_missing ? 0 : 7, fontSize: 12, color: T.t2, cursor: "pointer" }}>
               <input type="checkbox" checked={!!f.meter_missing}
                 onChange={(e) => { upd("meter_missing", e.target.checked); if (e.target.checked) upd("meter_reading", ""); }} />
-              Meter nahi de sakta
+             {t("fuel.meter_nahi_de_sakta")}
             </label>
             {f.meter_missing && (
               <select value={f.meter_missing_reason || ""} onChange={(e) => upd("meter_missing_reason", e.target.value)}
                 style={{ ...inp, marginTop: 7 }}>
-                <option value="">— wajah chunein —</option>
-                <option value="meter_kharab">Meter kharab hai</option>
-                <option value="meter_nahi">Machine par meter hai hi nahi</option>
-                <option value="padha_nahi_gaya">Us waqt padha nahi ja saka</option>
+                <option value="">{t("fuel.wajah_chunein")}</option>
+                <option value="meter_kharab">{t("fuel.meter_kharab_hai")}</option>
+                <option value="meter_nahi">{t("fuel.machine_par_meter_hai_hi_nahi")}</option>
+                <option value="padha_nahi_gaya">{t("fuel.us_waqt_padha_nahi_ja_saka")}</option>
               </select>
             )}
           </Field>
@@ -615,12 +616,12 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
 
         {!isIssue && (
           <>
-            <Field label="Slip no. (optional)">
-              <input value={f.slip_no || ""} onChange={(e) => upd("slip_no", e.target.value)} placeholder="pump slip" style={inp} />
+            <Field label={t("fuel.slip_no_optional")}>
+              <input value={f.slip_no || ""} onChange={(e) => upd("slip_no", e.target.value)} placeholder={t("fuel.pump_slip")} style={inp} />
             </Field>
-            <Field label="Payment">
+            <Field label={t("common.payment")}>
               <div style={{ display: "flex", gap: 8 }}>
-                {[{ k: "credit", l: "Udhaar (credit)" }, { k: "cash", l: "Cash" }].map((o) => {
+                {[{ k: "credit", l: t("fuel.udhaar_credit") }, { k: "cash", l: t("common.cash") }].map((o) => {
                   const on = (f.payment_mode || "credit") === o.k;
                   return (
                     <button key={o.k} type="button" onClick={() => upd("payment_mode", o.k)}
@@ -632,19 +633,19 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           </>
         )}
 
-        <Field label={isIssue ? "Photo (optional)" : "Pump slip ka photo"} span={2}
-          hint={isIssue ? null : "Slip hi wo saboot hai ki jitne litre bill hue, utne mile"}>
+        <Field label={isIssue ? t("fuel.photo_optional") : t("fuel.pump_slip_ka_photo")} span={2}
+          hint={isIssue ? null : t("fuel.slip_hi_wo_saboot_hai_ki")}>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <label style={{ ...inp, width: "auto", cursor: uploading ? "wait" : "pointer", display: "inline-flex", alignItems: "center", gap: 7, color: T.t2, fontWeight: 600 }}>
               <IcCamera size={14} color={T.t3} />
-              {uploading ? "Upload ho raha hai..." : f.photo_url ? "Photo badlein" : "Photo chunein"}
+              {uploading ? t("fuel.upload_ho_raha_hai") : f.photo_url ? t("fuel.photo_badlein") : t("fuel.photo_chunein")}
               <input type="file" accept="image/*" onChange={pickPhoto} disabled={uploading} style={{ display: "none" }} />
             </label>
             {f.photo_url && (
               <>
                 <img src={f.photo_url} alt="slip" style={{ height: 38, width: 38, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}` }} />
                 <button type="button" onClick={() => upd("photo_url", "")}
-                  style={{ background: "none", border: "none", color: T.t4, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>Hatayein</button>
+                  style={{ background: "none", border: "none", color: T.t4, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>{t("fuel.hatayein")}</button>
               </>
             )}
           </div>
@@ -658,10 +659,10 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
                 style={{ padding: "7px 13px", borderRadius: 7, cursor: slipBusy ? "default" : "pointer",
                   fontFamily: "inherit", fontSize: 12, fontWeight: 700,
                   border: "1.5px solid " + T.ind, background: T.surface, color: T.ind }}>
-                {slipBusy ? "Parchi padhi ja rahi hai…" : "✨ Parchi padho"}
+                {slipBusy ? t("fuel.parchi_padhi_ja_rahi_hai") : t("fuel.parchi_padho")}
               </button>
               <span style={{ fontSize: 11, color: T.t4, marginLeft: 9 }}>
-                Bhare hue fields nahi badlenge — sirf khaali bharenge.
+               {t("fuel.bhare_hue_fields_nahi_badlenge_sirf")}
               </span>
             </div>
           )}
@@ -678,7 +679,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           )}
         </Field>
 
-        <Field label="Note (optional)" span={2}>
+        <Field label={t("common.note_optional")} span={2}>
           <input value={f.note || ""} onChange={(e) => upd("note", e.target.value)} style={inp} />
         </Field>
       </div>
@@ -694,7 +695,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtN(litres)} L @ drum average ₹{fmtN(store.avg_rate)}</span>
           <span style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>
             {fmtC(litres * Number(store.avg_rate || 0))}
-            <span style={{ fontSize: 11, fontWeight: 600, color: T.t4, marginLeft: 8 }}>bacha: {fmtL(Number(store.litres) - litres)}</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: T.t4, marginLeft: 8 }}>{t("fuel.bacha_fmtl", { fmtL: fmtL(Number(store.litres) - litres) })}</span>
           </span>
         </div>
       )}
@@ -724,7 +725,7 @@ function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRe
       {lowStores.length > 0 && (
         <div style={{ padding: "9px 13px", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 7, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <IcAlert size={13} color={T.amb} />
-          <span style={{ fontSize: 12, fontWeight: 700, color: T.amb }}>Reorder level se neeche:</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: T.amb }}>{t("fuel.reorder_level_se_neeche")}</span>
           {lowStores.map((s) => (
             <span key={s.id} style={{ background: T.amb, color: "white", fontSize: 10.5, fontWeight: 600, padding: "2px 9px", borderRadius: 20 }}>
               {s.name} ({fmtL(s.litres)})
@@ -740,12 +741,10 @@ function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRe
         <div style={{ padding: "10px 13px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 7, display: "flex", alignItems: "flex-start", gap: 10 }}>
           <IcAlert size={13} color={T.ind} style={{ marginTop: 2 }} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: T.ind }}>
-              {normMissing.length} machine ka "Fuel per hour" norm set nahi
-            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.ind }}>{t("fuel.normmissing_machine_ka_fuel_per_hour", { normMissing: normMissing.length })}</div>
             <div style={{ fontSize: 11, color: T.t3, marginTop: 3, lineHeight: 1.45 }}>
-              Norm ke bina Reports me variance column khaali rahega — pata hi nahi chalega ki kis machine ne zyada piya.
-              Machinery module me machine kholo → Edit → "Rate &amp; fuel" me norm bharein.
+              {t("fuel.norm_ke_bina_variance")}
+              {t("fuel.norm_kahan_bharein")}
               {normMissing.length <= 6 && (
                 <span style={{ color: T.t4 }}> ({normMissing.map((m) => m.name).join(", ")})</span>
               )}
@@ -755,19 +754,19 @@ function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRe
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 12, alignItems: "start" }}>
-        <Panel title="Haal ki entries" action={<Btn size="sm" icon={IcAdd} onClick={onRefuel}>Refuelling entry</Btn>}>
-          {recent.length === 0 && <Empty>Abhi koi diesel entry nahi hui.</Empty>}
+        <Panel title={t("fuel.haal_ki_entries")} action={<Btn size="sm" icon={IcAdd} onClick={onRefuel}>{t("fuel.refuelling_entry")}</Btn>}>
+          {recent.length === 0 && <Empty>{t("fuel.abhi_koi_diesel_entry_nahi_hui")}</Empty>}
           {recent.length > 0 && (
             <>
               <Row head cols="90px 70px 1.4fr 1fr 90px">
-                <span>Kab</span><span>Kya</span><span>Kahan se / kahan</span><span>Litres</span><span style={{ textAlign: "right" }}>Amount</span>
+                <span>{t("fuel.kab")}</span><span>{t("fuel.kya")}</span><span>{t("fuel.kahan_se_kahan")}</span><span>{t("fuel.litres")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span>
               </Row>
               {recent.map((r, i) => (
                 <Row key={i} cols="90px 70px 1.4fr 1fr 90px">
                   <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r.at)}</span>
                   <span>{r.kind === "purchase"
-                    ? <Pill label="Kharida" c={T.blu} bg={T.bluL} />
-                    : <Pill label="Nikala" c={T.slt} bg={T.sltL} />}</span>
+                    ? <Pill label={t("fuel.kharida")} c={T.blu} bg={T.bluL} />
+                    : <Pill label={t("fuel.nikala")} c={T.slt} bg={T.sltL} />}</span>
                   <span style={{ fontSize: 11.5, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {r.who || "—"} <span style={{ color: T.t4 }}>→</span> {r.where || "—"}
                   </span>
@@ -780,8 +779,8 @@ function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRe
         </Panel>
 
         <div style={{ display: "grid", gap: 12 }}>
-          <Panel title="Barrel stock">
-            {stores.length === 0 && <Empty>Koi barrel nahi bana.</Empty>}
+          <Panel title={t("fuel.barrel_stock")}>
+            {stores.length === 0 && <Empty>{t("fuel.koi_barrel_nahi_bana")}</Empty>}
             {stores.map((s) => (
               <Row key={s.id} cols="1.4fr 90px 80px">
                 <div>
@@ -795,7 +794,7 @@ function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRe
           </Panel>
 
           {overNorm.length > 0 && (
-            <Panel title="Dhyan dene layak">
+            <Panel title={t("fuel.dhyan_dene_layak")}>
               {overNorm.map((e) => (
                 <Row key={"o" + e.equipment_id} cols="1fr 70px">
                   <span style={{ fontSize: 11.5, color: T.t2 }}>{e.equipment_name}</span>
@@ -820,29 +819,29 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
   }, [purchases, issues, kind]);
 
   return (
-    <Panel title="Refuelling"
+    <Panel title={t("fuel.refuelling")}
       action={<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <div style={{ display: "flex", gap: 4, background: T.sltL, padding: 3, borderRadius: 7 }}>
-          {[{ k: "all", l: "Sab" }, { k: "purchase", l: "Kharida" }, { k: "issue", l: "Barrel se" }].map((o) => (
+          {[{ k: "all", l: t("fuel.sab") }, { k: "purchase", l: t("fuel.kharida") }, { k: "issue", l: t("fuel.barrel_se") }].map((o) => (
             <button key={o.k} type="button" onClick={() => setKind(o.k)}
               style={{ padding: "5px 11px", borderRadius: 5, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: kind === o.k ? 700 : 500, background: kind === o.k ? T.surface : "transparent", color: kind === o.k ? T.ind : T.t3 }}>{o.l}</button>
           ))}
         </div>
-        <Btn size="sm" icon={IcAdd} onClick={onRefuel}>Refuelling entry</Btn>
+        <Btn size="sm" icon={IcAdd} onClick={onRefuel}>{t("fuel.refuelling_entry")}</Btn>
       </div>}>
-      {rows.length === 0 && <Empty>Koi entry nahi mili.</Empty>}
+      {rows.length === 0 && <Empty>{t("fuel.koi_entry_nahi_mili")}</Empty>}
       {rows.length > 0 && (
         <>
           <Row head cols="105px 80px 1.3fr 1.2fr 80px 80px 95px 90px 40px">
-            <span>Kab</span><span>Kya</span><span>Vendor / barrel</span><span>Machine / barrel</span>
-            <span>Litres</span><span>Rate</span><span style={{ textAlign: "right" }}>Amount</span><span>Status</span><span />
+            <span>{t("fuel.kab")}</span><span>{t("fuel.kya")}</span><span>{t("fuel.vendor_barrel")}</span><span>{t("fuel.machine_barrel")}</span>
+            <span>{t("fuel.litres")}</span><span>{t("common.rate")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span><span>{t("common.status")}</span><span />
           </Row>
           {rows.map((r) => (
             <Row key={r._k + r.id} cols="105px 80px 1.3fr 1.2fr 80px 80px 95px 90px 40px">
               <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r._at)}</span>
               <span>{r._k === "purchase"
-                ? <Pill label={r.destination === "store" ? "→ Barrel" : "→ Machine"} c={T.blu} bg={T.bluL} />
-                : <Pill label="Barrel se" c={T.slt} bg={T.sltL} />}</span>
+                ? <Pill label={r.destination === "store" ? t("fuel.barrel") : t("fuel.machine_2")} c={T.blu} bg={T.bluL} />
+                : <Pill label={t("fuel.barrel_se")} c={T.slt} bg={T.sltL} />}</span>
               <span style={{ fontSize: 11.5, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r._k === "purchase" ? (r.vendor_party_name || r.vendor_name || "—") : (r.store_name || "—")}
               </span>
@@ -854,14 +853,14 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
               <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(r.amount)}</span>
               <span>
                 {r._k === "issue"
-                  ? <Pill label="Stock se" c={T.slt} bg={T.sltL} />
+                  ? <Pill label={t("fuel.stock_se")} c={T.slt} bg={T.sltL} />
                   : r.payment_mode === "cash"
-                    ? <Pill label="Cash" c={T.grn} bg={T.grnL} />
+                    ? <Pill label={t("common.cash")} c={T.grn} bg={T.grnL} />
                     : r.settlement_status === "paid"
-                      ? <Pill label="Paid" c={T.grn} bg={T.grnL} />
-                      : <Pill label="Baaki" c={T.amb} bg={T.ambL} />}
+                      ? <Pill label={t("common.paid")} c={T.grn} bg={T.grnL} />
+                      : <Pill label={t("common.baaki")} c={T.amb} bg={T.ambL} />}
               </span>
-              <button type="button" title="Delete"
+              <button type="button" title={t("common.delete")}
                 onClick={() => (r._k === "purchase" ? onDeletePurchase(r) : onDeleteIssue(r))}
                 style={{ background: "none", border: "none", cursor: "pointer", color: T.t4, padding: 3, display: "flex" }}>
                 <IcTrash size={13} color="currentColor" />
@@ -887,8 +886,8 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
     // Warehouse wale ka koi project nahi hota — uska diesel jis site par pi
     // liya jayega, kharcha wahin jayega.
     const atWarehouse = f.scope === "warehouse";
-    if (!atWarehouse && !f.project_id) { setError("Project chunein — ya 'Warehouse' chunein"); return; }
-    if (!f.name?.trim()) { setError("Barrel ka naam likhein"); return; }
+    if (!atWarehouse && !f.project_id) { setError(t("fuel.project_chunein_ya_warehouse_chunein")); return; }
+    if (!f.name?.trim()) { setError(t("fuel.barrel_ka_naam_likhein")); return; }
     setBusy(true);
     try {
       const r = await api.post("/fuel/stores", {
@@ -906,7 +905,7 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
 
   const saveDip = async () => {
     setError("");
-    if (f.physical_l === undefined || f.physical_l === "") { setError("Naapa hua diesel likhein"); return; }
+    if (f.physical_l === undefined || f.physical_l === "") { setError(t("fuel.naapa_hua_diesel_likhein")); return; }
     setBusy(true);
     try {
       const r = await api.post("/fuel/stock-checks", {
@@ -926,15 +925,15 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
 
   return (
     <>
-      <Panel title="Barrel stock" action={<div style={{ display: "flex", gap: 8 }}>
-        <Btn size="sm" ghost icon={IcAdd} onClick={() => { setF({}); setError(""); setNewOpen(true); }}>Naya barrel</Btn>
-        <Btn size="sm" icon={IcDrop} onClick={onRefuel}>Refuelling entry</Btn>
+      <Panel title={t("fuel.barrel_stock")} action={<div style={{ display: "flex", gap: 8 }}>
+        <Btn size="sm" ghost icon={IcAdd} onClick={() => { setF({}); setError(""); setNewOpen(true); }}>{t("fuel.naya_barrel")}</Btn>
+        <Btn size="sm" icon={IcDrop} onClick={onRefuel}>{t("fuel.refuelling_entry")}</Btn>
       </div>}>
-        {stores.length === 0 && <Empty>Abhi koi barrel nahi bana — "Naya barrel" se shuru karein.</Empty>}
+        {stores.length === 0 && <Empty>{t("fuel.abhi_koi_barrel_nahi_bana_naya")}</Empty>}
         {stores.length > 0 && (
           <>
             <Row head cols="1.5fr 1.2fr 100px 100px 110px 150px">
-              <span>Barrel</span><span>Project</span><span>Stock</span><span>Avg rate</span><span>Value</span><span />
+              <span>{t("fuel.barrel_2")}</span><span>{t("common.project")}</span><span>{t("common.stock")}</span><span>{t("fuel.avg_rate")}</span><span>{t("fuel.value")}</span><span />
             </Row>
             {stores.map((s) => (
               <Row key={s.id} cols="1.5fr 1.2fr 100px 100px 110px 150px">
@@ -947,13 +946,13 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
                 <span style={{ fontSize: 11.5, color: T.t3 }}>{s.project_name || "—"}</span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: s.below_reorder ? T.amb : T.t1 }}>
                   {fmtL(s.litres)}
-                  {s.below_reorder && <span style={{ marginLeft: 6 }}><Pill label="Low" c={T.amb} bg={T.ambL} /></span>}
+                  {s.below_reorder && <span style={{ marginLeft: 6 }}><Pill label={t("fuel.low")} c={T.amb} bg={T.ambL} /></span>}
                 </span>
                 <span style={{ fontSize: 12, color: T.t2 }}>₹{fmtN(s.avg_rate)}</span>
                 <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{fmtC(s.value)}</span>
                 <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                  <Btn size="sm" ghost icon={IcRuler} onClick={() => { setF({ checked_at: nowLocal() }); setError(""); setDipFor(s); }}>Dipstick</Btn>
-                  <Btn size="sm" ghost onClick={() => onOpenLedger(s)}>Ledger</Btn>
+                  <Btn size="sm" ghost icon={IcRuler} onClick={() => { setF({ checked_at: nowLocal() }); setError(""); setDipFor(s); }}>{t("fuel.dipstick")}</Btn>
+                  <Btn size="sm" ghost onClick={() => onOpenLedger(s)}>{t("fuel.ledger")}</Btn>
                 </div>
               </Row>
             ))}
@@ -961,15 +960,15 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
         )}
       </Panel>
 
-      <Modal open={newOpen} onClose={() => setNewOpen(false)} title="Naya barrel / store" width={520}
-        footer={<><Btn ghost onClick={() => setNewOpen(false)}>Cancel</Btn><Btn onClick={saveStore} disabled={busy}>{busy ? "Saving..." : "Banayein"}</Btn></>}>
+      <Modal open={newOpen} onClose={() => setNewOpen(false)} title={t("fuel.naya_barrel_store")} width={520}
+        footer={<><Btn ghost onClick={() => setNewOpen(false)}>{t("common.cancel")}</Btn><Btn onClick={saveStore} disabled={busy}>{busy ? t("common.saving") : t("fuel.banayein")}</Btn></>}>
         <div style={{ display: "grid", gap: 12 }}>
           {/* Barrel kahan rakha hai — site par ya central store me. Warehouse
               wala har project ko diesel deta hai, isliye uska koi ek project
               nahi hota. */}
-          <Field label="Barrel kahan hai">
+          <Field label={t("fuel.barrel_kahan_hai")}>
             <div style={{ display: "flex", gap: 8 }}>
-              {[{ k: "project", l: "Kisi project par" }, { k: "warehouse", l: "Warehouse (central store)" }].map((o) => {
+              {[{ k: "project", l: t("fuel.kisi_project_par") }, { k: "warehouse", l: t("fuel.warehouse_central_store") }].map((o) => {
                 const on = (f.scope || "project") === o.k;
                 return (
                   <button key={o.k} type="button"
@@ -985,21 +984,21 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
           </Field>
 
           {(f.scope || "project") === "project" ? (
-            <Field label="Project">
+            <Field label={t("common.project")}>
               <select value={f.project_id || ""} onChange={(e) => setF((p) => ({ ...p, project_id: e.target.value }))} style={inp}>
-                <option value="">— Chunein —</option>
+                <option value="">{t("fuel.chunein")}</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
           ) : (
-            <Field label="Kahan rakha hai (optional)" hint="Warehouse ka diesel har project ko mil sakta hai. Kharcha tab banta hai jab wo kisi machine me daala jaata hai — usi project par.">
-              <input value={f.location || ""} onChange={(e) => setF((p) => ({ ...p, location: e.target.value }))} placeholder="e.g. Main Site Store" style={inp} />
+            <Field label={t("fuel.kahan_rakha_hai_optional")} hint={t("fuel.warehouse_ka_diesel_har_project_ko")}>
+              <input value={f.location || ""} onChange={(e) => setF((p) => ({ ...p, location: e.target.value }))} placeholder={t("fuel.e_g_main_site_store")} style={inp} />
             </Field>
           )}
-          <Field label="Naam"><input value={f.name || ""} onChange={(e) => setF((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. Site drum 1" style={inp} /></Field>
+          <Field label={t("common.naam")}><input value={f.name || ""} onChange={(e) => setF((p) => ({ ...p, name: e.target.value }))} placeholder={t("fuel.e_g_site_drum_1")} style={inp} /></Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Field label="Capacity (L)"><input value={f.capacity_l || ""} onChange={(e) => setF((p) => ({ ...p, capacity_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} /></Field>
-            <Field label="Reorder level (L)" hint="Isse neeche jaate hi alert aayega">
+            <Field label={t("fuel.capacity_l")}><input value={f.capacity_l || ""} onChange={(e) => setF((p) => ({ ...p, capacity_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} /></Field>
+            <Field label={t("fuel.reorder_level_l")} hint={t("fuel.isse_neeche_jaate_hi_alert_aayega")}>
               <input value={f.reorder_level_l || ""} onChange={(e) => setF((p) => ({ ...p, reorder_level_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} />
             </Field>
           </div>
@@ -1007,23 +1006,21 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
         </div>
       </Modal>
 
-      <Modal open={!!dipFor} onClose={() => setDipFor(null)} title="Dipstick check" width={520}
+      <Modal open={!!dipFor} onClose={() => setDipFor(null)} title={t("fuel.dipstick_check")} width={520}
         sub={dipFor ? `${dipFor.name} — kitaab ke hisaab se ${fmtL(dipFor.litres)}` : ""}
-        footer={<><Btn ghost onClick={() => setDipFor(null)}>Cancel</Btn><Btn onClick={saveDip} disabled={busy}>{busy ? "Saving..." : "Record karein"}</Btn></>}>
+        footer={<><Btn ghost onClick={() => setDipFor(null)}>{t("common.cancel")}</Btn><Btn onClick={saveDip} disabled={busy}>{busy ? t("common.saving") : t("fuel.record_karein")}</Btn></>}>
         <div style={{ display: "grid", gap: 12 }}>
-          <Field label="Kab naapa"><input type="datetime-local" value={f.checked_at || ""} onChange={(e) => setF((p) => ({ ...p, checked_at: e.target.value }))} style={inp} /></Field>
-          <Field label="Naapa hua diesel (L)">
+          <Field label={t("fuel.kab_naapa")}><input type="datetime-local" value={f.checked_at || ""} onChange={(e) => setF((p) => ({ ...p, checked_at: e.target.value }))} style={inp} /></Field>
+          <Field label={t("fuel.naapa_hua_diesel_l")}>
             <input value={f.physical_l ?? ""} inputMode="decimal" onChange={(e) => setF((p) => ({ ...p, physical_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} />
           </Field>
           {variance != null && (
-            <div style={{ padding: "10px 13px", borderRadius: 7, background: variance === 0 ? T.grnL : T.ambL, border: `1px solid ${variance === 0 ? T.grnM : T.ambM}`, fontSize: 12, fontWeight: 600, color: variance === 0 ? T.grn : T.amb }}>
-              Variance: {variance > 0 ? "+" : ""}{fmtN(variance)} L
-              <div style={{ fontSize: 10.5, fontWeight: 500, marginTop: 3 }}>
-                Stock apne aap adjust nahi hoga — ye sirf record hota hai.
+            <div style={{ padding: "10px 13px", borderRadius: 7, background: variance === 0 ? T.grnL : T.ambL, border: `1px solid ${variance === 0 ? T.grnM : T.ambM}`, fontSize: 12, fontWeight: 600, color: variance === 0 ? T.grn : T.amb }}>{t("fuel.variance_variancefmtn_l", { variance: variance > 0 ? "+" : "", fmtN: fmtN(variance) })}<div style={{ fontSize: 10.5, fontWeight: 500, marginTop: 3 }}>
+               {t("fuel.stock_apne_aap_adjust_nahi_hoga")}
               </div>
             </div>
           )}
-          <Field label="Note (optional)"><input value={f.note || ""} onChange={(e) => setF((p) => ({ ...p, note: e.target.value }))} style={inp} /></Field>
+          <Field label={t("common.note_optional")}><input value={f.note || ""} onChange={(e) => setF((p) => ({ ...p, note: e.target.value }))} style={inp} /></Field>
           {error && <div style={{ padding: "8px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 6, fontWeight: 600 }}>{error}</div>}
         </div>
       </Modal>
@@ -1039,13 +1036,13 @@ function VendorTab({ vendorRows, from, to, onRange }) {
   }), { litres: 0, amount: 0, unpaid: 0 });
 
   return (
-    <Panel title="Vendor ledger" action={<DateRange from={from} to={to} onRange={onRange} />}>
-      {vendorRows.length === 0 && <Empty>Is duration me koi diesel kharida nahi gaya.</Empty>}
+    <Panel title={t("fuel.vendor_ledger")} action={<DateRange from={from} to={to} onRange={onRange} />}>
+      {vendorRows.length === 0 && <Empty>{t("fuel.is_duration_me_koi_diesel_kharida")}</Empty>}
       {vendorRows.length > 0 && (
         <>
           <Row head cols="1.6fr 80px 90px 100px 100px 110px 100px">
-            <span>Pump / vendor</span><span>Fills</span><span>Litres</span><span>Avg rate</span>
-            <span>Udhaar</span><span>Cash</span><span style={{ textAlign: "right" }}>Baaki</span>
+            <span>{t("fuel.pump_vendor")}</span><span>{t("fuel.fills")}</span><span>{t("fuel.litres")}</span><span>{t("fuel.avg_rate")}</span>
+            <span>{t("fuel.udhaar")}</span><span>{t("common.cash")}</span><span style={{ textAlign: "right" }}>{t("common.baaki")}</span>
           </Row>
           {vendorRows.map((v) => (
             <Row key={v.vendor_party_id} cols="1.6fr 80px 90px 100px 100px 110px 100px">
@@ -1061,13 +1058,13 @@ function VendorTab({ vendorRows, from, to, onRange }) {
             </Row>
           ))}
           <Row cols="1.6fr 80px 90px 100px 100px 110px 100px">
-            <span style={{ fontSize: 12, fontWeight: 800, color: T.t1 }}>Total</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: T.t1 }}>{t("common.total")}</span>
             <span /><span style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{fmtL(tot.litres)}</span>
             <span /><span /><span style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{fmtC(tot.amount)}</span>
             <span style={{ fontSize: 12.5, fontWeight: 800, textAlign: "right", color: tot.unpaid > 0 ? T.amb : T.grn }}>{fmtC(tot.unpaid)}</span>
           </Row>
           <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-            "Baaki" = udhaar ka wo hissa jo abhi Finance → Pending Payments me pada hai.
+           {t("fuel.baaki_udhaar_ka_wo_hissa_jo")}
           </div>
         </>
       )}
@@ -1090,13 +1087,13 @@ const FilterBar = ({ children, chips, onClear }) => (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>{children}</div>
     {chips.length > 0 && (
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", borderTop: `1px solid ${T.b1}`, paddingTop: 8 }}>
-        <span style={{ fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".4px" }}>Lage hue filter</span>
+        <span style={{ fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".4px" }}>{t("fuel.lage_hue_filter")}</span>
         {chips.map((c, i) => (
           <span key={i} style={{ background: T.indL, color: T.ind, border: `1px solid ${T.indM}`, borderRadius: 20, padding: "2px 9px", fontSize: 10.5, fontWeight: 600 }}>
             {c.k}: {c.v}
           </span>
         ))}
-        <span onClick={onClear} style={{ fontSize: 10.5, color: T.t3, cursor: "pointer", textDecoration: "underline", marginLeft: 4 }}>sab hatao</span>
+        <span onClick={onClear} style={{ fontSize: 10.5, color: T.t3, cursor: "pointer", textDecoration: "underline", marginLeft: 4 }}>{t("fuel.sab_hatao")}</span>
       </div>
     )}
   </div>
@@ -1139,14 +1136,14 @@ function ExportBar({ rows, columns, pdfPath, params, baseName, caption, note }) 
     try {
       if (kind === "xls") {
         exportExcel(rows, columns, fname, baseName);
-        setMsg({ ok: true, t: "Excel ban gayi" });
+        setMsg({ ok: true, t: t("fuel.excel_ban_gayi") });
       } else {
         const blob = await fetchReportPdf(pdfPath, params);
-        if (kind === "pdf") { saveBlob(blob, fname + ".pdf"); setMsg({ ok: true, t: "PDF ban gayi" }); }
+        if (kind === "pdf") { saveBlob(blob, fname + ".pdf"); setMsg({ ok: true, t: t("fuel.pdf_ban_gayi") }); }
         else {
           const how = await sharePdf(blob, fname + ".pdf", caption);
-          if (how === "downloaded") setMsg({ ok: true, t: "PDF download ho gayi — WhatsApp me attach kar dijiye" });
-          else if (how === "shared") setMsg({ ok: true, t: "Bhej di" });
+          if (how === "downloaded") setMsg({ ok: true, t: t("fuel.pdf_download_ho_gayi_whatsapp_me") });
+          else if (how === "shared") setMsg({ ok: true, t: t("fuel.bhej_di") });
         }
       }
     } catch (e) { setMsg({ ok: false, t: e.message || "Nahi ho paya" }); }
@@ -1157,15 +1154,15 @@ function ExportBar({ rows, columns, pdfPath, params, baseName, caption, note }) 
     <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
       {note && <span style={{ fontSize: 10.5, color: T.t4 }}>{note}</span>}
       {msg && <span style={{ fontSize: 10.5, fontWeight: 600, color: msg.ok ? T.grn : T.red }}>{msg.t}</span>}
-      <Btn size="sm" ghost icon={IcSheet} disabled={empty || !!busy} onClick={() => run("xls")}>Excel</Btn>
+      <Btn size="sm" ghost icon={IcSheet} disabled={empty || !!busy} onClick={() => run("xls")}>{t("common.excel")}</Btn>
       {pdfPath && (
         <Btn size="sm" ghost icon={IcFile} disabled={empty || !!busy} onClick={() => run("pdf")}>
-          {busy === "pdf" ? "Ban rahi..." : "PDF"}
+          {busy === "pdf" ? t("fuel.ban_rahi") : "PDF"}
         </Btn>
       )}
       {pdfPath && (
         <Btn size="sm" c={T.grn} icon={IcWa} disabled={empty || !!busy} onClick={() => run("wa")}>
-          {busy === "wa" ? "..." : "WhatsApp"}
+          {busy === "wa" ? "..." : t("common.whatsapp")}
         </Btn>
       )}
     </div>
@@ -1174,14 +1171,14 @@ function ExportBar({ rows, columns, pdfPath, params, baseName, caption, note }) 
 
 // ── Report 1: DIESEL REGISTER ─────────────────────────────────────
 const FLOW_OPTS = [
-  { v: "pump_to_machine", l: "Pump → Machine" },
-  { v: "pump_to_barrel", l: "Pump → Barrel" },
-  { v: "barrel_to_machine", l: "Barrel → Machine" },
+  { v: "pump_to_machine", get l() { return t("fuel.pump_machine"); } },
+  { v: "pump_to_barrel", get l() { return t("fuel.pump_barrel"); } },
+  { v: "barrel_to_machine", get l() { return t("fuel.barrel_machine"); } },
 ];
 const KIND_STYLE = {
-  pump_to_machine: { l: "Pump → Machine", c: T.blu, bg: T.bluL },
-  pump_to_barrel: { l: "Pump → Barrel", c: T.slt, bg: T.sltL },
-  barrel_to_machine: { l: "Barrel → Machine", c: T.ind, bg: T.indL },
+  pump_to_machine: { get l() { return t("fuel.pump_machine"); }, c: T.blu, bg: T.bluL },
+  pump_to_barrel: { get l() { return t("fuel.pump_barrel"); }, c: T.slt, bg: T.sltL },
+  barrel_to_machine: { get l() { return t("fuel.barrel_machine"); }, c: T.ind, bg: T.indL },
 };
 const EMPTY_REG_F = { project_id: "", equipment_id: "", vendor_id: "", store_id: "", sector: "", flow: "", flagged: "" };
 
@@ -1207,70 +1204,68 @@ function DieselRegister({ projects, equipment, vendors, stores, from, to, onRang
   const chips = data?.applied || [];
 
   const COLS = [
-    { key: "date", label: "Date", w: 11 },
-    { key: "kind", label: "Kahan se", w: 16, excel: (r) => KIND_STYLE[r.kind]?.l || r.kind },
-    { key: "target", label: "Machine / Barrel", w: 20, excel: (r) => r.machine || r.barrel || "" },
-    { key: "from", label: "Pump / Barrel", w: 18 },
-    { key: "project", label: "Project", w: 18 },
-    { key: "sector", label: "Sector", w: 10 },
-    { key: "purpose", label: "Kis kaam ke liye", w: 24 },
-    { key: "litres", label: "Litre", w: 9 },
-    { key: "rate", label: "Rate", w: 9 },
-    { key: "amount", label: "Amount", w: 12, excel: (r) => Math.round(r.amount) },
-    { key: "slip_no", label: "Parchi", w: 12 },
-    { key: "flag", label: "Farq", w: 14, excel: (r) => (r.flag === "mismatch" ? "PARCHI SE FARQ" : "") },
-    { key: "entered_by", label: "Kisne bhara", w: 16 },
+    { key: "date", label: t("common.date"), w: 11 },
+    { key: "kind", label: t("fuel.kahan_se"), w: 16, excel: (r) => KIND_STYLE[r.kind]?.l || r.kind },
+    { key: "target", label: t("fuel.machine_barrel_2"), w: 20, excel: (r) => r.machine || r.barrel || "" },
+    { key: "from", label: t("fuel.pump_barrel_2"), w: 18 },
+    { key: "project", label: t("common.project"), w: 18 },
+    { key: "sector", label: t("common.sector"), w: 10 },
+    { key: "purpose", label: t("fuel.kis_kaam_ke_liye"), w: 24 },
+    { key: "litres", label: t("fuel.litre"), w: 9 },
+    { key: "rate", label: t("common.rate"), w: 9 },
+    { key: "amount", label: t("common.amount_2"), w: 12, excel: (r) => Math.round(r.amount) },
+    { key: "slip_no", label: t("fuel.parchi"), w: 12 },
+    { key: "flag", label: t("fuel.farq"), w: 14, excel: (r) => (r.flag === "mismatch" ? "PARCHI SE FARQ" : "") },
+    { key: "entered_by", label: t("fuel.kisne_bhara"), w: 16 },
   ];
   const cols = "78px 110px 1.3fr 1.1fr 1fr 66px 1.2fr 62px 58px 82px 92px";
 
   return (
     <div style={{ display: "grid", gap: 11 }}>
       <FilterBar chips={chips} onClear={() => setF(EMPTY_REG_F)}>
-        <div><FLbl>Se — Tak</FLbl><DateRange from={from} to={to} onRange={onRange} /></div>
-        <FSel label="Project" value={f.project_id} onChange={(v) => set("project_id", v)}
+        <div><FLbl>{t("fuel.se_tak")}</FLbl><DateRange from={from} to={to} onRange={onRange} /></div>
+        <FSel label={t("common.project")} value={f.project_id} onChange={(v) => set("project_id", v)}
           options={projects.map((x) => ({ v: x.id, l: x.name }))} />
-        <FSel label="Machine" value={f.equipment_id} onChange={(v) => set("equipment_id", v)}
+        <FSel label={t("fuel.machine")} value={f.equipment_id} onChange={(v) => set("equipment_id", v)}
           options={equipment.map((x) => ({ v: x.id, l: x.name }))} />
-        <FSel label="Pump" value={f.vendor_id} onChange={(v) => set("vendor_id", v)}
+        <FSel label={t("fuel.pump")} value={f.vendor_id} onChange={(v) => set("vendor_id", v)}
           options={vendors.map((x) => ({ v: x.id, l: x.name }))} w={140} />
-        <FSel label="Barrel" value={f.store_id} onChange={(v) => set("store_id", v)}
+        <FSel label={t("fuel.barrel_2")} value={f.store_id} onChange={(v) => set("store_id", v)}
           options={stores.map((x) => ({ v: x.id, l: x.name }))} w={140} />
-        <FSel label="Kahan se" value={f.flow} onChange={(v) => set("flow", v)} options={FLOW_OPTS} w={145} />
-        <FInp label="Sector" value={f.sector} onChange={(v) => set("sector", v)} w={95} ph="15" />
+        <FSel label={t("fuel.kahan_se")} value={f.flow} onChange={(v) => set("flow", v)} options={FLOW_OPTS} w={145} />
+        <FInp label={t("common.sector")} value={f.sector} onChange={(v) => set("sector", v)} w={95} ph="15" />
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.t2, cursor: "pointer", paddingBottom: 6 }}>
           <input type="checkbox" checked={f.flagged === "1"}
             onChange={(e) => set("flagged", e.target.checked ? "1" : "")} />
-          Sirf parchi-farq wali
+         {t("fuel.sirf_parchi_farq_wali")}
         </label>
       </FilterBar>
 
       <Panel
-        title={loading ? "Diesel Register — laa rahe hain..." : `Diesel Register — ${rows.length} entry`}
+        title={loading ? t("fuel.diesel_register_laa_rahe_hain") : `Diesel Register — ${rows.length} entry`}
         action={<ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/diesel-register.pdf"
           params={params} baseName="diesel-register"
           caption={`Diesel Register${from ? ` ${from} se ${to}` : ""} — Sanchalan`} />}>
 
-        {!loading && rows.length === 0 && <Empty>Is filter par koi entry nahi mili.</Empty>}
+        {!loading && rows.length === 0 && <Empty>{t("fuel.is_filter_par_koi_entry_nahi")}</Empty>}
         {rows.length > 0 && (
           <>
             <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, color: T.t2 }}><Rich k="fuel.khareeda_fmtl_fmtc" params={{ fmtL: fmtL(tot.bought_litres), fmtC: fmtC(tot.bought_amount) }} /></span>
               <span style={{ fontSize: 11.5, color: T.t2 }}>
-                Khareeda <b style={{ color: T.t1 }}>{fmtL(tot.bought_litres)}</b> · {fmtC(tot.bought_amount)}
-              </span>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>
-                Machine me gaya <b style={{ color: T.t1 }}>{fmtL(tot.into_machine_litres)}</b>
+               {t("fuel.machine_me_gaya")} <b style={{ color: T.t1 }}>{fmtL(tot.into_machine_litres)}</b>
               </span>
               {tot.flagged > 0 && (
-                <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>{tot.flagged} entry parchi se alag</span>
+                <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>{t("fuel.flagged_entry_parchi_se_alag", { flagged: tot.flagged })}</span>
               )}
             </div>
             <div style={{ overflowX: "auto" }}>
               <div style={{ minWidth: 1160 }}>
                 <Row head cols={cols}>
-                  <span>Date</span><span>Kahan se</span><span>Machine / Barrel</span><span>Pump / Barrel</span>
-                  <span>Project</span><span>Sector</span><span>Kis kaam ke liye</span>
-                  <span style={{ textAlign: "right" }}>Litre</span><span style={{ textAlign: "right" }}>Rate</span>
-                  <span style={{ textAlign: "right" }}>Amount</span><span>Kisne bhara</span>
+                  <span>{t("common.date")}</span><span>{t("fuel.kahan_se")}</span><span>{t("fuel.machine_barrel_2")}</span><span>{t("fuel.pump_barrel_2")}</span>
+                  <span>{t("common.project")}</span><span>{t("common.sector")}</span><span>{t("fuel.kis_kaam_ke_liye")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.litre")}</span><span style={{ textAlign: "right" }}>{t("common.rate")}</span>
+                  <span style={{ textAlign: "right" }}>{t("common.amount_2")}</span><span>{t("fuel.kisne_bhara")}</span>
                 </Row>
                 {rows.map((r) => {
                   const k = KIND_STYLE[r.kind] || {};
@@ -1281,14 +1276,14 @@ function DieselRegister({ projects, equipment, vendors, stores, from, to, onRang
                       <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>
                         {r.machine || r.barrel}
                         {r.flag === "mismatch" && (
-                          <span title={r.flag_note || ""} style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, color: T.red, background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 4, padding: "1px 5px" }}>PARCHI SE FARQ</span>
+                          <span title={r.flag_note || ""} style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, color: T.red, background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 4, padding: "1px 5px" }}>{t("fuel.parchi_se_farq")}</span>
                         )}
                       </span>
                       <span style={{ fontSize: 11.5, color: T.t3 }}>{r.from}</span>
                       <span style={{ fontSize: 11.5, color: T.t3 }}>{r.project || "—"}</span>
                       <span style={{ fontSize: 11.5, color: T.t3 }}>{r.sector || "—"}</span>
                       <span style={{ fontSize: 11.5, color: T.t2 }}>
-                        {r.purpose || <span style={{ color: T.t4 }}>likha nahi</span>}
+                        {r.purpose || <span style={{ color: T.t4 }}>{t("fuel.likha_nahi")}</span>}
                       </span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtN(r.litres)}</span>
                       <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{fmtN(r.rate)}</span>
@@ -1301,12 +1296,11 @@ function DieselRegister({ projects, equipment, vendors, stores, from, to, onRang
             </div>
             {tot.truncated && (
               <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.amb, background: T.ambL }}>
-                Bahut zyada entry hain — sirf pehli 5000 dikh rahi hain. Date range chhota kijiye.
+               {t("fuel.bahut_zyada_entry_hain_sirf_pehli")}
               </div>
             )}
             <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-              "Khareeda" aur "machine me gaya" alag isliye hain ki barrel me bhara diesel baad me
-              nikalta hai — dono jodne par wahi diesel do baar gin jaata.
+             {t("fuel.khareeda_aur_machine_me_gaya_alag")}
             </div>
           </>
         )}
@@ -1337,19 +1331,19 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
   const noDiesel = rows.filter((e) => e.hours > 0 && e.litres === 0);
 
   const COLS = [
-    { key: "equipment_name", label: "Machine", w: 22 },
-    { key: "ownership", label: "Ownership", w: 11 },
-    { key: "hours", label: "Ghante", w: 9 },
-    { key: "active_days", label: "Din", w: 7 },
-    { key: "norm_litres", label: "Norm L", w: 10, excel: (r) => (r.norm_litres == null ? "" : r.norm_litres) },
-    { key: "litres", label: "Asli L", w: 10 },
-    { key: "actual_per_hour", label: "Asli L/hr", w: 10, excel: (r) => r.actual_per_hour ?? "" },
-    { key: "fuel_per_hour", label: "Norm L/hr", w: 10, excel: (r) => r.fuel_per_hour ?? "" },
-    { key: "variance_litres", label: "Farq L", w: 9, excel: (r) => r.variance_litres ?? "" },
-    { key: "variance_pct", label: "Farq %", w: 9, excel: (r) => r.variance_pct ?? "" },
-    { key: "variance_amount", label: "Farq Rs", w: 11, excel: (r) => (r.variance_amount == null ? "" : Math.round(r.variance_amount)) },
-    { key: "amount", label: "Diesel Rs", w: 12, excel: (r) => Math.round(r.amount) },
-    { key: "note", label: "Note", w: 30, excel: (r) => (r.norm_missing ? "Norm set nahi — farq nikal hi nahi sakta"
+    { key: "equipment_name", label: t("fuel.machine"), w: 22 },
+    { key: "ownership", label: t("common.ownership"), w: 11 },
+    { key: "hours", label: t("fuel.ghante"), w: 9 },
+    { key: "active_days", label: t("fuel.din"), w: 7 },
+    { key: "norm_litres", label: t("fuel.norm_l"), w: 10, excel: (r) => (r.norm_litres == null ? "" : r.norm_litres) },
+    { key: "litres", label: t("fuel.asli_l"), w: 10 },
+    { key: "actual_per_hour", label: t("fuel.asli_l_hr"), w: 10, excel: (r) => r.actual_per_hour ?? "" },
+    { key: "fuel_per_hour", label: t("fuel.norm_l_hr"), w: 10, excel: (r) => r.fuel_per_hour ?? "" },
+    { key: "variance_litres", label: t("fuel.farq_l"), w: 9, excel: (r) => r.variance_litres ?? "" },
+    { key: "variance_pct", label: t("fuel.farq_2"), w: 9, excel: (r) => r.variance_pct ?? "" },
+    { key: "variance_amount", label: t("fuel.farq_rs"), w: 11, excel: (r) => (r.variance_amount == null ? "" : Math.round(r.variance_amount)) },
+    { key: "amount", label: t("fuel.diesel_rs"), w: 12, excel: (r) => Math.round(r.amount) },
+    { key: "note", label: t("common.note"), w: 30, excel: (r) => (r.norm_missing ? "Norm set nahi — farq nikal hi nahi sakta"
       : (r.hours > 0 && r.litres === 0 ? "Chali par diesel darj nahi" : "")) },
   ];
   const cols = "1.5fr 74px 68px 50px 72px 72px 98px 72px 74px 100px";
@@ -1359,8 +1353,8 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
       <FilterBar
         chips={projectId ? [{ k: "Project", v: projects.find((p) => String(p.id) === String(projectId))?.name || projectId }] : []}
         onClear={() => setProjectId("")}>
-        <div><FLbl>Se — Tak</FLbl><DateRange from={from} to={to} onRange={onRange} /></div>
-        <FSel label="Project" value={projectId} onChange={setProjectId}
+        <div><FLbl>{t("fuel.se_tak")}</FLbl><DateRange from={from} to={to} onRange={onRange} /></div>
+        <FSel label={t("common.project")} value={projectId} onChange={setProjectId}
           options={projects.map((x) => ({ v: x.id, l: x.name }))} />
       </FilterBar>
 
@@ -1368,16 +1362,16 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {withNorm.length > 0 && (
             <div style={{ flex: 1, minWidth: 250, padding: "11px 14px", background: totalVar > 0 ? T.redL : T.grnL, border: `1px solid ${totalVar > 0 ? T.redM : T.grnM}`, borderRadius: 8 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px" }}>Norm se farq — rupaye me</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px" }}>{t("fuel.norm_se_farq_rupaye_me")}</div>
               <div style={{ fontSize: 19, fontWeight: 700, color: totalVar > 0 ? T.red : T.grn, marginTop: 3 }}>
                 {totalVar > 0 ? "+" : "−"}{fmtC(Math.abs(totalVar))}
               </div>
-              <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>{withNorm.length} machine ka hisaab</div>
+              <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>{t("fuel.withnorm_machine_ka_hisaab", { withNorm: withNorm.length })}</div>
             </div>
           )}
           {noDiesel.length > 0 && (
             <div style={{ flex: 1, minWidth: 250, padding: "11px 14px", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 8 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px" }}>Chali, par diesel darj nahi</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px" }}>{t("fuel.chali_par_diesel_darj_nahi")}</div>
               <div style={{ fontSize: 19, fontWeight: 700, color: T.amb, marginTop: 3 }}>{noDiesel.length} machine</div>
               <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>
                 {noDiesel.slice(0, 3).map((m) => m.equipment_name).join(", ")}{noDiesel.length > 3 ? "…" : ""}
@@ -1391,17 +1385,17 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
         action={<ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/efficiency.pdf"
           params={params} baseName="fuel-efficiency"
           caption={`Fuel Efficiency${from ? ` ${from} se ${to}` : ""} — Sanchalan`} />}>
-        {rows.length === 0 && <Empty>Is duration me kisi machine ka diesel ya ghante record nahi hue.</Empty>}
+        {rows.length === 0 && <Empty>{t("fuel.is_duration_me_kisi_machine_ka")}</Empty>}
         {rows.length > 0 && (
           <div style={{ overflowX: "auto" }}>
             <div style={{ minWidth: 1010 }}>
               <Row head cols={cols}>
-                <span>Machine</span><span>Own</span>
-                <span style={{ textAlign: "right" }}>Ghante</span><span style={{ textAlign: "right" }}>Din</span>
-                <span style={{ textAlign: "right" }}>Norm L</span><span style={{ textAlign: "right" }}>Asli L</span>
-                <span style={{ textAlign: "right" }}>L/hr asli / norm</span>
-                <span style={{ textAlign: "right" }}>Farq L</span><span style={{ textAlign: "right" }}>Farq %</span>
-                <span style={{ textAlign: "right" }}>Farq ₹</span>
+                <span>{t("fuel.machine")}</span><span>{t("fuel.own")}</span>
+                <span style={{ textAlign: "right" }}>{t("fuel.ghante")}</span><span style={{ textAlign: "right" }}>{t("fuel.din")}</span>
+                <span style={{ textAlign: "right" }}>{t("fuel.norm_l")}</span><span style={{ textAlign: "right" }}>{t("fuel.asli_l")}</span>
+                <span style={{ textAlign: "right" }}>{t("fuel.l_hr_asli_norm")}</span>
+                <span style={{ textAlign: "right" }}>{t("fuel.farq_l")}</span><span style={{ textAlign: "right" }}>{t("fuel.farq_2")}</span>
+                <span style={{ textAlign: "right" }}>{t("fuel.farq_3")}</span>
               </Row>
               {rows.map((e) => {
                 const over = e.variance_litres > 0;
@@ -1411,8 +1405,8 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
                       <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{e.equipment_name || `#${e.equipment_id}`}</div>
                       <div style={{ fontSize: 10.5, color: T.t4 }}>
                         {fmtC(e.amount)}
-                        {e.norm_missing && <span style={{ color: T.amb }}> · norm set nahi</span>}
-                        {e.hours > 0 && e.litres === 0 && <span style={{ color: T.amb }}> · chali par diesel darj nahi</span>}
+                        {e.norm_missing && <span style={{ color: T.amb }}> {t("fuel.norm_set_nahi")}</span>}
+                        {e.hours > 0 && e.litres === 0 && <span style={{ color: T.amb }}> {t("fuel.chali_par_diesel_darj_nahi_2")}</span>}
                       </div>
                     </div>
                     <span style={{ fontSize: 11, color: T.t3 }}>{e.ownership || "—"}</span>
@@ -1443,9 +1437,7 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
           </div>
         )}
         <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-          Norm = machine ka "Fuel norm (L/hr)" × us duration ke ghante. Farq ₹ usi machine ke apne
-          diesel ke average rate par. Jiska norm set nahi uska farq khaali rehta hai — wahan 0 likhna
-          "sab theek hai" ka jhoota matlab de deta.
+         {t("fuel.norm_machine_ka_fuel_norm_l")}
         </div>
       </Panel>
     </div>
@@ -1455,20 +1447,20 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
 // ── Report 3: PROJECT-WISE ────────────────────────────────────────
 function ProjectSpend({ byProject }) {
   const COLS = [
-    { key: "project_name", label: "Project", w: 26 },
-    { key: "entries", label: "Fills", w: 9 },
-    { key: "litres", label: "Litres", w: 11 },
-    { key: "amount", label: "Amount", w: 13, excel: (r) => Math.round(r.amount) },
+    { key: "project_name", label: t("common.project"), w: 26 },
+    { key: "entries", label: t("fuel.fills"), w: 9 },
+    { key: "litres", label: t("fuel.litres"), w: 11 },
+    { key: "amount", label: t("common.amount_2"), w: 13, excel: (r) => Math.round(r.amount) },
   ];
   return (
-    <Panel title="Project-wise diesel kharcha"
+    <Panel title={t("fuel.project_wise_diesel_kharcha")}
       action={<ExportBar rows={byProject} columns={COLS} params={{}} baseName="project-diesel"
         note="PDF ke liye Diesel Register" />}>
-      {byProject.length === 0 && <Empty>Koi data nahi.</Empty>}
+      {byProject.length === 0 && <Empty>{t("fuel.koi_data_nahi")}</Empty>}
       {byProject.length > 0 && (
         <>
           <Row head cols="2fr 100px 110px 120px">
-            <span>Project</span><span>Fills</span><span>Litres</span><span style={{ textAlign: "right" }}>Amount</span>
+            <span>{t("common.project")}</span><span>{t("fuel.fills")}</span><span>{t("fuel.litres")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span>
           </Row>
           {byProject.map((p) => (
             <Row key={p.project_id || "none"} cols="2fr 100px 110px 120px">
@@ -1479,7 +1471,7 @@ function ProjectSpend({ byProject }) {
             </Row>
           ))}
           <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-            Sirf kharid ginti hai — barrel se nikaala diesel pehle hi ginaa ja chuka hota hai.
+           {t("fuel.sirf_kharid_ginti_hai_barrel_se")}
           </div>
         </>
       )}
@@ -1515,61 +1507,61 @@ function BarrelRegister({ projects }) {
   const tot = data?.totals || {};
 
   const COLS = [
-    { key: "barrel", label: "Barrel", w: 22 },
-    { key: "where", label: "Kahan", w: 20 },
-    { key: "location", label: "Jagah", w: 18 },
-    { key: "capacity_l", label: "Capacity L", w: 11 },
-    { key: "litres_in", label: "Aaya L", w: 10 },
-    { key: "litres_out", label: "Gaya L", w: 10 },
-    { key: "litres", label: "Bacha L", w: 10 },
-    { key: "fill_pct", label: "Bhara %", w: 9, excel: (r) => r.fill_pct ?? "" },
-    { key: "avg_rate", label: "Avg rate", w: 10, excel: (r) => r.avg_rate ?? "" },
-    { key: "value", label: "Value Rs", w: 12, excel: (r) => Math.round(r.value) },
-    { key: "fills", label: "Fills", w: 8 },
-    { key: "issues", label: "Issues", w: 8 },
-    { key: "last_move", label: "Aakhri harkat", w: 14 },
-    { key: "last_check", label: "Aakhri dipstick", w: 14, excel: (r) => r.last_check || "kabhi nahi" },
-    { key: "last_variance_l", label: "Dipstick farq L", w: 14, excel: (r) => r.last_variance_l ?? "" },
+    { key: "barrel", label: t("fuel.barrel_2"), w: 22 },
+    { key: "where", label: t("fuel.kahan"), w: 20 },
+    { key: "location", label: t("fuel.jagah"), w: 18 },
+    { key: "capacity_l", label: t("fuel.capacity_l_2"), w: 11 },
+    { key: "litres_in", label: t("fuel.aaya_l"), w: 10 },
+    { key: "litres_out", label: t("fuel.gaya_l"), w: 10 },
+    { key: "litres", label: t("fuel.bacha_l"), w: 10 },
+    { key: "fill_pct", label: t("fuel.bhara"), w: 9, excel: (r) => r.fill_pct ?? "" },
+    { key: "avg_rate", label: t("fuel.avg_rate"), w: 10, excel: (r) => r.avg_rate ?? "" },
+    { key: "value", label: t("fuel.value_rs"), w: 12, excel: (r) => Math.round(r.value) },
+    { key: "fills", label: t("fuel.fills"), w: 8 },
+    { key: "issues", label: t("common.issues"), w: 8 },
+    { key: "last_move", label: t("fuel.aakhri_harkat"), w: 14 },
+    { key: "last_check", label: t("fuel.aakhri_dipstick"), w: 14, excel: (r) => r.last_check || "kabhi nahi" },
+    { key: "last_variance_l", label: t("fuel.dipstick_farq_l"), w: 14, excel: (r) => r.last_variance_l ?? "" },
   ];
   const cols = "1.4fr 1.2fr 84px 80px 80px 86px 74px 92px 1fr 118px";
 
   return (
     <div style={{ display: "grid", gap: 11 }}>
       <FilterBar chips={data?.applied || []} onClear={() => setF(EMPTY_BF)}>
-        <FSel label="Project" value={f.project_id} onChange={(v) => set("project_id", v)}
+        <FSel label={t("common.project")} value={f.project_id} onChange={(v) => set("project_id", v)}
           options={projects.map((x) => ({ v: x.id, l: x.name }))} />
-        <FSel label="Kahan" value={f.location} onChange={(v) => set("location", v)}
-          options={[{ v: "warehouse", l: "Sirf warehouse" }, { v: "project", l: "Sirf project ke" }]} w={150} />
+        <FSel label={t("fuel.kahan")} value={f.location} onChange={(v) => set("location", v)}
+          options={[{ v: "warehouse", l: t("fuel.sirf_warehouse") }, { v: "project", l: t("fuel.sirf_project_ke") }]} w={150} />
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.t2, cursor: "pointer", paddingBottom: 6 }}>
           <input type="checkbox" checked={f.low === "1"}
             onChange={(e) => set("low", e.target.checked ? "1" : "")} />
-          Sirf kam stock wale
+         {t("fuel.sirf_kam_stock_wale")}
         </label>
       </FilterBar>
 
-      <Panel title={loading ? "Barrel Register — laa rahe hain..." : `Barrel Register — ${rows.length} barrel`}
+      <Panel title={loading ? t("fuel.barrel_register_laa_rahe_hain") : `Barrel Register — ${rows.length} barrel`}
         action={<ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/barrel-register.pdf"
           params={params} baseName="barrel-register" caption="Barrel Register — Sanchalan" />}>
-        {!loading && rows.length === 0 && <Empty>Is filter par koi barrel nahi mila.</Empty>}
+        {!loading && rows.length === 0 && <Empty>{t("fuel.is_filter_par_koi_barrel_nahi")}</Empty>}
         {rows.length > 0 && (
           <>
             <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>Abhi bacha <b style={{ color: T.t1 }}>{fmtL(tot.litres)}</b> · {fmtC(tot.value)}</span>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>Aaya {fmtL(tot.litres_in)} · Gaya {fmtL(tot.litres_out)}</span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}><Rich k="fuel.abhi_bacha_fmtl_fmtc" params={{ fmtL: fmtL(tot.litres), fmtC: fmtC(tot.value) }} /></span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.aaya_fmtl_gaya_fmtl2", { fmtL: fmtL(tot.litres_in), fmtL2: fmtL(tot.litres_out) })}</span>
               {tot.below_reorder > 0 && (
-                <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>{tot.below_reorder} barrel me stock kam</span>
+                <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>{t("fuel.below_reorder_barrel_me_stock_kam", { below_reorder: tot.below_reorder })}</span>
               )}
               {tot.never_checked > 0 && (
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{tot.never_checked} par kabhi dipstick nahi hua</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{t("fuel.never_checked_par_kabhi_dipstick_nahi", { never_checked: tot.never_checked })}</span>
               )}
             </div>
             <div style={{ overflowX: "auto" }}>
               <div style={{ minWidth: 1080 }}>
                 <Row head cols={cols}>
-                  <span>Barrel</span><span>Kahan</span>
-                  <span style={{ textAlign: "right" }}>Aaya L</span><span style={{ textAlign: "right" }}>Gaya L</span>
-                  <span style={{ textAlign: "right" }}>Bacha L</span><span style={{ textAlign: "right" }}>Bhara</span>
-                  <span style={{ textAlign: "right" }}>Value</span><span>Aakhri harkat</span><span>Aakhri dipstick</span>
+                  <span>{t("fuel.barrel_2")}</span><span>{t("fuel.kahan")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.aaya_l")}</span><span style={{ textAlign: "right" }}>{t("fuel.gaya_l")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.bacha_l")}</span><span style={{ textAlign: "right" }}>{t("fuel.bhara_2")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.value")}</span><span>{t("fuel.aakhri_harkat")}</span><span>{t("fuel.aakhri_dipstick")}</span>
                 </Row>
                 {rows.map((r) => (
                   <Row key={r.store_id} cols={cols} onClick={() => setOpenId(String(r.store_id))}>
@@ -1578,7 +1570,7 @@ function BarrelRegister({ projects }) {
                       {r.capacity_l ? <div style={{ fontSize: 10.5, color: T.t4 }}>{fmtL(r.capacity_l)} ka</div> : null}
                     </div>
                     <span>
-                      <Pill label={r.is_warehouse ? "Warehouse" : r.where}
+                      <Pill label={r.is_warehouse ? t("common.warehouse") : r.where}
                         c={r.is_warehouse ? T.slt : T.ind} bg={r.is_warehouse ? T.sltL : T.indL} />
                       {r.location && <div style={{ fontSize: 10, color: T.t4, marginTop: 2 }}>{r.location}</div>}
                     </span>
@@ -1592,28 +1584,22 @@ function BarrelRegister({ projects }) {
                     </span>
                     <span style={{ fontSize: 12, fontWeight: 600, color: T.t1, textAlign: "right" }}>{fmtC(r.value)}</span>
                     <span style={{ fontSize: 11, color: T.t3 }}>
-                      {r.last_move || "kabhi nahi"}
+                      {r.last_move || t("fuel.kabhi_nahi")}
                       {r.idle_days != null && r.idle_days > 30 && (
-                        <span style={{ color: T.amb }}> · {r.idle_days} din se chhua nahi</span>
+                        <span style={{ color: T.amb }}>{t("fuel.idle_days_din_se_chhua_nahi", { idle_days: r.idle_days })}</span>
                       )}
                     </span>
                     <span style={{ fontSize: 11 }}>
                       {r.last_check
-                        ? <span style={{ color: T.t3 }}>
-                            {r.last_check} · farq{" "}
-                            <b style={{ color: Math.abs(r.last_variance_l) > 0 ? T.red : T.grn }}>
-                              {r.last_variance_l > 0 ? "+" : ""}{fmtN(r.last_variance_l)} L
-                            </b>
-                          </span>
-                        : <span style={{ color: T.t4 }}>kabhi nahi hua</span>}
+                        ? <span style={{ color: T.t3 }}><Rich k="fuel.last_check_farqv_rfmtn_l" params={{ last_check: r.last_check, v: " ", r: r.last_variance_l > 0 ? "+" : "", fmtN: fmtN(r.last_variance_l) }} /></span>
+                        : <span style={{ color: T.t4 }}>{t("fuel.kabhi_nahi_hua")}</span>}
                     </span>
                   </Row>
                 ))}
               </div>
             </div>
             <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-              Kisi barrel par click karein — uska poora aana-jaana neeche khul jayega. Dipstick ka farq
-              stock me joda nahi jaata: dipstick drum ko dekhta hai, diesel hilata nahi.
+             {t("fuel.kisi_barrel_par_click_karein_uska")}
             </div>
           </>
         )}
@@ -1642,48 +1628,48 @@ function BarrelLedgerPanel({ storeId, onClose }) {
   const rows = data?.rows || [];
   const tot = data?.totals || {};
   const COLS = [
-    { key: "date", label: "Date", w: 12 },
-    { key: "kind_label", label: "Kya hua", w: 10 },
-    { key: "party", label: "Kis se / kisme", w: 22 },
-    { key: "in_l", label: "Aaya L", w: 10, excel: (r) => r.in_l ?? "" },
-    { key: "out_l", label: "Gaya L", w: 10, excel: (r) => r.out_l ?? "" },
-    { key: "rate", label: "Rate", w: 9, excel: (r) => r.rate ?? "" },
-    { key: "amount", label: "Amount", w: 12, excel: (r) => (r.amount == null ? "" : Math.round(r.amount)) },
-    { key: "balance_l", label: "Bacha L", w: 10 },
-    { key: "variance_l", label: "Dipstick farq L", w: 14, excel: (r) => r.variance_l ?? "" },
-    { key: "slip_no", label: "Parchi", w: 12 },
-    { key: "by_name", label: "Kisne", w: 16 },
+    { key: "date", label: t("common.date"), w: 12 },
+    { key: "kind_label", label: t("fuel.kya_hua"), w: 10 },
+    { key: "party", label: t("fuel.kis_se_kisme"), w: 22 },
+    { key: "in_l", label: t("fuel.aaya_l"), w: 10, excel: (r) => r.in_l ?? "" },
+    { key: "out_l", label: t("fuel.gaya_l"), w: 10, excel: (r) => r.out_l ?? "" },
+    { key: "rate", label: t("common.rate"), w: 9, excel: (r) => r.rate ?? "" },
+    { key: "amount", label: t("common.amount_2"), w: 12, excel: (r) => (r.amount == null ? "" : Math.round(r.amount)) },
+    { key: "balance_l", label: t("fuel.bacha_l"), w: 10 },
+    { key: "variance_l", label: t("fuel.dipstick_farq_l"), w: 14, excel: (r) => r.variance_l ?? "" },
+    { key: "slip_no", label: t("fuel.parchi"), w: 12 },
+    { key: "by_name", label: t("fuel.kisne"), w: 16 },
   ];
   const cols = "78px 78px 1.4fr 72px 72px 62px 92px 78px 1fr";
   const KC = { purchase: { c: T.grn, bg: T.grnL }, issue: { c: T.blu, bg: T.bluL }, check: { c: T.slt, bg: T.sltL } };
 
   return (
     <Panel
-      title={data ? `${data.store.name} — poora aana-jaana` : "Barrel ledger"}
+      title={data ? `${data.store.name} — poora aana-jaana` : t("fuel.barrel_ledger")}
       action={
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/barrel-ledger.pdf"
             params={params} baseName={`barrel-${slug(data?.store?.name)}`}
             caption={`${data?.store?.name || "Barrel"} ka register — Sanchalan`} />
-          <Btn size="sm" ghost onClick={onClose}>Band karein</Btn>
+          <Btn size="sm" ghost onClick={onClose}>{t("fuel.band_karein")}</Btn>
         </div>}>
-      {loading && <Empty>Laa rahe hain...</Empty>}
-      {!loading && rows.length === 0 && <Empty>Is barrel me abhi koi entry nahi.</Empty>}
+      {loading && <Empty>{t("fuel.laa_rahe_hain")}</Empty>}
+      {!loading && rows.length === 0 && <Empty>{t("fuel.is_barrel_me_abhi_koi_entry")}</Empty>}
       {rows.length > 0 && (
         <>
           <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11.5, color: T.t2 }}>Aaya <b style={{ color: T.t1 }}>{fmtL(tot.litres_in)}</b></span>
-            <span style={{ fontSize: 11.5, color: T.t2 }}>Gaya <b style={{ color: T.t1 }}>{fmtL(tot.litres_out)}</b></span>
-            <span style={{ fontSize: 11.5, color: T.t2 }}>Bacha <b style={{ color: T.t1 }}>{fmtL(tot.closing_l)}</b></span>
+            <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.aaya")} <b style={{ color: T.t1 }}>{fmtL(tot.litres_in)}</b></span>
+            <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.gaya")} <b style={{ color: T.t1 }}>{fmtL(tot.litres_out)}</b></span>
+            <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.bacha")} <b style={{ color: T.t1 }}>{fmtL(tot.closing_l)}</b></span>
             {tot.checks > 0 && <span style={{ fontSize: 11.5, color: T.t3 }}>{tot.checks} dipstick</span>}
           </div>
           <div style={{ overflowX: "auto" }}>
             <div style={{ minWidth: 940 }}>
               <Row head cols={cols}>
-                <span>Date</span><span>Kya hua</span><span>Kis se / kisme</span>
-                <span style={{ textAlign: "right" }}>Aaya</span><span style={{ textAlign: "right" }}>Gaya</span>
-                <span style={{ textAlign: "right" }}>Rate</span><span style={{ textAlign: "right" }}>Amount</span>
-                <span style={{ textAlign: "right" }}>Bacha</span><span>Note</span>
+                <span>{t("common.date")}</span><span>{t("fuel.kya_hua")}</span><span>{t("fuel.kis_se_kisme")}</span>
+                <span style={{ textAlign: "right" }}>{t("fuel.aaya")}</span><span style={{ textAlign: "right" }}>{t("fuel.gaya")}</span>
+                <span style={{ textAlign: "right" }}>{t("common.rate")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span>
+                <span style={{ textAlign: "right" }}>{t("fuel.bacha")}</span><span>{t("common.note")}</span>
               </Row>
               {rows.map((r, i) => {
                 const k = KC[r.kind] || {};
@@ -1703,10 +1689,7 @@ function BarrelLedgerPanel({ storeId, onClose }) {
                     <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtN(r.balance_l)}</span>
                     <span style={{ fontSize: 10.5, color: T.t3 }}>
                       {r.kind === "check"
-                        ? <>physical {fmtN(r.physical_l)} vs kitaab {fmtN(r.book_l)} ={" "}
-                            <b style={{ color: r.variance_l === 0 ? T.grn : T.red }}>
-                              {r.variance_l > 0 ? "+" : ""}{fmtN(r.variance_l)} L
-                            </b></>
+                        ? <><Rich k="fuel.physical_fmtn_vs_kitaab_fmtn2_v" params={{ fmtN: fmtN(r.physical_l), fmtN2: fmtN(r.book_l), v: " ", r: r.variance_l > 0 ? "+" : "", fmtN3: fmtN(r.variance_l) }} /></>
                         : [r.slip_no ? "slip " + r.slip_no : "", r.payment !== "—" ? r.payment : "", r.by_name]
                             .filter(Boolean).join(" · ")}
                     </span>
@@ -1716,7 +1699,7 @@ function BarrelLedgerPanel({ storeId, onClose }) {
             </div>
           </div>
           <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-            "Bacha" wala column dipstick par nahi badalta — farq bataya jaata hai, chup-chaap khapaya nahi.
+           {t("fuel.bacha_wala_column_dipstick_par_nahi")}
           </div>
         </>
       )}
@@ -1754,69 +1737,67 @@ function PumpRegister({ projects, from, to, onRange }) {
   const tot = data?.totals || {};
 
   const COLS = [
-    { key: "pump", label: "Pump", w: 24 },
-    { key: "fills", label: "Fills", w: 8 },
-    { key: "litres", label: "Litre", w: 11 },
-    { key: "avg_rate", label: "Avg rate", w: 10, excel: (r) => r.avg_rate ?? "" },
-    { key: "rate_min", label: "Rate kam", w: 10 },
-    { key: "rate_max", label: "Rate zyada", w: 10 },
-    { key: "cash_amount", label: "Cash Rs", w: 12, excel: (r) => Math.round(r.cash_amount) },
-    { key: "credit_amount", label: "Udhaar Rs", w: 12, excel: (r) => Math.round(r.credit_amount) },
-    { key: "unpaid_amount", label: "Baaki Rs", w: 12, excel: (r) => Math.round(r.unpaid_amount) },
-    { key: "amount", label: "Kul Rs", w: 13, excel: (r) => Math.round(r.amount) },
-    { key: "first_at", label: "Pehli fill", w: 12 },
-    { key: "last_at", label: "Aakhri fill", w: 12 },
-    { key: "flagged", label: "Parchi se farq", w: 13 },
-    { key: "no_slip", label: "Bina parchi", w: 12 },
+    { key: "pump", label: t("fuel.pump"), w: 24 },
+    { key: "fills", label: t("fuel.fills"), w: 8 },
+    { key: "litres", label: t("fuel.litre"), w: 11 },
+    { key: "avg_rate", label: t("fuel.avg_rate"), w: 10, excel: (r) => r.avg_rate ?? "" },
+    { key: "rate_min", label: t("fuel.rate_kam"), w: 10 },
+    { key: "rate_max", label: t("fuel.rate_zyada"), w: 10 },
+    { key: "cash_amount", label: t("fuel.cash_rs"), w: 12, excel: (r) => Math.round(r.cash_amount) },
+    { key: "credit_amount", label: t("fuel.udhaar_rs"), w: 12, excel: (r) => Math.round(r.credit_amount) },
+    { key: "unpaid_amount", label: t("fuel.baaki_rs"), w: 12, excel: (r) => Math.round(r.unpaid_amount) },
+    { key: "amount", label: t("fuel.kul_rs"), w: 13, excel: (r) => Math.round(r.amount) },
+    { key: "first_at", label: t("fuel.pehli_fill"), w: 12 },
+    { key: "last_at", label: t("fuel.aakhri_fill"), w: 12 },
+    { key: "flagged", label: t("fuel.parchi_se_farq_2"), w: 13 },
+    { key: "no_slip", label: t("fuel.bina_parchi"), w: 12 },
   ];
   const cols = "1.5fr 62px 84px 92px 110px 96px 100px 104px 1fr";
 
   return (
     <div style={{ display: "grid", gap: 11 }}>
       <FilterBar chips={data?.applied || []} onClear={() => setF(EMPTY_PF)}>
-        <div><FLbl>Se — Tak</FLbl><DateRange from={from} to={to} onRange={onRange} /></div>
-        <FSel label="Project" value={f.project_id} onChange={(v) => set("project_id", v)}
+        <div><FLbl>{t("fuel.se_tak")}</FLbl><DateRange from={from} to={to} onRange={onRange} /></div>
+        <FSel label={t("common.project")} value={f.project_id} onChange={(v) => set("project_id", v)}
           options={projects.map((x) => ({ v: x.id, l: x.name }))} />
-        <FSel label="Payment" value={f.payment_mode} onChange={(v) => set("payment_mode", v)}
-          options={[{ v: "cash", l: "Cash" }, { v: "credit", l: "Udhaar" }]} w={120} />
+        <FSel label={t("common.payment")} value={f.payment_mode} onChange={(v) => set("payment_mode", v)}
+          options={[{ v: "cash", l: t("common.cash") }, { v: "credit", l: t("fuel.udhaar") }]} w={120} />
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.t2, cursor: "pointer", paddingBottom: 6 }}>
           <input type="checkbox" checked={f.flagged === "1"}
             onChange={(e) => set("flagged", e.target.checked ? "1" : "")} />
-          Sirf parchi-farq wale pump
+         {t("fuel.sirf_parchi_farq_wale_pump")}
         </label>
       </FilterBar>
 
-      <Panel title={loading ? "Pump Register — laa rahe hain..." : `Pump Register — ${rows.length} pump`}
+      <Panel title={loading ? t("fuel.pump_register_laa_rahe_hain") : `Pump Register — ${rows.length} pump`}
         action={<ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/pump-register.pdf"
           params={params} baseName="pump-register"
           caption={`Pump Register${from ? ` ${from} se ${to}` : ""} — Sanchalan`} />}>
-        {!loading && rows.length === 0 && <Empty>Is filter par kisi pump se kharid nahi mili.</Empty>}
+        {!loading && rows.length === 0 && <Empty>{t("fuel.is_filter_par_kisi_pump_se")}</Empty>}
         {rows.length > 0 && (
           <>
             <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>
-                {tot.fills} fills · <b style={{ color: T.t1 }}>{fmtL(tot.litres)}</b> · {fmtC(tot.amount)}
-              </span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}><Rich k="fuel.fills_fills_fmtl_fmtc" params={{ fills: tot.fills, fmtL: fmtL(tot.litres), fmtC: fmtC(tot.amount) }} /></span>
               {tot.avg_rate != null && (
-                <span style={{ fontSize: 11.5, color: T.t2 }}>Average rate <b style={{ color: T.t1 }}>₹{fmtN(tot.avg_rate)}</b></span>
+                <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.average_rate")} <b style={{ color: T.t1 }}>₹{fmtN(tot.avg_rate)}</b></span>
               )}
               {tot.unpaid_amount > 0 && (
-                <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>Baaki {fmtC(tot.unpaid_amount)}</span>
+                <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>{t("fuel.baaki_fmtc", { fmtC: fmtC(tot.unpaid_amount) })}</span>
               )}
               {tot.flagged > 0 && (
-                <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>{tot.flagged} parchi entry se alag</span>
+                <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>{t("fuel.flagged_parchi_entry_se_alag", { flagged: tot.flagged })}</span>
               )}
               {tot.no_slip > 0 && (
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{tot.no_slip} bina parchi</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{t("fuel.no_slip_bina_parchi", { no_slip: tot.no_slip })}</span>
               )}
             </div>
             <div style={{ overflowX: "auto" }}>
               <div style={{ minWidth: 1080 }}>
                 <Row head cols={cols}>
-                  <span>Pump</span><span style={{ textAlign: "right" }}>Fills</span>
-                  <span style={{ textAlign: "right" }}>Litre</span><span style={{ textAlign: "right" }}>Avg rate</span>
-                  <span style={{ textAlign: "right" }}>Cash / Udhaar</span><span style={{ textAlign: "right" }}>Baaki</span>
-                  <span style={{ textAlign: "right" }}>Kul</span><span>Kab se kab tak</span><span>Note</span>
+                  <span>{t("fuel.pump")}</span><span style={{ textAlign: "right" }}>{t("fuel.fills")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.litre")}</span><span style={{ textAlign: "right" }}>{t("fuel.avg_rate")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.cash_udhaar")}</span><span style={{ textAlign: "right" }}>{t("common.baaki")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.kul")}</span><span>{t("fuel.kab_se_kab_tak")}</span><span>{t("common.note")}</span>
                 </Row>
                 {rows.map((r) => (
                   <Row key={r.vendor_party_id} cols={cols} onClick={() => setOpenId(String(r.vendor_party_id))}>
@@ -1825,7 +1806,7 @@ function PumpRegister({ projects, from, to, onRange }) {
                       {/* Ek hi pump ka bhaav duration me kitna hila — ye khud
                           ek sawaal hai, isliye naam ke neeche hi dikhta hai. */}
                       {r.rate_spread > 0 && (
-                        <div style={{ fontSize: 10.5, color: T.t4 }}>rate ₹{fmtN(r.rate_min)}–{fmtN(r.rate_max)}</div>
+                        <div style={{ fontSize: 10.5, color: T.t4 }}>{t("fuel.rate_fmtn_fmtn2", { fmtN: fmtN(r.rate_min), fmtN2: fmtN(r.rate_max) })}</div>
                       )}
                     </div>
                     <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{r.fills}</span>
@@ -1839,7 +1820,7 @@ function PumpRegister({ projects, from, to, onRange }) {
                     <span style={{ textAlign: "right" }}>
                       {r.unpaid_amount > 0
                         ? <Pill label={fmtC(r.unpaid_amount)} c={T.amb} bg={T.ambL} />
-                        : <span style={{ fontSize: 11, color: T.grn }}>sab settle</span>}
+                        : <span style={{ fontSize: 11, color: T.grn }}>{t("fuel.sab_settle")}</span>}
                     </span>
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(r.amount)}</span>
                     <span style={{ fontSize: 11, color: T.t3 }}>
@@ -1848,7 +1829,7 @@ function PumpRegister({ projects, from, to, onRange }) {
                     <span style={{ fontSize: 11 }}>
                       {r.flagged > 0 && <Pill label={`${r.flagged} parchi se alag`} c={T.red} bg={T.redL} />}
                       {r.no_slip > 0 && (
-                        <span style={{ color: T.t4, marginLeft: r.flagged ? 6 : 0 }}>{r.no_slip} bina parchi</span>
+                        <span style={{ color: T.t4, marginLeft: r.flagged ? 6 : 0 }}>{t("fuel.no_slip_bina_parchi", { no_slip: r.no_slip })}</span>
                       )}
                       {!r.flagged && !r.no_slip && <span style={{ color: T.t4 }}>—</span>}
                     </span>
@@ -1857,8 +1838,7 @@ function PumpRegister({ projects, from, to, onRange }) {
               </div>
             </div>
             <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-              Kisi pump par click karein — uska poora register khul jayega, chalte hue jod ke saath.
-              Sirf kharid ginti hai; barrel se nikaasi ka pump ke bill se lena-dena nahi.
+             {t("fuel.kisi_pump_par_click_karein_uska")}
             </div>
           </>
         )}
@@ -1887,56 +1867,56 @@ function PumpLedgerPanel({ vendorId, from, to, onClose }) {
   const rows = data?.rows || [];
   const tot = data?.totals || {};
   const COLS = [
-    { key: "date", label: "Date", w: 12 },
-    { key: "slip_no", label: "Parchi", w: 13 },
-    { key: "to", label: "Kisme dala", w: 22 },
-    { key: "project", label: "Project", w: 20 },
-    { key: "litres", label: "Litre", w: 9 },
-    { key: "rate", label: "Rate", w: 9 },
-    { key: "amount", label: "Amount", w: 12, excel: (r) => Math.round(r.amount) },
-    { key: "payment", label: "Payment", w: 10 },
-    { key: "status", label: "Status", w: 9 },
-    { key: "run_litres", label: "Ab tak L", w: 11 },
-    { key: "run_amount", label: "Ab tak Rs", w: 13, excel: (r) => Math.round(r.run_amount) },
-    { key: "flag", label: "Parchi se farq", w: 16,
+    { key: "date", label: t("common.date"), w: 12 },
+    { key: "slip_no", label: t("fuel.parchi"), w: 13 },
+    { key: "to", label: t("fuel.kisme_dala"), w: 22 },
+    { key: "project", label: t("common.project"), w: 20 },
+    { key: "litres", label: t("fuel.litre"), w: 9 },
+    { key: "rate", label: t("common.rate"), w: 9 },
+    { key: "amount", label: t("common.amount_2"), w: 12, excel: (r) => Math.round(r.amount) },
+    { key: "payment", label: t("common.payment"), w: 10 },
+    { key: "status", label: t("common.status"), w: 9 },
+    { key: "run_litres", label: t("fuel.ab_tak_l"), w: 11 },
+    { key: "run_amount", label: t("fuel.ab_tak_rs"), w: 13, excel: (r) => Math.round(r.run_amount) },
+    { key: "flag", label: t("fuel.parchi_se_farq_2"), w: 16,
       excel: (r) => (r.flag === "mismatch" ? `parchi ${r.slip_read_litres ?? "?"} L / entry ${r.litres} L` : "") },
-    { key: "entered_by", label: "Kisne bhara", w: 16 },
+    { key: "entered_by", label: t("fuel.kisne_bhara"), w: 16 },
   ];
   const cols = "76px 88px 1.3fr 1fr 62px 56px 84px 76px 82px 96px";
 
   return (
     <Panel
-      title={data ? `${data.pump.name} — poora register` : "Pump register"}
+      title={data ? `${data.pump.name} — poora register` : t("fuel.pump_register")}
       action={
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <ExportBar rows={rows} columns={COLS} pdfPath="/fuel/reports/pump-ledger.pdf"
             params={params} baseName={`pump-${slug(data?.pump?.name)}`}
             caption={`${data?.pump?.name || "Pump"} ka register — Sanchalan`} />
-          <Btn size="sm" ghost onClick={onClose}>Band karein</Btn>
+          <Btn size="sm" ghost onClick={onClose}>{t("fuel.band_karein")}</Btn>
         </div>}>
-      {loading && <Empty>Laa rahe hain...</Empty>}
-      {!loading && rows.length === 0 && <Empty>Is duration me is pump se koi kharid nahi.</Empty>}
+      {loading && <Empty>{t("fuel.laa_rahe_hain")}</Empty>}
+      {!loading && rows.length === 0 && <Empty>{t("fuel.is_duration_me_is_pump_se")}</Empty>}
       {rows.length > 0 && (
         <>
           <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11.5, color: T.t2 }}>{tot.fills} fills · <b style={{ color: T.t1 }}>{fmtL(tot.litres)}</b> · {fmtC(tot.amount)}</span>
-            {tot.avg_rate != null && <span style={{ fontSize: 11.5, color: T.t2 }}>Average ₹{fmtN(tot.avg_rate)}</span>}
-            {tot.unpaid_amount > 0 && <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>Baaki {fmtC(tot.unpaid_amount)}</span>}
-            {tot.flagged > 0 && <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>{tot.flagged} parchi se alag</span>}
+            <span style={{ fontSize: 11.5, color: T.t2 }}><Rich k="fuel.fills_fills_fmtl_fmtc" params={{ fills: tot.fills, fmtL: fmtL(tot.litres), fmtC: fmtC(tot.amount) }} /></span>
+            {tot.avg_rate != null && <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.average_fmtn", { fmtN: fmtN(tot.avg_rate) })}</span>}
+            {tot.unpaid_amount > 0 && <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>{t("fuel.baaki_fmtc", { fmtC: fmtC(tot.unpaid_amount) })}</span>}
+            {tot.flagged > 0 && <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>{t("fuel.flagged_parchi_se_alag", { flagged: tot.flagged })}</span>}
           </div>
           <div style={{ overflowX: "auto" }}>
             <div style={{ minWidth: 1040 }}>
               <Row head cols={cols}>
-                <span>Date</span><span>Parchi</span><span>Kisme dala</span><span>Project</span>
-                <span style={{ textAlign: "right" }}>Litre</span><span style={{ textAlign: "right" }}>Rate</span>
-                <span style={{ textAlign: "right" }}>Amount</span><span>Payment</span>
-                <span style={{ textAlign: "right" }}>Ab tak L</span><span style={{ textAlign: "right" }}>Ab tak ₹</span>
+                <span>{t("common.date")}</span><span>{t("fuel.parchi")}</span><span>{t("fuel.kisme_dala")}</span><span>{t("common.project")}</span>
+                <span style={{ textAlign: "right" }}>{t("fuel.litre")}</span><span style={{ textAlign: "right" }}>{t("common.rate")}</span>
+                <span style={{ textAlign: "right" }}>{t("common.amount_2")}</span><span>{t("common.payment")}</span>
+                <span style={{ textAlign: "right" }}>{t("fuel.ab_tak_l")}</span><span style={{ textAlign: "right" }}>{t("fuel.ab_tak")}</span>
               </Row>
               {rows.map((r) => (
                 <Row key={r.purchase_id} cols={cols}>
                   <span style={{ fontSize: 11.5, color: T.t2 }}>{r.date}</span>
                   <span style={{ fontSize: 11.5, color: r.slip_no ? T.t2 : T.t4 }}>
-                    {r.slip_no || "bina parchi"}
+                    {r.slip_no || t("fuel.bina_parchi_2")}
                     {r.flag === "mismatch" && (
                       <div title={r.flag_note || ""} style={{ fontSize: 9, fontWeight: 800, color: T.red }}>
                         parchi {r.slip_read_litres != null ? fmtN(r.slip_read_litres) + " L" : "alag"}
@@ -1945,7 +1925,7 @@ function PumpLedgerPanel({ vendorId, from, to, onClose }) {
                   </span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>
                     {r.to}
-                    {r.to_kind === "barrel" && <span style={{ fontSize: 10, color: T.t4 }}> (barrel)</span>}
+                    {r.to_kind === "barrel" && <span style={{ fontSize: 10, color: T.t4 }}> {t("fuel.barrel_3")}</span>}
                   </span>
                   <span style={{ fontSize: 11.5, color: T.t3 }}>{r.project || "—"}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: T.t1, textAlign: "right" }}>{fmtN(r.litres)}</span>
@@ -1967,8 +1947,7 @@ function PumpLedgerPanel({ vendorId, from, to, onClose }) {
             </div>
           </div>
           <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
-            "Ab tak" wale khaane pump ke bill se milaane ke liye hain — har row par us tareekh tak
-            ka jod. Aakhri row ka jod hi kul jod hota hai.
+           {t("fuel.ab_tak_wale_khaane_pump_ke")}
           </div>
         </>
       )}
@@ -1979,11 +1958,11 @@ function PumpLedgerPanel({ vendorId, from, to, onClose }) {
 function ReportsTab({ byEquipment, byProject, from, to, onRange, projects, equipment, vendors, stores }) {
   const [sub, setSub] = useState("register");
   const SUBS = [
-    { id: "register", l: "Diesel Register" },
-    { id: "eff", l: "Fuel Efficiency" },
-    { id: "barrel", l: "Barrel Register" },
-    { id: "pump", l: "Pump Register" },
-    { id: "project", l: "Project-wise" },
+    { id: "register", l: t("fuel.diesel_register") },
+    { id: "eff", l: t("fuel.fuel_efficiency") },
+    { id: "barrel", l: t("fuel.barrel_register") },
+    { id: "pump", l: t("fuel.pump_register_2") },
+    { id: "project", l: t("fuel.project_wise") },
   ];
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -2025,8 +2004,8 @@ function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
     <Row cols="1.6fr 110px 1.4fr">
       <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{name}</span>
       <span>{live
-        ? <Pill label="Chaalu" c={T.grn} bg={T.grnL} />
-        : <Pill label="Baaki hai" c={T.t3} bg={T.sltL} />}</span>
+        ? <Pill label={t("fuel.chaalu")} c={T.grn} bg={T.grnL} />
+        : <Pill label={t("fuel.baaki_hai")} c={T.t3} bg={T.sltL} />}</span>
       <span style={{ fontSize: 11.5, color: T.t3 }}>{note}</span>
     </Row>
   );
@@ -2048,11 +2027,10 @@ function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={{ padding: "11px 14px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 8, fontSize: 12, color: T.ind, lineHeight: 1.55 }}>
-        Manual entry vs sensor / physical — jahan farak tolerance se zyada hoga, wahi yahan aayega.
-        Kiraye par li hui "rent included" machines isse bahar rahengi.
+       {t("fuel.manual_entry_vs_sensor_physical_jahan")}
       </div>
 
-      <Panel title="Kaunsi jaanch abhi chalu hai">
+      <Panel title={t("fuel.kaunsi_jaanch_abhi_chalu_hai")}>
         <CheckRow name="Barrel ka dipstick check" live
           note={`${withStock.length} drum me stock hai — Barrel Stock tab se "Dipstick"`} />
         <CheckRow name="Norm vs actual (litre/ghanta)" live
@@ -2066,8 +2044,8 @@ function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
       {sensorOn && (
         <Panel title={`Sensor fill vs entry — pichhle 30 din (${fills.length} fill, ${fillIssues.length} me dikkat)`}>
           {fillIssues.length === 0 && noSensor.length === 0 ? (
-            <Empty>Sensor ke har fill ki entry mil gayi, litre bhi tolerance me.<br />
-              <span style={{ fontSize: 11.5 }}>Jaanch chal rahi hai — farq aate hi yahan dikhega.</span></Empty>
+            <Empty>{t("fuel.sensor_ke_har_fill_ki_entry")}<br />
+              <span style={{ fontSize: 11.5 }}>{t("fuel.jaanch_chal_rahi_hai_farq_aate")}</span></Empty>
           ) : (
             <>
               {fillIssues.map((f) => (
@@ -2079,9 +2057,9 @@ function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
                     sensor {fmtL(f.sensor_l)}{f.entry_l != null ? ` · entry ${fmtL(f.entry_l)}` : ""}
                   </span>
                   {f.status === "no_entry" ? (
-                    <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>Diesel gaya, entry nahi mili</span>
+                    <span style={{ fontSize: 11.5, color: T.red, fontWeight: 600 }}>{t("fuel.diesel_gaya_entry_nahi_mili")}</span>
                   ) : (
-                    <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>Farq {fmtL(Math.abs((f.entry_l || 0) - (f.sensor_l || 0)))} ({f.delta_pct}%)</span>
+                    <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>{t("fuel.farq_fmtl_delta_pct", { fmtL: fmtL(Math.abs((f.entry_l || 0) - (f.sensor_l || 0))), delta_pct: f.delta_pct })}</span>
                   )}
                 </Row>
               ))}
@@ -2090,12 +2068,11 @@ function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
                   <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(e.at)}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{e.machine}</span>
                   <span style={{ fontSize: 11.5, fontFamily: "monospace" }}>entry {fmtL(e.litres)}</span>
-                  <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>Entry hai, sensor ne fill nahi dekha</span>
+                  <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>{t("fuel.entry_hai_sensor_ne_fill_nahi")}</span>
                 </Row>
               ))}
               <div style={{ fontSize: 11, color: T.t4, padding: "9px 14px" }}>
-                "Entry nahi mili" ka matlab chori nahi — entry der se bhi aati hai (36 ghante tak khud jud
-                jaati hai). Baaki farq par entry karne wale se poochhiye.
+               {t("fuel.entry_nahi_mili_ka_matlab_chori")}
               </div>
             </>
           )}
@@ -2105,7 +2082,7 @@ function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
       {sensorOn && (
         <Panel title={`Fuel drop — engine band tha aur level gira (${drops.length})`}>
           {drops.length === 0 ? (
-            <Empty>Koi bina-jaancha drop nahi.</Empty>
+            <Empty>{t("fuel.koi_bina_jaancha_drop_nahi")}</Empty>
           ) : (
             <>
               {drops.map((d) => (
@@ -2115,13 +2092,12 @@ function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
                   <span style={{ fontSize: 12, fontFamily: "monospace", color: T.red, fontWeight: 700 }}>−{fmtL(d.litres)}</span>
                   <span style={{ fontSize: 11, color: T.t3 }}>{d.location || "—"}</span>
                   <span style={{ textAlign: "right" }}>
-                    <Btn size="sm" ghost onClick={() => review(d.id)}>Theek tha</Btn>
+                    <Btn size="sm" ghost onClick={() => review(d.id)}>{t("fuel.theek_tha")}</Btn>
                   </span>
                 </Row>
               ))}
               <div style={{ fontSize: 11, color: T.t4, padding: "9px 14px" }}>
-                Drop = sensor ka andaza, chori ka faisla nahi — tanker se machine me diesel utarna bhi
-                aise hi dikhta hai. Jaanch ke baad sahi laga to "Theek tha" dabaiye; wo dobara nahi aayega.
+               {t("fuel.drop_sensor_ka_andaza_chori_ka")}
               </div>
             </>
           )}
@@ -2130,13 +2106,12 @@ function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
 
       {/* Parchi vs entry — ab ye khaali nahi rehta. Jis entry par AI ne parchi
           padhi thi aur ankde nahi mile, wo yahan khud aa jaati hai. */}
-      <Panel title="Parchi aur entry me farq">
+      <Panel title={t("fuel.parchi_aur_entry_me_farq")}>
         {flagged.length === 0 ? (
           <Empty>
-            Abhi koi farq nahi mila.<br />
+           {t("fuel.abhi_koi_farq_nahi_mila")}<br />
             <span style={{ fontSize: 11.5 }}>
-              Entry karte waqt parchi ki photo se "Parchi padho" dabaiye — jo padha jaayega wo aapke
-              type kiye hue se apne aap milaya jaayega, aur farq yahan aa jayega.
+             {t("fuel.entry_karte_waqt_parchi_ki_photo")}
             </span>
           </Empty>
         ) : (
@@ -2158,8 +2133,7 @@ function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
               </div>
             ))}
             <div style={{ fontSize: 11.5, color: T.t4, marginTop: 10 }}>
-              Farq apne aap theek nahi kiya jaata aur entry roki bhi nahi jaati — parchi dhundhli ho
-              sakti hai, aur diesel to site par aa hi chuka hota hai. Faisla aapka.
+             {t("fuel.farq_apne_aap_theek_nahi_kiya")}
             </div>
           </>
         )}
@@ -2193,20 +2167,20 @@ function LedgerModal({ store, onClose }) {
   return (
     <Modal open={!!store} onClose={onClose} width={860}
       title={store ? `${store.name} — ledger` : ""}
-      sub={data ? `${fmtL(data.state.litres)} @ ₹${fmtN(data.state.avg_rate)}/L · value ${fmtC(data.state.value)}` : "Loading..."}>
-      {!data && <Empty>Loading...</Empty>}
-      {data && data.rows.length === 0 && <Empty>Is barrel me abhi koi aana-jaana nahi hua.</Empty>}
+      sub={data ? `${fmtL(data.state.litres)} @ ₹${fmtN(data.state.avg_rate)}/L · value ${fmtC(data.state.value)}` : t("common.loading")}>
+      {!data && <Empty>{t("common.loading")}</Empty>}
+      {data && data.rows.length === 0 && <Empty>{t("fuel.is_barrel_me_abhi_koi_aana")}</Empty>}
       {data && data.rows.length > 0 && (
         <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
           <Row head cols="110px 90px 1.4fr 90px 90px 100px">
-            <span>Kab</span><span>Kya</span><span>Kaun</span><span>Litres</span><span>Rate</span><span style={{ textAlign: "right" }}>Balance</span>
+            <span>{t("fuel.kab")}</span><span>{t("fuel.kya")}</span><span>{t("fuel.kaun")}</span><span>{t("fuel.litres")}</span><span>{t("common.rate")}</span><span style={{ textAlign: "right" }}>{t("common.balance")}</span>
           </Row>
           {data.rows.map((r, i) => (
             <Row key={i} cols="110px 90px 1.4fr 90px 90px 100px">
               <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r.at)}</span>
-              <span>{r.kind === "purchase" ? <Pill label="Aaya" c={T.grn} bg={T.grnL} />
-                : r.kind === "issue" ? <Pill label="Gaya" c={T.slt} bg={T.sltL} />
-                : <Pill label="Dipstick" c={T.amb} bg={T.ambL} />}</span>
+              <span>{r.kind === "purchase" ? <Pill label={t("fuel.aaya")} c={T.grn} bg={T.grnL} />
+                : r.kind === "issue" ? <Pill label={t("fuel.gaya")} c={T.slt} bg={T.sltL} />
+                : <Pill label={t("fuel.dipstick")} c={T.amb} bg={T.ambL} />}</span>
               <span style={{ fontSize: 11.5, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r.kind === "check"
                   ? `naapa ${fmtL(r.physical_l)} · kitaab ${fmtL(r.book_l)}`
@@ -2300,7 +2274,7 @@ function FuelModule() {
   const reloadAll = useCallback(async () => { await loadCore(); await loadReports(); }, [loadCore, loadReports]);
 
   const del = async (url, label) => {
-    if (!(await window.confirmAsync(`${label} delete karein?`))) return;
+    if (!(await window.confirmAsync(t("fuel.label_delete_karein", { label })))) return;
     try {
       const r = await api.del(url);
       if (r && r.success === false) { window.alert(r.message || "Delete failed"); return; }
@@ -2324,27 +2298,27 @@ function FuelModule() {
   const unpaid = byVendor.reduce((a, v) => a + Number(v.unpaid_amount || 0), 0);
 
   const TABS = [
-    { id: "overview",  l: "Overview",      I: IcGauge },
-    { id: "refueling", l: "Refueling",     I: IcDrop, badge: purchases.length + issues.length || null },
-    { id: "barrel",    l: "Barrel Stock",  I: IcDrum, badge: stores.filter((s) => s.below_reorder).length || null, bc: T.amb },
-    { id: "vendor",    l: "Vendor Ledger", I: IcTruck },
+    { id: "overview",  l: t("common.overview"),      I: IcGauge },
+    { id: "refueling", l: t("fuel.refueling"),     I: IcDrop, badge: purchases.length + issues.length || null },
+    { id: "barrel",    l: t("fuel.barrel_stock_2"),  I: IcDrum, badge: stores.filter((s) => s.below_reorder).length || null, bc: T.amb },
+    { id: "vendor",    l: t("fuel.vendor_ledger_2"), I: IcTruck },
     // No badge: a count here would have to be invented until the sensor
     // checks (E3) actually run.
-    { id: "cc",        l: "Cross-check",   I: IcRuler },
-    { id: "reports",   l: "Reports",       I: IcChart },
+    { id: "cc",        l: t("fuel.cross_check"),   I: IcRuler },
+    { id: "reports",   l: t("common.reports"),       I: IcChart },
   ];
 
   const TILES = [
-    { l: "Barrel Stock",  v: fmtL(totalStock), sub: `${stores.length} barrel · ${fmtC(stockValue)}`, c: T.ind, I: IcDrum },
-    { l: "Diesel Kharcha", v: fmtC(spendInRange), sub: `${fmtL(litresInRange)} is duration me`, c: T.blu, I: IcDrop },
-    { l: "Vendor Baaki",  v: fmtC(unpaid), sub: unpaid > 0 ? "Pending Payments me" : "Sab settle", c: unpaid > 0 ? T.amb : T.grn, I: IcTruck },
-    { l: "Norm se Zyada", v: byEquipment.filter((e) => e.variance_pct != null && e.variance_pct > 15).length, sub: `${normMissing.length} machine ka norm set nahi`, c: T.red, I: IcAlert },
+    { l: t("fuel.barrel_stock_2"),  v: fmtL(totalStock), sub: `${stores.length} barrel · ${fmtC(stockValue)}`, c: T.ind, I: IcDrum },
+    { l: t("fuel.diesel_kharcha"), v: fmtC(spendInRange), sub: `${fmtL(litresInRange)} is duration me`, c: T.blu, I: IcDrop },
+    { l: t("fuel.vendor_baaki"),  v: fmtC(unpaid), sub: unpaid > 0 ? "Pending Payments me" : "Sab settle", c: unpaid > 0 ? T.amb : T.grn, I: IcTruck },
+    { l: t("fuel.norm_se_zyada"), v: byEquipment.filter((e) => e.variance_pct != null && e.variance_pct > 15).length, sub: t("fuel.length_machine_ka_norm_set_nahi", { length: normMissing.length }), c: T.red, I: IcAlert },
   ];
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", flexDirection: "column", gap: 14 }}>
       <div style={{ width: 36, height: 36, border: "3px solid #E2E8F0", borderTopColor: T.ind, borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-      <div style={{ fontSize: 13, color: "#8896A6" }}>Loading Fuel...</div>
+      <div style={{ fontSize: 13, color: "#8896A6" }}>{t("fuel.loading_fuel")}</div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );

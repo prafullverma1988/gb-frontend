@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
+import { t } from "../../i18n";
 
 // ── BOQ Import wizard (M1) ──────────────────────────────────────────────
 // Client parses the sheet (SheetJS), maps columns, stages to /api/boq
@@ -28,12 +29,12 @@ const isBlank = (v) => v == null || String(v).trim() === "";
 const TOTAL_RE = /(sub[\s-]*total|grand\s*total|^total|carried\s*over|brought\s*forward|^c\/o$|^b\/f$)/i;
 
 const TARGETS = [
-  { key: "description", label: "Description", re: /description|item|particular|work/i, required: true },
-  { key: "unit",        label: "Unit",        re: /^unit|units|uom/i },
-  { key: "qty",         label: "Quantity",    re: /qty|quantity|nos/i, required: true },
-  { key: "rate",        label: "Rate",        re: /rate|price/i, required: true },
-  { key: "amount",      label: "Amount",      re: /amount|total|value/i },
-  { key: "sor_code",    label: "SOR / Code",  re: /sor|code|ref/i },
+  { key: "description", get label() { return t("boq_import_wizard.description"); }, re: /description|item|particular|work/i, required: true },
+  { key: "unit",        get label() { return t("common.unit"); },        re: /^unit|units|uom/i },
+  { key: "qty",         get label() { return t("boq_import_wizard.quantity"); },    re: /qty|quantity|nos/i, required: true },
+  { key: "rate",        get label() { return t("common.rate"); },        re: /rate|price/i, required: true },
+  { key: "amount",      get label() { return t("boq_import_wizard.amount"); },      re: /amount|total|value/i },
+  { key: "sor_code",    get label() { return t("boq_import_wizard.sor_code"); },  re: /sor|code|ref/i },
   { key: "sno",         label: "S.No.",       re: /^s\.?\s*no|^sr|serial|^#/i },
 ];
 const CATEGORIES = ["Civil", "Electrical", "Plumbing", "Finishing", "Structural", "Custom"];
@@ -90,7 +91,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
       const first = book.SheetNames[0];
       await loadSheet(book, first);
     } catch (err) {
-      flash("File padhne me dikkat — sahi Excel/CSV file chunein", "error");
+      flash(t("boq_import_wizard.file_padhne_me_dikkat_sahi_excel"), "error");
     }
     e.target.value = "";
   };
@@ -220,7 +221,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
       await refreshStaged(r.data.import_id);
       setStep(3);
     } catch (e) {
-      flash("Server tak nahi pahunch paaye", "error");
+      flash(t("boq_import_wizard.server_tak_nahi_pahunch_paaye"), "error");
     } finally { setBusy(false); }
   };
 
@@ -294,7 +295,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
       setResult(r.data);
       setStep(4);
     } catch (e) {
-      flash("Commit ke waqt server tak nahi pahunch paaye", "error");
+      flash(t("boq_import_wizard.commit_ke_waqt_server_tak_nahi"), "error");
     } finally { setBusy(false); }
   };
 
@@ -304,9 +305,9 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
       const r = await api.post("/boq/imports/" + importId + "/revert", {});
       if (!r?.success) { flash(r?.message || "Revert nahi hua", "error"); return; }
       setReverted(true);
-      flash("Import revert ho gaya", "ok");
+      flash(t("boq_import_wizard.import_revert_ho_gaya"), "ok");
     } catch (e) {
-      flash("Revert ke waqt dikkat", "error");
+      flash(t("boq_import_wizard.revert_ke_waqt_dikkat"), "error");
     } finally { setBusy(false); }
   };
 
@@ -331,7 +332,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
         <div style={{ padding: "14px 20px", background: T.surface, borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={T.ind} strokeWidth={2}><path d="M9 17V7h6v10M4 21h16M6 21V5a2 2 0 012-2h8a2 2 0 012 2v16" /></svg>
-            <span style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>BOQ Import</span>
+            <span style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{t("boq_import_wizard.boq_import")}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {STEPS.map((s, i) => (
@@ -340,7 +341,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                 {i < 3 && <span style={{ width: 14, height: 1, background: T.b1 }} />}
               </React.Fragment>
             ))}
-            <button onClick={onClose} title="Band karein" style={{ marginLeft: 8, width: 28, height: 28, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer" }}>
+            <button onClick={onClose} title={t("fuel.band_karein")} style={{ marginLeft: 8, width: 28, height: 28, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer" }}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
             </button>
           </div>
@@ -354,21 +355,21 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
             <div>
               <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: "28px 20px", border: `1.5px dashed ${T.b2}`, borderRadius: 12, background: T.surface, cursor: "pointer" }}>
                 <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke={T.ind} strokeWidth={1.8}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
-                <span style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>{fileName || "Excel / CSV file chunein"}</span>
-                <span style={{ fontSize: 11.5, color: T.t4 }}>.xlsx, .xls, .csv</span>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>{fileName || t("boq_import_wizard.excel_csv_file_chunein")}</span>
+                <span style={{ fontSize: 11.5, color: T.t4 }}>{t("boq_import_wizard.xlsx_xls_csv")}</span>
                 <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={onFile} />
               </label>
 
               {wb && (
                 <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 5 }}>Sheet</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 5 }}>{t("boq_import_wizard.sheet")}</div>
                     <select value={sheetName} onChange={(e) => loadSheet(wb, e.target.value)} style={inp}>
                       {wb.SheetNames.map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>
                   </div>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 5 }}>Header row {headerAuto && <span style={{ color: T.ind, fontWeight: 700 }}>· auto-detected</span>}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 5 }}>{t("boq_import.header_row")} {headerAuto && <span style={{ color: T.ind, fontWeight: 700 }}>{t("boq_import_wizard.auto_detected")}</span>}</div>
                     <input type="number" min={1} value={headerRow + 1} onChange={(e) => setHeader(Number(e.target.value) - 1)} style={inp} />
                   </div>
                 </div>
@@ -391,23 +392,23 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
           {step === 2 && (
             <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 18 }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 8 }}>Column mapping</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 8 }}>{t("boq_import_wizard.column_mapping")}</div>
                 {TARGETS.map((tg) => {
                   const detected = mapping[tg.key] != null && autoMap(headerCells)[tg.key] === mapping[tg.key];
                   return (
                     <div key={tg.key} style={{ marginBottom: 9 }}>
                       <div style={{ fontSize: 11, color: T.t3, marginBottom: 3, display: "flex", alignItems: "center", gap: 6 }}>
                         {tg.label}{tg.required && <span style={{ color: T.red }}>*</span>}
-                        {detected && <span style={{ fontSize: 9, fontWeight: 700, color: T.ind, background: T.indL, padding: "1px 6px", borderRadius: 10 }}>Detected</span>}
+                        {detected && <span style={{ fontSize: 9, fontWeight: 700, color: T.ind, background: T.indL, padding: "1px 6px", borderRadius: 10 }}>{t("boq_import_wizard.detected")}</span>}
                       </div>
                       <select value={mapping[tg.key] ?? ""} onChange={(e) => setMapping((m) => ({ ...m, [tg.key]: e.target.value === "" ? null : Number(e.target.value) }))} style={inp}>
-                        <option value="">— none —</option>
-                        {headerCells.map((c, i) => <option key={i} value={i}>{colLabel(i)} · {String(c || "").slice(0, 24) || "(blank)"}</option>)}
+                        <option value="">{t("boq_import_wizard.none")}</option>
+                        {headerCells.map((c, i) => <option key={i} value={i}>{colLabel(i)} · {String(c || "").slice(0, 24) || t("boq_import_wizard.blank")}</option>)}
                       </select>
                     </div>
                   );
                 })}
-                <div style={{ marginTop: 14, fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 8 }}>Options</div>
+                <div style={{ marginTop: 14, fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 8 }}>{t("boq_import_wizard.options")}</div>
                 {[["contFromBlankSno", "Blank S.No. = pichhle item ka hissa"], ["skipTotals", "Total / sub-total rows chhodo"], ["calcAmount", "Amount khud calculate karo (qty × rate)"], ["skipEmptyDesc", "Khaali description wali rows chhodo"]].map(([k, l]) => (
                   <label key={k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", cursor: "pointer", fontSize: 12, color: T.t2 }}>
                     <button type="button" onClick={() => setOpts((o) => ({ ...o, [k]: !o[k] }))}
@@ -420,7 +421,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 8 }}>Preview <span style={{ fontWeight: 400, color: T.t4 }}>· pehli 5 rows</span></div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 8 }}>{t("boq_import_wizard.preview")} <span style={{ fontWeight: 400, color: T.t4 }}>{t("boq_import_wizard.pehli_5_rows")}</span></div>
                 <div style={{ border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden", background: T.surface }}>
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -430,22 +431,22 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                           <tr key={r.row_no}>
                             <td style={{ ...td, color: T.t4 }}>{r.row_no}</td>
                             <td style={td}>{r.sor_code || "—"}</td>
-                            <td style={{ ...td, paddingLeft: r.is_continuation ? 22 : 9 }}>{r.is_continuation ? "↳ " : ""}{r.description || <span style={{ color: T.red }}>(khaali)</span>}</td>
+                            <td style={{ ...td, paddingLeft: r.is_continuation ? 22 : 9 }}>{r.is_continuation ? "↳ " : ""}{r.description || <span style={{ color: T.red }}>{t("boq_import_wizard.khaali")}</span>}</td>
                             <td style={td}>{r.unit_raw || "—"}</td>
                             <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.qty}</td>
                             <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.rate}</td>
                             <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{inr(r.amount)}</td>
-                            <td style={td}>{r.is_continuation ? <span style={{ fontSize: 9, fontWeight: 700, color: T.slt, background: T.sltL, padding: "1px 6px", borderRadius: 10 }}>cont.</span> : ""}</td>
+                            <td style={td}>{r.is_continuation ? <span style={{ fontSize: 9, fontWeight: 700, color: T.slt, background: T.sltL, padding: "1px 6px", borderRadius: 10 }}>{t("boq_import_wizard.cont")}</span> : ""}</td>
                           </tr>
                         ))}
-                        {!parsed.rows.length && <tr><td colSpan={8} style={{ ...td, textAlign: "center", color: T.t4, padding: 26 }}>Koi row nahi mili — mapping ya header row check karein</td></tr>}
+                        {!parsed.rows.length && <tr><td colSpan={8} style={{ ...td, textAlign: "center", color: T.t4, padding: 26 }}>{t("boq_import_wizard.koi_row_nahi_mili_mapping_ya")}</td></tr>}
                       </tbody>
                     </table>
                   </div>
                 </div>
                 {!!missingRequired.length && (
                   <div style={{ marginTop: 12, fontSize: 12, color: T.red, background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 8, padding: "8px 12px" }}>
-                    In fields ki mapping zaroori hai: <b>{missingRequired.join(", ")}</b>
+                   {t("boq_import_wizard.in_fields_ki_mapping_zaroori_hai")} <b>{missingRequired.join(", ")}</b>
                   </div>
                 )}
               </div>
@@ -458,34 +459,34 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
               {/* Target card */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 14, background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, padding: 14 }}>
                 <div>
-                  <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>Project</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>{t("common.project")}</div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: T.t2 }}>#{projectId}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>Parent</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>{t("boq_import_wizard.parent")}</div>
                   <select value={parentMode} onChange={(e) => setParentMode(e.target.value)} style={inp}>
-                    <option value="new">Naya wrapper banao</option>
-                    <option value="root">Project root pe rakho</option>
-                    <option value="existing">Existing task ke andar</option>
+                    <option value="new">{t("boq_import_wizard.naya_wrapper_banao")}</option>
+                    <option value="root">{t("boq_import_wizard.project_root_pe_rakho")}</option>
+                    <option value="existing">{t("boq_import_wizard.existing_task_ke_andar")}</option>
                   </select>
                 </div>
                 {parentMode === "new" && (
                   <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>Wrapper naam</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>{t("boq_import_wizard.wrapper_naam")}</div>
                     <input value={parentName} onChange={(e) => setParentName(e.target.value)} style={inp} />
                   </div>
                 )}
                 {parentMode === "existing" && (
                   <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>Parent task</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>{t("boq_import_wizard.parent_task")}</div>
                     <select value={parentTaskId} onChange={(e) => setParentTaskId(e.target.value)} style={inp}>
-                      <option value="">— chunein —</option>
+                      <option value="">{t("boq_import_wizard.chunein")}</option>
                       {existingTasks.map((t) => <option key={t.id} value={t.id}>{(t.task_no || t.no || "")} · {String(t.name || "").slice(0, 30)}</option>)}
                     </select>
                   </div>
                 )}
                 <div>
-                  <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>Category</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 }}>{t("common.category")}</div>
                   <select value={category} onChange={(e) => setCategory(e.target.value)} style={inp}>
                     {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -494,7 +495,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                   <button type="button" onClick={() => setBudgetNode((v) => !v)} style={{ width: 34, height: 19, borderRadius: 12, border: "none", cursor: "pointer", position: "relative", background: budgetNode ? T.ind : T.b2 }}>
                     <span style={{ position: "absolute", top: 2, left: budgetNode ? 17 : 2, width: 15, height: 15, borderRadius: "50%", background: "#fff" }} />
                   </button>
-                  Budget node banao
+                 {t("boq_import_wizard.budget_node_banao")}
                 </label>
               </div>
 
@@ -507,7 +508,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                   </div>
                 ))}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", background: staged.matched ? T.grnL : T.redL, border: `1px solid ${staged.matched ? T.grnM : T.redM}`, borderRadius: 10, padding: "10px 14px" }}>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: staged.matched ? T.grn : T.red }}>{staged.matched ? "Matched" : "Not matched"}</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: staged.matched ? T.grn : T.red }}>{staged.matched ? t("boq_import_wizard.matched") : t("boq_import_wizard.not_matched")}</span>
                 </div>
               </div>
 
@@ -517,10 +518,10 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                   style={{ height: 32, padding: "0 13px", borderRadius: 7, border: `1px solid ${T.ind}33`,
                     background: T.indL, color: T.ind, fontSize: 12, fontWeight: 700,
                     cursor: naming ? "default" : "pointer", fontFamily: "inherit" }}>
-                  {naming ? "AI naam bana raha hai…" : "AI se chhote task naam banao"}
+                  {naming ? t("boq_import_wizard.ai_naam_bana_raha_hai") : t("boq_import_wizard.ai_se_chhote_task_naam_banao")}
                 </button>
                 <span style={{ fontSize: 11.5, color: T.t4 }}>
-                  BOQ ka pura description task ke naam me bahut lamba padta hai. AI chhota naam sujhata hai — aap badal sakte ho.
+                 {t("boq_import_wizard.boq_ka_pura_description_task_ke")}
                 </span>
               </div>
 
@@ -540,7 +541,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                                 full description is used, exactly as before. */}
                             <td style={td}>
                               <input value={it.short_name ?? ""} onChange={(e) => editRow(it.id, "short_name", e.target.value)}
-                                placeholder="(description use hoga)"
+                                placeholder={t("boq_import_wizard.description_use_hoga")}
                                 style={{ ...inp, padding: "4px 6px", width: 170,
                                   color: it.short_name ? T.t1 : T.t4, borderColor: it.short_name ? T.ind : T.b1 }} />
                             </td>
@@ -572,8 +573,8 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                   <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M20 6L9 17l-5-5" /></svg>
                 </span>
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>Import ho gaya</div>
-                  <div style={{ fontSize: 12, color: T.t3 }}>{result.ms} ms me poora hua</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{t("boq_import_wizard.import_ho_gaya")}</div>
+                  <div style={{ fontSize: 12, color: T.t3 }}>{t("boq_import_wizard.ms_ms_me_poora_hua", { ms: result.ms })}</div>
                 </div>
               </div>
 
@@ -588,8 +589,8 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
 
               {staged && (
                 <div style={{ border: `1px solid ${T.b1}`, borderRadius: 10, background: T.surface, padding: "12px 14px", marginBottom: 16 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 8 }}>Tree preview</div>
-                  {parentMode === "new" && <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginBottom: 4 }}>{parentName || "BOQ-1"}</div>}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 8 }}>{t("boq_import_wizard.tree_preview")}</div>
+                  {parentMode === "new" && <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginBottom: 4 }}>{parentName || t("boq_import_wizard.boq_1")}</div>}
                   {staged.items.filter((i) => !i.is_continuation).slice(0, 8).map((it) => (
                     <div key={it.id} style={{ fontSize: 12.5, color: T.t2, paddingLeft: parentMode === "new" ? 16 : 0, marginBottom: 3, display: "flex", justifyContent: "space-between" }}>
                       <span>{String(it.description).slice(0, 46)}</span>
@@ -597,7 +598,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                     </div>
                   ))}
                   {staged.items.filter((i) => !i.is_continuation).length > 8 && (
-                    <div style={{ fontSize: 12, color: T.t4, paddingLeft: parentMode === "new" ? 16 : 0, marginTop: 4 }}>… aur {staged.items.filter((i) => !i.is_continuation).length - 8} items</div>
+                    <div style={{ fontSize: 12, color: T.t4, paddingLeft: parentMode === "new" ? 16 : 0, marginTop: 4 }}>{t("boq_import_wizard.aur_staged_items", { staged: staged.items.filter((i) => !i.is_continuation).length - 8 })}</div>
                   )}
                 </div>
               )}
@@ -608,28 +609,28 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
         {/* Footer */}
         <div style={{ padding: "12px 20px", background: T.surface, borderTop: `1px solid ${T.b1}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <div>
-            {step > 1 && step < 4 && <button onClick={() => setStep(step - 1)} style={btn("ghost")}>← Peeche</button>}
-            {step === 4 && !reverted && <button onClick={revert} disabled={busy} style={{ ...btn("ghost"), color: T.red, borderColor: T.redM }}>Is import ko revert karein</button>}
+            {step > 1 && step < 4 && <button onClick={() => setStep(step - 1)} style={btn("ghost")}>{t("boq_import_wizard.peeche")}</button>}
+            {step === 4 && !reverted && <button onClick={revert} disabled={busy} style={{ ...btn("ghost"), color: T.red, borderColor: T.redM }}>{t("boq_import_wizard.is_import_ko_revert_karein")}</button>}
           </div>
           <div style={{ display: "flex", gap: 10 }}>
-            {step === 1 && <button disabled={!parsed.rows.length} onClick={() => setStep(2)} style={{ ...btn("primary"), opacity: parsed.rows.length ? 1 : .5, cursor: parsed.rows.length ? "pointer" : "not-allowed" }}>Aage →</button>}
+            {step === 1 && <button disabled={!parsed.rows.length} onClick={() => setStep(2)} style={{ ...btn("primary"), opacity: parsed.rows.length ? 1 : .5, cursor: parsed.rows.length ? "pointer" : "not-allowed" }}>{t("boq_import_wizard.aage")}</button>}
             {step === 2 && (
               <button disabled={!!missingRequired.length || !parsed.rows.length || busy}
                 title={missingRequired.length ? "Required fields: " + missingRequired.join(", ") : ""}
                 onClick={stage}
                 style={{ ...btn("primary"), opacity: (missingRequired.length || !parsed.rows.length) ? .5 : 1, cursor: (missingRequired.length || !parsed.rows.length) ? "not-allowed" : "pointer" }}>
-                {busy ? "Ruko…" : "Review →"}
+                {busy ? t("boq_import_wizard.ruko") : t("boq_import_wizard.review")}
               </button>
             )}
             {step === 3 && staged && (
               <button disabled={!staged.matched || busy || (parentMode === "existing" && !parentTaskId)}
-                title={!staged.matched ? "Total match nahi ho raha" : ""}
+                title={!staged.matched ? t("boq_import_wizard.total_match_nahi_ho_raha") : ""}
                 onClick={commit}
                 style={{ ...btn("primary"), opacity: (!staged.matched || (parentMode === "existing" && !parentTaskId)) ? .5 : 1, cursor: (!staged.matched || (parentMode === "existing" && !parentTaskId)) ? "not-allowed" : "pointer" }}>
-                {busy ? "Import ho raha…" : `${staged.items.length} tasks import karein`}
+                {busy ? t("boq_import_wizard.import_ho_raha") : `${staged.items.length} tasks import karein`}
               </button>
             )}
-            {step === 4 && <button onClick={() => { onCommitted && onCommitted(); onClose(); }} style={btn("primary")}>Tasks tab kholein</button>}
+            {step === 4 && <button onClick={() => { onCommitted && onCommitted(); onClose(); }} style={btn("primary")}>{t("boq_import_wizard.tasks_tab_kholein")}</button>}
           </div>
         </div>
       </div>

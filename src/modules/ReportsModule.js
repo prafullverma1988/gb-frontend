@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import api from "../config/api";
+import { t } from "../i18n";
 
 const COMPANY_NAME = "Company";
 
@@ -54,7 +55,7 @@ function SearchSelect({options,value,onChange,placeholder,accent,style:extStyle,
         value={open?q:(value||"")}
         onChange={e=>{setQ(e.target.value);if(!open)openDrop();}}
         onFocus={openDrop}
-        placeholder={placeholder||"Select..."}
+        placeholder={placeholder||t("reports.select")}
         onKeyDown={e=>{
           if(e.key==="Escape"){setOpen(false);setQ("");}
           if(e.key==="Enter"&&filtered.length>0){e.preventDefault();pick(filtered[0]);}
@@ -82,7 +83,7 @@ function SearchSelect({options,value,onChange,placeholder,accent,style:extStyle,
               {o}
             </div>
           ))}
-          {!filtered.length&&<div style={{padding:"8px 10px",fontSize:11,color:"#9CA3AF",textAlign:"center"}}>No match</div>}
+          {!filtered.length&&<div style={{padding:"8px 10px",fontSize:11,color:"#9CA3AF",textAlign:"center"}}>{t("reports.no_match")}</div>}
         </div>
       )}
     </div>
@@ -361,11 +362,11 @@ function CashBookModule(){
     <div>
       {/* Summary tiles */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:12}}>
-        {[{l:"Total Receipt",v:fmtRs(totalRec),c:T.grn},{l:"Total Payment",v:fmtRs(totalPay),c:T.red},{l:"Net Balance",v:fmtRs(Math.abs(balance)),c:balance>=0?T.blu:T.red},{l:"Entries",v:filtered.length,c:T.slt}].map((s,i)=>(
+        {[{l:t("reports.total_receipt"),v:fmtRs(totalRec),c:T.grn},{l:t("reports.total_payment"),v:fmtRs(totalPay),c:T.red},{l:t("reports.net_balance"),v:fmtRs(Math.abs(balance)),c:balance>=0?T.blu:T.red},{l:t("reports.entries"),v:filtered.length,c:T.slt}].map((s,i)=>(
           <div key={i} style={{padding:"11px 14px",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{s.l}</div>
             <div style={{fontSize:18,fontWeight:800,color:s.c}}>{s.v}</div>
-            {i===2&&<div style={{fontSize:9.5,color:T.t4,marginTop:2}}>{balance>=0?"Surplus":"Deficit"}</div>}
+            {i===2&&<div style={{fontSize:9.5,color:T.t4,marginTop:2}}>{balance>=0?t("reports.surplus"):t("reports.deficit")}</div>}
           </div>
         ))}
       </div>
@@ -387,26 +388,26 @@ function CashBookModule(){
           <input type="date" value={fTo} onChange={e=>setFTo(e.target.value)} style={{...selStyle,width:130}}/>
           <div style={{position:"relative",flex:1,minWidth:160}}>
             <span style={{position:"absolute",left:7,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSrch size={12} color={T.t4}/></span>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search description..."
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("reports.search_description")}
               style={{...selStyle,width:"100%",paddingLeft:24,boxSizing:"border-box"}}/>
           </div>
         </div>
         {/* Row 2: Filters + buttons */}
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
           <select value={fSite} onChange={e=>setFSite(e.target.value)} style={{...selStyle,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}>
-            <option value="All">All Sites</option>{SITES_LIVE.map(s=><option key={s}>{s}</option>)}
+            <option value="All">{t("common.all_sites")}</option>{SITES_LIVE.map(s=><option key={s}>{s}</option>)}
           </select>
           <select value={fHead} onChange={e=>setFHead(e.target.value)} style={{...selStyle,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}>
-            <option value="All">All Heads</option>{HEADS.map(h=><option key={h}>{h}</option>)}
+            <option value="All">{t("finance.all_heads")}</option>{HEADS.map(h=><option key={h}>{h}</option>)}
           </select>
           <select value={fMOP} onChange={e=>setFMOP(e.target.value)} style={{...selStyle,borderColor:fMOP!=="All"?T.blu:T.b1,background:fMOP!=="All"?T.bluL:T.surface,color:fMOP!=="All"?T.blu:T.t2}}>
-            <option value="All">All MOP</option>{MOPS.map(m=><option key={m}>{m}</option>)}
+            <option value="All">{t("finance.all_mop")}</option>{MOPS.map(m=><option key={m}>{m}</option>)}
           </select>
           <select value={fAcc} onChange={e=>setFAcc(e.target.value)} style={{...selStyle,borderColor:fAcc!=="All"?T.blu:T.b1,background:fAcc!=="All"?T.bluL:T.surface,color:fAcc!=="All"?T.blu:T.t2}}>
-            <option value="All">All Accounts</option>{ACCOUNTS_LIVE.map(a=><option key={a}>{a}</option>)}
+            <option value="All">{t("finance.all_accounts")}</option>{ACCOUNTS_LIVE.map(a=><option key={a}>{a}</option>)}
           </select>
           <select value={fParty} onChange={e=>setFParty(e.target.value)} style={{...selStyle,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}>
-            <option value="All">All Parties</option>{PARTIES_LIVE.map(p=><option key={p}>{p}</option>)}
+            <option value="All">{t("finance.all_parties")}</option>{PARTIES_LIVE.map(p=><option key={p}>{p}</option>)}
           </select>
           {/* Reports = VIEW-ONLY. Excel + PDF only. Add/Edit/Delete
               moved out — those live in Finance → Cash Book where the
@@ -414,11 +415,11 @@ function CashBookModule(){
           <div style={{marginLeft:"auto",display:"flex",gap:6}}>
             <button onClick={view==="cashbook"?dlExcelCash:dlExcelDay}
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-              <IcXLS size={13} color={T.grn}/> Excel
+              <IcXLS size={13} color={T.grn}/> {t("common.excel")}
             </button>
             <button onClick={view==="cashbook"?printCash:printDay}
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-              <IcPrint size={13} color={T.blu}/> PDF / Print
+              <IcPrint size={13} color={T.blu}/> {t("finance.pdf_print")}
             </button>
           </div>
         </div>
@@ -429,7 +430,7 @@ function CashBookModule(){
 
       {loading && (
         <div style={{padding:"30px",textAlign:"center",fontSize:12,color:T.t4,background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:10}}>
-          Loading transactions...
+         {t("reports.loading_transactions")}
         </div>
       )}
 
@@ -460,7 +461,7 @@ function CashBookModule(){
           </div>
           {/* Totals */}
           <div style={{display:"grid",gridTemplateColumns:"80px 130px 1fr 110px 110px 95px 90px 90px 100px",padding:"9px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`}}>
-            <span/><span/><span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>TOTAL ({filtered.length} entries)</span>
+            <span/><span/><span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("reports.total_filtered_entries", { filtered: filtered.length })}</span>
             <span/><span/><span/>
             <span style={{fontSize:13,fontWeight:800,color:T.grn}}>{fmtRs(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red}}>{fmtRs(totalPay)}</span>
@@ -511,7 +512,7 @@ function CashBookModule(){
           <div style={{display:"grid",gridTemplateColumns:"95px 110px 1fr 100px 85px 85px 95px 100px",padding:"9px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`}}>
             <span style={{fontSize:12,fontWeight:700,color:T.t1}}>TOTAL</span>
             <span/>
-            <span style={{fontSize:11.5,color:T.t3}}>{daybook.length} days · {filtered.length} entries</span>
+            <span style={{fontSize:11.5,color:T.t3}}>{t("reports.daybook_days_filtered_entries", { daybook: daybook.length, filtered: filtered.length })}</span>
             <span/>
             <span style={{fontSize:13,fontWeight:800,color:T.grn}}>{fmtRs(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red}}>{fmtRs(totalPay)}</span>
@@ -812,10 +813,10 @@ function ChallanModule(){
           const unbilledCount = filtered.filter(m=>m.status==="Unbilled").length;
           const avgBilled = billedCount ? totalPaid / billedCount : 0;
           return [
-            {l:"Total Value",v:fmtRs(totalAmt),c:T.blu,sub:`${filtered.length} entries · billed-side only`},
-            {l:"Billed",v:fmtRs(totalPaid),c:T.grn,sub:`${billedCount} items`},
-            {l:"Unbilled",v:unbilledCount?`${unbilledCount} item${unbilledCount===1?"":"s"}`:"—",c:T.amb,sub:"rate pending"},
-            {l:"Avg. per Billed",v:avgBilled?fmtRs(Math.round(avgBilled)):"—",c:T.slt,sub:"only billed lines"},
+            {l:t("common.total_value"),v:fmtRs(totalAmt),c:T.blu,sub:t("reports.length_entries_billed_side_only", { length: filtered.length })},
+            {l:t("common.billed"),v:fmtRs(totalPaid),c:T.grn,sub:t("reports.billedcount_items", { billedCount })},
+            {l:t("common.unbilled"),v:unbilledCount?`${unbilledCount} item${unbilledCount===1?"":"s"}`:"—",c:T.amb,sub:t("reports.rate_pending")},
+            {l:t("reports.avg_per_billed"),v:avgBilled?fmtRs(Math.round(avgBilled)):"—",c:T.slt,sub:t("reports.only_billed_lines")},
           ];
         })().map((s,i)=>(
           <div key={i} style={{padding:"11px 14px",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,borderTop:`3px solid ${s.c}`}}>
@@ -831,12 +832,12 @@ function ChallanModule(){
           when summing rates × qty across the warehouse boundary. */}
       <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"10px 12px",marginBottom:10}}>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
-          <span style={{fontSize:10.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginRight:4}}>View</span>
+          <span style={{fontSize:10.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginRight:4}}>{t("common.view_2")}</span>
           {[
-            {k:"all",      l:"All",              d:"Raw register — every GRN row, every flow"},
-            {k:"vendor",   l:"Vendor Purchases", d:"Vendor billed (a+b) · full ₹"},
-            {k:"project",  l:"Project Receipts", d:"What reached projects (a+c) · c uses FIFO/manual rate"},
-            {k:"warehouse",l:"Warehouse Flow",   d:"In + Out + Transfers (b+c+d)"},
+            {k:"all",      l:t("common.all"),              d:t("reports.raw_register_every_grn_row_every")},
+            {k:"vendor",   l:t("reports.vendor_purchases"), d:t("reports.vendor_billed_a_b_full")},
+            {k:"project",  l:t("reports.project_receipts"), d:t("reports.what_reached_projects_a_c_c")},
+            {k:"warehouse",l:t("reports.warehouse_flow"),   d:t("reports.in_out_transfers_b_c_d")},
           ].map(v => (
             <button key={v.k} onClick={()=>setView(v.k)}
               title={v.d}
@@ -845,22 +846,22 @@ function ChallanModule(){
             </button>
           ))}
           <span style={{fontSize:10.5,color:T.t4,marginLeft:8,fontStyle:"italic"}}>
-            {view==="all"      && "Every row visible — total uses vendor-billed only (a+b) to avoid double-counting"}
-            {view==="vendor"   && "Total = sum of vendor bills (no double-count for warehouse issues)"}
-            {view==="project"  && "Project consumption — warehouse issues show FIFO/manual rate"}
-            {view==="warehouse"&& "Stock movements — receipts in, issues out, internal transfers"}
+            {view==="all"      && t("reports.every_row_visible_total_uses_vendor")}
+            {view==="vendor"   && t("reports.total_sum_of_vendor_bills_no")}
+            {view==="project"  && t("reports.project_consumption_warehouse_issues_show_fifo")}
+            {view==="warehouse"&& t("reports.stock_movements_receipts_in_issues_out")}
           </span>
         </div>
 
         {/* Row 1: date + search */}
         <div style={{display:"flex",gap:7,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
-          <span style={{fontSize:11,color:T.t4,fontWeight:600}}>Bill Date</span>
+          <span style={{fontSize:11,color:T.t4,fontWeight:600}}>{t("common.bill_date")}</span>
           <input type="date" value={fFrom} onChange={e=>setFFrom(e.target.value)} style={{...selStyle2,width:125}}/>
           <span style={{fontSize:11,color:T.t4}}>to</span>
           <input type="date" value={fTo} onChange={e=>setFTo(e.target.value)} style={{...selStyle2,width:125}}/>
           <div style={{position:"relative",flex:1,minWidth:200}}>
             <span style={{position:"absolute",left:7,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSrch size={12} color={T.t4}/></span>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search material, party, description..."
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("reports.search_material_party_description")}
               style={{...selStyle2,width:"100%",paddingLeft:26,boxSizing:"border-box"}}/>
           </div>
           {/* Reports = view-only. Add Entry removed; new GRNs come
@@ -868,11 +869,11 @@ function ChallanModule(){
           <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
             <button onClick={dlExcel}
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-              <IcXLS size={13} color={T.grn}/> Excel
+              <IcXLS size={13} color={T.grn}/> {t("common.excel")}
             </button>
             <button onClick={printAll}
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-              <IcPrint size={13} color={T.blu}/> PDF / Print
+              <IcPrint size={13} color={T.blu}/> {t("finance.pdf_print")}
             </button>
           </div>
         </div>
@@ -880,15 +881,15 @@ function ChallanModule(){
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
           <select value={fSite} onChange={e=>setFSite(e.target.value)}
             style={{...selStyle2,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}>
-            <option value="All">All Sites</option>{SITES_LIVE.map(s=><option key={s}>{s}</option>)}
+            <option value="All">{t("common.all_sites")}</option>{SITES_LIVE.map(s=><option key={s}>{s}</option>)}
           </select>
           <select value={fParty} onChange={e=>setFParty(e.target.value)}
             style={{...selStyle2,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}>
-            <option value="All">All Vendors</option>{VENDORS_LIVE.map(s=><option key={s}>{s}</option>)}
+            <option value="All">{t("reports.all_vendors")}</option>{VENDORS_LIVE.map(s=><option key={s}>{s}</option>)}
           </select>
           <select value={fHead} onChange={e=>setFHead(e.target.value)}
             style={{...selStyle2,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}>
-            <option value="All">All Categories</option>{CATS_LIVE.map(h=><option key={h}>{h}</option>)}
+            <option value="All">{t("common.all_categories")}</option>{CATS_LIVE.map(h=><option key={h}>{h}</option>)}
           </select>
           {/* MOP dropdown removed — GRNs don't have a payment method
               at GRN time; that lives on the eventual bill payment txn. */}
@@ -898,13 +899,13 @@ function ChallanModule(){
                 background:fStatus===s?(s==="Billed"?T.grnL:s==="Unbilled"?T.ambL:T.bluL):"none",
                 color:fStatus===s?(s==="Billed"?T.grn:s==="Unbilled"?T.amb:T.blu):T.t3,
                 fontSize:11.5,fontWeight:fStatus===s?700:400,cursor:"pointer"}}>
-              {s==="All"?"All Status":s}
+              {s==="All"?t("common.all_status"):s}
             </button>
           ))}
           {(fSite!=="All"||fParty!=="All"||fHead!=="All"||fStatus!=="All"||search)&&(
             <button onClick={()=>{setFSite("All");setFParty("All");setFHead("All");setFStatus("All");setSearch("");}}
               style={{padding:"4px 10px",borderRadius:20,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-              Clear All ✕
+             {t("reports.clear_all")}
             </button>
           )}
         </div>
@@ -915,7 +916,7 @@ function ChallanModule(){
 
       {loading && (
         <div style={{padding:"30px",textAlign:"center",fontSize:12,color:T.t4,background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:10}}>
-          Loading material register...
+         {t("reports.loading_material_register")}
         </div>
       )}
 
@@ -969,9 +970,9 @@ function ChallanModule(){
           {!loading && filtered.length===0&&(
             <div style={{textAlign:"center",padding:"40px",color:T.t4}}>
               <div style={{fontSize:32,marginBottom:8}}>🔍</div>
-              <div style={{fontSize:14,fontWeight:600,color:T.t3}}>No entries match the filters</div>
+              <div style={{fontSize:14,fontWeight:600,color:T.t3}}>{t("reports.no_entries_match_the_filters")}</div>
               <div style={{fontSize:11,color:T.t4,marginTop:4}}>
-                {rows.length === 0 ? "No GRN data yet — record receipts via Warehouse / Procurement first" : "Adjust date range or clear filters"}
+                {rows.length === 0 ? t("reports.no_grn_data_yet_record_receipts") : t("reports.adjust_date_range_or_clear_filters")}
               </div>
             </div>
           )}
@@ -982,11 +983,9 @@ function ChallanModule(){
             counts only direct (a) flows because (c) is qty-only. */}
         <div style={{display:"grid",gridTemplateColumns:"75px 115px 90px 95px 100px 1fr 90px 80px 85px 90px 75px",
           padding:"9px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,gap:7}}>
-          <span style={{fontSize:12,fontWeight:700,color:T.t1,gridColumn:"1/10"}}>
-            TOTAL &nbsp;({filtered.length} entries · {view==="all"?"All Flows":view==="vendor"?"Vendor Purchases":view==="project"?"Project Receipts":"Warehouse Flow"})
-          </span>
+          <span style={{fontSize:12,fontWeight:700,color:T.t1,gridColumn:"1/10"}}>{t("reports.total_filtered_entries_view", { filtered: filtered.length, view: view==="all"?"All Flows":view==="vendor"?"Vendor Purchases":view==="project"?"Project Receipts":"Warehouse Flow" })}</span>
           <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>{fmtRs(totalAmt)}</span>
-          <span style={{fontSize:10.5,color:T.t3}}>{view==="all"?"Vendor a+b only":view==="project"?"Direct only":"Billed only"}</span>
+          <span style={{fontSize:10.5,color:T.t3}}>{view==="all"?t("reports.vendor_a_b_only"):view==="project"?t("reports.direct_only"):t("reports.billed_only")}</span>
         </div>
       </div>
     </div>
@@ -1175,7 +1174,7 @@ function ProgressReportModule(){
     <div>
       {/* Portfolio summary */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:14}}>
-        {[{l:"Portfolio",v:fmtRs(totalContract),c:T.blu},{l:"Billed",v:fmtRs(totalBilled),c:T.pur},{l:"Received",v:fmtRs(totalReceived),c:T.grn},{l:"Expenses",v:fmtRs(totalExp),c:T.red},{l:"Net Margin",v:fmtRs(Math.abs(totalProfit)),c:totalProfit>=0?T.grn:T.red}].map((s,i)=>(
+        {[{l:t("reports.portfolio"),v:fmtRs(totalContract),c:T.blu},{l:t("common.billed"),v:fmtRs(totalBilled),c:T.pur},{l:t("common.received"),v:fmtRs(totalReceived),c:T.grn},{l:t("reports.expenses"),v:fmtRs(totalExp),c:T.red},{l:t("reports.net_margin"),v:fmtRs(Math.abs(totalProfit)),c:totalProfit>=0?T.grn:T.red}].map((s,i)=>(
           <div key={i} style={{padding:"11px 14px",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{s.l}</div>
             <div style={{fontSize:15,fontWeight:800,color:s.c}}>{s.v}</div>
@@ -1185,20 +1184,20 @@ function ProgressReportModule(){
 
       {/* Actions */}
       <div style={{display:"flex",gap:7,marginBottom:12}}>
-        <button onClick={dlExcelPortfolio} style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:12,fontWeight:600,cursor:"pointer"}}><IcXLS size={14} color={T.grn}/> Portfolio Excel</button>
-        <button onClick={printPortfolio} style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:600,cursor:"pointer"}}><IcPrint size={14} color={T.blu}/> Portfolio PDF</button>
+        <button onClick={dlExcelPortfolio} style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:12,fontWeight:600,cursor:"pointer"}}><IcXLS size={14} color={T.grn}/> {t("reports.portfolio_excel")}</button>
+        <button onClick={printPortfolio} style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:600,cursor:"pointer"}}><IcPrint size={14} color={T.blu}/> {t("reports.portfolio_pdf")}</button>
       </div>
 
       {/* Project cards */}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {loading && (
           <div style={{padding:"30px",textAlign:"center",fontSize:12,color:T.t4,background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-            Loading projects...
+           {t("common.loading_projects")}
           </div>
         )}
         {!loading && projects.length === 0 && (
           <div style={{padding:"30px",textAlign:"center",fontSize:13,color:T.t3,background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-            No projects yet. Create projects via Projects module.
+           {t("reports.no_projects_yet_create_projects_via")}
           </div>
         )}
         {projects.map(p=>{
@@ -1224,7 +1223,7 @@ function ProgressReportModule(){
                     <span style={{fontSize:11.5,color:T.t4}}>{p.site} · {p.start} → {p.target}</span>
                   </div>
                   <div style={{display:"flex",gap:7}} onClick={e=>e.stopPropagation()}>
-                    <button onClick={()=>dlExcelProject(p)} style={{display:"flex",alignItems:"center",gap:3,padding:"5px 9px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcXLS size={11} color={T.grn}/> Excel</button>
+                    <button onClick={()=>dlExcelProject(p)} style={{display:"flex",alignItems:"center",gap:3,padding:"5px 9px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcXLS size={11} color={T.grn}/> {t("common.excel")}</button>
                     <button onClick={()=>printProject(p)} style={{display:"flex",alignItems:"center",gap:3,padding:"5px 9px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcPrint size={11} color={T.blu}/> PDF</button>
                   </div>
                 </div>
@@ -1232,7 +1231,7 @@ function ProgressReportModule(){
                 {/* Overall progress bar */}
                 <div style={{marginBottom:10}}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                    <span style={{fontSize:11,color:T.t3}}>Overall Progress</span>
+                    <span style={{fontSize:11,color:T.t3}}>{t("reports.overall_progress")}</span>
                     <span style={{fontSize:12,fontWeight:800,color:p.progress>=80?T.grn:p.progress>=50?T.blu:T.amb}}>{p.progress}%</span>
                   </div>
                   <div style={{height:8,background:T.b1,borderRadius:8,overflow:"hidden"}}>
@@ -1242,7 +1241,7 @@ function ProgressReportModule(){
 
                 {/* Financial row */}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-                  {[{l:"Contract",v:fmtRs(p.contract),c:T.t1},{l:"Received",v:fmtRs(p.received),c:T.grn},{l:"Expenses",v:fmtRs(p.expenses),c:T.red},{l:`Margin (${marginPct}%)`,v:fmtRs(Math.abs(margin)),c:margin>=0?T.grn:T.red}].map((s,i)=>(
+                  {[{l:t("reports.contract"),v:fmtRs(p.contract),c:T.t1},{l:t("common.received"),v:fmtRs(p.received),c:T.grn},{l:t("reports.expenses"),v:fmtRs(p.expenses),c:T.red},{l:t("reports.margin_marginpct", { marginPct }),v:fmtRs(Math.abs(margin)),c:margin>=0?T.grn:T.red}].map((s,i)=>(
                     <div key={i} style={{padding:"8px 10px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`}}>
                       <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:1}}>{s.l}</div>
                       <div style={{fontSize:13,fontWeight:700,color:s.c}}>{s.v}</div>
@@ -1254,10 +1253,10 @@ function ProgressReportModule(){
               {/* Expanded: phase breakdown (lazy-loaded from /projects/:id/milestones) */}
               {isSel&&(
                 <div style={{padding:"12px 16px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB}}>
-                  <div style={{fontSize:11,fontWeight:700,color:T.t2,marginBottom:8}}>Phase-wise Progress</div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.t2,marginBottom:8}}>{t("reports.phase_wise_progress")}</div>
                   {!p.phases || p.phases.length === 0 ? (
                     <div style={{fontSize:11.5,color:T.t4,padding:"8px 4px",textAlign:"center"}}>
-                      No phases / milestones defined for this project yet.
+                     {t("reports.no_phases_milestones_defined_for_this")}
                     </div>
                   ) : (
                     <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -1293,9 +1292,9 @@ export default function ReportsModule(){
   const [tab,setTab]=useState("cash");
 
   const TABS=[
-    {id:"cash",    l:"Cash Book + Day Book",  desc:"Date-wise receipts & payments",icon:IcCalc},
-    {id:"challan", l:"Material Register",      desc:"GRN-level material movement (vendor / project / warehouse)", icon:IcSheet},
-    {id:"progress",l:"Progress + Financial",  desc:"Site progress & finance report",icon:IcBar},
+    {id:"cash",    l:t("reports.cash_book_day_book"),  desc:t("reports.date_wise_receipts_payments"),icon:IcCalc},
+    {id:"challan", l:t("reports.material_register"),      desc:t("reports.grn_level_material_movement_vendor_project"), icon:IcSheet},
+    {id:"progress",l:t("reports.progress_financial"),  desc:t("reports.site_progress_finance_report"),icon:IcBar},
   ];
 
   return(
@@ -1307,7 +1306,7 @@ export default function ReportsModule(){
         </div>
         <div>
           <div style={{fontSize:16,fontWeight:800,color:"white",letterSpacing:"-.3px"}}>{COMPANY_NAME}</div>
-          <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"1px"}}>Reports & Accounts</div>
+          <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"1px"}}>{t("reports.reports_accounts")}</div>
         </div>
         <div style={{flex:1}}/>
         {/* Tab bar in header */}

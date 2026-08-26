@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
+import { t } from "../../i18n";
 
 /* ────────────────────────────────────────────────────────────────────
    DIN KA BYORA — "aaj site par kya hua?" ek jagah (Sahayak idea a)
@@ -46,9 +47,9 @@ export default function DinKaByoraModal({ projectId, onClose }) {
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 17px",
           borderBottom: `1px solid ${T.b1}` }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>📋 Din ka byora</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{t("din_ka_byora.din_ka_byora")}</div>
             <div style={{ fontSize: 11, color: T.t4, marginTop: 1 }}>
-              Ankde entries/photos/GRN/haaziri se — AI sirf para likhta hai
+             {t("din_ka_byora.ankde_entries_photos_grn_haaziri_se")}
             </div>
           </div>
           <input type="date" value={date} max={todayYMD()} onChange={(e) => setDate(e.target.value)}
@@ -57,7 +58,7 @@ export default function DinKaByoraModal({ projectId, onClose }) {
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "14px 17px" }}>
-          {data === null && <div style={{ padding: "26px 0", textAlign: "center", fontSize: 12.5, color: T.t3 }}>Byora ban raha hai…</div>}
+          {data === null && <div style={{ padding: "26px 0", textAlign: "center", fontSize: 12.5, color: T.t3 }}>{t("din_ka_byora.byora_ban_raha_hai")}</div>}
           {!!err && <div style={{ background: T.redL, border: `1px solid ${T.redM}`, color: "#991B1B",
             borderRadius: 8, padding: "9px 12px", fontSize: 12 }}>{err}</div>}
 
@@ -79,9 +80,7 @@ export default function DinKaByoraModal({ projectId, onClose }) {
               padding: "11px 13px", fontSize: 12.5, color: T.t1, lineHeight: 1.8, whiteSpace: "pre-wrap" }}>
               {data.text}
             </div>
-            <div style={{ fontSize: 10.5, color: T.t4, marginTop: 8 }}>
-              Yahi byora Sahayak se bhi milta hai — poochho: "{`aaj ${data.project?.name || "site"} par kya hua`}"
-            </div>
+            <div style={{ fontSize: 10.5, color: T.t4, marginTop: 8 }}>{t("din_ka_byora.yahi_byora_sahayak_se_bhi_milta", { aaj: `aaj ${data.project?.name || "site"} par kya hua` })}</div>
           </>)}
         </div>
 
@@ -89,10 +88,10 @@ export default function DinKaByoraModal({ projectId, onClose }) {
           borderTop: `1px solid ${T.b1}` }}>
           <button onClick={() => load(date)} style={{ padding: "7px 14px", borderRadius: 7,
             border: `1px solid ${T.b1}`, background: T.surface, color: T.t2, fontSize: 12,
-            cursor: "pointer", fontFamily: "inherit" }}>↻ Dobara</button>
+            cursor: "pointer", fontFamily: "inherit" }}>{t("din_ka_byora.dobara")}</button>
           <button onClick={onClose} style={{ padding: "7px 16px", borderRadius: 7, border: "none",
             background: T.blu, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
-            fontFamily: "inherit" }}>Band</button>
+            fontFamily: "inherit" }}>{t("common.band")}</button>
         </div>
       </div>
     </div>

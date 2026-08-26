@@ -30,6 +30,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import api from "../config/api";
+import { t, Rich } from "../i18n";
 
 // ── THEME TOKENS ──────────────────────────────────────────────
 const T = {
@@ -45,12 +46,12 @@ const T = {
 
 // ── UNIT STATUS COLOURS (Master Grid) ─────────────────────────
 const UNIT_STATUS = {
-  AVAILABLE:{ bg:"#FFFFFF", brd:"#CBD5E1", txt:"#0F172A", label:"Available" },
-  FOLLOWUP :{ bg:"#FAEEDA", brd:"#EF9F27", txt:"#633806", label:"Followup" },
-  HOLD     :{ bg:"#FAECE7", brd:"#D85A30", txt:"#712B13", label:"Hold" },
-  BOOKED   :{ bg:"#B5D4F4", brd:"#378ADD", txt:"#0C447C", label:"Booked" },
-  SOLD     :{ bg:"#0C447C", brd:"#0C447C", txt:"#FFFFFF", label:"Sold" },
-  BLOCKED  :{ bg:"#D3D1C7", brd:"#888780", txt:"#444441", label:"Blocked" },
+  AVAILABLE:{ bg:"#FFFFFF", brd:"#CBD5E1", txt:"#0F172A", get label() { return t("machinery.available"); } },
+  FOLLOWUP :{ bg:"#FAEEDA", brd:"#EF9F27", txt:"#633806", get label() { return t("township_crm.followup"); } },
+  HOLD     :{ bg:"#FAECE7", brd:"#D85A30", txt:"#712B13", get label() { return t("township_crm.hold"); } },
+  BOOKED   :{ bg:"#B5D4F4", brd:"#378ADD", txt:"#0C447C", get label() { return t("township_crm.booked"); } },
+  SOLD     :{ bg:"#0C447C", brd:"#0C447C", txt:"#FFFFFF", get label() { return t("township_crm.sold"); } },
+  BLOCKED  :{ bg:"#D3D1C7", brd:"#888780", txt:"#444441", get label() { return t("township_crm.blocked"); } },
 };
 
 // ── PILL TONES ────────────────────────────────────────────────
@@ -104,10 +105,10 @@ const FACINGS = ["N", "S", "E", "W", "NE", "NW", "SE", "SW"];
 // A batch is either a row-house cluster or a flat tower (both hold units),
 // or a floor group / phase grouping.
 const BATCH_TYPE_OPTIONS = [
-  { value: "row_house_cluster", label: "Row House Cluster" },
-  { value: "tower",            label: "Tower" },
-  { value: "floor_group",      label: "Floor Group" },
-  { value: "phase",            label: "Phase" },
+  { value: "row_house_cluster", get label() { return t("township_crm.row_house_cluster"); } },
+  { value: "tower",            get label() { return t("township_crm.tower"); } },
+  { value: "floor_group",      get label() { return t("township_crm.floor_group"); } },
+  { value: "phase",            get label() { return t("township_crm.phase"); } },
 ];
 const BATCH_TYPE_LABEL = Object.fromEntries(BATCH_TYPE_OPTIONS.map(o => [o.value, o.label]));
 
@@ -470,13 +471,13 @@ export default function TownshipCRMModule() {
 
   // ── Seed Demo Data ──────────────────────────────────────────
   const handleSeed = async () => {
-    if (!await window.confirmAsync("Existing units + prospects delete ho jayenge. Continue?")) return;
+    if (!await window.confirmAsync(t("township_crm.existing_units_prospects_delete_ho_jayenge"))) return;
     setSeeding(true);
     try {
       const res = await api.post("/township-crm/seed-demo", { wipe_existing: true });
       if (res?.success) {
         const d = res.data;
-        alert(`Seeded: ${d.units_created} units, ${d.prospects_created} prospects, ${d.customers_created} customers, ${d.bookings_created} bookings, ${d.payments_created} payments, ${d.customizations_created} customizations`);
+        alert(t("township_crm.seeded_units_created_units_prospects_created", { units_created: d.units_created, prospects_created: d.prospects_created, customers_created: d.customers_created, bookings_created: d.bookings_created, payments_created: d.payments_created, customizations_created: d.customizations_created }));
         await loadAll();
       } else {
         alert("Seed failed: " + (res?.message || "unknown error"));
@@ -489,13 +490,13 @@ export default function TownshipCRMModule() {
 
   // ── Loading / empty states ──────────────────────────────────
   if (loading) {
-    return <div style={{ padding:40, textAlign:"center", color:T.t2, fontFamily:"'Segoe UI',system-ui,sans-serif" }}>Loading…</div>;
+    return <div style={{ padding:40, textAlign:"center", color:T.t2, fontFamily:"'Segoe UI',system-ui,sans-serif" }}>{t("common.loading_2")}</div>;
   }
   if (!project) {
     return (
       <div style={{ padding:40, textAlign:"center", fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
-        <div style={{ fontSize:14, color:T.t1, marginBottom:8, fontWeight:600 }}>No township project found</div>
-        <div style={{ fontSize:12, color:T.t2 }}>Backend may not be seeded. Check Settings tab for Seed Demo Data button.</div>
+        <div style={{ fontSize:14, color:T.t1, marginBottom:8, fontWeight:600 }}>{t("township_crm.no_township_project_found")}</div>
+        <div style={{ fontSize:12, color:T.t2 }}>{t("township_crm.backend_may_not_be_seeded_check")}</div>
       </div>
     );
   }
@@ -507,18 +508,16 @@ export default function TownshipCRMModule() {
         justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <div>
           <div style={{ fontSize:16, fontWeight:700, color:"#FFFFFF" }}>{project.name}</div>
-          <div style={{ fontSize:11, color:"rgba(255,255,255,0.55)", marginTop:2 }}>
-            {project.city || "—"}, {project.state || "—"} · {UNIT_SUMMARY_LIVE.total} units · Phase-1 · RERA: {project.rera_no || "—"}
-          </div>
+          <div style={{ fontSize:11, color:"rgba(255,255,255,0.55)", marginTop:2 }}>{t("township_crm.project_project2_total_units_phase_1", { project: project.city || "—", project2: project.state || "—", total: UNIT_SUMMARY_LIVE.total, project3: project.rera_no || "—" })}</div>
         </div>
         <div style={{ display:"flex", gap:8 }}>
           {/* Export — visual only per spec */}
           <button style={{ padding:"7px 13px", fontSize:12.5, fontWeight:500, borderRadius:6,
             background:"rgba(255,255,255,0.08)", color:"#FFFFFF",
-            border:"1px solid rgba(255,255,255,0.18)", cursor:"pointer" }}>Export</button>
+            border:"1px solid rgba(255,255,255,0.18)", cursor:"pointer" }}>{t("common.export")}</button>
           <button onClick={() => setShowAddUnit(true)} style={{ padding:"7px 13px", fontSize:12.5,
             fontWeight:500, borderRadius:6, background:T.pri, color:"#FFFFFF",
-            border:`1px solid ${T.pri}`, cursor:"pointer" }}>+ Add unit</button>
+            border:`1px solid ${T.pri}`, cursor:"pointer" }}>{t("township_crm.add_unit")}</button>
         </div>
       </div>
 
@@ -615,14 +614,14 @@ function DashboardTab({ summary, units, activityFeed, constructionSync, salesVel
   const mixLabel = Object.keys(typeMix).sort().map(k => typeMix[k]).join(" · ") + " mix";
 
   const kpis = [
-    { label:"Total units",  value:String(summary.total),                 sub:mixLabel,                color:T.t1   },
-    { label:"Available",    value:String(summary.available),              sub:`${availPct}% of total`, color:T.kGrn },
-    { label:"Followup",     value:String(summary.followup),               sub:"Active prospects",      color:T.kAmb },
-    { label:"Booked",       value:String(summary.hold + summary.booked),  sub:"Hold + Booked",         color:T.kBlu },
-    { label:"Sold",         value:String(summary.sold),                   sub:"Registration done",     color:T.kBlu },
-    { label:"Blocked",      value:String(summary.blocked),                sub:"Promoter hold",         color:T.kGry },
-    { label:"Total value",  value:inr(totalValue),                        sub:"Project potential",     color:T.t1   },
-    { label:"Booked value", value:inr(bookedValue),                       sub:`${absorbPct}% absorbed`, color:T.t1  },
+    { label:t("township_crm.total_units"),  value:String(summary.total),                 sub:mixLabel,                color:T.t1   },
+    { label:t("common.available"),    value:String(summary.available),              sub:t("township_crm.availpct_of_total", { availPct }), color:T.kGrn },
+    { label:t("township_crm.followup"),     value:String(summary.followup),               sub:t("township_crm.active_prospects"),      color:T.kAmb },
+    { label:t("township_crm.booked"),       value:String(summary.hold + summary.booked),  sub:t("township_crm.hold_booked"),         color:T.kBlu },
+    { label:t("township_crm.sold"),         value:String(summary.sold),                   sub:t("township_crm.registration_done"),     color:T.kBlu },
+    { label:t("township_crm.blocked"),      value:String(summary.blocked),                sub:t("township_crm.promoter_hold"),         color:T.kGry },
+    { label:t("township_crm.total_value"),  value:inr(totalValue),                        sub:t("township_crm.project_potential"),     color:T.t1   },
+    { label:t("township_crm.booked_value"), value:inr(bookedValue),                       sub:t("township_crm.absorbpct_absorbed", { absorbPct }), color:T.t1  },
   ];
 
   // Construction overall — average % across batches linked to a project.
@@ -639,8 +638,8 @@ function DashboardTab({ summary, units, activityFeed, constructionSync, salesVel
   }));
 
   return (
-    <Frame title="Project overview" sub="Sales aur construction ka summary"
-      right={<Chip label="Anadi Ananta ▾"/>}>
+    <Frame title={t("township_crm.project_overview")} sub={t("township_crm.sales_aur_construction_ka_summary")}
+      right={<Chip label={t("township_crm.anadi_ananta")}/>}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",
         gap:8, marginBottom:14 }}>
         {kpis.map(k => <KPI key={k.label} {...k}/>)}
@@ -648,27 +647,27 @@ function DashboardTab({ summary, units, activityFeed, constructionSync, salesVel
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))", gap:12 }}>
         <div>
-          <SectionH style={{ marginTop:0 }}>Construction overall</SectionH>
+          <SectionH style={{ marginTop:0 }}>{t("township_crm.construction_overall")}</SectionH>
           <div style={{ background:T.gryL, padding:12, borderRadius:8 }}>
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:7 }}>
-              <span style={{ color:T.t2 }}>{constructionSync?.length || 0} batches running</span>
-              <span style={{ fontWeight:600, color:T.t1 }}>{avgProg}% avg</span>
+              <span style={{ color:T.t2 }}>{t("township_crm.constructionsync_batches_running", { constructionSync: constructionSync?.length || 0 })}</span>
+              <span style={{ fontWeight:600, color:T.t1 }}>{t("township_crm.avgprog_avg", { avgProg })}</span>
             </div>
             <ProgBar pct={avgProg}/>
             <div style={{ fontSize:10.5, color:T.t3, marginTop:7 }}>
               {topBatch
                 ? `${topBatch.batch_no} ahead at ${Number(topBatch.construction_pct || 0)}%`
-                : "No linked construction projects yet"}
-              {linked.length === 0 ? " · construction sync pending" : ""}
+                : t("township_crm.no_linked_construction_projects_yet")}
+              {linked.length === 0 ? t("township_crm.construction_sync_pending") : ""}
             </div>
           </div>
         </div>
         <div>
-          <SectionH style={{ marginTop:0 }}>Sales velocity (last 180 days)</SectionH>
+          <SectionH style={{ marginTop:0 }}>{t("township_crm.sales_velocity_last_180_days")}</SectionH>
           {vBars.length === 0 ? (
             <div style={{ height:104, background:T.gryL, borderRadius:8, display:"flex",
               alignItems:"center", justifyContent:"center", fontSize:11.5, color:T.t3 }}>
-              No bookings in the window
+             {t("township_crm.no_bookings_in_the_window")}
             </div>
           ) : (
             <>
@@ -683,9 +682,9 @@ function DashboardTab({ summary, units, activityFeed, constructionSync, salesVel
         </div>
       </div>
 
-      <SectionH>Recent activity</SectionH>
+      <SectionH>{t("township_crm.recent_activity")}</SectionH>
       {(activityFeed || []).length === 0 ? (
-        <div style={{ fontSize:11.5, color:T.t3, padding:"8px 0" }}>No recent activity.</div>
+        <div style={{ fontSize:11.5, color:T.t3, padding:"8px 0" }}>{t("township_crm.no_recent_activity")}</div>
       ) : (
         <div>
           {activityFeed.map((a, i) => (
@@ -725,7 +724,7 @@ function InventoryTab({ units, summary, unitTypes, onUnitClick }) {
   ), [units, typeFilter, attr]);
 
   const typeChips = [
-    { key:"ALL", label:"All" },
+    { key:"ALL", label:t("common.all") },
     ...unitTypes.map(t => ({
       key: t.type_code,
       label: `${t.bhk != null ? Number(t.bhk) : "?"}BHK (${units.filter(u => u.type_code === t.type_code).length})`,
@@ -733,16 +732,16 @@ function InventoryTab({ units, summary, unitTypes, onUnitClick }) {
   ];
 
   const legend = [
-    { label:`Available ${summary.available}`, ...UNIT_STATUS.AVAILABLE },
-    { label:`Followup ${summary.followup}`,   ...UNIT_STATUS.FOLLOWUP },
-    { label:`Hold ${summary.hold}`,           ...UNIT_STATUS.HOLD },
-    { label:`Booked ${summary.booked}`,       ...UNIT_STATUS.BOOKED },
-    { label:`Sold ${summary.sold}`,           ...UNIT_STATUS.SOLD },
-    { label:`Blocked ${summary.blocked}`,     ...UNIT_STATUS.BLOCKED },
+    { label:t("township_crm.available_available", { available: summary.available }), ...UNIT_STATUS.AVAILABLE },
+    { label:t("township_crm.followup_followup", { followup: summary.followup }),   ...UNIT_STATUS.FOLLOWUP },
+    { label:t("township_crm.hold_hold", { hold: summary.hold }),           ...UNIT_STATUS.HOLD },
+    { label:t("township_crm.booked_booked", { booked: summary.booked }),       ...UNIT_STATUS.BOOKED },
+    { label:t("township_crm.sold_sold", { sold: summary.sold }),           ...UNIT_STATUS.SOLD },
+    { label:t("township_crm.blocked_blocked", { blocked: summary.blocked }),     ...UNIT_STATUS.BLOCKED },
   ];
 
   return (
-    <Frame title="Master inventory grid" sub={`${summary.total} units · color = sales status`}>
+    <Frame title={t("township_crm.master_inventory_grid")} sub={`${summary.total} units · color = sales status`}>
       {/* Filter bar */}
       <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center",
         paddingBottom:12, borderBottom:`1px solid ${T.b1}`, marginBottom:12 }}>
@@ -751,18 +750,16 @@ function InventoryTab({ units, summary, unitTypes, onUnitClick }) {
             onClick={() => setTypeFilter(c.key)}/>
         ))}
         <span style={{ width:1, height:20, background:T.b1, margin:"0 4px" }}/>
-        <Chip label="Garden facing" active={attr.garden} onClick={() => toggleAttr("garden")}/>
-        <Chip label="Corner"        active={attr.corner} onClick={() => toggleAttr("corner")}/>
-        <Chip label="East facing"   active={attr.east}   onClick={() => toggleAttr("east")}/>
-        <span style={{ marginLeft:"auto", fontSize:11.5, color:T.t2, fontWeight:500 }}>
-          {filtered.length} units shown
-        </span>
+        <Chip label={t("township_crm.garden_facing")} active={attr.garden} onClick={() => toggleAttr("garden")}/>
+        <Chip label={t("township_crm.corner")}        active={attr.corner} onClick={() => toggleAttr("corner")}/>
+        <Chip label={t("township_crm.east_facing")}   active={attr.east}   onClick={() => toggleAttr("east")}/>
+        <span style={{ marginLeft:"auto", fontSize:11.5, color:T.t2, fontWeight:500 }}>{t("township_crm.filtered_units_shown", { filtered: filtered.length })}</span>
       </div>
 
       {/* Master grid */}
       {filtered.length === 0 ? (
         <div style={{ padding:"40px 20px", textAlign:"center", color:T.t2, fontSize:13 }}>
-          In filters ke saath koi unit match nahi hui.
+         {t("township_crm.in_filters_ke_saath_koi_unit")}
         </div>
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:`repeat(${cols}, 1fr)`, gap:5, paddingTop:8 }}>
@@ -807,7 +804,7 @@ function InventoryTab({ units, summary, unitTypes, onUnitClick }) {
                     background:"#854F0B", color:"#FFFFFF", padding:"0 3px", borderRadius:2 }}>M</span>
                 )}
                 <div style={{ fontWeight:600, fontSize:11 }}>{u.unit_no}</div>
-                <div style={{ fontSize:9, opacity:0.7 }}>{u.bhk}BHK · {u.batch}</div>
+                <div style={{ fontSize:9, opacity:0.7 }}>{t("township_crm.bhkbhk_batch", { bhk: u.bhk, batch: u.batch })}</div>
               </div>
             );
           })}
@@ -825,11 +822,11 @@ function InventoryTab({ units, summary, unitTypes, onUnitClick }) {
         ))}
         <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}>
           <span style={{ fontSize:9, fontWeight:600, background:"#854F0B", color:"#FFF", padding:"0 4px", borderRadius:2 }}>M</span>
-          Modified
+         {t("township_crm.modified")}
         </span>
         <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}>
           <span style={{ fontSize:9, fontWeight:600, background:"#534AB7", color:"#FFF", padding:"0 4px", borderRadius:2 }}>MG</span>
-          Merged
+         {t("township_crm.merged")}
         </span>
       </div>
     </Frame>
@@ -846,7 +843,7 @@ function BatchesTab({ batches, projectId, unitTypes, onChanged }) {
   const [busyId, setBusyId]         = useState(null);
 
   const handleDelete = async (b) => {
-    if (!await window.confirmAsync(`Delete batch "${b.batch_no}"? Units isme honge to delete nahi hoga.`)) return;
+    if (!await window.confirmAsync(t("township_crm.delete_batch_batch_no_units_isme", { batch_no: b.batch_no }))) return;
     setBusyId(b.id);
     try {
       const r = await api.del(`/township-crm/batches/${b.id}`);
@@ -857,11 +854,11 @@ function BatchesTab({ batches, projectId, unitTypes, onChanged }) {
   };
 
   return (
-    <Frame title={`${batches.length} batches`} sub="Each batch = ek row-house cluster ya tower (units inke andar)"
-      right={<Btn small primary label="+ Add batch" onClick={() => setShowAdd(true)}/>}>
+    <Frame title={`${batches.length} batches`} sub={t("township_crm.each_batch_ek_row_house_cluster")}
+      right={<Btn small primary label={t("township_crm.add_batch")} onClick={() => setShowAdd(true)}/>}>
       {batches.length === 0 ? (
         <div style={{ padding:"36px 20px", textAlign:"center", color:T.t2, fontSize:13 }}>
-          Koi batch nahi hai. "+ Add batch" se ek cluster ya tower banao.
+         {t("township_crm.koi_batch_nahi_hai_add_batch")}
         </div>
       ) : (
         <div style={{ display:"grid", gap:9 }}>
@@ -886,14 +883,13 @@ function BatchesTab({ batches, projectId, unitTypes, onChanged }) {
                 <div style={{ display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:6,
                   fontSize:10.5, color:T.t2, marginTop:7 }}>
                   <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}>
-                    <SvgIco type="link" color={T.t3} size={12}/> Project: {b.linked_project_name || "Not linked"}
-                  </span>
-                  <span>Handover target: {fmtDate(b.target_completion_date)}</span>
+                    <SvgIco type="link" color={T.t3} size={12}/>{t("township_crm.project_b", { b: b.linked_project_name || t("township_crm.not_linked") })}</span>
+                  <span>{t("township_crm.handover_target_fmtdate", { fmtDate: fmtDate(b.target_completion_date) })}</span>
                 </div>
                 <div style={{ display:"flex", gap:7, marginTop:10, flexWrap:"wrap" }}>
-                  <Btn small primary label="⚙ Generate Units" onClick={() => setGenBatch(b)}/>
-                  <Btn small label="Edit" onClick={() => setEditBatch(b)}/>
-                  <Btn small danger label={busyId === b.id ? "Deleting…" : "Delete"}
+                  <Btn small primary label={t("township_crm.generate_units")} onClick={() => setGenBatch(b)}/>
+                  <Btn small label={t("common.edit_2")} onClick={() => setEditBatch(b)}/>
+                  <Btn small danger label={busyId === b.id ? t("common.deleting_2") : t("common.delete")}
                     disabled={busyId === b.id} onClick={() => handleDelete(b)}/>
                 </div>
               </div>
@@ -902,7 +898,7 @@ function BatchesTab({ batches, projectId, unitTypes, onChanged }) {
         </div>
       )}
       <Note>
-        "Generate Units" se ek batch ke andar units auto-ban jaate hain — prefix + start number do, A-1 se A-30 tak khud generate ho jayenge.
+       {t("township_crm.generate_units_se_ek_batch_ke")}
       </Note>
 
       {showAdd && (
@@ -944,7 +940,7 @@ function AddBatchModal({ projectId, batch, onClose, onSaved }) {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const submit = async () => {
-    if (!form.batch_no.trim()) { alert("Batch No is required"); return; }
+    if (!form.batch_no.trim()) { alert(t("township_crm.batch_no_is_required")); return; }
     setSaving(true);
     const body = {
       batch_no: form.batch_no.trim(),
@@ -970,16 +966,16 @@ function AddBatchModal({ projectId, batch, onClose, onSaved }) {
   };
 
   return (
-    <Modal title={isEdit ? `Edit Batch ${batch.batch_no}` : "Add Batch"} onClose={onClose} width={520}>
+    <Modal title={isEdit ? `Edit Batch ${batch.batch_no}` : t("township_crm.add_batch_2")} onClose={onClose} width={520}>
       <div style={{ display:"grid", gap:11 }}>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Batch No *</label>
+            <label style={labelStyle}>{t("township_crm.batch_no")}</label>
             <input style={inputStyle} value={form.batch_no}
               onChange={(e) => set("batch_no", e.target.value)} placeholder="e.g. B-1"/>
           </div>
           <div>
-            <label style={labelStyle}>Batch Type *</label>
+            <label style={labelStyle}>{t("township_crm.batch_type")}</label>
             <select style={inputStyle} value={form.batch_type}
               onChange={(e) => set("batch_type", e.target.value)}>
               {BATCH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -987,48 +983,48 @@ function AddBatchModal({ projectId, batch, onClose, onSaved }) {
           </div>
         </div>
         <div>
-          <label style={labelStyle}>Batch Name</label>
+          <label style={labelStyle}>{t("township_crm.batch_name")}</label>
           <input style={inputStyle} value={form.batch_name}
-            onChange={(e) => set("batch_name", e.target.value)} placeholder="e.g. Tower A / Riverside Cluster"/>
+            onChange={(e) => set("batch_name", e.target.value)} placeholder={t("township_crm.e_g_tower_a_riverside_cluster")}/>
         </div>
         <div>
-          <label style={labelStyle}>Unit Range Label</label>
+          <label style={labelStyle}>{t("township_crm.unit_range_label")}</label>
           <input style={inputStyle} value={form.unit_range_label}
-            onChange={(e) => set("unit_range_label", e.target.value)} placeholder="e.g. A-1 to A-30"/>
+            onChange={(e) => set("unit_range_label", e.target.value)} placeholder={t("township_crm.e_g_a_1_to_a")}/>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Subcontractor</label>
+            <label style={labelStyle}>{t("common.subcontractor")}</label>
             <input style={inputStyle} value={form.subcon_name}
-              onChange={(e) => set("subcon_name", e.target.value)} placeholder="Subcon name"/>
+              onChange={(e) => set("subcon_name", e.target.value)} placeholder={t("township_crm.subcon_name")}/>
           </div>
           <div>
-            <label style={labelStyle}>Subcon Phone</label>
+            <label style={labelStyle}>{t("township_crm.subcon_phone")}</label>
             <input style={inputStyle} value={form.subcon_phone}
-              onChange={(e) => set("subcon_phone", e.target.value)} placeholder="10-digit mobile"/>
+              onChange={(e) => set("subcon_phone", e.target.value)} placeholder={t("app.10_digit_mobile")}/>
           </div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Contract Value (₹)</label>
+            <label style={labelStyle}>{t("project_detail.contract_value")}</label>
             <input style={inputStyle} type="number" value={form.contract_value}
               onChange={(e) => set("contract_value", e.target.value)} placeholder="e.g. 12000000"/>
           </div>
           <div>
-            <label style={labelStyle}>Target Completion</label>
+            <label style={labelStyle}>{t("township_crm.target_completion")}</label>
             <input style={inputStyle} type="date" value={form.target_completion_date}
               onChange={(e) => set("target_completion_date", e.target.value)}/>
           </div>
         </div>
         <div>
-          <label style={labelStyle}>Notes</label>
+          <label style={labelStyle}>{t("common.notes")}</label>
           <textarea style={{ ...inputStyle, minHeight:60, resize:"vertical" }} value={form.notes}
-            onChange={(e) => set("notes", e.target.value)} placeholder="Optional"/>
+            onChange={(e) => set("notes", e.target.value)} placeholder={t("common.optional")}/>
         </div>
       </div>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
-        <Btn small label="Cancel" onClick={onClose}/>
-        <Btn small primary label={saving ? "Saving…" : (isEdit ? "Save Changes" : "Add Batch")}
+        <Btn small label={t("common.cancel")} onClick={onClose}/>
+        <Btn small primary label={saving ? t("common.saving_2") : (isEdit ? t("common.save_changes") : t("township_crm.add_batch_2"))}
           onClick={submit} disabled={saving}/>
       </div>
     </Modal>
@@ -1088,11 +1084,11 @@ function GenerateUnitsModal({ batch, unitTypes, onClose, onGenerated }) {
     : "—";
 
   const submit = async () => {
-    if (!form.prefix.trim())   { alert("Prefix is required"); return; }
-    if (start < 1)             { alert("Start number must be >= 1"); return; }
-    if (count < 1)             { alert("Count must be >= 1"); return; }
-    if (count > 200)           { alert("Max 200 units per generation"); return; }
-    if (!form.unit_type_id)    { alert("Unit Type is required"); return; }
+    if (!form.prefix.trim())   { alert(t("township_crm.prefix_is_required")); return; }
+    if (start < 1)             { alert(t("township_crm.start_number_must_be_1")); return; }
+    if (count < 1)             { alert(t("township_crm.count_must_be_1")); return; }
+    if (count > 200)           { alert(t("township_crm.max_200_units_per_generation")); return; }
+    if (!form.unit_type_id)    { alert(t("township_crm.unit_type_is_required")); return; }
     setSaving(true);
     try {
       const res = await api.post(`/township-crm/batches/${batch.id}/generate-units`, {
@@ -1127,31 +1123,29 @@ function GenerateUnitsModal({ batch, unitTypes, onClose, onGenerated }) {
       <div style={{ display:"grid", gap:11 }}>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Prefix *</label>
+            <label style={labelStyle}>{t("township_crm.prefix")}</label>
             <input style={inputStyle} value={form.prefix}
               onChange={(e) => set("prefix", e.target.value)} placeholder="A"/>
           </div>
           <div>
-            <label style={labelStyle}>Start No *</label>
+            <label style={labelStyle}>{t("township_crm.start_no")}</label>
             <input style={inputStyle} type="number" min={1} value={form.start_no}
               onChange={(e) => set("start_no", e.target.value)}/>
           </div>
           <div>
-            <label style={labelStyle}>Count *</label>
+            <label style={labelStyle}>{t("township_crm.count")}</label>
             <input style={inputStyle} type="number" min={1} max={200} value={form.count}
               onChange={(e) => set("count", e.target.value)}/>
           </div>
         </div>
 
-        <div style={{ padding:"8px 12px", background:T.priL, borderRadius:6, fontSize:12, color:T.priD }}>
-          Banenge: <strong>{preview}</strong> {previewValid && count > 0 ? `(${count} units)` : ""}
-        </div>
+        <div style={{ padding:"8px 12px", background:T.priL, borderRadius:6, fontSize:12, color:T.priD }}><Rich k="township_crm.banenge_preview_previewvalid" params={{ preview, previewValid: previewValid && count > 0 ? `(${count} units)` : "" }} /></div>
 
         <div>
-          <label style={labelStyle}>Unit Type *</label>
+          <label style={labelStyle}>{t("township_crm.unit_type")}</label>
           <select style={inputStyle} value={form.unit_type_id}
             onChange={(e) => set("unit_type_id", e.target.value)}>
-            <option value="">— Select —</option>
+            <option value="">{t("payroll.select")}</option>
             {unitTypes.map(t => (
               <option key={t.id} value={t.id}>{t.type_name} ({t.type_code})</option>
             ))}
@@ -1160,15 +1154,15 @@ function GenerateUnitsModal({ batch, unitTypes, onClose, onGenerated }) {
 
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Facing</label>
+            <label style={labelStyle}>{t("township_crm.facing")}</label>
             <select style={inputStyle} value={form.facing}
               onChange={(e) => set("facing", e.target.value)}>
-              <option value="">— None —</option>
+              <option value="">{t("township_crm.none")}</option>
               {FACINGS.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Block / Tower</label>
+            <label style={labelStyle}>{t("township_crm.block_tower")}</label>
             <input style={inputStyle} value={form.block_or_tower}
               onChange={(e) => set("block_or_tower", e.target.value)} placeholder="optional"/>
           </div>
@@ -1176,51 +1170,51 @@ function GenerateUnitsModal({ batch, unitTypes, onClose, onGenerated }) {
 
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Corner pattern</label>
+            <label style={labelStyle}>{t("township_crm.corner_pattern")}</label>
             <select style={inputStyle} value={form.is_corner_pattern}
               onChange={(e) => set("is_corner_pattern", e.target.value)}>
-              <option value="none">None</option>
-              <option value="first_last">First & last unit</option>
-              <option value="all">All units</option>
+              <option value="none">{t("common.none")}</option>
+              <option value="first_last">{t("township_crm.first_last_unit")}</option>
+              <option value="all">{t("township_crm.all_units")}</option>
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Garden pattern</label>
+            <label style={labelStyle}>{t("township_crm.garden_pattern")}</label>
             <select style={inputStyle} value={form.is_garden_facing_pattern}
               onChange={(e) => set("is_garden_facing_pattern", e.target.value)}>
-              <option value="none">None</option>
-              <option value="first_last">First & last unit</option>
-              <option value="all">All units</option>
+              <option value="none">{t("common.none")}</option>
+              <option value="first_last">{t("township_crm.first_last_unit")}</option>
+              <option value="all">{t("township_crm.all_units")}</option>
             </select>
           </div>
         </div>
 
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Base price override (₹)</label>
+            <label style={labelStyle}>{t("township_crm.base_price_override")}</label>
             <input style={inputStyle} type="number" value={form.override_base_price}
-              onChange={(e) => set("override_base_price", e.target.value)} placeholder="From type"/>
+              onChange={(e) => set("override_base_price", e.target.value)} placeholder={t("township_crm.from_type")}/>
           </div>
           <div>
-            <label style={labelStyle}>PLC corner (₹/sqft)</label>
+            <label style={labelStyle}>{t("township_crm.plc_corner_sqft")}</label>
             <input style={inputStyle} type="number" value={form.plc_corner}
               onChange={(e) => set("plc_corner", e.target.value)} placeholder="0"/>
           </div>
           <div>
-            <label style={labelStyle}>PLC garden (₹/sqft)</label>
+            <label style={labelStyle}>{t("township_crm.plc_garden_sqft")}</label>
             <input style={inputStyle} type="number" value={form.plc_garden}
               onChange={(e) => set("plc_garden", e.target.value)} placeholder="0"/>
           </div>
         </div>
         <div>
-          <label style={labelStyle}>Phase</label>
+          <label style={labelStyle}>{t("tasks.phase")}</label>
           <input style={inputStyle} value={form.phase}
             onChange={(e) => set("phase", e.target.value)} placeholder="optional"/>
         </div>
       </div>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
-        <Btn small label="Cancel" onClick={onClose}/>
-        <Btn small primary label={saving ? "Generating…" : `Generate ${count > 0 ? count : ""} Units`}
+        <Btn small label={t("common.cancel")} onClick={onClose}/>
+        <Btn small primary label={saving ? t("trip_tracking.generating") : `Generate ${count > 0 ? count : ""} Units`}
           onClick={submit} disabled={saving}/>
       </div>
     </Modal>
@@ -1237,8 +1231,8 @@ function ProspectsTab({ prospects, onAdd, onProspectClick }) {
     return "";
   };
   return (
-    <Frame title="Prospect pipeline" sub={`${prospects.length} active prospects across 6 stages`}
-      right={<Btn small label="+ Add prospect" onClick={onAdd}/>}>
+    <Frame title={t("township_crm.prospect_pipeline")} sub={`${prospects.length} active prospects across 6 stages`}
+      right={<Btn small label={t("township_crm.add_prospect")} onClick={onAdd}/>}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(170px, 1fr))", gap:8 }}>
         {STAGE_ORDER.map(stage => {
           const cards = prospects.filter(p => p.stage === stage);
@@ -1274,7 +1268,7 @@ function ProspectsTab({ prospects, onAdd, onProspectClick }) {
         })}
       </div>
       <Note tone="warning">
-        Prospect ek se zyada units me interested ho sakta hai · har card pe woh units listed milengi
+       {t("township_crm.prospect_ek_se_zyada_units_me")}
       </Note>
     </Frame>
   );
@@ -1300,7 +1294,7 @@ function BookingsTab({ bookings, onRowClick }) {
   const td = { padding:"9px 10px", borderBottom:`1px solid ${T.b1}`, fontSize:11.5, color:T.t1 };
 
   return (
-    <Frame title={`${bookings.length} booked customers`} sub="Hold + Booked + Sold"
+    <Frame title={`${bookings.length} booked customers`} sub={t("township_crm.hold_booked_sold")}
       right={
         <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
           {["All","Pending payment","Hold only","Sold only"].map(f => (
@@ -1334,7 +1328,7 @@ function BookingsTab({ bookings, onRowClick }) {
             ))}
             {rows.length === 0 && (
               <tr><td colSpan={6} style={{ ...td, textAlign:"center", color:T.t3 }}>
-                Is filter me koi booking nahi hai.
+               {t("township_crm.is_filter_me_koi_booking_nahi")}
               </td></tr>
             )}
           </tbody>
@@ -1366,12 +1360,12 @@ function CustomizationsTab({ customizations, onAdd, onCardClick }) {
           {["All","Modifications","Mergers"].map(f => (
             <Chip key={f} label={f} active={filter === f} onClick={() => setFilter(f)}/>
           ))}
-          <Btn small primary label="+ New" onClick={onAdd}/>
+          <Btn small primary label={t("subcon.new")} onClick={onAdd}/>
         </div>
       }>
       {rows.length === 0 ? (
         <div style={{ padding:"36px 20px", textAlign:"center", color:T.t3, fontSize:13 }}>
-          Koi customization nahi hai.
+         {t("township_crm.koi_customization_nahi_hai")}
         </div>
       ) : (
         <div style={{ display:"grid", gap:8 }}>
@@ -1391,7 +1385,7 @@ function CustomizationsTab({ customizations, onAdd, onCardClick }) {
                   </div>
                   <Pill label={c.status.label} tone={c.status.tone}/>
                 </div>
-                <div style={{ fontSize:10.5, color:T.t2 }}>Customer: {c.customer} · {c.desc}</div>
+                <div style={{ fontSize:10.5, color:T.t2 }}>{t("township_crm.customer_customer_desc", { customer: c.customer, desc: c.desc })}</div>
                 {isMerger ? (
                   <>
                     <div style={{ fontSize:10.5, color:T.t2, marginTop:4 }}>
@@ -1431,18 +1425,18 @@ function ConstructionTab({ constructionSync, onOpenProject }) {
   const pctColor = (p) => p >= 66 ? T.kGrn : p >= 30 ? T.kBlu : p > 0 ? T.kAmb : T.kGry;
 
   return (
-    <Frame title="Construction snapshot" sub={`${rows.length} batches · linked construction progress`}
-      right={<Chip label="Open in Projects" icon={<SvgIco type="ext" color={T.t2} size={12}/>}
+    <Frame title={t("township_crm.construction_snapshot")} sub={`${rows.length} batches · linked construction progress`}
+      right={<Chip label={t("township_crm.open_in_projects")} icon={<SvgIco type="ext" color={T.t2} size={12}/>}
         onClick={onOpenProject}/>}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:8 }}>
-        <KPI label="Ahead of schedule" value={String(ahead.length)}
+        <KPI label={t("township_crm.ahead_of_schedule")} value={String(ahead.length)}
           sub={ahead.map(r => r.batch_no).join(", ") || "—"} color={T.kGrn}/>
-        <KPI label="On track" value={String(onTrack.length)}
+        <KPI label={t("common.on_track")} value={String(onTrack.length)}
           sub={onTrack.map(r => r.batch_no).join(", ") || "—"} color={T.kBlu}/>
       </div>
       <div style={{ marginTop:12 }}>
         {rows.length === 0 && (
-          <div style={{ padding:"30px", textAlign:"center", color:T.t3, fontSize:12.5 }}>No batches.</div>
+          <div style={{ padding:"30px", textAlign:"center", color:T.t3, fontSize:12.5 }}>{t("township_crm.no_batches")}</div>
         )}
         {rows.map((r, i) => {
           const p = Number(r.construction_pct || 0);
@@ -1455,14 +1449,14 @@ function ConstructionTab({ constructionSync, onOpenProject }) {
                 {r.batch_no} · {r.subcon_name || r.batch_name || "—"}
               </span>
               <span style={{ fontSize:12, fontWeight:600, color:pctColor(p) }}>
-                {r.linked_project_id ? `${p}% · ${r.construction_status || "in progress"}` : "Not linked"}
+                {r.linked_project_id ? `${p}% · ${r.construction_status || "in progress"}` : t("township_crm.not_linked")}
               </span>
             </div>
           );
         })}
       </div>
       <Note>
-        Yahan se kuch update nahi hota · sirf linked construction project ka snapshot dikhega · "Open in Projects" se Projects module khulega
+       {t("township_crm.yahan_se_kuch_update_nahi_hota")}
       </Note>
     </Frame>
   );
@@ -1479,14 +1473,14 @@ function ReportsTab({ salesVelocity, typeDemand, revenueForecast, onStuckUnits }
   const rf = revenueForecast || { total_potential:0, booked_value:0, collected:0 };
 
   return (
-    <Frame title="Sales & inventory analytics" right={<Chip label="Last 180 days ▾"/>}>
+    <Frame title={t("township_crm.sales_inventory_analytics")} right={<Chip label={t("township_crm.last_180_days")}/>}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))", gap:12 }}>
         <div>
-          <SectionH style={{ marginTop:0 }}>Sales velocity</SectionH>
+          <SectionH style={{ marginTop:0 }}>{t("township_crm.sales_velocity")}</SectionH>
           {vBars.length === 0 ? (
             <div style={{ height:104, background:T.gryL, borderRadius:8, display:"flex",
               alignItems:"center", justifyContent:"center", fontSize:11.5, color:T.t3 }}>
-              No bookings in the window
+             {t("township_crm.no_bookings_in_the_window")}
             </div>
           ) : (
             <>
@@ -1498,12 +1492,10 @@ function ReportsTab({ salesVelocity, typeDemand, revenueForecast, onStuckUnits }
               </div>
             </>
           )}
-          <div style={{ fontSize:10.5, color:T.t2, marginTop:6 }}>
-            Avg {salesVelocity?.avg_per_month || 0} bookings/month
-          </div>
+          <div style={{ fontSize:10.5, color:T.t2, marginTop:6 }}>{t("township_crm.avg_salesvelocity_bookings_month", { salesVelocity: salesVelocity?.avg_per_month || 0 })}</div>
         </div>
         <div>
-          <SectionH style={{ marginTop:0 }}>Type-wise demand</SectionH>
+          <SectionH style={{ marginTop:0 }}>{t("township_crm.type_wise_demand")}</SectionH>
           <div style={{ background:T.gryL, padding:12, borderRadius:8,
             display:"flex", flexDirection:"column", gap:10, minHeight:104 }}>
             {(typeDemand || []).map(d => (
@@ -1514,23 +1506,23 @@ function ReportsTab({ salesVelocity, typeDemand, revenueForecast, onStuckUnits }
               </div>
             ))}
             {(typeDemand || []).length === 0 && (
-              <div style={{ fontSize:11, color:T.t3, textAlign:"center" }}>No data</div>
+              <div style={{ fontSize:11, color:T.t3, textAlign:"center" }}>{t("township_crm.no_data")}</div>
             )}
           </div>
         </div>
       </div>
 
       {/* Revenue forecast */}
-      <SectionH>Revenue forecast</SectionH>
+      <SectionH>{t("township_crm.revenue_forecast")}</SectionH>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:8 }}>
-        <KPI label="Total potential" value={inr(rf.total_potential)} sub="All units" color={T.t1}/>
-        <KPI label="Booked value"    value={inr(rf.booked_value)}
+        <KPI label={t("township_crm.total_potential")} value={inr(rf.total_potential)} sub={t("township_crm.all_units")} color={T.t1}/>
+        <KPI label={t("township_crm.booked_value")}    value={inr(rf.booked_value)}
           sub={rf.total_potential ? `${Math.round((rf.booked_value/rf.total_potential)*100)}% absorbed` : "—"} color={T.kBlu}/>
-        <KPI label="Collected"       value={inr(rf.collected)}
+        <KPI label={t("township_crm.collected")}       value={inr(rf.collected)}
           sub={rf.booked_value ? `${Math.round((rf.collected/rf.booked_value)*100)}% of booked` : "—"} color={T.kGrn}/>
       </div>
 
-      <SectionH>Available reports</SectionH>
+      <SectionH>{t("township_crm.available_reports")}</SectionH>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:7 }}>
         {REPORT_LINKS.map(r => {
           const isStuck = r.startsWith("Stuck units");
@@ -1555,7 +1547,7 @@ function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged
   const [busyTypeId, setBusyTypeId]   = useState(null);
 
   const handleDeleteType = async (t) => {
-    if (!await window.confirmAsync(`Delete unit type "${t.type_name}"? Units isme honge to delete nahi hoga.`)) return;
+    if (!await window.confirmAsync(t("township_crm.delete_unit_type_type_name_units", { type_name: t.type_name }))) return;
     setBusyTypeId(t.id);
     try {
       const r = await api.del(`/township-crm/unit-types/${t.id}`);
@@ -1581,29 +1573,29 @@ function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged
     <div style={{ display:"grid", gap:14 }}>
       {/* Demo Data section */}
       <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:14 }}>
-        <div style={{ fontSize:14, fontWeight:600, color:T.t1, marginBottom:8 }}>Demo Data</div>
+        <div style={{ fontSize:14, fontWeight:600, color:T.t1, marginBottom:8 }}>{t("township_crm.demo_data")}</div>
         <div style={{ fontSize:12, color:T.t2, marginBottom:10 }}>
-          Anadi Ananta ke liye realistic demo data load karein — 102 units, 14 prospects, with status distribution as per marketing demo.
+         {t("township_crm.anadi_ananta_ke_liye_realistic_demo")}
         </div>
         <Btn primary small onClick={onSeed} disabled={seeding}
-          label={seeding ? "Seeding…" : "Seed Demo Data"}/>
+          label={seeding ? t("township_crm.seeding") : t("township_crm.seed_demo_data")}/>
         <div style={{ fontSize:11, color:T.t3, marginTop:8 }}>
-          ⚠️ Yeh existing units, prospects aur followup history delete karke fresh data load karega.
+         {t("township_crm.yeh_existing_units_prospects_aur_followup")}
         </div>
       </div>
 
-      <Frame title="Project configuration" sub="Anadi Ananta · setup details">
+      <Frame title={t("township_crm.project_configuration")} sub={t("township_crm.anadi_ananta_setup_details")}>
         {/* Section 1 — Project info */}
-        <SectionH style={{ marginTop:0 }}>Project info</SectionH>
-        <FormRow label="Project name" value={project?.name || "—"}/>
-        <FormRow label="Project code" value={project?.project_code || "—"}/>
-        <FormRow label="RERA number"  value={project?.rera_no || "—"}/>
-        <FormRow label="Total units"  value={String(project?.unit_count ?? project?.total_units ?? 0)}/>
+        <SectionH style={{ marginTop:0 }}>{t("township_crm.project_info")}</SectionH>
+        <FormRow label={t("township_crm.project_name")} value={project?.name || "—"}/>
+        <FormRow label={t("township_crm.project_code")} value={project?.project_code || "—"}/>
+        <FormRow label={t("township_crm.rera_number")}  value={project?.rera_no || "—"}/>
+        <FormRow label={t("township_crm.total_units")}  value={String(project?.unit_count ?? project?.total_units ?? 0)}/>
 
         {/* Section 2 — Unit types (editable) */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <SectionH>Unit types</SectionH>
-          <Btn small primary label="+ Add type" onClick={() => setShowAddType(true)}/>
+          <SectionH>{t("township_crm.unit_types")}</SectionH>
+          <Btn small primary label={t("township_crm.add_type")} onClick={() => setShowAddType(true)}/>
         </div>
         <div style={{ overflowX:"auto" }}>
           <table style={{ width:"100%", borderCollapse:"collapse", minWidth:600 }}>
@@ -1621,15 +1613,15 @@ function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged
                   <td style={td}>{t.unit_count ?? 0}</td>
                   <td style={{ ...td, whiteSpace:"nowrap" }}>
                     <span style={{ display:"inline-flex", gap:6 }}>
-                      <Btn small label="Edit" onClick={() => setEditType(t)}/>
-                      <Btn small danger label={busyTypeId === t.id ? "…" : "Delete"}
+                      <Btn small label={t("common.edit_2")} onClick={() => setEditType(t)}/>
+                      <Btn small danger label={busyTypeId === t.id ? "…" : t("common.delete")}
                         disabled={busyTypeId === t.id} onClick={() => handleDeleteType(t)}/>
                     </span>
                   </td>
                 </tr>
               ))}
               {unitTypes.length === 0 && (
-                <tr><td colSpan={7} style={{ ...td, textAlign:"center", color:T.t3 }}>No unit types. "+ Add type" se banao.</td></tr>
+                <tr><td colSpan={7} style={{ ...td, textAlign:"center", color:T.t3 }}>{t("township_crm.no_unit_types_add_type_se")}</td></tr>
               )}
             </tbody>
           </table>
@@ -1683,8 +1675,8 @@ function UnitTypeModal({ projectId, unitType, onClose, onSaved }) {
   const numOrNull = (v) => v !== "" ? Number(v) : null;
 
   const submit = async () => {
-    if (!form.type_name.trim()) { alert("Type Name is required"); return; }
-    if (!form.type_code.trim()) { alert("Type Code is required"); return; }
+    if (!form.type_name.trim()) { alert(t("township_crm.type_name_is_required")); return; }
+    if (!form.type_code.trim()) { alert(t("township_crm.type_code_is_required")); return; }
     setSaving(true);
     const body = {
       type_name: form.type_name.trim(),
@@ -1719,16 +1711,16 @@ function UnitTypeModal({ projectId, unitType, onClose, onSaved }) {
   );
 
   return (
-    <Modal title={isEdit ? `Edit Unit Type ${unitType.type_code}` : "Add Unit Type"} onClose={onClose} width={540}>
+    <Modal title={isEdit ? `Edit Unit Type ${unitType.type_code}` : t("township_crm.add_unit_type")} onClose={onClose} width={540}>
       <div style={{ display:"grid", gap:11 }}>
         <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Type Name *</label>
+            <label style={labelStyle}>{t("township_crm.type_name")}</label>
             <input style={inputStyle} value={form.type_name}
-              onChange={(e) => set("type_name", e.target.value)} placeholder="e.g. 2BHK Row House"/>
+              onChange={(e) => set("type_name", e.target.value)} placeholder={t("township_crm.e_g_2bhk_row_house")}/>
           </div>
           <div>
-            <label style={labelStyle}>Type Code *</label>
+            <label style={labelStyle}>{t("township_crm.type_code")}</label>
             <input style={inputStyle} value={form.type_code}
               onChange={(e) => set("type_code", e.target.value)} placeholder="e.g. A"/>
           </div>
@@ -1745,21 +1737,21 @@ function UnitTypeModal({ projectId, unitType, onClose, onSaved }) {
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           {numField("Base rate (₹/sqft)", "base_rate_per_sqft", "e.g. 2833")}
           <div>
-            <label style={labelStyle}>Base price (₹)</label>
+            <label style={labelStyle}>{t("township_crm.base_price")}</label>
             <input style={inputStyle} type="number" value={form.base_price}
               onChange={(e) => set("base_price", e.target.value)} onFocus={() => { if (form.base_price === "") autoPrice(); }}
-              placeholder="auto = rate × built-up"/>
+              placeholder={t("township_crm.auto_rate_built_up")}/>
           </div>
         </div>
         <div>
-          <label style={labelStyle}>Description</label>
+          <label style={labelStyle}>{t("common.description")}</label>
           <textarea style={{ ...inputStyle, minHeight:54, resize:"vertical" }} value={form.description}
-            onChange={(e) => set("description", e.target.value)} placeholder="Optional"/>
+            onChange={(e) => set("description", e.target.value)} placeholder={t("common.optional")}/>
         </div>
       </div>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
-        <Btn small label="Cancel" onClick={onClose}/>
-        <Btn small primary label={saving ? "Saving…" : (isEdit ? "Save Changes" : "Add Type")}
+        <Btn small label={t("common.cancel")} onClick={onClose}/>
+        <Btn small primary label={saving ? t("common.saving_2") : (isEdit ? t("common.save_changes") : t("master_library.add_type"))}
           onClick={submit} disabled={saving}/>
       </div>
     </Modal>
@@ -1770,11 +1762,11 @@ function UnitTypeModal({ projectId, unitType, onClose, onSaved }) {
 // PLC CONFIG SECTION — editable per-project PLC rates
 // GET/PUT /projects/:id/plc-config
 // ════════════════════════════════════════════════════════════════
-const PLC_UNIT_OPTIONS  = [{ value:"per_sqft", label:"per sqft" }, { value:"flat", label:"flat" }];
+const PLC_UNIT_OPTIONS  = [{ value:"per_sqft", get label() { return t("township_crm.per_sqft"); } }, { value:"flat", label:"flat" }];
 const PLC_AREA_OPTIONS  = [
-  { value:"built_up", label:"Built-up" },
-  { value:"plot", label:"Plot" },
-  { value:"super_built_up", label:"Super built-up" },
+  { value:"built_up", get label() { return t("township_crm.built_up"); } },
+  { value:"plot", get label() { return t("township_crm.plot"); } },
+  { value:"super_built_up", get label() { return t("township_crm.super_built_up"); } },
 ];
 
 function PlcConfigSection({ projectId }) {
@@ -1802,8 +1794,8 @@ function PlcConfigSection({ projectId }) {
 
   const save = async () => {
     for (const r of rows) {
-      if (!String(r.plc_key).trim()) { alert("Har PLC row ka ek key hona chahiye (e.g. corner)"); return; }
-      if (!(Number(r.rate) >= 0))    { alert(`Invalid rate for '${r.plc_key}'`); return; }
+      if (!String(r.plc_key).trim()) { alert(t("township_crm.har_plc_row_ka_ek_key")); return; }
+      if (!(Number(r.rate) >= 0))    { alert(t("township_crm.invalid_rate_for_plc_key", { plc_key: r.plc_key })); return; }
     }
     setSv(true);
     try {
@@ -1830,11 +1822,11 @@ function PlcConfigSection({ projectId }) {
   return (
     <>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <SectionH>PLC charges (editable)</SectionH>
-        <Btn small label="+ Add charge" onClick={addRow}/>
+        <SectionH>{t("township_crm.plc_charges_editable")}</SectionH>
+        <Btn small label={t("township_crm.add_charge")} onClick={addRow}/>
       </div>
       {loading ? (
-        <div style={{ padding:"14px 0", fontSize:12, color:T.t3 }}>Loading…</div>
+        <div style={{ padding:"14px 0", fontSize:12, color:T.t3 }}>{t("common.loading_2")}</div>
       ) : (
         <div style={{ overflowX:"auto" }}>
           <table style={{ width:"100%", borderCollapse:"collapse", minWidth:560 }}>
@@ -1850,7 +1842,7 @@ function PlcConfigSection({ projectId }) {
                   </td>
                   <td style={td}>
                     <input style={cell} value={r.label}
-                      onChange={(e) => setRow(i, "label", e.target.value)} placeholder="Corner unit"/>
+                      onChange={(e) => setRow(i, "label", e.target.value)} placeholder={t("township_crm.corner_unit")}/>
                   </td>
                   <td style={{ ...td, width:100 }}>
                     <input style={cell} type="number" value={r.rate}
@@ -1867,14 +1859,14 @@ function PlcConfigSection({ projectId }) {
                     </select>
                   </td>
                   <td style={{ ...td, width:40, textAlign:"center" }}>
-                    <button onClick={() => delRow(i)} title="Remove" style={{ background:"transparent",
+                    <button onClick={() => delRow(i)} title={t("common.remove")} style={{ background:"transparent",
                       border:"none", color:"#B4453A", cursor:"pointer", fontSize:16, lineHeight:1 }}>×</button>
                   </td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr><td colSpan={6} style={{ ...td, textAlign:"center", color:T.t3, fontSize:12 }}>
-                  No PLC charges. "+ Add charge" se banao.
+                 {t("township_crm.no_plc_charges_add_charge_se")}
                 </td></tr>
               )}
             </tbody>
@@ -1883,9 +1875,9 @@ function PlcConfigSection({ projectId }) {
       )}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:10 }}>
         <span style={{ fontSize:11, color:T.t3 }}>
-          Per-sqft charges unit type ke area pe lagte hain · "flat" = fixed amount per unit.
+         {t("township_crm.per_sqft_charges_unit_type_ke")}
         </span>
-        <Btn small primary label={saving ? "Saving…" : "Save PLC"} onClick={save} disabled={saving || !dirty}/>
+        <Btn small primary label={saving ? t("common.saving_2") : t("township_crm.save_plc")} onClick={save} disabled={saving || !dirty}/>
       </div>
     </>
   );
@@ -1934,7 +1926,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
   }, [tab]); // eslint-disable-line
 
   const markSold = async () => {
-    if (!await window.confirmAsync("Mark this unit as SOLD (registration done)?")) return;
+    if (!await window.confirmAsync(t("township_crm.mark_this_unit_as_sold_registration"))) return;
     setBusy(true);
     try {
       const r = await api.post(`/township-crm/units/${unitId}/complete-sale`, { note:"Registration done" });
@@ -1944,7 +1936,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
     setBusy(false);
   };
   const cancelBooking = async () => {
-    const reason = await window.promptAsync("Cancel booking — reason:");
+    const reason = await window.promptAsync(t("township_crm.cancel_booking_reason"));
     if (reason === null) return;
     setBusy(true);
     try {
@@ -1955,7 +1947,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
     setBusy(false);
   };
   const addNote = async () => {
-    const note = await window.promptAsync("Add a note for this unit:");
+    const note = await window.promptAsync(t("township_crm.add_a_note_for_this_unit"));
     if (!note) return;
     setBusy(true);
     try {
@@ -1979,7 +1971,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <span style={{ fontSize:18, fontWeight:700, color:T.t1 }}>{u.unit_no}</span>
             <Pill label={sc.label} tone={statusTone(u.status)}/>
-            {unit.has_mod && <Pill label="Modified" tone="amber"/>}
+            {unit.has_mod && <Pill label={t("township_crm.modified")} tone="amber"/>}
             {u.merger_group_id && <Pill label={u.merger_group_id} tone="purple"/>}
           </div>
           <button onClick={onClose} style={{ background:"transparent", border:"none",
@@ -2006,43 +1998,40 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
         {/* Body */}
         <div style={{ padding:18, maxHeight:"60vh", overflowY:"auto" }}>
           {loading && (
-            <div style={{ padding:"40px 20px", textAlign:"center", color:T.t2, fontSize:12.5 }}>Loading…</div>
+            <div style={{ padding:"40px 20px", textAlign:"center", color:T.t2, fontSize:12.5 }}>{t("common.loading_2")}</div>
           )}
 
           {!loading && tab === "Overview" && (
             <>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",
                 gap:12, marginBottom:14 }}>
-                <ModalInfo label="Type"        value={u.type_name || "—"}/>
+                <ModalInfo label={t("common.type")}        value={u.type_name || "—"}/>
                 <ModalInfo label="BHK"         value={u.bhk != null ? `${Number(u.bhk)} BHK` : "—"}/>
-                <ModalInfo label="Built-up"    value={u.built_up_area_sqft ? `${Number(u.built_up_area_sqft)} sqft` : "—"}/>
-                <ModalInfo label="Plot area"   value={u.plot_area_sqft ? `${Number(u.plot_area_sqft)} sqft` : "—"}/>
-                <ModalInfo label="Facing"      value={u.facing || "—"}/>
-                <ModalInfo label="Corner"      value={u.is_corner ? "Yes" : "No"}/>
-                <ModalInfo label="Garden"      value={u.is_garden_facing ? "Yes" : "No"}/>
-                <ModalInfo label="Phase"       value={u.phase || "—"}/>
-                <ModalInfo label="Base price"  value={inr(u.base_price)}/>
-                <ModalInfo label="PLC charges" value={inr(u.plc_charges)}/>
-                <ModalInfo label="Final price" value={inr(u.final_offered_price)} highlight/>
+                <ModalInfo label={t("township_crm.built_up")}    value={u.built_up_area_sqft ? `${Number(u.built_up_area_sqft)} sqft` : "—"}/>
+                <ModalInfo label={t("township_crm.plot_area")}   value={u.plot_area_sqft ? `${Number(u.plot_area_sqft)} sqft` : "—"}/>
+                <ModalInfo label={t("township_crm.facing")}      value={u.facing || "—"}/>
+                <ModalInfo label={t("township_crm.corner")}      value={u.is_corner ? "Yes" : "No"}/>
+                <ModalInfo label={t("township_crm.garden")}      value={u.is_garden_facing ? "Yes" : "No"}/>
+                <ModalInfo label={t("tasks.phase")}       value={u.phase || "—"}/>
+                <ModalInfo label={t("township_crm.base_price_2")}  value={inr(u.base_price)}/>
+                <ModalInfo label={t("township_crm.plc_charges")} value={inr(u.plc_charges)}/>
+                <ModalInfo label={t("township_crm.final_price")} value={inr(u.final_offered_price)} highlight/>
               </div>
 
               {/* Merger / modification alerts */}
               {detail?.merger_partner && detail.merger_partner.length > 0 && (
                 <div style={{ background:"#EEEDFE", border:"1px solid #AFA9EC", borderRadius:8,
-                  padding:"9px 12px", fontSize:11.5, color:"#3C3489", marginBottom:8 }}>
-                  Part of <strong>{u.merger_group_id}</strong> merger group with unit{" "}
-                  <strong>{detail.merger_partner.map(p => p.unit_no).join(", ")}</strong>.
-                </div>
+                  padding:"9px 12px", fontSize:11.5, color:"#3C3489", marginBottom:8 }}><Rich k="township_crm.part_of_merger_group_id_merger" params={{ merger_group_id: u.merger_group_id, v: " ", detail: detail.merger_partner.map(p => p.unit_no).join(", ") }} /></div>
               )}
               {unit.has_mod && (
                 <div style={{ background:T.ambL, border:"1px solid #EF9F27", borderRadius:8,
                   padding:"9px 12px", fontSize:11.5, color:"#633806", marginBottom:8 }}>
-                  Has approved modifications — see the Customizations tab for details.
+                 {t("township_crm.has_approved_modifications_see_the_customizations")}
                 </div>
               )}
 
               {/* Plan + elevation thumbnails */}
-              <SectionH>Drawings</SectionH>
+              <SectionH>{t("design.drawings")}</SectionH>
               <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
                 {["Plan","Elevation"].map(lbl => (
                   <div key={lbl} style={{ width:200, height:150, background:T.gryL,
@@ -2055,28 +2044,28 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
               </div>
 
               {/* Booking lifecycle actions */}
-              <SectionH>Actions</SectionH>
+              <SectionH>{t("common.actions")}</SectionH>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 {["HOLD","AVAILABLE","FOLLOWUP"].includes(u.status) && (
-                  <Btn small primary label="Convert to Booking" disabled={busy}
+                  <Btn small primary label={t("township_crm.convert_to_booking")} disabled={busy}
                     onClick={() => setShowBookingForm(true)}/>
                 )}
                 {u.status === "BOOKED" && (
                   <>
-                    <Btn small primary label="Mark as Sold" disabled={busy} onClick={markSold}/>
-                    <Btn small danger label="Cancel Booking" disabled={busy} onClick={cancelBooking}/>
+                    <Btn small primary label={t("township_crm.mark_as_sold")} disabled={busy} onClick={markSold}/>
+                    <Btn small danger label={t("township_crm.cancel_booking")} disabled={busy} onClick={cancelBooking}/>
                   </>
                 )}
                 {u.status === "HOLD" && (
-                  <Btn small danger label="Cancel Booking" disabled={busy} onClick={cancelBooking}/>
+                  <Btn small danger label={t("township_crm.cancel_booking")} disabled={busy} onClick={cancelBooking}/>
                 )}
-                <Btn small label="Add Note" disabled={busy} onClick={addNote}/>
+                <Btn small label={t("township_crm.add_note")} disabled={busy} onClick={addNote}/>
               </div>
               {/* DECISION: Log Visit / Record Token are prospect-driven flows
                   handled from the Prospects tab; the Unit modal owns the
                   booking lifecycle (book / sell / cancel) + notes. */}
               <div style={{ fontSize:10, color:T.t3, marginTop:6 }}>
-                Log Visit / Record Token prospect ke through Prospects tab se hote hain.
+               {t("township_crm.log_visit_record_token_prospect_ke")}
               </div>
             </>
           )}
@@ -2085,7 +2074,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
             <div>
               {(detail?.interested_prospects || []).length === 0 ? (
                 <div style={{ padding:"30px 20px", textAlign:"center", color:T.t3, fontSize:12 }}>
-                  Is unit ke liye koi interested lead nahi hai.
+                 {t("township_crm.is_unit_ke_liye_koi_interested")}
                 </div>
               ) : (
                 detail.interested_prospects.map(p => (
@@ -2112,7 +2101,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
             <div>
               {(detail?.followup_history || []).length === 0 ? (
                 <div style={{ padding:"30px 20px", textAlign:"center", color:T.t3, fontSize:12 }}>
-                  Koi followup history nahi hai.
+                 {t("township_crm.koi_followup_history_nahi_hai")}
                 </div>
               ) : (
                 detail.followup_history.map(h => {
@@ -2144,17 +2133,17 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
 
           {!loading && tab === "Construction" && (
             <div>
-              {constrLoading && <div style={{ padding:"30px", textAlign:"center", color:T.t3, fontSize:12 }}>Loading…</div>}
+              {constrLoading && <div style={{ padding:"30px", textAlign:"center", color:T.t3, fontSize:12 }}>{t("common.loading_2")}</div>}
               {!constrLoading && constr && (
                 <>
                   {constr.batch ? (
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))", gap:12, marginBottom:12 }}>
-                      <ModalInfo label="Batch" value={`${constr.batch.batch_no} · ${constr.batch.batch_name || ""}`}/>
-                      <ModalInfo label="Subcon" value={constr.batch.subcon_name || "—"}/>
-                      <ModalInfo label="Handover target" value={fmtDate(constr.batch.target_completion_date)}/>
+                      <ModalInfo label={t("township_crm.batch")} value={`${constr.batch.batch_no} · ${constr.batch.batch_name || ""}`}/>
+                      <ModalInfo label={t("common.subcon")} value={constr.batch.subcon_name || "—"}/>
+                      <ModalInfo label={t("township_crm.handover_target")} value={fmtDate(constr.batch.target_completion_date)}/>
                     </div>
                   ) : (
-                    <div style={{ fontSize:12, color:T.t3, marginBottom:10 }}>Unit kisi batch me nahi hai.</div>
+                    <div style={{ fontSize:12, color:T.t3, marginBottom:10 }}>{t("township_crm.unit_kisi_batch_me_nahi_hai")}</div>
                   )}
                   {constr.project ? (
                     <div style={{ background:T.gryL, borderRadius:8, padding:12 }}>
@@ -2164,13 +2153,13 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
                       </div>
                       <ProgBar pct={constr.project.progress_pct}/>
                       <div style={{ marginTop:10 }}>
-                        <Btn small label="Open in Projects"
+                        <Btn small label={t("township_crm.open_in_projects")}
                           icon={<SvgIco type="ext" color={T.t2} size={12}/>} onClick={onOpenProject}/>
                       </div>
                     </div>
                   ) : (
                     <div style={{ fontSize:12, color:T.t3 }}>
-                      Is batch ka koi linked construction project nahi hai — sync pending.
+                     {t("township_crm.is_batch_ka_koi_linked_construction")}
                     </div>
                   )}
                 </>
@@ -2180,18 +2169,18 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
 
           {!loading && tab === "Payments" && (
             <div>
-              {paymentsLoading && <div style={{ padding:"30px", textAlign:"center", color:T.t3, fontSize:12 }}>Loading…</div>}
+              {paymentsLoading && <div style={{ padding:"30px", textAlign:"center", color:T.t3, fontSize:12 }}>{t("common.loading_2")}</div>}
               {!paymentsLoading && payments && (
                 (payments.milestones || []).length === 0 ? (
                   <div style={{ padding:"30px 20px", textAlign:"center", color:T.t3, fontSize:12 }}>
-                    Is unit ka koi payment schedule nahi hai — pehle booking confirm karo.
+                   {t("township_crm.is_unit_ka_koi_payment_schedule")}
                   </div>
                 ) : (
                   <>
                     <div style={{ display:"flex", gap:14, marginBottom:10, fontSize:11.5 }}>
-                      <span style={{ color:T.t2 }}>Total: <b style={{ color:T.t1 }}>{inr(payments.total_due)}</b></span>
-                      <span style={{ color:T.t2 }}>Paid: <b style={{ color:T.kGrn }}>{inr(payments.total_paid)}</b></span>
-                      <span style={{ color:T.t2 }}>Progress: <b style={{ color:T.pri }}>{payments.paid_pct}%</b></span>
+                      <span style={{ color:T.t2 }}>{t("common.total_2")} <b style={{ color:T.t1 }}>{inr(payments.total_due)}</b></span>
+                      <span style={{ color:T.t2 }}>{t("township_crm.paid")} <b style={{ color:T.kGrn }}>{inr(payments.total_paid)}</b></span>
+                      <span style={{ color:T.t2 }}>{t("township_crm.progress")} <b style={{ color:T.pri }}>{payments.paid_pct}%</b></span>
                     </div>
                     <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
                       <thead>
@@ -2211,11 +2200,11 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.t1 }}>{inr(m.due_amount)}</td>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.kGrn }}>{inr(m.paid_amount)}</td>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
-                                <Pill label={m.overdue && m.status==="pending" ? "Overdue" : m.status} tone={tone}/>
+                                <Pill label={m.overdue && m.status==="pending" ? t("common.overdue") : m.status} tone={tone}/>
                               </td>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
                                 {m.status !== "paid" && (
-                                  <Btn small label="Record" onClick={() => setRecordPaymentRow(m)}/>
+                                  <Btn small label={t("estimate.record")} onClick={() => setRecordPaymentRow(m)}/>
                                 )}
                               </td>
                             </tr>
@@ -2231,8 +2220,8 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
 
           {!loading && tab === "Documents" && (
             <div style={{ padding:"40px 20px", textAlign:"center" }}>
-              <div style={{ fontSize:13, fontWeight:600, color:T.t1, marginBottom:4 }}>Documents</div>
-              <div style={{ fontSize:12, color:T.t3 }}>Coming soon — Brief 4: Document Management</div>
+              <div style={{ fontSize:13, fontWeight:600, color:T.t1, marginBottom:4 }}>{t("common.documents")}</div>
+              <div style={{ fontSize:12, color:T.t3 }}>{t("township_crm.coming_soon_brief_4_document_management")}</div>
             </div>
           )}
         </div>
@@ -2274,8 +2263,8 @@ function AddUnitModal({ projectId, unitTypes, batches, onClose, onSaved }) {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const submit = async () => {
-    if (!form.unit_no.trim()) { alert("Unit No is required"); return; }
-    if (!form.unit_type_id)   { alert("Unit Type is required"); return; }
+    if (!form.unit_no.trim()) { alert(t("township_crm.unit_no_is_required")); return; }
+    if (!form.unit_type_id)   { alert(t("township_crm.unit_type_is_required")); return; }
     setSaving(true);
     try {
       const res = await api.post(`/township-crm/projects/${projectId}/units`, {
@@ -2297,29 +2286,29 @@ function AddUnitModal({ projectId, unitTypes, batches, onClose, onSaved }) {
   };
 
   return (
-    <Modal title="Add Unit" onClose={onClose} width={500}>
+    <Modal title={t("master_library.add_unit")} onClose={onClose} width={500}>
       <div style={{ display:"grid", gap:11 }}>
         <div>
-          <label style={labelStyle}>Unit No *</label>
+          <label style={labelStyle}>{t("township_crm.unit_no")}</label>
           <input style={inputStyle} value={form.unit_no}
             onChange={(e) => set("unit_no", e.target.value)} placeholder="e.g. A-103"/>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Unit Type *</label>
+            <label style={labelStyle}>{t("township_crm.unit_type")}</label>
             <select style={inputStyle} value={form.unit_type_id}
               onChange={(e) => set("unit_type_id", e.target.value)}>
-              <option value="">— Select —</option>
+              <option value="">{t("payroll.select")}</option>
               {unitTypes.map(t => (
                 <option key={t.id} value={t.id}>{t.type_name} ({t.type_code})</option>
               ))}
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Batch</label>
+            <label style={labelStyle}>{t("township_crm.batch")}</label>
             <select style={inputStyle} value={form.batch_id}
               onChange={(e) => set("batch_id", e.target.value)}>
-              <option value="">— None —</option>
+              <option value="">{t("township_crm.none")}</option>
               {batches.map(b => (
                 <option key={b.id} value={b.id}>{b.batch_no} · {b.unit_range_label || b.batch_name || ""}</option>
               ))}
@@ -2328,40 +2317,40 @@ function AddUnitModal({ projectId, unitTypes, batches, onClose, onSaved }) {
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Facing</label>
+            <label style={labelStyle}>{t("township_crm.facing")}</label>
             <select style={inputStyle} value={form.facing}
               onChange={(e) => set("facing", e.target.value)}>
-              <option value="">— None —</option>
+              <option value="">{t("township_crm.none")}</option>
               {FACINGS.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           </div>
           <div style={{ display:"flex", gap:14, alignItems:"flex-end", paddingBottom:6 }}>
             <label style={{ display:"flex", gap:5, alignItems:"center", fontSize:12, color:T.t2, cursor:"pointer" }}>
               <input type="checkbox" checked={form.is_corner}
-                onChange={(e) => set("is_corner", e.target.checked)}/> Corner
+                onChange={(e) => set("is_corner", e.target.checked)}/> {t("township_crm.corner")}
             </label>
             <label style={{ display:"flex", gap:5, alignItems:"center", fontSize:12, color:T.t2, cursor:"pointer" }}>
               <input type="checkbox" checked={form.is_garden_facing}
-                onChange={(e) => set("is_garden_facing", e.target.checked)}/> Garden
+                onChange={(e) => set("is_garden_facing", e.target.checked)}/> {t("township_crm.garden")}
             </label>
           </div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Base Price (₹)</label>
+            <label style={labelStyle}>{t("township_crm.base_price_3")}</label>
             <input style={inputStyle} type="number" value={form.base_price}
-              onChange={(e) => set("base_price", e.target.value)} placeholder="Default from type"/>
+              onChange={(e) => set("base_price", e.target.value)} placeholder={t("township_crm.default_from_type")}/>
           </div>
           <div>
-            <label style={labelStyle}>PLC Charges (₹)</label>
+            <label style={labelStyle}>{t("township_crm.plc_charges_2")}</label>
             <input style={inputStyle} type="number" value={form.plc_charges}
-              onChange={(e) => set("plc_charges", e.target.value)} placeholder="Default 0"/>
+              onChange={(e) => set("plc_charges", e.target.value)} placeholder={t("township_crm.default_0")}/>
           </div>
         </div>
       </div>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
-        <Btn small label="Cancel" onClick={onClose}/>
-        <Btn small primary label={saving ? "Saving…" : "Add Unit"} onClick={submit} disabled={saving}/>
+        <Btn small label={t("common.cancel")} onClick={onClose}/>
+        <Btn small primary label={saving ? t("common.saving_2") : t("master_library.add_unit")} onClick={submit} disabled={saving}/>
       </div>
     </Modal>
   );
@@ -2379,7 +2368,7 @@ function AddProspectModal({ projectId, onClose, onSaved }) {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const submit = async () => {
-    if (!form.name.trim()) { alert("Name is required"); return; }
+    if (!form.name.trim()) { alert(t("payroll.name_is_required")); return; }
     setSaving(true);
     try {
       const res = await api.post(`/township-crm/projects/${projectId}/prospects`, {
@@ -2402,35 +2391,35 @@ function AddProspectModal({ projectId, onClose, onSaved }) {
   };
 
   return (
-    <Modal title="Add Prospect" onClose={onClose} width={500}>
+    <Modal title={t("township_crm.add_prospect_2")} onClose={onClose} width={500}>
       <div style={{ display:"grid", gap:11 }}>
         <div>
-          <label style={labelStyle}>Name *</label>
+          <label style={labelStyle}>{t("common.name")}</label>
           <input style={inputStyle} value={form.name}
-            onChange={(e) => set("name", e.target.value)} placeholder="Prospect name"/>
+            onChange={(e) => set("name", e.target.value)} placeholder={t("township_crm.prospect_name")}/>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Phone</label>
+            <label style={labelStyle}>{t("common.phone")}</label>
             <input style={inputStyle} value={form.phone}
               onChange={(e) => set("phone", e.target.value)}/>
           </div>
           <div>
-            <label style={labelStyle}>Email</label>
+            <label style={labelStyle}>{t("common.email")}</label>
             <input style={inputStyle} value={form.email}
               onChange={(e) => set("email", e.target.value)}/>
           </div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Stage</label>
+            <label style={labelStyle}>{t("common.stage")}</label>
             <select style={inputStyle} value={form.stage}
               onChange={(e) => set("stage", e.target.value)}>
               {STAGE_ORDER.map(s => <option key={s} value={s}>{STAGE_DISPLAY[s]}</option>)}
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Priority</label>
+            <label style={labelStyle}>{t("common.priority")}</label>
             <select style={inputStyle} value={form.priority}
               onChange={(e) => set("priority", e.target.value)}>
               {["High","Medium","Low"].map(p => <option key={p} value={p}>{p}</option>)}
@@ -2438,31 +2427,31 @@ function AddProspectModal({ projectId, onClose, onSaved }) {
           </div>
         </div>
         <div>
-          <label style={labelStyle}>Source</label>
+          <label style={labelStyle}>{t("common.source")}</label>
           <input style={inputStyle} value={form.source}
-            onChange={(e) => set("source", e.target.value)} placeholder="Just Dial / Walk-in / Reference"/>
+            onChange={(e) => set("source", e.target.value)} placeholder={t("township_crm.just_dial_walk_in_reference")}/>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Budget Min (₹)</label>
+            <label style={labelStyle}>{t("township_crm.budget_min")}</label>
             <input style={inputStyle} type="number" value={form.budget_min}
               onChange={(e) => set("budget_min", e.target.value)}/>
           </div>
           <div>
-            <label style={labelStyle}>Budget Max (₹)</label>
+            <label style={labelStyle}>{t("township_crm.budget_max")}</label>
             <input style={inputStyle} type="number" value={form.budget_max}
               onChange={(e) => set("budget_max", e.target.value)}/>
           </div>
         </div>
         <div>
-          <label style={labelStyle}>Notes</label>
+          <label style={labelStyle}>{t("common.notes")}</label>
           <textarea style={{ ...inputStyle, minHeight:54, resize:"vertical" }} value={form.notes}
             onChange={(e) => set("notes", e.target.value)}/>
         </div>
       </div>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
-        <Btn small label="Cancel" onClick={onClose}/>
-        <Btn small primary label={saving ? "Saving…" : "Add Prospect"} onClick={submit} disabled={saving}/>
+        <Btn small label={t("common.cancel")} onClick={onClose}/>
+        <Btn small primary label={saving ? t("common.saving_2") : t("township_crm.add_prospect_2")} onClick={submit} disabled={saving}/>
       </div>
     </Modal>
   );
@@ -2500,7 +2489,7 @@ function ProspectDetailModal({ prospectId, onClose, onChanged }) {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const saveEdit = async () => {
-    if (!form.name.trim()) { alert("Name is required"); return; }
+    if (!form.name.trim()) { alert(t("payroll.name_is_required")); return; }
     setBusy(true);
     try {
       const res = await api.put(`/township-crm/prospects/${prospectId}`, {
@@ -2527,7 +2516,7 @@ function ProspectDetailModal({ prospectId, onClose, onChanged }) {
   };
 
   const remove = async () => {
-    if (!await window.confirmAsync("Is prospect ko delete karna hai?")) return;
+    if (!await window.confirmAsync(t("township_crm.is_prospect_ko_delete_karna_hai"))) return;
     setBusy(true);
     try {
       const res = await api.del(`/township-crm/prospects/${prospectId}`);
@@ -2538,8 +2527,8 @@ function ProspectDetailModal({ prospectId, onClose, onChanged }) {
   };
 
   return (
-    <Modal title={data ? data.name : "Prospect"} onClose={onClose} width={560}>
-      {loading && <div style={{ padding:"30px 10px", textAlign:"center", color:T.t2, fontSize:12.5 }}>Loading…</div>}
+    <Modal title={data ? data.name : t("township_crm.prospect")} onClose={onClose} width={560}>
+      {loading && <div style={{ padding:"30px 10px", textAlign:"center", color:T.t2, fontSize:12.5 }}>{t("common.loading_2")}</div>}
 
       {!loading && data && !editing && (
         <>
@@ -2550,31 +2539,31 @@ function ProspectDetailModal({ prospectId, onClose, onChanged }) {
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px,1fr))", gap:12, marginBottom:14 }}>
-            <ModalInfo label="Phone" value={data.phone || "—"}/>
-            <ModalInfo label="Email" value={data.email || "—"}/>
-            <ModalInfo label="Budget" value={
+            <ModalInfo label={t("common.phone")} value={data.phone || "—"}/>
+            <ModalInfo label={t("common.email")} value={data.email || "—"}/>
+            <ModalInfo label={t("common.budget")} value={
               data.budget_min || data.budget_max
                 ? `${inr(data.budget_min)}–${inr(data.budget_max)}` : "—"
             }/>
-            <ModalInfo label="Assigned to" value={data.assigned_to || "—"}/>
+            <ModalInfo label={t("design.assigned_to")} value={data.assigned_to || "—"}/>
           </div>
           {data.notes && (
             <div style={{ fontSize:11.5, color:T.t2, background:T.gryL, padding:"8px 11px",
               borderRadius:7, marginBottom:12 }}>{data.notes}</div>
           )}
 
-          <SectionH style={{ marginTop:0 }}>Interested units ({data.interested_unit_count || 0})</SectionH>
+          <SectionH style={{ marginTop:0 }}>{t("township_crm.interested_units_data", { data: data.interested_unit_count || 0 })}</SectionH>
           {(data.interested_units || []).length === 0 ? (
-            <div style={{ fontSize:11, color:T.t3, marginBottom:6 }}>Koi unit linked nahi hai.</div>
+            <div style={{ fontSize:11, color:T.t3, marginBottom:6 }}>{t("township_crm.koi_unit_linked_nahi_hai")}</div>
           ) : (
             <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:6 }}>
               {data.interested_units.map(u => <Pill key={u.unit_id} label={u.unit_no} tone="blue"/>)}
             </div>
           )}
 
-          <SectionH>Followup history</SectionH>
+          <SectionH>{t("township_crm.followup_history")}</SectionH>
           {(data.followup_history || []).length === 0 ? (
-            <div style={{ fontSize:11, color:T.t3 }}>Koi followup history nahi hai.</div>
+            <div style={{ fontSize:11, color:T.t3 }}>{t("township_crm.koi_followup_history_nahi_hai")}</div>
           ) : (
             data.followup_history.map(h => {
               const ai = ACTION_ICON[h.action_type] || ACTION_ICON.note;
@@ -2598,15 +2587,15 @@ function ProspectDetailModal({ prospectId, onClose, onChanged }) {
 
           {/* Actions */}
           <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:16, flexWrap:"wrap" }}>
-            <span style={{ fontSize:11, color:T.t2 }}>Change stage:</span>
+            <span style={{ fontSize:11, color:T.t2 }}>{t("township_crm.change_stage")}</span>
             <select value={data.stage} disabled={busy}
               onChange={(e) => changeStage(e.target.value)}
               style={{ ...inputStyle, width:"auto", padding:"5px 8px", fontSize:11.5 }}>
               {STAGE_ORDER.map(s => <option key={s} value={s}>{STAGE_DISPLAY[s]}</option>)}
             </select>
             <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
-              <Btn small label="Edit" onClick={() => setEditing(true)}/>
-              <Btn small danger label="Delete" onClick={remove} disabled={busy}/>
+              <Btn small label={t("common.edit_2")} onClick={() => setEditing(true)}/>
+              <Btn small danger label={t("common.delete")} onClick={remove} disabled={busy}/>
             </div>
           </div>
         </>
@@ -2616,50 +2605,50 @@ function ProspectDetailModal({ prospectId, onClose, onChanged }) {
         <>
           <div style={{ display:"grid", gap:11 }}>
             <div>
-              <label style={labelStyle}>Name *</label>
+              <label style={labelStyle}>{t("common.name")}</label>
               <input style={inputStyle} value={form.name} onChange={(e) => set("name", e.target.value)}/>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
               <div>
-                <label style={labelStyle}>Phone</label>
+                <label style={labelStyle}>{t("common.phone")}</label>
                 <input style={inputStyle} value={form.phone} onChange={(e) => set("phone", e.target.value)}/>
               </div>
               <div>
-                <label style={labelStyle}>Email</label>
+                <label style={labelStyle}>{t("common.email")}</label>
                 <input style={inputStyle} value={form.email} onChange={(e) => set("email", e.target.value)}/>
               </div>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
               <div>
-                <label style={labelStyle}>Priority</label>
+                <label style={labelStyle}>{t("common.priority")}</label>
                 <select style={inputStyle} value={form.priority} onChange={(e) => set("priority", e.target.value)}>
                   {["High","Medium","Low"].map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
               <div>
-                <label style={labelStyle}>Source</label>
+                <label style={labelStyle}>{t("common.source")}</label>
                 <input style={inputStyle} value={form.source} onChange={(e) => set("source", e.target.value)}/>
               </div>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
               <div>
-                <label style={labelStyle}>Budget Min (₹)</label>
+                <label style={labelStyle}>{t("township_crm.budget_min")}</label>
                 <input style={inputStyle} type="number" value={form.budget_min} onChange={(e) => set("budget_min", e.target.value)}/>
               </div>
               <div>
-                <label style={labelStyle}>Budget Max (₹)</label>
+                <label style={labelStyle}>{t("township_crm.budget_max")}</label>
                 <input style={inputStyle} type="number" value={form.budget_max} onChange={(e) => set("budget_max", e.target.value)}/>
               </div>
             </div>
             <div>
-              <label style={labelStyle}>Notes</label>
+              <label style={labelStyle}>{t("common.notes")}</label>
               <textarea style={{ ...inputStyle, minHeight:54, resize:"vertical" }} value={form.notes}
                 onChange={(e) => set("notes", e.target.value)}/>
             </div>
           </div>
           <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
-            <Btn small label="Cancel" onClick={() => setEditing(false)}/>
-            <Btn small primary label={busy ? "Saving…" : "Save Changes"} onClick={saveEdit} disabled={busy}/>
+            <Btn small label={t("common.cancel")} onClick={() => setEditing(false)}/>
+            <Btn small primary label={busy ? t("common.saving_2") : t("common.save_changes")} onClick={saveEdit} disabled={busy}/>
           </div>
         </>
       )}
@@ -2686,7 +2675,7 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
   useEffect(() => { load(); }, [load]);
 
   const markSold = async () => {
-    if (!await window.confirmAsync("Mark this unit as SOLD?")) return;
+    if (!await window.confirmAsync(t("township_crm.mark_this_unit_as_sold"))) return;
     setBusy(true);
     try {
       const r = await api.post(`/township-crm/units/${unitId}/complete-sale`, { note:"Registration done" });
@@ -2696,7 +2685,7 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
     setBusy(false);
   };
   const cancelBooking = async () => {
-    const reason = await window.promptAsync("Cancel booking — reason:");
+    const reason = await window.promptAsync(t("township_crm.cancel_booking_reason"));
     if (reason === null) return;
     setBusy(true);
     try {
@@ -2715,17 +2704,17 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
         <span style={{ fontSize:11.5, color:T.t3 }}>{booking.phone}</span>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px,1fr))", gap:12, marginBottom:14 }}>
-        <ModalInfo label="Agreement value" value={booking.value}/>
-        <ModalInfo label="Paid so far" value={booking.paid}/>
-        <ModalInfo label="Next due" value={booking.due}/>
+        <ModalInfo label={t("township_crm.agreement_value")} value={booking.value}/>
+        <ModalInfo label={t("township_crm.paid_so_far")} value={booking.paid}/>
+        <ModalInfo label={t("township_crm.next_due")} value={booking.due}/>
       </div>
 
-      <SectionH style={{ marginTop:0 }}>Payment schedule</SectionH>
-      {loading && <div style={{ padding:"24px", textAlign:"center", color:T.t3, fontSize:12 }}>Loading…</div>}
+      <SectionH style={{ marginTop:0 }}>{t("township_crm.payment_schedule")}</SectionH>
+      {loading && <div style={{ padding:"24px", textAlign:"center", color:T.t3, fontSize:12 }}>{t("common.loading_2")}</div>}
       {!loading && payments && (
         (payments.milestones || []).length === 0 ? (
           <div style={{ fontSize:11.5, color:T.t3, padding:"8px 0" }}>
-            Koi payment schedule nahi — HOLD unit hai (sirf token recorded).
+           {t("township_crm.koi_payment_schedule_nahi_hold_unit")}
           </div>
         ) : (
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
@@ -2746,10 +2735,10 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.t1 }}>{inr(m.due_amount)}</td>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.kGrn }}>{inr(m.paid_amount)}</td>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
-                      <Pill label={m.overdue && m.status==="pending" ? "Overdue" : m.status} tone={tone}/>
+                      <Pill label={m.overdue && m.status==="pending" ? t("common.overdue") : m.status} tone={tone}/>
                     </td>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
-                      {m.status !== "paid" && <Btn small label="Record" onClick={() => setRecordRow(m)}/>}
+                      {m.status !== "paid" && <Btn small label={t("estimate.record")} onClick={() => setRecordRow(m)}/>}
                     </td>
                   </tr>
                 );
@@ -2762,12 +2751,12 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16,
         paddingTop:12, borderTop:`1px solid ${T.b1}` }}>
         {booking.status === "BOOKED" && (
-          <Btn small primary label="Mark as Sold" disabled={busy} onClick={markSold}/>
+          <Btn small primary label={t("township_crm.mark_as_sold")} disabled={busy} onClick={markSold}/>
         )}
         {["HOLD","BOOKED"].includes(booking.status) && (
-          <Btn small danger label="Cancel Booking" disabled={busy} onClick={cancelBooking}/>
+          <Btn small danger label={t("township_crm.cancel_booking")} disabled={busy} onClick={cancelBooking}/>
         )}
-        <Btn small label="Close" onClick={onClose}/>
+        <Btn small label={t("common.close")} onClick={onClose}/>
       </div>
 
       {recordRow && (
@@ -2793,7 +2782,7 @@ function BookingFormModal({ unit, interestedProspects, onClose, onSaved }) {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const submit = async () => {
-    if (!form.prospect_id) { alert("Select a prospect to book against"); return; }
+    if (!form.prospect_id) { alert(t("township_crm.select_a_prospect_to_book_against")); return; }
     setSaving(true);
     try {
       const r = await api.post(`/township-crm/units/${unit.id}/book`, {
@@ -2812,12 +2801,12 @@ function BookingFormModal({ unit, interestedProspects, onClose, onSaved }) {
     <Modal title={`Convert ${unit.unit_no} to Booking`} onClose={onClose} width={460}>
       {interestedProspects.length === 0 ? (
         <div style={{ fontSize:12, color:T.t2, padding:"10px 0" }}>
-          Is unit ke saath koi prospect linked nahi hai. Pehle Prospects tab se ek site visit / token log karo.
+         {t("township_crm.is_unit_ke_saath_koi_prospect")}
         </div>
       ) : (
         <div style={{ display:"grid", gap:11 }}>
           <div>
-            <label style={labelStyle}>Customer (from prospect) *</label>
+            <label style={labelStyle}>{t("township_crm.customer_from_prospect")}</label>
             <select style={inputStyle} value={form.prospect_id}
               onChange={(e) => set("prospect_id", e.target.value)}>
               {interestedProspects.map(p => (
@@ -2827,28 +2816,28 @@ function BookingFormModal({ unit, interestedProspects, onClose, onSaved }) {
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
             <div>
-              <label style={labelStyle}>Agreement value (₹)</label>
+              <label style={labelStyle}>{t("township_crm.agreement_value_2")}</label>
               <input style={inputStyle} type="number" value={form.agreement_value}
                 onChange={(e) => set("agreement_value", e.target.value)}/>
             </div>
             <div>
-              <label style={labelStyle}>Booked date</label>
+              <label style={labelStyle}>{t("township_crm.booked_date")}</label>
               <input style={inputStyle} type="date" value={form.booked_date}
                 onChange={(e) => set("booked_date", e.target.value)}/>
             </div>
           </div>
           <div>
-            <label style={labelStyle}>Note</label>
+            <label style={labelStyle}>{t("common.note")}</label>
             <input style={inputStyle} value={form.note} onChange={(e) => set("note", e.target.value)}/>
           </div>
           <div style={{ fontSize:10.5, color:T.t3 }}>
-            Booking par 10-milestone RERA payment schedule auto-generate hoga.
+           {t("township_crm.booking_par_10_milestone_rera_payment")}
           </div>
         </div>
       )}
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
-        <Btn small label="Cancel" onClick={onClose}/>
-        <Btn small primary label={saving ? "Booking…" : "Confirm Booking"}
+        <Btn small label={t("common.cancel")} onClick={onClose}/>
+        <Btn small primary label={saving ? t("township_crm.booking") : t("township_crm.confirm_booking")}
           onClick={submit} disabled={saving || interestedProspects.length === 0}/>
       </div>
     </Modal>
@@ -2870,7 +2859,7 @@ function PaymentRecordModal({ milestone, onClose, onSaved }) {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const submit = async () => {
-    if (!form.amount || Number(form.amount) <= 0) { alert("Enter a valid amount"); return; }
+    if (!form.amount || Number(form.amount) <= 0) { alert(t("payment_request.enter_a_valid_amount")); return; }
     setSaving(true);
     try {
       const r = await api.post(`/township-crm/payments/${milestone.id}/record`, {
@@ -2888,23 +2877,22 @@ function PaymentRecordModal({ milestone, onClose, onSaved }) {
   return (
     <Modal title={`Record Payment — ${milestone.milestone_label}`} onClose={onClose} width={420}>
       <div style={{ fontSize:11.5, color:T.t2, marginBottom:12 }}>
-        Due: <b style={{ color:T.t1 }}>{inr(milestone.due_amount)}</b> ·
-        Already paid: <b style={{ color:T.kGrn }}>{inr(milestone.paid_amount)}</b>
+       {t("estimate.due")} <b style={{ color:T.t1 }}>{inr(milestone.due_amount)}</b> {t("township_crm.already_paid")} <b style={{ color:T.kGrn }}>{inr(milestone.paid_amount)}</b>
       </div>
       <div style={{ display:"grid", gap:11 }}>
         <div>
-          <label style={labelStyle}>Amount (₹) *</label>
+          <label style={labelStyle}>{t("common.amount")}</label>
           <input style={inputStyle} type="number" value={form.amount}
             onChange={(e) => set("amount", e.target.value)}/>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
           <div>
-            <label style={labelStyle}>Paid date</label>
+            <label style={labelStyle}>{t("township_crm.paid_date")}</label>
             <input style={inputStyle} type="date" value={form.paid_date}
               onChange={(e) => set("paid_date", e.target.value)}/>
           </div>
           <div>
-            <label style={labelStyle}>Mode</label>
+            <label style={labelStyle}>{t("common.mode")}</label>
             <select style={inputStyle} value={form.payment_mode}
               onChange={(e) => set("payment_mode", e.target.value)}>
               {["NEFT","RTGS","UPI","Cheque","Cash"].map(m => <option key={m} value={m}>{m}</option>)}
@@ -2912,13 +2900,13 @@ function PaymentRecordModal({ milestone, onClose, onSaved }) {
           </div>
         </div>
         <div>
-          <label style={labelStyle}>Txn reference</label>
+          <label style={labelStyle}>{t("township_crm.txn_reference")}</label>
           <input style={inputStyle} value={form.txn_ref} onChange={(e) => set("txn_ref", e.target.value)}/>
         </div>
       </div>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
-        <Btn small label="Cancel" onClick={onClose}/>
-        <Btn small primary label={saving ? "Saving…" : "Record Payment"} onClick={submit} disabled={saving}/>
+        <Btn small label={t("common.cancel")} onClick={onClose}/>
+        <Btn small primary label={saving ? t("common.saving_2") : t("common.record_payment")} onClick={submit} disabled={saving}/>
       </div>
     </Modal>
   );
@@ -2942,7 +2930,7 @@ function CustomizationDetailModal({ customization, onClose, onChanged }) {
     setBusy(false);
   };
   const remove = async () => {
-    if (!await window.confirmAsync("Delete this customization?")) return;
+    if (!await window.confirmAsync(t("township_crm.delete_this_customization"))) return;
     setBusy(true);
     try {
       const r = await api.del(`/township-crm/customizations/${c.id}`);
@@ -2960,7 +2948,7 @@ function CustomizationDetailModal({ customization, onClose, onChanged }) {
           : <Pill label="MODIFICATION" tone="amber"/>}
         <Pill label={c.status.label} tone={c.status.tone}/>
       </div>
-      <div style={{ fontSize:11.5, color:T.t2, marginBottom:8 }}>Customer: {c.customer}</div>
+      <div style={{ fontSize:11.5, color:T.t2, marginBottom:8 }}>{t("township_crm.customer_customer", { customer: c.customer })}</div>
       <div style={{ fontSize:11.5, color:T.t1, background:T.gryL, padding:"8px 11px",
         borderRadius:7, marginBottom:10 }}>{c.desc}</div>
       {c.kind === "merger" ? (
@@ -2970,15 +2958,15 @@ function CustomizationDetailModal({ customization, onClose, onChanged }) {
       )}
       <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:14, flexWrap:"wrap",
         paddingTop:12, borderTop:`1px solid ${T.b1}` }}>
-        <span style={{ fontSize:11, color:T.t2 }}>Change status:</span>
+        <span style={{ fontSize:11, color:T.t2 }}>{t("township_crm.change_status")}</span>
         <select disabled={busy} defaultValue=""
           onChange={(e) => e.target.value && changeStatus(e.target.value)}
           style={{ ...inputStyle, width:"auto", padding:"5px 8px", fontSize:11.5 }}>
-          <option value="">— Select —</option>
+          <option value="">{t("payroll.select")}</option>
           {CZ_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g," ")}</option>)}
         </select>
         <div style={{ marginLeft:"auto" }}>
-          <Btn small danger label="Delete" disabled={busy} onClick={remove}/>
+          <Btn small danger label={t("common.delete")} disabled={busy} onClick={remove}/>
         </div>
       </div>
     </Modal>
@@ -3015,8 +3003,8 @@ function CustomizationFormModal({ projectId, units, onClose, onSaved }) {
   };
 
   const submit = async () => {
-    if (!form.primary_unit_id) { alert("Select the primary unit"); return; }
-    if (kind === "unit_merger" && !form.partner_unit_id) { alert("Select a partner unit for the merger"); return; }
+    if (!form.primary_unit_id) { alert(t("township_crm.select_the_primary_unit")); return; }
+    if (kind === "unit_merger" && !form.partner_unit_id) { alert(t("township_crm.select_a_partner_unit_for_the")); return; }
     setSaving(true);
     try {
       const body = {
@@ -3034,23 +3022,23 @@ function CustomizationFormModal({ projectId, units, onClose, onSaved }) {
   };
 
   return (
-    <Modal title="New Customization" onClose={onClose} width={500}>
+    <Modal title={t("township_crm.new_customization")} onClose={onClose} width={500}>
       <div style={{ display:"grid", gap:11 }}>
         <div>
-          <label style={labelStyle}>Type</label>
+          <label style={labelStyle}>{t("common.type")}</label>
           <div style={{ display:"flex", gap:8 }}>
-            <Chip label="Modification" active={kind === "plan_modification"}
+            <Chip label={t("township_crm.modification")} active={kind === "plan_modification"}
               onClick={() => { setKind("plan_modification"); setEligNote(""); }}/>
-            <Chip label="Merger" active={kind === "unit_merger"}
+            <Chip label={t("township_crm.merger")} active={kind === "unit_merger"}
               onClick={() => setKind("unit_merger")}/>
           </div>
         </div>
         <div>
-          <label style={labelStyle}>{kind === "unit_merger" ? "Primary unit *" : "Unit *"}</label>
+          <label style={labelStyle}>{kind === "unit_merger" ? t("township_crm.primary_unit") : t("mrdetail.unit")}</label>
           <select style={inputStyle} value={form.primary_unit_id}
             onChange={(e) => { set("primary_unit_id", e.target.value); }}
             onBlur={checkElig}>
-            <option value="">— Select —</option>
+            <option value="">{t("payroll.select")}</option>
             {sortedUnits.map(u => (
               <option key={u.id} value={u.id}>{u.unit_no} · {u.status}</option>
             ))}
@@ -3058,11 +3046,11 @@ function CustomizationFormModal({ projectId, units, onClose, onSaved }) {
         </div>
         {kind === "unit_merger" && (
           <div>
-            <label style={labelStyle}>Partner unit (adjacent, same batch) *</label>
+            <label style={labelStyle}>{t("township_crm.partner_unit_adjacent_same_batch")}</label>
             <select style={inputStyle} value={form.partner_unit_id}
               onChange={(e) => set("partner_unit_id", e.target.value)}
               onBlur={checkElig}>
-              <option value="">— Select —</option>
+              <option value="">{t("payroll.select")}</option>
               {sortedUnits.map(u => (
                 <option key={u.id} value={u.id}>{u.unit_no} · {u.status}</option>
               ))}
@@ -3074,19 +3062,19 @@ function CustomizationFormModal({ projectId, units, onClose, onSaved }) {
           </div>
         )}
         <div>
-          <label style={labelStyle}>Description</label>
+          <label style={labelStyle}>{t("common.description")}</label>
           <textarea style={{ ...inputStyle, minHeight:54, resize:"vertical" }} value={form.description}
             onChange={(e) => set("description", e.target.value)}/>
         </div>
         <div>
-          <label style={labelStyle}>Extra cost (₹)</label>
+          <label style={labelStyle}>{t("township_crm.extra_cost")}</label>
           <input style={inputStyle} type="number" value={form.extra_cost}
             onChange={(e) => set("extra_cost", e.target.value)}/>
         </div>
       </div>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
-        <Btn small label="Cancel" onClick={onClose}/>
-        <Btn small primary label={saving ? "Saving…" : "Create"} onClick={submit} disabled={saving}/>
+        <Btn small label={t("common.cancel")} onClick={onClose}/>
+        <Btn small primary label={saving ? t("common.saving_2") : t("common.create")} onClick={submit} disabled={saving}/>
       </div>
     </Modal>
   );
@@ -3104,11 +3092,11 @@ function StuckUnitsModal({ projectId, onClose }) {
   }, [projectId]);
 
   return (
-    <Modal title="Stuck units (30+ days idle)" onClose={onClose} width={520}>
-      {rows === null && <div style={{ padding:"24px", textAlign:"center", color:T.t3, fontSize:12 }}>Loading…</div>}
+    <Modal title={t("township_crm.stuck_units_30_days_idle")} onClose={onClose} width={520}>
+      {rows === null && <div style={{ padding:"24px", textAlign:"center", color:T.t3, fontSize:12 }}>{t("common.loading_2")}</div>}
       {rows && rows.length === 0 && (
         <div style={{ padding:"24px", textAlign:"center", color:T.t3, fontSize:12.5 }}>
-          Koi stuck unit nahi — sab units pe recent activity hai.
+         {t("township_crm.koi_stuck_unit_nahi_sab_units")}
         </div>
       )}
       {rows && rows.length > 0 && (

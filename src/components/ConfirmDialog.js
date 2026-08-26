@@ -26,6 +26,7 @@
 
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { t } from "../i18n";
 
 const T = {
   surface: "#FFFFFF",
@@ -52,12 +53,12 @@ function detectVariant(text) {
 
 function detectConfirmLabel(text, variant) {
   const t = String(text || "").toLowerCase();
-  if (/delete/.test(t)) return "Delete";
-  if (/remove/.test(t)) return "Remove";
-  if (/cancel.*payment|cancel.*po|cancel.*subscription/.test(t)) return "Yes, Cancel";
-  if (/reset|factory/.test(t)) return "Reset";
-  if (/wipe|destroy/.test(t)) return "Continue";
-  return variant === "danger" ? "Confirm" : "OK";
+  if (/delete/.test(t)) return t("common.delete");
+  if (/remove/.test(t)) return t("common.remove");
+  if (/cancel.*payment|cancel.*po|cancel.*subscription/.test(t)) return t("confirm_dialog.yes_cancel");
+  if (/reset|factory/.test(t)) return t("common.reset");
+  if (/wipe|destroy/.test(t)) return t("confirm_dialog.continue");
+  return variant === "danger" ? t("common.confirm") : "OK";
 }
 
 export function ConfirmProvider({ children }) {

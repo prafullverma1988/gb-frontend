@@ -3,6 +3,7 @@ import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import { T, localYMD } from "../shared/tokens";
+import { t, Rich } from "../../i18n";
 
 function TabSubcon({ projectId, project }) {
   const [wos, setWos] = useState([]);
@@ -108,7 +109,7 @@ function TabSubcon({ projectId, project }) {
   };
 
   const unlinkTaskSub = async (msId) => {
-    if (!await window.confirmAsync("Unlink this milestone from its task?")) return;
+    if (!await window.confirmAsync(t("estimate.unlink_this_milestone_from_its_task"))) return;
     await api.del("/subcon/wo/"+selWo.id+"/milestones/rate/"+msId+"/link").catch(()=>{});
     await loadLinkedTasksSub(selWo.id);
     await loadBillingLedger(selWo.id);
@@ -121,7 +122,7 @@ function TabSubcon({ projectId, project }) {
   };
 
   const deletePercentScheduleSub = async () => {
-    if (!await window.confirmAsync("Delete all % milestones?")) return;
+    if (!await window.confirmAsync(t("subcon.delete_all_milestones"))) return;
     await api.del("/subcon/wo/"+selWo.id+"/milestones/percent").catch(()=>{});
     await reloadWo();
   };
@@ -193,7 +194,7 @@ function TabSubcon({ projectId, project }) {
           .map((m, i) => ({ seq: i, name: m.name, cum_rate: parseFloat(m.cum_rate) })),
       })).filter(x => x.milestones.length > 0);
 
-      if (!items.length) { setSaving(false); return alert("Pick at least one WO item and add stages"); }
+      if (!items.length) { setSaving(false); return alert(t("subcon.pick_at_least_one_wo_item")); }
       if (selWo.billing_method !== "milestone_rate") {
         await api.put("/subcon/wo/"+selWo.id+"/billing-method", { billing_method: "milestone_rate" }, { timeoutMs: 30000 });
       }
@@ -202,7 +203,7 @@ function TabSubcon({ projectId, project }) {
     } else {
       const ms = msForm.pctMs.filter(m => m.name && m.pct)
         .map((m,i) => ({ seq:i, name:m.name, pct: parseFloat(m.pct) }));
-      if (!ms.length) { setSaving(false); return alert("Add at least one milestone"); }
+      if (!ms.length) { setSaving(false); return alert(t("estimate.add_at_least_one_milestone")); }
       if (selWo.billing_method !== "milestone_percent") {
         await api.put("/subcon/wo/"+selWo.id+"/billing-method", { billing_method: "milestone_percent" }, { timeoutMs: 30000 });
       }
@@ -270,7 +271,7 @@ function TabSubcon({ projectId, project }) {
       // CASE A: nothing
       if (!normalItems.length && !overItems.length) {
         setSaving(false); billSubmitRef.current = false;
-        return alert("Nothing to bill.");
+        return alert(t("subcon.nothing_to_bill"));
       }
       // CASE B: only normal (no over-billing)
       if (overItems.length === 0) {
@@ -280,7 +281,7 @@ function TabSubcon({ projectId, project }) {
       else if (normalItems.length === 0) {
         if (!over_bill_mode) {
           setSaving(false); billSubmitRef.current = false;
-          return alert("⚠ One or more milestones are fully billed but you've entered extra qty.\n\nTurn on Over-Billing Mode + add a reason to proceed.");
+          return alert(t("subcon.one_or_more_milestones_are_fully"));
         }
         res = await postOne({ ...base, items: overItems, over_bill_mode: 1, over_bill_reason });
       }
@@ -288,7 +289,7 @@ function TabSubcon({ projectId, project }) {
       else {
         if (!over_bill_mode) {
           setSaving(false); billSubmitRef.current = false;
-          return alert("⚠ Some quantities exceed WO remaining.\n\nTurn on Over-Billing Mode + add a reason to proceed.\n\nSystem will auto-split into 2 linked RA bills (WO portion + over-bill portion).");
+          return alert(t("subcon.some_quantities_exceed_wo_remaining_turn"));
         }
         const r1 = await postOne({ ...base, items: normalItems });
         if (!r1.success || !r1.data?.id) {
@@ -322,7 +323,7 @@ function TabSubcon({ projectId, project }) {
     const validItems = manualBillForm.items.filter(it =>
       it.description.trim() && parseFloat(it.qty) > 0 && parseFloat(it.rate) >= 0
     );
-    if (!validItems.length) return alert("Add at least one item with Description, Qty and Rate.");
+    if (!validItems.length) return alert(t("subcon.add_at_least_one_item_with"));
     setManualBillSaving(true);
     const res = await api.post("/subcon/ra-bills", {
       wo_id: selWo.id,
@@ -347,7 +348,7 @@ function TabSubcon({ projectId, project }) {
 
   // ── RECORD PAYMENT ──
   const submitPayment = async (billId) => {
-    if(!payForm.amount_paid) return alert("Amount required");
+    if(!payForm.amount_paid) return alert(t("estimate.amount_required"));
     setSaving(true);
     const res = await api.post("/subcon/payments",{
       bill_id: billId, wo_id: selWo.id,
@@ -370,11 +371,11 @@ function TabSubcon({ projectId, project }) {
       {/* LEFT — WO List */}
       <div style={{width:220,borderRight:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0}}>
         <div style={{padding:"10px 12px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontSize:11,fontWeight:700,color:T.t1}}>Work Orders ({wos.length})</span>
-          <button onClick={()=>setShowNewWO(true)} style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>+ New</button>
+          <span style={{fontSize:11,fontWeight:700,color:T.t1}}>{t("subcon.work_orders_wos", { wos: wos.length })}</span>
+          <button onClick={()=>setShowNewWO(true)} style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{t("subcon.new")}</button>
         </div>
-        {loading&&<div style={{textAlign:"center",padding:"60px 0",color:T.t4}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>}
-        {!loading&&wos.length===0&&<div style={{padding:"24px 12px",textAlign:"center",color:T.t4,fontSize:12}}>No work orders yet</div>}
+        {loading&&<div style={{textAlign:"center",padding:"60px 0",color:T.t4}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>{t("common.loading")}</div>}
+        {!loading&&wos.length===0&&<div style={{padding:"24px 12px",textAlign:"center",color:T.t4,fontSize:12}}>{t("subcon.no_work_orders_yet")}</div>}
         {wos.map(wo=>{
           const isSel=selWo?.id===wo.id;
           const stC=wo.status==="Active"?T.grn:wo.status==="Completed"?T.blu:T.t4;
@@ -382,7 +383,7 @@ function TabSubcon({ projectId, project }) {
             <div key={wo.id} onClick={()=>selectWo(wo)}
               style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1,background:isSel?"#EFF6FF":T.surfaceB,borderLeft:isSel?"3px solid "+T.blu:"3px solid transparent"}}>
               <div style={{fontSize:12,fontWeight:700,color:isSel?T.blu:T.t1,marginBottom:2}}>{wo.subcon_name}</div>
-              <div style={{fontSize:10,color:T.t4,marginBottom:4}}>{wo.subcon_category||"Civil"}</div>
+              <div style={{fontSize:10,color:T.t4,marginBottom:4}}>{wo.subcon_category||t("subcon.civil")}</div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span style={{fontSize:10,fontWeight:700,color:T.grn}}>{fmtC(wo.total_value)}</span>
                 <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:stC+"22",color:stC}}>{wo.status}</span>
@@ -398,7 +399,7 @@ function TabSubcon({ projectId, project }) {
         {!selWo&&(
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:T.t4,flexDirection:"column",gap:8}}>
             <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5}><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            <div style={{fontSize:13,color:T.t3}}>Select a work order</div>
+            <div style={{fontSize:13,color:T.t3}}>{t("subcon.select_a_work_order")}</div>
           </div>
         )}
 
@@ -420,19 +421,19 @@ function TabSubcon({ projectId, project }) {
                          : "#A78BFA",
                     padding:"1px 8px", borderRadius:4, fontWeight:700, fontSize:10,
                   }}>
-                    {selWo.billing_method==="milestone_rate" ? "MILESTONE (rate)"
-                      : selWo.billing_method==="milestone_percent" ? "MILESTONE (%)"
-                      : "MANUAL BILLING"}
+                    {selWo.billing_method==="milestone_rate" ? t("subcon.milestone_rate")
+                      : selWo.billing_method==="milestone_percent" ? t("subcon.milestone")
+                      : t("subcon.manual_billing")}
                   </span>
                 </div>
               </div>
               <div style={{display:"flex",gap:16,alignItems:"center"}}>
                 {summary&&[
-                  {l:"WO Value",v:fmtC(summary.wo_value),c:"#94A3B8"},
-                  {l:"Billed",v:fmtC(summary.total_billed),c:"#60A5FA"},
-                  {l:"Paid",v:fmtC(summary.total_paid),c:"#4ADE80"},
-                  {l:"Retention",v:fmtC(summary.retention_held),c:"#FCD34D"},
-                  {l:"Balance",v:fmtC(summary.balance),c:"#F87171"},
+                  {l:t("subcon.wo_value"),v:fmtC(summary.wo_value),c:"#94A3B8"},
+                  {l:t("common.billed"),v:fmtC(summary.total_billed),c:"#60A5FA"},
+                  {l:t("common.paid"),v:fmtC(summary.total_paid),c:"#4ADE80"},
+                  {l:t("common.retention_2"),v:fmtC(summary.retention_held),c:"#FCD34D"},
+                  {l:t("common.balance"),v:fmtC(summary.balance),c:"#F87171"},
                 ].map(s=>(
                   <div key={s.l} style={{textAlign:"right"}}>
                     <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",textTransform:"uppercase"}}>{s.l}</div>
@@ -441,7 +442,7 @@ function TabSubcon({ projectId, project }) {
                 ))}
                 <button onClick={()=>setShowEditWO(true)}
                   style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"white",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0}}>
-                  ✏ Edit
+                 {t("common.edit")}
                 </button>
               </div>
             </div>
@@ -450,10 +451,10 @@ function TabSubcon({ projectId, project }) {
           {/* Sub Tabs */}
           <div style={{display:"flex",borderBottom:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0,alignItems:"center"}}>
             {[
-              {id:"wo",label:"Work Order"},
-              {id:"schedule",label:"Payment Schedule"},
-              {id:"bills",label:`RA Bills (${bills.length})`},
-              {id:"pay",label:"Payments"},
+              {id:"wo",label:t("subcon.work_order")},
+              {id:"schedule",label:t("estimate.payment_schedule")},
+              {id:"bills",label:t("subcon.ra_bills_length", { length: bills.length })},
+              {id:"pay",label:t("common.payments")},
               {id:"amend",label:"Amendments"+(amendments.filter(a=>a.status==="Pending").length>0 ? ` 🔴${amendments.filter(a=>a.status==="Pending").length}` : ` (${amendments.length})`)},
             ].map(t=>(
               <button key={t.id} onClick={()=>setSubTab(t.id)}
@@ -477,13 +478,13 @@ function TabSubcon({ projectId, project }) {
                   }}
                   disabled={linkedTasksLoading}
                   style={{background:"white",color:T.t3,border:"1px solid "+T.b1,borderRadius:14,padding:"4px 10px",fontSize:10.5,fontWeight:600,cursor:linkedTasksLoading?"default":"pointer",display:"flex",alignItems:"center",gap:4,marginRight:4}}>
-                  {linkedTasksLoading ? "Refreshing…" : "↻ Refresh progress"}
+                  {linkedTasksLoading ? t("estimate.refreshing") : t("estimate.refresh_progress")}
                 </button>
               )}
               <button onClick={async()=>{
                   const next = !selWo.auto_bill_on_complete;
                   if (next && !await window.confirmAsync(
-                    "Turn ON auto-billing?\n\nWhen a task linked to a milestone is marked Complete, the system will auto-create a DRAFT RA bill.\n\nDrafts need your review before paying. You can turn this off anytime."
+                    t("subcon.turn_on_auto_billing_when_a")
                   )) return;
                   const r = await api.patch("/subcon/wo/"+selWo.id+"/auto-bill", { enabled: next }).catch(()=>({success:false}));
                   if (!r?.success) { alert(r?.message || "Failed"); return; }
@@ -501,37 +502,35 @@ function TabSubcon({ projectId, project }) {
                   color:      selWo?.auto_bill_on_complete ? "#15803D" : T.t3,
                   border:"1px solid " + (selWo?.auto_bill_on_complete ? "#86EFAC" : T.b1),
                   borderRadius:14,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5,marginRight:4,
-                }}>
-                🤖 Auto-bill {selWo?.auto_bill_on_complete ? "ON" : "OFF"}
-              </button>
+                }}>{t("subcon.auto_bill_selwo", { selWo: selWo?.auto_bill_on_complete ? "ON" : "OFF" })}</button>
               <div style={{position:"relative",marginRight:8}}>
                 <button onClick={()=>setMsChooserOpen(o=>!o)}
                   style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                  + Set Schedule ▾
+                 {t("estimate.set_schedule")}
                 </button>
                 {msChooserOpen && (<>
                   <div onClick={()=>setMsChooserOpen(false)} style={{position:"fixed",inset:0,zIndex:200}}/>
                   <div style={{position:"absolute",top:30,right:0,width:270,background:"white",border:"1px solid "+T.b1,borderRadius:8,boxShadow:"0 12px 32px rgba(0,0,0,0.18)",zIndex:201,overflow:"hidden"}}>
                     <div style={{padding:"8px 12px",fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",borderBottom:"1px solid "+T.b1,background:T.surfaceB}}>
-                      Choose billing mode
+                     {t("estimate.choose_billing_mode")}
                     </div>
                     <div onClick={()=>{ setMsForm(p=>({...p,kind:"rate",wo_item_id:null})); setShowSetMs(true); setMsChooserOpen(false); }}
                       style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
                       onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"} onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                      <div style={{fontSize:12,fontWeight:700,color:T.t1}}>📋 Item-wise</div>
-                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>Define billing stages per WO item (₹/unit)</div>
+                      <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("estimate.item_wise")}</div>
+                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{t("subcon.define_billing_stages_per_wo_item")}</div>
                     </div>
                     <div onClick={()=>{ setMsForm(p=>({...p,kind:"percent"})); setShowSetMs(true); setMsChooserOpen(false); }}
                       style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
                       onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"} onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                      <div style={{fontSize:12,fontWeight:700,color:T.t1}}>📊 % of WO Value</div>
-                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>Define milestones as % of total WO value</div>
+                      <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("subcon.of_wo_value")}</div>
+                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{t("subcon.define_milestones_as_of_total_wo")}</div>
                     </div>
-                    <div onClick={async()=>{ setMsChooserOpen(false); if(selWo.billing_method==="manual") return; if(!await window.confirmAsync("Switch to Manual mode?")) return; await switchBillingMethod("manual"); }}
+                    <div onClick={async()=>{ setMsChooserOpen(false); if(selWo.billing_method==="manual") return; if(!await window.confirmAsync(t("subcon.switch_to_manual_mode"))) return; await switchBillingMethod("manual"); }}
                       style={{padding:"10px 12px",cursor:"pointer"}}
                       onMouseEnter={e=>e.currentTarget.style.background="#FAF5FF"} onMouseLeave={e=>e.currentTarget.style.background="white"}>
-                      <div style={{fontSize:12,fontWeight:700,color:T.t1}}>✍️ Manual (Cumulative)</div>
-                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>No preset stages — bill cumulative qty per item</div>
+                      <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("subcon.manual_cumulative")}</div>
+                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{t("subcon.no_preset_stages_bill_cumulative_qty")}</div>
                     </div>
                   </div>
                 </>)}
@@ -545,8 +544,8 @@ function TabSubcon({ projectId, project }) {
             {subTab==="wo"&&(
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                  <div style={{fontSize:11,fontWeight:700,color:T.t2}}>Retention: {selWo.retention_pct}% · TDS: {selWo.tds_pct}%</div>
-                  <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:T.grnL,color:T.grn}}>Total: {fmtC(selWo.total_value)}</span>
+                  <div style={{fontSize:11,fontWeight:700,color:T.t2}}>{t("subcon.retention_retention_pct_tds_tds_pct", { retention_pct: selWo.retention_pct, tds_pct: selWo.tds_pct })}</div>
+                  <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:T.grnL,color:T.grn}}>{t("subcon.total_fmtc", { fmtC: fmtC(selWo.total_value) })}</span>
                 </div>
                 {/* WO items table - load from API */}
                 <WoItemsTable woId={selWo.id} fmtC={fmtC}/>
@@ -559,8 +558,8 @@ function TabSubcon({ projectId, project }) {
                 {/* Manual billing message */}
                 {(!selWo.billing_method || selWo.billing_method==="manual") && (
                   <div style={{padding:"24px",textAlign:"center",color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8}}>
-                    <div style={{fontSize:13,marginBottom:6}}>This WO uses <b>manual</b> billing (per-item cumulative qty).</div>
-                    <div style={{fontSize:11.5,color:T.t4}}>Click <b>+ Set Schedule</b> to switch to milestone-based (item-wise rate or % of WO value).</div>
+                    <div style={{fontSize:13,marginBottom:6}}>{t("subcon.this_wo_uses")} <b>manual</b> {t("estimate.billing_per_item_cumulative_qty")}</div>
+                    <div style={{fontSize:11.5,color:T.t4}}>{t("common.click")} <b>{t("estimate.set_schedule_2")}</b> {t("subcon.to_switch_to_milestone_based_item")}</div>
                   </div>
                 )}
 
@@ -574,7 +573,7 @@ function TabSubcon({ projectId, project }) {
                   );
                   if (!itemsWithMs.size) return (
                     <div style={{padding:"24px",textAlign:"center",color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8}}>
-                      <div style={{fontSize:12}}>No milestones set yet. Click <b>+ Set Schedule → Item-wise</b> to add stages.</div>
+                      <div style={{fontSize:12}}>{t("subcon.no_milestones_set_yet_click")} <b>{t("subcon.set_schedule_item_wise")}</b> {t("subcon.to_add_stages")}</div>
                     </div>
                   );
 
@@ -609,12 +608,12 @@ function TabSubcon({ projectId, project }) {
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
                           <div>
                             <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{itemDesc}</span>
-                            {boqQty > 0 && <span style={{fontSize:10.5,color:T.t4,marginLeft:8}}>· {boqQty} {ledItem?.unit||""} @ {fmtC(boqRate)}/unit = {fmtC(boqValue)}</span>}
+                            {boqQty > 0 && <span style={{fontSize:10.5,color:T.t4,marginLeft:8}}>{t("subcon.boqqty_leditem_fmtc_unit_fmtc2", { boqQty, ledItem: ledItem?.unit||"", fmtC: fmtC(boqRate), fmtC2: fmtC(boqValue) })}</span>}
                           </div>
                           <div style={{display:"flex",gap:5}}>
-                            <button onClick={()=>{ setMsForm(p=>({...p,kind:"rate",wo_item_id:item_id})); setShowSetMs(true); }} title="Edit schedule"
+                            <button onClick={()=>{ setMsForm(p=>({...p,kind:"rate",wo_item_id:item_id})); setShowSetMs(true); }} title={t("estimate.edit_schedule")}
                               style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>✎</button>
-                            <button onClick={()=>deleteRateScheduleSub(item_id, itemDesc)} title="Delete"
+                            <button onClick={()=>deleteRateScheduleSub(item_id, itemDesc)} title={t("common.delete")}
                               style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>🗑</button>
                           </div>
                         </div>
@@ -623,9 +622,9 @@ function TabSubcon({ projectId, project }) {
                           <div style={{padding:"8px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
                             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:6}}>
                               {[
-                                {l:"Total (WO)",v:`${boqQty} ${ledItem.unit||""}`,v2:fmtC(boqValue),  c:T.t1},
-                                {l:"Billed",    v:`${billedQty} ${ledItem.unit||""}`,v2:fmtC(billedVal),c:billedQty>0?T.amb:T.t4},
-                                {l:"Remaining", v:`${remainQty} ${ledItem.unit||""}`,v2:fmtC(remainVal),c:remainQty>0?T.grn:T.t4},
+                                {l:t("subcon.total_wo"),v:`${boqQty} ${ledItem.unit||""}`,v2:fmtC(boqValue),  c:T.t1},
+                                {l:t("common.billed"),    v:`${billedQty} ${ledItem.unit||""}`,v2:fmtC(billedVal),c:billedQty>0?T.amb:T.t4},
+                                {l:t("estimate.remaining"), v:`${remainQty} ${ledItem.unit||""}`,v2:fmtC(remainVal),c:remainQty>0?T.grn:T.t4},
                               ].map(s=>(
                                 <div key={s.l}>
                                   <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>{s.l}</div>
@@ -639,7 +638,7 @@ function TabSubcon({ projectId, project }) {
                                 <div style={{width:pctBilled+"%",height:"100%",background:isFull?T.amb:(pctBilled>=50?T.blu:T.grn),transition:"width .3s"}}/>
                               </div>
                               <span style={{fontSize:10.5,fontWeight:700,color:isFull?T.amb:T.t3,minWidth:42,textAlign:"right"}}>
-                                {isFull ? "✓ FULL" : pctBilled.toFixed(0)+"%"}
+                                {isFull ? t("estimate.full") : pctBilled.toFixed(0)+"%"}
                               </span>
                             </div>
                           </div>
@@ -675,10 +674,10 @@ function TabSubcon({ projectId, project }) {
                                       background:mSt==="fully_billed"?"#FEF3C7":T.grnL,
                                       color:mSt==="fully_billed"?"#92400E":T.grn,
                                       border:"1px solid "+(mSt==="fully_billed"?"#FCD34D":T.grnM)}}>
-                                      {mSt==="fully_billed"?"✓ FULLY BILLED":"PARTIAL"}
+                                      {mSt==="fully_billed"?t("estimate.fully_billed"):"PARTIAL"}
                                     </span>
-                                    <span style={{fontSize:10.5,color:T.t3}}>Billed <b style={{color:T.amb}}>{mBill}</b> = <b style={{color:T.amb}}>{fmtC(mBill*mRate)}</b></span>
-                                    {mRem>0&&<span style={{fontSize:10.5,color:T.t3}}>· Remaining <b style={{color:T.grn}}>{mRem}</b> = <b style={{color:T.grn}}>{fmtC(mRem*mRate)}</b></span>}
+                                    <span style={{fontSize:10.5,color:T.t3}}>{t("common.billed")} <b style={{color:T.amb}}>{mBill}</b> = <b style={{color:T.amb}}>{fmtC(mBill*mRate)}</b></span>
+                                    {mRem>0&&<span style={{fontSize:10.5,color:T.t3}}>{t("subcon.remaining")} <b style={{color:T.grn}}>{mRem}</b> = <b style={{color:T.grn}}>{fmtC(mRem*mRate)}</b></span>}
                                   </div>
                                 )}
                                 <div style={{paddingLeft:26,paddingTop:4,paddingBottom:2,display:"flex",alignItems:"center",gap:8}}>
@@ -688,15 +687,15 @@ function TabSubcon({ projectId, project }) {
                                       border:"1px solid "+(linked.eligible?"#86EFAC":T.bluM),
                                       fontSize:10.5,fontWeight:600,color:linked.eligible?"#15803D":T.blu}}>
                                       🔗 {linked.task_name}
-                                      <span style={{color:linked.eligible?"#15803D":T.t3,fontWeight:500}}>· {linked.progress}% / trigger @ {linked.trigger_pct}%</span>
-                                      {linked.eligible&&<span style={{fontSize:10}}>✓ ready to bill</span>}
+                                      <span style={{color:linked.eligible?"#15803D":T.t3,fontWeight:500}}>{t("subcon.progress_trigger_trigger_pct", { progress: linked.progress, trigger_pct: linked.trigger_pct })}</span>
+                                      {linked.eligible&&<span style={{fontSize:10}}>{t("estimate.ready_to_bill")}</span>}
                                     </span>
                                     <button onClick={()=>openTaskPickerSub(m.id)} style={{background:"none",border:"none",color:T.t3,fontSize:11,cursor:"pointer",padding:"0 4px"}}>✎</button>
                                     <button onClick={()=>unlinkTaskSub(m.id)} style={{background:"none",border:"none",color:T.red,fontSize:12,cursor:"pointer",padding:"0 4px"}}>×</button>
                                   </>) : (
                                     <button onClick={()=>openTaskPickerSub(m.id)}
                                       style={{background:"transparent",border:"1px dashed "+T.b1,color:T.t3,borderRadius:14,padding:"3px 10px",fontSize:10.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
-                                      🔗 Link to task
+                                     {t("estimate.link_to_task")}
                                     </button>
                                   )}
                                 </div>
@@ -767,7 +766,7 @@ function TabSubcon({ projectId, project }) {
                     {woUnsectioned.length > 0 && (
                       <div style={{marginBottom:16}}>
                         <div style={{padding:"8px 14px",background:T.slt,borderRadius:"6px 6px 0 0",display:"flex",justifyContent:"space-between"}}>
-                          <span style={{fontSize:12,fontWeight:700,color:"white",textTransform:"uppercase",letterSpacing:".5px"}}>Other Items</span>
+                          <span style={{fontSize:12,fontWeight:700,color:"white",textTransform:"uppercase",letterSpacing:".5px"}}>{t("subcon.other_items")}</span>
                         </div>
                         <div style={{border:"1px solid "+T.b1,borderTop:"none",borderRadius:"0 0 6px 6px",padding:"10px 10px 4px"}}>
                           {woUnsectioned.map(it => renderItemCard(it.id, woMilestones.rate_by_item[it.id]||[]))}
@@ -781,17 +780,17 @@ function TabSubcon({ projectId, project }) {
                 {selWo.billing_method==="milestone_percent" && (
                   <div style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Payment Milestones (% of WO value)</div>
+                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("subcon.payment_milestones_of_wo_value")}</div>
                       {woMilestones.percent.length > 0 && (
                         <div style={{display:"flex",gap:5}}>
-                          <button onClick={()=>{ setMsForm(p=>({...p,kind:"percent"})); setShowSetMs(true); }} title="Edit"
+                          <button onClick={()=>{ setMsForm(p=>({...p,kind:"percent"})); setShowSetMs(true); }} title={t("common.edit_2")}
                             style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>✎</button>
-                          <button onClick={deletePercentScheduleSub} title="Delete"
+                          <button onClick={deletePercentScheduleSub} title={t("common.delete")}
                             style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>🗑</button>
                         </div>
                       )}
                     </div>
-                    {woMilestones.percent.length === 0 && <div style={{fontSize:11.5,color:T.t4,fontStyle:"italic"}}>No milestones set. Use + Set Schedule.</div>}
+                    {woMilestones.percent.length === 0 && <div style={{fontSize:11.5,color:T.t4,fontStyle:"italic"}}>{t("subcon.no_milestones_set_use_set_schedule")}</div>}
                     {woMilestones.percent.length > 0 && (
                       <div style={{display:"grid",gridTemplateColumns:"30px 1fr 80px 130px",gap:6,padding:"4px 0",borderBottom:"1px solid "+T.b1,marginBottom:4}}>
                         {["#","Milestone","%","Amount"].map(h=><span key={h} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
@@ -817,9 +816,9 @@ function TabSubcon({ projectId, project }) {
                                 background:mSt==="fully_billed"?"#FEF3C7":T.grnL,
                                 color:mSt==="fully_billed"?"#92400E":T.grn,
                                 border:"1px solid "+(mSt==="fully_billed"?"#FCD34D":T.grnM)}}>
-                                {mSt==="fully_billed"?"✓ FULLY BILLED":"PARTIAL"}
+                                {mSt==="fully_billed"?t("estimate.fully_billed"):"PARTIAL"}
                               </span>
-                              <span style={{fontSize:10.5,color:T.t3}}>Billed <b style={{color:T.amb}}>{fmtC(billAmt)}</b>{remAmt>0 && <> · Remaining <b style={{color:T.grn}}>{fmtC(remAmt)}</b></>}</span>
+                              <span style={{fontSize:10.5,color:T.t3}}><Rich k="subcon.billed_fmtc" params={{ fmtC: fmtC(billAmt) }} />{remAmt>0 && <> {t("subcon.remaining")} <b style={{color:T.grn}}>{fmtC(remAmt)}</b></>}</span>
                             </div>
                           )}
                         </div>
@@ -836,14 +835,14 @@ function TabSubcon({ projectId, project }) {
                 <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:12}}>
                   <button onClick={()=>{setManualBillForm({bill_date:localYMD(),remark:"",items:[{description:"",qty:"",rate:""}]});setShowManualRaBill(true);}}
                     style={{background:"white",color:"#7C3AED",border:"2px dashed #7C3AED",borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                    📝 Manual Bill
+                   {t("subcon.manual_bill")}
                   </button>
                   <button onClick={()=>setShowNewBill(true)}
                     style={{background:T.blu,color:"white",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                    + New RA Bill
+                   {t("subcon.new_ra_bill")}
                   </button>
                 </div>
-                {bills.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No bills raised yet</div>}
+                {bills.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("subcon.no_bills_raised_yet")}</div>}
                 {bills.map(b=>{
                   const stC=b.status==="Paid"?T.grn:b.status==="Approved"?T.blu:b.status==="Submitted"?T.amb:b.status==="Draft"?"#7C3AED":T.t4;
                   const isAutoDraft = b.source==="auto" && b.status==="Draft";
@@ -852,20 +851,20 @@ function TabSubcon({ projectId, project }) {
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                           <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{b.bill_no}</span>
-                          {b.source==="auto" && <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#EDE9FE",color:"#6D28D9",border:"1px solid #C4B5FD"}}>🤖 AUTO</span>}
-                          {b.source==="free_form" && <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#F3E8FF",color:"#7C3AED",border:"1px solid #C4B5FD"}}>📝 MANUAL</span>}
-                          {b.over_bill_mode==1 && <span title={b.over_bill_reason||"Over-bill RA bill"} style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#FEE2E2",color:"#991B1B",border:"1px solid #FCA5A5"}}>🔴 OVER-BILL</span>}
+                          {b.source==="auto" && <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#EDE9FE",color:"#6D28D9",border:"1px solid #C4B5FD"}}>{t("estimate.auto")}</span>}
+                          {b.source==="free_form" && <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#F3E8FF",color:"#7C3AED",border:"1px solid #C4B5FD"}}>{t("subcon.manual")}</span>}
+                          {b.over_bill_mode==1 && <span title={b.over_bill_reason||t("subcon.over_bill_ra_bill")} style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#FEE2E2",color:"#991B1B",border:"1px solid #FCA5A5"}}>{t("estimate.over_bill")}</span>}
                           <span style={{fontSize:10.5,color:T.t4}}>{b.bill_date?new Date(b.bill_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</span>
                         </div>
                         <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stC+"22",color:stC}}>{b.status}</span>
                       </div>
                       {isAutoDraft && (
                         <div style={{padding:"7px 10px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:6,marginBottom:8,fontSize:11,color:"#5B21B6",lineHeight:1.45}}>
-                          ⏳ Auto-generated from task progress. Review and confirm before submitting.
+                         {t("subcon.auto_generated_from_task_progress_review")}
                         </div>
                       )}
                       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
-                        {[{l:"Gross",v:fmtC(b.gross_amount),c:T.t1},{l:"Retention",v:fmtC(b.retention_amt),c:T.amb},{l:"TDS",v:fmtC(b.tds_amt),c:T.red},{l:"Net Payable",v:fmtC(b.net_payable),c:T.grn}].map(s=>(
+                        {[{l:t("common.gross"),v:fmtC(b.gross_amount),c:T.t1},{l:t("common.retention_2"),v:fmtC(b.retention_amt),c:T.amb},{l:"TDS",v:fmtC(b.tds_amt),c:T.red},{l:t("subcon.net_payable"),v:fmtC(b.net_payable),c:T.grn}].map(s=>(
                           <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:6,padding:"6px 8px"}}>
                             <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{s.l}</div>
                             <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
@@ -873,9 +872,9 @@ function TabSubcon({ projectId, project }) {
                         ))}
                       </div>
                       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
-                        {b.status==="Draft"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Confirm & Submit</button>}
-                        {b.status==="Submitted"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Approve</button>}
-                        {(b.status==="Approved"||b.status==="Submitted")&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>₹ Record Payment</button>}
+                        {b.status==="Draft"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
+                        {b.status==="Submitted"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
+                        {(b.status==="Approved"||b.status==="Submitted")&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.record_payment")}</button>}
                         {/* Edit + Delete (not for Paid) */}
                         {b.status!=="Paid"&&(
                           <button onClick={async()=>{
@@ -887,12 +886,12 @@ function TabSubcon({ projectId, project }) {
                               }
                             }}
                             style={{padding:"6px 12px",borderRadius:5,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                            ✏️ Edit
+                           {t("subcon.edit")}
                           </button>
                         )}
                         {b.status!=="Paid"&&(
                           <button onClick={async()=>{
-                              if(!await window.confirmAsync(`Delete ${b.bill_no}? This will permanently remove the bill.`)) return;
+                              if(!await window.confirmAsync(t("subcon.delete_bill_no_this_will_permanently", { bill_no: b.bill_no }))) return;
                               const res = await api.del("/subcon/ra-bills/"+b.id);
                               if(res.success){
                                 selectWo(selWo); // reload bills
@@ -901,7 +900,7 @@ function TabSubcon({ projectId, project }) {
                               }
                             }}
                             style={{padding:"6px 12px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                            🗑 Delete
+                           {t("transaction_detail.delete")}
                           </button>
                         )}
                       </div>
@@ -918,7 +917,7 @@ function TabSubcon({ projectId, project }) {
                         style={{background:"none",border:"none",color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:4}}
                       >
                         <span style={{fontSize:11}}>›</span>
-                        View Item Detail
+                       {t("subcon.view_item_detail")}
                       </button>
                     </div>
                   );
@@ -937,7 +936,7 @@ function TabSubcon({ projectId, project }) {
                       <div style={{background:"#0891B2",padding:"14px 18px",flexShrink:0,color:"white"}}>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                           <div>
-                            <div style={{fontSize:10,fontWeight:700,opacity:0.7,textTransform:"uppercase",letterSpacing:"0.5px"}}>RA Bill · Item Detail</div>
+                            <div style={{fontSize:10,fontWeight:700,opacity:0.7,textTransform:"uppercase",letterSpacing:"0.5px"}}>{t("subcon.ra_bill_item_detail")}</div>
                             <div style={{fontSize:17,fontWeight:700,marginTop:2}}>{b.bill_no}</div>
                           </div>
                           <button onClick={()=>setExpandedBill(null)} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"6px 9px",borderRadius:6,fontSize:13,fontWeight:700}}>✕</button>
@@ -952,10 +951,10 @@ function TabSubcon({ projectId, project }) {
                         {/* KPI tiles */}
                         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
                           {[
-                            {l:"Gross",       v:fmtC(b.gross_amount),  c:T.t1},
-                            {l:"Retention",   v:fmtC(b.retention_amt), c:T.amb},
+                            {l:t("common.gross"),       v:fmtC(b.gross_amount),  c:T.t1},
+                            {l:t("common.retention_2"),   v:fmtC(b.retention_amt), c:T.amb},
                             {l:"TDS",         v:fmtC(b.tds_amt),       c:T.red},
-                            {l:"Net Payable", v:fmtC(b.net_payable),   c:T.grn},
+                            {l:t("subcon.net_payable"), v:fmtC(b.net_payable),   c:T.grn},
                           ].map(s=>(
                             <div key={s.l} style={{textAlign:"center",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"10px 8px"}}>
                               <div style={{fontSize:9,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:3}}>{s.l}</div>
@@ -967,13 +966,13 @@ function TabSubcon({ projectId, project }) {
                         {b.over_bill_mode==1 && (
                           <div style={{margin:"0 0 12px",padding:"12px 14px",borderRadius:8,background:"#FEF2F2",border:"1px solid #FCA5A5"}}>
                             <div style={{fontSize:12,fontWeight:800,color:"#991B1B",letterSpacing:".3px",textTransform:"uppercase",marginBottom:5,display:"flex",alignItems:"center",gap:6}}>
-                              🔴 OVER-BILL RA BILL
+                             {t("subcon.over_bill_ra_bill_2")}
                             </div>
                             <div style={{fontSize:11.5,color:"#7F1D1D",lineHeight:1.5}}>
-                              <b>Reason:</b> {b.over_bill_reason || "(no reason recorded)"}
+                              <b>{t("common.reason_2")}</b> {b.over_bill_reason || t("estimate.no_reason_recorded")}
                             </div>
                             <div style={{fontSize:10,color:"#991B1B",marginTop:6,fontStyle:"italic"}}>
-                              Quantities in this bill exceed the Work Order scope. Approved by project admin.
+                             {t("subcon.quantities_in_this_bill_exceed_the")}
                             </div>
                           </div>
                         )}
@@ -987,11 +986,11 @@ function TabSubcon({ projectId, project }) {
                           {!items && (
                             <div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:12}}>
                               <div style={{width:22,height:22,border:"2px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
-                              Loading…
+                             {t("common.loading_2")}
                             </div>
                           )}
                           {items && items.length===0 && (
-                            <div style={{textAlign:"center",padding:"22px 0",color:T.t4,fontSize:12}}>No item breakdown</div>
+                            <div style={{textAlign:"center",padding:"22px 0",color:T.t4,fontSize:12}}>{t("subcon.no_item_breakdown")}</div>
                           )}
                           {(items||[]).map(it=>{
                             const isFree = !it.wo_item_id;
@@ -1009,14 +1008,14 @@ function TabSubcon({ projectId, project }) {
                           })}
                           {items && items.length>0 && (
                             <div style={{display:"grid",gridTemplateColumns:"2fr 50px 64px 64px 64px 70px 80px",padding:"9px 10px",gap:6,background:T.surfaceB,borderTop:`1.5px solid ${T.b2}`}}>
-                              <div style={{fontSize:11.5,fontWeight:700,color:T.t1,gridColumn:"1/7"}}>Total</div>
+                              <div style={{fontSize:11.5,fontWeight:700,color:T.t1,gridColumn:"1/7"}}>{t("common.total")}</div>
                               <div style={{fontSize:12.5,fontWeight:800,color:T.grn,textAlign:"right"}}>{fmtC(b.gross_amount)}</div>
                             </div>
                           )}
                         </div>
                         {b.remark && (
                           <div style={{marginTop:14,padding:"10px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:12,color:T.t2}}>
-                            <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:3}}>Remarks</div>
+                            <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:3}}>{t("common.remarks")}</div>
                             {b.remark}
                           </div>
                         )}
@@ -1108,7 +1107,7 @@ function TabSubcon({ projectId, project }) {
           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:640,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
             {/* Header */}
             <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Payment Schedule Setup</div>
+              <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{t("estimate.payment_schedule_setup")}</div>
               <button onClick={()=>setShowSetMs(false)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
             </div>
             {/* Body */}
@@ -1116,9 +1115,9 @@ function TabSubcon({ projectId, project }) {
               {/* Mode tabs */}
               <div style={{display:"flex",gap:8,marginBottom:14}}>
                 <button onClick={()=>setMsForm(p=>({...p,kind:"rate"}))}
-                  style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="rate"?T.blu:T.surfaceB,color:msForm.kind==="rate"?"white":T.t2,border:"1px solid "+(msForm.kind==="rate"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>📋 Item-wise</button>
+                  style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="rate"?T.blu:T.surfaceB,color:msForm.kind==="rate"?"white":T.t2,border:"1px solid "+(msForm.kind==="rate"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>{t("estimate.item_wise")}</button>
                 <button onClick={()=>setMsForm(p=>({...p,kind:"percent"}))}
-                  style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="percent"?T.blu:T.surfaceB,color:msForm.kind==="percent"?"white":T.t2,border:"1px solid "+(msForm.kind==="percent"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>📊 % of WO Value</button>
+                  style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="percent"?T.blu:T.surfaceB,color:msForm.kind==="percent"?"white":T.t2,border:"1px solid "+(msForm.kind==="percent"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>{t("subcon.of_wo_value")}</button>
               </div>
 
               {/* ── ITEM-WISE MODE ── */}
@@ -1127,18 +1126,16 @@ function TabSubcon({ projectId, project }) {
                 return (<>
                   {pickedItems.length === 0 ? (
                     <div style={{padding:"22px 16px",background:T.surfaceB,border:"1.5px dashed "+T.b1,borderRadius:8,textAlign:"center",marginBottom:12}}>
-                      <div style={{fontSize:12.5,color:T.t3,marginBottom:8}}>No items picked yet</div>
+                      <div style={{fontSize:12.5,color:T.t3,marginBottom:8}}>{t("estimate.no_items_picked_yet")}</div>
                       <button onClick={()=>{ setWoItemPickerSearch(""); setWoItemPickerOpen(true); }}
                         style={{background:T.blu,color:"white",border:"none",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                        📋 Pick Items from WO
+                       {t("subcon.pick_items_from_wo")}
                       </button>
                     </div>
                   ) : (
                     <div style={{marginBottom:12}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:8}}>
-                        <span style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
-                          Picked Items ({pickedItems.length})
-                        </span>
+                        <span style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>{t("subcon.picked_items_pickeditems", { pickedItems: pickedItems.length })}</span>
                         <div style={{display:"flex",gap:6}}>
                           <button onClick={()=>{
                               setMsForm(p => {
@@ -1149,13 +1146,13 @@ function TabSubcon({ projectId, project }) {
                                 return { ...p, itemStages: next };
                               });
                             }}
-                            title="Each item → 1 milestone at full rate"
+                            title={t("subcon.each_item_1_milestone_at_full")}
                             style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #FCD34D",borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                            ✓ All = 1 milestone each
+                           {t("estimate.all_1_milestone_each")}
                           </button>
                           <button onClick={()=>{ setWoItemPickerSearch(""); setWoItemPickerOpen(true); }}
                             style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                            + Pick More
+                           {t("estimate.pick_more")}
                           </button>
                         </div>
                       </div>
@@ -1178,10 +1175,8 @@ function TabSubcon({ projectId, project }) {
                               <span style={{width:20,height:20,borderRadius:"50%",background:T.blu,color:"white",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{idx+1}</span>
                               <div style={{flex:1,minWidth:0}}>
                                 <div style={{fontSize:12,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</div>
-                                <div style={{fontSize:10,color:T.t4,marginTop:1}}>
-                                  Item rate <b style={{color:T.t2}}>₹{itemRate}/unit</b> × {itemQty} {it.unit||""} = <b style={{color:T.t2}}>{fmtC(itemTotal)}</b>
-                                  {filledCount > 0 && <span style={{color:T.grn,marginLeft:6,fontWeight:600}}>· {filledCount} stage{filledCount>1?"s":""}</span>}
-                                  {filledCount > 0 && balanced && <span style={{color:T.grn,marginLeft:6,fontWeight:600}}>✓ balanced</span>}
+                                <div style={{fontSize:10,color:T.t4,marginTop:1}}><Rich k="subcon.item_rate_itemrate_unit_itemqty_it" params={{ itemRate, itemQty, it: it.unit||"", fmtC: fmtC(itemTotal) }} />{filledCount > 0 && <span style={{color:T.grn,marginLeft:6,fontWeight:600}}>· {filledCount} stage{filledCount>1?"s":""}</span>}
+                                  {filledCount > 0 && balanced && <span style={{color:T.grn,marginLeft:6,fontWeight:600}}>{t("estimate.balanced")}</span>}
                                 </div>
                               </div>
                               <button onClick={(e)=>{ e.stopPropagation(); removePicked(it.id); }}
@@ -1205,10 +1200,10 @@ function TabSubcon({ projectId, project }) {
                                       <span style={{fontSize:11,color:T.t4}}>{mi+1}</span>
                                       <input value={m.name}
                                         onChange={e=>patchItemStages(it.id, arr=>{ const n=[...arr]; n[mi]={...n[mi],name:e.target.value}; return n; })}
-                                        placeholder="e.g. Footing" style={{...inpStyle,padding:"5px 8px",fontSize:11.5}}/>
+                                        placeholder={t("subcon.e_g_footing")} style={{...inpStyle,padding:"5px 8px",fontSize:11.5}}/>
                                       <input type="number" value={m.cum_rate||""}
                                         onChange={e=>patchItemStages(it.id, arr=>{ const n=[...arr]; n[mi]={...n[mi],cum_rate:e.target.value}; return n; })}
-                                        placeholder={"₹/unit (cum)"} style={{...inpStyle,padding:"5px 8px",fontSize:11.5,textAlign:"right"}}/>
+                                        placeholder={t("subcon.unit_cum")} style={{...inpStyle,padding:"5px 8px",fontSize:11.5,textAlign:"right"}}/>
                                       <span style={{fontSize:11.5,fontWeight:700,color:T.grn,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{stageVal>0?fmtC(stageVal):"—"}</span>
                                       <button onClick={()=>patchItemStages(it.id, arr=>{ const n=arr.filter((_,i)=>i!==mi); return n.length?n:[{seq:0,name:"",cum_rate:""}]; })}
                                         style={{background:T.redL,color:T.red,border:"none",borderRadius:4,fontSize:13,cursor:"pointer"}}>×</button>
@@ -1220,21 +1215,19 @@ function TabSubcon({ projectId, project }) {
                                   background:balanced?"#ECFDF5":T.surfaceB,
                                   border:"1px solid "+(balanced?T.grnM:T.b1),
                                   display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:11}}>
-                                  <span style={{color:balanced?"#065F46":T.t3,fontWeight:600}}>
-                                    Last cum_rate: {fmtC(lastCum)} / {fmtC(itemRate)}
-                                  </span>
+                                  <span style={{color:balanced?"#065F46":T.t3,fontWeight:600}}>{t("subcon.last_cum_rate_fmtc_fmtc2", { fmtC: fmtC(lastCum), fmtC2: fmtC(itemRate) })}</span>
                                   <span style={{fontWeight:700,color:balanced?T.grn:T.amb}}>
-                                    {balanced ? "✓ Matches item rate" : `Diff: ${fmtC(Math.abs(lastCum - itemRate))}`}
+                                    {balanced ? t("subcon.matches_item_rate") : `Diff: ${fmtC(Math.abs(lastCum - itemRate))}`}
                                   </span>
                                 </div>
                                 <div style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
                                   <button onClick={()=>patchItemStages(it.id, arr=>[...arr, {seq:arr.length, name:"", cum_rate:""}])}
                                     style={{background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:4,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
-                                    + Add Stage
+                                   {t("subcon.add_stage")}
                                   </button>
                                   <button onClick={()=>patchItemStages(it.id, ()=>[{seq:0,name:"Complete",cum_rate:String(itemRate)}])}
                                     style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #FCD34D",borderRadius:4,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
-                                    ✓ Use whole item as 1 milestone
+                                   {t("estimate.use_whole_item_as_1_milestone")}
                                   </button>
                                   {templates.length > 0 && (
                                     <select onChange={async e=>{
@@ -1244,7 +1237,7 @@ function TabSubcon({ projectId, project }) {
                                         setShowSetMs(false);
                                       }}
                                       style={{padding:"4px 8px",fontSize:10.5,borderRadius:4,border:"1px solid "+T.b1,background:"white",cursor:"pointer",color:T.t3}}>
-                                      <option value="">Apply template…</option>
+                                      <option value="">{t("subcon.apply_template")}</option>
                                       {templates.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
                                     </select>
                                   )}
@@ -1262,12 +1255,12 @@ function TabSubcon({ projectId, project }) {
               {/* ── % OF WO VALUE MODE ── (exact copy of Estimate) */}
               {msForm.kind === "percent" && (<>
                 <div style={{padding:"7px 10px",background:T.surfaceB,borderRadius:6,fontSize:11,color:T.t3,marginBottom:10,display:"flex",justifyContent:"space-between"}}>
-                  <span>WO value</span>
+                  <span>{t("subcon.wo_value_2")}</span>
                   <span style={{fontWeight:700,color:T.t1}}>{fmtC(woValue)}</span>
                 </div>
                 {/* Quick presets */}
                 <div style={{display:"flex",gap:5,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-                  <span style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>Quick:</span>
+                  <span style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("estimate.quick")}</span>
                   {[
                     { label:"30 / 40 / 30",      splits:[30,40,30],     names:["Advance","On Progress","On Handover"] },
                     { label:"40 / 30 / 20 / 10", splits:[40,30,20,10],  names:["Booking","Slab","Finishing","Handover"] },
@@ -1290,21 +1283,21 @@ function TabSubcon({ projectId, project }) {
                   return (
                     <div key={mi} style={{display:"grid",gridTemplateColumns:"40px 1fr 80px 120px 32px",gap:6,marginBottom:4,alignItems:"center"}}>
                       <span style={{fontSize:12,color:T.t4,paddingTop:8}}>{mi+1}</span>
-                      <input value={m.name} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],name:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="e.g. Foundation" style={inpStyle}/>
+                      <input value={m.name} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],name:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder={t("estimate.e_g_foundation")} style={inpStyle}/>
                       <input type="number" value={m.pct} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],pct:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="%" style={{...inpStyle,textAlign:"right"}}/>
                       <span style={{padding:"7px 10px",background:T.surfaceB,borderRadius:6,fontSize:12,fontWeight:600,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(amt)}</span>
                       <button onClick={()=>{const arr=msForm.pctMs.filter((_,i)=>i!==mi);setMsForm(p=>({...p,pctMs:arr.length?arr:[{seq:0,name:"",pct:""}]}));}} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,fontSize:14,cursor:"pointer"}}>×</button>
                     </div>
                   );
                 })}
-                <button onClick={()=>setMsForm(p=>({...p,pctMs:[...p.pctMs,{seq:p.pctMs.length,name:"",pct:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Milestone</button>
+                <button onClick={()=>setMsForm(p=>({...p,pctMs:[...p.pctMs,{seq:p.pctMs.length,name:"",pct:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.add_milestone")}</button>
                 {/* Live total row */}
                 <div style={{marginTop:12,padding:"9px 12px",borderRadius:7,
                   background: sumOk ? T.grnL : "#FFFBEB",
                   border:"1px solid "+(sumOk ? T.grnM : "#FCD34D"),
                   display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:11.5,fontWeight:700,color:sumOk?T.grn:"#92400E"}}>
-                    {sumOk ? "✓ Total 100% — schedule covers full WO value"
+                    {sumOk ? t("subcon.total_100_schedule_covers_full_wo")
                           : `Total ${pctSum.toFixed(2)}% — ${remaining>0?remaining.toFixed(2)+"% remaining":Math.abs(remaining).toFixed(2)+"% over"}`}
                   </span>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1312,7 +1305,7 @@ function TabSubcon({ projectId, project }) {
                     {!sumOk && Math.abs(remaining)>0.01 && (
                       <button onClick={distributeRemaining}
                         style={{background:"#FEF3C7",border:"1px solid #FCD34D",color:"#92400E",borderRadius:5,padding:"3px 9px",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
-                        {remaining>0?"↻ Distribute remaining":"↻ Trim excess"}
+                        {remaining>0?t("estimate.distribute_remaining"):t("estimate.trim_excess")}
                       </button>
                     )}
                   </div>
@@ -1322,8 +1315,8 @@ function TabSubcon({ projectId, project }) {
 
             {/* Footer */}
             <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
-              <button onClick={()=>setShowSetMs(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
-              <button onClick={submitMilestones} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Save Schedule"}</button>
+              <button onClick={()=>setShowSetMs(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
+              <button onClick={submitMilestones} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?t("common.saving_2"):t("estimate.save_schedule")}</button>
             </div>
           </div>
         </>);
@@ -1377,7 +1370,7 @@ function TabSubcon({ projectId, project }) {
               )}
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:12.5,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</div>
-                <div style={{fontSize:10,color:T.t4,marginTop:1}}>{fmtC(it.rate)}/{it.unit} · qty {parseFloat(it.qty)||0}</div>
+                <div style={{fontSize:10,color:T.t4,marginTop:1}}>{t("subcon.fmtc_unit_qty_parsefloat", { fmtC: fmtC(it.rate), unit: it.unit, parseFloat: parseFloat(it.qty)||0 })}</div>
               </div>
             </div>
           );
@@ -1388,7 +1381,7 @@ function TabSubcon({ projectId, project }) {
             {/* Header */}
             <div style={{padding:"14px 18px",background:T.t1,color:"white",flexShrink:0}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                <div style={{fontSize:14,fontWeight:700}}>Pick Items for Schedule</div>
+                <div style={{fontSize:14,fontWeight:700}}>{t("estimate.pick_items_for_schedule")}</div>
                 <button onClick={()=>setWoItemPickerOpen(false)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.65)",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
               </div>
               <div style={{fontSize:10.5,color:"rgba(255,255,255,0.55)"}}>
@@ -1399,14 +1392,14 @@ function TabSubcon({ projectId, project }) {
             {/* Search */}
             <div style={{padding:"10px 18px",borderBottom:"1px solid "+T.b1,flexShrink:0}}>
               <input value={woItemPickerSearch} onChange={e=>setWoItemPickerSearch(e.target.value)}
-                placeholder="Search WO items…" autoFocus
+                placeholder={t("subcon.search_wo_items")} autoFocus
                 style={{width:"100%",padding:"7px 11px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             {/* List */}
             <div style={{flex:1,overflowY:"auto",padding:"4px 0"}}>
               {totalFiltered === 0 && (
                 <div style={{padding:"40px 20px",textAlign:"center",color:T.t4,fontSize:12.5}}>
-                  {woItemPickerSearch ? `No items match "${woItemPickerSearch}"` : "No items in this WO"}
+                  {woItemPickerSearch ? `No items match "${woItemPickerSearch}"` : t("subcon.no_items_in_this_wo")}
                 </div>
               )}
               {sections.map(sec => (
@@ -1423,7 +1416,7 @@ function TabSubcon({ projectId, project }) {
             <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.surfaceB}}>
               <button onClick={()=>setWoItemPickerOpen(false)}
                 style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                Done
+               {t("common.done")}
               </button>
               <span style={{fontSize:11.5,color:T.t3}}>{(msForm.pickedItemIds||[]).length} item{(msForm.pickedItemIds||[]).length===1?"":"s"} selected</span>
             </div>
@@ -1456,8 +1449,8 @@ function TabSubcon({ projectId, project }) {
             {/* Header */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
               <div>
-                <div style={{fontSize:15,fontWeight:700,color:"#7C3AED"}}>📝 Manual RA Bill</div>
-                <div style={{fontSize:11,color:"#6B7280",marginTop:2}}>Bill items NOT in the Work Order / BOQ scope</div>
+                <div style={{fontSize:15,fontWeight:700,color:"#7C3AED"}}>{t("subcon.manual_ra_bill")}</div>
+                <div style={{fontSize:11,color:"#6B7280",marginTop:2}}>{t("subcon.bill_items_not_in_the_work")}</div>
               </div>
               <button onClick={()=>setShowManualRaBill(false)} style={{background:"none",border:"none",cursor:"pointer",color:"#6B7280",fontSize:20,lineHeight:1}}>×</button>
             </div>
@@ -1465,25 +1458,25 @@ function TabSubcon({ projectId, project }) {
             {/* Date + Remark */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:14}}>
               <div>
-                <label style={lblStyle}>Bill Date</label>
+                <label style={lblStyle}>{t("common.bill_date")}</label>
                 <input type="date" value={manualBillForm.bill_date}
                   onChange={e=>setManualBillForm(p=>({...p,bill_date:e.target.value}))} style={inpStyle}/>
               </div>
               <div>
-                <label style={lblStyle}>Remark / Notes</label>
+                <label style={lblStyle}>{t("subcon.remark_notes")}</label>
                 <input type="text" value={manualBillForm.remark}
                   onChange={e=>setManualBillForm(p=>({...p,remark:e.target.value}))}
-                  style={inpStyle} placeholder="Optional notes..."/>
+                  style={inpStyle} placeholder={t("subcon.optional_notes")}/>
               </div>
             </div>
 
             {/* Line Items */}
             <div style={{marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                <label style={lblStyle}>Line Items</label>
+                <label style={lblStyle}>{t("common.line_items")}</label>
                 <button onClick={()=>setManualBillForm(p=>({...p,items:[...p.items,{description:"",qty:"",rate:""}]}))}
                   style={{background:"#F3E8FF",color:"#7C3AED",border:"1px solid #C4B5FD",borderRadius:5,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                  + Add Row
+                 {t("common.add_row")}
                 </button>
               </div>
               {/* Header row */}
@@ -1498,7 +1491,7 @@ function TabSubcon({ projectId, project }) {
                 const amt  = qty * rate;
                 return (
                   <div key={idx} style={{display:"grid",gridTemplateColumns:"2fr 80px 80px 90px 28px",gap:6,padding:"6px 8px",borderBottom:"1px solid #E2E8F0",alignItems:"center",background:"white"}}>
-                    <input type="text" value={it.description} placeholder="Description of work"
+                    <input type="text" value={it.description} placeholder={t("subcon.description_of_work")}
                       onChange={e=>{const a=[...manualBillForm.items];a[idx]={...a[idx],description:e.target.value};setManualBillForm(p=>({...p,items:a}));}}
                       style={{...inpStyle,padding:"5px 7px",fontSize:11}}/>
                     <input type="number" value={it.qty} placeholder="0" min={0}
@@ -1518,7 +1511,7 @@ function TabSubcon({ projectId, project }) {
               {/* Total row */}
               {manualBillForm.items.some(it=>parseFloat(it.qty)>0&&parseFloat(it.rate)>0) && (
                 <div style={{display:"grid",gridTemplateColumns:"2fr 80px 80px 90px 28px",gap:6,padding:"8px 8px",background:"#F0FDF4",borderRadius:"0 0 6px 6px",borderTop:"2px solid #BBF7D0"}}>
-                  <div style={{fontSize:11.5,fontWeight:700,color:"#1E293B",gridColumn:"1/4"}}>Total</div>
+                  <div style={{fontSize:11.5,fontWeight:700,color:"#1E293B",gridColumn:"1/4"}}>{t("common.total")}</div>
                   <div style={{fontSize:13,fontWeight:800,color:"#059669",textAlign:"right"}}>
                     {fmtC(manualBillForm.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0))}
                   </div>
@@ -1531,11 +1524,11 @@ function TabSubcon({ projectId, project }) {
             <div style={{display:"flex",justifyContent:"flex-end",gap:10}}>
               <button onClick={()=>setShowManualRaBill(false)}
                 style={{padding:"8px 18px",borderRadius:6,background:"#F1F5F9",color:"#475569",border:"1px solid #CBD5E1",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={submitManualRaBill} disabled={manualBillSaving}
                 style={{padding:"8px 20px",borderRadius:6,background:manualBillSaving?"#A78BFA":"#7C3AED",color:"white",border:"none",fontSize:12,fontWeight:700,cursor:manualBillSaving?"not-allowed":"pointer"}}>
-                {manualBillSaving?"Saving…":"💾 Save Manual Bill"}
+                {manualBillSaving?t("common.saving_2"):t("subcon.save_manual_bill")}
               </button>
             </div>
           </div>
@@ -1567,21 +1560,21 @@ function TabSubcon({ projectId, project }) {
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
             <div style={{background:T.surface,borderRadius:10,width:"min(640px,96vw)",maxHeight:"92vh",overflowY:"auto",padding:20,boxShadow:"0 20px 50px rgba(0,0,0,0.2)"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                <div style={{fontSize:14,fontWeight:700,color:T.t1}}>Edit RA Bill — {editBill.bill_no}</div>
+                <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{t("subcon.edit_ra_bill_bill_no", { bill_no: editBill.bill_no })}</div>
                 <button onClick={()=>{setShowEditBillModal(false);setEditBill(null);}} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:18}}>×</button>
               </div>
 
               {/* Date + Status */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                 <div>
-                  <label style={lblStyle}>Bill Date</label>
+                  <label style={lblStyle}>{t("common.bill_date")}</label>
                   <input type="date" value={(editBill.bill_date||"").split("T")[0]}
                     onChange={e=>setEditBill(p=>({...p,bill_date:e.target.value}))} style={inpStyle}/>
                 </div>
                 <div>
-                  <label style={lblStyle}>Status</label>
+                  <label style={lblStyle}>{t("common.status")}</label>
                   <SearchSelect value={editBill.status||"Submitted"} options={["Draft","Submitted","Approved","Rejected"]}
-                    onChange={v=>setEditBill(p=>({...p,status:v}))} placeholder="Select status..."/>
+                    onChange={v=>setEditBill(p=>({...p,status:v}))} placeholder={t("common.select_status")}/>
                 </div>
               </div>
 
@@ -1589,7 +1582,7 @@ function TabSubcon({ projectId, project }) {
               {showItems && (
                 <div style={{marginBottom:12}}>
                   <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>
-                    Item Quantities (cumulative)
+                   {t("subcon.item_quantities_cumulative")}
                   </div>
                   <div style={{border:"1px solid "+T.b1,borderRadius:7,overflow:"hidden"}}>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 85px 90px",gap:6,padding:"6px 10px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
@@ -1636,7 +1629,7 @@ function TabSubcon({ projectId, project }) {
               {/* Gross / Retention / TDS / Net */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                 <div>
-                  <label style={lblStyle}>Gross Amount</label>
+                  <label style={lblStyle}>{t("subcon.gross_amount")}</label>
                   <input type="number" value={editBill.gross_amount ?? 0}
                     onChange={e=>{
                       const g = parseFloat(e.target.value) || 0;
@@ -1646,12 +1639,12 @@ function TabSubcon({ projectId, project }) {
                     }} style={inpStyle}/>
                 </div>
                 <div>
-                  <label style={lblStyle}>Net Payable (auto)</label>
+                  <label style={lblStyle}>{t("subcon.net_payable_auto")}</label>
                   <input type="number" value={editBill.net_payable ?? 0} disabled
                     style={{...inpStyle,background:T.surfaceB,color:T.t3,fontWeight:700}}/>
                 </div>
                 <div>
-                  <label style={lblStyle}>Retention %</label>
+                  <label style={lblStyle}>{t("common.retention")}</label>
                   <input type="number" min={0} max={100}
                     value={editBill.retention_pct ?? ""}
                     onChange={e=>{
@@ -1664,7 +1657,7 @@ function TabSubcon({ projectId, project }) {
                     style={inpStyle}/>
                 </div>
                 <div>
-                  <label style={lblStyle}>TDS %</label>
+                  <label style={lblStyle}>{t("common.tds")}</label>
                   <input type="number" min={0} max={100}
                     value={editBill.tds_pct ?? ""}
                     onChange={e=>{
@@ -1680,18 +1673,18 @@ function TabSubcon({ projectId, project }) {
 
               {/* Remark */}
               <div style={{marginBottom:14}}>
-                <label style={lblStyle}>Remark / Notes</label>
+                <label style={lblStyle}>{t("subcon.remark_notes")}</label>
                 <textarea value={editBill.remark||""} onChange={e=>setEditBill(p=>({...p,remark:e.target.value}))}
-                  style={{...inpStyle,minHeight:55,resize:"vertical"}} placeholder="Optional notes..."/>
+                  style={{...inpStyle,minHeight:55,resize:"vertical"}} placeholder={t("subcon.optional_notes")}/>
               </div>
 
               {/* Summary bar */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14,padding:"10px",background:T.surfaceB,borderRadius:7,border:"1px solid "+T.b1}}>
                 {[
-                  {l:"Gross",  v:fmtC(editBill.gross_amount||0),    c:T.t1},
-                  {l:"Ret.",   v:fmtC(editBill.retention_amt||0),   c:T.amb},
+                  {l:t("common.gross"),  v:fmtC(editBill.gross_amount||0),    c:T.t1},
+                  {l:t("subcon.ret"),   v:fmtC(editBill.retention_amt||0),   c:T.amb},
                   {l:"TDS",    v:fmtC(editBill.tds_amt||0),         c:T.red},
-                  {l:"Net Pay",v:fmtC(editBill.net_payable||0),     c:T.grn},
+                  {l:t("subcon.net_pay"),v:fmtC(editBill.net_payable||0),     c:T.grn},
                 ].map(s=>(
                   <div key={s.l} style={{textAlign:"center"}}>
                     <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",fontWeight:700}}>{s.l}</div>
@@ -1703,7 +1696,7 @@ function TabSubcon({ projectId, project }) {
               <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>{setShowEditBillModal(false);setEditBill(null);}}
                   style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>
-                  Cancel
+                 {t("common.cancel")}
                 </button>
                 <button onClick={async()=>{
                     setEditBillSaving(true);
@@ -1737,7 +1730,7 @@ function TabSubcon({ projectId, project }) {
                     setEditBillSaving(false);
                   }} disabled={editBillSaving}
                   style={{flex:2,padding:"9px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",opacity:editBillSaving?0.6:1}}>
-                  {editBillSaving ? "Saving…" : "💾 Save Changes"}
+                  {editBillSaving ? t("common.saving_2") : t("subcon.save_changes")}
                 </button>
               </div>
             </div>
@@ -1749,30 +1742,30 @@ function TabSubcon({ projectId, project }) {
       {showPayModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
           <div style={{background:T.surface,borderRadius:10,width:"min(400px,94vw)",padding:20,boxShadow:"0 20px 50px rgba(0,0,0,0.2)"}}>
-            <div style={{fontSize:14,fontWeight:700,color:T.t1,marginBottom:14}}>Record Payment</div>
+            <div style={{fontSize:14,fontWeight:700,color:T.t1,marginBottom:14}}>{t("common.record_payment")}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
               <div>
-                <label style={lblStyle}>Amount *</label>
+                <label style={lblStyle}>{t("transaction_detail.amount")}</label>
                 <input type="number" value={payForm.amount_paid} onChange={e=>setPayForm(p=>({...p,amount_paid:e.target.value}))} style={inpStyle} placeholder="0"/>
               </div>
               <div>
-                <label style={lblStyle}>Date</label>
+                <label style={lblStyle}>{t("common.date")}</label>
                 <input type="date" value={payForm.payment_date} onChange={e=>setPayForm(p=>({...p,payment_date:e.target.value}))} style={inpStyle}/>
               </div>
               <div>
-                <label style={lblStyle}>Mode</label>
+                <label style={lblStyle}>{t("common.mode")}</label>
                 <SearchSelect value={payForm.payment_mode} options={["Bank Transfer","Cheque","Cash","NEFT","RTGS","UPI"]}
-                  onChange={v=>setPayForm(p=>({...p,payment_mode:v}))} placeholder="Select mode..."/>
+                  onChange={v=>setPayForm(p=>({...p,payment_mode:v}))} placeholder={t("subcon.select_mode")}/>
               </div>
               <div>
-                <label style={lblStyle}>Reference No.</label>
-                <input value={payForm.reference_no} onChange={e=>setPayForm(p=>({...p,reference_no:e.target.value}))} style={inpStyle} placeholder="UTR/Cheque no."/>
+                <label style={lblStyle}>{t("common.reference_no")}</label>
+                <input value={payForm.reference_no} onChange={e=>setPayForm(p=>({...p,reference_no:e.target.value}))} style={inpStyle} placeholder={t("subcon.utr_cheque_no")}/>
               </div>
             </div>
-            <input value={payForm.remark} onChange={e=>setPayForm(p=>({...p,remark:e.target.value}))} placeholder="Remark (optional)" style={{...inpStyle,marginBottom:12}}/>
+            <input value={payForm.remark} onChange={e=>setPayForm(p=>({...p,remark:e.target.value}))} placeholder={t("common.remark_optional")} style={{...inpStyle,marginBottom:12}}/>
             <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>setShowPayModal(false)} style={{flex:1,padding:"8px",borderRadius:6,border:"1px solid "+T.b1,background:T.surface,cursor:"pointer",fontSize:12}}>Cancel</button>
-              <button onClick={()=>submitPayment(showPayModal)} disabled={saving} style={{flex:2,padding:"8px",borderRadius:6,background:saving?T.t4:T.grn,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>{saving?"Saving...":"Save Payment"}</button>
+              <button onClick={()=>setShowPayModal(false)} style={{flex:1,padding:"8px",borderRadius:6,border:"1px solid "+T.b1,background:T.surface,cursor:"pointer",fontSize:12}}>{t("common.cancel")}</button>
+              <button onClick={()=>submitPayment(showPayModal)} disabled={saving} style={{flex:2,padding:"8px",borderRadius:6,background:saving?T.t4:T.grn,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>{saving?t("common.saving"):t("subcon.save_payment")}</button>
             </div>
           </div>
         </div>
@@ -1808,14 +1801,14 @@ function TabSubcon({ projectId, project }) {
           <div style={{position:"fixed",top:0,right:0,bottom:0,width:440,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 24px rgba(0,0,0,0.2)",zIndex:331,display:"flex",flexDirection:"column"}}>
             <div style={{padding:"14px 18px",background:T.t1,color:"white",flexShrink:0}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                <div style={{fontSize:14,fontWeight:700}}>Link to Project Task</div>
+                <div style={{fontSize:14,fontWeight:700}}>{t("estimate.link_to_project_task")}</div>
                 <button onClick={()=>setTaskPickerFor(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.65)",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
               </div>
-              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.55)"}}>Pick a task and set the % completion that triggers billing</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.55)"}}>{t("subcon.pick_a_task_and_set_the")}</div>
             </div>
             {/* Trigger % */}
             <div style={{padding:"12px 18px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,flexShrink:0}}>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Trigger at task completion %</label>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t("estimate.trigger_at_task_completion")}</label>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
                 <input type="range" min={0} max={100} step={5} value={linkTrigPct} onChange={e=>setLinkTrigPct(parseInt(e.target.value)||0)} style={{flex:1}}/>
                 <input type="number" min={0} max={100} value={linkTrigPct} onChange={e=>setLinkTrigPct(Math.min(100,Math.max(0,parseInt(e.target.value)||0)))}
@@ -1834,16 +1827,16 @@ function TabSubcon({ projectId, project }) {
             {/* Search */}
             <div style={{padding:"10px 18px",borderBottom:"1px solid "+T.b1,flexShrink:0}}>
               <input value={taskPickerSearch} onChange={e=>setTaskPickerSearch(e.target.value)}
-                placeholder="Search tasks…" autoFocus
+                placeholder={t("estimate.search_tasks")} autoFocus
                 style={{width:"100%",padding:"7px 11px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             {/* Task list */}
             <div style={{flex:1,overflowY:"auto",padding:"4px 0"}}>
               {projectTasksSub.length === 0 && (
-                <div style={{padding:"36px 20px",textAlign:"center",color:T.t3,fontSize:12.5}}>No tasks in this project yet.</div>
+                <div style={{padding:"36px 20px",textAlign:"center",color:T.t3,fontSize:12.5}}>{t("estimate.no_tasks_in_this_project_yet")}</div>
               )}
               {projectTasksSub.length > 0 && displayRows.length === 0 && (
-                <div style={{padding:"30px 20px",textAlign:"center",color:T.t4,fontSize:12.5}}>No tasks match "{taskPickerSearch}"</div>
+                <div style={{padding:"30px 20px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("subcon.no_tasks_match_taskpickersearch", { taskPickerSearch })}</div>
               )}
               {displayRows.map(({ node: t, depth }) => {
                 const isSel = linkSelTaskId === t.id;
@@ -1868,7 +1861,7 @@ function TabSubcon({ projectId, project }) {
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12.5,fontWeight:hasKids?700:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{taskName}</div>
                       <div style={{fontSize:10,color:T.t4,marginTop:2,display:"flex",gap:6}}>
-                        <span style={{padding:"1px 6px",borderRadius:3,background:stC2+"22",color:stC2,fontWeight:600}}>{t.status||"Not Started"}</span>
+                        <span style={{padding:"1px 6px",borderRadius:3,background:stC2+"22",color:stC2,fontWeight:600}}>{t.status||t("common.not_started")}</span>
                         <span>· {progress}%</span>
                       </div>
                       <div style={{marginTop:5,height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>
@@ -1882,10 +1875,10 @@ function TabSubcon({ projectId, project }) {
             {/* Footer */}
             <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.surfaceB,gap:8}}>
               <button onClick={()=>setTaskPickerFor(null)} disabled={linkingTask}
-                style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
               <button onClick={confirmLinkTaskSub} disabled={linkingTask||!linkSelTaskId}
                 style={{background:(!linkSelTaskId||linkingTask)?T.t4:T.blu,color:"white",border:"none",borderRadius:6,padding:"7px 18px",fontSize:12,fontWeight:700,cursor:(!linkSelTaskId||linkingTask)?"default":"pointer"}}>
-                {linkingTask?"Linking…":"Link Task"}
+                {linkingTask?t("estimate.linking"):t("estimate.link_task")}
               </button>
             </div>
           </div>
@@ -2099,7 +2092,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
     const sections = Object.entries(groups).map(([title, items]) => ({ title, items }));
     // Manual items appended as their own section
     const manuals = iwManualItems.filter(it => it.description.trim() && parseFloat(it.rate||0) > 0);
-    if (manuals.length) sections.push({ title:"Manual Items", items: manuals.map(it => ({
+    if (manuals.length) sections.push({ title:t("subcon.manual_items"), items: manuals.map(it => ({
       description: it.description.trim(), unit: it.unit||"Sqft",
       qty: parseFloat(it.qty||0), rate: parseFloat(it.rate||0),
     }))});
@@ -2180,20 +2173,20 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
   );
 
   const submit = async () => {
-    if(!form.subcon_name) return alert("Subcontractor required");
+    if(!form.subcon_name) return alert(t("subcon.subcontractor_required"));
 
     // Build sections based on wo_type
     let finalSections = [];
     if (woType === "package") {
       finalSections = buildPackageSections();
-      if (!finalSections.length) return alert("Package has no items with rates — set rates in Library → Subcon Rate Card first");
+      if (!finalSections.length) return alert(t("subcon.package_has_no_items_with_rates"));
     } else if (woType === "item_wise") {
       finalSections = buildItemSections();
-      if (!finalSections.length) return alert("Select at least one item with qty > 0 (from library or manual)");
+      if (!finalSections.length) return alert(t("subcon.select_at_least_one_item_with"));
     } else {
       // manual
       finalSections = form.sections.filter(s=>s.title.trim() && s.items.some(i=>i.description&&i.qty&&i.rate));
-      if (!finalSections.length) return alert("At least 1 section with items required");
+      if (!finalSections.length) return alert(t("subcon.at_least_1_section_with_items"));
     }
 
     setSaving(true);
@@ -2276,13 +2269,13 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
         {/* Header */}
         <div style={{background:"#0F172A",padding:"13px 18px",borderRadius:pkgBuilderMode?"0":"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:"white",marginBottom:8}}>New Work Order</div>
+            <div style={{fontSize:14,fontWeight:700,color:"white",marginBottom:8}}>{t("subcon.new_work_order")}</div>
             {/* WO Type toggle */}
             <div style={{display:"flex",gap:6}}>
               {[
-                {id:"manual",    icon:"✏️", label:"Manual"},
-                {id:"package",   icon:"📐", label:"Package"},
-                {id:"item_wise", icon:"🔧", label:"Item-wise"},
+                {id:"manual",    icon:"✏️", label:t("common.manual")},
+                {id:"package",   icon:"📐", label:t("subcon.package")},
+                {id:"item_wise", icon:"🔧", label:t("subcon.item_wise")},
               ].map(m=>(
                 <button key={m.id} onClick={()=>setWoType(m.id)} style={{
                   padding:"5px 12px", borderRadius:6, fontSize:11, fontWeight:700, cursor:"pointer",
@@ -2295,7 +2288,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                 </button>
               ))}
               <span style={{fontSize:10,color:"rgba(255,255,255,0.35)",alignSelf:"center",marginLeft:4}}>
-                {woType==="manual" ? "Type items manually" : woType==="package" ? "Load from Subcon Rate Card" : "Pick individual items from library"}
+                {woType==="manual" ? t("subcon.type_items_manually") : woType==="package" ? t("subcon.load_from_subcon_rate_card") : t("subcon.pick_individual_items_from_library")}
               </span>
             </div>
           </div>
@@ -2315,10 +2308,8 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                     style={{transition:"transform .15s",transform:pkgShowInfo?"rotate(90deg)":"rotate(0deg)"}}>
                     <polyline points="9 18 15 12 9 6"/>
                   </svg>
-                  <span style={{fontSize:12,fontWeight:700,color:"#0F172A",textTransform:"uppercase",letterSpacing:".4px"}}>WO Settings</span>
-                  <span style={{fontSize:11,color:"#64748B",marginLeft:"auto"}}>
-                    Retention {form.retention_pct}% · TDS {form.tds_pct}%{woAttachUrl?" · 📎 Attached":""}
-                  </span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#0F172A",textTransform:"uppercase",letterSpacing:".4px"}}>{t("subcon.wo_settings")}</span>
+                  <span style={{fontSize:11,color:"#64748B",marginLeft:"auto"}}>{t("subcon.retention_retention_pct_tds_tds_pct", { retention_pct: form.retention_pct, tds_pct: form.tds_pct, woAttachUrl: woAttachUrl?t("subcon.attached"):"" })}</span>
                 </div>
                 {pkgShowInfo && (() => {
                   const inpC={width:"100%",padding:"5px 8px",borderRadius:5,border:"1.5px solid #D1D5DB",fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
@@ -2328,11 +2319,11 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                       {/* Row 1: Subcon + Description */}
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:9}}>
                         <div>
-                          <label style={lblC}>Subcontractor <span style={{color:"#DC2626"}}>*</span></label>
+                          <label style={lblC}>{t("common.subcontractor")} <span style={{color:"#DC2626"}}>*</span></label>
                           <div style={{display:"flex",gap:6}}>
                             <input list="sc-list-wo-pkg" value={form.subcon_name}
                               onChange={e=>setForm(p=>({...p,subcon_name:e.target.value}))}
-                              placeholder="Select from library or type..."
+                              placeholder={t("subcon.select_from_library_or_type")}
                               style={{...inpC,flex:1,border:`1.5px solid ${!form.subcon_name?"#FCA5A5":"#D1D5DB"}`}}/>
                             <datalist id="sc-list-wo-pkg">
                               {subcons.map(s=><option key={s.id} value={s.name}/>)}
@@ -2340,31 +2331,31 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                           </div>
                         </div>
                         <div>
-                          <label style={lblC}>Description / Note</label>
+                          <label style={lblC}>{t("estimate_builder.description_note")}</label>
                           <input value={form.description||""} onChange={e=>setForm(p=>({...p,description:e.target.value}))}
-                            placeholder="Optional scope summary" style={inpC}/>
+                            placeholder={t("subcon.optional_scope_summary")} style={inpC}/>
                         </div>
                       </div>
                       {/* Row 2: Retention / TDS / Start / End */}
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr 1.3fr",gap:10,marginBottom:9}}>
-                        <div><label style={lblC}>Retention %</label>
+                        <div><label style={lblC}>{t("common.retention")}</label>
                           <input type="number" value={form.retention_pct} onChange={e=>setForm(p=>({...p,retention_pct:e.target.value}))} style={{...inpC,textAlign:"right"}}/></div>
-                        <div><label style={lblC}>TDS %</label>
+                        <div><label style={lblC}>{t("common.tds")}</label>
                           <input type="number" value={form.tds_pct} onChange={e=>setForm(p=>({...p,tds_pct:e.target.value}))} style={{...inpC,textAlign:"right"}}/></div>
-                        <div><label style={lblC}>Start Date</label>
+                        <div><label style={lblC}>{t("common.start_date")}</label>
                           <input type="date" value={form.start_date||""} onChange={e=>setForm(p=>({...p,start_date:e.target.value}))} style={inpC}/></div>
-                        <div><label style={lblC}>End Date</label>
+                        <div><label style={lblC}>{t("common.end_date")}</label>
                           <input type="date" value={form.end_date||""} onChange={e=>setForm(p=>({...p,end_date:e.target.value}))} style={inpC}/></div>
                       </div>
                       {/* Row 3: Attachment + Category */}
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                         <div>
-                          <label style={lblC}>Attachment</label>
+                          <label style={lblC}>{t("estimate_builder.attachment")}</label>
                           {!woAttachUrl ? (
                             <label style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:5,
                               border:"1.5px dashed #94A3B8",background:"white",cursor:woAttaching?"not-allowed":"pointer",fontSize:11.5,color:"#475569",fontWeight:600}}>
                               <span style={{fontSize:13}}>📎</span>
-                              {woAttaching?"Uploading…":"Attach PDF / image / DWG"}
+                              {woAttaching?t("estimate_builder.uploading"):t("estimate_builder.attach_pdf_image_dwg")}
                               <input type="file" accept=".pdf,.dwg,.dxf,.doc,.docx,.xls,.xlsx,image/*"
                                 onChange={e=>{const f=e.target.files?.[0];if(f)uploadWoAttachment(f);e.target.value="";}}
                                 disabled={woAttaching} style={{display:"none"}}/>
@@ -2381,7 +2372,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                           )}
                         </div>
                         <div>
-                          <label style={lblC}>Trade Category</label>
+                          <label style={lblC}>{t("master_library.trade_category")}</label>
                           <div style={{fontSize:12,color:T.t3,fontWeight:600,padding:"5px 0"}}>{pkgTrade} — {pkgSelPkg?.name}</div>
                         </div>
                       </div>
@@ -2400,7 +2391,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                     border:`2px solid ${pkgSelPkg?.id===p.id?"#2563EB":"#E5E7EB"}`,
                     background:pkgSelPkg?.id===p.id?"#EFF6FF":"white",
                     color:pkgSelPkg?.id===p.id?"#2563EB":"#374151"}}>
-                    {p.name}{p.sqft_rate>0&&<span style={{fontSize:10,fontWeight:500,marginLeft:4,opacity:.7}}>Rs.{Number(p.sqft_rate).toLocaleString()}/sqft</span>}
+                    {p.name}{p.sqft_rate>0&&<span style={{fontSize:10,fontWeight:500,marginLeft:4,opacity:.7}}>{t("subcon.rs_number_sqft", { Number: Number(p.sqft_rate).toLocaleString() })}</span>}
                   </button>
                 ))}
               </div>
@@ -2409,7 +2400,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
               {pkgSelPkg && (<>
                 {pkgStructures.length>0 && pkgStructures.every(sec=>(pkgSecItems[sec.id]||[]).every(r=>effR(r)===0)) && (
                   <div style={{background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:8,padding:"9px 13px",marginBottom:10,fontSize:12,color:"#92400E",display:"flex",alignItems:"center",gap:8}}>
-                    ⚠ Rates not set — go to <b>Library → Subcon Rate Card</b>, select this package, set rates and Save Rates first.
+                   {t("subcon.rates_not_set_go_to")} <b>{t("subcon.library_subcon_rate_card")}</b>{t("subcon.select_this_package_set_rates_and")}
                   </div>
                 )}
                 {pkgStructures.length>0 && (
@@ -2418,9 +2409,9 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                       style={{padding:"5px 13px",borderRadius:6,fontSize:11.5,fontWeight:700,cursor:"pointer",
                         background:pkgEditMode?"#10B981":"white",border:"1.5px solid "+(pkgEditMode?"#10B981":"#94A3B8"),
                         color:pkgEditMode?"white":"#334155",display:"flex",alignItems:"center",gap:5}}>
-                      {pkgEditMode?"✓ Done Editing":"✎ Edit Package"}
+                      {pkgEditMode?t("common.done_editing"):t("common.edit_package")}
                     </button>
-                    <span style={{fontSize:10.5,color:"#64748B"}}>{pkgEditMode?"Override rates/qty per item":"Click to override rates or qty for this WO"}</span>
+                    <span style={{fontSize:10.5,color:"#64748B"}}>{pkgEditMode?t("subcon.override_rates_qty_per_item"):t("subcon.click_to_override_rates_or_qty")}</span>
                   </div>
                 )}
                 {pkgStructures.map(sec=>{
@@ -2451,26 +2442,26 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                         </span>
                         <span style={{fontWeight:700,fontSize:14,flex:1}}>{sec.name}</span>
                         <span style={{fontSize:11,color:"rgba(255,255,255,0.45)"}}>· {cats.length} {cats.length===1?"category":"categories"}</span>
-                        {perItem&&<span style={{fontSize:9,color:"#FCD34D",background:"rgba(245,158,11,0.2)",padding:"2px 7px",borderRadius:4,fontWeight:700}}>Per-item Qty</span>}
+                        {perItem&&<span style={{fontSize:9,color:"#FCD34D",background:"rgba(245,158,11,0.2)",padding:"2px 7px",borderRadius:4,fontWeight:700}}>{t("common.per_item_qty")}</span>}
                         <div style={{display:"flex",gap:10,alignItems:"center",fontSize:11.5,fontWeight:600}}>
                           {!perItem&&<>
-                            <span style={{color:"rgba(255,255,255,0.6)"}}>Base <strong style={{color:"white"}}>Rs.{Math.round(secBase).toLocaleString("en-IN")}</strong></span>
-                            <span style={{color:"rgba(255,255,255,0.6)"}}>Add-on <strong style={{color:"#F59E0B"}}>Rs.{Math.round(secAddOn).toLocaleString("en-IN")}</strong></span>
-                            <span style={{padding:"3px 9px",background:"#CCFBF1",color:"#0D9488",borderRadius:4,fontWeight:700}}>Rs.{Math.round(secBase+secAddOn).toLocaleString("en-IN")}/sqft</span>
+                            <span style={{color:"rgba(255,255,255,0.6)"}}>{t("common.base")} <strong style={{color:"white"}}>{t("subcon.rs_math", { Math: Math.round(secBase).toLocaleString("en-IN") })}</strong></span>
+                            <span style={{color:"rgba(255,255,255,0.6)"}}>{t("common.add_on")} <strong style={{color:"#F59E0B"}}>{t("subcon.rs_math", { Math: Math.round(secAddOn).toLocaleString("en-IN") })}</strong></span>
+                            <span style={{padding:"3px 9px",background:"#CCFBF1",color:"#0D9488",borderRadius:4,fontWeight:700}}>{t("subcon.rs_math_sqft", { Math: Math.round(secBase+secAddOn).toLocaleString("en-IN") })}</span>
                             <span style={{display:"flex",alignItems:"center",gap:4}}>
-                              <span style={{color:"rgba(255,255,255,0.55)",fontSize:11}}>Area</span>
+                              <span style={{color:"rgba(255,255,255,0.55)",fontSize:11}}>{t("common.area")}</span>
                               <input type="number" value={pkgAreas[sec.id]||""} onChange={e=>setPkgAreas(p=>({...p,[sec.id]:e.target.value}))}
                                 onClick={e=>e.stopPropagation()} placeholder="0"
                                 style={{width:80,padding:"5px 8px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12,fontWeight:700,
                                   border:"1.5px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)",color:"white",outline:"none"}}/>
                             </span>
                           </>}
-                          <span style={{color:"rgba(255,255,255,0.6)"}}>Total <strong style={{color:"#CCFBF1",fontSize:13}}>Rs.{Math.round(secTotal).toLocaleString("en-IN")}</strong></span>
+                          <span style={{color:"rgba(255,255,255,0.6)"}}>{t("common.total")} <strong style={{color:"#CCFBF1",fontSize:13}}>{t("subcon.rs_math", { Math: Math.round(secTotal).toLocaleString("en-IN") })}</strong></span>
                         </div>
                       </div>
                       {!sCol&&(
                         <div style={{padding:10}}>
-                          {cats.length===0&&<div style={{padding:"14px",textAlign:"center",color:"#9CA3AF",fontSize:12.5}}>No categories — add via Library → Subcon Rate Card</div>}
+                          {cats.length===0&&<div style={{padding:"14px",textAlign:"center",color:"#9CA3AF",fontSize:12.5}}>{t("subcon.no_categories_add_via_library_subcon")}</div>}
                           {cats.map(cat=>{
                             const ck=`${sec.id}:${cat.id}`;
                             const catCol=!!pkgCatCollapsed[ck];
@@ -2498,10 +2489,10 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                   <span style={{fontSize:10.5,color:"#94A3B8"}}>· {catRows.length} item{catRows.length===1?"":"s"}</span>
                                   <div style={{display:"flex",gap:10,alignItems:"center",fontSize:11,fontWeight:600}}>
                                     {!perItem&&<>
-                                      <span style={{color:"#64748B"}}>Base <strong style={{color:"#0F172A"}}>Rs.{Math.round(catBase).toLocaleString("en-IN")}</strong></span>
-                                      <span style={{color:"#64748B"}}>Add-on <strong style={{color:"#F59E0B"}}>Rs.{Math.round(catAddOn).toLocaleString("en-IN")}</strong></span>
+                                      <span style={{color:"#64748B"}}>{t("common.base")} <strong style={{color:"#0F172A"}}>{t("subcon.rs_math", { Math: Math.round(catBase).toLocaleString("en-IN") })}</strong></span>
+                                      <span style={{color:"#64748B"}}>{t("common.add_on")} <strong style={{color:"#F59E0B"}}>{t("subcon.rs_math", { Math: Math.round(catAddOn).toLocaleString("en-IN") })}</strong></span>
                                       <span style={{display:"flex",alignItems:"center",gap:4}}>
-                                        <span style={{color:"#64748B",fontSize:10.5}}>Area</span>
+                                        <span style={{color:"#64748B",fontSize:10.5}}>{t("common.area")}</span>
                                         <input type="number" value={catAOv!=null?catAOv:""} onChange={e=>setPkgCatAreas(p=>({...p,[ck]:e.target.value===""?null:e.target.value}))}
                                           placeholder={String(secArea)}
                                           style={{width:70,padding:"4px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:11.5,fontWeight:700,
@@ -2509,22 +2500,22 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                             color:catAOv?"#92400E":"#0F172A",outline:"none"}}/>
                                       </span>
                                     </>}
-                                    <span style={{color:"#64748B"}}>Total <strong style={{color:"#059669"}}>Rs.{Math.round(catTotal).toLocaleString("en-IN")}</strong></span>
+                                    <span style={{color:"#64748B"}}>{t("common.total")} <strong style={{color:"#059669"}}>{t("subcon.rs_math", { Math: Math.round(catTotal).toLocaleString("en-IN") })}</strong></span>
                                   </div>
                                 </div>
                                 {!catCol&&(
                                   <table style={{width:"100%",borderCollapse:"collapse"}}>
                                     <thead>
                                       <tr style={{background:"#FAFAFA"}}>
-                                        <th style={{padding:"7px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>Item</th>
-                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase",width:100}}>Base</th>
-                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#F59E0B",textTransform:"uppercase",width:100}}>Add-on</th>
-                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#0D9488",textTransform:"uppercase",width:80}}>{perItem?"Qty":"Area"}</th>
-                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#059669",textTransform:"uppercase",width:110}}>Total</th>
+                                        <th style={{padding:"7px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>{t("common.item")}</th>
+                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase",width:100}}>{t("common.base")}</th>
+                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#F59E0B",textTransform:"uppercase",width:100}}>{t("common.add_on")}</th>
+                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#0D9488",textTransform:"uppercase",width:80}}>{perItem?t("common.qty"):t("common.area")}</th>
+                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#059669",textTransform:"uppercase",width:110}}>{t("common.total")}</th>
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {catRows.length===0&&!(pkgAddedItems[ck]||[]).length&&<tr><td colSpan={pkgEditMode?6:5} style={{padding:"12px",textAlign:"center",color:"#9CA3AF",fontSize:12}}>No items — click + Add Item to add</td></tr>}
+                                      {catRows.length===0&&!(pkgAddedItems[ck]||[]).length&&<tr><td colSpan={pkgEditMode?6:5} style={{padding:"12px",textAlign:"center",color:"#9CA3AF",fontSize:12}}>{t("subcon.no_items_click_add_item_to")}</td></tr>}
                                       {catRows.map((r,idx)=>{
                                         const excKey=`${sec.id}:${cat.id}:${r.item_id}`;
                                         if(pkgExcludedItems[excKey]) return null;
@@ -2543,7 +2534,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                                   placeholder={String(Math.round(r.base_rate!=null?parseFloat(r.base_rate||0):parseFloat(r.rate||0)-parseFloat(r.add_on_rate||0)))}
                                                   onChange={e=>patchPkgItem(sec.id,cat.id,r.item_id,{base:e.target.value===""?undefined:parseFloat(e.target.value)||0})}
                                                   style={{width:90,padding:"5px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12.5,border:"1.5px solid #E5E7EB",background:"white",outline:"none"}}/>
-                                                :<span style={{fontSize:12.5,fontWeight:600}}>Rs.{Math.round(base).toLocaleString("en-IN")}</span>}
+                                                :<span style={{fontSize:12.5,fontWeight:600}}>{t("subcon.rs_math", { Math: Math.round(base).toLocaleString("en-IN") })}</span>}
                                             </td>
                                             <td style={{padding:"8px 12px",textAlign:"right"}}>
                                               {pkgEditMode?<input type="number" value={pkgItemEdits[`${sec.id}:${cat.id}:${r.item_id}`]?.addOn??""}
@@ -2559,13 +2550,11 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                                   style={{width:70,padding:"5px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12.5,border:"1.5px solid #E5E7EB",background:"white",outline:"none",color:"#0D9488",fontWeight:700}}/>
                                                 :Math.round(qty).toLocaleString("en-IN")}
                                             </td>
-                                            <td style={{padding:"8px 12px",textAlign:"right",fontSize:13,fontWeight:700,color:"#059669"}}>
-                                              Rs.{Math.round(tot).toLocaleString("en-IN")}
-                                            </td>
+                                            <td style={{padding:"8px 12px",textAlign:"right",fontSize:13,fontWeight:700,color:"#059669"}}>{t("subcon.rs_math", { Math: Math.round(tot).toLocaleString("en-IN") })}</td>
                                             {/* × Delete column — only in edit mode */}
                                             {pkgEditMode&&<td style={{padding:"6px 10px",textAlign:"center"}}>
                                               <button onClick={()=>setPkgExcludedItems(p=>({...p,[excKey]:true}))}
-                                                title="Remove from this WO"
+                                                title={t("subcon.remove_from_this_wo")}
                                                 style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:15,lineHeight:1,padding:2}}>×</button>
                                             </td>}
                                           </tr>
@@ -2581,10 +2570,10 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                               {ai.name} <span style={{fontSize:9,background:"#2563EB",color:"white",borderRadius:3,padding:"1px 5px",marginLeft:4}}>NEW</span>
                                               <div style={{fontSize:10,color:"#93C5FD",marginTop:1}}>{ai.unit}</div>
                                             </td>
-                                            <td style={{padding:"8px 12px",textAlign:"right",fontSize:12.5,fontWeight:600,color:"#1D4ED8"}}>Rs.{Math.round(aiRate).toLocaleString("en-IN")}</td>
+                                            <td style={{padding:"8px 12px",textAlign:"right",fontSize:12.5,fontWeight:600,color:"#1D4ED8"}}>{t("subcon.rs_math", { Math: Math.round(aiRate).toLocaleString("en-IN") })}</td>
                                             <td style={{padding:"8px 12px",textAlign:"right",color:"#9CA3AF"}}>—</td>
                                             <td style={{padding:"8px 12px",textAlign:"right",fontSize:12,color:"#0D9488",fontWeight:600}}>{aiQty.toLocaleString()}</td>
-                                            <td style={{padding:"8px 12px",textAlign:"right",fontSize:13,fontWeight:700,color:"#059669"}}>Rs.{Math.round(aiRate*aiQty).toLocaleString("en-IN")}</td>
+                                            <td style={{padding:"8px 12px",textAlign:"right",fontSize:13,fontWeight:700,color:"#059669"}}>{t("subcon.rs_math", { Math: Math.round(aiRate*aiQty).toLocaleString("en-IN") })}</td>
                                             {pkgEditMode&&<td style={{padding:"6px 10px",textAlign:"center"}}>
                                               <button onClick={()=>setPkgAddedItems(p=>({...p,[ck]:(p[ck]||[]).filter((_,i)=>i!==aidx)}))}
                                                 style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:15,lineHeight:1,padding:2}}>×</button>
@@ -2600,9 +2589,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                   <button onClick={()=>setPkgAddItemForm({sid:sec.id,catId:cat.id,catName:cat.category_name,secName:sec.name,perItem,
                                       form:{name:"",unit:perItem?"No":"Sqft",qty:perItem?"1":"",rate:""}})}
                                     style={{width:"100%",padding:"7px",fontSize:11.5,fontWeight:700,color:"#2563EB",background:"#EFF6FF",
-                                      border:"1.5px dashed #93C5FD",borderTop:"none",cursor:"pointer",borderRadius:"0 0 6px 6px",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-                                    + Add Item to {cat.category_name}
-                                  </button>
+                                      border:"1.5px dashed #93C5FD",borderTop:"none",cursor:"pointer",borderRadius:"0 0 6px 6px",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>{t("subcon.add_item_to_category_name", { category_name: cat.category_name })}</button>
                                 )}
                               </div>
                             );
@@ -2618,7 +2605,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   <button onClick={()=>{setPkgAddedSections(p=>[...p,{title:"",items:[{name:"",unit:"Sqft",qty:"",rate:""}]}]);}}
                     style={{width:"100%",padding:"10px",marginTop:4,fontSize:12,fontWeight:700,color:"#2563EB",background:"white",
                       border:"1.5px dashed #93C5FD",borderRadius:8,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                    + Add New Section
+                   {t("subcon.add_new_section")}
                   </button>
                 )}
 
@@ -2627,11 +2614,11 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   <div key={`ms-${msi}`} style={{background:"white",borderRadius:10,border:"1.5px solid #93C5FD",marginBottom:12,marginTop:8,overflow:"hidden"}}>
                     <div style={{padding:"10px 14px",background:"#1E3A5F",display:"flex",alignItems:"center",gap:10}}>
                       <input value={ms.title} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,title:e.target.value}:s))}
-                        placeholder="Section name (e.g. Extra Civil Work)"
+                        placeholder={t("subcon.section_name_e_g_extra_civil")}
                         style={{flex:1,padding:"5px 9px",borderRadius:5,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.1)",color:"white",fontSize:13,fontWeight:700,outline:"none",fontFamily:"inherit"}}/>
                       <button onClick={()=>setPkgAddedSections(p=>p.filter((_,i)=>i!==msi))}
                         style={{background:"rgba(239,68,68,0.2)",border:"1px solid #EF4444",color:"#FCA5A5",borderRadius:5,padding:"4px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>
-                        × Remove Section
+                       {t("subcon.remove_section")}
                       </button>
                     </div>
                     <div style={{padding:10}}>
@@ -2646,12 +2633,12 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                         <tbody>
                           {ms.items.map((it,iti)=>(
                             <tr key={iti} style={{borderBottom:"1px solid #F3F4F6"}}>
-                              <td style={{padding:"6px 8px"}}><input value={it.name} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,name:e.target.value}:x)}:s))} placeholder="Item description" style={{width:"100%",padding:"5px 8px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/></td>
+                              <td style={{padding:"6px 8px"}}><input value={it.name} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,name:e.target.value}:x)}:s))} placeholder={t("estimate.item_description")} style={{width:"100%",padding:"5px 8px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/></td>
                               <td style={{padding:"6px 8px"}}><select value={it.unit} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,unit:e.target.value}:x)}:s))} style={{padding:"5px 8px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12,background:"white",outline:"none"}}>
                                 {["Sqft","Cft","No","Running Ft","Unit","Kg","Lump Sum"].map(u=><option key={u}>{u}</option>)}</select></td>
                               <td style={{padding:"6px 8px"}}><input type="number" value={it.qty} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,qty:e.target.value}:x)}:s))} placeholder="0" style={{width:70,padding:"5px 7px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12.5,textAlign:"right",outline:"none",fontFamily:"inherit"}}/></td>
                               <td style={{padding:"6px 8px"}}><input type="number" value={it.rate} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,rate:e.target.value}:x)}:s))} placeholder="0" style={{width:80,padding:"5px 7px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12.5,textAlign:"right",outline:"none",fontFamily:"inherit"}}/></td>
-                              <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#059669",fontSize:12.5}}>Rs.{Math.round((parseFloat(it.qty)||0)*(parseFloat(it.rate)||0)).toLocaleString("en-IN")}</td>
+                              <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#059669",fontSize:12.5}}>{t("subcon.rs_math", { Math: Math.round((parseFloat(it.qty)||0)*(parseFloat(it.rate)||0)).toLocaleString("en-IN") })}</td>
                               <td style={{padding:"6px 8px",textAlign:"center"}}><button onClick={()=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.filter((_,j)=>j!==iti)}:s))} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:14,lineHeight:1}}>×</button></td>
                             </tr>
                           ))}
@@ -2659,7 +2646,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                       </table>
                       <button onClick={()=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:[...s.items,{name:"",unit:"Sqft",qty:"",rate:""}]}:s))}
                         style={{padding:"6px 14px",fontSize:11.5,fontWeight:700,color:"#2563EB",background:"#EFF6FF",border:"1.5px dashed #93C5FD",borderRadius:5,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-                        + Add Item
+                       {t("common.add_item")}
                       </button>
                     </div>
                   </div>
@@ -2667,8 +2654,8 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
 
                 {pkgGrandTotal>0&&(
                   <div style={{marginTop:10,padding:"14px 20px",background:"#0F172A",color:"white",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <span style={{fontSize:13,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",color:"rgba(255,255,255,0.7)"}}>Grand Total</span>
-                    <span style={{fontSize:20,fontWeight:700,color:"#CCFBF1"}}>Rs.{Math.round(pkgGrandTotal).toLocaleString("en-IN")}</span>
+                    <span style={{fontSize:13,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",color:"rgba(255,255,255,0.7)"}}>{t("common.grand_total")}</span>
+                    <span style={{fontSize:20,fontWeight:700,color:"#CCFBF1"}}>{t("subcon.rs_math", { Math: Math.round(pkgGrandTotal).toLocaleString("en-IN") })}</span>
                   </div>
                 )}
 
@@ -2677,16 +2664,14 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setPkgAddItemForm(null)}>
                     <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",backdropFilter:"blur(4px)"}}/>
                     <div style={{position:"relative",width:400,maxWidth:"94vw",background:"white",borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",overflow:"hidden",fontFamily:"inherit"}} onClick={e=>e.stopPropagation()}>
-                      <div style={{padding:"14px 18px",background:"#0F172A",color:"white",fontSize:13,fontWeight:700}}>
-                        + Add Item — {pkgAddItemForm.catName}
-                        <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginTop:2,fontWeight:400}}>{pkgAddItemForm.secName}</div>
+                      <div style={{padding:"14px 18px",background:"#0F172A",color:"white",fontSize:13,fontWeight:700}}>{t("subcon.add_item_catname", { catName: pkgAddItemForm.catName })}<div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginTop:2,fontWeight:400}}>{pkgAddItemForm.secName}</div>
                       </div>
                       <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:10}}>
                         {[
-                          {label:"Item Name *",key:"name",type:"text",ph:"e.g. Extra RCC Work"},
-                          {label:"Unit",key:"unit",type:"select",opts:["Sqft","Cft","No","Running Ft","Unit","Kg","Lump Sum"]},
+                          {label:t("master_library.item_name"),key:"name",type:"text",ph:"e.g. Extra RCC Work"},
+                          {label:t("common.unit"),key:"unit",type:"select",opts:["Sqft","Cft","No","Running Ft","Unit","Kg","Lump Sum"]},
                           {label:pkgAddItemForm.perItem?"Quantity":"Qty (Area)",key:"qty",type:"number",ph:"0"},
-                          {label:"Rate (₹)",key:"rate",type:"number",ph:"0"},
+                          {label:t("subcon.rate"),key:"rate",type:"number",ph:"0"},
                         ].map(f=>(
                           <div key={f.key}>
                             <label style={{fontSize:11,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{f.label}</label>
@@ -2703,7 +2688,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                         ))}
                       </div>
                       <div style={{padding:"12px 18px",borderTop:"1px solid #E5E7EB",display:"flex",gap:8,justifyContent:"flex-end"}}>
-                        <button onClick={()=>setPkgAddItemForm(null)} style={{padding:"8px 16px",borderRadius:7,border:"1px solid #E5E7EB",background:"#F8FAFC",fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                        <button onClick={()=>setPkgAddItemForm(null)} style={{padding:"8px 16px",borderRadius:7,border:"1px solid #E5E7EB",background:"#F8FAFC",fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>{t("common.cancel")}</button>
                         <button disabled={!pkgAddItemForm.form.name?.trim()||!pkgAddItemForm.form.rate}
                           onClick={()=>{
                             const catKey=`${pkgAddItemForm.sid}:${pkgAddItemForm.catId}`;
@@ -2712,7 +2697,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                           }}
                           style={{padding:"8px 20px",borderRadius:7,background:!pkgAddItemForm.form.name?.trim()||!pkgAddItemForm.form.rate?"#D1D5DB":"#2563EB",
                             color:!pkgAddItemForm.form.name?.trim()||!pkgAddItemForm.form.rate?"#9CA3AF":"white",border:"none",fontSize:12.5,fontWeight:700,cursor:!pkgAddItemForm.form.name?.trim()||!pkgAddItemForm.form.rate?"not-allowed":"pointer",fontFamily:"inherit"}}>
-                          Add Item
+                         {t("common.add_item_2")}
                         </button>
                       </div>
                     </div>
@@ -2726,14 +2711,14 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
           {woType!=="manual" && !pkgBuilderMode && (
             <div style={{marginBottom:14,padding:"12px 14px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`}}>
               <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>
-                {woType==="package" ? "Select Rate Card Package" : "Select Items from Library"}
+                {woType==="package" ? t("subcon.select_rate_card_package") : t("subcon.select_items_from_library")}
                 {pkgSelCity && pkgSelType && <span style={{fontWeight:400,textTransform:"none",marginLeft:6,color:T.t4}}>— {pkgSelType.name} × {pkgSelCity.name}</span>}
               </div>
 
               {/* Type + City row */}
               <div style={{display:"flex",gap:16,marginBottom:12,flexWrap:"wrap"}}>
                 <div style={{flex:1,minWidth:180}}>
-                  <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>Construction Type</div>
+                  <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>{t("common.construction_type")}</div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     {pkgConTypes.map(ct=>(
                       <button key={ct.id} onClick={()=>setPkgSelType(ct)} style={{
@@ -2746,7 +2731,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   </div>
                 </div>
                 <div style={{flex:1,minWidth:180}}>
-                  <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>City</div>
+                  <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>{t("common.city")}</div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     {pkgCities.map(c=>(
                       <button key={c.id} onClick={()=>setPkgSelCity(c)} style={{
@@ -2763,7 +2748,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
               {/* ── Package mode: Trade + Package picker ── */}
               {woType==="package" && pkgSelType && pkgSelCity && (<>
                 <div style={{marginBottom:10}}>
-                  <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>Trade Category</div>
+                  <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>{t("master_library.trade_category")}</div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     {TRADE_CATS.map(t=>(
                       <button key={t} onClick={()=>setPkgTrade(t)} style={{
@@ -2777,7 +2762,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                 </div>
                 {pkgTrade && (
                   <div style={{marginBottom:pkgSelPkg?10:0}}>
-                    <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>Rate Card</div>
+                    <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>{t("subcon.rate_card")}</div>
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                       {pkgList.map(p=>(
                         <button key={p.id} onClick={()=>setPkgSelPkg(p)} style={{
@@ -2789,7 +2774,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                           {p.name}{p.sqft_rate>0?<span style={{fontSize:10,fontWeight:500,marginLeft:5,opacity:.7}}>₹{Number(p.sqft_rate).toLocaleString()}/sqft</span>:null}
                         </button>
                       ))}
-                      {pkgList.length===0 && <span style={{fontSize:11,color:T.t4}}>No packages for {pkgTrade} — add in Library → Subcon Rate Card</span>}
+                      {pkgList.length===0 && <span style={{fontSize:11,color:T.t4}}>{t("subcon.no_packages_for_pkgtrade_add_in", { pkgTrade })}</span>}
                     </div>
                   </div>
                 )}
@@ -2799,7 +2784,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   {/* 0-rate warning */}
                   {pkgStructures.length>0 && pkgStructures.every(sec=>(pkgSecItems[sec.id]||[]).every(r=>effR(r)===0)) && (
                     <div style={{background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:8,padding:"9px 13px",marginTop:10,fontSize:12,color:"#92400E",display:"flex",alignItems:"center",gap:8}}>
-                      ⚠ Rates not set — go to <b>Library → Subcon Rate Card</b>, select this package, set rates and Save Rates first.
+                     {t("subcon.rates_not_set_go_to")} <b>{t("subcon.library_subcon_rate_card")}</b>{t("subcon.select_this_package_set_rates_and")}
                     </div>
                   )}
 
@@ -2810,10 +2795,10 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                         style={{padding:"5px 13px",borderRadius:6,fontSize:11.5,fontWeight:700,cursor:"pointer",
                           background:pkgEditMode?"#10B981":"white",border:"1.5px solid "+(pkgEditMode?"#10B981":"#94A3B8"),
                           color:pkgEditMode?"white":"#334155",display:"flex",alignItems:"center",gap:5}}>
-                        {pkgEditMode?"✓ Done Editing":"✎ Edit Package"}
+                        {pkgEditMode?t("common.done_editing"):t("common.edit_package")}
                       </button>
                       <span style={{fontSize:10.5,color:T.t4}}>
-                        {pkgEditMode?"Override rates / qty per item for this WO":"Click to override rates or qty"}
+                        {pkgEditMode?t("subcon.override_rates_qty_per_item_for"):t("subcon.click_to_override_rates_or_qty_2")}
                       </span>
                     </div>
                   )}
@@ -2857,31 +2842,29 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                           </span>
                           <span style={{fontWeight:700,fontSize:14,flex:1}}>{sec.name}</span>
                           <span style={{fontSize:11,color:"rgba(255,255,255,0.45)"}}>· {cats.length} {cats.length===1?"category":"categories"}</span>
-                          {perItem && <span style={{fontSize:9,color:"#FCD34D",background:"rgba(245,158,11,0.2)",padding:"2px 7px",borderRadius:4,fontWeight:700}}>Per-item Qty</span>}
+                          {perItem && <span style={{fontSize:9,color:"#FCD34D",background:"rgba(245,158,11,0.2)",padding:"2px 7px",borderRadius:4,fontWeight:700}}>{t("common.per_item_qty")}</span>}
                           {/* Right: Base | AddOn | /sqft | Area | Total */}
                           <div style={{display:"flex",gap:10,alignItems:"center",fontSize:11.5,fontWeight:600}}>
                             {!perItem&&<>
-                              <span style={{color:"rgba(255,255,255,0.6)"}}>Base <strong style={{color:"white"}}>Rs.{Math.round(secBase).toLocaleString("en-IN")}</strong></span>
-                              <span style={{color:"rgba(255,255,255,0.6)"}}>Add-on <strong style={{color:"#F59E0B"}}>Rs.{Math.round(secAddOn).toLocaleString("en-IN")}</strong></span>
-                              <span style={{padding:"3px 9px",background:"#CCFBF1",color:"#0D9488",borderRadius:4,fontWeight:700}}>
-                                Rs.{Math.round(secBase+secAddOn).toLocaleString("en-IN")}/sqft
-                              </span>
+                              <span style={{color:"rgba(255,255,255,0.6)"}}>{t("common.base")} <strong style={{color:"white"}}>{t("subcon.rs_math", { Math: Math.round(secBase).toLocaleString("en-IN") })}</strong></span>
+                              <span style={{color:"rgba(255,255,255,0.6)"}}>{t("common.add_on")} <strong style={{color:"#F59E0B"}}>{t("subcon.rs_math", { Math: Math.round(secAddOn).toLocaleString("en-IN") })}</strong></span>
+                              <span style={{padding:"3px 9px",background:"#CCFBF1",color:"#0D9488",borderRadius:4,fontWeight:700}}>{t("subcon.rs_math_sqft", { Math: Math.round(secBase+secAddOn).toLocaleString("en-IN") })}</span>
                               <span style={{display:"flex",alignItems:"center",gap:4}}>
-                                <span style={{color:"rgba(255,255,255,0.55)",fontSize:11}}>Area</span>
+                                <span style={{color:"rgba(255,255,255,0.55)",fontSize:11}}>{t("common.area")}</span>
                                 <input type="number" value={pkgAreas[sec.id]||""} onChange={e=>setPkgAreas(p=>({...p,[sec.id]:e.target.value}))}
                                   onClick={e=>e.stopPropagation()} placeholder="0"
                                   style={{width:80,padding:"5px 8px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12,fontWeight:700,
                                     border:"1.5px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)",color:"white",outline:"none"}}/>
                               </span>
                             </>}
-                            <span style={{color:"rgba(255,255,255,0.6)"}}>Total <strong style={{color:"#CCFBF1",fontSize:13}}>Rs.{Math.round(secTotal).toLocaleString("en-IN")}</strong></span>
+                            <span style={{color:"rgba(255,255,255,0.6)"}}>{t("common.total")} <strong style={{color:"#CCFBF1",fontSize:13}}>{t("subcon.rs_math", { Math: Math.round(secTotal).toLocaleString("en-IN") })}</strong></span>
                           </div>
                         </div>
 
                         {/* Categories */}
                         {!sCollapsed && (
                           <div style={{padding:10}}>
-                            {cats.length===0 && <div style={{padding:"14px 12px",textAlign:"center",color:"#9CA3AF",fontSize:12.5}}>No categories — add via Library → Subcon Rate Card</div>}
+                            {cats.length===0 && <div style={{padding:"14px 12px",textAlign:"center",color:"#9CA3AF",fontSize:12.5}}>{t("subcon.no_categories_add_via_library_subcon")}</div>}
                             {cats.map(cat=>{
                               const catKey=`${sec.id}:${cat.id}`;
                               const catCollapsed=!!pkgCatCollapsed[catKey];
@@ -2910,10 +2893,10 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                     <span style={{fontSize:10.5,color:"#94A3B8"}}>· {catRows.length} item{catRows.length===1?"":"s"}</span>
                                     <div style={{display:"flex",gap:10,alignItems:"center",fontSize:11,fontWeight:600}}>
                                       {!perItem&&<>
-                                        <span style={{color:"#64748B"}}>Base <strong style={{color:"#0F172A"}}>Rs.{Math.round(catBase).toLocaleString("en-IN")}</strong></span>
-                                        <span style={{color:"#64748B"}}>Add-on <strong style={{color:"#F59E0B"}}>Rs.{Math.round(catAddOn).toLocaleString("en-IN")}</strong></span>
+                                        <span style={{color:"#64748B"}}>{t("common.base")} <strong style={{color:"#0F172A"}}>{t("subcon.rs_math", { Math: Math.round(catBase).toLocaleString("en-IN") })}</strong></span>
+                                        <span style={{color:"#64748B"}}>{t("common.add_on")} <strong style={{color:"#F59E0B"}}>{t("subcon.rs_math", { Math: Math.round(catAddOn).toLocaleString("en-IN") })}</strong></span>
                                         <span style={{display:"flex",alignItems:"center",gap:4}}>
-                                          <span style={{color:"#64748B",fontSize:10.5}}>Area</span>
+                                          <span style={{color:"#64748B",fontSize:10.5}}>{t("common.area")}</span>
                                           <input type="number"
                                             value={catAreaOverride!=null?catAreaOverride:""}
                                             onChange={e=>setPkgCatAreas(p=>({...p,[catKey]:e.target.value===""?null:e.target.value}))}
@@ -2925,7 +2908,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                               color:catAreaOverride?"#92400E":"#0F172A",outline:"none"}}/>
                                         </span>
                                       </>}
-                                      <span style={{color:"#64748B"}}>Total <strong style={{color:"#059669"}}>Rs.{Math.round(catTotal).toLocaleString("en-IN")}</strong></span>
+                                      <span style={{color:"#64748B"}}>{t("common.total")} <strong style={{color:"#059669"}}>{t("subcon.rs_math", { Math: Math.round(catTotal).toLocaleString("en-IN") })}</strong></span>
                                     </div>
                                   </div>
 
@@ -2934,15 +2917,15 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                     <table style={{width:"100%",borderCollapse:"collapse"}}>
                                       <thead>
                                         <tr style={{background:"#FAFAFA"}}>
-                                          <th style={{padding:"7px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>Item</th>
-                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase",width:100}}>Base</th>
-                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#F59E0B",textTransform:"uppercase",width:100}}>Add-on</th>
-                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#0D9488",textTransform:"uppercase",width:80}}>{perItem?"Qty":"Area"}</th>
-                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#059669",textTransform:"uppercase",width:110}}>Total</th>
+                                          <th style={{padding:"7px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>{t("common.item")}</th>
+                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase",width:100}}>{t("common.base")}</th>
+                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#F59E0B",textTransform:"uppercase",width:100}}>{t("common.add_on")}</th>
+                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#0D9488",textTransform:"uppercase",width:80}}>{perItem?t("common.qty"):t("common.area")}</th>
+                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#059669",textTransform:"uppercase",width:110}}>{t("common.total")}</th>
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {catRows.length===0 && <tr><td colSpan={5} style={{padding:"12px",textAlign:"center",color:"#9CA3AF",fontSize:12}}>No items</td></tr>}
+                                        {catRows.length===0 && <tr><td colSpan={5} style={{padding:"12px",textAlign:"center",color:"#9CA3AF",fontSize:12}}>{t("common.no_items_2")}</td></tr>}
                                         {catRows.map((r,idx)=>{
                                           const base   = getPkgItemBase(sec.id,cat.id,r.item_id,r);
                                           const addOn  = getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
@@ -2962,7 +2945,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                                       onChange={e=>patchPkgItem(sec.id,cat.id,r.item_id,{base:e.target.value===""?undefined:parseFloat(e.target.value)||0})}
                                                       style={{width:90,padding:"5px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12.5,
                                                         border:"1.5px solid #E5E7EB",background:"white",outline:"none"}}/>
-                                                  : <span style={{fontSize:12.5,fontWeight:600}}>Rs.{Math.round(base).toLocaleString("en-IN")}</span>
+                                                  : <span style={{fontSize:12.5,fontWeight:600}}>{t("subcon.rs_math", { Math: Math.round(base).toLocaleString("en-IN") })}</span>
                                                 }
                                               </td>
                                               <td style={{padding:"8px 12px",textAlign:"right"}}>
@@ -2987,9 +2970,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                                   : Math.round(qty).toLocaleString("en-IN")
                                                 }
                                               </td>
-                                              <td style={{padding:"8px 12px",textAlign:"right",fontSize:13,fontWeight:700,color:"#059669"}}>
-                                                Rs.{Math.round(total).toLocaleString("en-IN")}
-                                              </td>
+                                              <td style={{padding:"8px 12px",textAlign:"right",fontSize:13,fontWeight:700,color:"#059669"}}>{t("subcon.rs_math", { Math: Math.round(total).toLocaleString("en-IN") })}</td>
                                             </tr>
                                           );
                                         })}
@@ -3008,8 +2989,8 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   {/* Grand Total bar */}
                   {pkgGrandTotal>0 && (
                     <div style={{marginTop:10,padding:"14px 20px",background:"#0F172A",color:"white",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                      <span style={{fontSize:13,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",color:"rgba(255,255,255,0.7)"}}>Grand Total</span>
-                      <span style={{fontSize:20,fontWeight:700,color:"#CCFBF1"}}>Rs.{Math.round(pkgGrandTotal).toLocaleString("en-IN")}</span>
+                      <span style={{fontSize:13,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",color:"rgba(255,255,255,0.7)"}}>{t("common.grand_total")}</span>
+                      <span style={{fontSize:20,fontWeight:700,color:"#CCFBF1"}}>{t("subcon.rs_math", { Math: Math.round(pkgGrandTotal).toLocaleString("en-IN") })}</span>
                     </div>
                   )}
                 </>)}
@@ -3020,14 +3001,13 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                 <div>
                   {/* Top bar: count + Browse button */}
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                    <div style={{fontSize:11,color:T.t3}}>
-                      {Object.values(iwPicked).filter(q=>parseFloat(q||0)>0).length + iwManualItems.filter(it=>it.description.trim()&&parseFloat(it.rate||0)>0).length} item(s) · <span style={{color:T.grn,fontWeight:700}}>
+                    <div style={{fontSize:11,color:T.t3}}>{t("subcon.object_item_s", { Object: Object.values(iwPicked).filter(q=>parseFloat(q||0)>0).length + iwManualItems.filter(it=>it.description.trim()&&parseFloat(it.rate||0)>0).length })}<span style={{color:T.grn,fontWeight:700}}>
                         {fmtC(Object.entries(iwPicked).reduce((s,[id,qty])=>{const it=iwItems.find(i=>String(i.id)===String(id));return s+(parseFloat(it?.rate||0)*parseFloat(qty||0));},0)+iwManualItems.reduce((s,it)=>s+(parseFloat(it.qty||0)*parseFloat(it.rate||0)),0))}
                       </span>
                     </div>
                     <button onClick={()=>{setIwShowPicker(true);setIwSearch("");}}
                       style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",border:"none",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-                      📋 Browse &amp; Pick Items
+                     {t("subcon.browse_pick_items")}
                     </button>
                   </div>
 
@@ -3049,7 +3029,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                             </div>
                             <span style={{fontSize:11,color:T.t3}}>{item.unit}</span>
                             <span style={{fontSize:11,color:T.blu,fontWeight:600}}>₹{Number(item.rate||0).toLocaleString("en-IN")}</span>
-                            <input type="number" value={qty} placeholder="Qty"
+                            <input type="number" value={qty} placeholder={t("common.qty")}
                               onChange={e=>setIwPicked(p=>({...p,[id]:e.target.value}))}
                               style={{padding:"4px 6px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11,textAlign:"right",outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"}}/>
                             <span style={{fontSize:11,fontWeight:700,color:amt>0?T.grn:T.t4,textAlign:"right"}}>{amt>0?fmtC(amt):"—"}</span>
@@ -3071,17 +3051,17 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                         const amt=parseFloat(it.qty||0)*parseFloat(it.rate||0);
                         return(
                           <div key={idx} style={{display:"grid",gridTemplateColumns:"2fr 80px 80px 80px 80px 22px",gap:5,padding:"6px 8px",borderTop:idx>0?"1px solid #EDE9FE":"none",alignItems:"center",background:"white"}}>
-                            <input type="text" value={it.description} placeholder="Item description"
+                            <input type="text" value={it.description} placeholder={t("estimate.item_description")}
                               onChange={e=>{const a=[...iwManualItems];a[idx]={...a[idx],description:e.target.value};setIwManualItems(a);}}
                               style={{padding:"4px 6px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"}}/>
                             <select value={it.unit||"Sqft"} onChange={e=>{const a=[...iwManualItems];a[idx]={...a[idx],unit:e.target.value};setIwManualItems(a);}}
                               style={{padding:"4px 5px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",background:"white",width:"100%"}}>
                               {["Sqft","Cft","No","Running Ft","Unit","Kg","Lump Sum"].map(u=><option key={u}>{u}</option>)}
                             </select>
-                            <input type="number" value={it.rate} placeholder="Rate"
+                            <input type="number" value={it.rate} placeholder={t("common.rate")}
                               onChange={e=>{const a=[...iwManualItems];a[idx]={...a[idx],rate:e.target.value};setIwManualItems(a);}}
                               style={{padding:"4px 6px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11,textAlign:"right",outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"}}/>
-                            <input type="number" value={it.qty} placeholder="Qty"
+                            <input type="number" value={it.qty} placeholder={t("common.qty")}
                               onChange={e=>{const a=[...iwManualItems];a[idx]={...a[idx],qty:e.target.value};setIwManualItems(a);}}
                               style={{padding:"4px 6px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11,textAlign:"right",outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"}}/>
                             <span style={{fontSize:11,fontWeight:700,color:amt>0?"#059669":T.t4,textAlign:"right"}}>{amt>0?fmtC(amt):"—"}</span>
@@ -3096,14 +3076,14 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   {/* Empty state */}
                   {Object.keys(iwPicked).length===0 && iwManualItems.length===0 && (
                     <div style={{textAlign:"center",padding:"18px 0",color:T.t4,fontSize:12,border:`1px dashed ${T.b1}`,borderRadius:7,marginBottom:8}}>
-                      No items yet — click <b>Browse &amp; Pick Items</b> to select from library, or add manual items below.
+                     {t("subcon.no_items_yet_click")} <b>{t("subcon.browse_pick_items_2")}</b> {t("subcon.to_select_from_library_or_add")}
                     </div>
                   )}
 
                   {/* + Manual Item button */}
                   <button onClick={()=>setIwManualItems(p=>[...p,{description:"",unit:"Sqft",qty:"",rate:""}])}
                     style={{padding:"5px 13px",fontSize:11.5,fontWeight:700,color:"#7C3AED",background:"#F3E8FF",border:"1.5px dashed #C4B5FD",borderRadius:5,cursor:"pointer"}}>
-                    + Manual Item
+                   {t("subcon.manual_item")}
                   </button>
 
                   {/* ── SIDE SLIDE PICKER ─────────────────────── */}
@@ -3113,11 +3093,11 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                       {/* Picker header */}
                       <div style={{background:"#0F172A",padding:"14px 16px",flexShrink:0}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                          <div style={{fontSize:14,fontWeight:700,color:"white"}}>📋 Library Items</div>
+                          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("subcon.library_items")}</div>
                           <button onClick={()=>setIwShowPicker(false)}
-                            style={{background:"#10B981",border:"none",color:"white",padding:"6px 14px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>✓ Done</button>
+                            style={{background:"#10B981",border:"none",color:"white",padding:"6px 14px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>{t("master_library.done")}</button>
                         </div>
-                        <input type="text" value={iwSearch} placeholder="Search items…" autoFocus
+                        <input type="text" value={iwSearch} placeholder={t("common.search_items")} autoFocus
                           onChange={e=>setIwSearch(e.target.value)}
                           style={{width:"100%",padding:"8px 11px",borderRadius:6,border:"none",fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                         <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>
@@ -3132,7 +3112,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                       </div>
                       {/* Picker body — category-grouped */}
                       <div style={{flex:1,overflowY:"auto"}}>
-                        {iwLoading && <div style={{textAlign:"center",padding:"40px",color:"#94A3B8",fontSize:12}}>Loading…</div>}
+                        {iwLoading && <div style={{textAlign:"center",padding:"40px",color:"#94A3B8",fontSize:12}}>{t("common.loading_2")}</div>}
                         {!iwLoading && (()=>{
                           const filtered=(iwTradeFilter==="All"?iwItems:iwItems.filter(i=>i.trade_category===iwTradeFilter))
                             .filter(i=>!iwSearch||i.name.toLowerCase().includes(iwSearch.toLowerCase()));
@@ -3140,7 +3120,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                             <div style={{textAlign:"center",padding:"40px 20px",color:"#94A3B8",fontSize:12}}>
                               {iwItems.length===0
                                 ?`No items for ${pkgSelType?.name} × ${pkgSelCity?.name} — add in Library → Subcon Rate Card → Work Item Rates`
-                                :"No items match your search"}
+                                :t("subcon.no_items_match_your_search")}
                             </div>
                           );
                           const cats=[...new Set(filtered.map(i=>i.trade_category||"Work Items"))];
@@ -3168,7 +3148,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                         <div style={{fontSize:10,color:"#64748B",marginTop:1}}>{item.unit} · ₹{Number(item.rate||0).toLocaleString("en-IN")}/unit</div>
                                       </div>
                                       {isPicked&&(
-                                        <input type="number" value={iwPicked[item.id]||""} placeholder="Qty"
+                                        <input type="number" value={iwPicked[item.id]||""} placeholder={t("common.qty")}
                                           onChange={e=>{e.stopPropagation();setIwPicked(p=>({...p,[item.id]:e.target.value}));}}
                                           onClick={e=>e.stopPropagation()}
                                           style={{width:72,padding:"5px 8px",borderRadius:5,border:"1.5px solid #3B82F6",fontSize:12,textAlign:"right",outline:"none",fontFamily:"inherit",background:"white"}}/>
@@ -3186,11 +3166,9 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                       </div>
                       {/* Picker footer */}
                       <div style={{padding:"12px 16px",background:"#0F172A",flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                        <div style={{fontSize:11,color:"rgba(255,255,255,0.6)"}}>
-                          {Object.values(iwPicked).filter(q=>parseFloat(q||0)>0).length} selected · {fmtC(Object.entries(iwPicked).reduce((s,[id,qty])=>{const it=iwItems.find(i=>String(i.id)===String(id));return s+(parseFloat(it?.rate||0)*parseFloat(qty||0));},0))}
-                        </div>
+                        <div style={{fontSize:11,color:"rgba(255,255,255,0.6)"}}>{t("subcon.object_selected_fmtc", { Object: Object.values(iwPicked).filter(q=>parseFloat(q||0)>0).length, fmtC: fmtC(Object.entries(iwPicked).reduce((s,[id,qty])=>{const it=iwItems.find(i=>String(i.id)===String(id));return s+(parseFloat(it?.rate||0)*parseFloat(qty||0));},0)) })}</div>
                         <button onClick={()=>setIwShowPicker(false)}
-                          style={{padding:"7px 20px",borderRadius:6,background:"#10B981",color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>✓ Done Picking</button>
+                          style={{padding:"7px 20px",borderRadius:6,background:"#10B981",color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t("subcon.done_picking")}</button>
                       </div>
                     </div>
                   </>)}
@@ -3202,11 +3180,11 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
           {/* Basic Info — only for manual / item-wise modes (package mode has its own info panel) */}
           {woType!=="package" && <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:14}}>
             <div style={{gridColumn:"1/3"}}>
-              <label style={lblStyle}>Subcontractor *</label>
+              <label style={lblStyle}>{t("common.subcontractor_2")}</label>
               <div style={{display:"flex",gap:6,alignItems:"stretch"}}>
                 <input list="sc-list-wo" value={form.subcon_name}
                   onChange={e=>setForm(p=>({...p,subcon_name:e.target.value}))}
-                  placeholder="Select from library or type new..."
+                  placeholder={t("subcon.select_from_library_or_type_new")}
                   style={{...inpStyle,flex:1}}/>
                 <datalist id="sc-list-wo">
                   {subcons.map(s=>(
@@ -3216,9 +3194,9 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   ))}
                 </datalist>
                 <button type="button" onClick={()=>setShowAddSc(true)}
-                  title="Add new subcontractor to master library"
+                  title={t("subcon.add_new_subcontractor_to_master_library")}
                   style={{padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.blu}`,background:T.bluL,color:T.blu,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
-                  + New
+                 {t("subcon.new")}
                 </button>
               </div>
               {/* Labour strength chip — appears when typed name matches a library entry */}
@@ -3248,20 +3226,20 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
               )}
             </div>
             <div>
-              <label style={lblStyle}>Category</label>
+              <label style={lblStyle}>{t("common.category")}</label>
               <SearchSelect value={form.subcon_category} options={CATS}
-                onChange={v=>setForm(p=>({...p,subcon_category:v}))} placeholder="Select category..."/>
+                onChange={v=>setForm(p=>({...p,subcon_category:v}))} placeholder={t("common.select_category")}/>
             </div>
             <div>
-              <label style={lblStyle}>Retention %</label>
+              <label style={lblStyle}>{t("common.retention")}</label>
               <input type="number" value={form.retention_pct} onChange={e=>setForm(p=>({...p,retention_pct:e.target.value}))} style={inpStyle}/>
             </div>
             <div>
-              <label style={lblStyle}>TDS %</label>
+              <label style={lblStyle}>{t("common.tds")}</label>
               <input type="number" value={form.tds_pct} onChange={e=>setForm(p=>({...p,tds_pct:e.target.value}))} style={inpStyle}/>
             </div>
             <div>
-              <label style={lblStyle}>Start Date</label>
+              <label style={lblStyle}>{t("common.start_date")}</label>
               <input type="date" value={form.start_date} onChange={e=>setForm(p=>({...p,start_date:e.target.value}))} style={inpStyle}/>
             </div>
           </div>
@@ -3270,10 +3248,10 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
           {/* Sections & Grand Total — manual / item-wise mode only */}
           {woType!=="package" && (<>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".4px"}}>Sections & BOQ Items</div>
+            <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".4px"}}>{t("subcon.sections_boq_items")}</div>
             <button onClick={addSection}
               style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-              + Add Section
+             {t("common.add_section")}
             </button>
           </div>
 
@@ -3292,7 +3270,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",minWidth:20}}>#{si+1}</span>
                   <input value={sec.title} onChange={e=>updateSection(si,"title",e.target.value)}
                     onClick={e=>e.stopPropagation()}
-                    placeholder="Section name (e.g. Plinth Work, Lintel Level, Slab...)"
+                    placeholder={t("subcon.section_name_e_g_plinth_work")}
                     style={{flex:1,padding:"5px 9px",borderRadius:5,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.08)",color:"white",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
                   <span style={{fontSize:11,fontWeight:700,color:"#4ADE80",minWidth:80,textAlign:"right"}}>{fmtC(secTotal)}</span>
                   {form.sections.length>1&&(
@@ -3311,14 +3289,14 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                       <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:6,alignItems:"center"}}>
                         <div style={{position:"relative"}}>
                           <input value={it.description} onChange={e=>updateItem(si,ii,"description",e.target.value)}
-                            placeholder="Item description"
+                            placeholder={t("estimate.item_description")}
                             data-wo-desc={`new-${si}-${ii}`}
                             style={{...inpStyle,paddingRight:28}}/>
                           <button onClick={()=>{setShowLibFor({secIdx:si,itemIdx:ii});setLibSearch("");}}
-                            title="Pick from library"
+                            title={t("subcon.pick_from_library")}
                             style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.blu,fontSize:14,lineHeight:1,padding:0}}>📚</button>
                         </div>
-                        <input value={it.unit} onChange={e=>updateItem(si,ii,"unit",e.target.value)} placeholder="Sqft" style={inpStyle}/>
+                        <input value={it.unit} onChange={e=>updateItem(si,ii,"unit",e.target.value)} placeholder={t("master_library.sqft")} style={inpStyle}/>
                         <input type="number" value={it.qty} onChange={e=>updateItem(si,ii,"qty",e.target.value)} placeholder="0" style={inpStyle}/>
                         <input type="number" value={it.rate} onChange={e=>updateItem(si,ii,"rate",e.target.value)} placeholder="0" style={inpStyle}/>
                         <div style={{fontSize:11,fontWeight:700,color:T.grn,textAlign:"right"}}>{amt>0?fmtC(amt):""}</div>
@@ -3328,7 +3306,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   })}
                   <button onClick={()=>addItem(si)}
                     style={{background:"none",border:"1px dashed "+T.b1,color:T.blu,cursor:"pointer",fontSize:11,fontWeight:600,padding:"5px 10px",borderRadius:5,width:"100%",marginTop:2}}>
-                    + Add Item
+                   {t("common.add_item")}
                   </button>
                 </div>)}
               </div>
@@ -3336,9 +3314,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
           })}
 
           {/* Grand Total */}
-          <div style={{textAlign:"right",fontSize:14,fontWeight:800,color:T.grn,padding:"6px 0"}}>
-            Grand Total: {fmtC(grandTotal)}
-          </div>
+          <div style={{textAlign:"right",fontSize:14,fontWeight:800,color:T.grn,padding:"6px 0"}}>{t("subcon.grand_total_fmtc", { fmtC: fmtC(grandTotal) })}</div>
           </>)}
         </div>
 
@@ -3346,22 +3322,22 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
         <div style={{padding:"12px 20px",borderTop:"1px solid #E5E7EB",display:"flex",gap:8,flexShrink:0,alignItems:"center",background:"white"}}>
           {/* PDF download — only in package builder mode */}
           {pkgBuilderMode && (
-            <button onClick={()=>window.print()} title="Download PDF of current view"
+            <button onClick={()=>window.print()} title={t("subcon.download_pdf_of_current_view")}
               style={{padding:"8px 14px",borderRadius:7,border:"1.5px solid #94A3B8",background:"white",fontSize:12,fontWeight:600,color:"#334155",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-              📥 PDF
+             {t("subcon.pdf")}
             </button>
           )}
           {/* Subtotal display */}
           {pkgBuilderMode && pkgGrandTotal>0 && (
             <span style={{fontSize:12,color:"#64748B",fontWeight:500}}>
-              Subtotal: <strong style={{color:"#0F172A"}}>Rs.{Math.round(pkgGrandTotal).toLocaleString("en-IN")}</strong>
+             {t("common.subtotal")} <strong style={{color:"#0F172A"}}>{t("subcon.rs_math", { Math: Math.round(pkgGrandTotal).toLocaleString("en-IN") })}</strong>
             </span>
           )}
           <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-            <button onClick={onClose} style={{padding:"9px 18px",borderRadius:7,border:"1px solid #D1D5DB",background:"#F8FAFC",fontSize:12.5,fontWeight:600,color:"#374151",cursor:"pointer"}}>Cancel</button>
+            <button onClick={onClose} style={{padding:"9px 18px",borderRadius:7,border:"1px solid #D1D5DB",background:"#F8FAFC",fontSize:12.5,fontWeight:600,color:"#374151",cursor:"pointer"}}>{t("common.cancel")}</button>
             <button onClick={submit} disabled={saving}
               style={{padding:"9px 22px",borderRadius:7,background:saving?"#9CA3AF":"#2563EB",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:saving?"not-allowed":"pointer"}}>
-              {saving?"Creating…":"Create Work Order"}
+              {saving?t("common.creating"):t("subcon.create_work_order")}
             </button>
           </div>
         </div>
@@ -3398,15 +3374,15 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
           onClick={()=>setShowLibFor(null)}>
           <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:10,width:"min(420px,92vw)",maxHeight:"70vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 50px rgba(0,0,0,0.3)"}}>
             <div style={{background:"#0F172A",padding:"10px 14px",borderRadius:"10px 10px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{fontSize:13,fontWeight:700,color:"white"}}>Library — {form.subcon_category}</div>
+              <div style={{fontSize:13,fontWeight:700,color:"white"}}>{t("subcon.library_subcon_category", { subcon_category: form.subcon_category })}</div>
               <button onClick={()=>setShowLibFor(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:18,cursor:"pointer"}}>×</button>
             </div>
             <div style={{padding:"10px 12px",borderBottom:"1px solid "+T.b1}}>
-              <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder="Search items..."
+              <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder={t("subcon.search_items")}
                 style={{...inpStyle,marginBottom:0}}/>
             </div>
             <div style={{flex:1,overflowY:"auto"}}>
-              {filteredLib.length===0&&<div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:12}}>No items found</div>}
+              {filteredLib.length===0&&<div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:12}}>{t("subcon.no_items_found")}</div>}
               {filteredLib.map(item=>(
                 <div key={item.id} onClick={()=>pickLibItem(item)}
                   style={{padding:"9px 14px",borderBottom:"1px solid "+T.b1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}
@@ -3454,7 +3430,7 @@ function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const save = async () => {
-    if (!form.name.trim()) { setErr("Firm / Company name is required"); return; }
+    if (!form.name.trim()) { setErr(t("subcon.firm_company_name_is_required")); return; }
     setSaving(true); setErr("");
     try {
       const res = await api.post("/library/subcontractors", form);
@@ -3475,8 +3451,8 @@ function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
         {/* Header */}
         <div style={{background:"#0F172A",padding:"13px 18px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:"white"}}>Add Subcontractor to Library</div>
-            <div style={{fontSize:10.5,color:"rgba(255,255,255,0.55)",marginTop:1}}>Saved to master library so it appears across all projects</div>
+            <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("subcon.add_subcontractor_to_library")}</div>
+            <div style={{fontSize:10.5,color:"rgba(255,255,255,0.55)",marginTop:1}}>{t("subcon.saved_to_master_library_so_it")}</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
         </div>
@@ -3489,33 +3465,33 @@ function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
           )}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             <div>
-              <label style={lblStyle}>Firm / Company Name *</label>
+              <label style={lblStyle}>{t("subcon.firm_company_name")}</label>
               <input value={form.name} onChange={e=>upd("name", e.target.value)}
-                placeholder="e.g. Raj Construction" style={inpStyle} autoFocus/>
+                placeholder={t("master_library.e_g_raj_construction")} style={inpStyle} autoFocus/>
             </div>
             <div>
-              <label style={lblStyle}>Owner / Contact Person</label>
+              <label style={lblStyle}>{t("master_library.owner_contact_person")}</label>
               <input value={form.owner} onChange={e=>upd("owner", e.target.value)}
-                placeholder="Owner name" style={inpStyle}/>
+                placeholder={t("common.owner_name")} style={inpStyle}/>
             </div>
             <div>
-              <label style={lblStyle}>Trade / Specialty *</label>
+              <label style={lblStyle}>{t("subcon.trade_specialty")}</label>
               <select value={form.trade} onChange={e=>upd("trade", e.target.value)} style={inpStyle}>
                 {TRADES.map(t=><option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
-              <label style={lblStyle}>Phone</label>
+              <label style={lblStyle}>{t("common.phone")}</label>
               <input value={form.phone} onChange={e=>upd("phone", e.target.value)}
-                placeholder="+91 XXXXX XXXXX" style={inpStyle}/>
+                placeholder={t("common.91_xxxxx_xxxxx")} style={inpStyle}/>
             </div>
             <div>
-              <label style={lblStyle}>City</label>
+              <label style={lblStyle}>{t("common.city")}</label>
               <input value={form.city} onChange={e=>upd("city", e.target.value)}
-                placeholder="Raipur" style={inpStyle}/>
+                placeholder={t("subcon.raipur")} style={inpStyle}/>
             </div>
             <div>
-              <label style={lblStyle}>Labour Strength</label>
+              <label style={lblStyle}>{t("master_library.labour_strength")}</label>
               <input type="number" min={0} value={form.labour_strength || ""}
                 onChange={e=>upd("labour_strength", parseInt(e.target.value) || 0)}
                 placeholder="e.g. 15" style={inpStyle}/>
@@ -3523,14 +3499,14 @@ function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
             <div>
               <label style={lblStyle}>GSTIN</label>
               <input value={form.gstin} onChange={e=>upd("gstin", e.target.value)}
-                placeholder="If registered" style={inpStyle}/>
+                placeholder={t("master_library.if_registered")} style={inpStyle}/>
             </div>
             <div>
-              <label style={lblStyle}>Status</label>
+              <label style={lblStyle}>{t("common.status")}</label>
               <select value={form.status} onChange={e=>upd("status", e.target.value)} style={inpStyle}>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-                <option value="Blacklisted">Blacklisted</option>
+                <option value="Active">{t("common.active")}</option>
+                <option value="Inactive">{t("subcon.inactive")}</option>
+                <option value="Blacklisted">{t("subcon.blacklisted")}</option>
               </select>
             </div>
           </div>
@@ -3539,11 +3515,11 @@ function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
         <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8}}>
           <button onClick={onClose}
             style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>
-            Cancel
+           {t("common.cancel")}
           </button>
           <button onClick={save} disabled={saving || !form.name.trim()}
             style={{flex:2,padding:"9px",borderRadius:7,background:(saving||!form.name.trim())?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:(saving||!form.name.trim())?"not-allowed":"pointer"}}>
-            {saving ? "Saving…" : "Save & Use"}
+            {saving ? t("common.saving_2") : t("subcon.save_use")}
           </button>
         </div>
       </div>
@@ -3619,8 +3595,8 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
   const grandTotal = sections.reduce((st,sec)=>st+sec.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0),0);
 
   const submit = async () => {
-    if(!form.subcon_name) return alert("Subcontractor required");
-    if(!reason.trim()) return alert("Change reason required for approval");
+    if(!form.subcon_name) return alert(t("subcon.subcontractor_required"));
+    if(!reason.trim()) return alert(t("subcon.change_reason_required_for_approval"));
     const validSecs = sections.filter(s=>s.title.trim());
     setSaving(true);
     const res = await api.post("/subcon/work-orders/"+wo.id+"/amendment",{
@@ -3634,7 +3610,7 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
         }))
       })),
       reason,
-    }).catch(()=>({success:false,message:"Network error"}));
+    }).catch(()=>({success:false,message:t("common.network_error")}));
     setSaving(false);
     if(res.success){
       api.post("/approvals/submit", {
@@ -3662,8 +3638,8 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
         {/* Header */}
         <div style={{background:"#0F172A",padding:"13px 18px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:"white"}}>Edit Work Order</div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:2}}>Changes will require admin approval before applying</div>
+            <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("subcon.edit_work_order")}</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:2}}>{t("subcon.changes_will_require_admin_approval_before")}</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:22,cursor:"pointer",lineHeight:1}}>×</button>
         </div>
@@ -3671,58 +3647,58 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
         <div style={{flex:1,overflowY:"auto",padding:16}}>
 
           {/* Basic Info */}
-          <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Basic Details</div>
+          <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>{t("subcon.basic_details")}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:16,background:T.surfaceB,padding:12,borderRadius:8,border:"1px solid "+T.b1}}>
             <div style={{gridColumn:"1/3"}}>
-              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Subcontractor *</label>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>{t("common.subcontractor_2")}</label>
               <input list="sc-edit-list" value={form.subcon_name} onChange={e=>setForm(p=>({...p,subcon_name:e.target.value}))} style={inpStyle}/>
               <datalist id="sc-edit-list">{subcons.map(s=><option key={s.id} value={s.name}/>)}</datalist>
             </div>
             <div>
-              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Category</label>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>{t("common.category")}</label>
               <SearchSelect value={form.subcon_category} options={CATS}
-                onChange={v=>setForm(p=>({...p,subcon_category:v}))} placeholder="Select category..."/>
+                onChange={v=>setForm(p=>({...p,subcon_category:v}))} placeholder={t("common.select_category")}/>
             </div>
             <div>
-              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Status</label>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>{t("common.status")}</label>
               <SearchSelect value={form.status} options={["Active","On Hold","Completed","Cancelled"]}
-                onChange={v=>setForm(p=>({...p,status:v}))} placeholder="Select status..."/>
+                onChange={v=>setForm(p=>({...p,status:v}))} placeholder={t("common.select_status")}/>
             </div>
             <div>
-              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Retention %</label>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>{t("common.retention")}</label>
               <input type="number" value={form.retention_pct} onChange={e=>setForm(p=>({...p,retention_pct:e.target.value}))} style={inpStyle}/>
             </div>
             <div>
-              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>TDS %</label>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>{t("common.tds")}</label>
               <input type="number" value={form.tds_pct} onChange={e=>setForm(p=>({...p,tds_pct:e.target.value}))} style={inpStyle}/>
             </div>
             <div>
-              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Start Date</label>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>{t("common.start_date")}</label>
               <input type="date" value={form.start_date} onChange={e=>setForm(p=>({...p,start_date:e.target.value}))} style={inpStyle}/>
             </div>
             <div>
-              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>End Date</label>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>{t("common.end_date")}</label>
               <input type="date" value={form.end_date} onChange={e=>setForm(p=>({...p,end_date:e.target.value}))} style={inpStyle}/>
             </div>
             <div style={{gridColumn:"1/4"}}>
-              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Description / Remark</label>
-              <input value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} style={inpStyle} placeholder="Optional"/>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>{t("subcon.description_remark")}</label>
+              <input value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} style={inpStyle} placeholder={t("common.optional")}/>
             </div>
           </div>
 
           {/* Sections & BOQ */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px"}}>
-              Sections & BOQ Items
-              <span style={{marginLeft:8,fontSize:10,fontWeight:700,color:T.grn}}>Grand Total: {fmtC(grandTotal)}</span>
+             {t("subcon.sections_boq_items")}
+              <span style={{marginLeft:8,fontSize:10,fontWeight:700,color:T.grn}}>{t("subcon.grand_total_fmtc", { fmtC: fmtC(grandTotal) })}</span>
             </div>
             <button onClick={addSection}
               style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-              + Add Section
+             {t("common.add_section")}
             </button>
           </div>
 
-          {loadingSecs&&<div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading sections...</div>}
+          {loadingSecs&&<div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>{t("subcon.loading_sections")}</div>}
 
           {sections.map((sec,si)=>{
             const secTotal = sec.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0);
@@ -3740,7 +3716,7 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
                   <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",minWidth:20}}>#{si+1}</span>
                   <input value={sec.title} onChange={e=>updateSection(si,"title",e.target.value)}
                     onClick={e=>e.stopPropagation()}
-                    placeholder="Section name..."
+                    placeholder={t("subcon.section_name")}
                     style={{flex:1,padding:"5px 9px",borderRadius:5,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.08)",color:"white",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
                   <span style={{fontSize:11,fontWeight:700,color:"#4ADE80",minWidth:80,textAlign:"right"}}>{fmtC(secTotal)}</span>
                   <button onClick={()=>removeSection(si)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1}}>×</button>
@@ -3757,13 +3733,13 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
                         background:it.isNew?"#EFF6FF":"transparent",borderRadius:it.isNew?4:0,padding:it.isNew?"2px 4px":"0"}}>
                         <div style={{position:"relative"}}>
                           <input value={it.description} onChange={e=>updateItem(si,ii,"description",e.target.value)}
-                            placeholder="Item description"
+                            placeholder={t("estimate.item_description")}
                             data-wo-desc={`edit-${si}-${ii}`}
                             style={{...inpStyle,paddingRight:28}}/>
                           <button onClick={()=>{setShowLibFor({si,ii});setLibSearch("");}}
                             style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.blu,fontSize:14,lineHeight:1,padding:0}}>📚</button>
                         </div>
-                        <input value={it.unit} onChange={e=>updateItem(si,ii,"unit",e.target.value)} placeholder="Sqft" style={inpStyle}/>
+                        <input value={it.unit} onChange={e=>updateItem(si,ii,"unit",e.target.value)} placeholder={t("master_library.sqft")} style={inpStyle}/>
                         <input type="number" value={it.qty} onChange={e=>updateItem(si,ii,"qty",e.target.value)} placeholder="0" style={inpStyle}/>
                         <input type="number" value={it.rate} onChange={e=>updateItem(si,ii,"rate",e.target.value)} placeholder="0" style={inpStyle}/>
                         <div style={{fontSize:11,fontWeight:700,color:T.grn,textAlign:"right"}}>{amt>0?fmtC(amt):""}</div>
@@ -3773,7 +3749,7 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
                   })}
                   <button onClick={()=>addItem(si)}
                     style={{background:"none",border:"1px dashed "+T.b1,color:T.blu,cursor:"pointer",fontSize:11,fontWeight:600,padding:"5px 10px",borderRadius:5,width:"100%",marginTop:2}}>
-                    + Add Item
+                   {t("common.add_item")}
                   </button>
                 </div>)}
               </div>
@@ -3782,19 +3758,19 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
 
           {/* Change Reason */}
           <div style={{marginTop:14,background:"#FFF7ED",border:"1.5px solid #FED7AA",borderRadius:8,padding:12}}>
-            <div style={{fontSize:10,fontWeight:700,color:"#92400E",textTransform:"uppercase",marginBottom:6}}>⚠ Change Reason (Required for Approval)</div>
+            <div style={{fontSize:10,fontWeight:700,color:"#92400E",textTransform:"uppercase",marginBottom:6}}>{t("estimate.change_reason_required_for_approval")}</div>
             <textarea value={reason} onChange={e=>setReason(e.target.value)}
-              placeholder="Reason for this change (e.g. Scope change — added FF slab work, rate revision approved by PM...)"
+              placeholder={t("subcon.reason_for_this_change_e_g")}
               style={{width:"100%",minHeight:60,padding:"8px 10px",borderRadius:6,border:"1.5px solid #FED7AA",fontSize:12,outline:"none",fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",background:"white"}}/>
           </div>
         </div>
 
         {/* Footer */}
         <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8,flexShrink:0,background:T.surfaceB}}>
-          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>{t("common.cancel")}</button>
           <button onClick={submit} disabled={saving||!reason.trim()}
             style={{flex:2,padding:"9px",borderRadius:7,background:saving||!reason.trim()?T.t4:"#D97706",color:"white",border:"none",fontSize:13,fontWeight:700,cursor:saving||!reason.trim()?"not-allowed":"pointer"}}>
-            {saving?"Submitting...":"Submit for Approval"}
+            {saving?t("common.submitting_2"):t("common.submit_for_approval")}
           </button>
         </div>
 
@@ -3804,7 +3780,7 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
             <div style={{background:T.surface,borderRadius:10,width:"min(400px,94vw)",maxHeight:"70vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 40px rgba(0,0,0,0.2)"}}>
               <div style={{padding:"10px 14px",borderBottom:"1px solid "+T.b1,display:"flex",gap:8,alignItems:"center"}}>
                 <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} autoFocus
-                  placeholder="Search materials..." style={{...inpStyle,flex:1}}/>
+                  placeholder={t("subcon.search_materials")} style={{...inpStyle,flex:1}}/>
                 <button onClick={()=>setShowLibFor(null)} style={{background:"none",border:"none",color:T.t3,cursor:"pointer",fontSize:18}}>×</button>
               </div>
               <div style={{flex:1,overflowY:"auto"}}>
@@ -3843,8 +3819,8 @@ function AmendmentsTab({ amendments, fmtC, onRefresh }) {
   if(amendments.length===0) return(
     <div style={{textAlign:"center",padding:"48px 20px",color:T.t4}}>
       <svg width={32} height={32} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 10px",display:"block"}}><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      <div style={{fontSize:13,color:T.t3}}>No amendments yet</div>
-      <div style={{fontSize:11,color:T.t4,marginTop:4}}>Edit WO pe click karo changes propose karne ke liye</div>
+      <div style={{fontSize:13,color:T.t3}}>{t("subcon.no_amendments_yet")}</div>
+      <div style={{fontSize:11,color:T.t4,marginTop:4}}>{t("subcon.edit_wo_pe_click_karo_changes")}</div>
     </div>
   );
 
@@ -3860,7 +3836,7 @@ function AmendmentsTab({ amendments, fmtC, onRefresh }) {
             <div onClick={()=>setExpandedId(isExp?null:a.id)}
               style={{padding:"10px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",background:T.surfaceB}}>
               <div>
-                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>Amendment #{a.id}</div>
+                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("subcon.amendment_id", { id: a.id })}</div>
                 <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{a.reason}</div>
                 <div style={{fontSize:10,color:T.t4,marginTop:2}}>{a.created_at ? new Date(a.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</div>
               </div>
@@ -3878,15 +3854,15 @@ function AmendmentsTab({ amendments, fmtC, onRefresh }) {
                 {/* Proposed basic changes */}
                 {proposed.proposed_form&&(
                   <div style={{marginBottom:10}}>
-                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>Proposed Changes</div>
+                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>{t("subcon.proposed_changes")}</div>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
                       {[
-                        {l:"Subcontractor",v:proposed.proposed_form.subcon_name},
-                        {l:"Category",v:proposed.proposed_form.subcon_category},
-                        {l:"Status",v:proposed.proposed_form.status},
-                        {l:"Retention",v:proposed.proposed_form.retention_pct+"%"},
+                        {l:t("common.subcontractor"),v:proposed.proposed_form.subcon_name},
+                        {l:t("common.category"),v:proposed.proposed_form.subcon_category},
+                        {l:t("common.status"),v:proposed.proposed_form.status},
+                        {l:t("common.retention_2"),v:proposed.proposed_form.retention_pct+"%"},
                         {l:"TDS",v:proposed.proposed_form.tds_pct+"%"},
-                        {l:"Start",v:proposed.proposed_form.start_date||"—"},
+                        {l:t("common.start"),v:proposed.proposed_form.start_date||"—"},
                       ].map(f=>(
                         <div key={f.l} style={{background:T.surfaceB,borderRadius:5,padding:"6px 8px"}}>
                           <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{f.l}</div>
@@ -3899,7 +3875,7 @@ function AmendmentsTab({ amendments, fmtC, onRefresh }) {
                 {/* Sections summary */}
                 {proposed.proposed_sections&&proposed.proposed_sections.length>0&&(
                   <div style={{marginBottom:12}}>
-                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>Sections ({proposed.proposed_sections.length})</div>
+                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>{t("subcon.sections_proposed", { proposed: proposed.proposed_sections.length })}</div>
                     {proposed.proposed_sections.map((sec,si)=>{
                       const secTotal = (sec.items||[]).reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0);
                       return(
@@ -3927,11 +3903,11 @@ function AmendmentsTab({ amendments, fmtC, onRefresh }) {
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={()=>action(a.id,"Rejected")} disabled={!!actioning}
                       style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+T.red,background:"white",color:T.red,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                      ✕ Reject
+                     {t("common.reject")}
                     </button>
                     <button onClick={()=>action(a.id,"Approved")} disabled={!!actioning}
                       style={{flex:2,padding:"7px",borderRadius:6,background:actioning?T.t4:T.grn,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                      {actioning===a.id+"Approved"?"Applying...":"✓ Approve & Apply"}
+                      {actioning===a.id+"Approved"?t("subcon.applying"):t("common.approve_apply")}
                     </button>
                   </div>
                 )}
@@ -3958,8 +3934,8 @@ function WoItemsTable({ woId, fmtC }) {
 
   const toggleSec = (id) => setCollapsed(p=>({...p,[id]:!p[id]}));
 
-  if(loading) return <div style={{textAlign:"center",padding:"60px 0",color:T.t4}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>;
-  if(sections.length===0) return <div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12}}>No BOQ items</div>;
+  if(loading) return <div style={{textAlign:"center",padding:"60px 0",color:T.t4}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>{t("common.loading")}</div>;
+  if(sections.length===0) return <div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12}}>{t("subcon.no_boq_items")}</div>;
 
   const grandTotal = sections.reduce((st,sec)=>st+(sec.items||[]).reduce((s,it)=>s+parseFloat(it.amount||0),0),0);
 
@@ -4004,9 +3980,7 @@ function WoItemsTable({ woId, fmtC }) {
           </div>
         );
       })}
-      <div style={{textAlign:"right",fontSize:13,fontWeight:800,color:T.grn,padding:"6px 0"}}>
-        Grand Total: {fmtC(grandTotal)}
-      </div>
+      <div style={{textAlign:"right",fontSize:13,fontWeight:800,color:T.grn,padding:"6px 0"}}>{t("subcon.grand_total_fmtc", { fmtC: fmtC(grandTotal) })}</div>
     </div>
   );
 }
@@ -4026,7 +4000,7 @@ function WoItemOptions({ woId, fmtC }) {
     }).catch(()=>{});
   }, [woId]);
   return items.map(it => (
-    <option key={it.id} value={it.id}>{it.description} ({fmtC(it.rate)}/{it.unit||"-"}, qty {it.qty})</option>
+    <option key={it.id} value={it.id}>{t("subcon.description_fmtc_it_qty_qty", { description: it.description, fmtC: fmtC(it.rate), it: it.unit||"-", qty: it.qty })}</option>
   ));
 }
 
@@ -4071,7 +4045,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
         const serverMap = pr?.data?.prev_cum || {};
         for (const it of allItems) prevMap[it.id] = parseFloat(serverMap[it.id]||0)||0;
         const builtSecs = secs.map(s => ({ ...s, items: (s.items||[]).map(it => ({...it, prev_cum: prevMap[it.id]||0})) }));
-        if (unsec.length) builtSecs.push({ title:"Other Items", items: unsec.map(it=>({...it,prev_cum:prevMap[it.id]||0})) });
+        if (unsec.length) builtSecs.push({ title:t("subcon.other_items"), items: unsec.map(it=>({...it,prev_cum:prevMap[it.id]||0})) });
         setSections(builtSecs);
         const initCums = {};
         allItems.forEach(it => { initCums[it.id] = String(prevMap[it.id]||""); });
@@ -4109,7 +4083,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
   // ── Submit ────────────────────────────────────────────────────────────
   const handleSubmit = () => {
     if (overBillMode && !overBillReason.trim()) {
-      alert("Over-Billing mode is ON. Please add a reason — it's compulsory for audit trail.");
+      alert(t("subcon.over_billing_mode_is_on_please"));
       return;
     }
     if (method === "manual") {
@@ -4152,7 +4126,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
     }
 
     if (normalItems.length === 0 && overItems.length === 0) {
-      alert("Nothing to bill — enter qty for at least one milestone.");
+      alert(t("subcon.nothing_to_bill_enter_qty_for"));
       return;
     }
 
@@ -4174,7 +4148,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
 
         {/* ── Header ── */}
         <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-          <div style={{fontSize:15,fontWeight:700,color:T.t1}}>New RA Bill (from milestones)</div>
+          <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{t("subcon.new_ra_bill_from_milestones")}</div>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
         </div>
 
@@ -4183,12 +4157,12 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
           {/* ── Date + Remark ── */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:12,marginBottom:14}}>
             <div>
-              <label style={lblS}>Bill Date *</label>
+              <label style={lblS}>{t("subcon.bill_date")}</label>
               <input type="date" value={billDate} onChange={e=>setBillDate(e.target.value)} style={inpS}/>
             </div>
             <div>
-              <label style={lblS}>Remark</label>
-              <input value={remark} onChange={e=>setRemark(e.target.value)} style={inpS} placeholder="e.g. Bill for plinth work completion…"/>
+              <label style={lblS}>{t("common.remark")}</label>
+              <input value={remark} onChange={e=>setRemark(e.target.value)} style={inpS} placeholder={t("subcon.e_g_bill_for_plinth_work")}/>
             </div>
           </div>
 
@@ -4200,27 +4174,27 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
                 <div style={{flex:1}}>
                   <div style={{fontSize:12.5,fontWeight:700,color:overBillMode?"#991B1B":T.t1}}>
-                    {overBillMode ? "⚠ OVER-BILLING MODE ENABLED" : "Normal billing mode"}
+                    {overBillMode ? t("estimate.over_billing_mode_enabled") : t("estimate.normal_billing_mode")}
                   </div>
                   <div style={{fontSize:10.5,color:overBillMode?"#991B1B":T.t3,marginTop:2,lineHeight:1.45}}>
                     {overBillMode
-                      ? "Fully-billed milestones selectable. Qty can exceed WO item qty. Reason compulsory."
-                      : "WO-capped. Click toggle if extra work / site change needs over-billing."}
+                      ? t("subcon.fully_billed_milestones_selectable_qty_can")
+                      : t("subcon.wo_capped_click_toggle_if_extra")}
                   </div>
                 </div>
                 <button onClick={()=>{ setOverBillMode(p=>!p); if(overBillMode) setOverBillReason(""); }}
                   style={{padding:"6px 12px",borderRadius:6,fontSize:11,fontWeight:700,cursor:"pointer",border:"none",
                     background:overBillMode?"#DC2626":T.bluL,color:overBillMode?"white":T.blu}}>
-                  {overBillMode ? "Turn OFF" : "+ Over-Billing"}
+                  {overBillMode ? t("estimate.turn_off") : t("estimate.over_billing")}
                 </button>
               </div>
               {overBillMode && (
                 <div style={{marginTop:10}}>
                   <label style={{...lblS,color:"#991B1B",fontWeight:700}}>
-                    Reason <span style={{color:"#DC2626"}}>*</span> <span style={{fontWeight:400,fontSize:10}}>(compulsory — shown on bill + audit trail)</span>
+                   {t("common.reason")} <span style={{color:"#DC2626"}}>*</span> <span style={{fontWeight:400,fontSize:10}}>{t("subcon.compulsory_shown_on_bill_audit_trail")}</span>
                   </label>
                   <textarea value={overBillReason} onChange={e=>setOverBillReason(e.target.value)}
-                    placeholder="e.g. Extra work due to design change — client approval dated 28-May-2026"
+                    placeholder={t("subcon.e_g_extra_work_due_to")}
                     rows={2}
                     style={{...inpS,minHeight:50,resize:"vertical",fontFamily:"inherit",borderColor:overBillReason.trim()?T.b1:"#FCA5A5"}}/>
                   <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:6}}>
@@ -4236,7 +4210,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
             </div>
           )}
 
-          {ledgerLoading && <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12}}>Loading billing ledger…</div>}
+          {ledgerLoading && <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12}}>{t("estimate.loading_billing_ledger")}</div>}
 
           {/* ── MILESTONE RATE — ledger-aware per-item + per-milestone ── */}
           {!ledgerLoading && method === "milestone_rate" && billingLedger?.mode === "milestone_rate" && (() => {
@@ -4244,7 +4218,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
             const allLedgerItems = billingLedger.items || [];
             if (!allLedgerItems.length) return (
               <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12,background:T.surfaceB,borderRadius:7}}>
-                No milestones set yet. Close and use <b>+ Set Schedule → Item-wise</b>.
+               {t("subcon.no_milestones_set_yet_close_and")} <b>{t("subcon.set_schedule_item_wise")}</b>.
               </div>
             );
 
@@ -4267,11 +4241,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
                   <div style={{padding:"8px 12px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                       <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{ledgerItem.description}</span>
-                      <span style={{fontSize:10.5,color:T.t3}}>
-                        Planned <b style={{color:T.t1}}>{ledgerItem.total_planned}</b> {ledgerItem.unit}
-                        · Billed <b style={{color:T.amb}}>{ledgerItem.total_billed}</b>
-                        · Remaining <b style={{color:ledgerItem.total_remaining>0?T.grn:T.t4}}>{ledgerItem.total_remaining}</b>
-                      </span>
+                      <span style={{fontSize:10.5,color:T.t3}}><Rich k="subcon.planned_total_planned_unit_billed_total" params={{ total_planned: ledgerItem.total_planned, unit: ledgerItem.unit, total_billed: ledgerItem.total_billed, total_remaining: ledgerItem.total_remaining }} /></span>
                     </div>
                     <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>
                       <div style={{width:pctBilled+"%",height:"100%",background:pctBilled>=100?T.t4:T.blu,transition:"width .2s"}}/>
@@ -4312,15 +4282,13 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
                             <div style={{fontSize:10,color:T.t4,marginTop:1,display:"flex",gap:6,flexWrap:"wrap"}}>
                               {isFully
                                 ? <span style={{padding:"1px 6px",background:overbillOK?"#FEE2E2":T.surfaceB,color:overbillOK?"#991B1B":T.t3,borderRadius:3,fontWeight:600}}>
-                                    {overbillOK?"🔴 Fully billed — over-bill enabled":"✓ Fully billed"}
+                                    {overbillOK?t("estimate.fully_billed_over_bill_enabled"):t("subcon.fully_billed")}
                                   </span>
                                 : m.status === "partial"
-                                  ? <span>{m.billed_qty}/{m.planned_qty} billed · {m.remaining_qty} left</span>
+                                  ? <span>{t("subcon.billed_qty_planned_qty_billed_remaining", { billed_qty: m.billed_qty, planned_qty: m.planned_qty, remaining_qty: m.remaining_qty })}</span>
                                   : <span>{m.planned_qty} {ledgerItem.unit}</span>}
                               {m.linked_task && (
-                                <span style={{padding:"1px 6px",background:T.bluL,color:T.blu,borderRadius:3,fontWeight:600}}>
-                                  🔗 task @ {m.linked_task.progress}%
-                                </span>
+                                <span style={{padding:"1px 6px",background:T.bluL,color:T.blu,borderRadius:3,fontWeight:600}}>{t("subcon.task_progress", { progress: m.linked_task.progress })}</span>
                               )}
                             </div>
                           </div>
@@ -4344,14 +4312,10 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
                             color:checked&&enteredQty>0?(exceedsRemaining?"#991B1B":T.grn):T.t4}}>
                             {checked && enteredQty > 0 ? fmtC(lineAmt) : "—"}
                             {isSplit && (
-                              <div style={{fontSize:8.5,color:"#991B1B",fontWeight:700,marginTop:1,lineHeight:1.3}}>
-                                🔴 SPLIT: {normalPortion} BOQ + {overPortion} over
-                              </div>
+                              <div style={{fontSize:8.5,color:"#991B1B",fontWeight:700,marginTop:1,lineHeight:1.3}}>{t("subcon.split_normalportion_boq_overportion_over", { normalPortion, overPortion })}</div>
                             )}
                             {isFullOver && !isSplit && (
-                              <div style={{fontSize:8.5,color:"#991B1B",fontWeight:700,marginTop:1}}>
-                                🔴 ALL OVER-BILL ({overPortion} qty)
-                              </div>
+                              <div style={{fontSize:8.5,color:"#991B1B",fontWeight:700,marginTop:1}}>{t("subcon.all_over_bill_overportion_qty", { overPortion })}</div>
                             )}
                           </span>
                         </div>
@@ -4360,16 +4324,12 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
                           <div style={{margin:"4px 0 6px 26px",padding:"7px 10px",background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:6,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                             <span style={{fontSize:14}}>⚠️</span>
                             <div style={{flex:1,minWidth:180}}>
-                              <div style={{fontSize:11.5,fontWeight:700,color:"#991B1B"}}>
-                                Over-billing detected — {enteredQty} {ledgerItem.unit} entered, only {remainingQty} available
-                              </div>
-                              <div style={{fontSize:10.5,color:"#7F1D1D",marginTop:2}}>
-                                Either reduce qty to {remainingQty}, or enable Over-Billing Mode + provide a reason explaining the extra work.
-                              </div>
+                              <div style={{fontSize:11.5,fontWeight:700,color:"#991B1B"}}>{t("subcon.over_billing_detected_enteredqty_unit_entered", { enteredQty, unit: ledgerItem.unit, remainingQty })}</div>
+                              <div style={{fontSize:10.5,color:"#7F1D1D",marginTop:2}}>{t("subcon.either_reduce_qty_to_remainingqty_or", { remainingQty })}</div>
                             </div>
                             <button onClick={()=>setOverBillMode(true)}
                               style={{padding:"5px 10px",borderRadius:5,background:"#DC2626",color:"white",border:"none",fontSize:10.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
-                              Turn ON Over-Billing
+                             {t("estimate.turn_on_over_billing")}
                             </button>
                           </div>
                         )}
@@ -4393,8 +4353,8 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
 
             return (<>
               <div style={{fontSize:11,color:T.t3,marginBottom:10,display:"flex",justifyContent:"space-between"}}>
-                <span>Tick milestones to bill. Qty = this bill qty; defaults to remaining qty.</span>
-                {overbillOK && <span style={{padding:"2px 7px",fontSize:9.5,fontWeight:700,background:"#FEE2E2",color:"#991B1B",borderRadius:3}}>OVER-BILL ENABLED</span>}
+                <span>{t("subcon.tick_milestones_to_bill_qty_this")}</span>
+                {overbillOK && <span style={{padding:"2px 7px",fontSize:9.5,fontWeight:700,background:"#FEE2E2",color:"#991B1B",borderRadius:3}}>{t("estimate.over_bill_enabled")}</span>}
               </div>
               {sectionsWithItems.map(sec => (
                 <div key={sec.id||sec.title} style={{marginBottom:14}}>
@@ -4410,7 +4370,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
               {unsecItems.length > 0 && (
                 <div style={{marginBottom:14}}>
                   <div style={{padding:"7px 12px",background:T.slt,borderRadius:"6px 6px 0 0"}}>
-                    <span style={{fontSize:11.5,fontWeight:700,color:"white"}}>Other Items</span>
+                    <span style={{fontSize:11.5,fontWeight:700,color:"white"}}>{t("subcon.other_items")}</span>
                   </div>
                   <div style={{border:"1px solid "+T.b1,borderTop:"none",borderRadius:"0 0 6px 6px",padding:"8px 8px 2px"}}>
                     {unsecItems.map(renderItemBlock)}
@@ -4425,11 +4385,11 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
             const stages = billingLedger.stages || [];
             if (!stages.length) return (
               <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12,background:T.surfaceB,borderRadius:7}}>
-                No %-stages set. Close and use <b>+ Set Schedule → % of WO Value</b>.
+               {t("subcon.no_stages_set_close_and_use")} <b>{t("subcon.set_schedule_of_wo_value")}</b>.
               </div>
             );
             return (<>
-              <div style={{fontSize:11,color:T.t3,marginBottom:8}}>Tick stages to bill. Each stage can only be billed once.</div>
+              <div style={{fontSize:11,color:T.t3,marginBottom:8}}>{t("subcon.tick_stages_to_bill_each_stage")}</div>
               {stages.map(s => {
                 const isFully = s.status === "fully_billed";
                 const checked = !!pickedItems[s.milestone_id]?.checked;
@@ -4441,15 +4401,15 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
                       <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{s.name}</div>
                       <div style={{fontSize:10,color:T.t4,marginTop:1}}>
                         {isFully
-                          ? <span style={{padding:"1px 6px",background:T.surfaceB,color:T.t3,borderRadius:3,fontWeight:600}}>✓ Already billed</span>
+                          ? <span style={{padding:"1px 6px",background:T.surfaceB,color:T.t3,borderRadius:3,fontWeight:600}}>{t("subcon.already_billed")}</span>
                           : s.status==="partial"
-                            ? <span>{fmtC(s.billed_amount)} billed · {fmtC(s.remaining_amount)} left</span>
+                            ? <span>{t("subcon.fmtc_billed_fmtc2_left", { fmtC: fmtC(s.billed_amount), fmtC2: fmtC(s.remaining_amount) })}</span>
                             : <span>{fmtC(s.planned_amount)} planned</span>}
                       </div>
                     </div>
                     <span style={{fontSize:11.5,color:T.t3,textAlign:"right",paddingRight:8}}>{s.pct}%</span>
                     <span style={{fontSize:13,fontWeight:700,color:T.grn,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(s.planned_amount)}</span>
-                    <span style={{fontSize:11,color:T.t4,textAlign:"right"}}>{checked && <span style={{color:T.grn,fontWeight:700}}>✓ selected</span>}</span>
+                    <span style={{fontSize:11,color:T.t4,textAlign:"right"}}>{checked && <span style={{color:T.grn,fontWeight:700}}>{t("subcon.selected")}</span>}</span>
                   </div>
                 );
               })}
@@ -4492,7 +4452,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
                             style={{...inpS,textAlign:"right",fontWeight:700,padding:"5px 8px",
                               border:"1.5px solid "+(overLimit?T.red:cum>(it.prev_cum||0)?T.blu:T.b1),
                               color:overLimit?T.red:T.t1}}/>
-                          {overLimit&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>Exceeds WO!</div>}
+                          {overLimit&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>{t("subcon.exceeds_wo")}</div>}
                         </div>
                         <div style={{textAlign:"right"}}>
                           <div style={{fontSize:12,fontWeight:700,color:thisAmt>0?T.grn:T.t4}}>{thisAmt>0?fmtC(thisAmt):"—"}</div>
@@ -4509,13 +4469,13 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
           {/* ── Bill Summary ── */}
           {grossR > 0 && (
             <div style={{marginTop:14,background:"#0F172A",borderRadius:8,padding:14,flexShrink:0}}>
-              <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",marginBottom:10}}>Bill Summary</div>
+              <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",marginBottom:10}}>{t("subcon.bill_summary")}</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
                 {[
-                  {l:"Gross Amount",              v:fmtC(grossR), c:"#E2E8F0"},
-                  {l:`Retention (${retPct}%)`,    v:fmtC(retAmt), c:"#FCD34D"},
-                  {l:`TDS (${tdsPct}%)`,          v:fmtC(tdsAmt), c:"#F87171"},
-                  {l:"Net Payable",               v:fmtC(netPay), c:"#4ADE80"},
+                  {l:t("subcon.gross_amount"),              v:fmtC(grossR), c:"#E2E8F0"},
+                  {l:t("subcon.retention_retpct", { retPct }),    v:fmtC(retAmt), c:"#FCD34D"},
+                  {l:t("subcon.tds_tdspct", { tdsPct }),          v:fmtC(tdsAmt), c:"#F87171"},
+                  {l:t("subcon.net_payable"),               v:fmtC(netPay), c:"#4ADE80"},
                 ].map(s=>(
                   <div key={s.l} style={{textAlign:"center",background:"rgba(255,255,255,0.05)",borderRadius:6,padding:"8px"}}>
                     <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",marginBottom:3}}>{s.l}</div>
@@ -4525,7 +4485,7 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
               </div>
               {overBillMode && (
                 <div style={{marginTop:8,padding:"6px 10px",background:"rgba(220,38,38,0.15)",borderRadius:5,fontSize:10.5,color:"#FCA5A5",fontWeight:600}}>
-                  ⚠ Over-bill mode active — will be flagged for admin review
+                 {t("subcon.over_bill_mode_active_will_be")}
                 </div>
               )}
             </div>
@@ -4534,13 +4494,13 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
 
         {/* ── Footer ── */}
         <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",gap:8,flexShrink:0}}>
-          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>{t("common.cancel")}</button>
           <button onClick={handleSubmit} disabled={saving||grossR===0}
             style={{flex:2,padding:"9px",borderRadius:7,
               background:saving||grossR===0?T.t4:overBillMode?"#DC2626":T.blu,
               color:"white",border:"none",fontSize:13,fontWeight:700,
               cursor:saving||grossR===0?"not-allowed":"pointer"}}>
-            {saving ? "Submitting…" : grossR > 0 ? (overBillMode?"⚠ Submit Over-Bill — ":"Submit RA Bill — ")+fmtC(grossR) : "Select milestones to proceed"}
+            {saving ? t("common.submitting") : grossR > 0 ? (overBillMode?"⚠ Submit Over-Bill — ":"Submit RA Bill — ")+fmtC(grossR) : t("subcon.select_milestones_to_proceed")}
           </button>
         </div>
       </div>
@@ -4553,7 +4513,7 @@ function PaymentsTab({ woId, fmtC }) {
   useEffect(()=>{
     api.get("/subcon/payments?wo_id="+woId).then(r=>{ if(r.success) setPayments(r.data||[]); }).catch(()=>{});
   },[woId]);
-  if(payments.length===0) return <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No payments recorded yet</div>;
+  if(payments.length===0) return <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("subcon.no_payments_recorded_yet")}</div>;
   const total = payments.reduce((s,p)=>s+parseFloat(p.amount_paid||0),0);
   return(
     <div>
@@ -4569,7 +4529,7 @@ function PaymentsTab({ woId, fmtC }) {
           </div>
         </div>
       ))}
-      <div style={{textAlign:"right",fontSize:14,fontWeight:800,color:T.grn,marginTop:8}}>Total Paid: {fmtC(total)}</div>
+      <div style={{textAlign:"right",fontSize:14,fontWeight:800,color:T.grn,marginTop:8}}>{t("subcon.total_paid_fmtc", { fmtC: fmtC(total) })}</div>
     </div>
   );
 }

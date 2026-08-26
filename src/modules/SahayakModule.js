@@ -3,6 +3,7 @@ import api, { getUser } from "../config/api";
 import { getDiagBundle, getChatContext } from "../utils/diag";
 import { T } from "./shared/tokens";
 import { BundleView, TicketBadge as Badge, fmtTicketTime as fmtTime } from "./shared/TicketBundle";
+import { t } from "../i18n";
 
 // ── ICONS (SVG only, no emoji) ──────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -44,9 +45,9 @@ const STARTERS = [
 
 // Roman Hinglish labels
 const L = {
-  title: "Sahayak AI",
-  subtitle: "App ke baare me kuch bhi poochein",
-  placeholder: "Apna sawal likhein...",
+  get title() { return t("app.sahayak_ai"); },
+  get subtitle() { return t("sahayak.app_ke_baare_me_kuch_bhi"); },
+  get placeholder() { return t("sahayak.apna_sawal_likhein"); },
   thinking: "soch raha hu...",
   recording: "Sun raha hu... chhodne par bhej dunga",
   transcribing: "Aapki awaaz samajh raha hu...",
@@ -238,7 +239,7 @@ export default function SahayakModule({ onNavigate, onNotifCount, fromScreen } =
     chunksRef.current = [];
     try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch (e) {}
     streamRef.current = null;
-    if (!blob.size) { setErr("Recording khali rahi — dobara try karein."); return; }
+    if (!blob.size) { setErr(t("mom.recording_khali_rahi_dobara_try_karein")); return; }
     setTranscribing(true);
     try {
       const b64 = await blobToB64(blob);
@@ -413,7 +414,7 @@ function Shell({ tab, setTab, tabs = [], sahayakBadge = 0, onNewChat, newChatBus
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 14.5, fontWeight: 700, color: T.t1, letterSpacing: "-0.2px" }}>{L.title}</span>
-            <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: ".6px", color: ACCENT, background: ACCENT_SOFT, border: `1px solid ${ACCENT}33`, padding: "1px 5px", borderRadius: 4 }}>LIVE DATA</span>
+            <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: ".6px", color: ACCENT, background: ACCENT_SOFT, border: `1px solid ${ACCENT}33`, padding: "1px 5px", borderRadius: 4 }}>{t("sahayak.live_data")}</span>
           </div>
           <div style={{ fontSize: 11.5, color: T.t4 }}>{L.subtitle}</div>
         </div>
@@ -541,7 +542,7 @@ function MessageBubble({ m, vote, onVote, bundleState, onBundle, onBundleDone })
       {/* audio transcript quote (muted, above the user's own bubble text) */}
       {m.transcript && isUser && (
         <div style={{ fontSize: 11, color: T.t4, fontStyle: "italic", background: T.sltL, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "5px 9px", alignSelf: "flex-end" }}>
-          <span style={{ opacity: 0.7 }}>Aapne bola: </span>"{m.transcript}"
+          <span style={{ opacity: 0.7 }}>{t("sahayak.aapne_bola")} </span>"{m.transcript}"
         </div>
       )}
       <div style={{
@@ -588,10 +589,10 @@ function Thumbs({ vote, onVote }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-        <button title="Sahi jawab" style={btn(vote === "up")} onClick={() => { onVote("up"); setAsking(false); }}>
+        <button title={t("sahayak.sahi_jawab")} style={btn(vote === "up")} onClick={() => { onVote("up"); setAsking(false); }}>
           <IcUp size={14} color="currentColor" fill={vote === "up" ? ACCENT : "none"} />
         </button>
-        <button title="Galat jawab" style={btn(vote === "down")} onClick={() => { onVote("down"); setAsking(true); }}>
+        <button title={t("sahayak.galat_jawab")} style={btn(vote === "down")} onClick={() => { onVote("down"); setAsking(true); }}>
           <IcDown size={14} color="currentColor" fill={vote === "down" ? ACCENT : "none"} />
         </button>
         {done && <span style={{ fontSize: 11, color: T.t4, marginLeft: 4 }}>{L.fbThanks}</span>}
@@ -770,11 +771,9 @@ function openAgeDays(t) {
 function AgeChip({ days }) {
   if (!days) return null;
   return (
-    <span title="Itne din se ye ticket khula pada hai"
+    <span title={t("sahayak.itne_din_se_ye_ticket_khula")}
       style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, background: T.sltL, border: `1px solid ${T.b1}`,
-        padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>
-      {days} din se open
-    </span>
+        padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>{t("sahayak.days_din_se_open", { days })}</span>
   );
 }
 
@@ -823,7 +822,7 @@ function TicketsInbox() {
         ))}
       </div>
 
-      {rows === null && <div style={{ padding: 18, fontSize: 12.5, color: T.t4 }}>Loading...</div>}
+      {rows === null && <div style={{ padding: 18, fontSize: 12.5, color: T.t4 }}>{t("common.loading")}</div>}
       {rows && !rows.length && <div style={{ padding: 18, fontSize: 12.5, color: T.t4 }}>{L.ticketsEmpty}</div>}
 
       {rows && rows.map((t) => {
@@ -838,12 +837,12 @@ function TicketsInbox() {
               </span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3, flexWrap: "wrap" }}>
-                  <Badge text={isBug ? "Bug" : "Sawaal"} color={isBug ? T.red : T.slt} bg={isBug ? T.redL : T.sltL} />
+                  <Badge text={isBug ? t("sahayak.bug") : t("sahayak.sawaal")} color={isBug ? T.red : T.slt} bg={isBug ? T.redL : T.sltL} />
                   <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{t.ticket_no}</span>
                   <span style={{ fontSize: 11.5, color: T.t3 }}>{t.user_name || "—"}</span>
                   <span style={{ fontSize: 11, color: T.t4 }}>{fmtTime(t.created_at)}</span>
                   <AgeChip days={openAgeDays(t)} />
-                  {t.bundle_meta && <Badge text="Diagnostics" color={ACCENT} bg={ACCENT_SOFT} />}
+                  {t.bundle_meta && <Badge text={t("sahayak.diagnostics")} color={ACCENT} bg={ACCENT_SOFT} />}
                 </span>
                 <span style={{ display: "block", fontSize: 12.5, color: T.t2, lineHeight: 1.45, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: expanded ? "normal" : "nowrap" }}>
                   {t.question || "—"}
@@ -853,7 +852,7 @@ function TicketsInbox() {
 
             {expanded && (
               <div style={{ padding: "0 16px 14px 39px", display: "flex", flexDirection: "column", gap: 10 }}>
-                {t.reason && <div style={{ fontSize: 11.5, color: T.t3 }}>Reason: {t.reason}</div>}
+                {t.reason && <div style={{ fontSize: 11.5, color: T.t3 }}>{t("sahayak.reason_reason", { reason: t.reason })}</div>}
                 <BundleView meta={t.bundle_meta} url={t.bundle_url} />
 
                 {isBug ? (
@@ -909,14 +908,14 @@ function OnboardingView() {
   return (
     <div style={{ flex: 1, overflowY: "auto", background: T.bg }}>
       <div style={{ display: "flex", gap: 6, padding: "12px 16px", borderBottom: `1px solid ${T.b1}`, background: T.surface, position: "sticky", top: 0, zIndex: 1, flexWrap: "wrap" }}>
-        <button onClick={() => setRole("")} style={chip(role === "")}>Sabhi</button>
+        <button onClick={() => setRole("")} style={chip(role === "")}>{t("sahayak.sabhi")}</button>
         {["supervisor", "accountant", "project_manager", "admin"].map((r) => (
           <button key={r} onClick={() => setRole(r)} style={chip(role === r)}>{ROLE_LABEL[r]}</button>
         ))}
       </div>
 
-      {rows === null && <div style={{ padding: 18, fontSize: 12.5, color: T.t4 }}>Loading...</div>}
-      {rows && !rows.length && <div style={{ padding: 18, fontSize: 12.5, color: T.t4 }}>Abhi koi team member onboarding me nahi.</div>}
+      {rows === null && <div style={{ padding: 18, fontSize: 12.5, color: T.t4 }}>{t("common.loading")}</div>}
+      {rows && !rows.length && <div style={{ padding: 18, fontSize: 12.5, color: T.t4 }}>{t("sahayak.abhi_koi_team_member_onboarding_me")}</div>}
 
       {rows && rows.map((u) => {
         const expanded = openId === u.user_id;
@@ -933,9 +932,9 @@ function OnboardingView() {
                   <span style={{ fontSize: 13, fontWeight: 600, color: T.t1 }}>{u.name || "—"}</span>
                   <Badge text={ROLE_LABEL[u.role] || u.role} color={T.slt} bg={T.sltL} />
                   {u.never_logged_in
-                    ? <Badge text="Login nahi kiya" color={T.red} bg={T.redL} />
-                    : u.stuck && <Badge text="Atka hua" color={T.amb} bg={T.ambL} />}
-                  {u.pct >= 100 && <Badge text="Poora" color={T.grn} bg={T.grnL} />}
+                    ? <Badge text={t("sahayak.login_nahi_kiya")} color={T.red} bg={T.redL} />
+                    : u.stuck && <Badge text={t("sahayak.atka_hua")} color={T.amb} bg={T.ambL} />}
+                  {u.pct >= 100 && <Badge text={t("machinery.poora")} color={T.grn} bg={T.grnL} />}
                 </span>
                 {/* progress bar */}
                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -943,7 +942,7 @@ function OnboardingView() {
                     <span style={{ display: "block", height: "100%", width: u.pct + "%", background: barColor, borderRadius: 4 }} />
                   </span>
                   <span style={{ fontSize: 11, color: T.t3, fontVariantNumeric: "tabular-nums" }}>{u.done}/{u.total}</span>
-                  <span style={{ fontSize: 11, color: T.t4 }}>· {u.last_active ? "active " + fmtTime(u.last_active) : "abhi tak active nahi"}</span>
+                  <span style={{ fontSize: 11, color: T.t4 }}>· {u.last_active ? "active " + fmtTime(u.last_active) : t("sahayak.abhi_tak_active_nahi")}</span>
                 </span>
               </span>
             </button>

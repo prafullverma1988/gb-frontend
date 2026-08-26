@@ -3,6 +3,7 @@ import api from "../../config/api";
 import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
 import TabTripTracking from "./TabTripTracking";
+import { t } from "../../i18n";
 
 // Route keys as the backend stores them (routes/equipment.js PAYMENT_ROUTES).
 // "site_exp" used to fall through unlabelled and render as raw text.
@@ -201,20 +202,20 @@ function TabEquipment({ projectId }) {
   };
 
   const finStatusPill = (status, approval) => {
-    if (status === "confirmed") return <Pill label="Confirmed" c={T.grn} bg={T.grnL} />;
-    if (status === "log_only") return <Pill label="Log only" c={T.t3} bg={T.sltL} />;
+    if (status === "confirmed") return <Pill label={t("equipment.confirmed")} c={T.grn} bg={T.grnL} />;
+    if (status === "log_only") return <Pill label={t("equipment.log_only")} c={T.t3} bg={T.sltL} />;
     if (status === "suggested" || !status) {
-      if (approval === "pending") return <Pill label="Approval pending" c={T.amb} bg={T.ambL} />;
-      if (approval === "rejected") return <Pill label="Rate rejected" c={T.red} bg={T.redL} />;
-      return <Pill label="Suggested" c={T.amb} bg={T.ambL} />;
+      if (approval === "pending") return <Pill label={t("equipment.approval_pending")} c={T.amb} bg={T.ambL} />;
+      if (approval === "rejected") return <Pill label={t("equipment.rate_rejected")} c={T.red} bg={T.redL} />;
+      return <Pill label={t("equipment.suggested")} c={T.amb} bg={T.ambL} />;
     }
     return <Pill label={status} c={T.t3} bg={T.sltL} />;
   };
 
   const reqStatusPill = (s) => {
-    if (s === "fulfilled") return <Pill label="Fulfilled" c={T.grn} bg={T.grnL} />;
-    if (s === "rejected") return <Pill label="Rejected" c={T.red} bg={T.redL} />;
-    return <Pill label="Pending" c={T.amb} bg={T.ambL} />;
+    if (s === "fulfilled") return <Pill label={t("equipment.fulfilled")} c={T.grn} bg={T.grnL} />;
+    if (s === "rejected") return <Pill label={t("common.rejected")} c={T.red} bg={T.redL} />;
+    return <Pill label={t("common.pending")} c={T.amb} bg={T.ambL} />;
   };
 
   // A party can hold several roles; `roles` is the canonical comma list and
@@ -230,7 +231,7 @@ function TabEquipment({ projectId }) {
     ["subcontractor", "subcon", "sub-con"]));
 
   const dispDuration = (u) => {
-    if (u.measurement_mode === "fixed") return "Fixed";
+    if (u.measurement_mode === "fixed") return t("payroll.fixed");
     const n = Number(u.hours_or_days) || 0;
     if (u.measurement_mode === "daily") return `${n} day${n !== 1 ? "s" : ""}`;
     if (u.measurement_mode === "trip") return `${n} trip${n !== 1 ? "s" : ""}`;
@@ -244,7 +245,7 @@ function TabEquipment({ projectId }) {
   const QTY_LABEL = { daily: "Days", km: "Km", trip: "Trips", fixed: "Quantity" };
   const qtyLabelFor = (eqId) => {
     const m = eqId ? masterList.find((x) => String(x.id) === String(eqId)) : null;
-    return QTY_LABEL[m && m.measurement_mode] || "Hours or Days";
+    return QTY_LABEL[m && m.measurement_mode] || t("equipment.hours_or_days");
   };
 
   // Collapsible section helper (inline)
@@ -274,14 +275,14 @@ function TabEquipment({ projectId }) {
     if (!r || r.success === false) { window.alert((r && r.message) || "Update failed"); load(); }
   };
   const removeEq = async (eq) => {
-    if (!await window.confirmAsync(`Remove ${eq.name}?`)) return;
+    if (!await window.confirmAsync(t("equipment.remove_name", { name: eq.name }))) return;
     const r = await api.del("/library/project-equipment/" + eq.id);
     if (!r || r.success === false) { window.alert((r && r.message) || "Delete failed"); return; }
     load();
   };
   const resetForm = () => { setName(""); setVendor("Self"); setFromD(""); setToD(""); setStat("On Site"); setRate(""); };
   const saveNew = async () => {
-    if (!name.trim()) { window.alert("Equipment name required"); return; }
+    if (!name.trim()) { window.alert(t("equipment.equipment_name_required")); return; }
     setSaving(true);
     const r = await api.post("/library/project-equipment", {
       project_id: projectId,
@@ -309,36 +310,36 @@ function TabEquipment({ projectId }) {
     <div>
       <div style={{ padding: "14px 18px 0" }}>
         <FilterTabs
-          options={[{ id: "equipment", label: "Equipment" }, { id: "trips", label: "Trip Tracking" }]}
+          options={[{ id: "equipment", label: t("common.equipment") }, { id: "trips", label: t("equipment.trip_tracking") }]}
           active={view} onChange={setView} />
       </div>
       {view === "trips" ? <TabTripTracking projectId={projectId} /> : (
       <div style={{ padding: "16px 18px" }}>
       {/* ── KPI: Total equipment cost ─────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
-        <Stat label="Total Equipment Cost" value={`₹${fmtN(Math.round(totalCost))}`}
+        <Stat label={t("equipment.total_equipment_cost")} value={`₹${fmtN(Math.round(totalCost))}`}
           note={fuelCost > 0
             ? `Hire ₹${fmtN(Math.round(hireCost))} + diesel ₹${fmtN(Math.round(fuelCost))}`
             : `${confirmedCount} confirmed entr${confirmedCount === 1 ? "y" : "ies"}`}
           color={T.blu} />
-        <Stat label="Usage Entries" value={usageRows.length}
+        <Stat label={t("equipment.usage_entries")} value={usageRows.length}
           note={`${usageRows.filter(u => (u.finance_status || "suggested") === "suggested").length} awaiting review`}
           color={T.amb} />
-        <Stat label="Active Requests" value={reqList.filter(r => r.status === "pending").length}
+        <Stat label={t("equipment.active_requests")} value={reqList.filter(r => r.status === "pending").length}
           note={`${reservations.length} reserved`}
           color={T.pur} />
       </div>
 
       {/* ── 1. USAGE LOG ──────────────────────────────────────────── */}
       <Panel style={{ marginBottom: 12 }}>
-        <SectionHeader title="Usage Log" open={openUsage} onToggle={() => setOpenUsage(v => !v)}
+        <SectionHeader title={t("equipment.usage_log")} open={openUsage} onToggle={() => setOpenUsage(v => !v)}
           count={usageRows.length}
-          action={<AddBtn label="Log usage" onClick={() => { setLogForm(emptyLog); setLogErr(""); setShowLogModal(true); }} />} />
+          action={<AddBtn label={t("equipment.log_usage")} onClick={() => { setLogForm(emptyLog); setLogErr(""); setShowLogModal(true); }} />} />
         {openUsage && (
           <div>
-            {usageLoading && <div style={{ textAlign: "center", padding: "30px 0", color: T.t4, fontSize: 13 }}>Loading usage...</div>}
+            {usageLoading && <div style={{ textAlign: "center", padding: "30px 0", color: T.t4, fontSize: 13 }}>{t("equipment.loading_usage")}</div>}
             {!usageLoading && usageRows.length === 0 && (
-              <div style={{ textAlign: "center", padding: "30px 20px", color: T.t4, fontSize: 13 }}>No usage entries logged yet.</div>
+              <div style={{ textAlign: "center", padding: "30px 20px", color: T.t4, fontSize: 13 }}>{t("equipment.no_usage_entries_logged_yet")}</div>
             )}
             {!usageLoading && usageRows.length > 0 && (
               <>
@@ -372,49 +373,49 @@ function TabEquipment({ projectId }) {
 
       {/* ── 4. EQUIPMENT REQUESTS ─────────────────────────────────── */}
       <Panel style={{ marginBottom: 12 }}>
-        <SectionHeader title="Equipment Requests" open={openReqs} onToggle={() => setOpenReqs(v => !v)}
+        <SectionHeader title={t("equipment.equipment_requests")} open={openReqs} onToggle={() => setOpenReqs(v => !v)}
           count={reqList.length}
-          action={<AddBtn label="Request equipment" onClick={() => setShowReqForm(v => !v)} />} />
+          action={<AddBtn label={t("equipment.request_equipment")} onClick={() => setShowReqForm(v => !v)} />} />
         {openReqs && (
           <div>
             {showReqForm && (
               <div style={{ padding: "12px 15px", borderBottom: `1px solid ${T.b1}`, background: T.bluL + "55" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
                   <div>
-                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Equipment Type</div>
+                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.equipment_type")}</div>
                     <select value={reqForm.equipment_type} onChange={e => updReq("equipment_type", e.target.value)} style={inp}>
                       {["Earthwork","Lifting","Concrete","Steel","Safety","Transport","Pumping","Compaction"].map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Capacity</div>
-                    <input value={reqForm.capacity} onChange={e => updReq("capacity", e.target.value)} placeholder="e.g. 1 cum" style={inp} />
+                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.capacity")}</div>
+                    <input value={reqForm.capacity} onChange={e => updReq("capacity", e.target.value)} placeholder={t("equipment.e_g_1_cum")} style={inp} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>From</div>
+                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("common.from")}</div>
                     <input type="date" value={reqForm.from_date} onChange={e => updReq("from_date", e.target.value)} style={inp} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>To</div>
+                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("common.to")}</div>
                     <input type="date" value={reqForm.to_date} onChange={e => updReq("to_date", e.target.value)} style={inp} />
                   </div>
                 </div>
                 <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Reason / Notes</div>
-                  <input value={reqForm.reason} onChange={e => updReq("reason", e.target.value)} placeholder="Site needs JCB for excavation" style={inp} />
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.reason_notes")}</div>
+                  <input value={reqForm.reason} onChange={e => updReq("reason", e.target.value)} placeholder={t("equipment.site_needs_jcb_for_excavation")} style={inp} />
                 </div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
                   <button onClick={() => { setShowReqForm(false); setReqForm(emptyReq); }} type="button"
-                    style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+                    style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
                   <button onClick={saveRequest} disabled={reqSaving} type="button"
                     style={{ padding: "7px 16px", borderRadius: 7, border: "none", background: reqSaving ? T.b1 : T.blu, color: reqSaving ? T.t4 : "white", fontSize: 12, fontWeight: 700, cursor: reqSaving ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
-                    {reqSaving ? "Saving..." : "Submit request"}
+                    {reqSaving ? t("common.saving") : t("equipment.submit_request")}
                   </button>
                 </div>
               </div>
             )}
             {reqList.length === 0 && !showReqForm && (
-              <div style={{ textAlign: "center", padding: "30px 20px", color: T.t4, fontSize: 13 }}>No requests yet.</div>
+              <div style={{ textAlign: "center", padding: "30px 20px", color: T.t4, fontSize: 13 }}>{t("equipment.no_requests_yet")}</div>
             )}
             {reqList.length > 0 && (
               <>
@@ -440,12 +441,12 @@ function TabEquipment({ projectId }) {
 
       {/* ── 5. RESERVED EQUIPMENT ─────────────────────────────────── */}
       <Panel style={{ marginBottom: 12 }}>
-        <SectionHeader title="Reserved Equipment" open={openReserved} onToggle={() => setOpenReserved(v => !v)}
+        <SectionHeader title={t("equipment.reserved_equipment")} open={openReserved} onToggle={() => setOpenReserved(v => !v)}
           count={reservations.length} />
         {openReserved && (
           <div>
             {reservations.length === 0 && (
-              <div style={{ textAlign: "center", padding: "30px 20px", color: T.t4, fontSize: 13 }}>No reservations.</div>
+              <div style={{ textAlign: "center", padding: "30px 20px", color: T.t4, fontSize: 13 }}>{t("equipment.no_reservations")}</div>
             )}
             {reservations.map(rv => {
               const eq = masterList.find(m => m.id === rv.equipment_id);
@@ -455,9 +456,7 @@ function TabEquipment({ projectId }) {
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{eq?.name || `Equipment #${rv.equipment_id}`}</div>
                     {rv.note && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 1 }}>{rv.note}</div>}
                   </div>
-                  <span style={{ fontSize: 11.5, color: T.t2 }}>
-                    Reserved {fmtD(rv.from_date)} → {fmtD(rv.to_date)}
-                  </span>
+                  <span style={{ fontSize: 11.5, color: T.t2 }}>{t("equipment.reserved_fmtd_fmtd2", { fmtD: fmtD(rv.from_date), fmtD2: fmtD(rv.to_date) })}</span>
                 </div>
               );
             })}
@@ -467,41 +466,41 @@ function TabEquipment({ projectId }) {
 
       {/* ── LEGACY: Period & Status (project_equipment) ───────────── */}
       <Panel style={{ marginBottom: 12 }}>
-        <SectionHeader title="Period & Status (legacy)" open={openLegacy} onToggle={() => setOpenLegacy(v => !v)}
+        <SectionHeader title={t("equipment.period_status_legacy")} open={openLegacy} onToggle={() => setOpenLegacy(v => !v)}
           count={rows.length}
-          action={<AddBtn label="Add Equipment" onClick={() => setShowAdd(true)} />} />
+          action={<AddBtn label={t("equipment.add_equipment")} onClick={() => setShowAdd(true)} />} />
         {openLegacy && (
           <div style={{ padding: "10px 15px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div style={{ display: "flex", gap: 18 }}>
-          <div><div style={{ fontSize: 10, color: T.t4, textTransform: "uppercase", fontWeight: 600 }}>Total</div><div style={{ fontSize: 19, fontWeight: 700, color: T.t1 }}>{rows.length}</div></div>
-          <div><div style={{ fontSize: 10, color: T.t4, textTransform: "uppercase", fontWeight: 600 }}>On Site</div><div style={{ fontSize: 19, fontWeight: 700, color: T.grn }}>{onSite}</div></div>
-          <div><div style={{ fontSize: 10, color: T.t4, textTransform: "uppercase", fontWeight: 600 }}>Returned</div><div style={{ fontSize: 19, fontWeight: 700, color: T.t3 }}>{returned}</div></div>
+          <div><div style={{ fontSize: 10, color: T.t4, textTransform: "uppercase", fontWeight: 600 }}>{t("common.total")}</div><div style={{ fontSize: 19, fontWeight: 700, color: T.t1 }}>{rows.length}</div></div>
+          <div><div style={{ fontSize: 10, color: T.t4, textTransform: "uppercase", fontWeight: 600 }}>{t("equipment.on_site")}</div><div style={{ fontSize: 19, fontWeight: 700, color: T.grn }}>{onSite}</div></div>
+          <div><div style={{ fontSize: 10, color: T.t4, textTransform: "uppercase", fontWeight: 600 }}>{t("equipment.returned")}</div><div style={{ fontSize: 19, fontWeight: 700, color: T.t3 }}>{returned}</div></div>
         </div>
       </div>
 
       {showAdd && (
         <Panel style={{ marginBottom: 14, padding: "14px 16px" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 10 }}>Add Equipment</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 10 }}>{t("equipment.add_equipment")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div>
-              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Name *</div>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="JCB Excavator" style={inp} />
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("common.name")}</div>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder={t("equipment.jcb_excavator")} style={inp} />
             </div>
             <div>
-              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Vendor</div>
-              <input value={vendor} onChange={e => setVendor(e.target.value)} placeholder='"Self" for company-owned' style={inp} />
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("common.vendor")}</div>
+              <input value={vendor} onChange={e => setVendor(e.target.value)} placeholder={t("equipment.self_for_company_owned")} style={inp} />
             </div>
             <div>
-              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>From</div>
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("common.from")}</div>
               <input type="date" value={fromD} onChange={e => setFromD(e.target.value)} style={inp} />
             </div>
             <div>
-              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>To</div>
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("common.to")}</div>
               <input type="date" value={toD} onChange={e => setToD(e.target.value)} style={inp} />
             </div>
             <div>
-              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Status</div>
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("common.status")}</div>
               <div style={{ display: "flex", gap: 6 }}>
                 {["On Site", "Returned"].map(s => {
                   const on = stat === s;
@@ -518,30 +517,30 @@ function TabEquipment({ projectId }) {
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Day Rate (optional)</div>
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.day_rate_optional")}</div>
               <input value={rate} onChange={e => setRate(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 5000" style={inp} />
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
             <button onClick={() => { resetForm(); setShowAdd(false); }} type="button"
-              style={{ padding: "8px 14px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+              style={{ padding: "8px 14px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
             <button onClick={saveNew} disabled={saving || !name.trim()} type="button"
               style={{ padding: "8px 16px", borderRadius: 7, border: "none",
                 background: (saving || !name.trim()) ? T.b1 : T.blu,
                 color: (saving || !name.trim()) ? T.t4 : "white",
                 fontSize: 12, fontWeight: 700,
                 cursor: (saving || !name.trim()) ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
-              {saving ? "Saving..." : "Add Equipment"}
+              {saving ? t("common.saving") : t("equipment.add_equipment")}
             </button>
           </div>
         </Panel>
       )}
 
-      {loading && <div style={{ textAlign: "center", padding: "40px 0", color: T.t4, fontSize: 13 }}>Loading...</div>}
+      {loading && <div style={{ textAlign: "center", padding: "40px 0", color: T.t4, fontSize: 13 }}>{t("common.loading")}</div>}
 
       {!loading && rows.length === 0 && (
         <div style={{ textAlign: "center", padding: "50px 20px", color: T.t4, fontSize: 13 }}>
-          No equipment deployed yet — click "Add Equipment" to track one.
+         {t("equipment.no_equipment_deployed_yet_click_add")}
         </div>
       )}
 
@@ -558,7 +557,7 @@ function TabEquipment({ projectId }) {
                   <div style={{ fontSize: 13, fontWeight: 600, color: T.t1 }}>{eq.name}</div>
                   {eq.equipment_code && <div style={{ fontSize: 10, color: T.t4, marginTop: 1 }}>{eq.equipment_code}</div>}
                 </div>
-                <span style={{ fontSize: 12, color: T.t2 }}>{eq.vendor || "Self"}</span>
+                <span style={{ fontSize: 12, color: T.t2 }}>{eq.vendor || t("payroll.self")}</span>
                 <span style={{ fontSize: 11.5, color: T.t2 }}>
                   {eq.from_date ? fmtD(eq.from_date) : "—"}
                   {eq.to_date ? <> &nbsp;→&nbsp; {fmtD(eq.to_date)}</> : ""}
@@ -573,7 +572,7 @@ function TabEquipment({ projectId }) {
                   {eq.status}
                 </button>
                 <button onClick={() => removeEq(eq)} type="button"
-                  title="Remove"
+                  title={t("common.remove")}
                   style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.t4, fontSize: 16, fontFamily: "inherit", justifySelf: "end" }}>
                   ×
                 </button>
@@ -592,7 +591,7 @@ function TabEquipment({ projectId }) {
           <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
           <div style={{ position: "relative", width: 720, maxWidth: "94vw", maxHeight: "92vh", background: T.surface, borderRadius: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
             <div style={{ padding: "16px 22px", borderBottom: `1px solid ${T.b1}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: T.t1 }}>Log Equipment Usage</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.t1 }}>{t("equipment.log_equipment_usage")}</div>
               <button onClick={() => setShowLogModal(false)} style={{ background: T.surfaceB, border: "none", borderRadius: 6, padding: 6, cursor: "pointer", display: "flex" }}>
                 <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.t3} strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
               </button>
@@ -600,30 +599,30 @@ function TabEquipment({ projectId }) {
             <div style={{ padding: "16px 22px", overflowY: "auto", flex: 1 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Equipment (from master)</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.equipment_from_master")}</div>
                   <select value={logForm.equipment_id} onChange={e => updLog("equipment_id", e.target.value)} style={inp}>
-                    <option value="">— Select / leave empty for ad-hoc —</option>
+                    <option value="">{t("equipment.select_leave_empty_for_ad_hoc")}</option>
                     {masterList.map(m => <option key={m.id} value={m.id}>{m.name}{m.code ? ` (${m.code})` : ""}</option>)}
                   </select>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>OR Ad-hoc equipment name</div>
-                  <input value={logForm.equipment_name} onChange={e => updLog("equipment_name", e.target.value)} placeholder="e.g. Borrowed JCB" style={inp} disabled={!!logForm.equipment_id} />
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.or_ad_hoc_equipment_name")}</div>
+                  <input value={logForm.equipment_name} onChange={e => updLog("equipment_name", e.target.value)} placeholder={t("equipment.e_g_borrowed_jcb")} style={inp} disabled={!!logForm.equipment_id} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Usage Date</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.usage_date")}</div>
                   <input type="date" value={logForm.usage_date} onChange={e => updLog("usage_date", e.target.value)} style={inp} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Vendor name (ad-hoc, optional)</div>
-                  <input value={logForm.vendor_name} onChange={e => updLog("vendor_name", e.target.value)} placeholder="If no party set" style={inp} />
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.vendor_name_ad_hoc_optional")}</div>
+                  <input value={logForm.vendor_name} onChange={e => updLog("vendor_name", e.target.value)} placeholder={t("equipment.if_no_party_set")} style={inp} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Start Time</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.start_time")}</div>
                   <input type="time" value={logForm.start_time} onChange={e => updLog("start_time", e.target.value)} style={inp} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>End Time</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.end_time")}</div>
                   <input type="time" value={logForm.end_time} onChange={e => updLog("end_time", e.target.value)} style={inp} />
                 </div>
                 <div>
@@ -634,21 +633,21 @@ function TabEquipment({ projectId }) {
                   <input value={logForm.hours_or_days} onChange={e => updLog("hours_or_days", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 4" style={inp} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Rate Used (₹)</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.rate_used")}</div>
                   <input value={logForm.rate_used} onChange={e => updLog("rate_used", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Trip Charge (₹)</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.trip_charge")}</div>
                   <input value={logForm.trip_charge} onChange={e => updLog("trip_charge", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Lump Amount (Fixed mode)</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.lump_amount_fixed_mode")}</div>
                   <input value={logForm.lump_amount} onChange={e => updLog("lump_amount", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
                 </div>
                 <div style={{ gridColumn: "1 / 3" }}>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Settlement Side</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.settlement_side")}</div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    {[{ k: "company", l: "Company pays" }, { k: "subcon", l: "Subcon pays" }].map(o => {
+                    {[{ k: "company", l: t("equipment.company_pays") }, { k: "subcon", l: t("equipment.subcon_pays") }].map(o => {
                       const on = logForm.settlement_side === o.k;
                       return (
                         <button key={o.k} onClick={() => updLog("settlement_side", o.k)} type="button"
@@ -662,43 +661,43 @@ function TabEquipment({ projectId }) {
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Vendor (party)</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("machinery.vendor_party_2")}</div>
                   <select value={logForm.vendor_id} onChange={e => updLog("vendor_id", e.target.value)} style={inp}>
                     <option value="">—</option>
                     {vendorParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Subcon (party)</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.subcon_party")}</div>
                   <select value={logForm.subcon_id} onChange={e => updLog("subcon_id", e.target.value)} style={inp}>
                     <option value="">—</option>
                     {subconParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Fuel Qty (L)</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.fuel_qty_l")}</div>
                   <input value={logForm.fuel_qty} onChange={e => updLog("fuel_qty", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Fuel Cost (₹)</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.fuel_cost")}</div>
                   <input value={logForm.fuel_cost} onChange={e => updLog("fuel_cost", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
                 </div>
                 <div style={{ gridColumn: "1 / 3" }}>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Fuel paid to (pump / vendor)</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.fuel_paid_to_pump_vendor")}</div>
                   <select value={logForm.fuel_vendor_id} onChange={e => updLog("fuel_vendor_id", e.target.value)} style={inp}>
-                    <option value="">— Site cash (no separate payee) —</option>
+                    <option value="">{t("equipment.site_cash_no_separate_payee")}</option>
                     {vendorParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                   <div style={{ fontSize: 10, color: T.t4, marginTop: 4 }}>
-                    Diesel ka kharcha rent se alag book hota hai. Pump chuno to wo Pending Payments me jayega, warna site expense.
+                   {t("equipment.diesel_ka_kharcha_rent_se_alag")}
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Operator Name</div>
-                  <input value={logForm.operator_name} onChange={e => updLog("operator_name", e.target.value)} placeholder="e.g. Ramesh Kumar" style={inp} />
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.operator_name")}</div>
+                  <input value={logForm.operator_name} onChange={e => updLog("operator_name", e.target.value)} placeholder={t("master_library.e_g_ramesh_kumar")} style={inp} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Meter Start / End (optional)</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.meter_start_end_optional")}</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <input value={logForm.meter_start} onChange={e => updLog("meter_start", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="start" style={inp} />
                     <input value={logForm.meter_end} onChange={e => updLog("meter_end", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="end" style={inp} />
@@ -709,14 +708,14 @@ function TabEquipment({ projectId }) {
                     hain, aur poori sheet unhi par tiki hoti hai. Bina in do ke
                     Log Sheet aur Usage Register me ye column khaali rehte the. */}
                 <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Sector</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("common.sector")}</div>
                   <input value={logForm.sector} onChange={e => updLog("sector", e.target.value)}
-                    placeholder='e.g. 15, "15 & 12", Kosa Road' style={inp} />
+                    placeholder={t("equipment.e_g_15_15_12_kosa")} style={inp} />
                 </div>
                 <div style={{ gridColumn: "1 / -1" }}>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Remark — kya kaam hua</div>
+                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.remark_kya_kaam_hua")}</div>
                   <input value={logForm.remark} onChange={e => updLog("remark", e.target.value)}
-                    placeholder="e.g. SEC.15 BC soil excavation & loading (30 trip)" style={inp} />
+                    placeholder={t("equipment.e_g_sec_15_bc_soil")} style={inp} />
                 </div>
               </div>
               {logErr && (
@@ -725,10 +724,10 @@ function TabEquipment({ projectId }) {
             </div>
             <div style={{ padding: "12px 22px", borderTop: `1px solid ${T.b1}`, display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button onClick={() => setShowLogModal(false)} type="button"
-                style={{ padding: "9px 16px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12.5, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+                style={{ padding: "9px 16px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12.5, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
               <button onClick={saveUsage} disabled={logSaving} type="button"
                 style={{ padding: "9px 20px", borderRadius: 7, border: "none", background: logSaving ? T.b1 : T.blu, color: logSaving ? T.t4 : "white", fontSize: 12.5, fontWeight: 700, cursor: logSaving ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
-                {logSaving ? "Saving..." : "Save Usage"}
+                {logSaving ? t("common.saving") : t("equipment.save_usage")}
               </button>
             </div>
           </div>

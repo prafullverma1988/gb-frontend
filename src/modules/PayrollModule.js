@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import { t, Rich } from "../i18n";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -66,28 +67,28 @@ const exportCSV = (headers, rows, filename) => {
 };
 
 // ── LOADING / ERROR / EMPTY HELPERS ───────────────────────────────
-const LoadingSpinner=()=><div style={{textAlign:"center",padding:"60px 0",color:"#94A3B8"}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>;
-const ErrorRetry=({onRetry})=><div style={{textAlign:"center",padding:"60px 0",color:"#EF4444",fontSize:13}}>Failed to load. <span style={{color:"#3B82F6",cursor:"pointer",textDecoration:"underline"}} onClick={onRetry}>Retry</span></div>;
+const LoadingSpinner=()=><div style={{textAlign:"center",padding:"60px 0",color:"#94A3B8"}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>{t("common.loading")}</div>;
+const ErrorRetry=({onRetry})=><div style={{textAlign:"center",padding:"60px 0",color:"#EF4444",fontSize:13}}>{t("payroll.failed_to_load")} <span style={{color:"#3B82F6",cursor:"pointer",textDecoration:"underline"}} onClick={onRetry}>{t("common.retry")}</span></div>;
 const EmptyState=({icon,message,sub})=><div style={{textAlign:"center",padding:"50px 0",color:T.t4}}>{icon}<div style={{fontSize:13,marginTop:8}}>{message}</div>{sub&&<div style={{fontSize:11.5,color:T.t4,marginTop:3}}>{sub}</div>}</div>;
 
 // ── NAV ────────────────────────────────────────────────────────────
 const NAV=[
   {sec:null,items:[
-    {id:"dashboard",l:"Dashboard",I:IcHome},
-    {id:"projects",l:"Projects",I:IcProj},
+    {id:"dashboard",get l() { return t("common.dashboard"); },I:IcHome},
+    {id:"projects",get l() { return t("common.projects"); },I:IcProj},
     {id:"crm",l:"CRM",I:IcCRM},
-    {id:"tasks",l:"Tasks",I:IcTask},
-    {id:"team",l:"Team",I:IcTeam},
+    {id:"tasks",get l() { return t("common.tasks"); },I:IcTask},
+    {id:"team",get l() { return t("common.team"); },I:IcTeam},
   ]},
   {sec:"FINANCE & OPS",items:[
-    {id:"finance",l:"Finance",I:IcFin},
-    {id:"procurement",l:"Procurement",I:IcProc},
-    {id:"warehouse",l:"Warehouse",I:IcWH},
-    {id:"payroll",l:"Payroll",I:IcPay},
+    {id:"finance",get l() { return t("common.finance"); },I:IcFin},
+    {id:"procurement",get l() { return t("common.procurement"); },I:IcProc},
+    {id:"warehouse",get l() { return t("common.warehouse"); },I:IcWH},
+    {id:"payroll",get l() { return t("common.payroll"); },I:IcPay},
   ]},
   {sec:"MORE",items:[
-    {id:"reports",l:"Reports",I:IcRep},
-    {id:"settings",l:"Settings",I:IcSet},
+    {id:"reports",get l() { return t("common.reports"); },I:IcRep},
+    {id:"settings",get l() { return t("common.settings"); },I:IcSet},
   ]},
 ];
 
@@ -165,7 +166,7 @@ function GeofenceAdminTab({isAdmin}){
     }catch(e){ alert(e.message); }
   };
   const rejectSuggestion=async(id)=>{
-    if(!await window.confirmAsync("Reject this auto-detected location? It will not appear again until 3+ new photo uploads accumulate near these coords.")) return;
+    if(!await window.confirmAsync(t("payroll.reject_this_auto_detected_location_it"))) return;
     try{
       const r=await api.del(`/geofences/${id}?hard=1`);
       if(r.success) await reload();
@@ -189,7 +190,7 @@ function GeofenceAdminTab({isAdmin}){
     setErr("");
   };
   const useMyLocation=()=>{
-    if(!navigator.geolocation){ setErr("Browser GPS not supported"); return; }
+    if(!navigator.geolocation){ setErr(t("payroll.browser_gps_not_supported")); return; }
     navigator.geolocation.getCurrentPosition(
       pos=>setForm(p=>({...p,center_lat:pos.coords.latitude.toFixed(7),center_lng:pos.coords.longitude.toFixed(7)})),
       e=>setErr("GPS failed: "+e.message),
@@ -198,7 +199,7 @@ function GeofenceAdminTab({isAdmin}){
   };
   const save=async()=>{
     if(!form.label.trim()||!form.center_lat||!form.center_lng){
-      setErr("Label + latitude + longitude required"); return;
+      setErr(t("payroll.label_latitude_longitude_required")); return;
     }
     setSaving(true); setErr("");
     try{
@@ -218,7 +219,7 @@ function GeofenceAdminTab({isAdmin}){
     setSaving(false);
   };
   const remove=async(id)=>{
-    if(!await window.confirmAsync("Soft-delete this geofence? (Will not affect past punches)")) return;
+    if(!await window.confirmAsync(t("payroll.soft_delete_this_geofence_will_not"))) return;
     try{ await api.del(`/geofences/${id}`); await reload(); }
     catch(e){ alert(e.message); }
   };
@@ -230,16 +231,16 @@ function GeofenceAdminTab({isAdmin}){
   const inp={width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
 
   if(!isAdmin){
-    return <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Geofence config is admin-only.</div>;
+    return <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>{t("payroll.geofence_config_is_admin_only")}</div>;
   }
 
   return(
     <div>
       <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,padding:"10px 14px",marginBottom:14,fontSize:11.5,color:T.t2,lineHeight:1.5}}>
-        Mobile app checks each punch against active geofences. <b>Inside</b> → auto-attendance.
-        <b style={{color:T.amb,marginLeft:5}}>Outside</b> → admin review queue (Pending Approvals tab).
+       {t("payroll.mobile_app_checks_each_punch_against")} <b>{t("payroll.inside")}</b> {t("payroll.auto_attendance")}
+        <b style={{color:T.amb,marginLeft:5}}>{t("payroll.outside")}</b> {t("payroll.admin_review_queue_pending_approvals_tab")}
         <br/>
-        <span style={{color:T.t3,fontSize:11}}>💡 Tip: 3+ live-camera photo uploads from the same site auto-suggest a location below.</span>
+        <span style={{color:T.t3,fontSize:11}}>{t("payroll.tip_3_live_camera_photo_uploads")}</span>
       </div>
 
       {/* ─── AUTO-LEARNED SUGGESTIONS ─── */}
@@ -248,8 +249,8 @@ function GeofenceAdminTab({isAdmin}){
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
             <span style={{fontSize:18}}>🔮</span>
             <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.pur}}>Auto-Detected Locations — {suggestions.length} new</div>
-              <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>Team ne in coordinates pe regular photos upload kiye — site location lagti hai</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.pur}}>{t("payroll.auto_detected_locations_suggestions_new", { suggestions: suggestions.length })}</div>
+              <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>{t("payroll.team_ne_in_coordinates_pe_regular")}</div>
             </div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -257,10 +258,8 @@ function GeofenceAdminTab({isAdmin}){
               <div key={s.id} style={{background:T.surface,border:`1px solid ${T.purM}`,borderRadius:8,padding:"10px 12px",display:"grid",gridTemplateColumns:"1fr auto",gap:10,alignItems:"center"}}>
                 <div>
                   <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>
-                    {s.project_name || "Generic site"}
-                    <span style={{marginLeft:8,fontSize:9.5,padding:"1px 7px",borderRadius:10,background:T.purL,color:T.pur,fontWeight:700}}>
-                      {s.confidence||0}% confident
-                    </span>
+                    {s.project_name || t("payroll.generic_site")}
+                    <span style={{marginLeft:8,fontSize:9.5,padding:"1px 7px",borderRadius:10,background:T.purL,color:T.pur,fontWeight:700}}>{t("payroll.s_confident", { s: s.confidence||0 })}</span>
                   </div>
                   <div style={{fontSize:10.5,color:T.t3,marginTop:3,fontFamily:"monospace"}}>
                     {Number(s.center_lat).toFixed(5)}, {Number(s.center_lng).toFixed(5)}
@@ -269,7 +268,7 @@ function GeofenceAdminTab({isAdmin}){
                 </div>
                 <div style={{display:"flex",gap:6,alignItems:"center"}}>
                   {/* Editable radius — defaults to auto-learned value */}
-                  <div style={{display:"flex",alignItems:"center",gap:3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:6,padding:"3px 7px"}} title="Radius (meters) — edit before confirming">
+                  <div style={{display:"flex",alignItems:"center",gap:3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:6,padding:"3px 7px"}} title={t("payroll.radius_meters_edit_before_confirming")}>
                     <input type="number" min={20} max={1000}
                       value={sugRadius[s.id]!==undefined?sugRadius[s.id]:(s.radius_m||80)}
                       onChange={e=>setSugRadius(p=>({...p,[s.id]:e.target.value}))}
@@ -278,11 +277,11 @@ function GeofenceAdminTab({isAdmin}){
                   </div>
                   <button onClick={()=>rejectSuggestion(s.id)}
                     style={{padding:"6px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                    ✕ Reject
+                   {t("common.reject")}
                   </button>
                   <button onClick={()=>confirmSuggestion(s.id)}
                     style={{padding:"6px 14px",borderRadius:6,background:T.pur,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-                    ✓ Confirm Site
+                   {t("payroll.confirm_site")}
                   </button>
                 </div>
               </div>
@@ -295,51 +294,51 @@ function GeofenceAdminTab({isAdmin}){
         {/* ─── Form ─── */}
         <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:14}}>
           <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:10}}>
-            {editId?"Edit Geofence":"Add New Geofence"}
+            {editId?t("payroll.edit_geofence"):t("payroll.add_new_geofence")}
           </div>
           <div style={{display:"grid",gap:9}}>
             <div>
-              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Label *</div>
-              <input style={inp} value={form.label} onChange={e=>setForm(p=>({...p,label:e.target.value}))} placeholder="e.g. Raganee House Site"/>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.label")}</div>
+              <input style={inp} value={form.label} onChange={e=>setForm(p=>({...p,label:e.target.value}))} placeholder={t("payroll.e_g_raganee_house_site")}/>
             </div>
             <div>
-              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Project (optional)</div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.project_optional")}</div>
               <select style={inp} value={form.project_id} onChange={e=>setForm(p=>({...p,project_id:e.target.value}))}>
-                <option value="">— Generic (not project-linked) —</option>
+                <option value="">{t("payroll.generic_not_project_linked")}</option>
                 {projects.map(p=><option key={p.id} value={p.id}>{p.name}{p.city?` · ${p.city}`:""}</option>)}
               </select>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <div>
-                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Latitude *</div>
+                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.latitude")}</div>
                 <input style={inp} value={form.center_lat} onChange={e=>setForm(p=>({...p,center_lat:e.target.value}))} placeholder="21.2497"/>
               </div>
               <div>
-                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Longitude *</div>
+                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.longitude")}</div>
                 <input style={inp} value={form.center_lng} onChange={e=>setForm(p=>({...p,center_lng:e.target.value}))} placeholder="81.6324"/>
               </div>
             </div>
             <button onClick={useMyLocation}
               style={{padding:"6px 10px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-              📍 Use my current GPS location
+             {t("payroll.use_my_current_gps_location")}
             </button>
             <div>
-              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Radius: <b style={{color:T.t1}}>{form.radius_m}m</b></div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.radius")} <b style={{color:T.t1}}>{form.radius_m}m</b></div>
               <input type="range" min="30" max="500" step="10" value={form.radius_m}
                 onChange={e=>setForm(p=>({...p,radius_m:Number(e.target.value)}))}
                 style={{width:"100%"}}/>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:T.t4,marginTop:2}}>
-                <span>30m</span><span>80m default</span><span>500m</span>
+                <span>30m</span><span>{t("payroll.80m_default")}</span><span>500m</span>
               </div>
             </div>
             {err && <div style={{padding:"7px 10px",background:T.redL,color:T.red,borderRadius:6,fontSize:11}}>{err}</div>}
             <div style={{display:"flex",gap:7}}>
               {editId && (
-                <button onClick={openAdd} style={{flex:1,padding:"8px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                <button onClick={openAdd} style={{flex:1,padding:"8px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
               )}
               <button onClick={save} disabled={saving}
                 style={{flex:2,padding:"8px",borderRadius:6,background:saving?T.t4:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer"}}>
-                {saving?"Saving…":(editId?"Save Changes":"Add Geofence")}
+                {saving?t("common.saving_2"):(editId?t("common.save_changes"):t("payroll.add_geofence"))}
               </button>
             </div>
           </div>
@@ -348,13 +347,13 @@ function GeofenceAdminTab({isAdmin}){
         {/* ─── List ─── */}
         <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden",minHeight:280}}>
           <div style={{padding:"10px 14px",background:T.sb,color:"white",fontSize:12.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span>Active Geofences <span style={{color:"rgba(255,255,255,.5)",marginLeft:4,fontSize:11}}>({fences.length})</span></span>
+            <span>{t("payroll.active_geofences")} <span style={{color:"rgba(255,255,255,.5)",marginLeft:4,fontSize:11}}>({fences.length})</span></span>
           </div>
-          {loading && <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12}}>Loading…</div>}
+          {loading && <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12}}>{t("common.loading_2")}</div>}
           {!loading && fences.length===0 && (
             <div style={{padding:"35px 14px",textAlign:"center",color:T.t4,fontSize:12.5,lineHeight:1.5}}>
-              No geofences yet.<br/>
-              <span style={{fontSize:11}}>Until you add at least one site, all punches will be accepted without review.</span>
+             {t("payroll.no_geofences_yet")}<br/>
+              <span style={{fontSize:11}}>{t("payroll.until_you_add_at_least_one")}</span>
             </div>
           )}
           {!loading && fences.map(f=>(
@@ -369,13 +368,13 @@ function GeofenceAdminTab({isAdmin}){
                   {Number(f.center_lat).toFixed(5)}, {Number(f.center_lng).toFixed(5)} · {f.radius_m}m
                 </div>
               </div>
-              <button onClick={()=>toggleActive(f)} title={f.active?"Deactivate":"Activate"}
+              <button onClick={()=>toggleActive(f)} title={f.active?t("payroll.deactivate"):t("payroll.activate")}
                 style={{padding:"4px 9px",borderRadius:5,background:f.active?T.grnL:T.sltL,border:`1px solid ${f.active?T.grnM:T.b1}`,color:f.active?T.grn:T.t3,fontSize:10,fontWeight:700,cursor:"pointer"}}>
                 {f.active?"ON":"OFF"}
               </button>
               <button onClick={()=>openEdit(f)}
                 style={{padding:"4px 9px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10,fontWeight:600,cursor:"pointer"}}>
-                Edit
+               {t("common.edit_2")}
               </button>
               <button onClick={()=>remove(f.id)}
                 style={{padding:"4px 8px",borderRadius:5,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10,fontWeight:700,cursor:"pointer"}}>
@@ -419,33 +418,29 @@ function PendingReviewQueue({onChanged}){
   return(
     <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden"}}>
       <div style={{padding:"10px 14px",background:T.amb,color:"white",fontSize:12.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <span>Outside-Geofence Punches — Pending Review <span style={{color:"rgba(255,255,255,.6)",marginLeft:4,fontSize:11}}>({items.length})</span></span>
-        <button onClick={reload} style={{background:"rgba(255,255,255,.18)",border:"none",color:"white",padding:"3px 9px",borderRadius:5,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>↻ Refresh</button>
+        <span>{t("payroll.outside_geofence_punches_pending_review")} <span style={{color:"rgba(255,255,255,.6)",marginLeft:4,fontSize:11}}>({items.length})</span></span>
+        <button onClick={reload} style={{background:"rgba(255,255,255,.18)",border:"none",color:"white",padding:"3px 9px",borderRadius:5,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("common.refresh_2")}</button>
       </div>
-      {loading && <div style={{padding:"25px",textAlign:"center",color:T.t4,fontSize:12}}>Loading…</div>}
+      {loading && <div style={{padding:"25px",textAlign:"center",color:T.t4,fontSize:12}}>{t("common.loading_2")}</div>}
       {!loading && items.length===0 && (
-        <div style={{padding:"25px 14px",textAlign:"center",color:T.grn,fontSize:12.5,fontWeight:600}}>✓ All clean — no outside-geofence punches pending</div>
+        <div style={{padding:"25px 14px",textAlign:"center",color:T.grn,fontSize:12.5,fontWeight:600}}>{t("payroll.all_clean_no_outside_geofence_punches")}</div>
       )}
       {!loading && items.map(s=>(
         <div key={s.id} style={{padding:"11px 14px",borderTop:`1px solid ${T.b1}`,display:"grid",gridTemplateColumns:"1fr auto",gap:10,alignItems:"center"}}>
           <div>
             <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{s.user_name} <span style={{fontSize:10,color:T.t4,fontWeight:500}}>· {s.user_phone||""}</span></div>
-            <div style={{fontSize:11,color:T.t3,marginTop:3}}>
-              Punched in at <b>{new Date(s.punch_in_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}</b>
-              {s.project_name && <> · {s.project_name}</>}
+            <div style={{fontSize:11,color:T.t3,marginTop:3}}><Rich k="payroll.punched_in_at_vnew" params={{ vnew: new Date(s.punch_in_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) }} />{s.project_name && <> · {s.project_name}</>}
             </div>
-            <div style={{fontSize:10,color:T.t4,marginTop:2,fontFamily:"monospace"}}>
-              GPS: {s.punch_in_lat?Number(s.punch_in_lat).toFixed(5):"—"}, {s.punch_in_lng?Number(s.punch_in_lng).toFixed(5):"—"}
-            </div>
+            <div style={{fontSize:10,color:T.t4,marginTop:2,fontFamily:"monospace"}}>{t("payroll.gps_s_s2", { s: s.punch_in_lat?Number(s.punch_in_lat).toFixed(5):"—", s2: s.punch_in_lng?Number(s.punch_in_lng).toFixed(5):"—" })}</div>
           </div>
           <div style={{display:"flex",gap:6}}>
             <button onClick={()=>review(s.id,"reject")} disabled={acting===s.id}
               style={{padding:"6px 12px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-              ✕ Reject
+             {t("common.reject")}
             </button>
             <button onClick={()=>review(s.id,"approve")} disabled={acting===s.id}
               style={{padding:"6px 14px",borderRadius:6,background:T.grn,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-              ✓ Approve
+             {t("common.approve")}
             </button>
           </div>
         </div>
@@ -511,7 +506,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
   const submit=async()=>{
     setErr("");
     if(!form.staff_id||!form.leave_type_id||!form.from_date||!form.to_date){
-      setErr("Sab fields zaroori hain"); return;
+      setErr(t("payroll.sab_fields_zaroori_hain")); return;
     }
     setSubmitting(true);
     try{
@@ -543,7 +538,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
     }catch(e){ setReviewErr(p=>({...p,[id]:e.message||"Review failed"})); }
   };
   const cancel=async(id)=>{
-    if(!await window.confirmAsync("Cancel this leave application?")) return;
+    if(!await window.confirmAsync(t("payroll.cancel_this_leave_application"))) return;
     try{
       const r=await api.patch(`/payroll/leave-applications/${id}/cancel`,{});
       if(r.success) await reload();
@@ -553,9 +548,9 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
   // Admin-only: cancel an APPROVED leave — restores balance + unmarks 'L' days
   const cancelApproved=async(a)=>{
     if(!await window.confirmAsync(`${a.staff_name} ki approved leave (${fmtDate(a.from_date)} → ${fmtDate(a.to_date)}) cancel karein? Balance restore hoga aur grid ke 'L' days unmark ho jayenge.`)) return;
-    const reason=await window.promptAsync("Cancel reason (required):");
+    const reason=await window.promptAsync(t("payroll.cancel_reason_required"));
     if(reason===null) return;
-    if(!String(reason).trim()){ alert("Reason required"); return; }
+    if(!String(reason).trim()){ alert(t("payroll.reason_required")); return; }
     try{
       const r=await api.patch(`/payroll/leave-applications/${a.id}/cancel-approved`,{reason:String(reason).trim()});
       if(r.success){ await reload(); if(onAttendanceChanged) onAttendanceChanged(); }
@@ -577,10 +572,10 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
 
   // ─── Sub-tabs strip ────────────────────────────────────
   const SUB_TABS=[
-    {id:"pending", l:"Pending Approvals", c:T.amb, badge:pendingApps.length, adminOnly:true},
-    {id:"all",     l:"All Leaves", c:T.blu, badge:apps.length},
-    {id:"balance", l:"Balance", c:T.pur, badge:balances.length},
-    {id:"holidays",l:"Holidays", c:T.grn},
+    {id:"pending", l:t("common.pending_approvals"), c:T.amb, badge:pendingApps.length, adminOnly:true},
+    {id:"all",     l:t("payroll.all_leaves"), c:T.blu, badge:apps.length},
+    {id:"balance", l:t("common.balance"), c:T.pur, badge:balances.length},
+    {id:"holidays",l:t("payroll.holidays"), c:T.grn},
   ];
 
   return(
@@ -599,13 +594,13 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
         })}
         <span style={{flex:1}}/>
         <button onClick={()=>setShowApply(true)}
-          title="Staff phone par bataye to HR yahan se entry kar sakta hai — self-apply mobile app me hai"
+          title={t("payroll.staff_phone_par_bataye_to_hr")}
           style={{padding:"6px 13px",borderRadius:7,border:`1px solid ${T.grn}44`,background:T.grnL,color:T.grn,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-          <IcAdd size={12}/> Leave Entry (on behalf)
+          <IcAdd size={12}/> {t("payroll.leave_entry_on_behalf")}
         </button>
       </div>
 
-      {loading && <div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:12}}>Loading…</div>}
+      {loading && <div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:12}}>{t("common.loading_2")}</div>}
 
       {/* ─── ON-BEHALF LEAVE ENTRY (modal) ─── */}
       {showApply && (
@@ -614,82 +609,80 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
         <div onClick={e=>e.stopPropagation()} style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:12,padding:16,width:640,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
             <div>
-              <div style={{fontSize:13,fontWeight:700,color:T.t1}}>Leave Entry — on behalf</div>
-              <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>Staff ki self-apply mobile app me hai; ye HR/admin entry hai</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("payroll.leave_entry_on_behalf_2")}</div>
+              <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{t("payroll.staff_ki_self_apply_mobile_app")}</div>
             </div>
             <button onClick={()=>!submitting&&setShowApply(false)} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:T.t4}}><IcX size={16}/></button>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             <div>
-              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Staff Member</div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.staff_member")}</div>
               <select value={form.staff_id} onChange={e=>setForm(p=>({...p,staff_id:e.target.value}))} style={inp}>
-                <option value="">— Select —</option>
+                <option value="">{t("payroll.select")}</option>
                 {staff.map(s=><option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
               </select>
             </div>
             <div>
-              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Leave Type</div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.leave_type")}</div>
               <select value={form.leave_type_id} onChange={e=>setForm(p=>({...p,leave_type_id:e.target.value}))} style={inp}>
-                <option value="">— Select —</option>
-                {types.map(t=><option key={t.id} value={t.id}>{t.code} — {t.name}{t.is_unpaid?" (Unpaid)":""}</option>)}
+                <option value="">{t("payroll.select")}</option>
+                {types.map(t=><option key={t.id} value={t.id}>{t.code} — {t.name}{t.is_unpaid?t("payroll.unpaid"):""}</option>)}
               </select>
             </div>
             <div>
-              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>From</div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("common.from")}</div>
               <input type="date" value={form.from_date} onChange={e=>setForm(p=>({...p,from_date:e.target.value,to_date:form.is_half_day?e.target.value:p.to_date}))} style={inp}/>
             </div>
             <div>
-              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>To</div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("common.to")}</div>
               <input type="date" value={form.to_date} onChange={e=>setForm(p=>({...p,to_date:e.target.value}))} disabled={form.is_half_day} style={{...inp,opacity:form.is_half_day?0.5:1}}/>
             </div>
           </div>
           {selBalance!==null&&(
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-              <span style={{fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:10,background:selBalance>0?T.grnL:T.redL,color:selBalance>0?T.grn:T.red,border:`1px solid ${selBalance>0?T.grnM:T.redM}`}}>
-                Balance: {selBalance} din
-              </span>
+              <span style={{fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:10,background:selBalance>0?T.grnL:T.redL,color:selBalance>0?T.grn:T.red,border:`1px solid ${selBalance>0?T.grnM:T.redM}`}}>{t("payroll.balance_selbalance_din", { selBalance })}</span>
               <span style={{fontSize:10,color:T.t4}}>{selType.code} · {selType.name}</span>
             </div>
           )}
           <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:T.t2,marginBottom:10,cursor:"pointer"}}>
             <input type="checkbox" checked={form.is_half_day} onChange={e=>setForm(p=>({...p,is_half_day:e.target.checked,to_date:e.target.checked?p.from_date:p.to_date}))}/>
-            Half-day leave (single date)
+           {t("payroll.half_day_leave_single_date")}
           </label>
           {form.is_half_day && (
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Half-day Part</div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.half_day_part")}</div>
               <select value={form.half_day_part} onChange={e=>setForm(p=>({...p,half_day_part:e.target.value}))} style={{...inp,maxWidth:200}}>
-                <option value="first">First half (morning)</option>
-                <option value="second">Second half (afternoon)</option>
+                <option value="first">{t("payroll.first_half_morning")}</option>
+                <option value="second">{t("payroll.second_half_afternoon")}</option>
               </select>
             </div>
           )}
           <div style={{marginBottom:10}}>
-            <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Reason</div>
+            <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("common.reason")}</div>
             <textarea value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} rows={2}
-              placeholder="Brief reason (optional)"
+              placeholder={t("payroll.brief_reason_optional")}
               style={{...inp,resize:"vertical"}}/>
           </div>
 
           {/* Preview */}
           {form.from_date && form.to_date && (
             <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:11.5,color:T.t3}}>Computed working days:</span>
+              <span style={{fontSize:11.5,color:T.t3}}>{t("payroll.computed_working_days")}</span>
               <span style={{fontSize:14,fontWeight:800,color:T.blu}}>{preview.loading?"…":preview.days}</span>
-              <span style={{fontSize:10.5,color:T.t4,marginLeft:"auto"}}>Sundays + non-optional holidays auto-excluded</span>
+              <span style={{fontSize:10.5,color:T.t4,marginLeft:"auto"}}>{t("payroll.sundays_non_optional_holidays_auto_excluded")}</span>
             </div>
           )}
           {form.from_date && form.to_date && overBalance && (
             <div style={{padding:"8px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,marginBottom:10,display:"flex",alignItems:"center",gap:7}}>
               <IcAlert size={13} color={T.amb}/>
-              <span style={{fontSize:11.5,color:T.t2}}><b style={{color:T.amb}}>Balance se zyada</b> — {preview.days} din maange, balance sirf {selBalance} din. Approve par block hoga; excess ke liye LOP consider karein.</span>
+              <span style={{fontSize:11.5,color:T.t2}}><Rich k="payroll.balance_se_zyada_days_din_maange" params={{ days: preview.days, selBalance }} /></span>
             </div>
           )}
 
           {err && <div style={{padding:"8px 11px",background:T.redL,color:T.red,borderRadius:6,fontSize:11.5,marginBottom:10}}>{err}</div>}
           <button onClick={submit} disabled={submitting||!form.staff_id||!form.leave_type_id||!form.from_date||!form.to_date}
             style={{padding:"9px 22px",borderRadius:7,background:submitting||!form.staff_id||!form.leave_type_id||!form.from_date||!form.to_date?T.t4:T.grn,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:submitting?"not-allowed":"pointer"}}>
-            {submitting?"Submitting…":"Submit Application"}
+            {submitting?t("common.submitting"):t("payroll.submit_application")}
           </button>
         </div>
         </div>
@@ -701,7 +694,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
           <div style={{display:"grid",gridTemplateColumns:"160px 140px 90px 110px 110px 90px 100px",padding:"8px 14px",background:T.sb,color:"rgba(255,255,255,.55)",fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px"}}>
             {["Staff","Type","Days","From","To","Status","Actions"].map((h,i)=><span key={i}>{h}</span>)}
           </div>
-          {myApps.length===0&&<div style={{padding:"30px 14px",textAlign:"center",color:T.t4,fontSize:12.5}}>No leave applications yet</div>}
+          {myApps.length===0&&<div style={{padding:"30px 14px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("payroll.no_leave_applications_yet")}</div>}
           {myApps.map((a,i)=>{
             const stC={"Pending":T.amb,"Approved":T.grn,"Rejected":T.red,"Cancelled":T.t4}[a.status]||T.t4;
             const bg={"Pending":T.ambL,"Approved":T.grnL,"Rejected":T.redL,"Cancelled":T.sltL}[a.status]||T.sltL;
@@ -713,7 +706,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
                 </div>
                 <div>
                   <span style={{fontSize:10,padding:"2px 7px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700}}>{a.leave_code}</span>
-                  <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{a.leave_name}{a.is_unpaid?" (LOP)":""}</div>
+                  <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{a.leave_name}{a.is_unpaid?t("payroll.lop"):""}</div>
                 </div>
                 <span style={{fontSize:13,fontWeight:800,color:T.t1}}>{Number(a.days)}d{a.is_half_day?" ½":""}</span>
                 <span style={{color:T.t2}}>{fmtDate(a.from_date)}</span>
@@ -721,11 +714,11 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
                 <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:bg,color:stC,fontWeight:700,justifySelf:"start"}}>{a.status}</span>
                 <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
                   {a.status==="Pending"&&(a.applied_by===currentUser.id||isAdmin)&&(
-                    <button onClick={()=>cancel(a.id)} style={{padding:"3px 8px",borderRadius:5,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                    <button onClick={()=>cancel(a.id)} style={{padding:"3px 8px",borderRadius:5,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
                   )}
                   {a.status==="Approved"&&isAdmin&&(
-                    <button onClick={()=>cancelApproved(a)} title="Balance restore + 'L' days unmark honge"
-                      style={{padding:"3px 8px",borderRadius:5,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                    <button onClick={()=>cancelApproved(a)} title={t("payroll.balance_restore_l_days_unmark_honge")}
+                      style={{padding:"3px 8px",borderRadius:5,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
                   )}
                 </div>
               </div>
@@ -739,8 +732,8 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
         <div>
           {pendingApps.length===0?(
             <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:9,padding:30,textAlign:"center"}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.grn,marginBottom:4}}>All caught up</div>
-              <div style={{fontSize:11.5,color:T.t3}}>No pending leave applications</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.grn,marginBottom:4}}>{t("finance.all_caught_up")}</div>
+              <div style={{fontSize:11.5,color:T.t3}}>{t("payroll.no_pending_leave_applications")}</div>
             </div>
           ):pendingApps.map(a=>(
             <div key={a.id} style={{background:T.surface,border:`1px solid ${T.ambM}`,borderRadius:9,padding:13,marginBottom:9,borderLeft:`4px solid ${T.amb}`}}>
@@ -749,20 +742,20 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
                   <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{a.staff_name} <span style={{fontSize:10.5,color:T.t4,fontWeight:500}}>· {a.staff_role}</span></div>
                   <div style={{fontSize:11.5,color:T.t2,marginTop:3}}>
                     <span style={{fontSize:10,padding:"2px 7px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700,marginRight:6}}>{a.leave_code}</span>
-                    {a.leave_name}{a.is_unpaid?" (LOP)":""} · <b>{Number(a.days)} day{Number(a.days)===1?"":"s"}</b>{a.is_half_day?" (half-day)":""}
+                    {a.leave_name}{a.is_unpaid?t("payroll.lop"):""} · <b>{Number(a.days)} day{Number(a.days)===1?"":"s"}</b>{a.is_half_day?t("payroll.half_day"):""}
                   </div>
                   <div style={{fontSize:11,color:T.t3,marginTop:3}}>{fmtDate(a.from_date)} → {fmtDate(a.to_date)}</div>
                   {a.reason&&<div style={{fontSize:11,color:T.t3,fontStyle:"italic",marginTop:5}}>"{a.reason}"</div>}
                 </div>
                 <div style={{display:"flex",gap:6,flexShrink:0}}>
-                  <button onClick={async ()=>review(a.id,"reject",await window.promptAsync("Reject reason (optional):")||null)}
+                  <button onClick={async ()=>review(a.id,"reject",await window.promptAsync(t("payroll.reject_reason_optional"))||null)}
                     style={{padding:"6px 12px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                    ✕ Reject
+                   {t("common.reject")}
                   </button>
                   <button onClick={()=>setCoverApp(a)}
-                    title="Coverage check ke saath review"
+                    title={t("payroll.coverage_check_ke_saath_review")}
                     style={{padding:"6px 14px",borderRadius:6,background:T.grn,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-                    ✓ Review
+                   {t("payroll.review")}
                   </button>
                 </div>
               </div>
@@ -780,33 +773,29 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
           {isAdmin && (
             <div style={{marginBottom:10,display:"flex",gap:8}}>
               <button onClick={async()=>{
-                  if(!await window.confirmAsync(`Allocate ${year} balances for all staff × leave types (idempotent)?`)) return;
+                  if(!await window.confirmAsync(t("payroll.allocate_year_balances_for_all_staff", { year }))) return;
                   try{
                     const r=await api.post("/payroll/leave-balances/allocate-year",{year});
-                    if(r.success){ alert(`${r.added} balance row(s) added`); await reload(); }
+                    if(r.success){ alert(t("payroll.added_balance_row_s_added", { added: r.added })); await reload(); }
                   }catch(e){ alert(e.message); }
                 }}
-                style={{padding:"6px 12px",borderRadius:7,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                Allocate {year} Balances
-              </button>
+                style={{padding:"6px 12px",borderRadius:7,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("payroll.allocate_year_balances", { year })}</button>
               <button onClick={async()=>{
                   if(!await window.confirmAsync(`Carry-forward ${year-1} → ${year}? Carry-forward waale leave types ka bacha balance ${year} ke carried_fwd me SET hoga (idempotent — dobara chalane par double nahi hota).`)) return;
                   try{
                     const r=await api.post("/payroll/leave-balances/rollover",{from_year:year-1,to_year:year});
-                    if(r.success){ alert(`${r.rolled} balance row(s) rolled forward`); await reload(); }
+                    if(r.success){ alert(t("payroll.rolled_balance_row_s_rolled_forward", { rolled: r.rolled })); await reload(); }
                     else alert(r.message||"Rollover failed");
                   }catch(e){ alert(e.message); }
                 }}
-                style={{padding:"6px 12px",borderRadius:7,background:T.purL,border:`1px solid ${T.pur}33`,color:T.pur,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                ⟳ Carry-forward {year-1} → {year}
-              </button>
+                style={{padding:"6px 12px",borderRadius:7,background:T.purL,border:`1px solid ${T.pur}33`,color:T.pur,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("payroll.carry_forward_year_year2", { year: year-1, year2: year })}</button>
             </div>
           )}
           <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden"}}>
             <div style={{display:"grid",gridTemplateColumns:"180px 80px 1fr 70px 70px 70px 80px",padding:"8px 14px",background:T.sb,color:"rgba(255,255,255,.55)",fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px"}}>
               {["Staff","Type","Name","Allocated","Used","Carried","Balance"].map((h,i)=><span key={i}>{h}</span>)}
             </div>
-            {myBalances.length===0&&<div style={{padding:"30px 14px",textAlign:"center",color:T.t4,fontSize:12.5}}>No balances allocated yet</div>}
+            {myBalances.length===0&&<div style={{padding:"30px 14px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("payroll.no_balances_allocated_yet")}</div>}
             {myBalances.map((b,i)=>{
               const bal=Number(b.balance);
               const balColor=bal<=0?T.red:bal<3?T.amb:T.grn;
@@ -817,7 +806,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
                     <div style={{fontSize:10,color:T.t4}}>{b.staff_role}</div>
                   </div>
                   <span style={{fontSize:10,padding:"2px 7px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700,justifySelf:"start"}}>{b.code}</span>
-                  <span style={{color:T.t3}}>{b.leave_name}{b.is_unpaid?" (LOP)":""}</span>
+                  <span style={{color:T.t3}}>{b.leave_name}{b.is_unpaid?t("payroll.lop"):""}</span>
                   <span style={{color:T.t2,fontWeight:600}}>{Number(b.allocated)}</span>
                   <span style={{color:T.red,fontWeight:600}}>-{Number(b.used)}</span>
                   <span style={{color:T.t3}}>{Number(b.carried_fwd)}</span>
@@ -874,7 +863,7 @@ function LeaveCoverageModal({app,onClose,onDecide}){
     <div style={{marginBottom:12}}>
       <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{title}</div>
       {items.length===0
-        ? <div style={{fontSize:11.5,color:T.t4}}>Koi nahi — clear ✓</div>
+        ? <div style={{fontSize:11.5,color:T.t4}}>{t("payroll.koi_nahi_clear")}</div>
         : items.map(o=>(
           <div key={o.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0"}}>
             <Avatar name={o.staff_name} size={24}/>
@@ -894,11 +883,11 @@ function LeaveCoverageModal({app,onClose,onDecide}){
       <div onClick={e=>e.stopPropagation()}
         style={{background:T.surface,borderRadius:12,width:760,maxWidth:"100%",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
         <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-          <div style={{fontSize:15,fontWeight:800,color:T.t1}}>Leave Approval — Coverage Check</div>
+          <div style={{fontSize:15,fontWeight:800,color:T.t1}}>{t("payroll.leave_approval_coverage_check")}</div>
           <button onClick={()=>!acting&&onClose()} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:T.t4}}><IcX size={18}/></button>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
-          {loading ? <div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:12}}>Coverage check ho raha hai…</div> : (
+          {loading ? <div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:12}}>{t("payroll.coverage_check_ho_raha_hai")}</div> : (
             <div style={{display:"grid",gridTemplateColumns:"1fr 1.15fr",gap:18}}>
               {/* Left — application detail */}
               <div>
@@ -919,7 +908,7 @@ function LeaveCoverageModal({app,onClose,onDecide}){
                 {app.reason&&<Row l="Reason" v={app.reason}/>}
                 {ctx?.balance!=null&&Number(app.days)>Number(ctx.balance)&&(
                   <div style={{marginTop:10,padding:"8px 11px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,fontSize:11.5,color:T.red,fontWeight:600}}>
-                    Balance se zyada — approve backend par block hoga
+                   {t("payroll.balance_se_zyada_approve_backend_par")}
                   </div>
                 )}
               </div>
@@ -939,15 +928,15 @@ function LeaveCoverageModal({app,onClose,onDecide}){
         </div>
         <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0}}>
           <button disabled={acting} onClick={async()=>{
-              const note=await window.promptAsync("Reject reason (optional):");
+              const note=await window.promptAsync(t("payroll.reject_reason_optional"));
               setActing(true); await onDecide("reject",note||null); setActing(false);
             }}
             style={{padding:"8px 16px",borderRadius:7,background:T.surface,border:`1px solid ${T.redM}`,color:T.red,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-            Reject
+           {t("common.reject_2")}
           </button>
           <button disabled={acting||loading} onClick={async()=>{ setActing(true); await onDecide("approve",null); setActing(false); }}
             style={{padding:"8px 18px",borderRadius:7,background:risk?T.amb:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-            {risk?<><IcAlert size={13} color="#fff"/> Phir bhi Approve</>:<>✓ Approve</>}
+            {risk?<><IcAlert size={13} color="#fff"/> {t("payroll.phir_bhi_approve")}</>:<>{t("common.approve")}</>}
           </button>
         </div>
       </div>
@@ -986,7 +975,7 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
     setAddOpen(true);
   };
   const save=async()=>{
-    if(!form.holiday_date||!form.name.trim()){ alert("Date and name required"); return; }
+    if(!form.holiday_date||!form.name.trim()){ alert(t("payroll.date_and_name_required")); return; }
     setSaving(true);
     try{
       if(editId){
@@ -1000,15 +989,15 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
     setSaving(false);
   };
   const del=async(id)=>{
-    if(!await window.confirmAsync("Delete this holiday?")) return;
+    if(!await window.confirmAsync(t("payroll.delete_this_holiday"))) return;
     try{ await api.del(`/payroll/holidays/${id}`); await reload(); }
     catch(e){ alert(e.message); }
   };
   const bulkSeed=async()=>{
-    if(!await window.confirmAsync(`Seed CG + National 2026 holidays? Will skip dates already present.`)) return;
+    if(!await window.confirmAsync(t("payroll.seed_cg_national_2026_holidays_will"))) return;
     try{
       const r=await api.post(`/payroll/holidays/bulk-seed?year=${year}`,{});
-      if(r.success){ alert(`${r.added} holiday(s) seeded`); await reload(); }
+      if(r.success){ alert(t("payroll.added_holiday_s_seeded", { added: r.added })); await reload(); }
     }catch(e){ alert(e.message); }
   };
 
@@ -1046,10 +1035,10 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
       {/* KPI strip */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:12}}>
         {[
-          {l:"Working Days",  v:workingDays,           sub:`${MONTHS[month]} ${year}`, c:T.grn},
-          {l:"Sundays",       v:sundays,               sub:"Weekly off",                c:T.t3},
-          {l:"Holidays",      v:monthConfirmed,        sub:"Confirmed off",             c:T.red},
-          {l:"Optional",      v:monthOptional,         sub:"Admin discretion",          c:T.amb},
+          {l:t("payroll.working_days"),  v:workingDays,           sub:t("payroll.month_year", { month: MONTHS[month], year }), c:T.grn},
+          {l:t("payroll.sundays"),       v:sundays,               sub:t("payroll.weekly_off"),                c:T.t3},
+          {l:t("payroll.holidays"),      v:monthConfirmed,        sub:t("payroll.confirmed_off"),             c:T.red},
+          {l:t("common.optional"),      v:monthOptional,         sub:t("payroll.admin_discretion"),          c:T.amb},
         ].map((s,i)=>(
           <div key={i} style={{background:T.surface,border:`1px solid ${T.b1}`,borderTop:`3px solid ${s.c}`,borderRadius:8,padding:"11px 13px"}}>
             <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{s.l}</div>
@@ -1061,18 +1050,18 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
 
       {/* Toolbar */}
       <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
-        <div style={{fontSize:13,fontWeight:700,color:T.t1}}>Month view — {MONTHS[month]} {year}</div>
+        <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("payroll.month_view_months_year", { MONTHS: MONTHS[month], year })}</div>
         <div style={{flex:1}}/>
         {isAdmin&&(
           <button onClick={bulkSeed}
             style={{padding:"6px 12px",borderRadius:7,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-            Seed 2026 Defaults
+           {t("payroll.seed_2026_defaults")}
           </button>
         )}
         {isAdmin&&(
           <button onClick={()=>openAdd("")}
             style={{padding:"6px 12px",borderRadius:7,background:T.grn,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-            + Add Holiday
+           {t("payroll.add_holiday")}
           </button>
         )}
       </div>
@@ -1107,7 +1096,7 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
                 {hol&&(
                   <div style={{fontSize:9.5,color:hol.is_optional?T.amb:T.red,fontWeight:600,marginTop:3,lineHeight:1.2}}>
                     {hol.name}
-                    {hol.is_optional&&<div style={{fontSize:8.5,fontWeight:500,color:T.amb,opacity:0.9}}>Optional</div>}
+                    {hol.is_optional&&<div style={{fontSize:8.5,fontWeight:500,color:T.amb,opacity:0.9}}>{t("common.optional")}</div>}
                   </div>
                 )}
               </div>
@@ -1118,10 +1107,8 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
 
       {/* Year list */}
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden"}}>
-        <div style={{padding:"10px 14px",background:T.sb,color:"white",fontSize:12.5,fontWeight:700}}>
-          All Holidays — {year} ({yearList.length})
-        </div>
-        {yearList.length===0&&<div style={{padding:"30px 14px",textAlign:"center",color:T.t4,fontSize:12.5}}>No holidays added yet. Click "Seed 2026 Defaults" to bulk-load CG + National holidays.</div>}
+        <div style={{padding:"10px 14px",background:T.sb,color:"white",fontSize:12.5,fontWeight:700}}>{t("payroll.all_holidays_year_yearlist", { year, yearList: yearList.length })}</div>
+        {yearList.length===0&&<div style={{padding:"30px 14px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("payroll.no_holidays_added_yet_click_seed")}</div>}
         {yearList.map(h=>{
           const d=new Date(h.holiday_date);
           const dow=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
@@ -1134,7 +1121,7 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
               <div style={{display:"flex",gap:5,justifyContent:"flex-end"}}>
                 {h.is_optional&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:10,background:T.ambL,color:T.amb,fontWeight:700}}>OPT</span>}
                 {isAdmin&&<>
-                  <button onClick={()=>openEdit(h)} style={{padding:"3px 8px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Edit</button>
+                  <button onClick={()=>openEdit(h)} style={{padding:"3px 8px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>{t("common.edit_2")}</button>
                   <button onClick={()=>del(h.id)} style={{padding:"3px 8px",borderRadius:5,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>×</button>
                 </>}
               </div>
@@ -1147,28 +1134,28 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
       {addOpen && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,width:420,maxWidth:"100%",padding:20,boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
-            <div style={{fontSize:15,fontWeight:800,color:T.t1,marginBottom:14}}>{editId?"Edit Holiday":"Add Holiday"}</div>
+            <div style={{fontSize:15,fontWeight:800,color:T.t1,marginBottom:14}}>{editId?t("payroll.edit_holiday"):t("payroll.add_holiday_2")}</div>
             <div style={{display:"grid",gap:9}}>
               <div>
-                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Date</div>
+                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("common.date")}</div>
                 <input type="date" value={form.holiday_date} onChange={e=>setForm(p=>({...p,holiday_date:e.target.value}))}
                   style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
               <div>
-                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Name</div>
-                <input value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Diwali"
+                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("common.name_2")}</div>
+                <input value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder={t("payroll.e_g_diwali")}
                   style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
                 <div>
-                  <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Type</div>
+                  <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("common.type")}</div>
                   <select value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}
                     style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
                     {["National","Festival","Regional","Optional","Custom"].map(o=><option key={o}>{o}</option>)}
                   </select>
                 </div>
                 <div>
-                  <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Region</div>
+                  <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.region")}</div>
                   <select value={form.region} onChange={e=>setForm(p=>({...p,region:e.target.value}))}
                     style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
                     {["All-India","Chhattisgarh","Other"].map(o=><option key={o}>{o}</option>)}
@@ -1177,20 +1164,20 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
               </div>
               <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:T.t2,cursor:"pointer"}}>
                 <input type="checkbox" checked={form.is_optional} onChange={e=>setForm(p=>({...p,is_optional:e.target.checked}))}/>
-                Optional holiday (admin can still mark attendance)
+               {t("payroll.optional_holiday_admin_can_still_mark")}
               </label>
               <div>
-                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Notes</div>
+                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("common.notes")}</div>
                 <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2}
                   style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}}/>
               </div>
             </div>
             <div style={{display:"flex",gap:7,marginTop:14}}>
               <button onClick={()=>!saving&&setAddOpen(false)} disabled={saving}
-                style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:saving?"not-allowed":"pointer"}}>Cancel</button>
+                style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:saving?"not-allowed":"pointer"}}>{t("common.cancel")}</button>
               <button onClick={save} disabled={saving}
                 style={{flex:2,padding:"8px",borderRadius:7,background:saving?T.t4:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer"}}>
-                {saving?"Saving…":(editId?"Save Changes":"Add Holiday")}
+                {saving?t("common.saving_2"):(editId?t("common.save_changes"):t("payroll.add_holiday_2"))}
               </button>
             </div>
           </div>
@@ -1237,9 +1224,7 @@ function PunchReviewStrip({onActed}){
   if(!rows.length) return null;
   return(
     <div style={{background:"#F0FDFA",border:"2px dashed #0D9488",borderRadius:10,padding:"11px 14px",marginBottom:12}}>
-      <div style={{fontSize:12.5,fontWeight:800,color:"#0D9488",marginBottom:8}}>
-        📍 Punch Review — {rows.length} geofence ke bahar
-      </div>
+      <div style={{fontSize:12.5,fontWeight:800,color:"#0D9488",marginBottom:8}}>{t("payroll.punch_review_rows_geofence_ke_bahar", { rows: rows.length })}</div>
       <div style={{display:"flex",flexDirection:"column",gap:7}}>
         {rows.map(s=>{
           const t=tl[s.id];
@@ -1247,30 +1232,30 @@ function PunchReviewStrip({onActed}){
           <div key={s.id} style={{background:T.surface,border:"1px solid #99F6E4",borderRadius:8,padding:"8px 11px"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
               <div style={{flex:1,minWidth:180}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{s.user_name||"Staff"} {s.project_name&&<span style={{fontWeight:400,color:T.t3}}>· {s.project_name}</span>}</div>
+                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{s.user_name||t("master_library.staff")} {s.project_name&&<span style={{fontWeight:400,color:T.t3}}>· {s.project_name}</span>}</div>
                 <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>
                   🕐 {s.punch_in_at?new Date(s.punch_in_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}
                   {s.punch_in_lat!=null&&<>
                     {" · "}
-                    <a href={`https://www.google.com/maps?q=${s.punch_in_lat},${s.punch_in_lng}`} target="_blank" rel="noreferrer" style={{color:"#0D9488",fontWeight:600,textDecoration:"none"}}>📍 map ↗</a>
+                    <a href={`https://www.google.com/maps?q=${s.punch_in_lat},${s.punch_in_lng}`} target="_blank" rel="noreferrer" style={{color:"#0D9488",fontWeight:600,textDecoration:"none"}}>{t("payroll.map")}</a>
                   </>}
                   {" · "}
-                  <button onClick={()=>toggleTimeline(s.id)} style={{background:"none",border:"none",color:"#0D9488",fontWeight:600,fontSize:10.5,cursor:"pointer",padding:0}}>🗺️ {openId===s.id?"hide timeline":"din ka timeline"}</button>
+                  <button onClick={()=>toggleTimeline(s.id)} style={{background:"none",border:"none",color:"#0D9488",fontWeight:600,fontSize:10.5,cursor:"pointer",padding:0}}>🗺️ {openId===s.id?t("payroll.hide_timeline"):t("payroll.din_ka_timeline")}</button>
                 </div>
-                {s.out_reason&&<div style={{fontSize:10.5,color:T.t2,marginTop:2}}>📝 <b>Reason:</b> {s.out_reason}</div>}
+                {s.out_reason&&<div style={{fontSize:10.5,color:T.t2,marginTop:2}}>📝 <b>{t("common.reason_2")}</b> {s.out_reason}</div>}
               </div>
               <button disabled={acting===s.id} onClick={()=>act(s.id,"reject")}
-                style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>✕ Reject</button>
+                style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.reject")}</button>
               <button disabled={acting===s.id} onClick={()=>act(s.id,"approve")}
-                style={{padding:"5px 13px",borderRadius:6,background:"#0D9488",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===s.id?"…":"✓ Approve"}</button>
+                style={{padding:"5px 13px",borderRadius:6,background:"#0D9488",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===s.id?"…":t("common.approve")}</button>
             </div>
             {openId===s.id&&(
               <div style={{marginTop:8,paddingTop:8,borderTop:"1px dashed #99F6E4"}}>
                 {t&&t.loading?(
-                  <div style={{fontSize:10.5,color:T.t4}}>Timeline load ho raha…</div>
+                  <div style={{fontSize:10.5,color:T.t4}}>{t("payroll.timeline_load_ho_raha")}</div>
                 ):(t&&t.pings&&t.pings.length?(
                   <div style={{display:"flex",flexDirection:"column",gap:3,maxHeight:160,overflowY:"auto"}}>
-                    <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:2}}>Us din ka GPS timeline ({t.pings.length} points):</div>
+                    <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:2}}>{t("payroll.us_din_ka_gps_timeline_t", { t: t.pings.length })}</div>
                     {t.pings.map((p,i)=>(
                       <div key={i} style={{fontSize:10,color:T.t3,fontFamily:"monospace",display:"flex",gap:8}}>
                         <span style={{color:T.t4}}>{p.ts?new Date(p.ts).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):("#"+(i+1))}</span>
@@ -1279,7 +1264,7 @@ function PunchReviewStrip({onActed}){
                     ))}
                   </div>
                 ):(
-                  <div style={{fontSize:10.5,color:T.t4}}>Koi GPS ping nahi mili is session me (sirf punch-in location upar map link me hai).</div>
+                  <div style={{fontSize:10.5,color:T.t4}}>{t("payroll.koi_gps_ping_nahi_mili_is")}</div>
                 ))}
               </div>
             )}
@@ -1328,9 +1313,9 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
   // App user manual mark — reason compulsory (GPS punch system hote hue manual kyu, audit ke liye)
   const markAppUser=async(emp,status)=>{
     if(blocked) return;
-    const reason=await window.promptAsync(`${emp.name} app user hai (GPS punch). Manual ${status} mark karne ka reason:`);
+    const reason=await window.promptAsync(t("payroll.name_app_user_hai_gps_punch", { name: emp.name, status }));
     if(reason===null) return;
-    if(!String(reason).trim()){ alert("Reason zaroori hai"); return; }
+    if(!String(reason).trim()){ alert(t("payroll.reason_zaroori_hai")); return; }
     mark(emp.id,status,String(reason).trim());
   };
   const [bulking,setBulking]=useState(false);
@@ -1382,12 +1367,12 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
     return c;
   };
   const cm=counts(manual), ca=counts(appUsers);
-  const STATUS_META={P:{l:"Present",c:T.grn,bg:T.grnL},A:{l:"Absent",c:T.red,bg:T.redL},H:{l:"Half Day",c:T.amb,bg:T.ambL},L:{l:"Leave",c:T.blu,bg:T.bluL}};
+  const STATUS_META={P:{l:t("common.present"),c:T.grn,bg:T.grnL},A:{l:t("common.absent"),c:T.red,bg:T.redL},H:{l:t("common.half_day"),c:T.amb,bg:T.ambL},L:{l:t("app.leave"),c:T.blu,bg:T.bluL}};
   const Chip=({v})=>{
     const m=STATUS_META[v];
     return m
       ? <span style={{fontSize:10.5,fontWeight:800,padding:"3px 10px",borderRadius:10,background:m.bg,color:m.c}}>{v} · {m.l}</span>
-      : <span style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:10,background:T.sltL,color:T.t4}}>Unmarked</span>;
+      : <span style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:10,background:T.sltL,color:T.t4}}>{t("payroll.unmarked")}</span>;
   };
 
   // Date strip — ‹ date › + weekday, clamp 1..maxDay
@@ -1401,14 +1386,14 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
         <div style={{display:"flex",alignItems:"center",gap:6,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:"6px 10px"}}>
           <button disabled={!canPrev} onClick={()=>setDay(d=>d-1)} style={{border:"none",background:"none",cursor:canPrev?"pointer":"default",color:canPrev?T.t2:T.b2,fontSize:15,fontWeight:800,padding:"0 4px"}}>‹</button>
           <div style={{textAlign:"center",minWidth:150}}>
-            <div style={{fontSize:13,fontWeight:800,color:T.t1}}>{fmtDate(dateObj)}{isCurMonth&&day===now.getDate()?" · Aaj":""}</div>
-            <div style={{fontSize:10,color:dow===0?T.red:T.t4,fontWeight:600}}>{DOW[dow]}{dow===0?" — week off":""}</div>
+            <div style={{fontSize:13,fontWeight:800,color:T.t1}}>{fmtDate(dateObj)}{isCurMonth&&day===now.getDate()?t("payroll.aaj"):""}</div>
+            <div style={{fontSize:10,color:dow===0?T.red:T.t4,fontWeight:600}}>{DOW[dow]}{dow===0?t("payroll.week_off"):""}</div>
           </div>
           <button disabled={!canNext} onClick={()=>setDay(d=>d+1)} style={{border:"none",background:"none",cursor:canNext?"pointer":"default",color:canNext?T.t2:T.b2,fontSize:15,fontWeight:800,padding:"0 4px"}}>›</button>
         </div>
         {holiday&&(
           <span style={{fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:9,background:holiday.is_optional?T.ambL:T.redL,color:holiday.is_optional?T.amb:T.red,border:`1px solid ${holiday.is_optional?T.ambM:T.redM}`}}>
-            🎉 {holiday.name}{holiday.is_optional?" (Optional)":" — Holiday, marking band"}
+            🎉 {holiday.name}{holiday.is_optional?t("payroll.optional"):t("payroll.holiday_marking_band")}
           </span>
         )}
         {lock&&(
@@ -1429,24 +1414,24 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
           !lock?(
             <button disabled={locking} onClick={lockDay}
               style={{fontSize:11,fontWeight:700,color:"#fff",background:T.sb,border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer"}}>
-              🔒 Din lock karo
+             {t("payroll.din_lock_karo")}
             </button>
           ):(
             <div style={{display:"flex",gap:6}}>
               {lock.status==="locked"&&isAdmin&&(
                 <button disabled={locking} onClick={approveDay}
                   style={{fontSize:11,fontWeight:700,color:"#fff",background:T.grn,border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer"}}>
-                  ✓ Approve Day
+                 {t("payroll.approve_day")}
                 </button>
               )}
               <button onClick={()=>setShowEditReq(true)}
                 style={{fontSize:11,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.blu}33`,borderRadius:8,padding:"7px 14px",cursor:"pointer"}}>
-                ✏️ Edit Request
+               {t("payroll.edit_request")}
               </button>
               {isAdmin&&(
-                <button disabled={locking} onClick={unlockDay} title="Lock hatao — marking wapas khulegi"
+                <button disabled={locking} onClick={unlockDay} title={t("payroll.lock_hatao_marking_wapas_khulegi")}
                   style={{fontSize:11,fontWeight:700,color:T.t3,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"7px 12px",cursor:"pointer"}}>
-                  Unlock
+                 {t("payroll.unlock")}
                 </button>
               )}
             </div>
@@ -1457,26 +1442,24 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
       {showEditReq&&(
         <StaffAttEditModal staff={staff} date={dateISO} dateLabel={fmtDate(dateObj)} att={att} day={day}
           onClose={()=>setShowEditReq(false)}
-          onSubmitted={()=>{ setShowEditReq(false); alert("Edit request submit — admin approve karega tab attendance change hogi"); }}/>
+          onSubmitted={()=>{ setShowEditReq(false); alert(t("payroll.edit_request_submit_admin_approve_karega")); }}/>
       )}
 
       {maxDay===0?(
-        <div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:13}}>Future month — attendance abhi mark nahi ho sakti</div>
+        <div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:13}}>{t("payroll.future_month_attendance_abhi_mark_nahi")}</div>
       ):(
       <>
       {/* ── Manual staff — marking yahan hoti hai ── */}
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,overflow:"hidden",marginBottom:14}}>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
-          <div style={{fontSize:12,fontWeight:800,color:T.t1}}>Manual Attendance <span style={{fontWeight:600,color:T.t4}}>· {manual.length} staff</span></div>
+          <div style={{fontSize:12,fontWeight:800,color:T.t1}}>{t("payroll.manual_attendance")} <span style={{fontWeight:600,color:T.t4}}>· {manual.length} staff</span></div>
           <span style={{flex:1}}/>
           {!blocked&&unmarkedManual.length>0&&(
             <button disabled={bulking} onClick={bulkPresent}
-              style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}44`,borderRadius:7,padding:"5px 12px",cursor:"pointer"}}>
-              ✓ Baaki {unmarkedManual.length} ko Present mark karo
-            </button>
+              style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}44`,borderRadius:7,padding:"5px 12px",cursor:"pointer"}}>{t("payroll.baaki_unmarkedmanual_ko_present_mark_karo", { unmarkedManual: unmarkedManual.length })}</button>
           )}
         </div>
-        {manual.length===0&&<div style={{padding:"26px 14px",textAlign:"center",color:T.t4,fontSize:12}}>Koi manual staff nahi — sab app users hain</div>}
+        {manual.length===0&&<div style={{padding:"26px 14px",textAlign:"center",color:T.t4,fontSize:12}}>{t("payroll.koi_manual_staff_nahi_sab_app")}</div>}
         {manual.map((emp,i)=>{
           const v=getStatus(emp.id);
           const isLeave=v==="L";
@@ -1515,10 +1498,10 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
       {/* ── App users — GPS punch se auto, sirf review ── */}
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,overflow:"hidden"}}>
         <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
-          <div style={{fontSize:12,fontWeight:800,color:T.t1}}>📍 App Users — GPS Punch <span style={{fontWeight:600,color:T.t4}}>· {appUsers.length} staff</span></div>
-          <div style={{fontSize:10,color:T.t4,marginTop:2}}>Attendance mobile geo-tag punch se auto aati hai. Manual mark karna pade (punch bhool gaya, phone issue) to reason compulsory — audit me dikhega. Geofence-bahar punch upar Punch Review me approve/reject hote hain.</div>
+          <div style={{fontSize:12,fontWeight:800,color:T.t1}}>{t("payroll.app_users_gps_punch")} <span style={{fontWeight:600,color:T.t4}}>· {appUsers.length} staff</span></div>
+          <div style={{fontSize:10,color:T.t4,marginTop:2}}>{t("payroll.attendance_mobile_geo_tag_punch_se")}</div>
         </div>
-        {appUsers.length===0&&<div style={{padding:"26px 14px",textAlign:"center",color:T.t4,fontSize:12}}>Koi app user nahi</div>}
+        {appUsers.length===0&&<div style={{padding:"26px 14px",textAlign:"center",color:T.t4,fontSize:12}}>{t("payroll.koi_app_user_nahi")}</div>}
         {appUsers.map((emp,i)=>{
           const v=getStatus(emp.id);
           const punched=!!punchDays[emp.id]?.[day];
@@ -1531,12 +1514,12 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
                 <div style={{fontSize:12.5,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{emp.name}</div>
                 <div style={{fontSize:10,color:T.t4}}>{emp.role||"—"}{note&&<span style={{color:T.amb,fontWeight:600}}> · 📝 {note}</span>}</div>
               </div>
-              {punched&&<span style={{fontSize:9.5,fontWeight:700,color:"#0D9488",background:"#F0FDFA",border:"1px solid #99F6E4",borderRadius:10,padding:"2px 8px"}}>📍 GPS punch</span>}
+              {punched&&<span style={{fontSize:9.5,fontWeight:700,color:"#0D9488",background:"#F0FDFA",border:"1px solid #99F6E4",borderRadius:10,padding:"2px 8px"}}>{t("payroll.gps_punch")}</span>}
               {isLeave||blocked?(
                 <Chip v={v}/>
               ):(
                 <div style={{display:"flex",gap:5,alignItems:"center"}}>
-                  {!v&&<span style={{fontSize:10,color:T.t4,marginRight:2}}>manual (reason):</span>}
+                  {!v&&<span style={{fontSize:10,color:T.t4,marginRight:2}}>{t("payroll.manual_reason")}</span>}
                   {v&&<Chip v={v}/>}
                   {["P","A","H"].map(s=>{
                     const m=STATUS_META[s];
@@ -1574,8 +1557,8 @@ function StaffAttEditModal({staff,date,dateLabel,att,day,onClose,onSubmitted}){
   const submit=async()=>{
     setErr("");
     const changes=rows.filter(r=>r.staff_id).map(r=>({staff_id:Number(r.staff_id),date,new_status:r.new_status}));
-    if(changes.length===0){ setErr("Kam se kam ek staff select karein"); return; }
-    if(!reason.trim()){ setErr("Reason zaroori hai"); return; }
+    if(changes.length===0){ setErr(t("payroll.kam_se_kam_ek_staff_select")); return; }
+    if(!reason.trim()){ setErr(t("payroll.reason_zaroori_hai")); return; }
     setSaving(true);
     try{
       const r=await api.post("/payroll/attendance-edit-requests",{scope:"staff",date_from:date,date_to:date,changes,reason:reason.trim()});
@@ -1589,8 +1572,8 @@ function StaffAttEditModal({staff,date,dateLabel,att,day,onClose,onSubmitted}){
       <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,width:520,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
         <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
-            <div style={{fontSize:14.5,fontWeight:800,color:T.t1}}>Attendance Edit Request</div>
-            <div style={{fontSize:11,color:T.t4,marginTop:2}}>{dateLabel} — din locked hai; admin approve karega tab change hogi</div>
+            <div style={{fontSize:14.5,fontWeight:800,color:T.t1}}>{t("payroll.attendance_edit_request")}</div>
+            <div style={{fontSize:11,color:T.t4,marginTop:2}}>{t("payroll.datelabel_din_locked_hai_admin_approve", { dateLabel })}</div>
           </div>
           <button onClick={()=>!saving&&onClose()} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:T.t4}}><IcX size={16}/></button>
         </div>
@@ -1598,10 +1581,10 @@ function StaffAttEditModal({staff,date,dateLabel,att,day,onClose,onSubmitted}){
           {rows.map((r,i)=>(
             <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 90px 90px 28px",gap:8,marginBottom:8,alignItems:"center"}}>
               <select value={r.staff_id} onChange={e=>setRows(p=>p.map((x,j)=>j===i?{...x,staff_id:e.target.value}:x))} style={inp}>
-                <option value="">— Staff —</option>
+                <option value="">{t("payroll.staff")}</option>
                 {staff.map(s=><option key={s.id} value={s.id}>{s.name}{s.isAppUser?" 📱":""}</option>)}
               </select>
-              <div style={{fontSize:11,color:T.t3,textAlign:"center"}}>abhi: <b>{cur(r.staff_id)}</b></div>
+              <div style={{fontSize:11,color:T.t3,textAlign:"center"}}>{t("payroll.abhi")} <b>{cur(r.staff_id)}</b></div>
               <select value={r.new_status} onChange={e=>setRows(p=>p.map((x,j)=>j===i?{...x,new_status:e.target.value}:x))} style={inp}>
                 {["P","A","H","L"].map(s=><option key={s} value={s}>{s}</option>)}
               </select>
@@ -1609,16 +1592,16 @@ function StaffAttEditModal({staff,date,dateLabel,att,day,onClose,onSubmitted}){
             </div>
           ))}
           <button onClick={()=>setRows(p=>[...p,{staff_id:"",new_status:"P"}])}
-            style={{fontSize:11,fontWeight:600,color:T.blu,background:"none",border:"none",cursor:"pointer",padding:0,marginBottom:12}}>+ aur staff add karo</button>
-          <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Reason (zaroori)</div>
-          <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder="Change kyu chahiye — e.g. galat mark hua tha, site visit pe tha…" style={{...inp,resize:"vertical"}}/>
+            style={{fontSize:11,fontWeight:600,color:T.blu,background:"none",border:"none",cursor:"pointer",padding:0,marginBottom:12}}>{t("payroll.aur_staff_add_karo")}</button>
+          <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.reason_zaroori")}</div>
+          <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder={t("payroll.change_kyu_chahiye_e_g_galat")} style={{...inp,resize:"vertical"}}/>
           {err&&<div style={{marginTop:8,padding:"7px 10px",background:T.redL,color:T.red,borderRadius:6,fontSize:11.5}}>{err}</div>}
         </div>
         <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:8}}>
-          <button onClick={()=>!saving&&onClose()} style={{padding:"7px 16px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+          <button onClick={()=>!saving&&onClose()} style={{padding:"7px 16px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
           <button onClick={submit} disabled={saving}
             style={{padding:"7px 18px",borderRadius:7,background:saving?T.t4:T.blu,color:"#fff",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-            {saving?"Submitting…":"Submit Request"}
+            {saving?t("common.submitting"):t("common.submit_request")}
           </button>
         </div>
       </div>
@@ -1638,7 +1621,7 @@ function StaffEditRequestsStrip({staff,onActed}){
   useEffect(()=>{ load(); },[load]);
   const staffName=(id)=>staff.find(s=>s.id===Number(id))?.name||`#${id}`;
   const act=async(id,status)=>{
-    const notes=status==="rejected"?(await window.promptAsync("Reject reason (optional):")||null):null;
+    const notes=status==="rejected"?(await window.promptAsync(t("payroll.reject_reason_optional"))||null):null;
     setActing(id);
     try{
       const r=await api.patch(`/payroll/attendance-edit-requests/${id}`,{status,approval_notes:notes});
@@ -1650,7 +1633,7 @@ function StaffEditRequestsStrip({staff,onActed}){
   if(!rows.length) return null;
   return(
     <div style={{background:T.bluL,border:`2px dashed ${T.blu}66`,borderRadius:10,padding:"11px 14px",marginBottom:12}}>
-      <div style={{fontSize:12.5,fontWeight:800,color:T.blu,marginBottom:8}}>✏️ Attendance Edit Requests — {rows.length} pending</div>
+      <div style={{fontSize:12.5,fontWeight:800,color:T.blu,marginBottom:8}}>{t("payroll.attendance_edit_requests_rows_pending", { rows: rows.length })}</div>
       <div style={{display:"flex",flexDirection:"column",gap:7}}>
         {rows.map(r=>{
           const changes=Array.isArray(r.changes)?r.changes:[];
@@ -1661,12 +1644,12 @@ function StaffEditRequestsStrip({staff,onActed}){
                   {changes.map((c,i)=><span key={i}>{i>0&&", "}{staffName(c.staff_id)} → <b style={{color:T.blu}}>{c.new_status}</b></span>)}
                   <span style={{fontWeight:400,color:T.t3}}> · {fmtDate(r.date_from)}</span>
                 </div>
-                <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>📝 {r.reason||"—"} <span style={{color:T.t4}}>· by {r.requester_name||"?"}</span></div>
+                <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>📝 {r.reason||"—"} <span style={{color:T.t4}}>{t("payroll.by_r", { r: r.requester_name||"?" })}</span></div>
               </div>
               <button disabled={acting===r.id} onClick={()=>act(r.id,"rejected")}
-                style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>✕ Reject</button>
+                style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.reject")}</button>
               <button disabled={acting===r.id} onClick={()=>act(r.id,"approved")}
-                style={{padding:"5px 13px",borderRadius:6,background:T.blu,border:"none",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===r.id?"…":"✓ Approve & Apply"}</button>
+                style={{padding:"5px 13px",borderRadius:6,background:T.blu,border:"none",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===r.id?"…":t("common.approve_apply")}</button>
             </div>
           );
         })}
@@ -1754,7 +1737,7 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
             </div>
           );
         })}
-        <div style={{width:100,textAlign:"center",fontSize:9.5,fontWeight:600,color:T.t4,padding:"3px 6px"}}>Summary</div>
+        <div style={{width:100,textAlign:"center",fontSize:9.5,fontWeight:600,color:T.t4,padding:"3px 6px"}}>{t("payroll.summary")}</div>
       </div>
 
       {/* Staff rows */}
@@ -1824,7 +1807,7 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
         );
       })}
 
-      {staff.length===0&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No staff for attendance tracking" sub="Add monthly staff members first"/>}
+      {staff.length===0&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No staff for attendance tracking" sub={t("payroll.add_monthly_staff_members_first")}/>}
 
       {/* Legend */}
       <div style={{display:"flex",gap:12,marginTop:10,padding:"6px 10px",background:T.surfaceB,borderRadius:6,width:"fit-content"}}>
@@ -1834,7 +1817,7 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
             <span style={{fontSize:10.5,color:T.t3}}>{lbl}</span>
           </div>
         ))}
-        <div style={{fontSize:10.5,color:T.t4,borderLeft:`1px solid ${T.b1}`,paddingLeft:10}}>Cell click → status select · 📍 = GPS punch (app users read-only)</div>
+        <div style={{fontSize:10.5,color:T.t4,borderLeft:`1px solid ${T.b1}`,paddingLeft:10}}>{t("payroll.cell_click_status_select_gps_punch")}</div>
       </div>
     </div>
   );
@@ -1923,7 +1906,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
           <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)"}}>{emp.id} · {emp.role} · {MONTHS[month]} {year}</div>
         </div>
         <button onClick={printSlip} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-          <IcPrint size={13} color="white"/> Print Slip
+          <IcPrint size={13} color="white"/> {t("payroll.print_slip")}
         </button>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={14}/></button>
       </div>
@@ -1931,7 +1914,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
       <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>
         {/* Attendance summary */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
-          {[{l:"Present",v:P,c:T.grn},{l:"Half Day",v:H,c:T.amb},{l:"Absent",v:A,c:T.red},{l:"Effective",v:effective,c:T.blu}].map((s,i)=>(
+          {[{l:t("common.present"),v:P,c:T.grn},{l:t("common.half_day"),v:H,c:T.amb},{l:t("common.absent"),v:A,c:T.red},{l:t("payroll.effective"),v:effective,c:T.blu}].map((s,i)=>(
             <div key={i} style={{padding:"9px 10px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,borderTop:`3px solid ${s.c}`,textAlign:"center"}}>
               <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
               <div style={{fontSize:9.5,color:T.t4,marginTop:1}}>{s.l}</div>
@@ -1944,15 +1927,11 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
           <div style={{width:9,height:9,borderRadius:"50%",background:isAttBased?T.pur:T.grn,flexShrink:0}}/>
           <div style={{flex:1}}>
             <span style={{fontSize:12,fontWeight:700,color:isAttBased?T.pur:T.grn}}>
-              {isAttBased?"Attendance Based (Pro-rata)":"Fixed Monthly Salary"}
+              {isAttBased?t("payroll.attendance_based_pro_rata"):t("payroll.fixed_monthly_salary")}
             </span>
             {isAttBased
-              ?<span style={{fontSize:11,color:T.pur,marginLeft:8}}>
-                ₹{fmtN(fullGross)} ÷ {WD} days × {effective} eff. days = ₹{fmtN(grossEarned)}
-              </span>
-              :<span style={{fontSize:11,color:T.grn,marginLeft:8}}>
-                Full gross paid regardless of attendance ({P}P {H>0?`${H}H `:""}{A>0?`${A}A`:""})
-              </span>
+              ?<span style={{fontSize:11,color:T.pur,marginLeft:8}}>{t("payroll.fmtn_wd_days_effective_eff_days", { fmtN: fmtN(fullGross), WD, effective, fmtN2: fmtN(grossEarned) })}</span>
+              :<span style={{fontSize:11,color:T.grn,marginLeft:8}}>{t("payroll.full_gross_paid_regardless_of_attendance", { P, H: H>0?`${H}H `:"", A: A>0?`${A}A`:"" })}</span>
             }
           </div>
         </div>
@@ -1962,7 +1941,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
           {/* Earnings */}
           <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
             <div style={{padding:"8px 12px",background:T.grnL,borderBottom:`1px solid ${T.grnM}`}}>
-              <span style={{fontSize:11,fontWeight:700,color:T.grn,textTransform:"uppercase",letterSpacing:".4px"}}>Earnings</span>
+              <span style={{fontSize:11,fontWeight:700,color:T.grn,textTransform:"uppercase",letterSpacing:".4px"}}>{t("payroll.earnings")}</span>
             </div>
             {[["Basic",emp.basicSalary],["HRA",emp.hra],["Conveyance",emp.conveyance],["Medical",emp.medical],emp.phone?["Phone",emp.phone]:null].filter(Boolean).map(([l,v])=>(
               <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"7px 12px",borderBottom:`1px solid ${T.b1}`}}>
@@ -1971,7 +1950,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
               </div>
             ))}
             <div style={{display:"flex",justifyContent:"space-between",padding:"9px 12px",background:T.grnL}}>
-              <span style={{fontSize:12.5,fontWeight:700,color:T.grn}}>Gross</span>
+              <span style={{fontSize:12.5,fontWeight:700,color:T.grn}}>{t("common.gross")}</span>
               <span style={{fontSize:13,fontWeight:800,color:T.grn}}>₹{fmtN(grossEarned)}</span>
             </div>
           </div>
@@ -1979,7 +1958,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
           {/* Deductions */}
           <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
             <div style={{padding:"8px 12px",background:T.redL,borderBottom:`1px solid ${T.redM}`}}>
-              <span style={{fontSize:11,fontWeight:700,color:T.red,textTransform:"uppercase",letterSpacing:".4px"}}>Deductions</span>
+              <span style={{fontSize:11,fontWeight:700,color:T.red,textTransform:"uppercase",letterSpacing:".4px"}}>{t("payroll.deductions")}</span>
             </div>
             {[[`PF (12%)`,pf],esi>0?[`ESI (0.75%)`,esi]:null,tds>0?[`TDS`,tds]:null,advDeduction>0?[`Advance`,advDeduction]:null].filter(Boolean).map(([l,v])=>(
               <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"7px 12px",borderBottom:`1px solid ${T.b1}`}}>
@@ -1987,9 +1966,9 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
                 <span style={{fontSize:12,fontWeight:500,color:T.red}}>-₹{fmtN(v)}</span>
               </div>
             ))}
-            {totalDed===0&&<div style={{padding:"7px 12px",fontSize:12,color:T.t4}}>No deductions</div>}
+            {totalDed===0&&<div style={{padding:"7px 12px",fontSize:12,color:T.t4}}>{t("payroll.no_deductions")}</div>}
             <div style={{display:"flex",justifyContent:"space-between",padding:"9px 12px",background:T.redL}}>
-              <span style={{fontSize:12.5,fontWeight:700,color:T.red}}>Total Deductions</span>
+              <span style={{fontSize:12.5,fontWeight:700,color:T.red}}>{t("payroll.total_deductions")}</span>
               <span style={{fontSize:13,fontWeight:800,color:T.red}}>-₹{fmtN(totalDed)}</span>
             </div>
           </div>
@@ -1998,17 +1977,17 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
         {/* Net Pay */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",background:`linear-gradient(135deg,${T.grn}18,${T.grn}08)`,border:`2px solid ${T.grnM}`,borderRadius:10}}>
           <div>
-            <div style={{fontSize:11,color:T.grn,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Net Pay — {MONTHS[month]} {year}</div>
-            <div style={{fontSize:11,color:T.t4}}>Bank: {emp.bankAcc} · IFSC: {emp.ifsc}</div>
+            <div style={{fontSize:11,color:T.grn,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{t("payroll.net_pay_months_year", { MONTHS: MONTHS[month], year })}</div>
+            <div style={{fontSize:11,color:T.t4}}>{t("payroll.bank_bankacc_ifsc_ifsc", { bankAcc: emp.bankAcc, ifsc: emp.ifsc })}</div>
           </div>
           <div style={{fontSize:26,fontWeight:800,color:T.grn}}>₹{fmtN(netPay)}</div>
         </div>
       </div>
 
       <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:7,flexShrink:0}}>
-        <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Close</button>
+        <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.close")}</button>
         <button onClick={printSlip} style={{flex:2,padding:"9px",borderRadius:7,background:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-          <IcPrint size={14} color="white"/> Print / Download Slip
+          <IcPrint size={14} color="white"/> {t("payroll.print_download_slip")}
         </button>
       </div>
     </div>
@@ -2068,8 +2047,8 @@ function EditAttendanceModal({workers,att,month,year,onClose,onSubmitted}){
   const submit=async()=>{
     setErr("");
     const changes=collectChanges();
-    if (!changes.length) { setErr("Koi change nahi mila"); return; }
-    if (!reason.trim()) { setErr("Reason zaroori hai"); return; }
+    if (!changes.length) { setErr(t("payroll.koi_change_nahi_mila")); return; }
+    if (!reason.trim()) { setErr(t("payroll.reason_zaroori_hai")); return; }
     setSubmitting(true);
     try{
       const r=await api.post("/payroll/attendance-edit-requests",{date_from:from,date_to:to,changes,reason:reason.trim()});
@@ -2087,8 +2066,8 @@ function EditAttendanceModal({workers,att,month,year,onClose,onSubmitted}){
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(900px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{padding:"14px 18px",background:"#0D1B2A",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
-          <div style={{fontSize:14,fontWeight:700}}>✏️ Edit Attendance — Bulk Request</div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>Changes go to admin for approval</div>
+          <div style={{fontSize:14,fontWeight:700}}>{t("payroll.edit_attendance_bulk_request")}</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>{t("payroll.changes_go_to_admin_for_approval")}</div>
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:18,cursor:"pointer"}}>×</button>
       </div>
@@ -2096,15 +2075,15 @@ function EditAttendanceModal({workers,att,month,year,onClose,onSubmitted}){
       <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
         {stage==="range"&&(
           <div>
-            <div style={{fontSize:12,color:T.t3,marginBottom:10}}>Step 1 — Date range select karo (us range ke worker × day cells edit hone ke liye open honge)</div>
+            <div style={{fontSize:12,color:T.t3,marginBottom:10}}>{t("payroll.step_1_date_range_select_karo")}</div>
             <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:14}}>
-              <label style={{fontSize:12,color:T.t2,fontWeight:600}}>From</label>
+              <label style={{fontSize:12,color:T.t2,fontWeight:600}}>{t("common.from")}</label>
               <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{padding:"6px 10px",border:`1.5px solid ${T.b1}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
-              <label style={{fontSize:12,color:T.t2,fontWeight:600}}>To</label>
+              <label style={{fontSize:12,color:T.t2,fontWeight:600}}>{t("common.to")}</label>
               <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{padding:"6px 10px",border:`1.5px solid ${T.b1}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
-              <button onClick={()=>{ if (fromD>toD) { setErr("From date To date se pehle honi chahiye"); return; } setErr(""); setStage("grid"); }}
+              <button onClick={()=>{ if (fromD>toD) { setErr(t("payroll.from_date_to_date_se_pehle")); return; } setErr(""); setStage("grid"); }}
                 style={{marginLeft:"auto",padding:"7px 16px",borderRadius:7,background:T.blu,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
-                Next → Edit Cells
+               {t("payroll.next_edit_cells")}
               </button>
             </div>
             {err&&<div style={{fontSize:12,color:T.red,fontWeight:600}}>{err}</div>}
@@ -2114,14 +2093,14 @@ function EditAttendanceModal({workers,att,month,year,onClose,onSubmitted}){
         {stage==="grid"&&(
           <div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-              <div style={{fontSize:12,color:T.t3}}>Step 2 — Cells me dropdown se status badlo. {changeCount>0&&<span style={{color:T.amb,fontWeight:700}}>{changeCount} changes</span>}</div>
-              <button onClick={()=>setStage("range")} style={{padding:"5px 11px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:11.5,color:T.t3,cursor:"pointer"}}>← Back</button>
+              <div style={{fontSize:12,color:T.t3}}>{t("payroll.step2_dropdown_status")} {changeCount>0&&<span style={{color:T.amb,fontWeight:700}}>{changeCount} changes</span>}</div>
+              <button onClick={()=>setStage("range")} style={{padding:"5px 11px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:11.5,color:T.t3,cursor:"pointer"}}>{t("common.back_2")}</button>
             </div>
             <div style={{overflowX:"auto",border:`1px solid ${T.b1}`,borderRadius:7,maxHeight:300}}>
               <table style={{borderCollapse:"collapse",fontSize:11.5,width:"100%"}}>
                 <thead style={{background:T.surfaceB,position:"sticky",top:0}}>
                   <tr>
-                    <th style={{padding:"7px 10px",textAlign:"left",borderBottom:`1px solid ${T.b1}`,minWidth:160}}>Worker</th>
+                    <th style={{padding:"7px 10px",textAlign:"left",borderBottom:`1px solid ${T.b1}`,minWidth:160}}>{t("payroll.worker")}</th>
                     {days.map(d=><th key={d} style={{padding:"7px 4px",textAlign:"center",borderBottom:`1px solid ${T.b1}`,minWidth:62}}>{d}</th>)}
                   </tr>
                 </thead>
@@ -2147,8 +2126,8 @@ function EditAttendanceModal({workers,att,month,year,onClose,onSubmitted}){
               </table>
             </div>
             <div style={{marginTop:14}}>
-              <label style={{fontSize:12,color:T.t2,fontWeight:600,display:"block",marginBottom:5}}>Reason for change (admin ko dikhega)</label>
-              <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder="Eg: Site visit verified — Dinesh was actually present"
+              <label style={{fontSize:12,color:T.t2,fontWeight:600,display:"block",marginBottom:5}}>{t("payroll.reason_for_change_admin_ko_dikhega")}</label>
+              <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder={t("payroll.eg_site_visit_verified_dinesh_was")}
                 style={{width:"100%",padding:"7px 10px",border:`1.5px solid ${T.b1}`,borderRadius:6,fontSize:12,fontFamily:"inherit",resize:"vertical"}}/>
             </div>
             {err&&<div style={{fontSize:12,color:T.red,fontWeight:600,marginTop:6}}>{err}</div>}
@@ -2158,10 +2137,10 @@ function EditAttendanceModal({workers,att,month,year,onClose,onSubmitted}){
 
       {stage==="grid"&&(
         <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,justifyContent:"flex-end"}}>
-          <button onClick={onClose} style={{padding:"8px 16px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+          <button onClick={onClose} style={{padding:"8px 16px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
           <button onClick={submit} disabled={submitting||changeCount===0}
             style={{padding:"8px 18px",borderRadius:6,background:changeCount>0?T.blu:T.b2,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:changeCount>0?"pointer":"not-allowed"}}>
-            {submitting?"Sending…":`Send for Approval (${changeCount})`}
+            {submitting?t("common.sending"):`Send for Approval (${changeCount})`}
           </button>
         </div>
       )}
@@ -2193,25 +2172,25 @@ function ApprovalQueueModal({onClose,onProcessed,isAdmin}){
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(800px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{padding:"14px 18px",background:"#0D1B2A",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div style={{fontSize:14,fontWeight:700}}>📋 Attendance Edit Approvals ({items.length} pending)</div>
+        <div style={{fontSize:14,fontWeight:700}}>{t("payroll.attendance_edit_approvals_items_pending", { items: items.length })}</div>
         <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:18,cursor:"pointer"}}>×</button>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
-        {loading&&<div style={{textAlign:"center",color:T.t4,padding:30}}>Loading…</div>}
-        {!loading&&items.length===0&&<div style={{textAlign:"center",color:T.t4,padding:30}}>Koi pending request nahi</div>}
+        {loading&&<div style={{textAlign:"center",color:T.t4,padding:30}}>{t("common.loading_2")}</div>}
+        {!loading&&items.length===0&&<div style={{textAlign:"center",color:T.t4,padding:30}}>{t("payroll.koi_pending_request_nahi")}</div>}
         {items.map(req=>(
           <div key={req.id} style={{border:`1px solid ${T.b1}`,borderRadius:8,padding:12,marginBottom:12,background:T.surfaceB}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
               <div>
-                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>Request #{req.id} · {req.changes?.length||0} changes</div>
-                <div style={{fontSize:11,color:T.t4}}>By {req.requester_name||"User"} · {new Date(req.requested_at).toLocaleString("en-IN")}</div>
-                <div style={{fontSize:11,color:T.t3,marginTop:3}}>Range: {String(req.date_from).split("T")[0]} → {String(req.date_to).split("T")[0]}</div>
+                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("payroll.request_id_req_changes", { id: req.id, req: req.changes?.length||0 })}</div>
+                <div style={{fontSize:11,color:T.t4}}>{t("payroll.by_req_vnew", { req: req.requester_name||"User", vnew: new Date(req.requested_at).toLocaleString("en-IN") })}</div>
+                <div style={{fontSize:11,color:T.t3,marginTop:3}}>{t("payroll.range_string_string2", { String: String(req.date_from).split("T")[0], String2: String(req.date_to).split("T")[0] })}</div>
               </div>
             </div>
-            {req.reason&&<div style={{fontSize:11.5,color:T.t2,padding:"6px 10px",background:T.surface,borderLeft:`3px solid ${T.amb}`,borderRadius:4,marginBottom:8}}><b>Reason:</b> {req.reason}</div>}
+            {req.reason&&<div style={{fontSize:11.5,color:T.t2,padding:"6px 10px",background:T.surface,borderLeft:`3px solid ${T.amb}`,borderRadius:4,marginBottom:8}}><b>{t("common.reason_2")}</b> {req.reason}</div>}
             <div style={{maxHeight:140,overflowY:"auto",border:`1px solid ${T.b1}`,borderRadius:6,background:T.surface,marginBottom:8}}>
               <table style={{width:"100%",fontSize:11,borderCollapse:"collapse"}}>
-                <thead><tr style={{background:T.surfaceB}}><th style={{padding:"5px 8px",textAlign:"left"}}>Worker</th><th style={{padding:"5px 8px"}}>Date</th><th style={{padding:"5px 8px"}}>Old → New</th></tr></thead>
+                <thead><tr style={{background:T.surfaceB}}><th style={{padding:"5px 8px",textAlign:"left"}}>{t("payroll.worker")}</th><th style={{padding:"5px 8px"}}>{t("common.date")}</th><th style={{padding:"5px 8px"}}>{t("payroll.old_new")}</th></tr></thead>
                 <tbody>
                   {(req.changes||[]).map((c,i)=>(
                     <tr key={i} style={{borderTop:`1px solid ${T.b1}`}}>
@@ -2224,14 +2203,14 @@ function ApprovalQueueModal({onClose,onProcessed,isAdmin}){
               </table>
             </div>
             {isAdmin&&(<>
-              <input value={notes[req.id]||""} onChange={e=>setNotes(p=>({...p,[req.id]:e.target.value}))} placeholder="Note (optional)"
+              <input value={notes[req.id]||""} onChange={e=>setNotes(p=>({...p,[req.id]:e.target.value}))} placeholder={t("common.note_optional")}
                 style={{width:"100%",padding:"6px 10px",border:`1px solid ${T.b1}`,borderRadius:5,fontSize:11.5,marginBottom:6,fontFamily:"inherit"}}/>
               <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
-                <button disabled={actingId===req.id} onClick={()=>act(req.id,"rejected")} style={{padding:"6px 14px",borderRadius:6,background:T.redL,border:`1px solid ${T.red}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>✕ Reject</button>
-                <button disabled={actingId===req.id} onClick={()=>act(req.id,"approved")} style={{padding:"6px 14px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{actingId===req.id?"…":"✓ Approve"}</button>
+                <button disabled={actingId===req.id} onClick={()=>act(req.id,"rejected")} style={{padding:"6px 14px",borderRadius:6,background:T.redL,border:`1px solid ${T.red}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{t("common.reject")}</button>
+                <button disabled={actingId===req.id} onClick={()=>act(req.id,"approved")} style={{padding:"6px 14px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{actingId===req.id?"…":t("common.approve")}</button>
               </div>
             </>)}
-            {!isAdmin&&<div style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>Awaiting admin approval</div>}
+            {!isAdmin&&<div style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>{t("common.awaiting_admin_approval")}</div>}
           </div>
         ))}
       </div>
@@ -2306,7 +2285,7 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
       <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
         <select value={selProject} onChange={e=>setSelProject(e.target.value)}
           style={{height:32,padding:"0 10px",borderRadius:7,border:`1.5px solid ${selProject!=="All"?T.blu:T.b1}`,background:selProject!=="All"?T.bluL:T.surface,fontSize:12,color:selProject!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-          <option value="All">All Projects</option>
+          <option value="All">{t("common.all_projects")}</option>
           {PROJECTS.map(p=><option key={p}>{p}</option>)}
         </select>
         <div style={{display:"flex",gap:2,background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,padding:3}}>
@@ -2323,30 +2302,30 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
             const rows=filteredWorkers.map(w=>{const c=calcWorkerPay(w);return[w.name,w.trade,w.project,w.ratePerDay,w.rateOT,c.presentDays,c.otHours,c.total];});
             exportCSV(headers,rows,`Daily_Wages_${MONTHS[month]}_${year}.csv`);
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-            <IcDown size={12} color={T.t2}/> Export
+            <IcDown size={12} color={T.t2}/> {t("common.export")}
           </button>
-          <button onClick={doResync} disabled={syncing} title="Re-sync from project attendance"
+          <button onClick={doResync} disabled={syncing} title={t("payroll.re_sync_from_project_attendance")}
             style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:syncing?T.sltL:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:600,cursor:syncing?"wait":"pointer"}}>
-            {syncing?"⏳ Syncing…":"🔄 Re-sync"}
+            {syncing?t("payroll.syncing"):t("payroll.re_sync")}
           </button>
-          <button onClick={()=>setShowEditModal(true)} title="Bulk edit attendance — sends to admin for approval"
+          <button onClick={()=>setShowEditModal(true)} title={t("payroll.bulk_edit_attendance_sends_to_admin")}
             style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-            ✏️ Edit Attendance
+           {t("payroll.edit_attendance")}
           </button>
-          <button onClick={()=>setShowApprovalModal(true)} title="View pending approvals"
+          <button onClick={()=>setShowApprovalModal(true)} title={t("payroll.view_pending_approvals")}
             style={{position:"relative",display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.purL,border:`1px solid ${T.purM}`,color:T.pur,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-            📋 Approvals
+            {t("payroll.approvals_tab")}
             {pendingCount>0&&<span style={{position:"absolute",top:-5,right:-5,background:T.red,color:"white",fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:9,minWidth:14,textAlign:"center"}}>{pendingCount}</span>}
           </button>
           {syncMsg&&<span style={{fontSize:11,color:syncMsg.startsWith("✓")?T.grn:T.red,fontWeight:600}}>{syncMsg}</span>}
           <div style={{padding:"6px 13px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7}}>
-            <span style={{fontSize:11,color:T.grn,fontWeight:600}}>Total Payable (till today): </span>
+            <span style={{fontSize:11,color:T.grn,fontWeight:600}}>{t("payroll.total_payable_till_today")} </span>
             <span style={{fontSize:14,fontWeight:800,color:T.grn}}>₹{fmtN(totalPayable)}</span>
           </div>
         </div>
       </div>
 
-      {filteredWorkers.length===0&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No daily workers found" sub={selProject!=="All"?`No workers for project "${selProject}"`:"Add daily wage workers to track attendance"}/>}
+      {filteredWorkers.length===0&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No daily workers found" sub={selProject!=="All"?`No workers for project "${selProject}"`:t("payroll.add_daily_wage_workers_to_track")}/>}
 
       {/* GRID VIEW — calendar grid for each worker */}
       {view==="grid"&&(()=>{
@@ -2377,9 +2356,9 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
                 </div>
               );
             })}
-            <div style={{width:70,textAlign:"center",fontSize:9.5,color:T.t4,paddingLeft:4}}>Days</div>
-            <div style={{width:50,textAlign:"center",fontSize:9.5,color:T.t4}}>OT Hrs</div>
-            <div style={{width:80,textAlign:"right",fontSize:9.5,color:T.t4,paddingRight:4}}>Pay (₹)</div>
+            <div style={{width:70,textAlign:"center",fontSize:9.5,color:T.t4,paddingLeft:4}}>{t("payroll.days")}</div>
+            <div style={{width:50,textAlign:"center",fontSize:9.5,color:T.t4}}>{t("payroll.ot_hrs")}</div>
+            <div style={{width:80,textAlign:"right",fontSize:9.5,color:T.t4,paddingRight:4}}>{t("payroll.pay")}</div>
           </div>
 
           {filteredWorkers.map((w,wi)=>{
@@ -2418,7 +2397,7 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
 
           {/* Hint */}
           <div style={{marginTop:8,fontSize:10.5,color:T.t4,padding:"5px 10px",background:T.surfaceB,borderRadius:5,display:"inline-block"}}>
-            Sun-Sat weekly grouping · Direct edit disabled — Click ✏️ Edit Attendance for bulk edit (admin approval) · OT → click worker name
+           {t("payroll.sun_sat_weekly_grouping_direct_edit")}
           </div>
         </div>
         );})()}
@@ -2439,12 +2418,12 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
                     <div style={{fontSize:11,color:T.t4}}>{w.trade} · {w.project}</div>
                   </div>
                   <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:9.5,color:T.t4}}>Rate/Day</div>
+                    <div style={{fontSize:9.5,color:T.t4}}>{t("payroll.rate_day")}</div>
                     <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>₹{fmtN(w.ratePerDay)}</div>
                   </div>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
-                  {[{l:"Days",v:presentDays,c:T.grn},{l:"OT Hrs",v:otHours||"—",c:T.pur},{l:"Payable",v:`₹${fmtN(total)}`,c:T.blu}].map((s,i)=>(
+                  {[{l:t("payroll.days"),v:presentDays,c:T.grn},{l:t("payroll.ot_hrs"),v:otHours||"—",c:T.pur},{l:t("payroll.payable"),v:`₹${fmtN(total)}`,c:T.blu}].map((s,i)=>(
                     <div key={i} style={{padding:"6px 8px",background:T.surfaceB,borderRadius:5,textAlign:"center"}}>
                       <div style={{fontSize:11.5,fontWeight:700,color:s.c}}>{s.v}</div>
                       <div style={{fontSize:9,color:T.t4,marginTop:1}}>{s.l}</div>
@@ -2464,7 +2443,7 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
                 {/* Expanded OT editor */}
                 {isSelected&&(
                   <div style={{marginTop:10,padding:"10px 11px",background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7}} onClick={e=>e.stopPropagation()}>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.pur,marginBottom:7}}>OT Hours per day (rate: ₹{w.rateOT}/hr)</div>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.pur,marginBottom:7}}>{t("payroll.ot_hours_per_day_rate_rateot", { rateOT: w.rateOT })}</div>
                     <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                       {Array.from({length:new Date(year,month+1,0).getDate()},(_,i)=>i+1).map(d=>{
                         const dayAtt=att[w.id]?.[d];
@@ -2565,69 +2544,69 @@ function EditStaffModal({emp,onClose,onSaved}){
         style={{background:T.surface,borderRadius:12,width:560,maxWidth:"100%",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
         <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div>
-            <div style={{fontSize:15,fontWeight:800,color:T.t1}}>Edit Staff Master</div>
-            <div style={{fontSize:11,color:T.t4,marginTop:2}}>{emp.name} · ID {emp.id}</div>
+            <div style={{fontSize:15,fontWeight:800,color:T.t1}}>{t("payroll.edit_staff_master")}</div>
+            <div style={{fontSize:11,color:T.t4,marginTop:2}}>{t("payroll.name_id_id", { name: emp.name, id: emp.id })}</div>
           </div>
           <button onClick={()=>!saving&&onClose()} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:T.t4}}>
             <IcX size={18}/>
           </button>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
-          <Sect title="Personal">
-            <F label="Name"><input style={inp} value={form.name} onChange={e=>set("name",e.target.value)}/></F>
-            <F label="Mobile"><input style={inp} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="10-digit"/></F>
-            <F label="Email"><input style={inp} value={form.email} onChange={e=>set("email",e.target.value)}/></F>
-            <F label="Aadhaar"><input style={inp} value={form.aadhaar} onChange={e=>set("aadhaar",e.target.value)} placeholder="12-digit"/></F>
-            <F label="Role / Designation"><input style={inp} value={form.role} onChange={e=>set("role",e.target.value)}/></F>
-            <F label="Department"><input style={inp} value={form.dept} onChange={e=>set("dept",e.target.value)}/></F>
+          <Sect title={t("payroll.personal")}>
+            <F label={t("common.name_2")}><input style={inp} value={form.name} onChange={e=>set("name",e.target.value)}/></F>
+            <F label={t("payroll.mobile")}><input style={inp} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder={t("payroll.10_digit")}/></F>
+            <F label={t("common.email")}><input style={inp} value={form.email} onChange={e=>set("email",e.target.value)}/></F>
+            <F label={t("payroll.aadhaar")}><input style={inp} value={form.aadhaar} onChange={e=>set("aadhaar",e.target.value)} placeholder={t("payroll.12_digit")}/></F>
+            <F label={t("payroll.role_designation")}><input style={inp} value={form.role} onChange={e=>set("role",e.target.value)}/></F>
+            <F label={t("payroll.department")}><input style={inp} value={form.dept} onChange={e=>set("dept",e.target.value)}/></F>
             {/* Dropdown (not free text) — Overview ki project-wise coverage typo se na toote */}
-            <F label="Posting / Project" full><SearchSelect value={form.project} options={PROJECTS||[]} onChange={v=>set("project",v)} placeholder="— Office / koi project nahi —"/></F>
+            <F label={t("payroll.posting_project")} full><SearchSelect value={form.project} options={PROJECTS||[]} onChange={v=>set("project",v)} placeholder={t("payroll.office_koi_project_nahi")}/></F>
           </Sect>
-          <Sect title="Salary — Earnings (₹/month)">
-            <F label="Basic"><input style={inp} type="number" value={form.basic_salary} onChange={e=>set("basic_salary",Number(e.target.value)||0)}/></F>
+          <Sect title={t("payroll.salary_earnings_month")}>
+            <F label={t("payroll.basic")}><input style={inp} type="number" value={form.basic_salary} onChange={e=>set("basic_salary",Number(e.target.value)||0)}/></F>
             <F label="HRA"><input style={inp} type="number" value={form.hra} onChange={e=>set("hra",Number(e.target.value)||0)}/></F>
-            <F label="Conveyance"><input style={inp} type="number" value={form.conveyance} onChange={e=>set("conveyance",Number(e.target.value)||0)}/></F>
-            <F label="Medical"><input style={inp} type="number" value={form.medical} onChange={e=>set("medical",Number(e.target.value)||0)}/></F>
-            <F label="Phone Allowance"><input style={inp} type="number" value={form.phone_allowance} onChange={e=>set("phone_allowance",Number(e.target.value)||0)}/></F>
-            <F label="Petrol Allowance"><input style={inp} type="number" value={form.petrol_allowance} onChange={e=>set("petrol_allowance",Number(e.target.value)||0)}/></F>
-            <F label="Special Allowance" full><input style={inp} type="number" value={form.special_allowance} onChange={e=>set("special_allowance",Number(e.target.value)||0)}/></F>
+            <F label={t("payroll.conveyance")}><input style={inp} type="number" value={form.conveyance} onChange={e=>set("conveyance",Number(e.target.value)||0)}/></F>
+            <F label={t("payroll.medical")}><input style={inp} type="number" value={form.medical} onChange={e=>set("medical",Number(e.target.value)||0)}/></F>
+            <F label={t("payroll.phone_allowance")}><input style={inp} type="number" value={form.phone_allowance} onChange={e=>set("phone_allowance",Number(e.target.value)||0)}/></F>
+            <F label={t("payroll.petrol_allowance")}><input style={inp} type="number" value={form.petrol_allowance} onChange={e=>set("petrol_allowance",Number(e.target.value)||0)}/></F>
+            <F label={t("payroll.special_allowance")} full><input style={inp} type="number" value={form.special_allowance} onChange={e=>set("special_allowance",Number(e.target.value)||0)}/></F>
           </Sect>
-          <Sect title="PF Configuration">
-            <F label="PF Applicable">
+          <Sect title={t("payroll.pf_configuration")}>
+            <F label={t("payroll.pf_applicable")}>
               <select style={inp} value={form.pf_applicable?"yes":"no"} onChange={e=>set("pf_applicable",e.target.value==="yes")}>
-                <option value="yes">Yes</option><option value="no">No</option>
+                <option value="yes">{t("payroll.yes")}</option><option value="no">{t("payroll.no")}</option>
               </select>
             </F>
-            <F label="Calculation Method">
+            <F label={t("payroll.calculation_method")}>
               <select style={inp} value={form.pf_method} onChange={e=>set("pf_method",e.target.value)} disabled={!form.pf_applicable}>
-                <option value="none">None (₹0)</option>
-                <option value="capped_15k">Capped at ₹15,000 — 12% of min(basic, 15k)</option>
-                <option value="full_basic">Full Basic — 12% of full basic</option>
-                <option value="custom">Custom fixed amount</option>
+                <option value="none">{t("payroll.none_0")}</option>
+                <option value="capped_15k">{t("payroll.capped_at_15_000_12_of")}</option>
+                <option value="full_basic">{t("payroll.full_basic_12_of_full_basic")}</option>
+                <option value="custom">{t("payroll.custom_fixed_amount")}</option>
               </select>
             </F>
             {form.pf_method==="custom"&&form.pf_applicable&&(
-              <F label="Custom PF Amount (₹)"><input style={inp} type="number" value={form.pf_custom_amount} onChange={e=>set("pf_custom_amount",Number(e.target.value)||0)}/></F>
+              <F label={t("payroll.custom_pf_amount")}><input style={inp} type="number" value={form.pf_custom_amount} onChange={e=>set("pf_custom_amount",Number(e.target.value)||0)}/></F>
             )}
             <F label="UAN" full={form.pf_method!=="custom"}><input style={inp} value={form.pf_uan} onChange={e=>set("pf_uan",e.target.value)}/></F>
           </Sect>
-          <Sect title="ESIC Configuration">
-            <F label="ESIC Applicable">
+          <Sect title={t("payroll.esic_configuration")}>
+            <F label={t("payroll.esic_applicable")}>
               <select style={inp} value={form.esic_applicable?"yes":"no"} onChange={e=>set("esic_applicable",e.target.value==="yes")}>
-                <option value="yes">Yes (auto if gross ≤ ₹21k)</option><option value="no">No</option>
+                <option value="yes">{t("payroll.yes_auto_if_gross_21k")}</option><option value="no">{t("payroll.no")}</option>
               </select>
             </F>
-            <F label="ESIC Number"><input style={inp} value={form.esic_number} onChange={e=>set("esic_number",e.target.value)}/></F>
+            <F label={t("payroll.esic_number")}><input style={inp} value={form.esic_number} onChange={e=>set("esic_number",e.target.value)}/></F>
           </Sect>
-          <Sect title="Bank Details">
-            <F label="Bank Account Number"><input style={inp} value={form.bank_acc} onChange={e=>set("bank_acc",e.target.value)}/></F>
+          <Sect title={t("common.bank_details")}>
+            <F label={t("payroll.bank_account_number")}><input style={inp} value={form.bank_acc} onChange={e=>set("bank_acc",e.target.value)}/></F>
             <F label="IFSC"><input style={inp} value={form.ifsc} onChange={e=>set("ifsc",e.target.value)}/></F>
             <F label="PAN" full><input style={inp} value={form.pan} onChange={e=>set("pan",e.target.value)}/></F>
           </Sect>
-          <Sect title="Payment Mode">
-            <F label="Salary Tracking" full>
+          <Sect title={t("payroll.payment_mode")}>
+            <F label={t("payroll.salary_tracking")} full>
               <div style={{display:"flex",gap:8}}>
-                {[{v:1,l:"✓ Salary ON",sub:"appears in Monthly Salary"},{v:0,l:"Salary OFF",sub:"attendance only (app user)"}].map(o=>(
+                {[{v:1,l:t("payroll.salary_on"),sub:t("payroll.appears_in_monthly_salary")},{v:0,l:t("payroll.salary_off"),sub:t("payroll.attendance_only_app_user")}].map(o=>(
                   <button key={o.v} type="button" onClick={()=>set("salary_enabled",o.v)}
                     style={{flex:1,padding:"9px 11px",borderRadius:8,border:`1.5px solid ${form.salary_enabled===o.v?(o.v?T.grn:T.amb):T.b1}`,background:form.salary_enabled===o.v?(o.v?T.grnL:T.ambL):T.surface,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
                     <div style={{fontSize:12.5,fontWeight:700,color:form.salary_enabled===o.v?(o.v?T.grn:T.amb):T.t2}}>{o.l}</div>
@@ -2636,10 +2615,10 @@ function EditStaffModal({emp,onClose,onSaved}){
                 ))}
               </div>
             </F>
-            {!!form.salary_enabled && <F label="Type" full>
+            {!!form.salary_enabled && <F label={t("common.type")} full>
               <select style={inp} value={form.payment_type} onChange={e=>set("payment_type",e.target.value)}>
-                <option value="fixed">Fixed (full month salary regardless of attendance)</option>
-                <option value="attendance">Attendance-based (pro-rated by P/H days)</option>
+                <option value="fixed">{t("payroll.fixed_full_month_salary_regardless_of")}</option>
+                <option value="attendance">{t("payroll.attendance_based_pro_rated_by_p")}</option>
               </select>
             </F>}
           </Sect>
@@ -2648,10 +2627,10 @@ function EditStaffModal({emp,onClose,onSaved}){
           {err&&<span style={{flex:1,fontSize:11.5,color:T.red}}>{err}</span>}
           {!err&&<span style={{flex:1}}/>}
           <button onClick={()=>!saving&&onClose()} disabled={saving}
-            style={{padding:"7px 16px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:saving?"not-allowed":"pointer"}}>Cancel</button>
+            style={{padding:"7px 16px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:saving?"not-allowed":"pointer"}}>{t("common.cancel")}</button>
           <button onClick={save} disabled={saving}
             style={{padding:"7px 18px",borderRadius:7,background:saving?T.t4:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer"}}>
-            {saving?"Saving…":"Save Changes"}
+            {saving?t("common.saving_2"):t("common.save_changes")}
           </button>
         </div>
       </div>
@@ -2705,7 +2684,7 @@ function AddStaffModal({onClose,onSaved}){
   const clearPick=()=>{ setPicked(null); setForm(f=>({...f,name:"",designation:""})); };
 
   const save=async()=>{
-    if(!form.name.trim()){ setErr("Naam zaroori hai"); return; }
+    if(!form.name.trim()){ setErr(t("payroll.naam_zaroori_hai")); return; }
     setSaving(true); setErr("");
     try{
       let partyId=picked?.party_id||null;
@@ -2755,15 +2734,15 @@ function AddStaffModal({onClose,onSaved}){
         style={{background:T.surface,borderRadius:12,width:560,maxWidth:"100%",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
         <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div>
-            <div style={{fontSize:15,fontWeight:800,color:T.t1}}>Add Staff to Payroll</div>
-            <div style={{fontSize:11,color:T.t4,marginTop:2}}>Library se fetch karein ya naya add karein</div>
+            <div style={{fontSize:15,fontWeight:800,color:T.t1}}>{t("payroll.add_staff_to_payroll")}</div>
+            <div style={{fontSize:11,color:T.t4,marginTop:2}}>{t("payroll.library_se_fetch_karein_ya_naya")}</div>
           </div>
           <button onClick={()=>!saving&&onClose()} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:T.t4}}><IcX size={18}/></button>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
           {/* ── Library search ── */}
           <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,padding:"11px 13px",marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:700,color:T.blu,marginBottom:5}}>🔍 Existing staff library se fetch karein</div>
+            <div style={{fontSize:12,fontWeight:700,color:T.blu,marginBottom:5}}>{t("payroll.existing_staff_library_se_fetch_karein")}</div>
             {picked ? (
               <div style={{display:"flex",alignItems:"center",gap:8,background:T.surface,border:`1.5px solid ${T.blu}`,borderRadius:7,padding:"7px 11px"}}>
                 <div style={{flex:1,fontSize:12.5}}>
@@ -2774,7 +2753,7 @@ function AddStaffModal({onClose,onSaved}){
             ) : (
               <>
                 <input value={staffSearch} onChange={e=>setStaffSearch(e.target.value)}
-                  placeholder="Naam ya designation se search..."
+                  placeholder={t("payroll.naam_ya_designation_se_search")}
                   style={{...inp,fontSize:12.5}}/>
                 {results.length>0&&(
                   <div style={{marginTop:6,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,maxHeight:150,overflowY:"auto"}}>
@@ -2782,70 +2761,68 @@ function AddStaffModal({onClose,onSaved}){
                       <div key={p.party_id} onClick={()=>pickStaff(p)}
                         style={{padding:"7px 11px",cursor:"pointer",borderBottom:`1px solid ${T.b1}`,fontSize:12}}>
                         <b>{p.name}</b>{p.designation?<span style={{color:T.t3}}> — {p.designation}</span>:null}
-                        <div style={{fontSize:10,color:T.t4,marginTop:1}}>
-                          {p.staff_subtype==="wages"?"Daily wages":"Office staff"} · Library
-                        </div>
+                        <div style={{fontSize:10,color:T.t4,marginTop:1}}>{t("payroll.p_library", { p: p.staff_subtype==="wages"?"Daily wages":"Office staff" })}</div>
                       </div>
                     ))}
                   </div>
                 )}
                 <div style={{fontSize:10,color:T.t4,marginTop:5}}>
-                  Naam library me hai to fetch ho jayega. Naya naam type karein to nayi staff-party ban jayegi.
+                 {t("payroll.naam_library_me_hai_to_fetch")}
                 </div>
               </>
             )}
           </div>
 
-          <Sect title="Personal">
-            <F label="Name"><input style={{...inp,...(picked?{background:T.surfaceB}:{})}} value={form.name} onChange={e=>set("name",e.target.value)} disabled={!!picked}/></F>
-            <F label="Mobile"><input style={inp} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="10-digit"/></F>
-            <F label="Designation"><input style={inp} value={form.designation} onChange={e=>set("designation",e.target.value)} placeholder="e.g. Site Supervisor"/></F>
-            <F label="Subtype">
+          <Sect title={t("payroll.personal")}>
+            <F label={t("common.name_2")}><input style={{...inp,...(picked?{background:T.surfaceB}:{})}} value={form.name} onChange={e=>set("name",e.target.value)} disabled={!!picked}/></F>
+            <F label={t("payroll.mobile")}><input style={inp} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder={t("payroll.10_digit")}/></F>
+            <F label={t("master_library.designation")}><input style={inp} value={form.designation} onChange={e=>set("designation",e.target.value)} placeholder={t("payroll.e_g_site_supervisor")}/></F>
+            <F label={t("master_library.subtype")}>
               <select style={inp} value={form.staff_subtype} onChange={e=>set("staff_subtype",e.target.value)} disabled={!!picked}>
-                <option value="office">Office Staff</option>
-                <option value="wages">Daily Wages Worker</option>
+                <option value="office">{t("payroll.office_staff")}</option>
+                <option value="wages">{t("master_library.daily_wages_worker")}</option>
               </select>
             </F>
             {/* Dropdown (not free text) — Overview ki project-wise coverage typo se na toote */}
-            <F label="Posting / Project" full><SearchSelect value={form.project} options={PROJECTS||[]} onChange={v=>set("project",v)} placeholder="— Office / koi project nahi —"/></F>
+            <F label={t("payroll.posting_project")} full><SearchSelect value={form.project} options={PROJECTS||[]} onChange={v=>set("project",v)} placeholder={t("payroll.office_koi_project_nahi")}/></F>
           </Sect>
-          <Sect title="Salary — Earnings (₹/month)">
-            <F label="Basic"><input style={inp} type="number" value={form.basic_salary} onChange={e=>set("basic_salary",e.target.value)}/></F>
+          <Sect title={t("payroll.salary_earnings_month")}>
+            <F label={t("payroll.basic")}><input style={inp} type="number" value={form.basic_salary} onChange={e=>set("basic_salary",e.target.value)}/></F>
             <F label="HRA"><input style={inp} type="number" value={form.hra} onChange={e=>set("hra",e.target.value)}/></F>
-            <F label="Conveyance"><input style={inp} type="number" value={form.conveyance} onChange={e=>set("conveyance",e.target.value)}/></F>
-            <F label="Medical"><input style={inp} type="number" value={form.medical} onChange={e=>set("medical",e.target.value)}/></F>
-            <F label="Phone Allowance"><input style={inp} type="number" value={form.phone_allowance} onChange={e=>set("phone_allowance",e.target.value)}/></F>
-            <F label="Petrol Allowance"><input style={inp} type="number" value={form.petrol_allowance} onChange={e=>set("petrol_allowance",e.target.value)}/></F>
-            <F label="Special Allowance" full><input style={inp} type="number" value={form.special_allowance} onChange={e=>set("special_allowance",e.target.value)}/></F>
+            <F label={t("payroll.conveyance")}><input style={inp} type="number" value={form.conveyance} onChange={e=>set("conveyance",e.target.value)}/></F>
+            <F label={t("payroll.medical")}><input style={inp} type="number" value={form.medical} onChange={e=>set("medical",e.target.value)}/></F>
+            <F label={t("payroll.phone_allowance")}><input style={inp} type="number" value={form.phone_allowance} onChange={e=>set("phone_allowance",e.target.value)}/></F>
+            <F label={t("payroll.petrol_allowance")}><input style={inp} type="number" value={form.petrol_allowance} onChange={e=>set("petrol_allowance",e.target.value)}/></F>
+            <F label={t("payroll.special_allowance")} full><input style={inp} type="number" value={form.special_allowance} onChange={e=>set("special_allowance",e.target.value)}/></F>
           </Sect>
-          <Sect title="PF / ESIC">
-            <F label="PF Applicable">
+          <Sect title={t("payroll.pf_esic")}>
+            <F label={t("payroll.pf_applicable")}>
               <select style={inp} value={form.pf_applicable?"yes":"no"} onChange={e=>set("pf_applicable",e.target.value==="yes")}>
-                <option value="yes">Yes</option><option value="no">No</option>
+                <option value="yes">{t("payroll.yes")}</option><option value="no">{t("payroll.no")}</option>
               </select>
             </F>
-            <F label="PF Method">
+            <F label={t("payroll.pf_method")}>
               <select style={inp} value={form.pf_method} onChange={e=>set("pf_method",e.target.value)} disabled={!form.pf_applicable}>
-                <option value="none">None</option>
-                <option value="capped_15k">Capped at ₹15,000</option>
-                <option value="full_basic">Full Basic 12%</option>
-                <option value="custom">Custom amount</option>
+                <option value="none">{t("common.none")}</option>
+                <option value="capped_15k">{t("payroll.capped_at_15_000")}</option>
+                <option value="full_basic">{t("payroll.full_basic_12")}</option>
+                <option value="custom">{t("payroll.custom_amount")}</option>
               </select>
             </F>
             {form.pf_method==="custom"&&form.pf_applicable&&(
-              <F label="Custom PF (₹)"><input style={inp} type="number" value={form.pf_custom_amount} onChange={e=>set("pf_custom_amount",e.target.value)}/></F>
+              <F label={t("payroll.custom_pf")}><input style={inp} type="number" value={form.pf_custom_amount} onChange={e=>set("pf_custom_amount",e.target.value)}/></F>
             )}
-            <F label="ESIC Applicable" full={form.pf_method!=="custom"}>
+            <F label={t("payroll.esic_applicable")} full={form.pf_method!=="custom"}>
               <select style={inp} value={form.esic_applicable?"yes":"no"} onChange={e=>set("esic_applicable",e.target.value==="yes")}>
-                <option value="yes">Yes (auto if gross ≤ ₹21k)</option><option value="no">No</option>
+                <option value="yes">{t("payroll.yes_auto_if_gross_21k")}</option><option value="no">{t("payroll.no")}</option>
               </select>
             </F>
           </Sect>
-          <Sect title="Payment Mode">
-            <F label="Type" full>
+          <Sect title={t("payroll.payment_mode")}>
+            <F label={t("common.type")} full>
               <select style={inp} value={form.payment_type} onChange={e=>set("payment_type",e.target.value)}>
-                <option value="fixed">Fixed (full month salary)</option>
-                <option value="attendance">Attendance-based (pro-rated)</option>
+                <option value="fixed">{t("payroll.fixed_full_month_salary")}</option>
+                <option value="attendance">{t("payroll.attendance_based_pro_rated")}</option>
               </select>
             </F>
           </Sect>
@@ -2853,10 +2830,10 @@ function AddStaffModal({onClose,onSaved}){
         <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
           {err?<span style={{flex:1,fontSize:11.5,color:T.red}}>{err}</span>:<span style={{flex:1}}/>}
           <button onClick={()=>!saving&&onClose()} disabled={saving}
-            style={{padding:"7px 16px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:saving?"not-allowed":"pointer"}}>Cancel</button>
+            style={{padding:"7px 16px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:saving?"not-allowed":"pointer"}}>{t("common.cancel")}</button>
           <button onClick={save} disabled={saving}
             style={{padding:"7px 18px",borderRadius:7,background:saving?T.t4:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer"}}>
-            {saving?"Saving…":"Add to Payroll"}
+            {saving?t("common.saving_2"):t("payroll.add_to_payroll")}
           </button>
         </div>
       </div>
@@ -3061,31 +3038,31 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
       <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
         <div style={{position:"relative",minWidth:200}}>
           <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={12} color={T.t4}/></span>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search employee..."
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("payroll.search_employee")}
             style={{height:32,padding:"0 8px 0 26px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",width:"100%"}}/>
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           <div style={{padding:"6px 13px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7}}>
-            <span style={{fontSize:11,color:T.blu}}>Total Net Payroll: </span>
+            <span style={{fontSize:11,color:T.blu}}>{t("payroll.total_net_payroll")} </span>
             <span style={{fontSize:14,fontWeight:800,color:T.blu}}>₹{fmtN(totalNet)}</span>
           </div>
           <div style={{padding:"6px 13px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7}}>
-            <span style={{fontSize:11,color:T.grn}}>{paidCount}/{filtered.length} Paid</span>
+            <span style={{fontSize:11,color:T.grn}}>{t("payroll.paidcount_filtered_paid", { paidCount, filtered: filtered.length })}</span>
           </div>
           {isAdmin&&<button onClick={()=>setShowAddStaff(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-            <IcAdd size={13} color="white"/> Add Staff
+            <IcAdd size={13} color="white"/> {t("payroll.add_staff")}
           </button>}
           {isAdmin&&<button onClick={markAllPaid}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-            <IcChk size={13} color="white"/> Mark All Paid
+            <IcChk size={13} color="white"/> {t("payroll.mark_all_paid")}
           </button>}
           <button onClick={()=>{
             const headers=["Employee","ID","Dept","Pay Type","Basic","Gross","PF","ESI","TDS","Net Pay"];
             const rows=filtered.map(emp=>{const c=calcNet(emp);return[emp.name,emp.id,emp.dept,c.pType,emp.basicSalary,c.gross,c.pf,c.esi,c.tds||0,c.net];});
             exportCSV(headers,rows,`Monthly_Salary_${MONTHS[month]}_${year}.csv`);
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-            <IcDown size={12} color={T.t2}/> Export
+            <IcDown size={12} color={T.t2}/> {t("common.export")}
           </button>
         </div>
       </div>
@@ -3094,8 +3071,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
       {isAdmin && editReqs.filter(r=>r.status==="pending").length>0 && (
         <div style={{background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:9,padding:"10px 14px",marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:700,color:T.amb,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-            <IcAlert size={14} color={T.amb}/> {editReqs.filter(r=>r.status==="pending").length} Salary Edit Request(s) — Pending Your Approval
-          </div>
+            <IcAlert size={14} color={T.amb}/>{t("payroll.editreqs_salary_edit_request_s_pending", { editReqs: editReqs.filter(r=>r.status==="pending").length })}</div>
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {editReqs.filter(r=>r.status==="pending").map(r=>(
               <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,background:T.surface,padding:"7px 10px",borderRadius:7,border:`1px solid ${T.ambM}`}}>
@@ -3106,11 +3082,11 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
                 </div>
                 <button onClick={()=>approveReq(r.id,"approved")}
                   style={{padding:"4px 12px",borderRadius:6,background:T.grn,color:"white",fontSize:11,fontWeight:700,border:"none",cursor:"pointer"}}>
-                  ✓ Approve
+                 {t("common.approve")}
                 </button>
                 <button onClick={()=>approveReq(r.id,"rejected")}
                   style={{padding:"4px 12px",borderRadius:6,background:T.redL,color:T.red,fontSize:11,fontWeight:700,border:`1px solid ${T.redM}`,cursor:"pointer"}}>
-                  ✕ Reject
+                 {t("common.reject")}
                 </button>
               </div>
             ))}
@@ -3118,7 +3094,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
         </div>
       )}
 
-      {filtered.length===0&&!search&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No staff members added yet" sub="Add monthly staff to see salary data"/>}
+      {filtered.length===0&&!search&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No staff members added yet" sub={t("payroll.add_monthly_staff_to_see_salary")}/>}
       {filtered.length===0&&search&&<EmptyState icon={<IcSearch size={32} color={T.b2}/>} message={`No results for "${search}"`}/>}
 
       {/* Table */}
@@ -3148,7 +3124,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
                     {emp.id}
                     {isAttBased
                       ?<span style={{marginLeft:5,color:T.pur}}>{P}P {H>0?`${H}H `:""}{A>0?`${A}A `:""} = {effective}d</span>
-                      :<span style={{marginLeft:5,color:T.grn}}>Full month</span>
+                      :<span style={{marginLeft:5,color:T.grn}}>{t("payroll.full_month")}</span>
                     }
                   </div>
                 </div>
@@ -3158,11 +3134,11 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
                 {isAdmin?<button
                   onClick={()=>togglePayType(emp.id)}
-                  title={isAttBased?"Switch to Fixed Monthly":"Switch to Attendance Based"}
+                  title={isAttBased?t("payroll.switch_to_fixed_monthly"):t("payroll.switch_to_attendance_based")}
                   style={{display:"flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:20,border:`1.5px solid ${isAttBased?T.pur:T.grn}`,background:isAttBased?T.purL:T.grnL,color:isAttBased?T.pur:T.grn,fontSize:10.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",transition:"all .2s"}}>
                   <div style={{width:7,height:7,borderRadius:"50%",background:isAttBased?T.pur:T.grn,flexShrink:0}}/>
-                  {isAttBased?"Attendance":"Fixed"}
-                </button>:<span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:20,border:`1.5px solid ${isAttBased?T.pur:T.grn}`,background:isAttBased?T.purL:T.grnL,color:isAttBased?T.pur:T.grn,fontSize:10.5,fontWeight:700,whiteSpace:"nowrap"}}><div style={{width:7,height:7,borderRadius:"50%",background:isAttBased?T.pur:T.grn,flexShrink:0}}/>{isAttBased?"Attendance":"Fixed"}</span>}
+                  {isAttBased?t("payroll.attendance"):t("payroll.fixed")}
+                </button>:<span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:20,border:`1.5px solid ${isAttBased?T.pur:T.grn}`,background:isAttBased?T.purL:T.grnL,color:isAttBased?T.pur:T.grn,fontSize:10.5,fontWeight:700,whiteSpace:"nowrap"}}><div style={{width:7,height:7,borderRadius:"50%",background:isAttBased?T.pur:T.grn,flexShrink:0}}/>{isAttBased?t("payroll.attendance"):t("payroll.fixed")}</span>}
                 {isAttBased&&(
                   <div style={{fontSize:9,color:T.t4,textAlign:"center"}}>
                     ₹{fmtN(Math.round(fullGross/WD))}/day
@@ -3192,7 +3168,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
                   onBlur={e=>saveTds(emp.id,Number(e.target.value)||0)}
                   placeholder="0"
                   style={{width:70,padding:"3px 6px",borderRadius:5,border:`1.5px solid ${(tdsByEmpMonth[emp.id]||0)>0?T.redM:T.b1}`,fontSize:11.5,color:(tdsByEmpMonth[emp.id]||0)>0?T.red:T.t2,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:(tdsByEmpMonth[emp.id]||0)>0?T.redL:T.surface,textAlign:"right"}}
-                  title="Manual TDS for this month (saves on blur)"
+                  title={t("payroll.manual_tds_for_this_month_saves")}
                 />
               ) : (
                 <span style={{fontSize:12,color:(tdsByEmpMonth[emp.id]||0)>0?T.red:T.t4}}>{(tdsByEmpMonth[emp.id]||0)>0?`-₹${fmtN(tdsByEmpMonth[emp.id])}`:"—"}</span>
@@ -3209,15 +3185,13 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
                         ₹{fmtN(displayNet)}
                       </div>
                       {approvedOverride!==null && (
-                        <div style={{fontSize:9,color:T.blu}} title="Approved edit">
-                          edited (was ₹{fmtN(net)})
-                        </div>
+                        <div style={{fontSize:9,color:T.blu}} title={t("payroll.approved_edit")}>{t("payroll.edited_was_fmtn", { fmtN: fmtN(net) })}</div>
                       )}
                       {req && req.status === "pending" && (
-                        <div style={{fontSize:9,color:T.amb}}>edit pending</div>
+                        <div style={{fontSize:9,color:T.amb}}>{t("payroll.edit_pending")}</div>
                       )}
                       {hasAdv && approvedOverride === null && (
-                        <div style={{fontSize:9.5,color:T.amb}}>-₹{fmtN(hasAdv.amount)} adv.</div>
+                        <div style={{fontSize:9.5,color:T.amb}}>{t("payroll.fmtn_adv", { fmtN: fmtN(hasAdv.amount) })}</div>
                       )}
                     </>
                   );
@@ -3226,10 +3200,10 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
 
               <div>
                 {isPaid
-                  ?<span style={{display:"inline-flex",alignItems:"center",gap:4,background:T.grnL,color:T.grn,fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:20,border:`1px solid ${T.grnM}`}}><IcChk size={10} color={T.grn}/>Paid</span>
+                  ?<span style={{display:"inline-flex",alignItems:"center",gap:4,background:T.grnL,color:T.grn,fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:20,border:`1px solid ${T.grnM}`}}><IcChk size={10} color={T.grn}/>{t("common.paid")}</span>
                   :<button onClick={()=>setPayStatus(p=>({...p,[emp.id]:"Paid"}))}
                     style={{padding:"4px 11px",borderRadius:20,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                    Pay Now
+                   {t("finance.pay_now")}
                   </button>
                 }
               </div>
@@ -3237,16 +3211,16 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
               <div style={{display:"flex",gap:5}}>
                 <button onClick={()=>onViewSlip(emp,pType,paymentTypes)}
                   style={{display:"flex",alignItems:"center",gap:3,padding:"4px 9px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                  <IcEye size={11} color={T.blu}/> Slip
+                  <IcEye size={11} color={T.blu}/> {t("payroll.slip")}
                 </button>
                 {isAdmin && (
-                  <button onClick={()=>openEdit(emp,net)} title="Request salary edit (needs approval)"
+                  <button onClick={()=>openEdit(emp,net)} title={t("payroll.request_salary_edit_needs_approval")}
                     style={{display:"flex",alignItems:"center",gap:3,padding:"4px 7px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11,fontWeight:600,cursor:"pointer"}}>
                     <IcEdit size={11} color={T.amb}/>
                   </button>
                 )}
                 {isAdmin && (
-                  <button onClick={()=>setEditStaffEmp(emp)} title="Edit staff master (PF method, allowances, contact)"
+                  <button onClick={()=>setEditStaffEmp(emp)} title={t("payroll.edit_staff_master_pf_method_allowances")}
                     style={{display:"flex",alignItems:"center",gap:3,padding:"4px 7px",borderRadius:6,background:T.purL,border:`1px solid ${T.purM}`,color:T.pur,fontSize:11,fontWeight:600,cursor:"pointer"}}>
                     <IcSet size={11} color={T.pur}/>
                   </button>
@@ -3282,7 +3256,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
             style={{background:T.surface,borderRadius:12,padding:20,width:440,maxWidth:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
               <div>
-                <div style={{fontSize:15,fontWeight:800,color:T.t1}}>Request Salary Edit</div>
+                <div style={{fontSize:15,fontWeight:800,color:T.t1}}>{t("payroll.request_salary_edit")}</div>
                 <div style={{fontSize:11,color:T.t4,marginTop:2}}>{editModalEmp.name} — {MONTHS[month]} {year}</div>
               </div>
               <button onClick={()=>!editSubmitting&&setEditModalEmp(null)}
@@ -3292,12 +3266,12 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
             </div>
 
             <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:11,color:T.blu}}>
-              ⓘ Edit will be submitted for approval. Admin/Super-admin must approve before it takes effect.
+             {t("payroll.edit_will_be_submitted_for_approval")}
             </div>
 
             <div style={{marginBottom:10}}>
               <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>
-                Current Calculated Net
+               {t("payroll.current_calculated_net")}
               </label>
               <div style={{fontSize:14,fontWeight:700,color:T.t2,padding:"8px 12px",background:T.b1,borderRadius:7}}>
                 ₹ {fmtN(calcNet(editModalEmp).net)}
@@ -3306,7 +3280,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
 
             <div style={{marginBottom:10}}>
               <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>
-                New Final Salary Amount <span style={{color:T.red}}>*</span>
+               {t("payroll.new_final_salary_amount")} <span style={{color:T.red}}>*</span>
               </label>
               <input type="number" value={editNewAmt} onChange={e=>setEditNewAmt(e.target.value)}
                 style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:14,fontWeight:700,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
@@ -3314,10 +3288,10 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
 
             <div style={{marginBottom:12}}>
               <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>
-                Reason for Edit
+               {t("payroll.reason_for_edit")}
               </label>
               <textarea value={editReason} onChange={e=>setEditReason(e.target.value)} rows={3}
-                placeholder="e.g. Bonus for overtime, late mark waiver, etc."
+                placeholder={t("payroll.e_g_bonus_for_overtime_late")}
                 style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
             </div>
 
@@ -3326,11 +3300,11 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
               <button onClick={()=>!editSubmitting&&setEditModalEmp(null)} disabled={editSubmitting}
                 style={{padding:"8px 16px",borderRadius:7,background:"none",border:`1.5px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={submitEdit} disabled={editSubmitting}
                 style={{padding:"8px 18px",borderRadius:7,background:editSubmitting?T.b1:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:editSubmitting?"not-allowed":"pointer"}}>
-                {editSubmitting?"Submitting...":"Submit for Approval"}
+                {editSubmitting?t("common.submitting_2"):t("common.submit_for_approval")}
               </button>
             </div>
           </div>
@@ -3362,7 +3336,7 @@ function AdvancesTab({advances,setAdvances,isAdmin}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{display:"flex",gap:10}}>
           <div style={{padding:"6px 13px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7}}>
-            <span style={{fontSize:11,color:T.amb}}>Pending Recovery: </span>
+            <span style={{fontSize:11,color:T.amb}}>{t("payroll.pending_recovery")} </span>
             <span style={{fontSize:14,fontWeight:800,color:T.amb}}>₹{fmtN(totalPending)}</span>
           </div>
         </div>
@@ -3372,11 +3346,11 @@ function AdvancesTab({advances,setAdvances,isAdmin}){
             const rows=advances.map(a=>[a.id,a.name,a.amount,a.date,a.reason,a.status]);
             exportCSV(headers,rows,"Advances_Export.csv");
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-            <IcDown size={12} color={T.t2}/> Export
+            <IcDown size={12} color={T.t2}/> {t("common.export")}
           </button>
           {isAdmin&&<button onClick={()=>setShowAdd(!showAdd)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-            <IcAdd size={13} color="white"/> New Advance
+            <IcAdd size={13} color="white"/> {t("payroll.new_advance")}
           </button>}
         </div>
       </div>
@@ -3385,7 +3359,7 @@ function AdvancesTab({advances,setAdvances,isAdmin}){
       {showAdd&&(
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"13px 14px",marginBottom:12}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:9,marginBottom:9}}>
-            {[{l:"Name",k:"name",ph:"Employee name"},{l:"Amount (₹)",k:"amount",ph:"Amount",type:"number"},{l:"Date",k:"date",type:"date"},{l:"Reason",k:"reason",ph:"Medical, personal..."}].map(f=>(
+            {[{l:t("common.name_2"),k:"name",ph:"Employee name"},{l:t("crm.amount"),k:"amount",ph:"Amount",type:"number"},{l:t("common.date"),k:"date",type:"date"},{l:t("common.reason"),k:"reason",ph:"Medical, personal..."}].map(f=>(
               <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{f.l}</label>
                 <input type={f.type||"text"} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
                   style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
@@ -3393,8 +3367,8 @@ function AdvancesTab({advances,setAdvances,isAdmin}){
             ))}
           </div>
           <div style={{display:"flex",gap:7}}>
-            <button onClick={()=>setShowAdd(false)} style={{padding:"7px 14px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-            <button onClick={addAdvance} style={{padding:"7px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>Save Advance</button>
+            <button onClick={()=>setShowAdd(false)} style={{padding:"7px 14px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
+            <button onClick={addAdvance} style={{padding:"7px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>{t("payroll.save_advance")}</button>
           </div>
         </div>
       )}
@@ -3405,7 +3379,7 @@ function AdvancesTab({advances,setAdvances,isAdmin}){
             <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
           ))}
         </div>
-        {advances.length===0&&<EmptyState icon={<IcFin size={32} color={T.b2}/>} message="No advance records" sub="No salary advances have been recorded yet"/>}
+        {advances.length===0&&<EmptyState icon={<IcFin size={32} color={T.b2}/>} message="No advance records" sub={t("payroll.no_salary_advances_have_been_recorded")}/>}
         {advances.map((adv,i)=>{
           const isPending=adv.status==="Pending deduction";
           return(
@@ -3418,10 +3392,10 @@ function AdvancesTab({advances,setAdvances,isAdmin}){
               <span style={{fontSize:11.5,color:T.t3}}>{adv.date}</span>
               <span style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>{adv.reason}</span>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <Pill label={adv.status==="Deducted"?"Deducted":"Pending"} c={isPending?T.amb:T.grn} bg={isPending?T.ambL:T.grnL} brd={isPending?T.ambM:T.grnM}/>
+                <Pill label={adv.status==="Deducted"?t("payroll.deducted"):t("common.pending")} c={isPending?T.amb:T.grn} bg={isPending?T.ambL:T.grnL} brd={isPending?T.ambM:T.grnM}/>
                 {isPending&&isAdmin&&<button onClick={async()=>{try{await api.patch("/payroll/advances/"+adv.id,{status:"Deducted"});}catch(err){console.error(err);}setAdvances(p=>p.map(a=>a.id===adv.id?{...a,status:"Deducted"}:a));}}
                   style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,cursor:"pointer",fontWeight:600}}>
-                  Deduct
+                 {t("payroll.deduct")}
                 </button>}
               </div>
             </div>
@@ -3523,7 +3497,7 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
     <div>
       {/* Summary bar */}
       <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-        {[{l:"Total Created",v:`₹${fmtN(totalCreated)}`,c:T.blu},{l:"Paid",v:`₹${fmtN(totalPaid)}`,c:T.grn},{l:"Pending",v:`₹${fmtN(totalPending)}`,c:totalPending>0?T.amb:T.grn}].map((s,i)=>(
+        {[{l:t("payroll.total_created"),v:`₹${fmtN(totalCreated)}`,c:T.blu},{l:t("common.paid"),v:`₹${fmtN(totalPaid)}`,c:T.grn},{l:t("common.pending"),v:`₹${fmtN(totalPending)}`,c:totalPending>0?T.amb:T.grn}].map((s,i)=>(
           <div key={i} style={{padding:"6px 14px",background:T.surface,border:`1.5px solid ${s.c}33`,borderRadius:8,borderLeft:`3px solid ${s.c}`}}>
             <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>{s.l}</div>
             <div style={{fontSize:16,fontWeight:800,color:s.c}}>{s.v}</div>
@@ -3532,7 +3506,7 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
         <div style={{marginLeft:"auto"}}>
           <button onClick={()=>setShowForm(s=>!s)}
             style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",borderRadius:8,background:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",boxShadow:`0 3px 10px ${T.blu}44`}}>
-            <IcAdd size={14} color="white"/> Create Salary
+            <IcAdd size={14} color="white"/> {t("payroll.create_salary")}
           </button>
         </div>
       </div>
@@ -3541,15 +3515,15 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
       {showForm&&(
         <div style={{background:T.surface,borderRadius:10,border:`1.5px solid ${T.bluM}`,padding:"16px 18px",marginBottom:14,boxShadow:`0 2px 12px ${T.blu}11`}}>
           <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
-            <IcSlip size={15} color={T.blu}/> Create Salary Entry
+            <IcSlip size={15} color={T.blu}/> {t("payroll.create_salary_entry")}
           </div>
 
           {/* Quick fill search */}
           <div style={{marginBottom:12,padding:"10px 12px",background:T.bluL,borderRadius:7,border:`1px solid ${T.bluM}`}}>
-            <div style={{fontSize:10,color:T.blu,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Quick Fill from Existing Person</div>
+            <div style={{fontSize:10,color:T.blu,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("payroll.quick_fill_from_existing_person")}</div>
             <div style={{position:"relative"}}>
               <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={12} color={T.t4}/></span>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Type name to search..."
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("payroll.type_name_to_search")}
                 style={{width:"100%",height:30,padding:"0 8px 0 26px",borderRadius:6,border:`1px solid ${T.bluM}`,fontSize:12,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             </div>
             {search&&(
@@ -3560,14 +3534,14 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
                     {p.name} <span style={{opacity:.6,fontSize:10}}>({p.category})</span>
                   </button>
                 ))}
-                {filteredQF.length===0&&<span style={{fontSize:11,color:T.t4}}>No match — fill manually below</span>}
+                {filteredQF.length===0&&<span style={{fontSize:11,color:T.t4}}>{t("payroll.no_match_fill_manually_below")}</span>}
               </div>
             )}
           </div>
 
           {/* Form grid */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
-            {[{l:"Full Name *",k:"name",ph:"Employee / Worker name",col:1},{l:"Designation",k:"designation",ph:"Role / Trade",col:1},{l:"Phone",k:"phone",ph:"Mobile number",col:1}].map(f=>(
+            {[{l:t("crm.full_name"),k:"name",ph:"Employee / Worker name",col:1},{l:t("master_library.designation"),k:"designation",ph:"Role / Trade",col:1},{l:t("common.phone"),k:"phone",ph:"Mobile number",col:1}].map(f=>(
               <div key={f.k}>
                 <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{f.l}</label>
                 <input value={form[f.k]} onChange={upd(f.k)} placeholder={f.ph}
@@ -3580,10 +3554,10 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
           {/* Bank details */}
           <div style={{padding:"10px 12px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,marginBottom:10}}>
             <div style={{fontSize:10,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",alignItems:"center",gap:6}}>
-              <IcBank size={12} color={T.t3}/> Bank Details
+              <IcBank size={12} color={T.t3}/> {t("common.bank_details")}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9}}>
-              {[{l:"Bank Name",k:"bankName",ph:"SBI, HDFC..."},{l:"Account No",k:"accountNo",ph:"Account number"},{l:"IFSC Code",k:"ifsc",ph:"SBIN0001234"}].map(f=>(
+              {[{l:t("common.bank_name"),k:"bankName",ph:"SBI, HDFC..."},{l:t("master_library.account_no"),k:"accountNo",ph:"Account number"},{l:t("master_library.ifsc_code"),k:"ifsc",ph:"SBIN0001234"}].map(f=>(
                 <div key={f.k}>
                   <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{f.l}</label>
                   <input value={form[f.k]} onChange={upd(f.k)} placeholder={f.ph}
@@ -3598,59 +3572,59 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
             {/* Days Present */}
             <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Days Present</label>
+              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{t("payroll.days_present")}</label>
               <div style={{display:"flex",gap:5}}>
-                <input value={form.daysPresent} onChange={upd("daysPresent")} placeholder="e.g. 22 or NA"
+                <input value={form.daysPresent} onChange={upd("daysPresent")} placeholder={t("payroll.e_g_22_or_na")}
                   style={{flex:1,padding:"8px 9px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 <button onClick={()=>setForm(p=>({...p,daysPresent:"NA"}))}
                   style={{padding:"0 9px",borderRadius:7,background:form.daysPresent==="NA"?T.slt:T.sltL,color:form.daysPresent==="NA"?"white":T.slt,border:`1px solid ${T.b2}`,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
                   NA
                 </button>
               </div>
-              {form.daysPresent==="NA"&&<div style={{fontSize:10,color:T.slt,marginTop:3}}>Fixed salary — no deduction</div>}
+              {form.daysPresent==="NA"&&<div style={{fontSize:10,color:T.slt,marginTop:3}}>{t("payroll.fixed_salary_no_deduction")}</div>}
             </div>
             {/* Total / Working days */}
             <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Working Days</label>
+              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{t("payroll.working_days")}</label>
               <input type="number" value={form.totalDays} onChange={upd("totalDays")}
                 style={{width:"100%",padding:"8px 9px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             </div>
             {/* Amount */}
             <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Net Amount (₹) *</label>
-              <input type="number" value={form.amount} onChange={upd("amount")} placeholder="Total salary to pay"
+              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{t("payroll.net_amount")}</label>
+              <input type="number" value={form.amount} onChange={upd("amount")} placeholder={t("payroll.total_salary_to_pay")}
                 style={{width:"100%",padding:"8px 9px",borderRadius:7,border:`1.5px solid ${form.amount?T.grn:T.b1}`,fontSize:13,fontWeight:form.amount?700:400,color:form.amount?T.grn:T.t1,background:form.amount?T.grnL:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                 onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>{if(!form.amount)e.target.style.borderColor=T.b1;}}/>
               {form.amount&&<div style={{fontSize:10.5,color:T.grn,marginTop:2,fontWeight:600}}>₹ {fmtN(Number(form.amount))}</div>}
             </div>
             {/* Category */}
             <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Category</label>
-              <SearchSelect value={form.category} options={["Monthly Staff","Daily Worker","Contractor","Consultant","Other"]} onChange={v=>upd("category")({target:{value:v}})} placeholder="Select category..."/>
+              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{t("common.category")}</label>
+              <SearchSelect value={form.category} options={["Monthly Staff","Daily Worker","Contractor","Consultant","Other"]} onChange={v=>upd("category")({target:{value:v}})} placeholder={t("common.select_category")}/>
             </div>
           </div>
 
           {/* Dates */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
             <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Salary Date</label>
+              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{t("payroll.salary_date")}</label>
               <input type="date" value={form.salaryDate} onChange={upd("salaryDate")}
                 style={{width:"100%",padding:"8px 9px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             </div>
             <div>
               <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>
-                Due Date
-                <span style={{marginLeft:5,color:T.blu,fontSize:9,fontWeight:400}}>← Editable (default +{defaultDueDays}d)</span>
+               {t("common.due_date")}
+                <span style={{marginLeft:5,color:T.blu,fontSize:9,fontWeight:400}}>{t("payroll.editable_default_defaultduedaysd", { defaultDueDays })}</span>
               </label>
               <input type="date" value={form.dueDate} onChange={upd("dueDate")}
                 style={{width:"100%",padding:"8px 9px",borderRadius:7,border:`1.5px solid ${T.amb}`,fontSize:12.5,color:T.amb,background:T.ambL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               {form.dueDate&&<div style={{fontSize:10,color:T.amb,marginTop:2}}>
-                {daysDiff2(form.dueDate)>0?`Due in ${daysDiff2(form.dueDate)} days`:daysDiff2(form.dueDate)===0?"Due today!":"Overdue!"}
+                {daysDiff2(form.dueDate)>0?`Due in ${daysDiff2(form.dueDate)} days`:daysDiff2(form.dueDate)===0?t("payroll.due_today"):t("payroll.overdue")}
               </div>}
             </div>
             <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Notes</label>
-              <input value={form.notes} onChange={upd("notes")} placeholder="March salary, contract etc."
+              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{t("common.notes")}</label>
+              <input value={form.notes} onChange={upd("notes")} placeholder={t("payroll.march_salary_contract_etc")}
                 style={{width:"100%",padding:"8px 9px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             </div>
           </div>
@@ -3659,18 +3633,18 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
           <div style={{padding:"9px 12px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
             <IcFinLink size={13} color={T.grn}/>
             <span style={{fontSize:11.5,color:T.grn}}>
-              This salary will automatically appear in <strong>Finance → Pending Payments</strong> on due date (warning 7 days before)
+             {t("payroll.this_salary_will_automatically_appear_in")} <strong>{t("payroll.finance_pending_payments")}</strong> {t("payroll.on_due_date_warning_7_days")}
             </span>
           </div>
 
           <div style={{display:"flex",gap:8}}>
             <button onClick={()=>{setShowForm(false);setForm(blank);}}
               style={{flex:1,padding:"10px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>
-              Cancel
+             {t("common.cancel")}
             </button>
             <button onClick={handleCreate} disabled={!form.name.trim()||!form.amount}
               style={{flex:2,padding:"10px",borderRadius:7,background:form.name.trim()&&form.amount?T.grn:T.b1,color:form.name.trim()&&form.amount?"white":T.t4,fontSize:13,fontWeight:700,border:"none",cursor:form.name.trim()&&form.amount?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
-              <IcChk size={14} color={form.name.trim()&&form.amount?"white":T.t4}/> Create Salary Entry
+              <IcChk size={14} color={form.name.trim()&&form.amount?"white":T.t4}/> {t("payroll.create_salary_entry")}
             </button>
           </div>
         </div>
@@ -3686,8 +3660,8 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
         {monthRecords.length===0&&(
           <div style={{padding:"40px",textAlign:"center",color:T.t4}}>
             <IcSlip size={32} color={T.b2}/>
-            <div style={{fontSize:13,marginTop:8}}>No salary entries for {MONTHS[month]} {year}</div>
-            <div style={{fontSize:11.5,color:T.t4,marginTop:3}}>Click "Create Salary" to add entries</div>
+            <div style={{fontSize:13,marginTop:8}}>{t("payroll.no_salary_entries_for_months_year", { MONTHS: MONTHS[month], year })}</div>
+            <div style={{fontSize:11.5,color:T.t4,marginTop:3}}>{t("payroll.click_create_salary_to_add_entries")}</div>
           </div>
         )}
         {monthRecords.map((rec,i)=>{
@@ -3702,15 +3676,15 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
               <span style={{fontSize:10.5,fontFamily:"monospace",color:T.t4}}>{rec.id.slice(-6)}</span>
               <div>
                 <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{rec.name}</div>
-                <div style={{fontSize:10.5,color:T.t4}}>{rec.designation} {rec.daysPresent!=="NA"?`· ${rec.daysPresent}/${rec.totalDays} days`:"· Fixed"}</div>
+                <div style={{fontSize:10.5,color:T.t4}}>{rec.designation} {rec.daysPresent!=="NA"?`· ${rec.daysPresent}/${rec.totalDays} days`:t("payroll.fixed_2")}</div>
               </div>
               <span style={{fontSize:11,color:T.t3}}>{rec.category}</span>
               <span style={{fontSize:13,fontWeight:700,color:T.t1}}>₹{fmtN(rec.amount)}</span>
               <span style={{fontSize:11.5,color:T.t3}}>{rec.salaryDate}</span>
               <div>
                 <div style={{fontSize:11.5,fontWeight:600,color:isOverdue?T.red:isDueSoon?T.amb:T.t3}}>{rec.dueDate}</div>
-                {isOverdue&&<div style={{fontSize:9.5,color:T.red}}>Overdue {Math.abs(diff)}d</div>}
-                {isDueSoon&&<div style={{fontSize:9.5,color:T.amb}}>Due in {diff}d ⚠</div>}
+                {isOverdue&&<div style={{fontSize:9.5,color:T.red}}>{t("payroll.overdue_mathd", { Math: Math.abs(diff) })}</div>}
+                {isDueSoon&&<div style={{fontSize:9.5,color:T.amb}}>{t("payroll.due_in_diffd", { diff })}</div>}
               </div>
               <Pill label={rec.status} c={statusC.c} bg={statusC.bg} brd={statusC.brd}/>
             </div>
@@ -3773,7 +3747,7 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
       try{
         const r=await api.post("/wallets/salary/settle",{run_item_id:Number(itemId),amount:remaining,payment_method:"manual",tx_ref:payForm.txRef||undefined});
         if(!r.success){ window.alert(r.message||"Settle failed"); setMarkPayModal(null); return; }
-      }catch(err){ console.error("Mark paid (run):",err); window.alert("Settle failed"); setMarkPayModal(null); return; }
+      }catch(err){ console.error("Mark paid (run):",err); window.alert(t("payroll.settle_failed")); setMarkPayModal(null); return; }
       setRunRecs(p=>p.map(r=>r.id===rec.id?{...r,status:"Paid",settled:rec.amount,paidDate:payForm.paidDate,txRef:payForm.txRef}:r));
       setMarkPayModal(null);
       return;
@@ -3790,11 +3764,11 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
       {/* KPI strip */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:12}}>
         {[
-          {l:"Total Salary",v:`₹${fmt(totalCreated)}`,c:T.blu},
-          {l:"Paid",v:`₹${fmt(totalPaid)}`,c:T.grn},
-          {l:"Pending",v:`₹${fmt(totalPending)}`,c:totalPending>0?T.amb:T.grn},
-          {l:"Overdue",v:overdue,c:overdue>0?T.red:T.grn,isBig:true},
-          {l:"Due in 7 days",v:dueSoon,c:dueSoon>0?T.amb:T.grn,isBig:true},
+          {l:t("payroll.total_salary"),v:`₹${fmt(totalCreated)}`,c:T.blu},
+          {l:t("common.paid"),v:`₹${fmt(totalPaid)}`,c:T.grn},
+          {l:t("common.pending"),v:`₹${fmt(totalPending)}`,c:totalPending>0?T.amb:T.grn},
+          {l:t("common.overdue"),v:overdue,c:overdue>0?T.red:T.grn,isBig:true},
+          {l:t("payroll.due_in_7_days"),v:dueSoon,c:dueSoon>0?T.amb:T.grn,isBig:true},
         ].map((s,i)=>(
           <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1.5px solid ${s.c}22`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{s.l}</div>
@@ -3811,7 +3785,7 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
             {overdue>0?`${overdue} salary payments overdue!`:""} {dueSoon>0?`${dueSoon} payments due within 7 days — check Finance module`:""}
           </span>
           <span style={{marginLeft:"auto",fontSize:10.5,color:T.t4,display:"flex",alignItems:"center",gap:4}}>
-            <IcFinLink size={11} color={T.t4}/> Visible in Finance → Pending Payments
+            <IcFinLink size={11} color={T.t4}/> {t("payroll.visible_in_finance_pending_payments")}
           </span>
         </div>
       )}
@@ -3832,7 +3806,7 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
             </button>
           ))}
         </div>
-        <span style={{fontSize:11,color:T.t4,marginLeft:4}}>{records.length} records · ₹{fmtN(records.reduce((s,r)=>s+r.amount,0))} total</span>
+        <span style={{fontSize:11,color:T.t4,marginLeft:4}}>{t("payroll.records_records_fmtn_total", { records: records.length, fmtN: fmtN(records.reduce((s,r)=>s+r.amount,0)) })}</span>
       </div>
 
       {/* Table */}
@@ -3854,7 +3828,7 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
               <div>
                 <div style={{fontSize:12.5,fontWeight:600,color:T.t1,display:"flex",alignItems:"center",gap:6}}>
                   {rec.name}
-                  <span style={{fontSize:8.5,fontWeight:700,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:.3,color:rec.source==="Run"?T.blu:T.slt,background:rec.source==="Run"?T.bluL:T.sltL,border:`1px solid ${rec.source==="Run"?T.blu:T.slt}33`}}>{rec.source==="Run"?"Run":"Manual"}</span>
+                  <span style={{fontSize:8.5,fontWeight:700,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:.3,color:rec.source==="Run"?T.blu:T.slt,background:rec.source==="Run"?T.bluL:T.sltL,border:`1px solid ${rec.source==="Run"?T.blu:T.slt}33`}}>{rec.source==="Run"?t("payroll.run"):t("common.manual")}</span>
                 </div>
                 <div style={{fontSize:10,color:T.t4}}>{rec.designation} · {rec.category||""} · {MONTHS[rec.month]} {rec.year}</div>
               </div>
@@ -3863,9 +3837,9 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
               <div>
                 <div style={{fontSize:11.5,fontWeight:600,color:isOverdue?T.red:isDueSoon?T.amb:T.t3}}>{rec.dueDate}</div>
                 {isOverdue&&<div style={{fontSize:9,color:T.red,fontWeight:700}}>OVERDUE {Math.abs(diff)}d</div>}
-                {isDueSoon&&<div style={{fontSize:9,color:T.amb,fontWeight:700}}>DUE IN {diff}d</div>}
+                {isDueSoon&&<div style={{fontSize:9,color:T.amb,fontWeight:700}}>{t("payroll.due_in_diffd", { diff })}</div>}
               </div>
-              <span style={{fontSize:11.5,color:T.t3}}>{rec.daysPresent==="NA"?"Fixed":`${rec.daysPresent}/${rec.totalDays}`}</span>
+              <span style={{fontSize:11.5,color:T.t3}}>{rec.daysPresent==="NA"?t("payroll.fixed"):`${rec.daysPresent}/${rec.totalDays}`}</span>
               <div>
                 <div style={{fontSize:11,color:T.t2}}>{rec.bankName||"—"}</div>
                 <div style={{fontSize:9.5,color:T.t4}}>{rec.accountNo?rec.accountNo.slice(-6)+"...":"—"}</div>
@@ -3875,17 +3849,17 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
                 {rec.status==="Pending"&&(
                   <button onClick={()=>setMarkPayModal(rec)}
                     style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,cursor:"pointer",fontWeight:700}}>
-                    Mark Paid
+                   {t("payroll.mark_paid")}
                   </button>
                 )}
                 {rec.status==="Paid"&&rec.paidDate&&(
-                  <div style={{fontSize:9,color:T.t4}}>Paid {rec.paidDate}</div>
+                  <div style={{fontSize:9,color:T.t4}}>{t("payroll.paid_paiddate", { paidDate: rec.paidDate })}</div>
                 )}
               </div>
             </div>
           );
         })}
-        {records.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:13}}>No records match</div>}
+        {records.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:13}}>{t("payroll.no_records_match")}</div>}
       </div>
 
       {/* Mark Paid Modal */}
@@ -3894,14 +3868,14 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(420px,95vw)",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
           <div style={{background:T.sb,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
-              <div style={{fontSize:13,fontWeight:700,color:"white"}}>Mark as Paid</div>
+              <div style={{fontSize:13,fontWeight:700,color:"white"}}>{t("payroll.mark_as_paid")}</div>
               <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)"}}>{markPayModal.name} · ₹{fmtN(markPayModal.amount)}</div>
             </div>
             <button onClick={()=>setMarkPayModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={13}/></button>
           </div>
           <div style={{padding:"14px 16px"}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:12}}>
-              {[{l:"Paid Date",k:"paidDate",type:"date"},{l:"Paid By",k:"paidBy",ph:"Who processed"},{l:"Tx Reference",k:"txRef",ph:"UTR / Cheque no",col:2}].map(f=>(
+              {[{l:t("payroll.paid_date"),k:"paidDate",type:"date"},{l:t("payroll.paid_by"),k:"paidBy",ph:"Who processed"},{l:t("payroll.tx_reference"),k:"txRef",ph:"UTR / Cheque no",col:2}].map(f=>(
                 <div key={f.k} style={{gridColumn:f.col===2?"span 2":"span 1"}}>
                   <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{f.l}</label>
                   <input type={f.type||"text"} value={payForm[f.k]} onChange={e=>setPayForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
@@ -3912,13 +3886,13 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
             </div>
             {/* Finance sync note */}
             <div style={{padding:"7px 10px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:6,marginBottom:12,fontSize:11.5,color:T.grn}}>
-              <IcFinLink size={11} color={T.grn} style={{marginRight:5}}/> Payment will sync to Finance module automatically
+              <IcFinLink size={11} color={T.grn} style={{marginRight:5}}/> {t("payroll.payment_will_sync_to_finance_module")}
             </div>
             <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>setMarkPayModal(null)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+              <button onClick={()=>setMarkPayModal(null)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
               <button onClick={()=>markPaid(markPayModal)}
                 style={{flex:2,padding:"9px",borderRadius:7,background:T.grn,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                <IcChk size={14} color="white"/> Confirm Payment
+                <IcChk size={14} color="white"/> {t("payroll.confirm_payment")}
               </button>
             </div>
           </div>
@@ -3993,7 +3967,7 @@ function MobilePunchTab(){
     <div style={{maxWidth:480,margin:"0 auto"}}>
       {/* Mobile-style header */}
       <div style={{background:T.sb,borderRadius:12,padding:"16px 20px",marginBottom:14,textAlign:"center"}}>
-        <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"1px",marginBottom:4}}>Site Attendance</div>
+        <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"1px",marginBottom:4}}>{t("payroll.site_attendance")}</div>
         <div style={{fontSize:28,fontWeight:800,color:"white",letterSpacing:"-1px"}}>
           {new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true})}
         </div>
@@ -4002,16 +3976,16 @@ function MobilePunchTab(){
 
       {/* Worker select */}
       <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"13px 16px",marginBottom:10}}>
-        <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:6}}>Worker / Employee</label>
+        <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:6}}>{t("payroll.worker_employee")}</label>
         <SearchSelect value={workerName} options={ALL_WORKERS}
-          onChange={v=>setWorkerName(v)} placeholder="Select worker..."/>
+          onChange={v=>setWorkerName(v)} placeholder={t("payroll.select_worker")}/>
       </div>
 
       {/* Project select */}
       <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"13px 16px",marginBottom:10}}>
-        <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:6}}>Project / Site</label>
+        <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:6}}>{t("finance.project_site")}</label>
         <SearchSelect value={selProject} options={PROJECTS}
-          onChange={v=>setSelProject(v)} placeholder="Select project..."/>
+          onChange={v=>setSelProject(v)} placeholder={t("common.select_project")}/>
       </div>
 
       {/* GPS Location */}
@@ -4023,14 +3997,14 @@ function MobilePunchTab(){
             </div>
             <div>
               <div style={{fontSize:12,fontWeight:600,color:location?T.grn:T.t2}}>
-                {location?"Location Captured":"GPS Location"}
+                {location?t("payroll.location_captured"):t("payroll.gps_location")}
               </div>
-              <div style={{fontSize:10.5,color:T.t4}}>{location?location.address:"Not captured yet"}</div>
+              <div style={{fontSize:10.5,color:T.t4}}>{location?location.address:t("payroll.not_captured_yet")}</div>
             </div>
           </div>
           <button onClick={getLocation} disabled={locLoading}
             style={{padding:"7px 13px",borderRadius:7,background:location?T.grnL:T.blu,color:location?T.grn:"white",border:`1px solid ${location?T.grnM:"transparent"}`,fontSize:12,fontWeight:700,cursor:locLoading?"wait":"pointer"}}>
-            {locLoading?"Detecting...":(location?"Re-capture":"Capture GPS")}
+            {locLoading?t("payroll.detecting"):(location?t("payroll.re_capture"):t("payroll.capture_gps"))}
           </button>
         </div>
         {location&&<div style={{marginTop:6,fontSize:10,color:T.t4,fontFamily:"monospace"}}>
@@ -4042,7 +4016,7 @@ function MobilePunchTab(){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
         {/* PUNCH IN */}
         <button
-          onClick={()=>{if(!selProject){alert("Please select a project first");return;}doPunch("IN");}}
+          onClick={()=>{if(!selProject){alert(t("payroll.please_select_a_project_first"));return;}doPunch("IN");}}
           disabled={punchState==="in"}
           style={{
             padding:"24px 16px",borderRadius:14,
@@ -4055,12 +4029,12 @@ function MobilePunchTab(){
             transition:"all .2s",display:"flex",flexDirection:"column",alignItems:"center",gap:8
           }}>
           <IcClockIn size={28} color={punchState==="in"?T.grn:"white"}/>
-          {punchState==="in"?"PUNCHED IN":"PUNCH IN"}
+          {punchState==="in"?t("payroll.punched_in"):t("payroll.punch_in")}
           {punchState==="in"&&punchTime&&<span style={{fontSize:11,fontWeight:400}}>at {punchTime}</span>}
         </button>
         {/* PUNCH OUT */}
         <button
-          onClick={()=>{if(!selProject){alert("Please select a project first");return;}doPunch("OUT");}}
+          onClick={()=>{if(!selProject){alert(t("payroll.please_select_a_project_first"));return;}doPunch("OUT");}}
           disabled={punchState==="out"}
           style={{
             padding:"24px 16px",borderRadius:14,
@@ -4073,14 +4047,14 @@ function MobilePunchTab(){
             transition:"all .2s",display:"flex",flexDirection:"column",alignItems:"center",gap:8
           }}>
           <IcClockIn size={28} color={punchState==="out"?T.slt:"white"}/>
-          {punchState==="out"?"NOT PUNCHED":"PUNCH OUT"}
+          {punchState==="out"?t("payroll.not_punched"):t("payroll.punch_out")}
         </button>
       </div>
 
       {/* Today's punch log */}
       <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
         <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <span style={{fontSize:12,fontWeight:700,color:T.t1}}>Today's Punch Log</span>
+          <span style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("payroll.today_s_punch_log")}</span>
           <span style={{fontSize:10.5,color:T.t4}}>{punchLog.length} entries</span>
         </div>
         {punchLog.slice(0,6).map((p,i)=>(
@@ -4138,18 +4112,17 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
       <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:14}}>
         <div style={{padding:"12px 16px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:8}}>
           <IcPay size={14} color={T.blu}/>
-          <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Salary Payment Settings</span>
+          <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("payroll.salary_payment_settings")}</span>
         </div>
         <div style={{padding:"16px"}}>
           {/* Default due days */}
           <div style={{marginBottom:18}}>
             <label style={{fontSize:11,fontWeight:700,color:T.t1,display:"block",marginBottom:4}}>
-              Default Payment Due Days
+             {t("payroll.default_payment_due_days")}
             </label>
             <div style={{fontSize:12,color:T.t3,marginBottom:8,lineHeight:1.6}}>
-              After salary creation date, how many days later should payment be due?
-              <br/>Example: Salary created on 30 March + <strong>{localDays} days</strong> = Due on {addDays("2026-03-30",Number(localDays))}
-            </div>
+              {t("payroll.due_days_after_creation")}
+              <br/><Rich k="payroll.example_salary_created_on_30_march" params={{ localDays, addDays: addDays("2026-03-30",Number(localDays)) }} /></div>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
               <input type="range" min={1} max={30} value={localDays} onChange={e=>setLocalDays(e.target.value)}
                 style={{flex:1,accentColor:T.blu}}/>
@@ -4173,28 +4146,28 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
 
           {/* Warning period */}
           <div style={{padding:"12px 14px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:8,marginBottom:16}}>
-            <div style={{fontSize:11.5,fontWeight:700,color:T.amb,marginBottom:4}}>Finance Alert Settings</div>
+            <div style={{fontSize:11.5,fontWeight:700,color:T.amb,marginBottom:4}}>{t("payroll.finance_alert_settings")}</div>
             <div style={{fontSize:12,color:"#92400E",lineHeight:1.6}}>
-              Salary payments appear in Finance → Pending Payments when due date is within
-              <strong style={{color:T.amb,margin:"0 4px"}}>7 days</strong>
-              (fixed). Overdue payments are highlighted in red immediately.
+             {t("payroll.salary_payments_appear_in_finance_pending")}
+              <strong style={{color:T.amb,margin:"0 4px"}}>{t("payroll.7_days")}</strong>
+             {t("payroll.fixed_overdue_payments_are_highlighted_in")}
             </div>
           </div>
 
           {/* Working days */}
           <div style={{marginBottom:16}}>
-            <label style={{fontSize:11,fontWeight:700,color:T.t1,display:"block",marginBottom:4}}>Working Days Per Month</label>
-            <div style={{fontSize:12,color:T.t3,marginBottom:6}}>Used to calculate pro-rata attendance-based salaries</div>
+            <label style={{fontSize:11,fontWeight:700,color:T.t1,display:"block",marginBottom:4}}>{t("payroll.working_days_per_month")}</label>
+            <div style={{fontSize:12,color:T.t3,marginBottom:6}}>{t("payroll.used_to_calculate_pro_rata_attendance")}</div>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <input type="number" min={20} max={31} value={localWorkDays} onChange={e=>setLocalWorkDays(e.target.value)}
                 style={{width:70,padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:14,fontWeight:600,color:T.t1,outline:"none",textAlign:"center",fontFamily:"inherit"}}/>
-              <span style={{fontSize:12,color:T.t3}}>days (current: {workingDays} days)</span>
+              <span style={{fontSize:12,color:T.t3}}>{t("payroll.days_current_workingdays_days", { workingDays })}</span>
             </div>
           </div>
 
           <button onClick={save}
             style={{padding:"10px 24px",borderRadius:8,background:saved?T.grn:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:7,transition:"background .2s"}}>
-            {saved?<><IcChk size={14} color="white"/> Settings Saved!</>:<><IcChk size={14} color="white"/> Save Settings</>}
+            {saved?<><IcChk size={14} color="white"/> {t("payroll.settings_saved")}</>:<><IcChk size={14} color="white"/> {t("payroll.save_settings")}</>}
           </button>
         </div>
       </div>
@@ -4203,14 +4176,14 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
       <div style={{background:T.surface,borderRadius:10,border:`1.5px solid ${T.ambM}`,overflow:"hidden"}}>
         <div style={{padding:"12px 16px",background:T.ambL,borderBottom:`1px solid ${T.ambM}`,display:"flex",alignItems:"center",gap:8}}>
           <IcFinLink size={14} color={T.amb}/>
-          <span style={{fontSize:13,fontWeight:700,color:T.amb}}>How Finance Integration Works</span>
+          <span style={{fontSize:13,fontWeight:700,color:T.amb}}>{t("payroll.how_finance_integration_works")}</span>
         </div>
         <div style={{padding:"14px 16px"}}>
           {[
-            {step:"1",title:"Salary Create karo",desc:"Payroll → Manual Salary tab mein entry banao — name, amount, due date set karo",c:T.blu},
-            {step:"2",title:"Auto Finance Queue",desc:"Due date 7 days se kam bacha → Finance → Pending Payments mein amber warning",c:T.amb},
-            {step:"3",title:"Due Date pe Red Alert",desc:"Due date aa gayi → Finance mein red urgent highlight",c:T.red},
-            {step:"4",title:"Finance Settle / Pay",desc:"Finance team payment kare (partial bhi) → Salary Ledger mein Partial/Paid update ho jaata hai",c:T.grn},
+            {step:"1",title:t("payroll.salary_create_karo"),desc:t("payroll.payroll_manual_salary_tab_mein_entry"),c:T.blu},
+            {step:"2",title:t("payroll.auto_finance_queue"),desc:t("payroll.due_date_7_days_se_kam"),c:T.amb},
+            {step:"3",title:t("payroll.due_date_pe_red_alert"),desc:t("payroll.due_date_aa_gayi_finance_mein"),c:T.red},
+            {step:"4",title:t("payroll.finance_settle_pay"),desc:t("payroll.finance_team_payment_kare_partial_bhi"),c:T.grn},
           ].map((s,i)=>(
             <div key={i} style={{display:"flex",gap:12,marginBottom:i<3?12:0}}>
               <div style={{width:24,height:24,borderRadius:"50%",background:s.c,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:11,fontWeight:800,color:"white"}}>{s.step}</div>
@@ -4225,17 +4198,17 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
         <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden",marginTop:14}}>
           <div style={{padding:"12px 16px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:15}}>📍</span>
-            <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Attendance & Auto Punch-Out</span>
+            <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("payroll.attendance_auto_punch_out")}</span>
           </div>
           <div style={{padding:"16px"}}>
             <div style={{fontSize:11.5,color:T.t3,marginBottom:8,lineHeight:1.6}}>
-              Worker din bhar site se <b>aata-jaata</b> reh sakta hai — koi auto-logout nahi. Sirf <b>normal shift poori hone ke baad</b> agar wo site chhod de to auto punch-out. App band ho / site na chhode to <b>absolute max</b> backstop. Har auto-close <b>HR review queue</b> me jata hai.
+             {t("payroll.worker_din_bhar_site_se")} <b>{t("payroll.aata_jaata")}</b> {t("payroll.reh_sakta_hai_koi_auto_logout")} <b>{t("payroll.normal_shift_poori_hone_ke_baad")}</b> {t("payroll.agar_wo_site_chhod_de_to")} <b>{t("payroll.absolute_max")}</b> {t("payroll.backstop_har_auto_close")} <b>{t("payroll.hr_review_queue")}</b> {t("payroll.me_jata_hai")}
             </div>
             {[
-              {tog:"autoclose_enabled",t:"Auto punch-out",d:"Master switch — neeche ka poora logic on/off",master:true},
-              {num:"max_shift_hours",t:"Normal shift",d:"Itne ghante ke baad HI site chhodne pe auto-logout shuru (pehle nahi — worker free aata-jaata hai)",suf:"hours",mn:1,mx:24},
-              {tog:"geo_exit_enabled",num:"geo_exit_minutes",t:"Shift ke baad site chhodne pe logout",d:"Shift ke baad itne min continuous site se bahar = auto punch-out (exit time pe)",suf:"min",mn:1,mx:240},
-              {num:"hard_cap_hours",t:"Absolute max (safety)",d:"Itne ghante baad har haal me band — app band ya site na chhode tab bhi",suf:"hours",mn:1,mx:48},
+              {tog:"autoclose_enabled",t:t("payroll.auto_punch_out"),d:t("payroll.master_switch_neeche_ka_poora_logic"),master:true},
+              {num:"max_shift_hours",t:t("payroll.normal_shift"),d:t("payroll.itne_ghante_ke_baad_hi_site"),suf:"hours",mn:1,mx:24},
+              {tog:"geo_exit_enabled",num:"geo_exit_minutes",t:t("payroll.shift_ke_baad_site_chhodne_pe"),d:t("payroll.shift_ke_baad_itne_min_continuous"),suf:"min",mn:1,mx:240},
+              {num:"hard_cap_hours",t:t("payroll.absolute_max_safety"),d:t("payroll.itne_ghante_baad_har_haal_me"),suf:"hours",mn:1,mx:48},
             ].map((row,ri)=>{
               const masterOn=att.autoclose_enabled==="1";
               const dim=!row.master&&!masterOn;
@@ -4275,21 +4248,21 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
                 </span>
               </label>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Punch-out reminder</div>
-                <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>Worker ko "still punched in" notification — <b>kab bhejni hai</b> choose karo.</div>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("payroll.punch_out_reminder")}</div>
+                <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>{t("payroll.worker_ko_still_punched_in_notification")} <b>{t("payroll.kab_bhejni_hai")}</b> {t("payroll.choose_karo")}</div>
                 {att.reminder_enabled==="1" && (
                   <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap"}}>
                     <select value={att.reminder_mode||"after_hours"} onChange={e=>setA("reminder_mode",e.target.value)}
                       style={{padding:"7px 9px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
-                      <option value="after_hours">Punch-in ke baad (ghante)</option>
-                      <option value="at_shift_end">Shift end pe (normal shift poori hone pe)</option>
-                      <option value="fixed_time">Roz fixed time pe</option>
+                      <option value="after_hours">{t("payroll.punch_in_ke_baad_ghante")}</option>
+                      <option value="at_shift_end">{t("payroll.shift_end_pe_normal_shift_poori")}</option>
+                      <option value="fixed_time">{t("payroll.roz_fixed_time_pe")}</option>
                     </select>
                     {(att.reminder_mode||"after_hours")==="after_hours" && (
                       <span style={{display:"flex",alignItems:"center",gap:5}}>
                         <input type="number" min={1} max={24} value={att.reminder_after_hours} onChange={e=>setA("reminder_after_hours",e.target.value)}
                           style={{width:50,padding:"7px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:14,fontWeight:700,color:T.t1,textAlign:"center",outline:"none",fontFamily:"inherit"}}/>
-                        <span style={{fontSize:11,color:T.t3,fontWeight:600}}>hours baad</span>
+                        <span style={{fontSize:11,color:T.t3,fontWeight:600}}>{t("payroll.hours_baad")}</span>
                       </span>
                     )}
                     {att.reminder_mode==="fixed_time" && (
@@ -4316,20 +4289,20 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
                 </span>
               </label>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Punch-IN reminder (site pe aate hi)</div>
-                <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>Worker site fence ke andar aaye + punched-in na ho → <b>soft-vibration</b> reminder ([Punch In]/[Skip]). App khulne/resume pe check.</div>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("payroll.punch_in_reminder_site_pe_aate")}</div>
+                <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>{t("payroll.worker_site_fence_ke_andar_aaye")} <b>{t("payroll.soft_vibration")}</b> {t("payroll.reminder_punch_in_skip_app_khulne")}</div>
                 {att.punchin_reminder_enabled==="1" && (
                   <div style={{display:"flex",alignItems:"center",gap:7,marginTop:8,flexWrap:"wrap"}}>
-                    <span style={{fontSize:11,color:T.t3,fontWeight:600}}>Window</span>
+                    <span style={{fontSize:11,color:T.t3,fontWeight:600}}>{t("payroll.window")}</span>
                     <input type="time" value={att.punchin_window_start||"06:00"} onChange={e=>setA("punchin_window_start",e.target.value)}
                       style={{padding:"6px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,fontWeight:700,color:T.t1,outline:"none",fontFamily:"inherit"}}/>
                     <span style={{fontSize:11,color:T.t3}}>se</span>
                     <input type="time" value={att.punchin_window_end||"20:00"} onChange={e=>setA("punchin_window_end",e.target.value)}
                       style={{padding:"6px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,fontWeight:700,color:T.t1,outline:"none",fontFamily:"inherit"}}/>
-                    <span style={{fontSize:11,color:T.t3,fontWeight:600,marginLeft:4}}>· har</span>
+                    <span style={{fontSize:11,color:T.t3,fontWeight:600,marginLeft:4}}>{t("payroll.har")}</span>
                     <input type="number" min={1} max={12} value={att.punchin_cooldown_hours} onChange={e=>setA("punchin_cooldown_hours",e.target.value)}
                       style={{width:46,padding:"7px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:14,fontWeight:700,color:T.t1,textAlign:"center",outline:"none",fontFamily:"inherit"}}/>
-                    <span style={{fontSize:11,color:T.t3,fontWeight:600}}>ghante me ek baar</span>
+                    <span style={{fontSize:11,color:T.t3,fontWeight:600}}>{t("payroll.ghante_me_ek_baar")}</span>
                   </div>
                 )}
               </div>
@@ -4343,8 +4316,8 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
                 </span>
               </label>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Daily punch-in reminder <span style={{color:T.grn}}>(app band ho tab bhi)</span></div>
-                <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>Roz fixed time pe punch-in reminder — app <b>bilkul band</b> ho tab bhi baje (OS-scheduled, no battery drain). [Punch In]/[Skip].</div>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("payroll.daily_punch_in_reminder")} <span style={{color:T.grn}}>{t("payroll.app_band_ho_tab_bhi")}</span></div>
+                <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>{t("payroll.roz_fixed_time_pe_punch_in")} <b>{t("payroll.bilkul_band")}</b> {t("payroll.ho_tab_bhi_baje_os_scheduled")}</div>
                 {att.punchin_daily_enabled==="1" && (
                   <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
                     <span style={{fontSize:11,color:T.t3,fontWeight:600}}>roz</span>
@@ -4357,7 +4330,7 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
             </div>
             <button onClick={saveAtt}
               style={{marginTop:14,padding:"10px 24px",borderRadius:8,background:attSaved?T.grn:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:7}}>
-              <IcChk size={14} color="white"/> {attSaved?"Saved!":"Save Attendance Settings"}
+              <IcChk size={14} color="white"/> {attSaved?t("finance.saved"):t("payroll.save_attendance_settings")}
             </button>
           </div>
         </div>
@@ -4385,8 +4358,8 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
 
   const save=async()=>{
     const d=modal.data;
-    if(!d.name || !d.name.trim()){ setErr("Name is required"); return; }
-    if(!d.rate_per_day || Number(d.rate_per_day)<=0){ setErr("Rate per day required"); return; }
+    if(!d.name || !d.name.trim()){ setErr(t("payroll.name_is_required")); return; }
+    if(!d.rate_per_day || Number(d.rate_per_day)<=0){ setErr(t("payroll.rate_per_day_required")); return; }
     setSaving(true);setErr("");
     try{
       const payload={
@@ -4426,7 +4399,7 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
   };
 
   const remove=async(w)=>{
-    if(!await window.confirmAsync(`Remove worker "${w.name}"?`)) return;
+    if(!await window.confirmAsync(t("payroll.remove_worker_name", { name: w.name }))) return;
     try{
       const res=await api.del(`/payroll/workers/${w.id}`);
       if(res.success) setWorkers(p=>p.filter(x=>x.id!==w.id));
@@ -4443,19 +4416,19 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
       <div style={{display:"flex",gap:10,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{position:"relative",minWidth:240}}>
           <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={12} color={T.t4}/></span>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name or skill..."
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("payroll.search_by_name_or_skill")}
             style={{height:32,padding:"0 8px 0 26px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",width:"100%"}}/>
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
-          <span style={{fontSize:11.5,color:T.t3}}>Total: <b style={{color:T.t1}}>{workers.length}</b></span>
+          <span style={{fontSize:11.5,color:T.t3}}>{t("common.total_2")} <b style={{color:T.t1}}>{workers.length}</b></span>
           {isAdmin&&<button onClick={()=>open("add")}
             style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-            <IcAdd size={13} color="white"/> Add Worker
+            <IcAdd size={13} color="white"/> {t("common.add_worker")}
           </button>}
         </div>
       </div>
 
-      {filtered.length===0&&<EmptyState icon={<div style={{fontSize:40}}>👷</div>} message={search?"No matching workers":"No workers yet"} sub={search?"":"Add workers to start tracking attendance"}/>}
+      {filtered.length===0&&<EmptyState icon={<div style={{fontSize:40}}>👷</div>} message={search?"No matching workers":"No workers yet"} sub={search?"":t("payroll.add_workers_to_start_tracking_attendance")}/>}
 
       {/* Table */}
       {filtered.length>0&&(
@@ -4474,7 +4447,7 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
               <span style={{fontSize:11.5,color:T.t2}}>{w.skill||w.trade||"—"}</span>
               <span style={{fontSize:12,fontWeight:600,color:T.t1}}>₹{fmtN(w.ratePerDay||w.rate_per_day||0)}</span>
               <span style={{fontSize:12,color:T.t3}}>₹{fmtN(w.rateOT||w.rate_ot||0)}</span>
-              <span style={{fontSize:11.5,color:T.t3}}>{w.contractor||"Self"}</span>
+              <span style={{fontSize:11.5,color:T.t3}}>{w.contractor||t("payroll.self")}</span>
               <span style={{fontSize:11,color:T.t4}}>{w.phone||"—"}</span>
               <div style={{display:"flex",gap:5}}>
                 {isAdmin&&<>
@@ -4500,7 +4473,7 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
             style={{background:T.surface,borderRadius:12,padding:22,width:480,maxWidth:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
               <div style={{fontSize:15,fontWeight:800,color:T.t1}}>
-                {modal.mode==="add"?"Add Worker":"Edit Worker"}
+                {modal.mode==="add"?t("common.add_worker"):t("master_library.edit_worker")}
               </div>
               <button onClick={close} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:T.t4}}>
                 <IcX size={18}/>
@@ -4509,43 +4482,43 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <div style={{gridColumn:"span 2"}}>
-                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>Name *</label>
+                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>{t("common.name")}</label>
                 <input value={modal.data.name} onChange={e=>setModal({...modal,data:{...modal.data,name:e.target.value}})}
                   style={{width:"100%",padding:"8px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
 
               <div>
-                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>Skill</label>
-                <SearchSelect value={modal.data.skill||""} options={SKILLS} onChange={v=>setModal({...modal,data:{...modal.data,skill:v}})} placeholder="Select skill..."/>
+                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>{t("payroll.skill")}</label>
+                <SearchSelect value={modal.data.skill||""} options={SKILLS} onChange={v=>setModal({...modal,data:{...modal.data,skill:v}})} placeholder={t("payroll.select_skill")}/>
               </div>
 
               <div>
-                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>Phone</label>
+                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>{t("common.phone")}</label>
                 <input value={modal.data.phone||""} onChange={e=>setModal({...modal,data:{...modal.data,phone:e.target.value}})}
                   style={{width:"100%",padding:"8px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
 
               <div>
-                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>Rate per Day *</label>
+                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>{t("payroll.rate_per_day")}</label>
                 <input type="number" value={modal.data.rate_per_day} onChange={e=>setModal({...modal,data:{...modal.data,rate_per_day:e.target.value}})}
                   style={{width:"100%",padding:"8px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
 
               <div>
-                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>OT Rate (per hour)</label>
+                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>{t("payroll.ot_rate_per_hour")}</label>
                 <input type="number" value={modal.data.rate_ot||""} onChange={e=>setModal({...modal,data:{...modal.data,rate_ot:e.target.value}})}
                   style={{width:"100%",padding:"8px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
 
               <div>
-                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>Contractor</label>
-                <input value={modal.data.contractor||""} onChange={e=>setModal({...modal,data:{...modal.data,contractor:e.target.value}})} placeholder="Self"
+                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>{t("payroll.contractor")}</label>
+                <input value={modal.data.contractor||""} onChange={e=>setModal({...modal,data:{...modal.data,contractor:e.target.value}})} placeholder={t("payroll.self")}
                   style={{width:"100%",padding:"8px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
 
               <div>
-                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>Project</label>
-                <SearchSelect value={modal.data.project||""} options={PROJECTS||[]} onChange={v=>setModal({...modal,data:{...modal.data,project:v}})} placeholder="— Any project —"/>
+                <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>{t("common.project")}</label>
+                <SearchSelect value={modal.data.project||""} options={PROJECTS||[]} onChange={v=>setModal({...modal,data:{...modal.data,project:v}})} placeholder={t("payroll.any_project")}/>
               </div>
             </div>
 
@@ -4554,11 +4527,11 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
             <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}}>
               <button onClick={close} disabled={saving}
                 style={{padding:"8px 16px",borderRadius:7,background:"none",border:`1.5px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={save} disabled={saving}
                 style={{padding:"8px 18px",borderRadius:7,background:saving?T.b1:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer"}}>
-                {saving?"Saving...":"Save"}
+                {saving?t("common.saving"):t("common.save")}
               </button>
             </div>
           </div>
@@ -4618,7 +4591,7 @@ function WorkerPaymentDrawer({worker,attMonth,month,year,onClose,onMarkPaid,paym
         <Avatar name={worker.name} size={42} color={T.amb}/>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:15,fontWeight:700}}>{worker.name}</div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>{worker.trade} · ₹{fmtN(worker.ratePerDay)}/day · OT ₹{fmtN(worker.rateOT||0)}/hr</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>{t("payroll.trade_fmtn_day_ot_fmtn2_hr", { trade: worker.trade, fmtN: fmtN(worker.ratePerDay), fmtN2: fmtN(worker.rateOT||0) })}</div>
         </div>
         <button onClick={onClose} style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",borderRadius:6,color:"white",fontSize:18,width:30,height:30,cursor:"pointer"}}>×</button>
       </div>
@@ -4626,20 +4599,20 @@ function WorkerPaymentDrawer({worker,attMonth,month,year,onClose,onMarkPaid,paym
       <div style={{flex:1,overflowY:"auto",padding:"14px 20px"}}>
         {/* Date range */}
         <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
-          <div style={{fontSize:11,color:T.t3,fontWeight:600}}>Period:</div>
+          <div style={{fontSize:11,color:T.t3,fontWeight:600}}>{t("payroll.period")}</div>
           <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,fontFamily:"inherit"}}/>
           <span style={{fontSize:11,color:T.t4}}>to</span>
           <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,fontFamily:"inherit"}}/>
-          <button onClick={()=>{setFrom(iso(lastSunday));setTo(iso(today));}} style={{padding:"4px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:700,cursor:"pointer"}}>Last Sun → today</button>
+          <button onClick={()=>{setFrom(iso(lastSunday));setTo(iso(today));}} style={{padding:"4px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:700,cursor:"pointer"}}>{t("payroll.last_sun_today")}</button>
         </div>
 
         {/* Stats grid */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
           {[
-            {l:"Present",v:stats.P,c:T.grn,bg:T.grnL},
-            {l:"Half Day",v:stats.H,c:T.amb,bg:T.ambL},
-            {l:"Absent",v:stats.A,c:T.red,bg:T.redL},
-            {l:"OT hrs",v:stats.OT,c:T.pur,bg:T.purL},
+            {l:t("common.present"),v:stats.P,c:T.grn,bg:T.grnL},
+            {l:t("common.half_day"),v:stats.H,c:T.amb,bg:T.ambL},
+            {l:t("common.absent"),v:stats.A,c:T.red,bg:T.redL},
+            {l:t("payroll.ot_hrs_2"),v:stats.OT,c:T.pur,bg:T.purL},
           ].map((s,i)=>(
             <div key={i} style={{padding:"10px 8px",background:s.bg,borderRadius:7,border:`1px solid ${s.c}33`,textAlign:"center"}}>
               <div style={{fontSize:18,fontWeight:800,color:s.c}}>{s.v}</div>
@@ -4651,17 +4624,17 @@ function WorkerPaymentDrawer({worker,attMonth,month,year,onClose,onMarkPaid,paym
         {/* Total + Already paid */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
           <div style={{padding:"12px 14px",background:`linear-gradient(135deg,${T.blu}12,${T.blu}06)`,borderRadius:8,border:`1.5px solid ${T.bluM}`}}>
-            <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>Period Payable</div>
+            <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{t("payroll.period_payable")}</div>
             <div style={{fontSize:22,fontWeight:800,color:T.blu,marginTop:3}}>₹{fmtN(stats.total)}</div>
           </div>
           <div style={{padding:"12px 14px",background:`linear-gradient(135deg,${T.grn}12,${T.grn}06)`,borderRadius:8,border:`1.5px solid ${T.grnM}`}}>
-            <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>Already Paid</div>
+            <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{t("payroll.already_paid")}</div>
             <div style={{fontSize:22,fontWeight:800,color:T.grn,marginTop:3}}>₹{fmtN(alreadyPaid)}</div>
           </div>
         </div>
 
         {/* Daily breakdown */}
-        <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:6}}>Daily breakdown</div>
+        <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:6}}>{t("payroll.daily_breakdown")}</div>
         <div style={{maxHeight:240,overflowY:"auto",border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:14}}>
           <table style={{width:"100%",fontSize:11.5,borderCollapse:"collapse"}}>
             <thead style={{background:T.surfaceB,position:"sticky",top:0}}>
@@ -4687,7 +4660,7 @@ function WorkerPaymentDrawer({worker,attMonth,month,year,onClose,onMarkPaid,paym
 
         {/* Existing payment records */}
         {matchingPayments.length>0&&(<>
-          <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:6}}>Payment records ({matchingPayments.length})</div>
+          <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:6}}>{t("payroll.payment_records_matchingpayments", { matchingPayments: matchingPayments.length })}</div>
           <div style={{border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:14}}>
             {matchingPayments.map((p,i)=>{
               const stColor=p.status==="paid"?T.grn:p.status==="cancelled"?T.slt:T.amb;
@@ -4699,7 +4672,7 @@ function WorkerPaymentDrawer({worker,attMonth,month,year,onClose,onMarkPaid,paym
                     <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{String(p.period_start).split("T")[0]} → {String(p.period_end).split("T")[0]}</div>
                   </div>
                   <span style={{padding:"3px 9px",borderRadius:11,background:stBg,color:stColor,fontSize:10,fontWeight:700,textTransform:"capitalize",border:`1px solid ${stColor}33`}}>{p.status}</span>
-                  {p.status==="pending"&&isAdmin&&<button onClick={()=>onMarkPaid(p,"cash")} style={{padding:"4px 10px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>✓ Mark Paid</button>}
+                  {p.status==="pending"&&isAdmin&&<button onClick={()=>onMarkPaid(p,"cash")} style={{padding:"4px 10px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>{t("payroll.mark_paid_2")}</button>}
                 </div>
               );
             })}
@@ -4708,7 +4681,7 @@ function WorkerPaymentDrawer({worker,attMonth,month,year,onClose,onMarkPaid,paym
 
         {matchingPayments.length===0&&stats.total>0&&(
           <div style={{padding:12,background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,fontSize:11.5,color:T.amb}}>
-            ⚡ Is period ke liye payment generate nahi hua. Payments tab pe "Generate Payments" button click karo.
+           {t("payroll.is_period_ke_liye_payment_generate")}
           </div>
         )}
       </div>
@@ -4754,14 +4727,14 @@ function DailyPaymentsTab({workers,isAdmin,attMonth,month,year}){
   useEffect(()=>{load();},[load]);
 
   const generate=async()=>{
-    if(!await window.confirmAsync(`Generate payments from ${from} to ${to}?\n\nThis will compute payable amount per worker based on attendance in this period.`)) return;
+    if(!await window.confirmAsync(t("payroll.generate_payments_from_from_to_to", { from, to }))) return;
     setGenerating(true);setErr("");
     try{
       const r=await api.post("/payroll/daily-labour/payments/generate",{
         period_start:from, period_end:to, cycle_type:cycle,
       });
       if(r.success){
-        alert(`Generated ${r.count} payment records`);
+        alert(t("payroll.generated_count_payment_records", { count: r.count }));
         load();
       }else{ setErr(r.message||"Generation failed"); }
     }catch(e){ setErr(e.message||"Network error"); }
@@ -4775,7 +4748,7 @@ function DailyPaymentsTab({workers,isAdmin,attMonth,month,year}){
     }catch(e){ alert(e.message); }
   };
   const cancel=async(p)=>{
-    if(!await window.confirmAsync("Cancel this payment record?")) return;
+    if(!await window.confirmAsync(t("payroll.cancel_this_payment_record"))) return;
     try{
       const r=await api.patch(`/payroll/daily-labour/payments/${p.id}`,{status:"cancelled"});
       if(r.success) load();
@@ -4800,10 +4773,10 @@ function DailyPaymentsTab({workers,isAdmin,attMonth,month,year}){
           </div>
 
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
-            <label style={{fontSize:11,color:T.t3}}>From:</label>
+            <label style={{fontSize:11,color:T.t3}}>{t("payroll.from")}</label>
             <input type="date" value={from} onChange={e=>{setFrom(e.target.value);setCycle("custom");}}
               style={{padding:"6px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
-            <label style={{fontSize:11,color:T.t3}}>To:</label>
+            <label style={{fontSize:11,color:T.t3}}>{t("payroll.to")}</label>
             <input type="date" value={to} onChange={e=>{setTo(e.target.value);setCycle("custom");}}
               style={{padding:"6px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
           </div>
@@ -4811,14 +4784,14 @@ function DailyPaymentsTab({workers,isAdmin,attMonth,month,year}){
           <div style={{marginLeft:"auto",display:"flex",gap:8}}>
             <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}
               style={{padding:"6px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-              <option value="all">All statuses</option>
-              <option value="pending">Pending</option>
-              <option value="paid">Paid</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="all">{t("payroll.all_statuses")}</option>
+              <option value="pending">{t("common.pending")}</option>
+              <option value="paid">{t("common.paid")}</option>
+              <option value="cancelled">{t("common.cancelled")}</option>
             </select>
             {isAdmin&&<button onClick={generate} disabled={generating}
               style={{padding:"7px 16px",borderRadius:7,background:generating?T.b1:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:generating?"not-allowed":"pointer"}}>
-              {generating?"Generating...":"⚡ Generate Payments"}
+              {generating?t("payroll.generating"):t("payroll.generate_payments")}
             </button>}
           </div>
         </div>
@@ -4827,15 +4800,15 @@ function DailyPaymentsTab({workers,isAdmin,attMonth,month,year}){
       {/* Summary */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
         <div style={{padding:"11px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,borderLeft:`3px solid ${T.amb}`}}>
-          <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>Pending Payable</div>
+          <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{t("payroll.pending_payable")}</div>
           <div style={{fontSize:18,fontWeight:700,color:T.amb,marginTop:3}}>₹{fmtN(totalPayable)}</div>
         </div>
         <div style={{padding:"11px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,borderLeft:`3px solid ${T.grn}`}}>
-          <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>Paid</div>
+          <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{t("common.paid")}</div>
           <div style={{fontSize:18,fontWeight:700,color:T.grn,marginTop:3}}>₹{fmtN(totalPaid)}</div>
         </div>
         <div style={{padding:"11px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,borderLeft:`3px solid ${T.blu}`}}>
-          <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>Records</div>
+          <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{t("payroll.records")}</div>
           <div style={{fontSize:18,fontWeight:700,color:T.blu,marginTop:3}}>{payments.length}</div>
         </div>
       </div>
@@ -4844,7 +4817,7 @@ function DailyPaymentsTab({workers,isAdmin,attMonth,month,year}){
 
       {/* Payments table */}
       {loading ? <LoadingSpinner/> :
-        payments.length===0 ? <EmptyState icon={<div style={{fontSize:40}}>💰</div>} message="No payments in this period" sub="Click Generate Payments to create from attendance"/> :
+        payments.length===0 ? <EmptyState icon={<div style={{fontSize:40}}>💰</div>} message="No payments in this period" sub={t("payroll.click_generate_payments_to_create_from")}/> :
         <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"2fr 1.3fr 0.8fr 0.8fr 1.1fr 1.1fr 1fr 140px",padding:"8px 14px",background:"#0D1B2A"}}>
             {["Worker","Period","Days","OT hrs","Gross","Net","Status","Actions"].map((h,i)=>(
@@ -4877,11 +4850,11 @@ function DailyPaymentsTab({workers,isAdmin,attMonth,month,year}){
                 <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:12,background:stBg,color:stColor,fontSize:10.5,fontWeight:700,border:`1px solid ${stColor}44`,textTransform:"capitalize",alignSelf:"flex-start"}}>{st}</span>
                 <div style={{display:"flex",gap:5}} onClick={e=>e.stopPropagation()}>
                   {st==="pending"&&isAdmin&&<>
-                    <button onClick={()=>markPaid(p,"cash")} title="Mark Paid (Cash)"
+                    <button onClick={()=>markPaid(p,"cash")} title={t("payroll.mark_paid_cash")}
                       style={{padding:"4px 9px",borderRadius:6,background:T.grn,color:"white",fontSize:10.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-                      ✓ Paid
+                     {t("payroll.paid")}
                     </button>
-                    <button onClick={()=>cancel(p)} title="Cancel"
+                    <button onClick={()=>cancel(p)} title={t("common.cancel")}
                       style={{padding:"4px 7px",borderRadius:6,background:T.redL,color:T.red,fontSize:10.5,fontWeight:700,border:`1px solid ${T.redM}`,cursor:"pointer"}}>
                       <IcX size={10} color={T.red}/>
                     </button>
@@ -4896,7 +4869,7 @@ function DailyPaymentsTab({workers,isAdmin,attMonth,month,year}){
       {/* Worker quick-pick — view drawer for any worker even if no payment row yet */}
       {workers.length>0&&(
         <div style={{marginTop:14,padding:"10px 14px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9}}>
-          <div style={{fontSize:11,color:T.t3,fontWeight:600,marginBottom:6}}>Quick view — click any worker for full breakdown</div>
+          <div style={{fontSize:11,color:T.t3,fontWeight:600,marginBottom:6}}>{t("payroll.quick_view_click_any_worker_for")}</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {workers.slice(0,20).map(w=>(
               <button key={w.id} onClick={()=>setDrawerWorker(w)}
@@ -4950,20 +4923,18 @@ function RateHistoryDrawer({skill,onClose}){
         <div style={{width:42,height:42,borderRadius:10,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>👷</div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:15,fontWeight:700}}>{skill.role}</div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>
-            {skill.category||"—"} · Current: <b style={{color:"white"}}>₹{Number(skill.rate||0).toLocaleString("en-IN")}/day</b>
-          </div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}><Rich k="payroll.skill_current_number_day" params={{ skill: skill.category||"—", Number: Number(skill.rate||0).toLocaleString("en-IN") }} /></div>
         </div>
         <button onClick={onClose} style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",borderRadius:6,color:"white",fontSize:18,width:30,height:30,cursor:"pointer"}}>×</button>
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"14px 20px"}}>
-        <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:8,letterSpacing:".3px",textTransform:"uppercase"}}>Rate Change History</div>
-        {loading&&<div style={{textAlign:"center",padding:40,color:T.t4}}><div style={{width:24,height:24,border:`2.5px solid ${T.b1}`,borderTopColor:T.blu,borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 8px"}}/>Loading history…</div>}
+        <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:8,letterSpacing:".3px",textTransform:"uppercase"}}>{t("payroll.rate_change_history")}</div>
+        {loading&&<div style={{textAlign:"center",padding:40,color:T.t4}}><div style={{width:24,height:24,border:`2.5px solid ${T.b1}`,borderTopColor:T.blu,borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 8px"}}/>{t("payroll.loading_history")}</div>}
         {!loading&&items.length===0&&(
           <div style={{textAlign:"center",padding:36,color:T.t4,fontSize:12.5,background:T.surfaceB,borderRadius:8,border:`1px dashed ${T.b1}`}}>
             <div style={{fontSize:30,marginBottom:8}}>📋</div>
-            Abhi tak koi rate change request nahi hua hai
+           {t("payroll.abhi_tak_koi_rate_change_request")}
           </div>
         )}
         {!loading&&items.map((h,i)=>{
@@ -4983,7 +4954,7 @@ function RateHistoryDrawer({skill,onClose}){
               {/* Rate change diff */}
               <div style={{padding:"10px 13px"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                  <span style={{fontSize:12,color:T.t3}}>From</span>
+                  <span style={{fontSize:12,color:T.t3}}>{t("common.from")}</span>
                   <span style={{fontSize:14,fontWeight:700,color:T.t1,padding:"3px 10px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`}}>₹{Number(h.current_rate||0).toLocaleString("en-IN")}</span>
                   <span style={{fontSize:14,color:T.blu,fontWeight:700}}>→</span>
                   <span style={{fontSize:14,fontWeight:700,color:T.t1,padding:"3px 10px",background:T.bluL,borderRadius:6,border:`1px solid ${T.bluM}`}}>₹{Number(h.requested_rate||0).toLocaleString("en-IN")}</span>
@@ -4991,7 +4962,7 @@ function RateHistoryDrawer({skill,onClose}){
                 </div>
                 {h.apply_scope&&(
                   <div style={{fontSize:10.5,color:h.apply_scope==="all"?T.amb:T.t3,fontWeight:600,marginBottom:6,padding:"3px 8px",background:h.apply_scope==="all"?T.ambL:T.surfaceB,borderRadius:5,display:"inline-block",border:`1px solid ${h.apply_scope==="all"?T.ambM:T.b1}`}}>
-                    {h.apply_scope==="all"?"🔄 Applied to ALL existing workers":"📋 Applied to new appointments only"}
+                    {h.apply_scope==="all"?t("payroll.applied_to_all_existing_workers"):t("payroll.applied_to_new_appointments_only")}
                   </div>
                 )}
                 {h.reason&&(
@@ -5002,20 +4973,20 @@ function RateHistoryDrawer({skill,onClose}){
                 {/* Audit trail — requested by + approver */}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,paddingTop:8,borderTop:`1px solid ${T.b1}`}}>
                   <div>
-                    <div style={{fontSize:9,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>Requested by</div>
+                    <div style={{fontSize:9,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>{t("common.requested_by")}</div>
                     <div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{h.requested_by_name||"—"}</div>
                   </div>
                   <div>
-                    <div style={{fontSize:9,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>{h.status==="Approved"?"Approved by":h.status==="Rejected"?"Rejected by":"Awaiting"}</div>
+                    <div style={{fontSize:9,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>{h.status==="Approved"?t("payment_request.approved_by"):h.status==="Rejected"?t("payroll.rejected_by"):t("payroll.awaiting")}</div>
                     <div style={{fontSize:11.5,fontWeight:600,color:h.status==="Approved"?T.grn:h.status==="Rejected"?T.red:T.t4}}>
-                      {h.approved_by_name||(h.status==="Pending"?"admin approval":"—")}
+                      {h.approved_by_name||(h.status==="Pending"?t("payroll.admin_approval"):"—")}
                     </div>
                     {h.acted_at&&<div style={{fontSize:10,color:T.t4,marginTop:1}}>{fmtDate(h.acted_at)}</div>}
                   </div>
                 </div>
                 {h.action_remarks&&(
                   <div style={{marginTop:8,fontSize:11,color:T.t3,padding:"5px 9px",background:T.surfaceB,borderRadius:5}}>
-                    <span style={{fontWeight:700,color:T.t4}}>Note: </span>{h.action_remarks}
+                    <span style={{fontWeight:700,color:T.t4}}>{t("payroll.note")} </span>{h.action_remarks}
                   </div>
                 )}
               </div>
@@ -5074,7 +5045,7 @@ function DailyWagesSettingsTab(){
   };
 
   const dedupe=async()=>{
-    if(!await window.confirmAsync("Duplicate skills hata du? (Same role+category waale rakhe ek)")) return;
+    if(!await window.confirmAsync(t("payroll.duplicate_skills_hata_du_same_role"))) return;
     const res=await api.post("/library/labour-rates/dedupe");
     if(res.success){
       setSavedMsg(`✓ Cleaned up — kept ${res.data.kept}, removed ${res.data.deduped} duplicates`);
@@ -5093,22 +5064,22 @@ function DailyWagesSettingsTab(){
     <div style={{maxWidth:760}}>
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:18,marginBottom:14}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,flexWrap:"wrap",gap:8}}>
-          <div style={{fontSize:14,fontWeight:800,color:T.t1}}>Default Rates by Skill</div>
-          <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700,border:`1px solid ${T.bluM}`}}>📋 Synced with Library</span>
+          <div style={{fontSize:14,fontWeight:800,color:T.t1}}>{t("payroll.default_rates_by_skill")}</div>
+          <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700,border:`1px solid ${T.bluM}`}}>{t("payroll.synced_with_library")}</span>
         </div>
         <div style={{fontSize:11,color:T.amb,marginBottom:14,padding:"6px 10px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6}}>
-          ⚠️ Base rates hain ye — change karne ke liye <b>admin approval</b> chahiye. Approvals drawer → Finance tab pe approve karna padega.
+         {t("payroll.base_rates_hain_ye_change_karne")} <b>{t("payroll.admin_approval")}</b> {t("payroll.chahiye_approvals_drawer_finance_tab_pe")}
         </div>
         {loading
-          ? <div style={{padding:"20px 0",textAlign:"center",color:T.t4,fontSize:12}}>Loading rates from library…</div>
+          ? <div style={{padding:"20px 0",textAlign:"center",color:T.t4,fontSize:12}}>{t("payroll.loading_rates_from_library")}</div>
           : rates.length===0
             ? <div style={{padding:"20px 0",textAlign:"center",color:T.t4,fontSize:12.5}}>
-                Library mein koi labour rate nahi hai. <b>Library → Labour Rate Card</b> mein jaake "Add Labour Rate" se add karo.
+               {t("payroll.library_mein_koi_labour_rate_nahi")} <b>{t("payroll.library_labour_rate_card")}</b> {t("payroll.mein_jaake_add_labour_rate_se")}
               </div>
             : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 {rates.map(r=>(
                   <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:`1px dashed ${T.b1}`}}>
-                    <div onClick={()=>setHistorySkill(r)} title="Click to see rate change history"
+                    <div onClick={()=>setHistorySkill(r)} title={t("payroll.click_to_see_rate_change_history")}
                       style={{flex:1,cursor:"pointer",padding:"3px 6px",borderRadius:5,transition:"background .12s"}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bluL}
                       onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
@@ -5131,13 +5102,13 @@ function DailyWagesSettingsTab(){
       </div>
 
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:18,marginBottom:14}}>
-        <div style={{fontSize:14,fontWeight:800,color:T.t1,marginBottom:4}}>Default Payment Cycle</div>
-        <div style={{fontSize:11,color:T.t4,marginBottom:12}}>Default date range when opening the Payments tab.</div>
+        <div style={{fontSize:14,fontWeight:800,color:T.t1,marginBottom:4}}>{t("payroll.default_payment_cycle")}</div>
+        <div style={{fontSize:11,color:T.t4,marginBottom:12}}>{t("payroll.default_date_range_when_opening_the")}</div>
         <div style={{display:"flex",gap:10}}>
           {[
-            {v:"weekly",l:"Weekly",d:"Pay every week (Mon-Sun)"},
-            {v:"monthly",l:"Monthly",d:"Pay every month (1st-last day)"},
-            {v:"custom",l:"Custom",d:"Manual date range"},
+            {v:"weekly",l:t("payroll.weekly"),d:t("payroll.pay_every_week_mon_sun")},
+            {v:"monthly",l:t("payroll.monthly"),d:t("payroll.pay_every_month_1st_last_day")},
+            {v:"custom",l:t("crm.custom"),d:t("payroll.manual_date_range")},
           ].map(o=>(
             <label key={o.v} style={{flex:1,cursor:"pointer",padding:"12px 14px",border:`2px solid ${cycle===o.v?T.blu:T.b1}`,background:cycle===o.v?T.bluL:"transparent",borderRadius:9,transition:"all .15s"}}>
               <input type="radio" name="cycle" value={o.v} checked={cycle===o.v} onChange={()=>setCycle(o.v)} style={{marginRight:8}}/>
@@ -5151,9 +5122,9 @@ function DailyWagesSettingsTab(){
       <div style={{display:"flex",alignItems:"center",gap:14}}>
         <button onClick={saveCycle}
           style={{padding:"9px 22px",borderRadius:7,background:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-          Save Payment Cycle
+         {t("payroll.save_payment_cycle")}
         </button>
-        <span style={{fontSize:11,color:T.t4}}>Rate change → admin approval needed</span>
+        <span style={{fontSize:11,color:T.t4}}>{t("payroll.rate_change_admin_approval_needed")}</span>
       </div>
 
       {/* ── SCOPE CHOICE MODAL ── */}
@@ -5161,35 +5132,35 @@ function DailyWagesSettingsTab(){
         <div onClick={()=>{setScopeModal(null);loadRates();}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"white",borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:301,width:520,maxWidth:"95vw",padding:0,overflow:"hidden"}}>
           <div style={{background:"#0D1B2A",padding:"14px 18px",color:"white"}}>
-            <div style={{fontSize:14,fontWeight:700}}>Base Rate Change — Scope?</div>
+            <div style={{fontSize:14,fontWeight:700}}>{t("payroll.base_rate_change_scope")}</div>
             <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>{scopeModal.item.role}: ₹{scopeModal.item.rate} → ₹{scopeModal.newRate}/day</div>
           </div>
           <div style={{padding:"16px 18px"}}>
-            <div style={{fontSize:11,fontWeight:700,color:T.t4,marginBottom:10,letterSpacing:".4px"}}>APPLY THIS RATE CHANGE TO:</div>
+            <div style={{fontSize:11,fontWeight:700,color:T.t4,marginBottom:10,letterSpacing:".4px"}}>{t("payroll.apply_this_rate_change_to")}</div>
             <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
               <button onClick={()=>{const r=scopeModal;setScopeModal(null);submitRateChange(r.item,r.newRate,"new_only",r.reason);}}
                 style={{padding:"12px 14px",border:`2px solid ${T.b1}`,borderRadius:9,background:"white",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.background=T.bluL;}}
                 onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.background="white";}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:3}}>📋 New Appointments Only</div>
-                <div style={{fontSize:11,color:T.t4}}>Existing workers ke individual rates same rahenge. Naye appointments mein new base rate apply hoga.</div>
+                <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:3}}>{t("payroll.new_appointments_only")}</div>
+                <div style={{fontSize:11,color:T.t4}}>{t("payroll.existing_workers_ke_individual_rates_same")}</div>
               </button>
               <button onClick={()=>{const r=scopeModal;setScopeModal(null);submitRateChange(r.item,r.newRate,"all",r.reason);}}
                 style={{padding:"12px 14px",border:`2px solid ${T.amb}`,borderRadius:9,background:T.ambL,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.amb,marginBottom:3}}>🔄 Apply to All Existing Workers</div>
-                <div style={{fontSize:11,color:T.t3}}>Approval ke baad sab projects mein {scopeModal.item.role} ke saare workers ka rate update + naye appointments bhi.</div>
+                <div style={{fontSize:13,fontWeight:700,color:T.amb,marginBottom:3}}>{t("payroll.apply_to_all_existing_workers")}</div>
+                <div style={{fontSize:11,color:T.t3}}>{t("payroll.approval_ke_baad_sab_projects_mein", { role: scopeModal.item.role })}</div>
               </button>
             </div>
             <div style={{borderTop:`1px solid ${T.b1}`,paddingTop:12}}>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.t4,marginBottom:5}}>REASON (optional)</div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.t4,marginBottom:5}}>{t("payroll.reason_optional")}</div>
               <input type="text" value={scopeModal.reason}
                 onChange={e=>setScopeModal(p=>({...p,reason:e.target.value}))}
-                placeholder="e.g. Quarterly review, Market correction"
+                placeholder={t("payroll.e_g_quarterly_review_market_correction")}
                 style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             <div style={{marginTop:14,display:"flex",justifyContent:"flex-end"}}>
               <button onClick={()=>{setScopeModal(null);loadRates();}}
-                style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${T.b1}`,background:"white",fontSize:12,color:T.t3,cursor:"pointer"}}>Cancel</button>
+                style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${T.b1}`,background:"white",fontSize:12,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
             </div>
           </div>
         </div>
@@ -5310,14 +5281,14 @@ function RunAttEditModal({emp,month,year,holidaySet,workingDays,onClose,onSave})
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <Avatar name={emp.name} size={32}/>
             <div>
-              <div style={{fontSize:14,fontWeight:800,color:T.t1}}>Edit Attendance — {emp.name}</div>
+              <div style={{fontSize:14,fontWeight:800,color:T.t1}}>{t("payroll.edit_attendance_name", { name: emp.name })}</div>
               <div style={{fontSize:11,color:T.t4}}>{emp.designation||""} · {MONTHS[month]} {year}</div>
             </div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><IcX size={17} color={T.t3}/></button>
         </div>
         <div style={{padding:"16px 18px"}}>
-          {dayMap===null?<div style={{textAlign:"center",padding:"20px 0",color:T.t4,fontSize:12.5}}>Loading attendance…</div>:<>
+          {dayMap===null?<div style={{textAlign:"center",padding:"20px 0",color:T.t4,fontSize:12.5}}>{t("payroll.loading_attendance")}</div>:<>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
             {fields.map(([k,l,c])=>(
               <div key={k}>
@@ -5329,39 +5300,39 @@ function RunAttEditModal({emp,month,year,holidaySet,workingDays,onClose,onSave})
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
             <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.blu,marginBottom:4,textTransform:"uppercase",letterSpacing:.3,display:"flex",alignItems:"center",gap:3}}><IcClockIn size={11} color={T.blu}/> OT Hours</div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.blu,marginBottom:4,textTransform:"uppercase",letterSpacing:.3,display:"flex",alignItems:"center",gap:3}}><IcClockIn size={11} color={T.blu}/> {t("payroll.ot_hours")}</div>
               <input type="number" min={0} style={{...inp,color:T.blu,borderColor:changedOt?T.blu:T.b2,background:changedOt?T.bluL:T.surface}}
                 value={target.ot} onChange={e=>setTarget(s=>({...s,ot:Math.max(0,Number(e.target.value)||0)}))}/>
             </div>
             <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.pur,marginBottom:4,textTransform:"uppercase",letterSpacing:.3}}>Leave (read-only)</div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.pur,marginBottom:4,textTransform:"uppercase",letterSpacing:.3}}>{t("payroll.leave_read_only")}</div>
               <div style={{...inp,color:T.pur,background:T.surfaceB,borderColor:T.b1}}>{emp.paid_leave}P / {emp.unpaid_leave}LOP</div>
             </div>
           </div>
           <div style={{display:"flex",gap:8,marginBottom:12}}>
             <div style={{flex:1,background:T.bluL,borderRadius:9,padding:"9px 12px",textAlign:"center"}}>
-              <div style={{fontSize:10,color:T.t3,fontWeight:600}}>PAYABLE DAYS</div>
+              <div style={{fontSize:10,color:T.t3,fontWeight:600}}>{t("payroll.payable_days")}</div>
               <div style={{fontSize:16,fontWeight:800,color:T.blu}}>{payable} / {workingDays||26}</div>
             </div>
             <div style={{flex:1,background:T.grnL,borderRadius:9,padding:"9px 12px",textAlign:"center"}}>
-              <div style={{fontSize:10,color:T.t3,fontWeight:600}}>OT AMOUNT</div>
+              <div style={{fontSize:10,color:T.t3,fontWeight:600}}>{t("payroll.ot_amount")}</div>
               <div style={{fontSize:16,fontWeight:800,color:T.grn}}>₹{fmtN(otAmt)}</div>
             </div>
           </div>
           {over&&<div style={{display:"flex",alignItems:"center",gap:7,padding:"8px 12px",background:T.redL,border:`1px solid ${T.red}33`,borderRadius:8,marginBottom:12}}>
-            <IcAlert size={13} color={T.red}/><span style={{fontSize:11.5,color:T.red,fontWeight:600}}>Marked days ({totalMarked}) working days ({workingDays||26}) se zyada</span>
+            <IcAlert size={13} color={T.red}/><span style={{fontSize:11.5,color:T.red,fontWeight:600}}>{t("payroll.marked_days_totalmarked_working_days_workingdays", { totalMarked, workingDays: workingDays||26 })}</span>
           </div>}
           <div style={{marginBottom:14}}>
-            <div style={{fontSize:11,fontWeight:700,color:T.t2,marginBottom:5}}>Reason for edit <span style={{color:T.red}}>*</span></div>
-            <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder="e.g. 15 Jun GPS punch miss hua, site par tha · 4 hrs OT finishing work"
+            <div style={{fontSize:11,fontWeight:700,color:T.t2,marginBottom:5}}>{t("payroll.reason_for_edit_2")} <span style={{color:T.red}}>*</span></div>
+            <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder={t("payroll.e_g_15_jun_gps_punch")}
               style={{width:"100%",padding:"9px 11px",border:`1px solid ${T.b2}`,borderRadius:8,fontSize:12.5,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
-            <div style={{fontSize:10.5,color:T.t4,marginTop:4}}>Reason audit log me save hoga — payslip dispute me kaam aata hai. Days unmarked se auto-pick honge.</div>
+            <div style={{fontSize:10.5,color:T.t4,marginTop:4}}>{t("payroll.reason_audit_log_me_save_hoga")}</div>
           </div>
           <div style={{display:"flex",gap:9}}>
-            <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:9,border:`1px solid ${T.b2}`,background:T.surface,color:T.t2,fontSize:13,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+            <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:9,border:`1px solid ${T.b2}`,background:T.surface,color:T.t2,fontSize:13,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
             <button disabled={(!changedCount&&!changedOt)||!reason.trim()||over} onClick={submit}
               style={{flex:2,padding:"10px",borderRadius:9,border:"none",background:((!changedCount&&!changedOt)||!reason.trim()||over)?T.b2:T.blu,color:"#fff",fontSize:13,fontWeight:700,cursor:((!changedCount&&!changedOt)||!reason.trim()||over)?"default":"pointer"}}>
-              Add to Review List
+             {t("payroll.add_to_review_list")}
             </button>
           </div>
           </>}
@@ -5462,7 +5433,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
   const onSaveEdit=(edit)=>{ setPending(p=>[...p.filter(x=>x.staff_id!==edit.staff_id),edit]); setEditEmp(null); };
 
   const doFinalize=async()=>{
-    if(!await window.confirmAsync(`${MONTHS[month]} ${year} payroll finalize & lock karein? Attendance lock ho jayegi (revert se hi edit hogi).`)) return;
+    if(!await window.confirmAsync(t("payroll.month_year_payroll_finalize_lock_karein", { month: MONTHS[month], year }))) return;
     setBusy(true);
     try{
       const adjustments=Object.entries(adjs).filter(([,v])=>Number(v)).map(([staff_id,amount])=>({staff_id:Number(staff_id),amount:Number(amount),note:"One-time adjustment"}));
@@ -5470,20 +5441,20 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
       if(r.success){
         const ri=await api.get(`/payroll/run/${r.data.run_id}/items`);
         if(ri.success){ setFinalized(ri.data.run); setItems(ri.data.items||[]); }
-        flash("Payroll finalized & locked 🔒");
+        flash(t("payroll.payroll_finalized_locked"));
         if(onChanged) onChanged();
       }else flash(r.message||"Finalize failed");
     }catch(e){ flash(e?.response?.data?.message||"Finalize failed"); }
     setBusy(false);
   };
   const doRevert=async()=>{
-    const reason=await window.promptAsync("Revert reason? (period unlock ho jayega)");
+    const reason=await window.promptAsync(t("payroll.revert_reason_period_unlock_ho_jayega"));
     if(reason===null) return;
     setBusy(true);
     try{
       const r=await api.post(`/payroll/run/${finalized.id}/revert`,{reason});
       if(r.success){
-        flash("Run reverted — period unlocked, deducted advances restored");
+        flash(t("payroll.run_reverted_period_unlocked_deducted_advances"));
         setFinalized(null); setItems([]); setStep(0); await loadPre();
         if(onChanged) onChanged();
       }else flash(r.message||"Revert failed");
@@ -5501,7 +5472,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
   };
   const doSettle=async()=>{
     const amt=Number(settleForm.amount);
-    if(!amt||amt<=0){ flash("Amount sahi bharo"); return; }
+    if(!amt||amt<=0){ flash(t("finance.amount_sahi_bharo")); return; }
     setBusy(true);
     try{
       const r=await api.post("/wallets/salary/settle",{run_item_id:settleIt.id,amount:amt,payment_method:settleForm.method,tx_ref:settleForm.txRef||undefined});
@@ -5516,11 +5487,11 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
     setBusy(false);
   };
   const openPayslip=async(it)=>{
-    try{ const r=await api.get(`/payroll/run-items/${it.id}/payslip`); if(r.success) printRunPayslip(r.data.item,r.data.run); }catch(e){ flash("Payslip load failed"); }
+    try{ const r=await api.get(`/payroll/run-items/${it.id}/payslip`); if(r.success) printRunPayslip(r.data.item,r.data.run); }catch(e){ flash(t("payroll.payslip_load_failed")); }
   };
 
-  if(!isAdmin) return <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Create Salary run is only accessible to admins.</div>;
-  if(loading) return <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Loading payroll run…</div>;
+  if(!isAdmin) return <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>{t("payroll.create_salary_run_is_only_accessible")}</div>;
+  if(loading) return <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>{t("payroll.loading_payroll_run")}</div>;
 
   const errs=pre?(pre.pendingLeaves.length>0?1:0)+(pre.pendingAttEdits.length>0?1:0)+((pre.pendingReviews&&pre.pendingReviews.length>0)?1:0):0;
   const warns=pre?(pre.unmarkedStaff.length>0?1:0)+(pre.zeroSalaryStaff.length>0?1:0):0;
@@ -5530,10 +5501,10 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
       {/* header strip */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
         <div>
-          <div style={{fontSize:16,fontWeight:800,color:T.t1}}>Create Salary — Payroll Run</div>
-          <div style={{fontSize:12,color:T.t3,marginTop:2}}>Month-end processing · attendance se net payout tak</div>
+          <div style={{fontSize:16,fontWeight:800,color:T.t1}}>{t("payroll.create_salary_payroll_run")}</div>
+          <div style={{fontSize:12,color:T.t3,marginTop:2}}>{t("payroll.month_end_processing_attendance_se_net")}</div>
         </div>
-        <Pill label={finalized?"Finalized 🔒":"Draft"} c={finalized?T.grn:T.amb} bg={finalized?T.grnL:T.ambL}/>
+        <Pill label={finalized?t("payroll.finalized"):t("payroll.draft")} c={finalized?T.grn:T.amb} bg={finalized?T.grnL:T.ambL}/>
       </div>
       <RWStepper step={step}/>
 
@@ -5541,19 +5512,19 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
       {step===0&&pre&&(
         <div>
           <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
-            <RWKpi label="Blocking Issues" value={errs} color={T.red} bg={T.redL}/>
-            <RWKpi label="Warnings" value={warns} color={T.amb} bg={T.ambL}/>
-            <RWKpi label="GPS Punches" value={pre.punchSessionCount} sub="merged in grid" color={T.grn} bg={T.grnL}/>
+            <RWKpi label={t("payroll.blocking_issues")} value={errs} color={T.red} bg={T.redL}/>
+            <RWKpi label={t("payroll.warnings")} value={warns} color={T.amb} bg={T.ambL}/>
+            <RWKpi label={t("payroll.gps_punches")} value={pre.punchSessionCount} sub={t("payroll.merged_in_grid")} color={T.grn} bg={T.grnL}/>
           </div>
           <RWCard>
             {[
-              pre.pendingLeaves.length>0&&{type:"error",label:`${pre.pendingLeaves.length} leave application(s) pending approval`,sub:pre.pendingLeaves.slice(0,3).map(l=>`${l.staff_name} (${l.leave_name})`).join(" · "),action:"Review Leaves",go:"office-leave"},
-              pre.pendingAttEdits.length>0&&{type:"error",label:`${pre.pendingAttEdits.length} attendance edit request(s) pending`,sub:"Approve/reject in Attendance tab",action:"Open Attendance",go:"office-att"},
-              pre.pendingReviews&&pre.pendingReviews.length>0&&{type:"error",label:`${pre.pendingReviews.length} outside-geofence punch(es) review pending`,sub:pre.pendingReviews.slice(0,3).map(r=>`${r.user_name}${r.out_reason?" ("+r.out_reason+")":""}`).join(" · ")+" — salary finalize ke liye review compulsory",action:"Review Punches",go:"office-att"},
-              pre.unmarkedStaff.length>0&&{type:"warn",label:`${pre.unmarkedStaff.length} staff ke unmarked days hain`,sub:pre.unmarkedStaff.slice(0,3).map(s=>`${s.name} (${s.unmarkedDays}d)`).join(" · ")+" — unmarked = no pay",action:"Open Attendance",go:"office-att"},
-              pre.zeroSalaryStaff.length>0&&{type:"warn",label:`${pre.zeroSalaryStaff.length} staff ki salary structure incomplete`,sub:pre.zeroSalaryStaff.slice(0,3).map(s=>s.name).join(" · ")+" — ₹0 salary banegi",action:"Edit Staff",go:"office-salary"},
-              {type:"ok",label:"GPS punch data synced",sub:`${pre.punchSessionCount} mobile sessions is month — grid me merged`},
-              {type:"ok",label:`${pre.holidays.length} holiday(s) set`,sub:pre.holidays.length?pre.holidays.map(h=>h.name).join(" · "):"Koi holiday nahi — Calendar tab me add karein"},
+              pre.pendingLeaves.length>0&&{type:"error",label:t("payroll.length_leave_application_s_pending_approval", { length: pre.pendingLeaves.length }),sub:pre.pendingLeaves.slice(0,3).map(l=>`${l.staff_name} (${l.leave_name})`).join(" · "),action:"Review Leaves",go:"office-leave"},
+              pre.pendingAttEdits.length>0&&{type:"error",label:t("payroll.length_attendance_edit_request_s_pending", { length: pre.pendingAttEdits.length }),sub:t("payroll.approve_reject_in_attendance_tab"),action:"Open Attendance",go:"office-att"},
+              pre.pendingReviews&&pre.pendingReviews.length>0&&{type:"error",label:t("payroll.length_outside_geofence_punch_es_review", { length: pre.pendingReviews.length }),sub:pre.pendingReviews.slice(0,3).map(r=>`${r.user_name}${r.out_reason?" ("+r.out_reason+")":""}`).join(" · ")+" — salary finalize ke liye review compulsory",action:"Review Punches",go:"office-att"},
+              pre.unmarkedStaff.length>0&&{type:"warn",label:t("payroll.length_staff_ke_unmarked_days_hain", { length: pre.unmarkedStaff.length }),sub:pre.unmarkedStaff.slice(0,3).map(s=>`${s.name} (${s.unmarkedDays}d)`).join(" · ")+" — unmarked = no pay",action:"Open Attendance",go:"office-att"},
+              pre.zeroSalaryStaff.length>0&&{type:"warn",label:t("payroll.length_staff_ki_salary_structure_incomplete", { length: pre.zeroSalaryStaff.length }),sub:pre.zeroSalaryStaff.slice(0,3).map(s=>s.name).join(" · ")+" — ₹0 salary banegi",action:"Edit Staff",go:"office-salary"},
+              {type:"ok",label:t("payroll.gps_punch_data_synced"),sub:t("payroll.punchsessioncount_mobile_sessions_is_month_grid", { punchSessionCount: pre.punchSessionCount })},
+              {type:"ok",label:t("payroll.length_holiday_s_set", { length: pre.holidays.length }),sub:pre.holidays.length?pre.holidays.map(h=>h.name).join(" · "):"Koi holiday nahi — Calendar tab me add karein"},
             ].filter(Boolean).map((c,i,arr)=>{
               const col=c.type==="error"?T.red:c.type==="warn"?T.amb:T.grn;
               const bgL=c.type==="error"?T.redL:c.type==="warn"?T.ambL:T.grnL;
@@ -5572,7 +5543,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
             })}
           </RWCard>
           {errs>0&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:12,padding:"10px 14px",background:T.ambL,border:`1px solid ${T.amb}33`,borderRadius:10}}>
-            <IcAlert size={15} color={T.amb}/><span style={{fontSize:12,color:T.t2}}>Red items resolve karna recommended. Aage badhne par pending leaves <b>unpaid</b> aur unmarked days <b>no-pay</b> count honge.</span>
+            <IcAlert size={15} color={T.amb}/><span style={{fontSize:12,color:T.t2}}>{t("payroll.red_items_resolve_karna_recommended_aage")} <b>unpaid</b> {t("payroll.aur_unmarked_days")} <b>{t("payroll.no_pay")}</b> {t("payroll.count_honge")}</span>
           </div>}
         </div>
       )}
@@ -5583,19 +5554,19 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
           {pending.length>0&&(
             <RWCard style={{marginBottom:14,border:`1.5px solid ${T.amb}55`,background:T.ambL}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:`1px solid ${T.amb}33`}}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}><IcAlert size={15} color={T.amb}/><span style={{fontSize:13,fontWeight:800,color:T.t1}}>{pending.length} Attendance Edit{pending.length>1?"s":""} — Review & Approve</span></div>
-                <button disabled={busy} onClick={()=>applyEdits(pending)} style={{fontSize:12,fontWeight:700,color:"#fff",background:T.grn,border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}><IcChk size={13} color="#fff"/> Approve All & Apply</button>
+                <div style={{display:"flex",alignItems:"center",gap:8}}><IcAlert size={15} color={T.amb}/><span style={{fontSize:13,fontWeight:800,color:T.t1}}>{t("payroll.pending_attendance_editpending2_review_approve", { pending: pending.length, pending2: pending.length>1?"s":"" })}</span></div>
+                <button disabled={busy} onClick={()=>applyEdits(pending)} style={{fontSize:12,fontWeight:700,color:"#fff",background:T.grn,border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}><IcChk size={13} color="#fff"/> {t("payroll.approve_all_apply")}</button>
               </div>
               {pending.map((ed,i)=>(
                 <div key={ed.staff_id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 16px",borderBottom:i<pending.length-1?`1px solid ${T.amb}22`:"none"}}>
                   <Avatar name={ed.name} size={26}/>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{ed.name}</div>
-                    <div style={{fontSize:11.5,color:T.t2,marginTop:2}}>{ed.changes.map(c=><span key={c.field} style={{display:"inline-block",marginRight:10}}>{c.field}: <b style={{color:T.t3}}>{c.old}</b> → <b style={{color:T.blu}}>{c.new}</b></span>)}{ed.day_changes.length?<span style={{color:T.t4}}>({ed.day_changes.length} din)</span>:null}</div>
+                    <div style={{fontSize:11.5,color:T.t2,marginTop:2}}>{ed.changes.map(c=><span key={c.field} style={{display:"inline-block",marginRight:10}}>{c.field}: <b style={{color:T.t3}}>{c.old}</b> → <b style={{color:T.blu}}>{c.new}</b></span>)}{ed.day_changes.length?<span style={{color:T.t4}}>{t("payroll.ed_din", { ed: ed.day_changes.length })}</span>:null}</div>
                     <div style={{fontSize:10.5,color:T.t4,marginTop:2,fontStyle:"italic"}}>"{ed.reason}"</div>
                   </div>
-                  <button disabled={busy} onClick={()=>applyEdits([ed])} style={{fontSize:11,fontWeight:600,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer",flexShrink:0}}>Approve</button>
-                  <button onClick={()=>setPending(p=>p.filter(x=>x.staff_id!==ed.staff_id))} style={{fontSize:11,fontWeight:600,color:T.red,background:T.redL,border:`1px solid ${T.red}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer",flexShrink:0}}>Reject</button>
+                  <button disabled={busy} onClick={()=>applyEdits([ed])} style={{fontSize:11,fontWeight:600,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer",flexShrink:0}}>{t("common.approve_2")}</button>
+                  <button onClick={()=>setPending(p=>p.filter(x=>x.staff_id!==ed.staff_id))} style={{fontSize:11,fontWeight:600,color:T.red,background:T.redL,border:`1px solid ${T.red}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer",flexShrink:0}}>{t("common.reject_2")}</button>
                 </div>
               ))}
             </RWCard>
@@ -5612,7 +5583,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
                   const hasPending=pending.some(p=>p.staff_id===e.staff_id);
                   return(
                     <tr key={e.staff_id} style={{borderBottom:`1px solid ${T.b1}`,background:hasPending?T.ambL:"transparent"}}>
-                      <td style={{padding:"10px 12px"}}><div style={{display:"flex",alignItems:"center",gap:9}}><Avatar name={e.name}/><div><div style={{fontWeight:600,color:T.t1}}>{e.name} {hasPending&&<Pill label="Edit pending" c={T.amb} bg="#fff"/>}</div><div style={{fontSize:10.5,color:T.t4}}>{e.designation||e.payment_type}</div></div></div></td>
+                      <td style={{padding:"10px 12px"}}><div style={{display:"flex",alignItems:"center",gap:9}}><Avatar name={e.name}/><div><div style={{fontWeight:600,color:T.t1}}>{e.name} {hasPending&&<Pill label={t("payroll.edit_pending_2")} c={T.amb} bg="#fff"/>}</div><div style={{fontSize:10.5,color:T.t4}}>{e.designation||e.payment_type}</div></div></div></td>
                       <td style={{textAlign:"center",fontWeight:700,color:T.grn}}>{e.P}</td>
                       <td style={{textAlign:"center",color:T.blu,fontSize:11.5}}>{e.gps_days>0?<span style={{display:"inline-flex",alignItems:"center",gap:3}}><IcGPS size={11} color={T.blu}/>{e.gps_days}</span>:"—"}</td>
                       <td style={{textAlign:"center",color:T.amb,fontWeight:600}}>{e.H||"—"}</td>
@@ -5621,15 +5592,15 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
                       <td style={{textAlign:"center",color:T.red,fontWeight:700}}>{e.A||"—"}</td>
                       <td style={{textAlign:"center",color:T.blu,fontWeight:700}}>{e.ot_hours||"—"}</td>
                       <td style={{textAlign:"center"}}><Pill label={`${e.payable_days} / ${workingDays||26}`} c={T.blu} bg={T.bluL}/></td>
-                      <td style={{textAlign:"center"}}><button onClick={()=>setEditEmp(e)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:T.blu,background:T.bluL,border:`1px solid ${T.blu}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer",fontWeight:600}}><IcEdit size={12} color={T.blu}/> Edit</button></td>
+                      <td style={{textAlign:"center"}}><button onClick={()=>setEditEmp(e)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:T.blu,background:T.bluL,border:`1px solid ${T.blu}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer",fontWeight:600}}><IcEdit size={12} color={T.blu}/> {t("common.edit_2")}</button></td>
                     </tr>
                   );
                 })}
-                {!summary.length&&<tr><td colSpan={10} style={{textAlign:"center",padding:"24px",color:T.t4}}>Koi salary-enabled staff nahi mila.</td></tr>}
+                {!summary.length&&<tr><td colSpan={10} style={{textAlign:"center",padding:"24px",color:T.t4}}>{t("payroll.koi_salary_enabled_staff_nahi_mila")}</td></tr>}
               </tbody>
             </table>
           </RWCard>
-          <div style={{fontSize:11.5,color:T.t3,marginTop:10}}>Payable = Present + (Half × 0.5) + Paid Leave + Holidays. OT × per-hour rate (Gross ÷ {workingDays||26} ÷ 8) salary me add. Leave Leave-tab se manage hoti hai.</div>
+          <div style={{fontSize:11.5,color:T.t3,marginTop:10}}>{t("payroll.payable_present_half_0_5_paid", { workingDays: workingDays||26 })}</div>
         </div>
       )}
 
@@ -5652,25 +5623,25 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
         return(
           <div onClick={()=>setSettleIt(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:120,display:"flex",alignItems:"center",justifyContent:"center"}}>
             <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,padding:"18px 20px",width:380,maxWidth:"92vw",boxShadow:"0 12px 40px rgba(0,0,0,0.25)"}}>
-              <div style={{fontSize:14,fontWeight:800,color:T.t1,marginBottom:4}}>Settle salary — {settleIt.staff_name}</div>
-              <div style={{fontSize:11.5,color:T.t3,marginBottom:12}}>Net ₹{fmtN(net)}{already>0?` · ₹${fmtN(already)} settle ho chuka`:""} · Remaining <b style={{color:T.amb}}>₹{fmtN(remaining)}</b></div>
-              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Amount</label>
+              <div style={{fontSize:14,fontWeight:800,color:T.t1,marginBottom:4}}>{t("payroll.settle_salary_staff_name", { staff_name: settleIt.staff_name })}</div>
+              <div style={{fontSize:11.5,color:T.t3,marginBottom:12}}><Rich k="payroll.net_fmtnalready_remaining_fmtn2" params={{ fmtN: fmtN(net), already: already>0?` · ₹${fmtN(already)} settle ho chuka`:"", fmtN2: fmtN(remaining) }} /></div>
+              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("common.amount_2")}</label>
               <input type="number" value={settleForm.amount} onChange={e=>setSettleForm(f=>({...f,amount:e.target.value}))}
                 style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:13,fontWeight:700,boxSizing:"border-box",margin:"4px 0 10px"}}/>
-              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Payment Method</label>
+              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("payroll.payment_method")}</label>
               <select value={settleForm.method} onChange={e=>setSettleForm(f=>({...f,method:e.target.value}))}
                 style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:12.5,boxSizing:"border-box",margin:"4px 0 10px",background:T.surface}}>
-                <option value="bank_transfer">Bank Transfer / NEFT</option>
+                <option value="bank_transfer">{t("payroll.bank_transfer_neft")}</option>
                 <option value="upi">UPI</option>
-                <option value="cash">Cash</option>
-                <option value="cheque">Cheque</option>
+                <option value="cash">{t("common.cash")}</option>
+                <option value="cheque">{t("common.cheque")}</option>
               </select>
-              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Tx Ref (optional)</label>
-              <input value={settleForm.txRef} onChange={e=>setSettleForm(f=>({...f,txRef:e.target.value}))} placeholder="UTR / cheque no."
+              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("payroll.tx_ref_optional")}</label>
+              <input value={settleForm.txRef} onChange={e=>setSettleForm(f=>({...f,txRef:e.target.value}))} placeholder={t("payroll.utr_cheque_no")}
                 style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:12.5,boxSizing:"border-box",margin:"4px 0 14px"}}/>
               <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-                <button onClick={()=>setSettleIt(null)} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${T.b1}`,background:T.surface,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-                <button disabled={busy} onClick={doSettle} style={{padding:"9px 18px",borderRadius:8,border:"none",background:T.grn,color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>{busy?"Saving…":"Settle ₹"+fmtN(Number(settleForm.amount)||0)}</button>
+                <button onClick={()=>setSettleIt(null)} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${T.b1}`,background:T.surface,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
+                <button disabled={busy} onClick={doSettle} style={{padding:"9px 18px",borderRadius:8,border:"none",background:T.grn,color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>{busy?t("common.saving_2"):"Settle ₹"+fmtN(Number(settleForm.amount)||0)}</button>
               </div>
             </div>
           </div>
@@ -5680,9 +5651,9 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
       {/* NAV */}
       {!finalized&&(
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:18,gap:10}}>
-          <button disabled={step===0} onClick={()=>goStep(step-1)} style={{padding:"10px 20px",borderRadius:9,border:`1px solid ${T.b2}`,background:T.surface,color:step===0?T.t4:T.t2,fontSize:13,fontWeight:600,cursor:step===0?"default":"pointer"}}>← Back</button>
-          {step===1&&pending.length>0&&<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⚠ {pending.length} edit approval pending — continue par skip honge</span>}
-          {step<3&&<button onClick={()=>goStep(step+1)} style={{padding:"10px 24px",borderRadius:9,border:"none",background:T.blu,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Continue →</button>}
+          <button disabled={step===0} onClick={()=>goStep(step-1)} style={{padding:"10px 20px",borderRadius:9,border:`1px solid ${T.b2}`,background:T.surface,color:step===0?T.t4:T.t2,fontSize:13,fontWeight:600,cursor:step===0?"default":"pointer"}}>{t("common.back_2")}</button>
+          {step===1&&pending.length>0&&<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>{t("payroll.pending_edit_approval_pending_continue_par", { pending: pending.length })}</span>}
+          {step<3&&<button onClick={()=>goStep(step+1)} style={{padding:"10px 24px",borderRadius:9,border:"none",background:T.blu,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>{t("payroll.continue")}</button>}
         </div>
       )}
 
@@ -5701,10 +5672,10 @@ function RunSalaryPreview({preview,adjs,setAdjs,workingDays}){
   return(
     <div>
       <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
-        <RWKpi label="Gross Payable" value={`₹${fmtN(tot.g)}`}/>
-        <RWKpi label="OT Payable" value={`₹${fmtN(tot.ot)}`} color={T.blu}/>
-        <RWKpi label="Deductions" value={`₹${fmtN(tot.d)}`} sub="PF+ESI+TDS+Advance" color={T.red}/>
-        <RWKpi label="Net Payout" value={`₹${fmtN(tot.n)}`} color={T.grn} bg={T.grnL}/>
+        <RWKpi label={t("payroll.gross_payable")} value={`₹${fmtN(tot.g)}`}/>
+        <RWKpi label={t("payroll.ot_payable")} value={`₹${fmtN(tot.ot)}`} color={T.blu}/>
+        <RWKpi label={t("payroll.deductions")} value={`₹${fmtN(tot.d)}`} sub={t("payroll.pf_esi_tds_advance")} color={T.red}/>
+        <RWKpi label={t("payroll.net_payout")} value={`₹${fmtN(tot.n)}`} color={T.grn} bg={T.grnL}/>
       </div>
       <RWCard style={{overflowX:"auto"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,minWidth:820}}>
@@ -5720,7 +5691,7 @@ function RunSalaryPreview({preview,adjs,setAdjs,workingDays}){
           </tbody>
         </table>
       </RWCard>
-      <div style={{fontSize:11.5,color:T.t3,marginTop:10}}>Adjustment me one-time bonus (+) ya deduction (−) — sirf is month, structure change nahi hota.</div>
+      <div style={{fontSize:11.5,color:T.t3,marginTop:10}}>{t("payroll.adjustment_me_one_time_bonus_ya")}</div>
     </div>
   );
 }
@@ -5730,7 +5701,7 @@ function RWPreviewRow({it,open,setOpen,adj,setAdj,net}){
     <>
       <tr style={{borderBottom:open?"none":`1px solid ${T.b1}`,background:it.full_gross===0?T.ambL:"transparent"}}>
         <td style={{padding:"10px 12px"}}><div style={{display:"flex",alignItems:"center",gap:9}}><Avatar name={it.staff_name}/><div><div style={{fontWeight:600,color:T.t1}}>{it.staff_name}</div><div style={{fontSize:10.5,color:T.t4}}>{it.designation}</div></div></div></td>
-        <td style={{textAlign:"center"}}><Pill label={it.payment_type==="fixed"?"Fixed":"Pro-rata"} c={it.payment_type==="fixed"?T.grn:T.pur} bg={it.payment_type==="fixed"?T.grnL:T.purL}/></td>
+        <td style={{textAlign:"center"}}><Pill label={it.payment_type==="fixed"?t("payroll.fixed"):t("payroll.pro_rata")} c={it.payment_type==="fixed"?T.grn:T.pur} bg={it.payment_type==="fixed"?T.grnL:T.purL}/></td>
         <td style={{textAlign:"center",fontWeight:600,color:T.t2}}>{it.payable_days}</td>
         <td style={{textAlign:"center",fontWeight:600,color:T.t1}}>₹{fmtN(it.gross_earned)}</td>
         <td style={{textAlign:"center",fontWeight:600,color:it.ot_amount?T.blu:T.t4}}>{it.ot_amount?`+₹${fmtN(it.ot_amount)}`:"—"}</td>
@@ -5744,19 +5715,19 @@ function RWPreviewRow({it,open,setOpen,adj,setAdj,net}){
           <td colSpan={9} style={{padding:"0 12px 14px"}}>
             <div style={{display:"flex",gap:12,flexWrap:"wrap",background:T.surfaceB,borderRadius:10,padding:"12px 16px"}}>
               <div style={{flex:1,minWidth:200}}>
-                <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>Earnings</div>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>{t("payroll.earnings")}</div>
                 {[["Basic",e.basic],["HRA",e.hra],["Conveyance",e.conveyance],["Medical",e.medical],["Phone",e.phone],["Petrol",e.petrol],["Special",e.special]].filter(([,v])=>v).map(([l,v])=>(
                   <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2.5px 0",color:T.t2}}><span>{l}</span><span>₹{fmtN(v)}</span></div>
                 ))}
-                {it.ot_amount>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2.5px 0",color:T.blu,fontWeight:600}}><span>OT ({it.ot_hours} hrs)</span><span>+₹{fmtN(it.ot_amount)}</span></div>}
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",fontWeight:700,color:T.t1,borderTop:`1px solid ${T.b1}`,marginTop:4}}><span>Gross earned ({it.payable_days}d)</span><span>₹{fmtN(it.gross_earned+it.ot_amount)}</span></div>
+                {it.ot_amount>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2.5px 0",color:T.blu,fontWeight:600}}><span>{t("payroll.ot_ot_hours_hrs", { ot_hours: it.ot_hours })}</span><span>+₹{fmtN(it.ot_amount)}</span></div>}
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",fontWeight:700,color:T.t1,borderTop:`1px solid ${T.b1}`,marginTop:4}}><span>{t("payroll.gross_earned_payable_daysd", { payable_days: it.payable_days })}</span><span>₹{fmtN(it.gross_earned+it.ot_amount)}</span></div>
               </div>
               <div style={{flex:1,minWidth:200}}>
-                <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>Deductions</div>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>{t("payroll.deductions")}</div>
                 {[["PF",it.pf],["ESI",it.esi],["TDS",it.tds],["Advance",it.advance_deducted]].map(([l,v])=>(
                   <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2.5px 0",color:T.t2}}><span>{l}</span><span style={{color:v?T.red:T.t4}}>{v?`−₹${fmtN(v)}`:"—"}</span></div>
                 ))}
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",fontWeight:700,color:T.grn,borderTop:`1px solid ${T.b1}`,marginTop:4}}><span>Net</span><span>₹{fmtN(net)}</span></div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",fontWeight:700,color:T.grn,borderTop:`1px solid ${T.b1}`,marginTop:4}}><span>{t("common.net")}</span><span>₹{fmtN(net)}</span></div>
               </div>
             </div>
           </td>
@@ -5780,28 +5751,28 @@ function RunFinalize({preview,adjs,finalized,items,month,year,busy,onFinalize,on
   return(
     <div>
       <RWCard style={{padding:"20px 22px",marginBottom:14}}>
-        <div style={{fontSize:14,fontWeight:800,color:T.t1,marginBottom:14,display:"flex",alignItems:"center",gap:8}}><IcCal size={16} color={T.blu}/> {MONTHS[month]} {year} — Payroll Run Summary</div>
+        <div style={{fontSize:14,fontWeight:800,color:T.t1,marginBottom:14,display:"flex",alignItems:"center",gap:8}}><IcCal size={16} color={T.blu}/>{t("payroll.months_year_payroll_run_summary", { MONTHS: MONTHS[month], year })}</div>
         <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-          <RWKpi label="Employees" value={count}/>
-          <RWKpi label="Gross + OT" value={`₹${fmtN(totG+totOt)}`}/>
-          <RWKpi label="Deductions" value={`−₹${fmtN(totD)}`} color={T.red}/>
-          <RWKpi label="Adjustments" value={`${totAdj>=0?"+":""}₹${fmtN(totAdj)}`} color={T.amb}/>
-          <RWKpi label="Net Payout" value={`₹${fmtN(totN)}`} color={T.grn} bg={T.grnL}/>
+          <RWKpi label={t("payroll.employees")} value={count}/>
+          <RWKpi label={t("payroll.gross_ot")} value={`₹${fmtN(totG+totOt)}`}/>
+          <RWKpi label={t("payroll.deductions")} value={`−₹${fmtN(totD)}`} color={T.red}/>
+          <RWKpi label={t("payroll.adjustments")} value={`${totAdj>=0?"+":""}₹${fmtN(totAdj)}`} color={T.amb}/>
+          <RWKpi label={t("payroll.net_payout")} value={`₹${fmtN(totN)}`} color={T.grn} bg={T.grnL}/>
         </div>
         {!finalized&&<div style={{marginTop:16,padding:"12px 14px",background:T.sltL||T.surfaceB,borderRadius:10,fontSize:12,color:T.t2,lineHeight:1.65}}>
-          <b>Finalize karne par:</b><br/>① Har employee ka attendance+OT+salary snapshot freeze (payroll_run_items)<br/>② {MONTHS[month]} attendance <b>lock</b> — edit sirf revert se<br/>③ Payslips generate honge<br/>④ Payment status "Pending" — bank transfer ke baad "Settle / Pay" (partial bhi chalega)</div>}
+          <b>{t("payroll.finalize_karne_par")}</b><br/>① Har employee ka attendance+OT+salary snapshot freeze (payroll_run_items)<br/><Rich k="payroll.months_attendance_lock_edit_sirf_revert" params={{ MONTHS: MONTHS[month] }} /><br/>{t("payroll.step3_payslips")}<br/>{t("payroll.step4_payment_status")}</div>}
       </RWCard>
       {!finalized?(
-        <button disabled={busy||count===0} onClick={onFinalize} style={{width:"100%",padding:"14px",background:count===0?T.b2:T.grn,color:"#fff",border:"none",borderRadius:11,fontSize:14,fontWeight:800,cursor:count===0?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><IcLock size={16} color="#fff"/> {busy?"Finalizing…":`Finalize & Lock ${MONTHS[month]} ${year} Payroll`}</button>
+        <button disabled={busy||count===0} onClick={onFinalize} style={{width:"100%",padding:"14px",background:count===0?T.b2:T.grn,color:"#fff",border:"none",borderRadius:11,fontSize:14,fontWeight:800,cursor:count===0?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><IcLock size={16} color="#fff"/> {busy?t("payroll.finalizing"):`Finalize & Lock ${MONTHS[month]} ${year} Payroll`}</button>
       ):(
         <div>
           <div style={{padding:"14px",background:T.grnL,border:`1.5px solid ${T.grn}55`,borderRadius:11,display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
             <div style={{width:32,height:32,borderRadius:"50%",background:T.grn,display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={16} color="#fff"/></div>
             <div style={{flex:1}}>
-              <div style={{fontSize:13.5,fontWeight:800,color:T.grn}}>Payroll Finalized — {MONTHS[month]} {year} 🔒</div>
-              <div style={{fontSize:11.5,color:T.t3}}>{count} payslips · Net ₹{fmtN(totN)} · Attendance locked</div>
+              <div style={{fontSize:13.5,fontWeight:800,color:T.grn}}>{t("payroll.payroll_finalized_months_year", { MONTHS: MONTHS[month], year })}</div>
+              <div style={{fontSize:11.5,color:T.t3}}>{t("payroll.count_payslips_net_fmtn_attendance_locked", { count, fmtN: fmtN(totN) })}</div>
             </div>
-            {isAdmin&&<button disabled={busy} onClick={onRevert} style={{fontSize:12,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.red}55`,borderRadius:8,padding:"8px 14px",cursor:"pointer"}}>Revert Run</button>}
+            {isAdmin&&<button disabled={busy} onClick={onRevert} style={{fontSize:12,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.red}55`,borderRadius:8,padding:"8px 14px",cursor:"pointer"}}>{t("payroll.revert_run")}</button>}
           </div>
           <RWCard>
             {items.map((it,i)=>(
@@ -5809,17 +5780,17 @@ function RunFinalize({preview,adjs,finalized,items,month,year,busy,onFinalize,on
                 <Avatar name={it.staff_name} size={28}/>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{it.staff_name}</div>
-                  <div style={{fontSize:10.5,color:T.t4}}>Net ₹{fmtN(it.net_amount)}{it.ot_amount>0?` (incl. OT ₹${fmtN(it.ot_amount)})`:""}</div>
+                  <div style={{fontSize:10.5,color:T.t4}}>{t("payroll.net_fmtnit", { fmtN: fmtN(it.net_amount), it: it.ot_amount>0?` (incl. OT ₹${fmtN(it.ot_amount)})`:"" })}</div>
                 </div>
                 {(()=>{
                   const settled=Number(it.settled)||0, net=Number(it.net_amount)||0;
-                  if(it.pay_status==="paid")   return <Pill label="Paid" c={T.grn} bg={T.grnL}/>;
-                  if(it.pay_status==="hold")   return <Pill label="Hold" c={T.slt} bg={T.sltL||T.surfaceB}/>;
+                  if(it.pay_status==="paid")   return <Pill label={t("common.paid")} c={T.grn} bg={T.grnL}/>;
+                  if(it.pay_status==="hold")   return <Pill label={t("common.hold")} c={T.slt} bg={T.sltL||T.surfaceB}/>;
                   if(it.pay_status==="partial"||settled>0) return <Pill label={`Partial (₹${fmtN(settled)} of ₹${fmtN(net)})`} c={T.blu} bg={T.bluL}/>;
-                  return <Pill label="Pending" c={T.amb} bg={T.ambL}/>;
+                  return <Pill label={t("common.pending")} c={T.amb} bg={T.ambL}/>;
                 })()}
-                {it.pay_status!=="paid"&&isAdmin&&<button onClick={()=>onMarkPaid(it)} style={{fontSize:11,fontWeight:600,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer"}}>Settle / Pay</button>}
-                <button onClick={()=>onPayslip(it)} style={{fontSize:11,fontWeight:600,color:T.blu,background:"none",border:"none",cursor:"pointer"}}>Payslip</button>
+                {it.pay_status!=="paid"&&isAdmin&&<button onClick={()=>onMarkPaid(it)} style={{fontSize:11,fontWeight:600,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer"}}>{t("payroll.settle_pay")}</button>}
+                <button onClick={()=>onPayslip(it)} style={{fontSize:11,fontWeight:600,color:T.blu,background:"none",border:"none",cursor:"pointer"}}>{t("payroll.payslip")}</button>
               </div>
             ))}
           </RWCard>
@@ -5847,7 +5818,7 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
   },[]);
   useEffect(()=>{ load(); },[load]);
 
-  if(loading) return <div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:12}}>Overview load ho raha hai…</div>;
+  if(loading) return <div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:12}}>{t("payroll.overview_load_ho_raha_hai")}</div>;
   if(err||!ov) return <ErrorRetry onRetry={load}/>;
 
   const DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -5888,10 +5859,10 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
   const actionRows=actions?[
     actions.pendingLeaves>0&&{c:T.amb,l:`${actions.pendingLeaves} leave approval${actions.pendingLeaves>1?"s":""} pending`,btn:"Review",go:()=>setTab("office-leave")},
     actions.pendingAttEdits>0&&{c:T.blu,l:`${actions.pendingAttEdits} attendance edit request${actions.pendingAttEdits>1?"s":""}`,btn:"Review",go:()=>setTab("office-att")},
-    actions.pendingReviews>0&&{c:T.red,l:`${actions.pendingReviews} outside-geofence punch review pending`,btn:"Review",go:()=>setTab("office-att")},
-    actions.settleRequests.count>0&&{c:T.grn,l:`${actions.settleRequests.count} salary settle request${actions.settleRequests.count>1?"s":""} — ₹${fmtN(actions.settleRequests.amount)}`,sub:"Finance → Staff Wallets me confirm hote hain"},
-    !actions.run.finalized&&{c:T.pur,l:`${MONTHS[actions.run.month-1]} payroll run pending`,btn:"Start Run",go:()=>onOpenSalary("run")},
-    actions.run.finalized&&{c:T.grn,l:`${MONTHS[actions.run.month-1]} payroll finalized 🔒`,btn:"View",go:()=>onOpenSalary("run")},
+    actions.pendingReviews>0&&{c:T.red,l:t("payroll.pendingreviews_outside_geofence_punch_review_pending", { pendingReviews: actions.pendingReviews }),btn:"Review",go:()=>setTab("office-att")},
+    actions.settleRequests.count>0&&{c:T.grn,l:`${actions.settleRequests.count} salary settle request${actions.settleRequests.count>1?"s":""} — ₹${fmtN(actions.settleRequests.amount)}`,sub:t("payroll.finance_staff_wallets_me_confirm_hote")},
+    !actions.run.finalized&&{c:T.pur,l:t("payroll.months_payroll_run_pending", { MONTHS: MONTHS[actions.run.month-1] }),btn:"Start Run",go:()=>onOpenSalary("run")},
+    actions.run.finalized&&{c:T.grn,l:t("payroll.months_payroll_finalized", { MONTHS: MONTHS[actions.run.month-1] }),btn:"View",go:()=>onOpenSalary("run")},
   ].filter(Boolean):[];
 
   const selected=selDay!=null?ov.days[selDay]:null;
@@ -5902,8 +5873,8 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
       {/* ─── ACTION CENTER ─── */}
       {isAdmin&&actions&&(
         <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:"4px 16px"}}>
-          <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",padding:"10px 0 4px"}}>Action Center</div>
-          {actionRows.length===0&&<div style={{padding:"10px 0 14px",fontSize:12.5,color:T.grn,fontWeight:600}}>Sab clear — koi pending action nahi ✓</div>}
+          <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",padding:"10px 0 4px"}}>{t("payroll.action_center")}</div>
+          {actionRows.length===0&&<div style={{padding:"10px 0 14px",fontSize:12.5,color:T.grn,fontWeight:600}}>{t("payroll.sab_clear_koi_pending_action_nahi")}</div>}
           {actionRows.map((r,i)=>(
             <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderTop:i>0?`1px solid ${T.b1}`:"none"}}>
               <span style={{width:7,height:7,borderRadius:"50%",background:r.c,flexShrink:0}}/>
@@ -5920,8 +5891,8 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
       {/* ─── MANPOWER OUTLOOK ─── */}
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:16}}>
         <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:800,color:T.t1}}>Manpower Outlook — Next 4 Days</div>
-          <div style={{fontSize:10.5,color:T.t4}}>din par click karo — detail neeche</div>
+          <div style={{fontSize:13,fontWeight:800,color:T.t1}}>{t("payroll.manpower_outlook_next_4_days")}</div>
+          <div style={{fontSize:10.5,color:T.t4}}>{t("payroll.din_par_click_karo_detail_neeche")}</div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:`repeat(${ov.days.length},1fr)`,gap:10}}>
           {ov.days.map((d,i)=>{
@@ -5936,7 +5907,7 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
                 {off?(
                   <>
                     <div style={{fontSize:20,fontWeight:800,color:T.t4,margin:"8px 0 2px"}}>—</div>
-                    <div style={{fontSize:10.5,color:T.t4}}>{d.holiday||"Week off"}</div>
+                    <div style={{fontSize:10.5,color:T.t4}}>{d.holiday||t("payroll.week_off_2")}</div>
                   </>
                 ):(
                   <>
@@ -5944,7 +5915,7 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
                     <div style={{fontSize:10,color:T.t4,marginBottom:4}}>available</div>
                     {nLeave>0
                       ? <div style={{fontSize:10.5,fontWeight:700,color:T.amb}}>⚠ {nLeave} leave</div>
-                      : <div style={{fontSize:10.5,fontWeight:700,color:T.grn}}>✓ Full team</div>}
+                      : <div style={{fontSize:10.5,fontWeight:700,color:T.grn}}>{t("payroll.full_team")}</div>}
                     {d.pending.length>0&&<div style={{fontSize:9.5,color:T.t4,marginTop:1}}>+{d.pending.length} pending</div>}
                   </>
                 )}
@@ -5957,7 +5928,7 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
         {selected&&(
           <div style={{marginTop:12,border:`1px solid ${T.b1}`,borderRadius:10,padding:"12px 14px",background:T.surfaceB}}>
             <div style={{fontSize:12,fontWeight:800,color:T.t1,marginBottom:8}}>
-              {fmtDate(selected.date)} — {selected.onLeave.length>0?`${selected.onLeave.length} staff leave par`:"koi approved leave nahi"}
+              {fmtDate(selected.date)} — {selected.onLeave.length>0?`${selected.onLeave.length} staff leave par`:t("payroll.koi_approved_leave_nahi")}
               {selected.holiday&&<span style={{fontSize:10.5,fontWeight:600,color:T.amb,marginLeft:8}}>🎉 {selected.holiday}</span>}
             </div>
             {selected.onLeave.map(l=>(
@@ -5976,7 +5947,7 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
                 <Avatar name={l.name} size={26}/>
                 <div style={{flex:1,minWidth:0}}>
                   <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{l.name}</span>
-                  <span style={{fontSize:10,fontWeight:700,color:T.amb,marginLeft:6}}>• pending approval</span>
+                  <span style={{fontSize:10,fontWeight:700,color:T.amb,marginLeft:6}}>{t("payroll.pending_approval")}</span>
                 </div>
                 {l.role&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700}}>{l.role}</span>}
                 <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.purL,color:T.pur,fontWeight:700}}>{projName(l.project)}</span>
@@ -5997,12 +5968,12 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
       {covRows.length>0&&(
         <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:16}}>
           <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:10}}>
-            <div style={{fontSize:13,fontWeight:800,color:T.t1}}>Project Coverage</div>
-            <div style={{fontSize:10.5,color:T.t4}}>next 4 days basis — available staff per din</div>
+            <div style={{fontSize:13,fontWeight:800,color:T.t1}}>{t("payroll.project_coverage")}</div>
+            <div style={{fontSize:10.5,color:T.t4}}>{t("payroll.next_4_days_basis_available_staff")}</div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:`minmax(160px,1.4fr) 70px repeat(${ov.days.length},1fr)`,gap:0,fontSize:11.5}}>
-            <div style={{padding:"6px 8px",fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Project</div>
-            <div style={{padding:"6px 8px",fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Staff</div>
+            <div style={{padding:"6px 8px",fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("common.project")}</div>
+            <div style={{padding:"6px 8px",fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("master_library.staff")}</div>
             {ov.days.map((d,i)=><div key={d.date} style={{padding:"6px 4px",fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign:"center"}}>{dayLabel(d,i).split(" · ")[0]}</div>)}
             {covRows.map(p=>(
               [
@@ -6254,17 +6225,17 @@ function PayrollModule(){
 
   // Office Staff mode — 5 tabs (Settings gear icon me, right side)
   const TABS_OFFICE=[
-    {id:"office-overview", l:"Overview",   sub:"Team & HR dashboard"},
-    {id:"office-att",      l:"Attendance", sub:"From Mobile Punch"},
-    {id:"office-leave",    l:"Leave",      sub:"Approvals & holidays"},
-    {id:"office-salary",   l:"Salary",     sub:"Monthly · Run · Ledger"},
-    {id:"office-advances", l:"Advances",   sub:"Advance tracking"},
+    {id:"office-overview", l:t("common.overview"),   sub:t("payroll.team_hr_dashboard")},
+    {id:"office-att",      l:t("payroll.attendance"), sub:t("payroll.from_mobile_punch")},
+    {id:"office-leave",    l:t("app.leave"),      sub:t("payroll.approvals_holidays")},
+    {id:"office-salary",   l:t("finance.salary"),     sub:t("payroll.monthly_run_ledger")},
+    {id:"office-advances", l:t("payroll.advances"),   sub:t("payroll.advance_tracking")},
   ];
   // Daily Wages Labour mode — 3 tabs (Settings gear me)
   const TABS_DAILY=[
-    {id:"daily-workers",   l:"Workers",           sub:"Labour master"},
-    {id:"daily-att",       l:"Daily Attendance",  sub:"Project-wise"},
-    {id:"daily-payments",  l:"Payments",          sub:"Weekly / monthly"},
+    {id:"daily-workers",   l:t("common.workers"),           sub:t("payroll.labour_master")},
+    {id:"daily-att",       l:t("payroll.daily_attendance"),  sub:t("fuel.project_wise")},
+    {id:"daily-payments",  l:t("common.payments"),          sub:t("payroll.weekly_monthly")},
   ];
   const TABS = mode==="office" ? TABS_OFFICE : TABS_DAILY;
   const settingsTabId = mode==="office" ? "office-settings" : "daily-settings";
@@ -6279,16 +6250,16 @@ function PayrollModule(){
   const pendingCount=Math.max(0,staff.length-paidEmpIds.size);
 
   const TILES_OFFICE=[
-    {l:"Office Staff",         v:staff.length,        sub:"Permanent employees",               c:T.blu},
-    {l:"Monthly Net Payroll",  v:`₹${fmt(totalMonthlyNet)}`,  sub:`${MONTHS[month]} ${year}`,          c:T.grn},
-    {l:"Pending Advances",     v:`₹${fmt(pendingAdvances)}`,  sub:`${advances.filter(a=>a.status==="Pending deduction").length} to deduct`, c:T.pur},
-    {l:"Salary Pending",       v:`₹${fmt(manualPending)}`,    sub:`${pendingCount} ${pendingCount===1?"employee":"employees"} unpaid`, c:manualPending>0?T.amb:T.grn},
+    {l:t("payroll.office_staff"),         v:staff.length,        sub:t("payroll.permanent_employees"),               c:T.blu},
+    {l:t("payroll.monthly_net_payroll"),  v:`₹${fmt(totalMonthlyNet)}`,  sub:t("payroll.month_year", { month: MONTHS[month], year }),          c:T.grn},
+    {l:t("payroll.pending_advances"),     v:`₹${fmt(pendingAdvances)}`,  sub:t("payroll.length_to_deduct", { length: advances.filter(a=>a.status==="Pending deduction").length }), c:T.pur},
+    {l:t("payroll.salary_pending"),       v:`₹${fmt(manualPending)}`,    sub:`${pendingCount} ${pendingCount===1?"employee":"employees"} unpaid`, c:manualPending>0?T.amb:T.grn},
   ];
   const TILES_DAILY=[
-    {l:"Daily Workers",        v:workers.length,              sub:"Active labour",                     c:T.blu},
-    {l:"Payable This Month",   v:`₹${fmt(totalDailyPayable)}`,sub:`${MONTHS[month]} ${year}`,          c:T.grn},
-    {l:"Projects Covered",     v:(PROJECTS||[]).length,       sub:"Active project sites",              c:T.pur},
-    {l:"Pending Advances",     v:`₹${fmt(pendingAdvances)}`,  sub:`${advances.filter(a=>a.status==="Pending deduction").length} to deduct`, c:T.amb},
+    {l:t("payroll.daily_workers"),        v:workers.length,              sub:t("payroll.active_labour"),                     c:T.blu},
+    {l:t("payroll.payable_this_month"),   v:`₹${fmt(totalDailyPayable)}`,sub:t("payroll.month_year", { month: MONTHS[month], year }),          c:T.grn},
+    {l:t("payroll.projects_covered"),     v:(PROJECTS||[]).length,       sub:t("payroll.active_project_sites"),              c:T.pur},
+    {l:t("payroll.pending_advances"),     v:`₹${fmt(pendingAdvances)}`,  sub:t("payroll.length_to_deduct", { length: advances.filter(a=>a.status==="Pending deduction").length }), c:T.amb},
   ];
   const TILES = mode==="office" ? TILES_OFFICE : TILES_DAILY;
 
@@ -6300,11 +6271,11 @@ function PayrollModule(){
         <div style={{display:"inline-flex",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:3,boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
           <button onClick={()=>setModeAndTab("office")}
             style={{display:"flex",alignItems:"center",gap:7,padding:"8px 18px",border:"none",background:mode==="office"?T.blu:"transparent",color:mode==="office"?"#fff":T.t3,borderRadius:8,fontSize:12.5,fontWeight:700,cursor:"pointer",transition:"all .15s"}}>
-            <span style={{fontSize:14}}>👔</span> Office Staff
+            <span style={{fontSize:14}}>👔</span> {t("payroll.office_staff")}
           </button>
           <button onClick={()=>setModeAndTab("daily")}
             style={{display:"flex",alignItems:"center",gap:7,padding:"8px 18px",border:"none",background:mode==="daily"?T.amb:"transparent",color:mode==="daily"?"#fff":T.t3,borderRadius:8,fontSize:12.5,fontWeight:700,cursor:"pointer",transition:"all .15s"}}>
-            <span style={{fontSize:14}}>👷</span> Daily Wages Workers
+            <span style={{fontSize:14}}>👷</span> {t("payroll.daily_wages_workers")}
           </button>
         </div>
       </div>
@@ -6335,7 +6306,7 @@ function PayrollModule(){
             ))}
           </div>
           {/* Settings — gear (config roz ka kaam nahi, isliye tab nahi) */}
-          <button onClick={()=>setTab(settingsTabId)} title="Settings"
+          <button onClick={()=>setTab(settingsTabId)} title={t("common.settings")}
             style={{display:"flex",alignItems:"center",padding:"5px 8px",borderRadius:6,border:"none",background:tab===settingsTabId?"rgba(255,255,255,0.14)":"none",color:tab===settingsTabId?"white":"rgba(255,255,255,0.45)",cursor:"pointer"}}>
             <IcSet size={15} color="currentColor"/>
           </button>
@@ -6358,7 +6329,7 @@ function PayrollModule(){
                 `salary_ledger_${MONTHS[month]}_${year}.csv`);
             }
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.18)",background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.7)",fontSize:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
-            <IcDown size={12} color="currentColor"/> Export
+            <IcDown size={12} color="currentColor"/> {t("common.export")}
           </button>
 
           {/* Month + Year picker */}
@@ -6386,7 +6357,7 @@ function PayrollModule(){
           {/* View toggle + search — Day view (marking) | Month grid (overview) */}
           <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
             <div style={{display:"inline-flex",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:3}}>
-              {[{v:"day",l:"📅 Aaj — Day View"},{v:"grid",l:"Month Grid"}].map(o=>(
+              {[{v:"day",l:t("payroll.aaj_day_view")},{v:"grid",l:t("payroll.month_grid")}].map(o=>(
                 <button key={o.v} onClick={()=>setAttView(o.v)}
                   style={{padding:"6px 14px",borderRadius:7,border:"none",background:attView===o.v?T.blu:"transparent",color:attView===o.v?"#fff":T.t3,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>
                   {o.l}
@@ -6394,16 +6365,16 @@ function PayrollModule(){
               ))}
             </div>
             {attView==="grid"&&[
-              {v:"all",  l:"All",            n:staff.length},
-              {v:"sal",  l:"💰 Salary staff", n:staff.filter(s=>s.salaryEnabled!==false).length},
-              {v:"app",  l:"📱 App users",    n:staff.filter(s=>s.isAppUser).length},
+              {v:"all",  l:t("common.all"),            n:staff.length},
+              {v:"sal",  l:t("payroll.salary_staff"), n:staff.filter(s=>s.salaryEnabled!==false).length},
+              {v:"app",  l:t("payroll.app_users"),    n:staff.filter(s=>s.isAppUser).length},
             ].map(f=>(
               <button key={f.v} onClick={()=>setAttFilter(f.v)}
                 style={{padding:"5px 12px",borderRadius:14,border:`1.5px solid ${attFilter===f.v?T.blu:T.b1}`,background:attFilter===f.v?T.bluL:T.surface,color:attFilter===f.v?T.blu:T.t3,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                 {f.l} <span style={{opacity:.6}}>({f.n})</span>
               </button>
             ))}
-            <input value={attSearch} onChange={e=>setAttSearch(e.target.value)} placeholder="Search name…"
+            <input value={attSearch} onChange={e=>setAttSearch(e.target.value)} placeholder={t("payroll.search_name")}
               style={{marginLeft:"auto",height:28,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",width:160}}/>
           </div>
           {attView==="day"?(
@@ -6434,9 +6405,9 @@ function PayrollModule(){
             {/* Salary group — Monthly / Create Salary / Ledger */}
             <div style={{display:"flex",gap:6,marginBottom:14,borderBottom:`1px solid ${T.b1}`,paddingBottom:6}}>
               {[
-                {id:"monthly", l:"Monthly Salary", c:T.blu},
-                ...(isAdmin?[{id:"run", l:"Create Salary", c:T.grn}]:[]),
-                {id:"ledger",  l:"Salary Ledger", c:T.pur},
+                {id:"monthly", l:t("payroll.monthly_salary"), c:T.blu},
+                ...(isAdmin?[{id:"run", l:t("payroll.create_salary"), c:T.grn}]:[]),
+                {id:"ledger",  l:t("payroll.salary_ledger"), c:T.pur},
               ].map(s=>(
                 <button key={s.id} onClick={()=>setSalarySub(s.id)}
                   style={{padding:"6px 13px",borderRadius:7,border:"none",background:salarySub===s.id?s.c:"transparent",color:salarySub===s.id?"white":T.t3,fontSize:12,fontWeight:salarySub===s.id?700:500,cursor:"pointer",transition:"all .15s"}}>
@@ -6451,7 +6422,7 @@ function PayrollModule(){
               isAdmin
                 ? <PayrollRunWizard month={month} year={year} isAdmin={isAdmin} workingDays={workingDays}
                     setTab={(id)=>{ if(id==="office-salary") setSalarySub("monthly"); else setTab(id); }} onChanged={loadAll}/>
-                : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Create Salary run is only accessible to admins.</div>
+                : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>{t("payroll.create_salary_run_is_only_accessible")}</div>
             )}
             {salarySub==="ledger" && (
               <SalaryLedgerTab salaryRecords={salaryRecords} setSalaryRecords={setSalaryRecords} month={month} year={year}/>
@@ -6467,8 +6438,8 @@ function PayrollModule(){
               {/* Settings group — Payroll Config / Sites & Geofences */}
               <div style={{display:"flex",gap:6,marginBottom:14,borderBottom:`1px solid ${T.b1}`,paddingBottom:6}}>
                 {[
-                  {id:"config", l:"Payroll Config", c:T.blu},
-                  {id:"sites",  l:"Sites & Geofences", c:T.grn},
+                  {id:"config", l:t("payroll.payroll_config"), c:T.blu},
+                  {id:"sites",  l:t("payroll.sites_geofences"), c:T.grn},
                 ].map(s=>(
                   <button key={s.id} onClick={()=>setSettingsSub(s.id)}
                     style={{padding:"6px 13px",borderRadius:7,border:"none",background:settingsSub===s.id?s.c:"transparent",color:settingsSub===s.id?"white":T.t3,fontSize:12,fontWeight:settingsSub===s.id?700:500,cursor:"pointer",transition:"all .15s"}}>
@@ -6480,7 +6451,7 @@ function PayrollModule(){
                 ? <PayrollSettingsTab defaultDueDays={defaultDueDays} setDefaultDueDays={setDefaultDueDays} workingDays={workingDays} setWorkingDays={setWorkingDays}/>
                 : <GeofenceAdminTab isAdmin={isAdmin}/>}
             </div>
-          ) : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Settings are only accessible to admins.</div>
+          ) : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>{t("payroll.settings_are_only_accessible_to_admins")}</div>
         )}
 
         {/* ─── DAILY WAGES MODE ─── */}
@@ -6496,7 +6467,7 @@ function PayrollModule(){
         {mode==="daily" && tab==="daily-settings" && (
           isAdmin
             ? <DailyWagesSettingsTab/>
-            : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Settings are only accessible to admins.</div>
+            : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>{t("payroll.settings_are_only_accessible_to_admins")}</div>
         )}
       </div>
 

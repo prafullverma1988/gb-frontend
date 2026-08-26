@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import MOMModule from "../MOMModule";
 import { T } from "../shared/tokens";
 import { Pill, Panel, PHead, AddBtn, SecBtn } from "../shared/ui";
+import { t } from "../../i18n";
 
 const D = { moms:[] };
 
@@ -23,7 +24,7 @@ function _TabMOM_legacy_unused() {
   return (
     <div style={{padding:"16px 18px", display:"flex", gap:14, height:"100%"}}>
       <div style={{width:270, flexShrink:0, display:"flex", flexDirection:"column", gap:8}}>
-        <AddBtn label="New MOM"/>
+        <AddBtn label={t("mom.new_mom")}/>
         <div style={{marginTop:4}}/>
         {D.moms.map(m=>{
           const ms = momS[m.status]||{c:T.slt,bg:T.sltL};
@@ -36,7 +37,7 @@ function _TabMOM_legacy_unused() {
               </div>
               <div style={{fontSize:11.5, color:T.t2, marginBottom:3}}>{m.type}</div>
               <div style={{fontSize:11.5, color:T.t3, marginBottom:4}}>{m.date}</div>
-              <div style={{fontSize:11, color:T.t4}}>{m.attendees.length>0?m.attendees.slice(0,2).join(", ")+(m.attendees.length>2?` +${m.attendees.length-2}`:""):"No attendees yet"}</div>
+              <div style={{fontSize:11, color:T.t4}}>{m.attendees.length>0?m.attendees.slice(0,2).join(", ")+(m.attendees.length>2?` +${m.attendees.length-2}`:""):t("mom.no_attendees_yet")}</div>
             </div>
           );
         })}
@@ -47,24 +48,24 @@ function _TabMOM_legacy_unused() {
           <PHead title={`${sel.no} — ${sel.type}`} action={
             <div style={{display:"flex", gap:8, alignItems:"center"}}>
               <span style={{fontSize:11.5, color:T.t3}}>{sel.date} · {sel.venue}</span>
-              {sel.next&&<span style={{fontSize:11.5, color:T.blu, fontWeight:600}}>Next: {sel.next}</span>}
-              <SecBtn label="Export PDF"/>
+              {sel.next&&<span style={{fontSize:11.5, color:T.blu, fontWeight:600}}>{t("mom.next_next", { next: sel.next })}</span>}
+              <SecBtn label={t("mom.export_pdf")}/>
             </div>
           }/>
           <div style={{flex:1, overflowY:"auto", padding:"16px 18px"}}>
             <div style={{marginBottom:16}}>
-              <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>Attendees</div>
+              <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>{t("mom.attendees")}</div>
               {sel.attendees.length>0?(
                 <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
                   {sel.attendees.map((a,i)=>(
                     <span key={i} style={{background:T.surfaceB, color:T.t1, fontSize:12.5, fontWeight:500, padding:"4px 12px", borderRadius:20, border:`1px solid ${T.b1}`}}>{a}</span>
                   ))}
                 </div>
-              ):<span style={{fontSize:12.5, color:T.t4, fontStyle:"italic"}}>No attendees recorded</span>}
+              ):<span style={{fontSize:12.5, color:T.t4, fontStyle:"italic"}}>{t("mom.no_attendees_recorded")}</span>}
             </div>
             <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:16}}>
               <div>
-                <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>Agenda</div>
+                <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>{t("mom.agenda")}</div>
                 {sel.agenda.map((a,i)=>(
                   <div key={i} style={{display:"flex", gap:8, marginBottom:8, padding:"8px 11px", background:T.surfaceB, borderRadius:6, border:`1px solid ${T.b1}`, alignItems:"flex-start"}}>
                     <span style={{width:18, height:18, borderRadius:4, background:T.bluL, color:T.blu, fontSize:10, fontWeight:700, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>{i+1}</span>
@@ -73,7 +74,7 @@ function _TabMOM_legacy_unused() {
                 ))}
               </div>
               <div>
-                <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>Decisions / Action Items</div>
+                <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>{t("mom.decisions_action_items")}</div>
                 {sel.decisions.length>0?sel.decisions.map((d,i)=>(
                   <div key={i} style={{display:"flex", gap:8, marginBottom:8, padding:"8px 11px", background:T.grnL, borderRadius:6, border:`1px solid ${T.grnM}`, alignItems:"flex-start", borderLeft:`3px solid ${T.grn}`}}>
                     <div style={{width:16,height:16,borderRadius:4,background:T.grn,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -81,7 +82,7 @@ function _TabMOM_legacy_unused() {
                     </div>
                     <span style={{fontSize:12.5, color:T.t1, lineHeight:1.4}}>{d}</span>
                   </div>
-                )):<div style={{padding:"14px", background:T.surfaceB, borderRadius:6, border:`1px solid ${T.b1}`, color:T.t4, fontSize:12.5, fontStyle:"italic"}}>No decisions — meeting is {sel.status.toLowerCase()}</div>}
+                )):<div style={{padding:"14px", background:T.surfaceB, borderRadius:6, border:`1px solid ${T.b1}`, color:T.t4, fontSize:12.5, fontStyle:"italic"}}>{t("mom.no_decisions_meeting_is_sel", { sel: sel.status.toLowerCase() })}</div>}
               </div>
             </div>
           </div>

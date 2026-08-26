@@ -1,4 +1,5 @@
 import { recordFailedCall } from "../utils/diag";
+import { t, getLang } from "../i18n";
 
 // ── GB Buildcon API Configuration ──────────────────────────────
 // Local dev → localhost:5000, else production.
@@ -54,6 +55,11 @@ const api = async (endpoint, options={}) => {
   const config = {
     headers: {
       "Content-Type": "application/json",
+      // Backend apne messages isi header se chunta hai. Iske bina user ne
+      // Hindi/English chuni ho to bhi API se jawab default (Hinglish) me hi
+      // aata — aadhi screen ek bhasha me, aadhi doosri me. Mobile app ye
+      // pehle se bhejta tha; web me chhoot gaya tha.
+      "X-Lang": getLang(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
@@ -89,7 +95,7 @@ const api = async (endpoint, options={}) => {
       // Allow in-flight responses to finish writing before reload.
       setTimeout(() => window.location.reload(), 50);
     }
-    return { success: false, message: "Session expired", _unauthorized: true };
+    return { success: false, message: t("api.session_expired"), _unauthorized: true };
   }
 
   // Safe JSON parse — backend occasionally returns plain text on edge
@@ -102,7 +108,7 @@ const api = async (endpoint, options={}) => {
   } catch (parseErr) {
     return {
       success: false,
-      message: `Bad server response (${res.status})`,
+      message: t("api.bad_server_response_status", { status: res.status }),
       _parseError: true,
       _status: res.status,
     };
@@ -123,7 +129,7 @@ api.del   = (endpoint, body, opts)  => api(endpoint, body !== undefined ? { meth
 
 // ── Mobile + Password ────────────────────────────────────────
 api.loginPassword = async (mobile, password) => {
-  const res  = await fetch(`${API_BASE}/auth/login/password`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,password}) });
+  const res  = await fetch(`${API_BASE}/auth/login/password`, { method:"POST", headers:{"Content-Type":"application/json","X-Lang":getLang()}, body:JSON.stringify({mobile,password}) });
   const data = await res.json();
   if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
   return data;
@@ -131,13 +137,13 @@ api.loginPassword = async (mobile, password) => {
 
 // ── Mobile + OTP: request OTP ────────────────────────────────
 api.requestOtp = async (mobile) => {
-  const res  = await fetch(`${API_BASE}/auth/otp/request`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile}) });
+  const res  = await fetch(`${API_BASE}/auth/otp/request`, { method:"POST", headers:{"Content-Type":"application/json","X-Lang":getLang()}, body:JSON.stringify({mobile}) });
   return await res.json();
 };
 
 // ── Mobile + OTP: verify OTP & login ─────────────────────────
 api.loginOtp = async (mobile, otp, accessToken) => {
-  const res  = await fetch(`${API_BASE}/auth/login/otp`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,otp,accessToken}) });
+  const res  = await fetch(`${API_BASE}/auth/login/otp`, { method:"POST", headers:{"Content-Type":"application/json","X-Lang":getLang()}, body:JSON.stringify({mobile,otp,accessToken}) });
   const data = await res.json();
   if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
   return data;
@@ -145,7 +151,7 @@ api.loginOtp = async (mobile, otp, accessToken) => {
 // Multi-company login: after login returns multi_company, the user picks a
 // company → exchange the pending token for a real auth token.
 api.loginSelect = async (pending, user_id, company_id) => {
-  const res  = await fetch(`${API_BASE}/auth/login/select`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ pending, user_id, company_id }) });
+  const res  = await fetch(`${API_BASE}/auth/login/select`, { method:"POST", headers:{"Content-Type":"application/json","X-Lang":getLang()}, body:JSON.stringify({ pending, user_id, company_id }) });
   const data = await res.json();
   if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
   return data;

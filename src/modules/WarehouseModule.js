@@ -3,6 +3,7 @@ import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
 import GrnIssueBlock from "../components/GrnIssueBlock";
+import { t, Rich } from "../i18n";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -59,7 +60,7 @@ const getCategoryEmoji=(cat)=>{
 const UnitLock=({unit,locked,onChange,fallbackUnits=UNITS,compact})=>{
   if(locked){
     return (
-      <div title="Unit Material Library se aata hai — change karne ke liye Library → Materials me edit karein"
+      <div title={t("procurement.unit_material_library_se_aata_hai")}
         style={{height:compact?32:38,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",justifyContent:"center",gap:5,fontSize:12.5,fontWeight:700,color:T.t1,fontFamily:"inherit",cursor:"not-allowed",boxSizing:"border-box"}}>
         <span style={{fontSize:9,opacity:.55}}>🔒</span>
         <span>{unit||"—"}</span>
@@ -204,7 +205,7 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
     if(m) setF(p=>({...p,name:m.name,unit:m.unit||"Nos",rate:m.rate||p.rate,category:m.category||p.category}));
   };
   const submit=async()=>{
-    if(!f.name.trim()){alert("Material ka naam dalna padega");return;}
+    if(!f.name.trim()){alert(t("warehouse.material_ka_naam_dalna_padega"));return;}
     setSaving(true);
     try{
       const body={...f,qty:Number(f.qty)||0,min_qty:Number(f.min_qty)||0,max_qty:Number(f.max_qty)||0,rate:Number(f.rate)||0};
@@ -221,56 +222,56 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
   const fromLibrary=editing||!!libPick;
 
   return(
-    <ModalShell title={editing?"Edit Material":"New Material"}
-      sub={editing?material.id||material.name:"Library se pick karein — unit auto-locked"}
+    <ModalShell title={editing?t("master_library.edit_material"):t("warehouse.new_material")}
+      sub={editing?material.id||material.name:t("warehouse.library_se_pick_karein_unit_auto")}
       onClose={onClose} width={500}
       footer={<>
-        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-        <Btn onClick={submit} disabled={!f.name.trim()||saving} c={editing?T.blu:T.grn} icon={IcChk}>{saving?"Saving...":editing?"Save Changes":"Add Material"}</Btn>
+        <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
+        <Btn onClick={submit} disabled={!f.name.trim()||saving} c={editing?T.blu:T.grn} icon={IcChk}>{saving?t("common.saving"):editing?t("common.save_changes"):t("master_library.add_material")}</Btn>
       </>}>
       {!editing&&(
-        <Field label="Pick from Material Library *" style={{marginBottom:11}}>
-          <SearchSelect value={libPick} options={libOpts} onChange={onLibPick} placeholder="Library se material chunein"/>
-          {effectiveLib.length===0&&<div style={{fontSize:10.5,color:T.amb,marginTop:3}}>⚠ Library khali hai — Library → Materials me pehle add karein</div>}
+        <Field label={t("warehouse.pick_from_material_library")} style={{marginBottom:11}}>
+          <SearchSelect value={libPick} options={libOpts} onChange={onLibPick} placeholder={t("warehouse.library_se_material_chunein")}/>
+          {effectiveLib.length===0&&<div style={{fontSize:10.5,color:T.amb,marginTop:3}}>{t("warehouse.library_khali_hai_library_materials_me")}</div>}
           {fromLibrary&&(
             <div style={{marginTop:6,padding:"6px 10px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:6,fontSize:11.5,color:T.grn,display:"flex",alignItems:"center",gap:5}}>
               <span style={{fontSize:11}}>🔒</span>
               <span style={{fontWeight:700}}>{f.name}</span>
-              <span style={{color:T.t4,fontWeight:500,marginLeft:"auto"}}>· name + unit locked from library</span>
+              <span style={{color:T.t4,fontWeight:500,marginLeft:"auto"}}>{t("warehouse.name_unit_locked_from_library")}</span>
             </div>
           )}
         </Field>
       )}
       {/* Edit mode: name is fixed (came from existing wh_materials row) */}
       {editing&&(
-        <Field label="Material name" style={{marginBottom:11}}>
+        <Field label={t("warehouse.material_name")} style={{marginBottom:11}}>
           <Input value={f.name} disabled
             style={{background:T.surfaceB,color:T.t2,cursor:"not-allowed"}}/>
         </Field>
       )}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:11}}>
-        <Field label="Category">
+        <Field label={t("common.category")}>
           <select value={f.category} onChange={e=>upd("category",e.target.value)} disabled={fromLibrary}
             style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:fromLibrary?T.t2:T.t1,background:fromLibrary?T.surfaceB:T.surface,outline:"none",fontFamily:"inherit",cursor:fromLibrary?"not-allowed":"pointer"}}>
             {CATEGORIES.map(c=><option key={c}>{c}</option>)}
             {fromLibrary&&!CATEGORIES.includes(f.category)&&<option>{f.category}</option>}
           </select>
         </Field>
-        <Field label={<span>Unit {fromLibrary?<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· locked from library</span>:""}</span>}>
+        <Field label={<span>{t("common.unit")} {fromLibrary?<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.locked_from_library")}</span>:""}</span>}>
           <UnitLock unit={f.unit} locked={fromLibrary} onChange={u=>upd("unit",u)}/>
         </Field>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:11,marginBottom:11}}>
-        <Field label="Min qty"><Input value={f.min_qty} type="number" onChange={e=>upd("min_qty",e.target.value)}/></Field>
-        <Field label="Max qty"><Input value={f.max_qty} type="number" onChange={e=>upd("max_qty",e.target.value)}/></Field>
-        <Field label="Rate (₹/unit)"><Input value={f.rate} type="number" onChange={e=>upd("rate",e.target.value)}/></Field>
+        <Field label={t("warehouse.min_qty")}><Input value={f.min_qty} type="number" onChange={e=>upd("min_qty",e.target.value)}/></Field>
+        <Field label={t("warehouse.max_qty")}><Input value={f.max_qty} type="number" onChange={e=>upd("max_qty",e.target.value)}/></Field>
+        <Field label={t("warehouse.rate_unit")}><Input value={f.rate} type="number" onChange={e=>upd("rate",e.target.value)}/></Field>
       </div>
       <div style={{display:"grid",gridTemplateColumns:editing?"1fr":"1fr 1fr",gap:11}}>
         {!editing&&(
-          <Field label="Opening qty"><Input value={f.qty} type="number" onChange={e=>upd("qty",e.target.value)}/></Field>
+          <Field label={t("warehouse.opening_qty")}><Input value={f.qty} type="number" onChange={e=>upd("qty",e.target.value)}/></Field>
         )}
-        <Field label="Location">
-          <Input value={f.location} onChange={e=>upd("location",e.target.value)} placeholder="Main Godown"/>
+        <Field label={t("warehouse.location")}>
+          <Input value={f.location} onChange={e=>upd("location",e.target.value)} placeholder={t("warehouse.main_godown")}/>
         </Field>
       </div>
     </ModalShell>
@@ -308,7 +309,7 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMateria
       {lockMaterial?(
         // MR-driven flow: material is decided by the parent MR — no change allowed.
         // Show as a non-interactive locked chip so the user sees what's being issued.
-        <div title="MR me yahi material approve hua hai — change nahi ho sakta"
+        <div title={t("warehouse.mr_me_yahi_material_approve_hua")}
           style={{display:"flex",alignItems:"center",gap:6,padding:"7px 11px",borderRadius:6,background:T.surfaceB,border:`1.5px solid ${T.b1}`,fontFamily:"inherit",minHeight:32}}>
           <span style={{fontSize:11,opacity:.55}}>🔒</span>
           <span style={{fontSize:12.5,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
@@ -318,25 +319,25 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMateria
         </div>
       ):mode==="issue"?(
         <SearchSelect compact value={row.material_id} options={stockOpts}
-          onChange={onPickMaterial} placeholder="Pick material from stock..."/>
+          onChange={onPickMaterial} placeholder={t("warehouse.pick_material_from_stock")}/>
       ):(
         <SearchSelect compact value={row.material_id||row.name} options={stockOpts}
-          onChange={onPickMaterial} placeholder="Material name (pick or type)"/>
+          onChange={onPickMaterial} placeholder={t("warehouse.material_name_pick_or_type")}/>
       )}
       <UnitLock unit={row.unit||"Nos"} compact
         locked={!!(row.material_id || row._unitLocked)}
         onChange={u=>onChange(idx,{unit:u})}/>
       {mode==="grn"&&(
-        <input type="number" value={row.ordered_qty||""} onChange={e=>onChange(idx,{ordered_qty:e.target.value})} placeholder="Ord"
+        <input type="number" value={row.ordered_qty||""} onChange={e=>onChange(idx,{ordered_qty:e.target.value})} placeholder={t("warehouse.ord")}
           style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
       )}
       <input type="number" value={row.qty||row.received_qty||""} onChange={e=>onChange(idx,mode==="grn"?{received_qty:e.target.value}:{qty:e.target.value})}
-        placeholder={mode==="grn"?"Rcvd":"Qty"}
+        placeholder={mode==="grn"?t("warehouse.rcvd"):t("common.qty")}
         style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${overStock?T.red:T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",color:overStock?T.red:T.t1,background:overStock?T.redL:T.surface}}/>
       {(mode==="grn"||mode==="issue"||mode==="transfer")&&(
         <input type="number" value={row.rate||""} onChange={e=>onChange(idx,{rate:e.target.value})}
-          placeholder={mode==="transfer"?"Rate (auto)":"Rate"}
-          title={mode==="transfer"?"Last purchase rate auto-filled. Edit if needed.":""}
+          placeholder={mode==="transfer"?t("warehouse.rate_auto"):t("common.rate")}
+          title={mode==="transfer"?t("warehouse.last_purchase_rate_auto_filled_edit"):""}
           style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",background:mode==="transfer"&&row.rate?T.cynL+"66":T.surface}}/>
       )}
       {(mode==="grn"||mode==="transfer")&&(
@@ -397,13 +398,13 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
   };
   const submitMR=async(mr)=>{
     const d=getDraft(mr);
-    if(!d.challan.trim()){alert("Challan number required");return;}
+    if(!d.challan.trim()){alert(t("common.challan_number_required"));return;}
     const items=(mr.items||[]).map(it=>{
       const dit=d.items[it.id]||{};
       return {id:it.id,name:it.material_name,unit:it.unit,
               received_qty:Number(dit.received_qty)||0,rate:Number(dit.rate)||0};
     }).filter(x=>x.received_qty>0);
-    if(items.length===0){alert("Kam se kam ek item ka received qty fill karo");return;}
+    if(items.length===0){alert(t("warehouse.kam_se_kam_ek_item_ka"));return;}
     setSavingMR(p=>({...p,[mr.id]:true}));
     const res=await api.post(`/warehouse/mr/${mr.id}/grn`,{
       challan:d.challan.trim(),vendor:mr.vendor||null,items,
@@ -530,7 +531,7 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
   const submitDirectRef=useRef(false);
   const submitDirect=async()=>{
     if(submitDirectRef.current) return; // hard guard against double-fire
-    if(!dirF.challan.trim()){alert("Challan No required");return;}
+    if(!dirF.challan.trim()){alert(t("warehouse.challan_no_required"));return;}
     submitDirectRef.current=true;
     setDirSaving(true);
     const cleanItems=dirItems.filter(it=>it.lib_id&&Number(it.qty)>0).map(it=>{
@@ -559,25 +560,25 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
   };
 
   const tabs=[
-    {id:"procurement",l:"Requested by Procurement",c:T.pur,count:orderedMRs.length},
-    {id:"direct",     l:"Direct GRN",              c:T.blu,count:null},
-    {id:"return",     l:"Return from Project",     c:T.cyn,count:null},
+    {id:"procurement",l:t("warehouse.requested_by_procurement"),c:T.pur,count:orderedMRs.length},
+    {id:"direct",     l:t("warehouse.direct_grn"),              c:T.blu,count:null},
+    {id:"return",     l:t("warehouse.return_from_project"),     c:T.cyn,count:null},
   ];
 
   return (
-    <ModalShell title="New GRN — Material In"
-      sub={tab==="procurement"?"Procurement-ordered material ko receive karein":tab==="direct"?"Vendor walk-in delivery — bina prior MR/PO ke":"Project se wapas aaya material log karein"}
+    <ModalShell title={t("warehouse.new_grn_material_in")}
+      sub={tab==="procurement"?t("warehouse.procurement_ordered_material_ko_receive_karein"):tab==="direct"?t("warehouse.vendor_walk_in_delivery_bina_prior"):t("warehouse.project_se_wapas_aaya_material_log")}
       onClose={onClose} width={820}
       footer={
         tab==="return"?<>
-          <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total Value: <b style={{color:T.cyn}}>₹{fmtN(retTotal)}</b></span>
-          <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-          <Btn onClick={submitReturn} disabled={!retValid||retSaving} c={T.cyn} icon={IcIn}>{retSaving?"Saving...":"Save Return"}</Btn>
+          <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>{t("warehouse.total_value")} <b style={{color:T.cyn}}>₹{fmtN(retTotal)}</b></span>
+          <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
+          <Btn onClick={submitReturn} disabled={!retValid||retSaving} c={T.cyn} icon={IcIn}>{retSaving?t("common.saving"):t("warehouse.save_return")}</Btn>
         </>:tab==="direct"?<>
-          <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total: <b style={{color:T.blu}}>₹{fmtN(dirTotal)}</b></span>
-          <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-          <Btn onClick={submitDirect} disabled={!dirValid||dirSaving} c={T.grn} icon={IcChk}>{dirSaving?"Saving...":"Save Direct GRN"}</Btn>
-        </>:<GhostBtn onClick={onClose}>Close</GhostBtn>
+          <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>{t("common.total_2")} <b style={{color:T.blu}}>₹{fmtN(dirTotal)}</b></span>
+          <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
+          <Btn onClick={submitDirect} disabled={!dirValid||dirSaving} c={T.grn} icon={IcChk}>{dirSaving?t("common.saving"):t("warehouse.save_direct_grn")}</Btn>
+        </>:<GhostBtn onClick={onClose}>{t("common.close")}</GhostBtn>
       }>
 
       {/* Sub-tabs */}
@@ -594,18 +595,18 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
       {/* TAB 1: Requested by Procurement */}
       {tab==="procurement"&&(
         <div>
-          {loadingMRs&&<div style={{textAlign:"center",padding:"30px",color:T.t4,fontSize:12.5}}>Loading...</div>}
+          {loadingMRs&&<div style={{textAlign:"center",padding:"30px",color:T.t4,fontSize:12.5}}>{t("common.loading")}</div>}
           {!loadingMRs&&orderedMRs.length===0&&(
             <div style={{padding:"24px 14px",textAlign:"center",background:T.surfaceB,borderRadius:8,border:`1.5px dashed ${T.b1}`,color:T.t4,fontSize:12.5}}>
               <div style={{fontSize:28,opacity:.4,marginBottom:6}}>📋</div>
-              <div style={{fontSize:13,fontWeight:600,color:T.t3,marginBottom:3}}>Koi ordered MR nahi</div>
-              <div>Pehle Warehouse MR banao → admin approve karega → Place Order karo → vendor delivery par yahan receive karo</div>
+              <div style={{fontSize:13,fontWeight:600,color:T.t3,marginBottom:3}}>{t("warehouse.koi_ordered_mr_nahi")}</div>
+              <div>{t("warehouse.pehle_warehouse_mr_banao_admin_approve")}</div>
             </div>
           )}
           {!loadingMRs&&orderedMRs.length>0&&(
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               <div style={{padding:"8px 11px",background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7,fontSize:11.5,color:T.pur,fontWeight:600,marginBottom:4}}>
-                💡 Niche dikhi MR ke against vendor delivery aayi — challan + actual qty + rate fill karke "Record GRN" click karein, stock auto-update hoga.
+               {t("warehouse.niche_dikhi_mr_ke_against_vendor")}
               </div>
               {orderedMRs.map(mr=>{
                 const totalQty=(mr.items||[]).reduce((s,it)=>s+Number(it.qty||0),0);
@@ -627,24 +628,24 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
                         {mr.priority&&<Pill label={mr.priority} c={T.amb} bg={T.ambL}/>}
                       </div>
                       <div style={{fontSize:11.5,color:T.t3}}>
-                        {mr.vendor&&<span>vendor: <b style={{color:T.t1}}>{mr.vendor}</b></span>}
+                        {mr.vendor&&<span>{t("warehouse.vendor")} <b style={{color:T.t1}}>{mr.vendor}</b></span>}
                         {mr.po_no&&<span style={{marginLeft:8,color:T.t4,fontFamily:"monospace"}}>{mr.po_no}</span>}
-                        {mr.expected_date&&<span style={{marginLeft:8,color:T.t4}}>· exp {fmtDate(mr.expected_date)}</span>}
+                        {mr.expected_date&&<span style={{marginLeft:8,color:T.t4}}>{t("warehouse.exp_fmtdate", { fmtDate: fmtDate(mr.expected_date) })}</span>}
                       </div>
-                      {alreadyRecv>0&&<div style={{fontSize:10.5,color:T.blu,fontWeight:600,marginTop:2}}>{fmtN(alreadyRecv)} of {fmtN(totalQty)} already received</div>}
+                      {alreadyRecv>0&&<div style={{fontSize:10.5,color:T.blu,fontWeight:600,marginTop:2}}>{t("warehouse.fmtn_of_fmtn2_already_received", { fmtN: fmtN(alreadyRecv), fmtN2: fmtN(totalQty) })}</div>}
                     </div>
                     {/* Inline GRN form — challan + date + per-item qty/rate */}
                     <div style={{padding:"10px 13px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`}}>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 140px",gap:10,marginBottom:9}}>
-                        <Field label="Challan No *">
-                          <Input value={d.challan} onChange={e=>updDraft(mr,{challan:e.target.value})} placeholder="CH-2026-..."/>
+                        <Field label={t("tasks.challan_no")}>
+                          <Input value={d.challan} onChange={e=>updDraft(mr,{challan:e.target.value})} placeholder={t("warehouse.ch_2026")}/>
                         </Field>
-                        <Field label="Date">
+                        <Field label={t("common.date")}>
                           <Input type="date" value={d.date} onChange={e=>updDraft(mr,{date:e.target.value})}/>
                         </Field>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"2fr 50px 60px 60px 95px 85px 80px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 2px"}}>
-                        <span>Material</span><span>Unit</span><span style={{textAlign:"right"}}>Ord</span><span style={{textAlign:"right"}}>Already</span><span style={{textAlign:"center",color:T.grn,fontSize:10,fontWeight:800}}>RECEIVE QTY *</span><span style={{textAlign:"right"}}>Rate ₹</span><span style={{textAlign:"right"}}>Value</span>
+                        <span>{t("common.material")}</span><span>{t("common.unit")}</span><span style={{textAlign:"right"}}>{t("warehouse.ord")}</span><span style={{textAlign:"right"}}>{t("warehouse.already")}</span><span style={{textAlign:"center",color:T.grn,fontSize:10,fontWeight:800}}>{t("warehouse.receive_qty")}</span><span style={{textAlign:"right"}}>{t("warehouse.rate")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span>
                       </div>
                       {(mr.items||[]).map(it=>{
                         const dit=d.items[it.id]||{received_qty:0,rate:0};
@@ -657,10 +658,10 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
                             <span style={{fontSize:10.5,color:T.t3}}>{it.unit}</span>
                             <span style={{fontSize:11,color:T.t3,textAlign:"right"}}>{fmtN(it.qty)}</span>
                             <span style={{fontSize:11,color:Number(it.received_qty)>0?T.blu:T.t4,textAlign:"right",fontWeight:Number(it.received_qty)>0?700:400}}>{fmtN(it.received_qty||0)}</span>
-                            <input type="number" value={dit.received_qty} max={pending} placeholder="Qty *"
+                            <input type="number" value={dit.received_qty} max={pending} placeholder={t("tenders.qty")}
                               onChange={e=>updItem(mr,it.id,{received_qty:e.target.value})}
                               style={{height:34,padding:"0 8px",borderRadius:6,border:`2px solid ${empty?T.amb:short?T.blu:T.grn}`,fontSize:13,fontWeight:700,outline:"none",fontFamily:"inherit",textAlign:"right",background:empty?T.ambL:short?T.bluL:T.grnL,color:empty?T.amb:T.t1}}/>
-                            <input type="number" value={dit.rate} placeholder="Rate"
+                            <input type="number" value={dit.rate} placeholder={t("common.rate")}
                               onChange={e=>updItem(mr,it.id,{rate:e.target.value})}
                               style={{height:34,padding:"0 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",textAlign:"right"}}/>
                             <span style={{fontSize:11.5,fontWeight:700,color:T.grn,textAlign:"right"}}>₹{fmt(Number(dit.received_qty||0)*Number(dit.rate||0))}</span>
@@ -668,14 +669,14 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
                         );
                       })}
                       <div style={{fontSize:10.5,color:T.amb,fontWeight:600,marginTop:6,padding:"5px 8px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:5}}>
-                        ⚠️ Receive Qty mandatory hai — vendor ne kitna actual diya wo fill karo (full delivery par ordered qty pre-filled hai)
+                       {t("warehouse.receive_qty_mandatory_hai_vendor_ne")}
                       </div>
                       <div style={{marginTop:8}}>
                         <GrnIssueBlock value={d.issues||[]} onChange={v=>updDraft(mr,{issues:v})}/>
                       </div>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:9,borderTop:`1px dashed ${T.b1}`}}>
-                        <span style={{fontSize:12,color:T.t3}}>Total: <b style={{color:T.grn,fontSize:13}}>₹{fmtN(draftTotal)}</b></span>
-                        <Btn onClick={()=>submitMR(mr)} disabled={isSaving} c={T.grn} icon={IcIn} size="sm">{isSaving?"Saving...":"Record GRN & Update Stock"}</Btn>
+                        <span style={{fontSize:12,color:T.t3}}>{t("common.total_2")} <b style={{color:T.grn,fontSize:13}}>₹{fmtN(draftTotal)}</b></span>
+                        <Btn onClick={()=>submitMR(mr)} disabled={isSaving} c={T.grn} icon={IcIn} size="sm">{isSaving?t("common.saving"):t("warehouse.record_grn_update_stock")}</Btn>
                       </div>
                     </div>
                   </div>
@@ -690,36 +691,36 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
       {tab==="direct"&&(
         <div>
           <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:13,lineHeight:1.5}}>
-            🚚 <b>Direct GRN:</b> bina prior MR/PO ke vendor delivery aayi hai. Save par warehouse stock me add hoga + Finance → Unbilled Materials me dikhega billing ke liye (project ke same flow).
+            🚚 <b>{t("warehouse.direct_grn_2")}</b> {t("warehouse.bina_prior_mr_po_ke_vendor")}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"140px 2fr 1fr 1fr",gap:11,marginBottom:11}}>
-            <Field label="Date"><Input type="date" value={dirF.date} onChange={e=>setDirF(p=>({...p,date:e.target.value}))}/></Field>
-            <Field label="Vendor *">
+            <Field label={t("common.date")}><Input type="date" value={dirF.date} onChange={e=>setDirF(p=>({...p,date:e.target.value}))}/></Field>
+            <Field label={t("common.vendor_2")}>
               <LibrarySelect type="supplier" value={dirF.vendor}
                 onChange={v=>setDirF(p=>({...p,vendor:v||""}))}
-                placeholder="Vendor library se pick karein"/>
+                placeholder={t("warehouse.vendor_library_se_pick_karein")}/>
             </Field>
-            <Field label="PO No"><Input value={dirF.po_no} onChange={e=>setDirF(p=>({...p,po_no:e.target.value}))} placeholder="Optional"/></Field>
-            <Field label="Challan No *">
-              <Input value={dirF.challan} onChange={e=>setDirF(p=>({...p,challan:e.target.value}))} placeholder="CH-..."
+            <Field label={t("warehouse.po_no")}><Input value={dirF.po_no} onChange={e=>setDirF(p=>({...p,po_no:e.target.value}))} placeholder={t("common.optional")}/></Field>
+            <Field label={t("tasks.challan_no")}>
+              <Input value={dirF.challan} onChange={e=>setDirF(p=>({...p,challan:e.target.value}))} placeholder={t("warehouse.ch")}
                 style={{borderColor:dirF.challan.trim()?T.b1:T.amb}}/>
             </Field>
           </div>
-          <Field label="Remark" style={{marginBottom:13}}>
-            <Input value={dirF.remark} onChange={e=>setDirF(p=>({...p,remark:e.target.value}))} placeholder="Optional note"/>
+          <Field label={t("common.remark")} style={{marginBottom:13}}>
+            <Input value={dirF.remark} onChange={e=>setDirF(p=>({...p,remark:e.target.value}))} placeholder={t("common.optional_note")}/>
           </Field>
 
           {library.length===0&&(
             <div style={{padding:"10px 13px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:12,color:T.amb,fontWeight:600,marginBottom:11}}>
-              ⚠ Material Library khali hai — pehle Library → Materials me items add karein
+             {t("warehouse.material_library_khali_hai_pehle_library")}
             </div>
           )}
 
           <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
-            Items <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· library se pick karein</span>
+           {t("common.items")} <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.library_se_pick_karein")}</span>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-            <span>Material (from library)</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
+            <span>{t("warehouse.material_from_library")}</span><span>{t("common.unit")}</span><span>{t("common.qty")}</span><span>{t("warehouse.rate_u")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span><span/>
           </div>
           {dirItems.map((row,i)=>{
             const lib=findDirLib(row.lib_id);
@@ -729,12 +730,12 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
                 <SearchSelect compact value={row.lib_id} options={dirLibOpts}
                   inputRef={el=>{ dirRowRefs.current[i]=el; }}
                   onChange={v=>{const m=findDirLib(v);updDirItem(i,{lib_id:v,name:m?.name||"",unit:m?.unit||"",rate:m?.rate?Number(m.rate):row.rate});}}
-                  placeholder="Library se material pick karein"/>
+                  placeholder={t("warehouse.library_se_material_pick_karein")}/>
                 <UnitLock unit={lib?.unit||row.unit||"—"} locked={true} compact/>
-                <input type="number" value={row.qty||""} onChange={e=>updDirItem(i,{qty:e.target.value})} placeholder="Qty"
+                <input type="number" value={row.qty||""} onChange={e=>updDirItem(i,{qty:e.target.value})} placeholder={t("common.qty")}
                   style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
-                <input type="number" value={row.rate||""} onChange={e=>updDirItem(i,{rate:e.target.value})} placeholder="Rate (auto)"
-                  title="Last purchase rate auto-fills on material pick"
+                <input type="number" value={row.rate||""} onChange={e=>updDirItem(i,{rate:e.target.value})} placeholder={t("warehouse.rate_auto")}
+                  title={t("warehouse.last_purchase_rate_auto_fills_on")}
                   style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",background:row.rate?T.bluL+"66":T.surface}}/>
                 <span style={{fontSize:11,color:T.blu,fontWeight:700,textAlign:"right"}}>₹{fmt(value)}</span>
                 {dirItems.length>1?(
@@ -748,10 +749,10 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
           })}
           <button onClick={addDirItem} disabled={library.length===0}
             style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:library.length===0?T.t4:T.t3,fontSize:11.5,fontWeight:600,cursor:library.length===0?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
-            <IcAdd size={11}/> Add row
+            <IcAdd size={11}/> {t("procurement.add_row")}
           </button>
           <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
-            💡 Material library se aata hai aur unit locked rahega — change karne ke liye Library → Materials me edit karein. Rate auto-fill last purchase se.
+           {t("warehouse.material_library_se_aata_hai_aur")}
           </div>
           <div style={{marginTop:12}}>
             <GrnIssueBlock value={dirIssues} onChange={setDirIssues}/>
@@ -763,54 +764,52 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
       {tab==="return"&&(
         <div>
           <div style={{padding:"9px 12px",background:T.cynL,border:`1px solid ${T.cynM}`,borderRadius:7,fontSize:11.5,color:T.cyn,marginBottom:13,lineHeight:1.5}}>
-            🔄 <b>Return flow:</b> kisi project me extra/unused material bach gaya hai aur warehouse me wapas la rahe hain. Project ke material ledger me debit + warehouse stock me credit.
+            🔄 <b>{t("warehouse.return_flow")}</b> {t("warehouse.kisi_project_me_extra_unused_material")}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"140px 1fr",gap:11,marginBottom:11}}>
-            <Field label="Date"><Input type="date" value={retF.date} onChange={e=>setRetF(p=>({...p,date:e.target.value}))}/></Field>
-            <Field label="From project *">
+            <Field label={t("common.date")}><Input type="date" value={retF.date} onChange={e=>setRetF(p=>({...p,date:e.target.value}))}/></Field>
+            <Field label={t("warehouse.from_project")}>
               <SearchSelect compact value={retF.from_project_id} options={projects}
-                onChange={v=>setRetF(p=>({...p,from_project_id:v}))} placeholder="Project pick karein"/>
+                onChange={v=>setRetF(p=>({...p,from_project_id:v}))} placeholder={t("warehouse.project_pick_karein")}/>
             </Field>
           </div>
-          <Field label="Remark" style={{marginBottom:13}}>
-            <Input value={retF.remark} onChange={e=>setRetF(p=>({...p,remark:e.target.value}))} placeholder="e.g. Surplus from foundation work, project closed"/>
+          <Field label={t("common.remark")} style={{marginBottom:13}}>
+            <Input value={retF.remark} onChange={e=>setRetF(p=>({...p,remark:e.target.value}))} placeholder={t("warehouse.e_g_surplus_from_foundation_work")}/>
           </Field>
 
           {!retF.from_project_id&&(
             <div style={{padding:"24px 14px",textAlign:"center",background:T.surfaceB,borderRadius:8,border:`1.5px dashed ${T.b1}`,color:T.t4,fontSize:12,marginBottom:8}}>
-              From project select karo — uska available material yahan dikhega
+             {t("warehouse.from_project_select_karo_uska_available")}
             </div>
           )}
           {retF.from_project_id&&retInvLoading&&(
-            <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading inventory...</div>
+            <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>{t("common.loading_inventory")}</div>
           )}
           {retF.from_project_id&&!retInvLoading&&retInv.length===0&&(
-            <div style={{padding:"24px 14px",textAlign:"center",background:T.ambL,borderRadius:8,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:12,marginBottom:8,fontWeight:600}}>
-              ⚠ {fromName} me koi available material nahi (sab use ho gaya ya issue nahi hua)
-            </div>
+            <div style={{padding:"24px 14px",textAlign:"center",background:T.ambL,borderRadius:8,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:12,marginBottom:8,fontWeight:600}}>{t("warehouse.fromname_me_koi_available_material_nahi", { fromName })}</div>
           )}
           {retF.from_project_id&&retInv.length>0&&(
             <>
               <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
-                Items returning <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· {fromName} ke ledger se</span>
+               {t("warehouse.items_returning")} <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.fromname_ke_ledger_se", { fromName })}</span>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-                <span>Material (avail)</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
+                <span>{t("warehouse.material_avail")}</span><span>{t("common.unit")}</span><span>{t("common.qty")}</span><span>{t("warehouse.rate_u")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span><span/>
               </div>
               {retItems.map((row,i)=>(
                 <LineItemRow key={i} row={row} idx={i} stock={retInv} onChange={updRetItem} onRemove={remRetItem} mode="transfer" canRemove={retItems.length>1}/>
               ))}
               <button onClick={addRetItem}
                 style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
-                <IcAdd size={11}/> Add row
+                <IcAdd size={11}/> {t("procurement.add_row")}
               </button>
               {overstockRow&&(
                 <div style={{marginTop:8,padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600}}>
-                  ⚠ Project me itna available nahi hai — qty kam karo
+                 {t("warehouse.project_me_itna_available_nahi_hai")}
                 </div>
               )}
               <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
-                💡 Save par: project ledger me debit ("Returned to warehouse") + warehouse stock me credit + master rate refresh.
+               {t("warehouse.save_par_project_ledger_me_debit")}
               </div>
             </>
           )}
@@ -999,66 +998,66 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   };
 
   return (
-    <ModalShell title={fromMR?`Issue against MR ${fromMR}`:"New Issue — Material Out"}
-      sub="Warehouse → Project · Source debit turant, dest pe site team Receive karegi"
+    <ModalShell title={fromMR?`Issue against MR ${fromMR}`:t("warehouse.new_issue_material_out")}
+      sub={t("warehouse.warehouse_project_source_debit_turant_dest")}
       onClose={onClose} width={780}
       footer={<>
-        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total Value: <b style={{color:T.amb}}>₹{fmtN(total)}</b></span>
-        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-        <Btn onClick={submit} disabled={!valid||saving} c={T.amb} icon={IcOut}>{saving?"Saving...":fromMR?"Issue Material":"Save Issue (Pending)"}</Btn>
+        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>{t("warehouse.total_value")} <b style={{color:T.amb}}>₹{fmtN(total)}</b></span>
+        <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
+        <Btn onClick={submit} disabled={!valid||saving} c={T.amb} icon={IcOut}>{saving?t("common.saving"):fromMR?t("warehouse.issue_material"):t("warehouse.save_issue_pending")}</Btn>
       </>}>
       {/* Route card — From locked, To picker */}
       <div style={{padding:"12px 14px",background:`linear-gradient(135deg, ${T.ambL} 0%, ${T.bluL} 100%)`,borderRadius:9,border:`1px solid ${T.ambM}`,marginBottom:13}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:14,alignItems:"center"}}>
           <div>
-            <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>From</div>
+            <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.from")}</div>
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 11px",borderRadius:6,background:T.surfaceB,border:`1.5px solid ${T.b1}`,fontFamily:"inherit"}}>
               <span style={{fontSize:11,opacity:.55}}>🔒</span>
-              <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Warehouse</span>
-              <span style={{fontSize:10,color:T.t4,marginLeft:"auto"}}>(central stock)</span>
+              <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{t("common.warehouse")}</span>
+              <span style={{fontSize:10,color:T.t4,marginLeft:"auto"}}>{t("warehouse.central_stock")}</span>
             </div>
-            <div style={{fontSize:10.5,color:T.red,marginTop:3,fontWeight:600}}>− DEBIT (immediate)</div>
+            <div style={{fontSize:10.5,color:T.red,marginTop:3,fontWeight:600}}>{t("warehouse.debit_immediate")}</div>
           </div>
           <div style={{color:T.amb,fontSize:24,fontWeight:800}}>→</div>
           <div>
-            <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>To Project *</div>
+            <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("material_transfer.to_project")}</div>
             {fromMR?(
               // MR-driven flow: project is fixed by the parent MR
-              <div title="MR me yahi project decide ho chuka hai — change nahi ho sakta"
+              <div title={t("warehouse.mr_me_yahi_project_decide_ho")}
                 style={{display:"flex",alignItems:"center",gap:6,padding:"7px 11px",borderRadius:6,background:T.surfaceB,border:`1.5px solid ${T.b1}`,fontFamily:"inherit"}}>
                 <span style={{fontSize:11,opacity:.55}}>🔒</span>
                 <span style={{fontSize:13,fontWeight:700,color:T.t1}}>
                   {projects.find(p=>String(p.id)===String(f.project_id))?.name||"—"}
                 </span>
-                <span style={{fontSize:10,color:T.t4,marginLeft:"auto"}}>(from MR)</span>
+                <span style={{fontSize:10,color:T.t4,marginLeft:"auto"}}>{t("warehouse.from_mr")}</span>
               </div>
             ):(
               <SearchSelect compact value={f.project_id} options={projects}
-                onChange={v=>upd("project_id",v)} placeholder="Project select karo"/>
+                onChange={v=>upd("project_id",v)} placeholder={t("design.project_select_karo")}/>
             )}
-            <div style={{fontSize:10.5,color:T.amb,marginTop:3,fontWeight:600}}>⏳ PENDING RECEIVE</div>
+            <div style={{fontSize:10.5,color:T.amb,marginTop:3,fontWeight:600}}>{t("warehouse.pending_receive")}</div>
           </div>
         </div>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"140px 1fr 1fr",gap:11,marginBottom:13}}>
-        <Field label="Date"><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
-        <Field label="Issued To">
-          <SearchSelect compact value={f.issued_to} options={users} onChange={v=>upd("issued_to",v)} placeholder="Person who collected"/>
+        <Field label={t("common.date")}><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
+        <Field label={t("warehouse.issued_to")}>
+          <SearchSelect compact value={f.issued_to} options={users} onChange={v=>upd("issued_to",v)} placeholder={t("warehouse.person_who_collected")}/>
         </Field>
-        <Field label="Remarks">
-          <Input value={f.remarks} onChange={e=>upd("remarks",e.target.value)} placeholder="e.g. GF slab casting"/>
+        <Field label={t("common.remarks")}>
+          <Input value={f.remarks} onChange={e=>upd("remarks",e.target.value)} placeholder={t("warehouse.e_g_gf_slab_casting")}/>
         </Field>
       </div>
       {toName&&(
         <div style={{padding:"7px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,fontSize:11.5,color:T.blu,marginBottom:13,lineHeight:1.5}}>
-          Warehouse stock turant minus hoga. <b>{toName}</b> me material physically pohonchne par site wala "Receive" karega — tab tak Pending dikhega aur dest inventory me add nahi hoga.
+         {t("warehouse.warehouse_stock_turant_minus_hoga")} <b>{toName}</b> {t("warehouse.me_material_physically_pohonchne_par_site")}
         </div>
       )}
 
-      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Items <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· warehouse stock se</span></div>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("common.items")} <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.warehouse_stock_se")}</span></div>
       <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-        <span>Material (from stock)</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
+        <span>{t("warehouse.material_from_stock")}</span><span>{t("common.unit")}</span><span>{t("common.qty")}</span><span>{t("warehouse.rate_u")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span><span/>
       </div>
       {items.map((row,i)=>{
         const preview=row.name&&Number(row.qty)>0?computeFifoPreview(i,row.qty):null;
@@ -1072,21 +1071,21 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
           {row.name && (
             <div style={{display:"flex",alignItems:"center",gap:8,marginTop:-2,marginBottom:preview?2:6,paddingLeft:"calc(40% + 60px + 1fr + 6px)",fontSize:10.5,flexWrap:"wrap"}}>
               <button onClick={()=>openBatchPicker(i)}
-                title="Manual stock-batch selection (override FIFO)"
+                title={t("warehouse.manual_stock_batch_selection_override_fifo")}
                 style={{background:row.selected_batches?T.purL:"none",color:row.selected_batches?T.pur:T.blu,border:`1px solid ${row.selected_batches?T.pur+"66":T.bluM}`,padding:"2px 9px",borderRadius:14,fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:4}}>
-                🗂 {row.selected_batches?`${row.selected_batches.length} batch picked`:"Choose batches"}
+                🗂 {row.selected_batches?`${row.selected_batches.length} batch picked`:t("warehouse.choose_batches")}
               </button>
               {row.selected_batches&&(
                 <button onClick={()=>updItem(i,{selected_batches:null})}
                   style={{background:"none",color:T.t4,border:"none",fontSize:10,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>
-                  reset to FIFO
+                 {t("warehouse.reset_to_fifo")}
                 </button>
               )}
               {row._rateDirty&&preview&&(
                 <button onClick={()=>setItems(p=>p.map((r,j)=>j===i?{...r,_rateDirty:false,rate:Number(preview.weightedRate.toFixed(2))}:r))}
-                  title="User-edited rate ko clear karke FIFO weighted rate par wapas le aao"
+                  title={t("warehouse.user_edited_rate_ko_clear_karke")}
                   style={{background:"none",color:T.amb,border:`1px solid ${T.ambM}`,padding:"2px 8px",borderRadius:14,fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
-                  ↻ Reset to FIFO rate
+                 {t("warehouse.reset_to_fifo_rate")}
                 </button>
               )}
             </div>
@@ -1095,37 +1094,32 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
               the user sees exactly how the weighted rate was derived. */}
           {usingFifo&&(
             <div style={{margin:"2px 0 8px",marginLeft:"calc(40% + 60px + 1fr + 6px)",padding:"7px 10px",borderRadius:6,background:T.cynL+"55",border:`1px solid ${T.cynM||"#A7F3D0"}`,fontSize:10.5,color:T.t2,lineHeight:1.6}}>
-              <div style={{fontWeight:700,color:T.cyn,marginBottom:3}}>
-                ⓘ FIFO breakdown — qty {row.qty} {row.unit} spans {preview.breakdown.length} batch{preview.breakdown.length>1?"es":""}
-              </div>
+              <div style={{fontWeight:700,color:T.cyn,marginBottom:3}}>{t("warehouse.fifo_breakdown_qty_qty_unit_spans", { qty: row.qty, unit: row.unit, preview: preview.breakdown.length, preview2: preview.breakdown.length>1?"es":"" })}</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:3}}>
                 {preview.breakdown.map((b,k)=>(
                   <span key={k} style={{background:"white",border:`1px solid ${b.grn_no==="FALLBACK"?T.ambM:T.b1}`,borderRadius:14,padding:"2px 9px",fontSize:10.5,fontWeight:600,color:b.grn_no==="FALLBACK"?T.amb:T.t2}}>
-                    {b.grn_no==="FALLBACK"?"⚠ Master fallback":<span style={{color:T.blu,fontFamily:"monospace"}}>{b.grn_no}</span>} · {b.take} @ ₹{fmtN(b.rate)} = ₹{fmtN(b.cost)}
+                    {b.grn_no==="FALLBACK"?t("warehouse.master_fallback"):<span style={{color:T.blu,fontFamily:"monospace"}}>{b.grn_no}</span>} · {b.take} @ ₹{fmtN(b.rate)} = ₹{fmtN(b.cost)}
                   </span>
                 ))}
               </div>
-              <div style={{fontSize:10.5,color:T.t3}}>
-                Weighted avg: <b style={{color:T.cyn}}>₹{fmtN(preview.weightedRate)}/{row.unit}</b>
-                {" · "}Total cost: <b style={{color:T.cyn}}>₹{fmtN(preview.totalCost)}</b>
-                {preview.shortfall>0&&<span style={{color:T.amb,marginLeft:8,fontWeight:600}}>⚠ {preview.shortfall} {row.unit} master rate se cover (batches kam pad gaye)</span>}
+              <div style={{fontSize:10.5,color:T.t3}}><Rich k="warehouse.weighted_avg_fmtn_unit_vtotal_cost" params={{ fmtN: fmtN(preview.weightedRate), unit: row.unit, v: " · ", fmtN2: fmtN(preview.totalCost) }} />{preview.shortfall>0&&<span style={{color:T.amb,marginLeft:8,fontWeight:600}}>{t("warehouse.shortfall_unit_master_rate_se_cover", { shortfall: preview.shortfall, unit: row.unit })}</span>}
               </div>
             </div>
           )}
         </div>
         );
       })}
-      {stockErr&&<div style={{marginTop:5,padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600}}>⚠ Stock se zyada qty kisi item me hai — kam karo</div>}
+      {stockErr&&<div style={{marginTop:5,padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600}}>{t("warehouse.stock_se_zyada_qty_kisi_item")}</div>}
       {!fromMR&&(
         <button onClick={addItem}
           style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
-          <IcAdd size={11}/> Add row
+          <IcAdd size={11}/> {t("procurement.add_row")}
         </button>
       )}
       <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
         {fromMR
-          ? "💡 Project + Material MR me decide ho chuka hai (locked). Sirf Qty (stock/quality ke hisaab se) aur Rate (auto-fill, editable) badal sakte ho."
-          : "💡 Rate auto-fill FIFO (oldest batch ka rate). Custom batch select karne ke liye row me 🗂 Choose batches click karein."}
+          ? t("warehouse.project_material_mr_me_decide_ho")
+          : t("warehouse.rate_auto_fill_fifo_oldest_batch")}
       </div>
       {batchPickerIdx!=null&&(
         <BatchPickerPanel data={batchData} onClose={closeBatchPicker} onApply={applyBatchSelection}
@@ -1183,15 +1177,15 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
       <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:11,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:601,width:680,maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"inherit"}}>
         <div style={{padding:"12px 16px",background:T.sb,color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
-            <div style={{fontSize:13.5,fontWeight:700}}>Choose Stock Batches — {materialName}</div>
-            <div style={{fontSize:10.5,opacity:.7,marginTop:1}}>Manual override of FIFO. Tick in the order you want consumed.</div>
+            <div style={{fontSize:13.5,fontWeight:700}}>{t("warehouse.choose_stock_batches_materialname", { materialName })}</div>
+            <div style={{fontSize:10.5,opacity:.7,marginTop:1}}>{t("warehouse.manual_override_of_fifo_tick_in")}</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,.6)",fontSize:20,lineHeight:1}}>×</button>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
-          {data.loading?<div style={{textAlign:"center",padding:30,color:T.t4,fontSize:13}}>Loading batches...</div>
+          {data.loading?<div style={{textAlign:"center",padding:30,color:T.t4,fontSize:13}}>{t("warehouse.loading_batches")}</div>
           :data.error?<div style={{padding:"9px 12px",background:T.redL,color:T.red,borderRadius:6,fontSize:12}}>{data.error}</div>
-          :batches.length===0?<div style={{textAlign:"center",padding:30,color:T.t4,fontSize:12.5}}>Koi batch nahi mila — material legacy (add-stock without GRN) ho sakta hai. FIFO master rate use karega.</div>
+          :batches.length===0?<div style={{textAlign:"center",padding:30,color:T.t4,fontSize:12.5}}>{t("warehouse.koi_batch_nahi_mila_material_legacy")}</div>
           :(
             <>
               <div style={{display:"grid",gridTemplateColumns:"30px 90px 100px 1fr 70px 75px 75px 100px",gap:6,padding:"6px 10px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,marginBottom:6}}>
@@ -1226,7 +1220,7 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
                       : <span/>}
                     {isInPlan
                       ? <span style={{fontSize:11,fontWeight:700,color:isManualPicked?T.pur:T.cyn,textAlign:"right"}}>{plan.take} {b.unit} <span style={{fontSize:9.5,color:T.t4,fontWeight:500}}>= ₹{fmtN(plan.cost)}</span></span>
-                      : <span style={{fontSize:10.5,color:T.t4,textAlign:"right",fontStyle:"italic"}}>{requestedQty>0?"not used":"—"}</span>}
+                      : <span style={{fontSize:10.5,color:T.t4,textAlign:"right",fontStyle:"italic"}}>{requestedQty>0?t("warehouse.not_used"):"—"}</span>}
                   </label>
                 );
               })}
@@ -1238,18 +1232,16 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
           <div style={{flex:1,fontSize:11.5}}>
             <div style={{color:T.t2}}>
               <span style={{padding:"1px 8px",borderRadius:10,background:isManual?T.purL:T.cynL,color:isManual?T.pur:T.cyn,fontSize:10,fontWeight:700,marginRight:6}}>
-                {isManual?"MANUAL ORDER":"DEFAULT FIFO"}
+                {isManual?t("warehouse.manual_order"):t("warehouse.default_fifo")}
               </span>
-              Req: <b>{requestedQty||"—"}</b> · Will consume: <b>{totalConsumed} {data.unit||""}</b> · Cost: <b>₹{fmtN(totalCost)}</b>
+             {t("tasks.req")} <b>{requestedQty||"—"}</b> {t("warehouse.will_consume")} <b>{totalConsumed} {data.unit||""}</b> {t("warehouse.cost")} <b>₹{fmtN(totalCost)}</b>
             </div>
-            <div style={{color:weightedRate>0?T.cyn:T.t4,fontSize:11,marginTop:3}}>
-              Weighted rate: <b>₹{fmtN(weightedRate)}/{data.unit||""}</b>
-              {insufficient?<span style={{color:T.amb,marginLeft:8,fontWeight:600}}>⚠ {(requestedQty-totalConsumed).toFixed(2)} {data.unit||""} short — backend master rate se cover hoga</span>:null}
+            <div style={{color:weightedRate>0?T.cyn:T.t4,fontSize:11,marginTop:3}}><Rich k="warehouse.weighted_rate_fmtn_data" params={{ fmtN: fmtN(weightedRate), data: data.unit||"" }} />{insufficient?<span style={{color:T.amb,marginLeft:8,fontWeight:600}}>{t("warehouse.requestedqty_data_short_backend_master_rate", { requestedQty: (requestedQty-totalConsumed).toFixed(2), data: data.unit||"" })}</span>:null}
             </div>
           </div>
-          <GhostBtn onClick={onClose}>Cancel</GhostBtn>
+          <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
           <Btn onClick={()=>onApply(selected,weightedRate)} c={T.pur}>
-            {isManual?"Apply Selection":"Use Default FIFO"}
+            {isManual?t("warehouse.apply_selection"):t("warehouse.use_default_fifo")}
           </Btn>
         </div>
       </div>
@@ -1340,23 +1332,23 @@ function NewMRModal({library,onClose,onSaved,prefill}){
   };
 
   return (
-    <ModalShell title={prefill?.name?"Quick Request — Procurement":"New Material Request"}
-      sub={prefill?.name?`"${prefill.name}" ke liye procurement ko request bhejein — qty daalein`:"Warehouse ke liye material maango — Library se pick karein"}
+    <ModalShell title={prefill?.name?t("warehouse.quick_request_procurement"):t("tasks.new_material_request")}
+      sub={prefill?.name?`"${prefill.name}" ke liye procurement ko request bhejein — qty daalein`:t("warehouse.warehouse_ke_liye_material_maango_library")}
       onClose={onClose} width={720}
       footer={<>
-        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-        <Btn onClick={submit} disabled={!valid||saving} c={T.pur} icon={IcChk}>{saving?"Saving...":"Submit MR"}</Btn>
+        <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
+        <Btn onClick={submit} disabled={!valid||saving} c={T.pur} icon={IcChk}>{saving?t("common.saving"):t("warehouse.submit_mr")}</Btn>
       </>}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:11,marginBottom:14}}>
-        <Field label="Date"><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
-        <Field label="Project">
+        <Field label={t("common.date")}><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
+        <Field label={t("common.project")}>
           <div style={{padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,height:38,boxSizing:"border-box"}}>
             <span style={{fontSize:10,opacity:.6}}>🔒</span>
-            <span style={{fontWeight:600,color:T.t1}}>Warehouse</span>
-            <span style={{fontSize:10,color:T.t4}}>(internal request)</span>
+            <span style={{fontWeight:600,color:T.t1}}>{t("common.warehouse")}</span>
+            <span style={{fontSize:10,color:T.t4}}>{t("warehouse.internal_request")}</span>
           </div>
         </Field>
-        <Field label="Priority">
+        <Field label={t("common.priority")}>
           <select value={f.priority} onChange={e=>upd("priority",e.target.value)}
             style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
             {PRIORITIES.map(p=><option key={p}>{p}</option>)}
@@ -1366,15 +1358,15 @@ function NewMRModal({library,onClose,onSaved,prefill}){
 
       {library.length===0&&(
         <div style={{padding:"10px 13px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:12,color:T.amb,fontWeight:600,marginBottom:11}}>
-          ⚠ Material Library khali hai — pehle Library → Materials me items add karein
+         {t("warehouse.material_library_khali_hai_pehle_library")}
         </div>
       )}
 
       <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
-        Items <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· library se pick karein</span>
+       {t("common.items")} <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.library_se_pick_karein")}</span>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 1.5fr 30px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-        <span>Material (from library)</span><span>Unit</span><span>Qty</span><span>Note</span><span/>
+        <span>{t("warehouse.material_from_library")}</span><span>{t("common.unit")}</span><span>{t("common.qty")}</span><span>{t("common.note")}</span><span/>
       </div>
       {items.map((row,i)=>{
         const lib=findLib(row.lib_id);
@@ -1388,11 +1380,11 @@ function NewMRModal({library,onClose,onSaved,prefill}){
                   updItem(i,{lib_id:v,name:m?.name||"",unit:m?.unit||""});
                   checkPipeline(i,m?.name||"");
                 }}
-                placeholder="Library se material pick karein"/>
+                placeholder={t("warehouse.library_se_material_pick_karein")}/>
               <UnitLock unit={lib?.unit||row.unit||"—"} locked={true} compact/>
-              <input type="number" value={row.qty||""} onChange={e=>updItem(i,{qty:e.target.value})} placeholder="Qty"
+              <input type="number" value={row.qty||""} onChange={e=>updItem(i,{qty:e.target.value})} placeholder={t("common.qty")}
                 style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
-              <input value={row.note||""} onChange={e=>updItem(i,{note:e.target.value})} placeholder="Optional remark"
+              <input value={row.note||""} onChange={e=>updItem(i,{note:e.target.value})} placeholder={t("warehouse.optional_remark")}
                 style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
               {items.length>1?(
                 <button onClick={()=>remItem(i)}
@@ -1404,7 +1396,7 @@ function NewMRModal({library,onClose,onSaved,prefill}){
             {pipe&&pipe.in_pipeline&&(
               <div style={{marginTop:5,padding:"7px 11px",borderRadius:6,background:T.ambL,border:`1.5px solid ${T.ambM}`,fontSize:11.5,color:T.amb,lineHeight:1.5}}>
                 <div style={{fontWeight:700,marginBottom:3,display:"flex",alignItems:"center",gap:5}}>
-                  ⚠ Ye material already pipeline me hai · Total pending: <b>{pipe.total_pending_qty} {pipe.unit||""}</b>
+                 {t("warehouse.ye_material_already_pipeline_me_hai")} <b>{pipe.total_pending_qty} {pipe.unit||""}</b>
                 </div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:3}}>
                   {pipe.entries.map((e,k)=>(
@@ -1418,7 +1410,7 @@ function NewMRModal({library,onClose,onSaved,prefill}){
                   ))}
                 </div>
                 <div style={{fontSize:10.5,color:T.t3,marginTop:4,fontStyle:"italic"}}>
-                  Force karoge to Submit ke samay confirm dialog aayega. Stock receive hone tak wait karna behtar hai.
+                 {t("warehouse.force_karoge_to_submit_ke_samay")}
                 </div>
               </div>
             )}
@@ -1427,10 +1419,10 @@ function NewMRModal({library,onClose,onSaved,prefill}){
       })}
       <button onClick={addItem} disabled={library.length===0}
         style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:library.length===0?T.t4:T.t3,fontSize:11.5,fontWeight:600,cursor:library.length===0?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
-        <IcAdd size={11}/> Add row
+        <IcAdd size={11}/> {t("procurement.add_row")}
       </button>
       <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
-        💡 Unit Material Library se aata hai aur locked rahega — change karne ke liye Library → Materials me edit karein.
+       {t("warehouse.unit_material_library_se_aata_hai")}
       </div>
     </ModalShell>
   );
@@ -1460,27 +1452,27 @@ function OrderModal({mr,onClose,onSaved}){
   };
 
   return (
-    <ModalShell title="Place Order" sub={`${mr?.id} · ${mr?.items?.length||0} items`}
+    <ModalShell title={t("warehouse.place_order")} sub={`${mr?.id} · ${mr?.items?.length||0} items`}
       onClose={onClose} width={620}
       footer={<>
-        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total Value: <b style={{color:T.pur}}>₹{fmtN(total)}</b></span>
-        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-        <Btn onClick={submit} disabled={!valid||saving} c={T.pur} icon={IcChk}>{saving?"Saving...":"Mark Ordered"}</Btn>
+        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>{t("warehouse.total_value")} <b style={{color:T.pur}}>₹{fmtN(total)}</b></span>
+        <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
+        <Btn onClick={submit} disabled={!valid||saving} c={T.pur} icon={IcChk}>{saving?t("common.saving"):t("warehouse.mark_ordered")}</Btn>
       </>}>
       <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:10,marginBottom:12}}>
-        <Field label="Vendor *">
-          <Input value={vendor} onChange={e=>setVendor(e.target.value)} placeholder="Supplier name"/>
+        <Field label={t("common.vendor_2")}>
+          <Input value={vendor} onChange={e=>setVendor(e.target.value)} placeholder={t("common.supplier_name")}/>
         </Field>
-        <Field label="PO No">
-          <Input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-2026-..."/>
+        <Field label={t("warehouse.po_no")}>
+          <Input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder={t("warehouse.po_2026")}/>
         </Field>
-        <Field label="Expected Delivery">
+        <Field label={t("common.expected_delivery")}>
           <Input type="date" value={expDate} onChange={e=>setExpDate(e.target.value)}/>
         </Field>
       </div>
-      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Item rates</div>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("warehouse.item_rates")}</div>
       <div style={{display:"grid",gridTemplateColumns:"2fr 60px 80px 100px 100px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-        <span>Material</span><span>Unit</span><span style={{textAlign:"right"}}>Qty</span><span style={{textAlign:"right"}}>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span>
+        <span>{t("common.material")}</span><span>{t("common.unit")}</span><span style={{textAlign:"right"}}>{t("common.qty")}</span><span style={{textAlign:"right"}}>{t("warehouse.rate_u")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span>
       </div>
       {items.map((it,i)=>(
         <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 60px 80px 100px 100px",gap:6,alignItems:"center",marginBottom:6}}>
@@ -1523,19 +1515,19 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
   };
 
   return (
-    <ModalShell title="Record GRN — Material Received"
+    <ModalShell title={t("tasks.record_grn_material_received")}
       sub={`${mr?.id}${mr?.vendor?` · ${mr.vendor}`:""}${mr?.po_no?` · ${mr.po_no}`:""}`}
       onClose={onClose} width={680}
       footer={<>
-        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total: <b style={{color:T.grn}}>₹{fmtN(total)}</b></span>
-        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-        <Btn onClick={submit} disabled={!valid||saving} c={T.grn} icon={IcIn}>{saving?"Saving...":"Record GRN & Update Stock"}</Btn>
+        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>{t("common.total_2")} <b style={{color:T.grn}}>₹{fmtN(total)}</b></span>
+        <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
+        <Btn onClick={submit} disabled={!valid||saving} c={T.grn} icon={IcIn}>{saving?t("common.saving"):t("warehouse.record_grn_update_stock")}</Btn>
       </>}>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:14}}>
-        <Field label="Challan No *">
-          <Input value={challan} onChange={e=>setChallan(e.target.value)} placeholder="CH-2026-..."/>
+        <Field label={t("tasks.challan_no")}>
+          <Input value={challan} onChange={e=>setChallan(e.target.value)} placeholder={t("warehouse.ch_2026")}/>
         </Field>
-        <Field label="Vendor">
+        <Field label={t("common.vendor")}>
           {mr?.vendor ? (
             // Locked — vendor was set by procurement when ordering. Receiving
             // team can't reassign; would break the PO → GRN audit chain.
@@ -1544,18 +1536,18 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
               </svg>
               <span style={{flex:1,fontSize:12.5,fontWeight:700,color:T.grn,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{vendor}</span>
-              <span style={{fontSize:9.5,color:T.grn,fontWeight:600,letterSpacing:".3px"}}>FROM ORDER</span>
+              <span style={{fontSize:9.5,color:T.grn,fontWeight:600,letterSpacing:".3px"}}>{t("warehouse.from_order")}</span>
             </div>
           ) : (
-            <Input value={vendor} onChange={e=>setVendor(e.target.value)} placeholder="Supplier (auto from MR)"/>
+            <Input value={vendor} onChange={e=>setVendor(e.target.value)} placeholder={t("warehouse.supplier_auto_from_mr")}/>
           )}
         </Field>
       </div>
       <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
-        Items received
+       {t("material.items_received")}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"2fr 60px 70px 70px 90px 90px 100px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-        <span>Material</span><span>Unit</span><span style={{textAlign:"right"}}>Ord.</span><span style={{textAlign:"right"}}>Already</span><span style={{textAlign:"right"}}>Receive</span><span style={{textAlign:"right"}}>Rate ₹</span><span style={{textAlign:"right"}}>Value</span>
+        <span>{t("common.material")}</span><span>{t("common.unit")}</span><span style={{textAlign:"right"}}>{t("warehouse.ord_2")}</span><span style={{textAlign:"right"}}>{t("warehouse.already")}</span><span style={{textAlign:"right"}}>{t("tenders.receive")}</span><span style={{textAlign:"right"}}>{t("warehouse.rate")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span>
       </div>
       {items.map((it,i)=>{
         const short=Number(it.received_qty)<it.pending;
@@ -1575,7 +1567,7 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
         );
       })}
       <div style={{marginTop:10,padding:"9px 11px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11,color:T.blu}}>
-        💡 GRN record karne par warehouse stock me automatic add ho jayega. Agar kam aaya to MR "PartialReceived" rahegi — baki baad me receive kar sakte ho.
+       {t("warehouse.grn_record_karne_par_warehouse_stock")}
       </div>
     </ModalShell>
   );
@@ -1670,77 +1662,74 @@ export function NewTransferModal({stock,projects,onClose,onSaved}){
   };
 
   return (
-    <ModalShell title="New Project-to-Project Transfer" sub="Source me debit + Dest pending receive (site wala GRN dalega)"
+    <ModalShell title={t("warehouse.new_project_to_project_transfer")} sub={t("warehouse.source_me_debit_dest_pending_receive")}
       onClose={onClose} width={780}
       footer={<>
-        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total Value: <b style={{color:T.cyn}}>₹{fmtN(totalValue)}</b></span>
-        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-        <Btn onClick={submit} disabled={!valid||saving} c={T.cyn} icon={IcTrns}>{saving?"Saving...":"Save Transfer (Pending)"}</Btn>
+        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>{t("warehouse.total_value")} <b style={{color:T.cyn}}>₹{fmtN(totalValue)}</b></span>
+        <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
+        <Btn onClick={submit} disabled={!valid||saving} c={T.cyn} icon={IcTrns}>{saving?t("common.saving"):t("warehouse.save_transfer_pending")}</Btn>
       </>}>
       <div style={{display:"grid",gridTemplateColumns:"120px 1fr 1fr",gap:11,marginBottom:11}}>
-        <Field label="Date"><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
-        <Field label="From project *">
+        <Field label={t("common.date")}><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
+        <Field label={t("warehouse.from_project")}>
           <SearchSelect compact value={f.from_project_id} options={projects}
-            onChange={v=>upd("from_project_id",v)} placeholder="Source project select karo"/>
+            onChange={v=>upd("from_project_id",v)} placeholder={t("warehouse.source_project_select_karo")}/>
         </Field>
-        <Field label="To project *">
+        <Field label={t("warehouse.to_project")}>
           <SearchSelect compact value={f.to_project_id} options={projects}
-            onChange={v=>upd("to_project_id",v)} placeholder="Destination project select karo"/>
+            onChange={v=>upd("to_project_id",v)} placeholder={t("material_transfer.destination_project_select_karo")}/>
         </Field>
       </div>
       {sameProj&&(
         <div style={{padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600,marginBottom:11}}>
-          ⚠ From aur To project alag hone chahiye
+         {t("warehouse.from_aur_to_project_alag_hone")}
         </div>
       )}
       {projects.length===0&&(
         <div style={{padding:"7px 11px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:11.5,color:T.amb,fontWeight:600,marginBottom:11}}>
-          ⚠ Koi project nahi mila — pehle Projects me ja ke ek project banao
+         {t("warehouse.koi_project_nahi_mila_pehle_projects")}
         </div>
       )}
       {fromName&&toName&&!sameProj&&(
         <div style={{padding:"8px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,fontSize:11.5,color:T.blu,marginBottom:11,lineHeight:1.5}}>
-          <b>{fromName}</b> ka stock & expense turant minus hoga. <b>{toName}</b> me material physically pohonchne par
-          site wala "Receive" karega — tab tak Pending dikhega aur dest inventory me add nahi hoga.
+          <b>{fromName}</b> {t("warehouse.ka_stock_expense_turant_minus_hoga")} <b>{toName}</b> {t("warehouse.me_material_physically_pohonchne_par_site")}
         </div>
       )}
 
       <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span>Items {f.from_project_id?<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· from <b style={{color:T.cyn}}>{fromName}</b> inventory</span>:""}</span>
-        {srcLoading&&<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontSize:10.5}}>Loading inventory...</span>}
+        <span>{t("common.items")} {f.from_project_id?<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.from")} <b style={{color:T.cyn}}>{fromName}</b> inventory</span>:""}</span>
+        {srcLoading&&<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontSize:10.5}}>{t("common.loading_inventory")}</span>}
       </div>
 
       {!f.from_project_id&&(
         <div style={{padding:"24px 14px",textAlign:"center",background:T.surfaceB,borderRadius:8,border:`1.5px dashed ${T.b1}`,color:T.t4,fontSize:12,marginBottom:8}}>
-          Source project select karo — uske available materials yahan dikhenge
+         {t("warehouse.source_project_select_karo_uske_available")}
         </div>
       )}
 
       {f.from_project_id&&!srcLoading&&srcInv.length===0&&(
-        <div style={{padding:"24px 14px",textAlign:"center",background:T.ambL,borderRadius:8,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:12,marginBottom:8,fontWeight:600}}>
-          ⚠ {fromName} me koi available material nahi hai (sab use ho gaya hai ya GRN nahi mila)
-        </div>
+        <div style={{padding:"24px 14px",textAlign:"center",background:T.ambL,borderRadius:8,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:12,marginBottom:8,fontWeight:600}}>{t("warehouse.fromname_me_koi_available_material_nahi", { fromName })}</div>
       )}
 
       {f.from_project_id&&srcInv.length>0&&(
         <>
           <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-            <span>Material (avail in {fromName})</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
+            <span>{t("warehouse.material_avail_in_fromname", { fromName })}</span><span>{t("common.unit")}</span><span>{t("common.qty")}</span><span>{t("warehouse.rate_u")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span><span/>
           </div>
           {items.map((row,i)=>(
             <LineItemRow key={i} row={row} idx={i} stock={srcInv} onChange={updItem} onRemove={remItem} mode="transfer" canRemove={items.length>1}/>
           ))}
           <button onClick={addItem}
             style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
-            <IcAdd size={11}/> Add row
+            <IcAdd size={11}/> {t("procurement.add_row")}
           </button>
           {overStockRow&&(
             <div style={{marginTop:8,padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600}}>
-              ⚠ Kisi item ki qty source me available stock se zyada hai — kam karo
+             {t("warehouse.kisi_item_ki_qty_source_me")}
             </div>
           )}
           <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
-            💡 Material pick karte hi rate auto-fill ho jayega. Edit kar sakte ho. Source me jitna available hai utna hi transfer karein.
+           {t("warehouse.material_pick_karte_hi_rate_auto")}
           </div>
         </>
       )}
@@ -1767,27 +1756,27 @@ function AddStockModal({material,onClose,onSaved}){
     setSaving(false);
   };
   return (
-    <ModalShell title="Add Stock" sub={material?`${material.name} · Current: ${fmtN(material.qty)} ${material.unit}`:""}
+    <ModalShell title={t("warehouse.add_stock")} sub={material?`${material.name} · Current: ${fmtN(material.qty)} ${material.unit}`:""}
       onClose={onClose} width={460}
       footer={<>
-        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-        <Btn onClick={submit} disabled={!f.qty||saving} c={T.grn} icon={IcIn}>{saving?"Adding...":"Add to Warehouse"}</Btn>
+        <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
+        <Btn onClick={submit} disabled={!f.qty||saving} c={T.grn} icon={IcIn}>{saving?t("common.adding_2"):t("warehouse.add_to_warehouse")}</Btn>
       </>}>
       {material&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 13px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:8,marginBottom:14}}>
         <span style={{fontSize:20}}>{getCategoryEmoji(material.category)}</span>
         <div><div style={{fontSize:13,fontWeight:700,color:T.grn}}>{material.name}</div>
-          <div style={{fontSize:10.5,color:T.grn}}>Current: {fmtN(material.qty)} {material.unit} · {material.location}</div></div>
+          <div style={{fontSize:10.5,color:T.grn}}>{t("warehouse.current_fmtn_unit_location", { fmtN: fmtN(material.qty), unit: material.unit, location: material.location })}</div></div>
       </div>}
       <Field label={`Quantity (${material?.unit||"Units"}) *`} style={{marginBottom:11}}>
-        <Input type="number" value={f.qty} onChange={upd("qty")} placeholder="Enter quantity received"/>
-        {material&&f.qty&&<div style={{fontSize:11,color:T.grn,marginTop:3}}>New total: {fmtN(Number(material.qty)+Number(f.qty))} {material.unit}</div>}
+        <Input type="number" value={f.qty} onChange={upd("qty")} placeholder={t("warehouse.enter_quantity_received")}/>
+        {material&&f.qty&&<div style={{fontSize:11,color:T.grn,marginTop:3}}>{t("warehouse.new_total_fmtn_unit", { fmtN: fmtN(Number(material.qty)+Number(f.qty)), unit: material.unit })}</div>}
       </Field>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:11}}>
-        <Field label="Rate (₹)"><Input type="number" value={f.rate} onChange={upd("rate")} placeholder="Per unit rate"/></Field>
-        <Field label="Vendor"><Input value={f.vendor} onChange={upd("vendor")} placeholder="Optional"/></Field>
+        <Field label={t("subcon.rate")}><Input type="number" value={f.rate} onChange={upd("rate")} placeholder={t("warehouse.per_unit_rate")}/></Field>
+        <Field label={t("common.vendor")}><Input value={f.vendor} onChange={upd("vendor")} placeholder={t("common.optional")}/></Field>
       </div>
-      <Field label="Remarks">
-        <Input value={f.remarks} onChange={upd("remarks")} placeholder="Optional note"/>
+      <Field label={t("common.remarks")}>
+        <Input value={f.remarks} onChange={upd("remarks")} placeholder={t("common.optional_note")}/>
       </Field>
     </ModalShell>
   );
@@ -1816,11 +1805,11 @@ function QuickIssueModal({material,projects,users,onClose,onSaved}){
     setSaving(false);
   };
   return (
-    <ModalShell title="Quick Issue" sub={`${material?.name} · Available: ${fmtN(max)} ${material?.unit}`}
+    <ModalShell title={t("warehouse.quick_issue")} sub={`${material?.name} · Available: ${fmtN(max)} ${material?.unit}`}
       onClose={onClose} width={500}
       footer={<>
-        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-        <Btn onClick={submit} disabled={!f.qty||overStock||saving} c={T.amb} icon={IcOut}>{saving?"Issuing...":"Confirm Issue"}</Btn>
+        <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
+        <Btn onClick={submit} disabled={!f.qty||overStock||saving} c={T.amb} icon={IcOut}>{saving?t("warehouse.issuing"):t("warehouse.confirm_issue")}</Btn>
       </>}>
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:14}}>
         <span style={{fontSize:22}}>{getCategoryEmoji(material?.category)}</span>
@@ -1829,27 +1818,27 @@ function QuickIssueModal({material,projects,users,onClose,onSaved}){
           <div style={{fontSize:10.5,color:T.t4}}>{material?.location} · ₹{fmtN(material?.rate)}/{material?.unit}</div>
         </div>
         <div style={{textAlign:"right"}}>
-          <div style={{fontSize:9.5,color:T.t4,marginBottom:1}}>Available</div>
+          <div style={{fontSize:9.5,color:T.t4,marginBottom:1}}>{t("common.available")}</div>
           <div style={{fontSize:18,fontWeight:800,color:T.grn}}>{fmtN(max)} <span style={{fontSize:11,fontWeight:400}}>{material?.unit}</span></div>
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:11}}>
-        <Field label="Project">
-          <SearchSelect compact value={f.project_id} options={projects} onChange={v=>setF(p=>({...p,project_id:v}))} placeholder="Select project"/>
+        <Field label={t("common.project")}>
+          <SearchSelect compact value={f.project_id} options={projects} onChange={v=>setF(p=>({...p,project_id:v}))} placeholder={t("warehouse.select_project")}/>
         </Field>
-        <Field label="Issued To">
-          <SearchSelect compact value={f.issued_to} options={users} onChange={v=>setF(p=>({...p,issued_to:v}))} placeholder="Person on site"/>
+        <Field label={t("warehouse.issued_to")}>
+          <SearchSelect compact value={f.issued_to} options={users} onChange={v=>setF(p=>({...p,issued_to:v}))} placeholder={t("warehouse.person_on_site")}/>
         </Field>
       </div>
       <Field label={`Quantity (${material?.unit}) *`} style={{marginBottom:11}}>
         <Input type="number" value={f.qty} onChange={e=>setF(p=>({...p,qty:e.target.value}))} placeholder={`Max ${max}`} max={max}
           accent={overStock?T.red:T.amb}
           style={{borderColor:overStock?T.red:T.b1,color:overStock?T.red:T.t1}}/>
-        {Number(f.qty)>0&&!overStock&&<div style={{fontSize:11,color:T.amb,marginTop:3}}>Value: ₹{fmtN(Number(f.qty)*(material?.rate||0))}</div>}
-        {overStock&&<div style={{fontSize:11,color:T.red,marginTop:3}}>⚠ Exceeds available stock</div>}
+        {Number(f.qty)>0&&!overStock&&<div style={{fontSize:11,color:T.amb,marginTop:3}}>{t("warehouse.value_fmtn", { fmtN: fmtN(Number(f.qty)*(material?.rate||0)) })}</div>}
+        {overStock&&<div style={{fontSize:11,color:T.red,marginTop:3}}>{t("warehouse.exceeds_available_stock")}</div>}
       </Field>
-      <Field label="Remarks">
-        <Input value={f.remarks} onChange={e=>setF(p=>({...p,remarks:e.target.value}))} placeholder="e.g. GF slab casting..."/>
+      <Field label={t("common.remarks")}>
+        <Input value={f.remarks} onChange={e=>setF(p=>({...p,remarks:e.target.value}))} placeholder={t("warehouse.e_g_gf_slab_casting_2")}/>
       </Field>
     </ModalShell>
   );
@@ -1886,35 +1875,34 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
 
         <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,flexShrink:0,background:T.surfaceB}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-            <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Stock</div>
+            <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{t("common.stock")}</div>
               <div style={{fontSize:18,fontWeight:800,color:material.qty<=0?T.red:material.qty<material.minQty?T.amb:T.t1}}>{fmtN(material.qty)} <span style={{fontSize:10.5,fontWeight:400,color:T.t4}}>{material.unit}</span></div></div>
-            <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Total In</div>
+            <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{t("warehouse.total_in")}</div>
               <div style={{fontSize:18,fontWeight:700,color:T.grn}}>{fmtN(totalIn)}</div></div>
-            <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Total Out</div>
+            <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{t("warehouse.total_out")}</div>
               <div style={{fontSize:18,fontWeight:700,color:T.amb}}>{fmtN(totalOut)}</div></div>
-            <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>Value</div>
+            <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{t("fuel.value")}</div>
               <div style={{fontSize:18,fontWeight:700,color:T.blu}}>₹{fmt(material.qty*material.rate)}</div></div>
           </div>
         </div>
 
         <div style={{padding:"10px 18px",borderBottom:`1px solid ${T.b1}`,flexShrink:0,display:"flex",gap:7,flexWrap:"wrap"}}>
-          <Btn onClick={()=>onIssue(material)} c={T.amb} icon={IcOut} size="sm">Issue</Btn>
-          <Btn onClick={()=>onAddStock(material)} c={T.grn} icon={IcIn} size="sm">Add Stock</Btn>
-          <GhostBtn onClick={()=>onEdit(material)} icon={IcEdit} c={T.blu}>Edit</GhostBtn>
-          <GhostBtn onClick={()=>onDelete(material)} icon={IcTrash} c={T.red}>Delete</GhostBtn>
+          <Btn onClick={()=>onIssue(material)} c={T.amb} icon={IcOut} size="sm">{t("mom.issue")}</Btn>
+          <Btn onClick={()=>onAddStock(material)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.add_stock")}</Btn>
+          <GhostBtn onClick={()=>onEdit(material)} icon={IcEdit} c={T.blu}>{t("common.edit_2")}</GhostBtn>
+          <GhostBtn onClick={()=>onDelete(material)} icon={IcTrash} c={T.red}>{t("common.delete")}</GhostBtn>
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
           <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
-            <IcHist size={12} color={T.t3}/> Movement history ({history.length})
-          </div>
-          {loading&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:12}}>Loading...</div>}
-          {!loading&&history.length===0&&<Empty label="Koi movement nahi" sub="Iss material par GRN ya issue nahi hua"/>}
+            <IcHist size={12} color={T.t3}/>{t("warehouse.movement_history_history", { history: history.length })}</div>
+          {loading&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:12}}>{t("common.loading")}</div>}
+          {!loading&&history.length===0&&<Empty label={t("warehouse.koi_movement_nahi")} sub={t("warehouse.iss_material_par_grn_ya_issue")}/>}
           {!loading&&history.map((h,i)=>(
             <div key={i} style={{padding:"10px 13px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:7,borderLeft:`3px solid ${h.type==="in"?T.grn:T.amb}`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <Pill label={h.type==="in"?"GRN":"Issue"} c={h.type==="in"?T.grn:T.amb} bg={h.type==="in"?T.grnL:T.ambL} brd={h.type==="in"?T.grnM:T.ambM}/>
+                  <Pill label={h.type==="in"?"GRN":t("mom.issue")} c={h.type==="in"?T.grn:T.amb} bg={h.type==="in"?T.grnL:T.ambL} brd={h.type==="in"?T.grnM:T.ambM}/>
                   <span style={{fontSize:11,fontWeight:700,color:h.type==="in"?T.grn:T.amb,fontFamily:"monospace"}}>{h.doc_no}</span>
                   <span style={{fontSize:10.5,color:T.t4}}>{fmtDate(h.date)}</span>
                 </div>
@@ -1923,7 +1911,7 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
               <div style={{fontSize:11,color:T.t3,display:"flex",gap:10,flexWrap:"wrap"}}>
                 {h.project_name&&<span>📁 {h.project_name}</span>}
                 {h.vendor&&<span>🏢 {h.vendor}</span>}
-                {h.po_no&&<span>PO: {h.po_no}</span>}
+                {h.po_no&&<span>{t("warehouse.po_po_no", { po_no: h.po_no })}</span>}
                 {h.to_name&&<span>➡ {h.to_name}</span>}
                 {h.by_name&&<span>by {h.by_name}</span>}
                 {h.rate>0&&<span>@ ₹{fmtN(h.rate)}</span>}
@@ -1964,15 +1952,15 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
 
   const getVel=(m)=>{
     const v=velMap[m.id]||{outCount:0};
-    if(v.outCount>=5) return{label:"Fast Moving",icon:"🔥",c:"#DC2626",bg:"#FEF2F2"};
-    if(v.outCount>=2) return{label:"Active",icon:"⚡",c:T.blu,bg:T.bluL};
-    return{label:"Slow",icon:"",c:T.t4,bg:T.surfaceB};
+    if(v.outCount>=5) return{label:t("warehouse.fast_moving"),icon:"🔥",c:"#DC2626",bg:"#FEF2F2"};
+    if(v.outCount>=2) return{label:t("common.active"),icon:"⚡",c:T.blu,bg:T.bluL};
+    return{label:t("warehouse.slow"),icon:"",c:T.t4,bg:T.surfaceB};
   };
 
   const getHealth=(m)=>{
-    if(m.qty===0)              return{label:"Out",      c:"#EF4444",bg:"#FEF2F2",brd:"#FECACA",pri:0};
-    if(m.qty<m.minQty)         return{label:"Low",      c:T.amb,    bg:T.ambL,  brd:T.ambM,   pri:1};
-    if(m.maxQty&&m.qty>m.maxQty*0.95) return{label:"High",c:"#7C3AED",bg:"#F5F3FF",brd:"#DDD6FE",pri:3};
+    if(m.qty===0)              return{label:t("overview.out"),      c:"#EF4444",bg:"#FEF2F2",brd:"#FECACA",pri:0};
+    if(m.qty<m.minQty)         return{label:t("fuel.low"),      c:T.amb,    bg:T.ambL,  brd:T.ambM,   pri:1};
+    if(m.maxQty&&m.qty>m.maxQty*0.95) return{label:t("warehouse.high"),c:"#7C3AED",bg:"#F5F3FF",brd:"#DDD6FE",pri:3};
     return                            {label:"OK",       c:T.grn,    bg:T.grnL,  brd:T.grnM,   pri:2};
   };
 
@@ -2034,7 +2022,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
       <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{position:"relative",flex:1,minWidth:200}}>
           <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search material..."
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("common.search_material")}
             style={{width:"100%",height:33,padding:"0 9px 0 28px",borderRadius:7,border:`1.5px solid ${search?T.blu:T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
         </div>
         <select value={cat} onChange={e=>setCat(e.target.value)}
@@ -2043,14 +2031,14 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
         </select>
         <button onClick={()=>setShowLow(s=>!s)}
           style={{height:33,padding:"0 11px",borderRadius:7,border:`1.5px solid ${showLow?"#EF4444":T.b1}`,background:showLow?"#FEF2F2":T.surface,color:showLow?"#EF4444":T.t3,fontSize:12,fontWeight:showLow?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-          <IcAlert size={12} color={showLow?"#EF4444":T.t4}/> Low Stock
+          <IcAlert size={12} color={showLow?"#EF4444":T.t4}/> {t("warehouse.low_stock")}
         </button>
         <select value={sort} onChange={e=>setSort(e.target.value)}
           style={{height:33,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-          <option value="name">Sort: Name</option>
-          <option value="qty">Sort: Qty ↑</option>
-          <option value="value">Sort: Value ↓</option>
-          <option value="low">Sort: Alerts first</option>
+          <option value="name">{t("warehouse.sort_name")}</option>
+          <option value="qty">{t("warehouse.sort_qty")}</option>
+          <option value="value">{t("warehouse.sort_value")}</option>
+          <option value="low">{t("warehouse.sort_alerts_first")}</option>
         </select>
         <div style={{display:"flex",gap:2,background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,padding:3}}>
           {[["group","≡≡","Grouped by category"],["grid","⊞","Card grid"],["list","☰","Compact list"]].map(([id,ico,ttl])=>(
@@ -2060,22 +2048,22 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
             </button>
           ))}
         </div>
-        <Btn onClick={onAddMaterial} c={T.blu} icon={IcAdd} size="sm">New Material</Btn>
+        <Btn onClick={onAddMaterial} c={T.blu} icon={IcAdd} size="sm">{t("warehouse.new_material")}</Btn>
       </div>
 
       {/* ── Summary strip ── */}
       <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",fontSize:11.5,color:T.t3,flexWrap:"wrap"}}>
         <span style={{fontWeight:600,color:T.t2}}>{filtered.length} item{filtered.length!==1?"s":""}</span>
         <span style={{color:T.b2}}>·</span>
-        <span>₹{fmt(totalVal)} total value</span>
-        {outCount>0&&<><span style={{color:T.b2}}>·</span><span style={{color:"#EF4444",fontWeight:700,background:"#FEF2F2",padding:"2px 9px",borderRadius:20,border:"1px solid #FECACA",fontSize:11}}>🔴 {outCount} Out of Stock</span></>}
-        {lowCount>0&&<><span style={{color:T.b2}}>·</span><span style={{color:T.amb,fontWeight:700,background:T.ambL,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.ambM}`,fontSize:11}}>⚠ {lowCount} Low Stock</span></>}
+        <span>{t("warehouse.fmt_total_value", { fmt: fmt(totalVal) })}</span>
+        {outCount>0&&<><span style={{color:T.b2}}>·</span><span style={{color:"#EF4444",fontWeight:700,background:"#FEF2F2",padding:"2px 9px",borderRadius:20,border:"1px solid #FECACA",fontSize:11}}>{t("warehouse.outcount_out_of_stock", { outCount })}</span></>}
+        {lowCount>0&&<><span style={{color:T.b2}}>·</span><span style={{color:T.amb,fontWeight:700,background:T.ambL,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.ambM}`,fontSize:11}}>{t("warehouse.lowcount_low_stock", { lowCount })}</span></>}
         {cat!=="All"&&<span style={{background:T.bluL,color:T.blu,fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20,border:`1px solid ${T.bluM}`}}>{cat}</span>}
       </div>
 
       {filtered.length===0&&(
-        <Empty label={stock.length===0?"Stock me kuch nahi":"Filter ke andar koi item nahi"}
-          sub={stock.length===0?"\"New Material\" se SKU add karke shuru karein":""}/>
+        <Empty label={stock.length===0?t("warehouse.stock_me_kuch_nahi"):t("warehouse.filter_ke_andar_koi_item_nahi")}
+          sub={stock.length===0?t("warehouse.new_material_se_sku_add_karke"):""}/>
       )}
 
       {/* ══════════════════════════════════════════════
@@ -2138,7 +2126,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                       <div style={{textAlign:"right",paddingRight:14}}>
                         <span style={{fontSize:16,fontWeight:600,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1,letterSpacing:"-0.1px",lineHeight:1}}>{fmtN(m.qty)}</span>
                         <span style={{fontSize:10,color:T.t4,marginLeft:3}}>{m.unit}</span>
-                        {h.label!=="OK"&&<div style={{fontSize:8.5,color:h.c,fontWeight:700,marginTop:2,textTransform:"uppercase",letterSpacing:".3px"}}>{h.label==="Out"?"Out of stock":h.label==="Low"?"Below min":h.label}</div>}
+                        {h.label!=="OK"&&<div style={{fontSize:8.5,color:h.c,fontWeight:700,marginTop:2,textTransform:"uppercase",letterSpacing:".3px"}}>{h.label==="Out"?t("warehouse.out_of_stock"):h.label==="Low"?t("warehouse.below_min"):h.label}</div>}
                       </div>
 
                       {/* Value */}
@@ -2159,15 +2147,15 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                       {/* Quick actions */}
                       <div style={{display:"flex",gap:5,paddingRight:12,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
                         {onAddStock&&(
-                          <button onClick={()=>onAddStock(m)} title="Add Stock"
+                          <button onClick={()=>onAddStock(m)} title={t("warehouse.add_stock")}
                             style={{width:28,height:28,borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:T.grn,fontWeight:700}}>+</button>
                         )}
                         {onIssue&&(
-                          <button onClick={()=>onIssue(m)} title="Issue to project"
+                          <button onClick={()=>onIssue(m)} title={t("warehouse.issue_to_project")}
                             style={{width:28,height:28,borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:T.amb}}>↓</button>
                         )}
                         {onQuickRequest&&(
-                          <button onClick={()=>onQuickRequest(m)} title="Request to procurement"
+                          <button onClick={()=>onQuickRequest(m)} title={t("warehouse.request_to_procurement")}
                             style={{width:28,height:28,borderRadius:7,background:T.purL,border:`1px solid ${T.purM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.pur}}>
                             <IcMR size={13} color={T.pur}/>
                           </button>
@@ -2247,15 +2235,15 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                             <span style={{fontSize:11.5,fontWeight:600,color:T.blu}}>₹{fmt(val)}</span>
                             <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
                               {onAddStock&&(
-                                <button onClick={()=>onAddStock(m)} title="Add Stock"
+                                <button onClick={()=>onAddStock(m)} title={t("warehouse.add_stock")}
                                   style={{width:23,height:23,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:T.grn,fontWeight:700}}>+</button>
                               )}
                               {onIssue&&(
-                                <button onClick={()=>onIssue(m)} title="Issue to project"
+                                <button onClick={()=>onIssue(m)} title={t("warehouse.issue_to_project")}
                                   style={{width:23,height:23,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:T.amb}}>↓</button>
                               )}
                               {onQuickRequest&&(
-                                <button onClick={()=>onQuickRequest(m)} title="Request to procurement"
+                                <button onClick={()=>onQuickRequest(m)} title={t("warehouse.request_to_procurement")}
                                   style={{width:23,height:23,borderRadius:6,background:T.purL,border:`1px solid ${T.purM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.pur}}>
                                   <IcMR size={11} color={T.pur}/>
                                 </button>
@@ -2307,7 +2295,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                 </div>
                 <span style={{fontSize:12.5,fontWeight:600,color:T.blu}}>₹{fmt(m.qty*m.rate)}</span>
                 {h.label!=="OK"
-                  ?<Pill label={h.label==="Out"?"Out of Stock":"Low"} c={h.c} bg={h.bg} brd={h.brd}/>
+                  ?<Pill label={h.label==="Out"?t("warehouse.out_of_stock_2"):t("fuel.low")} c={h.c} bg={h.bg} brd={h.brd}/>
                   :<span style={{fontSize:10,color:T.t4}}>—</span>
                 }
               </div>
@@ -2326,10 +2314,10 @@ function GrnTab({grns,onNew,onVerify}){
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{grns.length} Receipts</span>
-        <Btn onClick={onNew} c={T.blu} icon={IcAdd} size="sm">New GRN</Btn>
+        <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{t("warehouse.grns_receipts", { grns: grns.length })}</span>
+        <Btn onClick={onNew} c={T.blu} icon={IcAdd} size="sm">{t("warehouse.new_grn")}</Btn>
       </div>
-      {grns.length===0?<Empty label="Koi GRN nahi" sub="Naya GRN bana ke material receive karein"/>:(
+      {grns.length===0?<Empty label={t("warehouse.koi_grn_nahi")} sub={t("warehouse.naya_grn_bana_ke_material_receive")}/>:(
         <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"100px 90px 1fr 110px 100px 90px",padding:"7px 14px",background:T.sb,gap:8}}>
             {["GRN No","Date","Vendor","PO No","Total","Status"].map((h,i)=>(
@@ -2347,7 +2335,7 @@ function GrnTab({grns,onNew,onVerify}){
                 <span style={{fontSize:11.5,fontWeight:700,color:isReturn?T.cyn:T.blu,fontFamily:"monospace"}}>{g.id}</span>
                 <span style={{fontSize:11.5,color:T.t3}}>{g.date}</span>
                 <div style={{minWidth:0,display:"flex",alignItems:"center",gap:6}}>
-                  {isReturn&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:10,background:T.cynL,color:T.cyn,fontWeight:600,border:`1px solid ${T.cynM}`,whiteSpace:"nowrap"}}>Return</span>}
+                  {isReturn&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:10,background:T.cynL,color:T.cyn,fontWeight:600,border:`1px solid ${T.cynM}`,whiteSpace:"nowrap"}}>{t("warehouse.return")}</span>}
                   <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.vendor}</span>
                 </div>
                 <span style={{fontSize:11,color:T.t4,fontFamily:"monospace"}}>{g.poNo}</span>
@@ -2382,7 +2370,7 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
             <div>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:14,fontWeight:700,color:"white",fontFamily:"monospace"}}>{grn.id}</span>
-                {isReturn&&<span style={{fontSize:10,padding:"1px 8px",borderRadius:10,background:"rgba(255,255,255,0.15)",color:"#fff",fontWeight:600}}>Return</span>}
+                {isReturn&&<span style={{fontSize:10,padding:"1px 8px",borderRadius:10,background:"rgba(255,255,255,0.15)",color:"#fff",fontWeight:600}}>{t("warehouse.return")}</span>}
               </div>
               <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:1}}>{grn.vendor} · {grn.date}</div>
             </div>
@@ -2395,7 +2383,7 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
           <div style={{padding:"11px 14px",background:ss.bg,border:`1.5px solid ${ss.brd}`,borderRadius:8,marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:18}}>{grn.status==="Verified"?"✓":grn.status==="Partial"?"⚠":"⏳"}</span>
             <div style={{flex:1}}>
-              <div style={{fontSize:12.5,fontWeight:700,color:ss.c}}>Status: {grn.status}</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:ss.c}}>{t("warehouse.status_status", { status: grn.status })}</div>
               <div style={{fontSize:11,color:ss.c,marginTop:2}}>
                 {isReturn?`Return GRN — material project se warehouse me wapas aaya`:`Vendor receipt — material warehouse stock me add ho gaya`}
               </div>
@@ -2405,19 +2393,19 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
           {/* Meta grid */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
             <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{isReturn?"From Project":"Vendor"}</div>
+              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{isReturn?t("material_transfer.from_project"):t("common.vendor")}</div>
               <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{grn.vendor||"—"}</div>
             </div>
             <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{isReturn?"Date":"PO No"}</div>
+              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{isReturn?t("common.date"):t("warehouse.po_no")}</div>
               <div style={{fontSize:12,fontWeight:600,color:T.t1,fontFamily:isReturn?"inherit":"monospace"}}>{isReturn?grn.date:(grn.poNo||"—")}</div>
             </div>
             <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Received By</div>
+              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.received_by")}</div>
               <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{grn.by||"—"}</div>
             </div>
             <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Total Value</div>
+              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.total_value")}</div>
               <div style={{fontSize:13,fontWeight:700,color:isReturn?T.cyn:T.blu}}>₹{fmtN(grn.total)}</div>
             </div>
           </div>
@@ -2425,17 +2413,15 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
           {/* Remark */}
           {grn.remark&&(
             <div style={{padding:"9px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:13}}>
-              <div style={{fontSize:9.5,color:T.t4,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>Remark</div>
+              <div style={{fontSize:9.5,color:T.t4,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.remark")}</div>
               <div style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>"{grn.remark}"</div>
             </div>
           )}
 
           {/* Items table */}
           <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between"}}>
-            <span>Items Received ({(grn.items||[]).length})</span>
-            <span style={{textTransform:"none",letterSpacing:0,color:T.t1,fontWeight:700}}>
-              {totalOrd>0?`Ord: ${fmtN(totalOrd)} · `:""}Recv: {fmtN(totalRecv)}
-            </span>
+            <span>{t("warehouse.items_received_grn", { grn: (grn.items||[]).length })}</span>
+            <span style={{textTransform:"none",letterSpacing:0,color:T.t1,fontWeight:700}}>{t("warehouse.totalordrecv_fmtn", { totalOrd: totalOrd>0?`Ord: ${fmtN(totalOrd)} · `:"", fmtN: fmtN(totalRecv) })}</span>
           </div>
           <div style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:12}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 80px 90px",padding:"7px 11px",background:T.sb,gap:8}}>
@@ -2469,18 +2455,18 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
           {/* Short notice for partial */}
           {(grn.items||[]).some(it=>Number(it.recQty)<Number(it.ordQty))&&!isReturn&&(
             <div style={{padding:"8px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,fontSize:11.5,color:T.amb}}>
-              ⚠ Kuch items ordered se kam aaye hain. PartialReceived status reflect karta hai.
+             {t("warehouse.kuch_items_ordered_se_kam_aaye")}
             </div>
           )}
         </div>
 
         {/* Footer */}
         <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-          <span style={{fontSize:10.5,color:T.t4}}>{isReturn?"Project se return":"Vendor delivery"}</span>
+          <span style={{fontSize:10.5,color:T.t4}}>{isReturn?t("warehouse.project_se_return"):t("warehouse.vendor_delivery")}</span>
           <div style={{display:"flex",gap:8}}>
-            <GhostBtn onClick={onClose}>Close</GhostBtn>
+            <GhostBtn onClick={onClose}>{t("common.close")}</GhostBtn>
             {grn.status!=="Verified"&&!isReturn&&(
-              <Btn onClick={()=>{onVerify(grn.dbId);onClose();}} c={T.grn} icon={IcChk} size="sm">Verify & Accept</Btn>
+              <Btn onClick={()=>{onVerify(grn.dbId);onClose();}} c={T.grn} icon={IcChk} size="sm">{t("warehouse.verify_accept")}</Btn>
             )}
           </div>
         </div>
@@ -2509,14 +2495,12 @@ function IssueTab({issues,projects,onNew,onSelect}){
       {pendingCount>0&&(
         <div style={{padding:"10px 13px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,marginBottom:11,display:"flex",alignItems:"center",gap:10}}>
           <IcAlert size={14} color={T.amb}/>
-          <span style={{fontSize:12,color:T.amb,fontWeight:700}}>
-            {pendingCount} issue{pendingCount>1?"s":""} pending receive — destination project se acknowledge hona baki hai
-          </span>
+          <span style={{fontSize:12,color:T.amb,fontWeight:700}}>{t("warehouse.pendingcount_issuependingcount2_pending_receive_destination_project", { pendingCount, pendingCount2: pendingCount>1?"s":"" })}</span>
         </div>
       )}
       <div style={{display:"flex",gap:8,marginBottom:11,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{minWidth:200,maxWidth:240,flex:1}}>
-          <SearchSelect compact value={fProj} options={[{id:null,name:"All projects"},...projects]} onChange={v=>setFProj(v)} placeholder="Filter by project"/>
+          <SearchSelect compact value={fProj} options={[{id:null,name:"All projects"},...projects]} onChange={v=>setFProj(v)} placeholder={t("warehouse.filter_by_project")}/>
         </div>
         {["All","Pending","Partial","Received"].map(s=>{
           const count = s==="All" ? issues.length : issues.filter(i=>(i.status||"Pending")===s).length;
@@ -2528,9 +2512,9 @@ function IssueTab({issues,projects,onNew,onSelect}){
           );
         })}
         <div style={{flex:1}}/>
-        <Btn onClick={onNew} c={T.amb} icon={IcOut} size="sm">Issue Material</Btn>
+        <Btn onClick={onNew} c={T.amb} icon={IcOut} size="sm">{t("warehouse.issue_material")}</Btn>
       </div>
-      {filtered.length===0?<Empty label="Koi issue nahi" sub="Stock se material project ko bhejne ke liye Issue Material click karein"/>:(
+      {filtered.length===0?<Empty label={t("warehouse.koi_issue_nahi")} sub={t("warehouse.stock_se_material_project_ko_bhejne")}/>:(
         <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"100px 80px 1fr 110px 100px 95px 95px",padding:"7px 14px",background:T.sb,gap:8}}>
             {["Issue No","Date","To Project","Issued To","Value","By","Status"].map((h,i)=>(
@@ -2633,46 +2617,46 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
             </div>
             <div>
               <div style={{fontSize:14,fontWeight:700,color:"white",fontFamily:"monospace"}}>{detail?.id||issue?.id}</div>
-              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:1}}>Material Out · Warehouse → {detail?.project||"—"}</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:1}}>{t("warehouse.material_out_warehouse_detail", { detail: detail?.project||"—" })}</div>
             </div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={14}/></button>
         </div>
 
         {loading?(
-          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:13}}>Loading...</div>
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:13}}>{t("common.loading")}</div>
         ):(
           <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
             {isPending&&(
               <div style={{padding:"11px 14px",background:T.ambL,border:`1.5px solid ${T.ambM}`,borderRadius:8,marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
                 <span style={{fontSize:18}}>⏳</span>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:12.5,fontWeight:700,color:T.amb}}>Pending receive at {detail.project}</div>
-                  <div style={{fontSize:11,color:T.amb,marginTop:2}}>Warehouse stock minus ho chuka hai. Site team physically receive karke "Receive" click karegi tab dest project me GRN banega.</div>
+                  <div style={{fontSize:12.5,fontWeight:700,color:T.amb}}>{t("warehouse.pending_receive_at_project", { project: detail.project })}</div>
+                  <div style={{fontSize:11,color:T.amb,marginTop:2}}>{t("warehouse.warehouse_stock_minus_ho_chuka_hai")}</div>
                 </div>
               </div>
             )}
             {isPartial&&(
               <div style={{padding:"11px 14px",background:T.bluL,border:`1.5px solid ${T.bluM}`,borderRadius:8,marginBottom:12}}>
-                <div style={{fontSize:12.5,fontWeight:700,color:T.blu}}>📦 Partially received</div>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.blu}}>{t("warehouse.partially_received")}</div>
               </div>
             )}
 
             <div style={{padding:"14px 16px",background:`linear-gradient(135deg, ${T.ambL} 0%, ${T.bluL} 100%)`,borderRadius:10,border:`1px solid ${T.ambM}`,marginBottom:14}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:14,alignItems:"center"}}>
                 <div>
-                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>From</div>
+                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.from")}</div>
                   <div style={{fontSize:14,fontWeight:700,color:T.t1,display:"flex",alignItems:"center",gap:5}}>
-                    <span style={{fontSize:10,opacity:.6}}>🔒</span>Warehouse
+                    <span style={{fontSize:10,opacity:.6}}>🔒</span>{t("common.warehouse")}
                   </div>
-                  <div style={{fontSize:10.5,color:T.red,marginTop:3,fontWeight:600}}>− DEBIT (immediate)</div>
+                  <div style={{fontSize:10.5,color:T.red,marginTop:3,fontWeight:600}}>{t("warehouse.debit_immediate")}</div>
                 </div>
                 <div style={{color:T.amb,fontSize:24,fontWeight:800}}>→</div>
                 <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>To Project</div>
+                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.to_project_2")}</div>
                   <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{detail?.project||"—"}</div>
                   <div style={{fontSize:10.5,color:isReceived?T.grn:isPartial?T.blu:T.amb,marginTop:3,fontWeight:600}}>
-                    {isReceived?"+ CREDITED":isPartial?"⚠ PARTIAL":"⏳ PENDING RECEIVE"}
+                    {isReceived?t("warehouse.credited"):isPartial?t("warehouse.partial"):t("warehouse.pending_receive")}
                   </div>
                 </div>
               </div>
@@ -2680,16 +2664,16 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Status</div>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.status")}</div>
                 <Pill label={status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
               </div>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Issued To</div>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.issued_to")}</div>
                 <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{detail?.issuedTo||"—"}</div>
                 <div style={{fontSize:9.5,color:T.t4,marginTop:1}}>by {detail?.by||"—"}</div>
               </div>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{detail?.received_at?"Received":"Created"}</div>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{detail?.received_at?t("common.received"):t("common.created")}</div>
                 <div style={{fontSize:12,fontWeight:600,color:T.t1}}>
                   {detail?.received_at?(<>{detail.received_by_name||"—"}<div style={{fontSize:10,color:T.t4,fontWeight:400}}>{fmtDate(detail.received_at)}</div></>):fmtDate(detail?.created_at||detail?.date)}
                 </div>
@@ -2697,8 +2681,8 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
             </div>
 
             <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between"}}>
-              <span>Items ({items.length})</span>
-              <span style={{textTransform:"none",letterSpacing:0,color:T.t1,fontWeight:700}}>Qty: {fmtN(totalQty)} · Value: ₹{fmtN(totalValue)}</span>
+              <span>{t("warehouse.items_items", { items: items.length })}</span>
+              <span style={{textTransform:"none",letterSpacing:0,color:T.t1,fontWeight:700}}>{t("warehouse.qty_fmtn_value_fmtn2", { fmtN: fmtN(totalQty), fmtN2: fmtN(totalValue) })}</span>
             </div>
             <div style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:12}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 50px 70px 70px 80px 80px",padding:"7px 11px",background:T.sb,gap:8}}>
@@ -2726,13 +2710,13 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
 
             {receiveOpen&&isPending&&(
               <div style={{padding:"12px 14px",background:T.grnL,border:`2px solid ${T.grnM}`,borderRadius:9,marginBottom:14}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.grn,marginBottom:8}}>📥 Receive at {detail.project}</div>
-                <div style={{fontSize:11,color:T.t3,marginBottom:10}}>Actual received qty edit kar sakte ho (kam aaya to "Partial")</div>
+                <div style={{fontSize:12,fontWeight:700,color:T.grn,marginBottom:8}}>{t("warehouse.receive_at_project", { project: detail.project })}</div>
+                <div style={{fontSize:11,color:T.t3,marginBottom:10}}>{t("warehouse.actual_received_qty_edit_kar_sakte")}</div>
                 {receiveItems.map((it,i)=>(
                   <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 90px",gap:8,marginBottom:7,alignItems:"center"}}>
                     <div>
                       <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.name}</div>
-                      <div style={{fontSize:10.5,color:T.t4}}>Sent: {fmtN(it.qty)} {it.unit}</div>
+                      <div style={{fontSize:10.5,color:T.t4}}>{t("warehouse.sent_fmtn_unit", { fmtN: fmtN(it.qty), unit: it.unit })}</div>
                     </div>
                     <input type="number" value={it.received_qty} max={it.qty}
                       onChange={e=>{const v=e.target.value;setReceiveItems(p=>p.map((x,j)=>j===i?{...x,received_qty:v}:x));}}
@@ -2740,9 +2724,9 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
                   </div>
                 ))}
                 <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
-                  <GhostBtn onClick={()=>setReceiveOpen(false)}>Cancel</GhostBtn>
+                  <GhostBtn onClick={()=>setReceiveOpen(false)}>{t("common.cancel")}</GhostBtn>
                   <Btn onClick={handleReceive} disabled={receiving} c={T.grn} icon={IcChk} size="sm">
-                    {receiving?"Saving...":"Confirm Receive (creates GRN)"}
+                    {receiving?t("common.saving"):t("warehouse.confirm_receive_creates_grn")}
                   </Btn>
                 </div>
               </div>
@@ -2750,7 +2734,7 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
 
             {detail?.remarks&&(
               <div style={{padding:"9px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:8}}>
-                <div style={{fontSize:9.5,color:T.t4,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>Remarks</div>
+                <div style={{fontSize:9.5,color:T.t4,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.remarks")}</div>
                 <div style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>"{detail.remarks}"</div>
               </div>
             )}
@@ -2758,15 +2742,15 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
         )}
 
         <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-          <span style={{fontSize:10.5,color:T.t4}}>{isPending?"Site receive baki":isReceived?"All received":""}</span>
+          <span style={{fontSize:10.5,color:T.t4}}>{isPending?t("warehouse.site_receive_baki"):isReceived?t("warehouse.all_received"):""}</span>
           <div style={{display:"flex",gap:8}}>
-            <GhostBtn onClick={onClose}>Close</GhostBtn>
+            <GhostBtn onClick={onClose}>{t("common.close")}</GhostBtn>
             {isPending&&canReceive&&!receiveOpen&&detail?.project_id&&(
-              <Btn onClick={()=>setReceiveOpen(true)} c={T.grn} icon={IcIn} size="sm">Receive at {detail.project}</Btn>
+              <Btn onClick={()=>setReceiveOpen(true)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.receive_at_project", { project: detail.project })}</Btn>
             )}
             {canDelete&&(
               <Btn onClick={handleDelete} disabled={deleting} c={T.red} icon={IcTrash} size="sm">
-                {deleting?"Deleting...":"Delete & Reverse"}
+                {deleting?t("common.deleting"):t("warehouse.delete_reverse")}
               </Btn>
             )}
           </div>
@@ -2819,14 +2803,14 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSen
           );
         })}
         <div style={{flex:1}}/>
-        {mode==="warehouse"&&onNew&&<Btn onClick={onNew} c={T.pur} icon={IcMR} size="sm">New MR</Btn>}
+        {mode==="warehouse"&&onNew&&<Btn onClick={onNew} c={T.pur} icon={IcMR} size="sm">{t("tasks.new_mr")}</Btn>}
       </div>
 
       {filtered.length===0?<Empty
-          label={mode==="warehouse"?"Warehouse ke liye koi MR nahi":"Project ke liye koi request nahi"}
+          label={mode==="warehouse"?t("warehouse.warehouse_ke_liye_koi_mr_nahi"):t("warehouse.project_ke_liye_koi_request_nahi")}
           sub={mode==="warehouse"
-            ?"Apne stock ko replenish karne ke liye New MR click karein"
-            :"Procurement team \"Issue from Warehouse\" choose karegi to yahan request aayegi"}/>:(
+            ?t("warehouse.apne_stock_ko_replenish_karne_ke")
+            :t("warehouse.procurement_team_issue_from_warehouse_choose")}/>:(
       <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
         {/* Column header */}
         <div style={{display:"grid",gridTemplateColumns:GRID,padding:"8px 14px",background:T.sb,gap:10,alignItems:"center"}}>
@@ -2857,7 +2841,7 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSen
                 <div style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                   by {mr.requestedBy}
                   {mr.vendor&&<span style={{color:T.t3}}> · {mr.vendor}</span>}
-                  {mr.linked_procurement_mr_id&&<span style={{color:T.cyn,fontWeight:600}}> · From Proc.</span>}
+                  {mr.linked_procurement_mr_id&&<span style={{color:T.cyn,fontWeight:600}}> {t("warehouse.from_proc")}</span>}
                 </div>
               </div>
               {/* Material names */}
@@ -2887,38 +2871,38 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSen
                       sees the "approval pending" badge as before. */}
                   {mr.status==="Pending"&&onApprove&&onReject&&(
                     <>
-                      <Btn onClick={()=>onApprove(mr)} c={T.grn} size="sm" icon={IcChk}>Approve</Btn>
+                      <Btn onClick={()=>onApprove(mr)} c={T.grn} size="sm" icon={IcChk}>{t("common.approve_2")}</Btn>
                       <button onClick={()=>onReject(mr)}
                         style={{padding:"6px 11px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
-                        ✕ Reject
+                       {t("common.reject")}
                       </button>
                     </>
                   )}
                   {mr.status==="Pending"&&!(onApprove&&onReject)&&(
                     <div style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,whiteSpace:"nowrap"}}>
                       <span style={{fontSize:13}}>⏳</span>
-                      <span style={{fontSize:11,color:T.amb,fontWeight:600}}>Admin approval pending</span>
+                      <span style={{fontSize:11,color:T.amb,fontWeight:600}}>{t("warehouse.admin_approval_pending")}</span>
                     </div>
                   )}
 
                   {/* WAREHOUSE MODE — only Order + GRN after approval */}
                   {mode==="warehouse"&&mr.status==="Approved"&&procMode==="direct"&&onOrder&&(
-                    <Btn onClick={()=>onOrder(mr)} c={T.pur} size="sm" icon={IcMR}>Place Order</Btn>
+                    <Btn onClick={()=>onOrder(mr)} c={T.pur} size="sm" icon={IcMR}>{t("warehouse.place_order")}</Btn>
                   )}
                   {mode==="warehouse"&&mr.status==="Approved"&&procMode==="via_procurement"&&onSendToProc&&(
-                    <Btn onClick={()=>onSendToProc(mr)} c={T.pur} size="sm" icon={IcOut}>Send to Procurement</Btn>
+                    <Btn onClick={()=>onSendToProc(mr)} c={T.pur} size="sm" icon={IcOut}>{t("warehouse.send_to_procurement")}</Btn>
                   )}
                   {mode==="warehouse"&&mr.status==="Ordered"&&!mr.sent_to_procurement_at&&onGrn&&(
-                    <Btn onClick={()=>onGrn(mr)} c={T.grn} size="sm" icon={IcIn}>Receive (GRN)</Btn>
+                    <Btn onClick={()=>onGrn(mr)} c={T.grn} size="sm" icon={IcIn}>{t("warehouse.receive_grn")}</Btn>
                   )}
                   {mode==="warehouse"&&mr.status==="Ordered"&&mr.sent_to_procurement_at&&(
                     <div style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:7,background:T.purL,border:`1px solid ${T.purM}`,whiteSpace:"nowrap"}}>
                       <span style={{fontSize:13}}>📦</span>
-                      <span style={{fontSize:11,color:T.pur,fontWeight:600}}>With Procurement Team</span>
+                      <span style={{fontSize:11,color:T.pur,fontWeight:600}}>{t("warehouse.with_procurement_team")}</span>
                     </div>
                   )}
                   {mode==="warehouse"&&mr.status==="PartialReceived"&&onGrn&&(
-                    <Btn onClick={()=>onGrn(mr)} c={T.grn} size="sm" icon={IcIn}>Receive Rest</Btn>
+                    <Btn onClick={()=>onGrn(mr)} c={T.grn} size="sm" icon={IcIn}>{t("warehouse.receive_rest")}</Btn>
                   )}
                   {mode==="warehouse"&&mr.status==="Received"&&(
                     <span style={{fontSize:12,color:T.b2}}>—</span>
@@ -2936,17 +2920,17 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSen
                     <>
                       {onCheckStock&&(
                         <button onClick={()=>onCheckStock(mr)}
-                          title="Warehouse me is material ka current stock dekho"
+                          title={t("warehouse.warehouse_me_is_material_ka_current")}
                           style={{padding:"5px 9px",borderRadius:7,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}>
-                          🔍 Stock
+                         {t("warehouse.stock")}
                         </button>
                       )}
-                      <Btn onClick={()=>onIssue(mr)} c={T.amb} size="sm" icon={IcOut}>Issue from Stock</Btn>
+                      <Btn onClick={()=>onIssue(mr)} c={T.amb} size="sm" icon={IcOut}>{t("warehouse.issue_from_stock")}</Btn>
                       {onPassToProc&&(
                         <button onClick={()=>onPassToProc(mr)}
-                          title="Stock kam hai / fulfill nahi ho sakta — wapas procurement ko bhejo (vendor PO route)"
+                          title={t("warehouse.stock_kam_hai_fulfill_nahi_ho")}
                           style={{padding:"6px 11px",borderRadius:7,background:T.surface,border:`1.5px solid ${T.purM||"#DDD6FE"}`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
-                          ↩ Send to Procurement
+                         {t("warehouse.send_to_procurement_2")}
                         </button>
                       )}
                     </>
@@ -2968,11 +2952,11 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSen
                       mandatory closure reason. */}
                   {onClose && ["Pending","Approved","Ordered","PartialReceived"].includes(mr.status) && (
                     <button onClick={()=>onClose(mr)}
-                      title="Manually close this MR (compulsory reason)"
+                      title={t("warehouse.manually_close_this_mr_compulsory_reason")}
                       style={{padding:"5px 10px",borderRadius:7,background:"none",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}
                       onMouseEnter={e=>{e.currentTarget.style.background=T.surfaceB;e.currentTarget.style.color=T.red;e.currentTarget.style.borderColor=T.redM;}}
                       onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.t3;e.currentTarget.style.borderColor=T.b2;}}>
-                      🔒 Close
+                     {t("warehouse.close")}
                     </button>
                   )}
                 </div>
@@ -2998,16 +2982,15 @@ function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR,onApp
   return (
     <div>
       <SubTabBar active={sub} onSelect={setSub} tabs={[
-        {id:"warehouse",l:"Warehouse MR",     count:whMrs.length,  c:T.pur},
-        {id:"project",  l:"Project Requests", count:projMrs.length,c:T.cyn},
+        {id:"warehouse",l:t("warehouse.warehouse_mr"),     count:whMrs.length,  c:T.pur},
+        {id:"project",  l:t("warehouse.project_requests"), count:projMrs.length,c:T.cyn},
       ]}/>
-      <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}>
-        <b>Flow:</b> Request {sub==="warehouse"?"(yahin se ya site se)":"(procurement se aati)"} → Admin <b>Material Approvals</b> drawer me approve karega → {sub==="warehouse"
+      <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}><Rich k="warehouse.t_request_sub_admin_t2_drawer" params={{ t: t("warehouse.flow"), sub: sub==="warehouse"?t("warehouse.yahin_se_ya_site_se"):t("warehouse.procurement_se_aati"), t2: t("warehouse.material_approvals") }} />{sub==="warehouse"
           ?(procMode==="via_procurement"
-            ?<><b>Send to Procurement</b> button click karein → procurement queue me MR jaayegi → vendor receive par stock auto-update.</>
-            :<>"Place Order" + "Receive (GRN)" buttons milenge.</>)
-          :<>"Issue Now" button milega.</>}
-        {sub==="warehouse"&&<span style={{marginLeft:8,padding:"1px 8px",background:procMode==="via_procurement"?T.purL:T.grnL,color:procMode==="via_procurement"?T.pur:T.grn,borderRadius:10,fontSize:10,fontWeight:700}}>Mode: {procMode==="via_procurement"?"Via Procurement":"Direct"}</span>}
+            ?<><b>{t("warehouse.send_to_procurement")}</b> {t("warehouse.button_click_karein_procurement_queue_me")}</>
+            :<>{t("warehouse.place_order_receive_grn_buttons_milenge")}</>)
+          :<>{t("warehouse.issue_now_button_milega")}</>}
+        {sub==="warehouse"&&<span style={{marginLeft:8,padding:"1px 8px",background:procMode==="via_procurement"?T.purL:T.grnL,color:procMode==="via_procurement"?T.pur:T.grn,borderRadius:10,fontSize:10,fontWeight:700}}>{t("warehouse.mode_procmode", { procMode: procMode==="via_procurement"?"Via Procurement":"Direct" })}</span>}
       </div>
       {sub==="warehouse"
         ? <MRTab mrs={whMrs} mode="warehouse" procMode={procMode}
@@ -3050,15 +3033,14 @@ function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewG
   return (
     <div>
       <SubTabBar active={sub} onSelect={setSub} tabs={[
-        {id:"received",l:"Received GRN",  count:grns.length,c:T.grn},
-        {id:"requests",l:"Warehouse MR",  count:whMrs.length,c:T.pur},
+        {id:"received",l:t("warehouse.received_grn"),  count:grns.length,c:T.grn},
+        {id:"requests",l:t("warehouse.warehouse_mr"),  count:whMrs.length,c:T.pur},
       ]}/>
       {sub==="requests"&&(
-        <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}>
-          <b>Flow:</b> Request (yahin se ya site se) → Admin <b>Material Approvals</b> drawer me approve karega → {procMode==="via_procurement"
-            ?<><b>Send to Procurement</b> button click karein → procurement queue me MR jaayegi → vendor receive par stock auto-update.</>
-            :<>"Place Order" + "Receive (GRN)" buttons milenge.</>}
-          <span style={{marginLeft:8,padding:"1px 8px",background:procMode==="via_procurement"?T.purL:T.grnL,color:procMode==="via_procurement"?T.pur:T.grn,borderRadius:10,fontSize:10,fontWeight:700}}>Mode: {procMode==="via_procurement"?"Via Procurement":"Direct"}</span>
+        <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}><Rich k="warehouse.t_request_yahin_se_ya_site" params={{ t: t("warehouse.flow"), t2: t("warehouse.material_approvals") }} />{procMode==="via_procurement"
+            ?<><b>{t("warehouse.send_to_procurement")}</b> {t("warehouse.button_click_karein_procurement_queue_me")}</>
+            :<>{t("warehouse.place_order_receive_grn_buttons_milenge")}</>}
+          <span style={{marginLeft:8,padding:"1px 8px",background:procMode==="via_procurement"?T.purL:T.grnL,color:procMode==="via_procurement"?T.pur:T.grn,borderRadius:10,fontSize:10,fontWeight:700}}>{t("warehouse.mode_procmode", { procMode: procMode==="via_procurement"?"Via Procurement":"Direct" })}</span>
         </div>
       )}
       {sub==="received"
@@ -3083,12 +3065,12 @@ function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR,on
   return (
     <div>
       <SubTabBar active={sub} onSelect={setSub} tabs={[
-        {id:"issued",  l:"Issued",          count:issues.length,c:T.amb},
-        {id:"requests",l:"Project Requests",count:projMrs.length,c:T.cyn},
+        {id:"issued",  l:t("warehouse.issued"),          count:issues.length,c:T.amb},
+        {id:"requests",l:t("warehouse.project_requests"),count:projMrs.length,c:T.cyn},
       ]}/>
       {sub==="requests"&&(
         <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}>
-          <b>Flow:</b> Request procurement se aati → Admin <b>Material Approvals</b> drawer me approve karega → "Issue from Stock" button. Warehouse-driven MRs me alternate "Pass to Procurement" bhi available.
+          <b>{t("warehouse.flow")}</b> {t("warehouse.request_procurement_se_aati_admin")} <b>{t("warehouse.material_approvals")}</b> {t("warehouse.drawer_me_approve_karega_issue_from")}
         </div>
       )}
       {sub==="issued"
@@ -3119,13 +3101,11 @@ export function TransfersTab({transfers,onNew,onSelect}){
       {pendingCount>0&&(
         <div style={{padding:"10px 13px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,marginBottom:11,display:"flex",alignItems:"center",gap:10}}>
           <IcAlert size={14} color={T.amb}/>
-          <span style={{fontSize:12,color:T.amb,fontWeight:700}}>
-            {pendingCount} transfer{pendingCount>1?"s":""} pending receive — destination site se acknowledge hona baki hai
-          </span>
+          <span style={{fontSize:12,color:T.amb,fontWeight:700}}>{t("warehouse.pendingcount_transferpendingcount2_pending_receive_destination_site", { pendingCount, pendingCount2: pendingCount>1?"s":"" })}</span>
         </div>
       )}
       <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
-        <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{filtered.length} Transfers</span>
+        <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{t("warehouse.filtered_transfers", { filtered: filtered.length })}</span>
         {["All","Pending","Partial","Completed"].map(s=>(
           <button key={s} onClick={()=>setFStatus(s)}
             style={{padding:"5px 13px",borderRadius:20,border:`1.5px solid ${fStatus===s?(STATUS_S[s]?.brd||T.blu):T.b1}`,background:fStatus===s?(STATUS_S[s]?.bg||T.bluL):"none",color:fStatus===s?(STATUS_S[s]?.c||T.blu):T.t3,fontSize:11.5,fontWeight:fStatus===s?700:400,cursor:"pointer",fontFamily:"inherit"}}>
@@ -3133,9 +3113,9 @@ export function TransfersTab({transfers,onNew,onSelect}){
           </button>
         ))}
         <div style={{flex:1}}/>
-        <Btn onClick={onNew} c={T.cyn} icon={IcTrns} size="sm">New Transfer</Btn>
+        <Btn onClick={onNew} c={T.cyn} icon={IcTrns} size="sm">{t("warehouse.new_transfer")}</Btn>
       </div>
-      {filtered.length===0?<Empty label="Koi transfer nahi" sub="Ek project se dusre project me material bhejne ke liye New Transfer click karein"/>:(
+      {filtered.length===0?<Empty label={t("warehouse.koi_transfer_nahi")} sub={t("warehouse.ek_project_se_dusre_project_me")}/>:(
         <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"100px 80px 1fr 1fr 100px 95px 100px",padding:"7px 14px",background:T.sb,gap:8}}>
             {["Transfer No","Date","From Project","To Project","Value","By","Status"].map((h,i)=>(
@@ -3238,14 +3218,14 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
             </div>
             <div>
               <div style={{fontSize:14,fontWeight:700,color:"white",fontFamily:"monospace"}}>{detail?.id||transfer?.id}</div>
-              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:1}}>Project-to-Project Transfer · {detail?.date||transfer?.date}</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:1}}>{t("warehouse.project_to_project_transfer_date", { date: detail?.date||transfer?.date })}</div>
             </div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={14}/></button>
         </div>
 
         {loading?(
-          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:13}}>Loading...</div>
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:13}}>{t("common.loading")}</div>
         ):(
           <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
             {/* Status banner — pending dominant */}
@@ -3253,15 +3233,15 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
               <div style={{padding:"11px 14px",background:T.ambL,border:`1.5px solid ${T.ambM}`,borderRadius:8,marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
                 <span style={{fontSize:18}}>⏳</span>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:12.5,fontWeight:700,color:T.amb}}>Pending receive at {detail.to}</div>
-                  <div style={{fontSize:11,color:T.amb,marginTop:2}}>Source ({detail.from}) ka debit ho chuka hai. Site wala physically receive karke "Receive" click karega tab dest inventory me add hoga.</div>
+                  <div style={{fontSize:12.5,fontWeight:700,color:T.amb}}>{t("warehouse.pending_receive_at_to", { to: detail.to })}</div>
+                  <div style={{fontSize:11,color:T.amb,marginTop:2}}>{t("warehouse.source_from_ka_debit_ho_chuka", { from: detail.from })}</div>
                 </div>
               </div>
             )}
             {isPartial&&(
               <div style={{padding:"11px 14px",background:T.bluL,border:`1.5px solid ${T.bluM}`,borderRadius:8,marginBottom:12}}>
-                <div style={{fontSize:12.5,fontWeight:700,color:T.blu}}>📦 Partially received</div>
-                <div style={{fontSize:11,color:T.blu,marginTop:2}}>Kuch items kam aaye. Received_qty per item neeche dekho.</div>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.blu}}>{t("warehouse.partially_received")}</div>
+                <div style={{fontSize:11,color:T.blu,marginTop:2}}>{t("warehouse.kuch_items_kam_aaye_received_qty")}</div>
               </div>
             )}
 
@@ -3269,16 +3249,16 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
             <div style={{padding:"14px 16px",background:`linear-gradient(135deg, ${T.bluL} 0%, ${T.cynL} 100%)`,borderRadius:10,border:`1px solid ${T.cynM}`,marginBottom:14}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:14,alignItems:"center"}}>
                 <div>
-                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>From Project</div>
+                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("material_transfer.from_project")}</div>
                   <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{detail?.from||"—"}</div>
-                  <div style={{fontSize:10.5,color:T.red,marginTop:3,fontWeight:600}}>− DEBIT (immediate)</div>
+                  <div style={{fontSize:10.5,color:T.red,marginTop:3,fontWeight:600}}>{t("warehouse.debit_immediate")}</div>
                 </div>
                 <div style={{color:T.cyn,fontSize:24,fontWeight:800}}>→</div>
                 <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>To Project</div>
+                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.to_project_2")}</div>
                   <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{detail?.to||"—"}</div>
                   <div style={{fontSize:10.5,color:isCompleted?T.grn:isPartial?T.blu:T.amb,marginTop:3,fontWeight:600}}>
-                    {isCompleted?"+ CREDITED":isPartial?"⚠ PARTIAL":"⏳ PENDING RECEIVE"}
+                    {isCompleted?t("warehouse.credited"):isPartial?t("warehouse.partial"):t("warehouse.pending_receive")}
                   </div>
                 </div>
               </div>
@@ -3287,15 +3267,15 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
             {/* Meta grid */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Status</div>
-                <Pill label={detail?.status||"Pending"} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("common.status")}</div>
+                <Pill label={detail?.status||t("common.pending")} c={ss.c} bg={ss.bg} brd={ss.brd}/>
               </div>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Transferred By</div>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{t("warehouse.transferred_by")}</div>
                 <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{detail?.by||"—"}</div>
               </div>
               <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{detail?.received_at?"Received":"Created"}</div>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{detail?.received_at?t("common.received"):t("common.created")}</div>
                 <div style={{fontSize:12,fontWeight:600,color:T.t1}}>
                   {detail?.received_at?(<>{detail.received_by_name||"—"}<div style={{fontSize:10,color:T.t4,fontWeight:400}}>{fmtDate(detail.received_at)}</div></>):fmtDate(detail?.created_at)}
                 </div>
@@ -3304,8 +3284,8 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
 
             {/* Items table */}
             <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between"}}>
-              <span>Items ({items.length})</span>
-              <span style={{textTransform:"none",letterSpacing:0,color:T.t1,fontWeight:700}}>Qty: {fmtN(totalQty)} · Value: ₹{fmtN(totalValue)}</span>
+              <span>{t("warehouse.items_items", { items: items.length })}</span>
+              <span style={{textTransform:"none",letterSpacing:0,color:T.t1,fontWeight:700}}>{t("warehouse.qty_fmtn_value_fmtn2", { fmtN: fmtN(totalQty), fmtN2: fmtN(totalValue) })}</span>
             </div>
             <div style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:14}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 50px 70px 70px 80px 80px",padding:"7px 11px",background:T.sb,gap:8}}>
@@ -3334,13 +3314,13 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
             {/* Receive editor */}
             {receiveOpen&&isPending&&(
               <div style={{padding:"12px 14px",background:T.grnL,border:`2px solid ${T.grnM}`,borderRadius:9,marginBottom:14}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.grn,marginBottom:8}}>📥 Receive at {detail.to}</div>
-                <div style={{fontSize:11,color:T.t3,marginBottom:10}}>Actual received qty edit kar sakte ho (kam aaya to "Partial" status milega)</div>
+                <div style={{fontSize:12,fontWeight:700,color:T.grn,marginBottom:8}}>{t("warehouse.receive_at_to", { to: detail.to })}</div>
+                <div style={{fontSize:11,color:T.t3,marginBottom:10}}>{t("warehouse.actual_received_qty_edit_kar_sakte_2")}</div>
                 {receiveItems.map((it,i)=>(
                   <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 90px",gap:8,marginBottom:7,alignItems:"center"}}>
                     <div>
                       <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.material_name}</div>
-                      <div style={{fontSize:10.5,color:T.t4}}>Sent: {fmtN(it.qty)} {it.unit}</div>
+                      <div style={{fontSize:10.5,color:T.t4}}>{t("warehouse.sent_fmtn_unit", { fmtN: fmtN(it.qty), unit: it.unit })}</div>
                     </div>
                     <input type="number" value={it.received_qty} max={it.qty}
                       onChange={e=>{const v=e.target.value;setReceiveItems(p=>p.map((x,j)=>j===i?{...x,received_qty:v}:x));}}
@@ -3348,9 +3328,9 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
                   </div>
                 ))}
                 <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
-                  <GhostBtn onClick={()=>setReceiveOpen(false)}>Cancel</GhostBtn>
+                  <GhostBtn onClick={()=>setReceiveOpen(false)}>{t("common.cancel")}</GhostBtn>
                   <Btn onClick={handleReceive} disabled={receiving} c={T.grn} icon={IcChk} size="sm">
-                    {receiving?"Saving...":"Confirm Receive (creates GRN)"}
+                    {receiving?t("common.saving"):t("warehouse.confirm_receive_creates_grn")}
                   </Btn>
                 </div>
               </div>
@@ -3359,10 +3339,9 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
             {/* Ledger note */}
             {detail?.from_project_id&&detail?.to_project_id&&(
               <div style={{padding:"10px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu}}>
-                <div style={{fontWeight:700,marginBottom:3}}>📊 Material Ledger pe asar:</div>
-                <div style={{fontSize:11,lineHeight:1.5}}>
-                  • <b>{detail.from}</b> ke ledger me ye items "Used" me dikh chuke hain (debit, with rate &amp; value in remark)<br/>
-                  • <b>{detail.to}</b> me {isPending?<span><b>abhi nahi</b> dikh raha — receive karne par GRN banega</span>:<span><b>{detail.id}</b> ek GRN ki tarah dikh raha hai (credit)</span>}
+                <div style={{fontWeight:700,marginBottom:3}}>{t("warehouse.material_ledger_pe_asar")}</div>
+                <div style={{fontSize:11,lineHeight:1.5}}><Rich k="warehouse.from_ke_ledger_me_ye_items" params={{ from: detail.from }} /><br/>
+                  • <b>{detail.to}</b> me {isPending?<span><b>{t("warehouse.abhi_nahi")}</b> {t("warehouse.dikh_raha_receive_karne_par_grn")}</span>:<span><b>{detail.id}</b> {t("warehouse.ek_grn_ki_tarah_dikh_raha")}</span>}
                 </div>
               </div>
             )}
@@ -3372,16 +3351,16 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
         {/* Footer actions */}
         <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
           <span style={{fontSize:10.5,color:T.t4}}>
-            {isPending?"Site receive baki":isCompleted?"All received":""}
+            {isPending?t("warehouse.site_receive_baki"):isCompleted?t("warehouse.all_received"):""}
           </span>
           <div style={{display:"flex",gap:8}}>
-            <GhostBtn onClick={onClose}>Close</GhostBtn>
+            <GhostBtn onClick={onClose}>{t("common.close")}</GhostBtn>
             {isPending&&canReceive&&!receiveOpen&&(
-              <Btn onClick={()=>setReceiveOpen(true)} c={T.grn} icon={IcIn} size="sm">Receive at {detail?.to}</Btn>
+              <Btn onClick={()=>setReceiveOpen(true)} c={T.grn} icon={IcIn} size="sm">{t("warehouse.receive_at_to", { to: detail?.to })}</Btn>
             )}
             {canDelete&&(
               <Btn onClick={handleDelete} disabled={deleting} c={T.red} icon={IcTrash} size="sm">
-                {deleting?"Deleting...":"Delete & Reverse"}
+                {deleting?t("common.deleting"):t("warehouse.delete_reverse")}
               </Btn>
             )}
           </div>
@@ -3443,7 +3422,7 @@ function WarehouseModule(){
   };
   const rejectMR = async (mr) => {
     if (!mr?.dbId) return;
-    const reason = await window.promptAsync("Reject reason (optional):", "");
+    const reason = await window.promptAsync(t("payroll.reject_reason_optional"), "");
     if (reason === null) return; // user cancelled
     try {
       const res = await api.patch(`/warehouse/mr/${mr.dbId}`, {
@@ -3459,7 +3438,7 @@ function WarehouseModule(){
   // committing. Shows current available qty (master) + pending pipeline.
   const checkStockMR = async (mr) => {
     const matName = mr.items?.[0]?.material_name || mr.items?.[0]?.name || mr.item_name;
-    if (!matName) { alert("Material name nahi mila"); return; }
+    if (!matName) { alert(t("warehouse.material_name_nahi_mila")); return; }
     const need = Number(mr.items?.[0]?.qty || mr.quantity || 0);
     try {
       const [stockRes, pipeRes] = await Promise.all([
@@ -3502,7 +3481,7 @@ function WarehouseModule(){
       ""
     );
     if (reason === null) return; // user cancelled
-    if (!reason.trim()) { alert("Closure reason zaroori hai"); return; }
+    if (!reason.trim()) { alert(t("warehouse.closure_reason_zaroori_hai")); return; }
     try {
       const res = await api.patch(`/warehouse/mr/${mr.dbId}`, {
         status: "Closed",
@@ -3552,13 +3531,13 @@ function WarehouseModule(){
     else alert(res.message||"Approve failed");
   };
   const handleRejectMR=async(dbId)=>{
-    if(!await window.confirmAsync("Yeh MR reject kar dein?")) return;
+    if(!await window.confirmAsync(t("warehouse.yeh_mr_reject_kar_dein"))) return;
     const res=await api.patch(`/warehouse/mr/${dbId}`,{status:"Rejected"});
     if(res.success) loadAll();
     else alert(res.message||"Reject failed");
   };
   const handleDeleteMaterial=async(m)=>{
-    if(!await window.confirmAsync(`"${m.name}" ko delete karein? Movements hue hain to backend block karega.`)) return;
+    if(!await window.confirmAsync(t("warehouse.name_ko_delete_karein_movements_hue", { name: m.name }))) return;
     const res=await api.del(`/warehouse/materials/${m.id}`);
     if(res.success){setMatDetail(null);loadAll();}
     else alert(res.message||"Delete failed");
@@ -3574,24 +3553,24 @@ function WarehouseModule(){
   const pendingOutMRs= mrs.filter(m=>!!m.project_id && ["Pending","Approved"].includes(m.status)).length;
 
   const TABS=[
-    {id:"stock",  l:"Stock",         I:IcBox,  badge:lowStock.length>0?lowStock.length:null, bc:T.red},
-    {id:"grn",    l:"Material In",   I:IcIn,   badge:pendingInMRs>0?pendingInMRs:null, bc:T.pur},
-    {id:"issue",  l:"Material Out",  I:IcOut,  badge:pendingOutMRs>0?pendingOutMRs:null, bc:T.cyn},
-    {id:"mr",     l:"Requests",      I:IcMR,   badge:pendingMRs>0?pendingMRs:null, bc:T.amb},
-    {id:"transfer",l:"Transfers",    I:IcTrns, badge:null},
+    {id:"stock",  l:t("common.stock"),         I:IcBox,  badge:lowStock.length>0?lowStock.length:null, bc:T.red},
+    {id:"grn",    l:t("material.material_in"),   I:IcIn,   badge:pendingInMRs>0?pendingInMRs:null, bc:T.pur},
+    {id:"issue",  l:t("warehouse.material_out"),  I:IcOut,  badge:pendingOutMRs>0?pendingOutMRs:null, bc:T.cyn},
+    {id:"mr",     l:t("common.requests"),      I:IcMR,   badge:pendingMRs>0?pendingMRs:null, bc:T.amb},
+    {id:"transfer",l:t("common.transfers"),    I:IcTrns, badge:null},
   ];
 
   const TILE_DATA=[
-    {l:"Total Items",    v:totalItems,       sub:`${[...new Set(stock.map(s=>s.category))].length} categories`,      c:T.blu, I:IcBox},
-    {l:"Total Value",    v:`₹${fmt(totalValue)}`,  sub:"Current stock value",         c:T.grn, I:IcIn},
-    {l:"Low Stock",      v:lowStock.length,  sub:`${outOfStock.length} out of stock`, c:lowStock.length>0?T.red:T.grn, I:IcAlert},
-    {l:"Pending MRs",    v:pendingMRs, sub:"Need to be issued", c:pendingMRs>0?T.amb:T.grn, I:IcMR},
+    {l:t("team_schedule.total_items"),    v:totalItems,       sub:t("warehouse.length_categories", { length: [...new Set(stock.map(s=>s.category))].length }),      c:T.blu, I:IcBox},
+    {l:t("common.total_value"),    v:`₹${fmt(totalValue)}`,  sub:t("warehouse.current_stock_value"),         c:T.grn, I:IcIn},
+    {l:t("warehouse.low_stock"),      v:lowStock.length,  sub:t("warehouse.length_out_of_stock", { length: outOfStock.length }), c:lowStock.length>0?T.red:T.grn, I:IcAlert},
+    {l:t("warehouse.pending_mrs"),    v:pendingMRs, sub:t("warehouse.need_to_be_issued"), c:pendingMRs>0?T.amb:T.grn, I:IcMR},
   ];
 
   if(loading) return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",flexDirection:"column",gap:14}}>
       <div style={{width:36,height:36,border:"3px solid #E2E8F0",borderTopColor:"#1565C0",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
-      <div style={{fontSize:13,color:"#8896A6"}}>Loading Warehouse...</div>
+      <div style={{fontSize:13,color:"#8896A6"}}>{t("warehouse.loading_warehouse")}</div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
@@ -3608,7 +3587,7 @@ function WarehouseModule(){
       {lowStock.length>0&&(
         <div style={{margin:"0 18px 6px",padding:"8px 13px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
           <IcAlert size={13} color={T.red}/>
-          <span style={{fontSize:12,fontWeight:700,color:T.red}}>Low Stock:</span>
+          <span style={{fontSize:12,fontWeight:700,color:T.red}}>{t("warehouse.low_stock_2")}</span>
           <div style={{display:"flex",gap:6,flex:1,flexWrap:"wrap"}}>
             {lowStock.slice(0,10).map(m=>(
               <button key={m.id} onClick={()=>{setTab("stock");setMatDetail(m);}}
@@ -3644,13 +3623,13 @@ function WarehouseModule(){
             openOrder:(mr)=>setOrderMR(mr),
             openGrn:(mr)=>setGrnMR(mr),
             sendToProcurement:async(mr)=>{
-              if(!await window.confirmAsync(`${mr.id} ko procurement team ke paas bhejna hai? Vendor PO place karne ke baad warehouse stock auto-update hoga.`)) return;
+              if(!await window.confirmAsync(t("warehouse.id_ko_procurement_team_ke_paas", { id: mr.id }))) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/send-to-procurement`);
               if(r.success){ alert(r.message||"Sent to procurement"); loadAll(); }
               else alert(r.message||"Failed");
             },
             passToProcurement:async(mr)=>{
-              const reason = await window.promptAsync(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
+              const reason = await window.promptAsync(t("warehouse.id_ye_mr_procurement_ko_wapas", { id: mr.id }), "Stock kam hai / fulfill nahi ho sakta");
               if(reason===null) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
               if(r.success){ alert(r.message||"Wapas procurement ke paas bhej diya"); loadAll(); }
@@ -3664,7 +3643,7 @@ function WarehouseModule(){
           onSubMR={{
             openIssue:(mr)=>setIssueFromMR(mr),
             passToProcurement:async(mr)=>{
-              const reason = await window.promptAsync(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
+              const reason = await window.promptAsync(t("warehouse.id_ye_mr_procurement_ko_wapas", { id: mr.id }), "Stock kam hai / fulfill nahi ho sakta");
               if(reason===null) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
               if(r.success){ alert(r.message||"Wapas procurement ke paas bhej diya"); loadAll(); }
@@ -3681,13 +3660,13 @@ function WarehouseModule(){
             openOrder:(mr)=>setOrderMR(mr),
             openGrn:(mr)=>setGrnMR(mr),
             sendToProcurement:async(mr)=>{
-              if(!await window.confirmAsync(`${mr.id} ko procurement team ke paas bhejna hai? Vendor PO place karne ke baad warehouse stock auto-update hoga.`)) return;
+              if(!await window.confirmAsync(t("warehouse.id_ko_procurement_team_ke_paas", { id: mr.id }))) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/send-to-procurement`);
               if(r.success){ alert(r.message||"Sent to procurement"); loadAll(); }
               else alert(r.message||"Failed");
             },
             passToProcurement:async(mr)=>{
-              const reason = await window.promptAsync(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
+              const reason = await window.promptAsync(t("warehouse.id_ye_mr_procurement_ko_wapas", { id: mr.id }), "Stock kam hai / fulfill nahi ho sakta");
               if(reason===null) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
               if(r.success){ alert(r.message||"Wapas procurement ke paas bhej diya"); loadAll(); }

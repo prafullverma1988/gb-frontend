@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import api from "../../config/api";
 import { T, fmt, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead } from "../shared/ui";
+import { t } from "../../i18n";
 
 /* ────────────────────────────────────────────────────────────────────
    Project Overview — mirrors the company dashboard's depth at the
@@ -23,7 +24,7 @@ function DonutChart({slices, size=118, r=40, inner=24}){
   if(!valid.length) return (
     <div style={{width:size,height:size,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:10.5,border:`1.5px dashed ${T.b2}`,borderRadius:"50%",gap:4}}>
       <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-9-9v9z"/><path d="M21 12a9 9 0 00-9-9v9h9z"/></svg>
-      <span style={{fontWeight:600}}>No spend yet</span>
+      <span style={{fontWeight:600}}>{t("overview.no_spend_yet")}</span>
     </div>
   );
   const total=valid.reduce((s,sl)=>s+sl.value,0)||1;
@@ -51,8 +52,8 @@ function CashBars({data, height=160}){
       <div style={{width:38,height:38,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
         <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20V10M18 20V4M6 20v-6"/></svg>
       </div>
-      <div style={{fontSize:11.5,color:T.t3,fontWeight:600}}>No transactions yet</div>
-      <div style={{fontSize:10.5,color:T.t4}}>Money in / out will chart here</div>
+      <div style={{fontSize:11.5,color:T.t3,fontWeight:600}}>{t("app.no_transactions_yet")}</div>
+      <div style={{fontSize:10.5,color:T.t4}}>{t("overview.money_in_out_will_chart_here")}</div>
     </div>
   );
   const n=data.length;
@@ -160,9 +161,9 @@ function TabOverview({proj, onRequestPayment}) {
 
   const isVid = (m) => m.kind==="video" || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(m.url||"");
   const bucketOf = (d)=>{
-    const dt=new Date(d); if(isNaN(dt)) return "Older";
+    const dt=new Date(d); if(isNaN(dt)) return t("overview.older");
     const days=(Date.now()-dt.getTime())/86400000;
-    return days<=7 ? "Last week" : days<=30 ? "Last month" : "Older";
+    return days<=7 ? t("overview.last_week") : days<=30 ? t("overview.last_month") : t("overview.older");
   };
   const mediaBuckets = useMemo(()=>{
     const g={"Last week":[],"Last month":[],"Older":[]};
@@ -185,11 +186,11 @@ function TabOverview({proj, onRequestPayment}) {
     const bars=Object.keys(bm).sort().slice(-6).map(k=>({month:MONTHS[Number(k.split("-")[1])-1]||k, sales:bm[k].in, expense:bm[k].out}));
     const cat=(keys)=>txns.filter(t=>keys.includes(t.type)).reduce((s,t)=>s+num(t.amount),0);
     const slices=[
-      {label:"Material Purchase", value:cat(["material_purchase"]),       color:T.blu},
-      {label:"Sub-Contractor",    value:cat(["subcon_expense"]),          color:T.pur},
-      {label:"Labour / Payments", value:cat(["payment","party_payment"]), color:T.grn},
-      {label:"Site Expense",      value:cat(["site_expense"]),            color:T.amb},
-      {label:"Other / Wallet",    value:cat(["wallet_payment"]),          color:T.slt},
+      {label:t("common.material_purchase"), value:cat(["material_purchase"]),       color:T.blu},
+      {label:t("app.sub_contractor"),    value:cat(["subcon_expense"]),          color:T.pur},
+      {label:t("overview.labour_payments"), value:cat(["payment","party_payment"]), color:T.grn},
+      {label:t("common.site_expense"),      value:cat(["site_expense"]),            color:T.amb},
+      {label:t("overview.other_wallet"),    value:cat(["wallet_payment"]),          color:T.slt},
     ].filter(s=>s.value>0);
     const recent=[...txns].sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))).slice(0,6);
     const pendingPay=payReqs.filter(p=>["pending","approved"].includes(String(p.status||"").toLowerCase()));
@@ -205,11 +206,11 @@ function TabOverview({proj, onRequestPayment}) {
     const overdue=open.filter(t=>{ const e=t.base_end||t.actual_end||t.end_date; return e && new Date(e) < new Date(); });
     const stageOf=(m)=>{
       const ms=(m.mat_status||"").toLowerCase(); const rs=(m.mr_status||"").toLowerCase();
-      if(ms.includes("used")) return "Used";
-      if(ms.includes("received")) return "Received";
-      if(ms.includes("ordered")) return "Ordered";
-      if(rs.includes("approve")) return "Approved";
-      return "Requested";
+      if(ms.includes("used")) return t("common.used");
+      if(ms.includes("received")) return t("common.received");
+      if(ms.includes("ordered")) return t("common.ordered");
+      if(rs.includes("approve")) return t("common.approved");
+      return t("overview.requested");
     };
     const byStage={}; STAGES.forEach(s=>byStage[s]=0);
     mrs.forEach(m=>{ const s=stageOf(m); byStage[s]=(byStage[s]||0)+1; });
@@ -231,7 +232,7 @@ function TabOverview({proj, onRequestPayment}) {
   /* ── Toggle switch ── */
   const Switch=(
     <div style={{display:"inline-flex", background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:3}}>
-      {[{v:"operations",l:"Operations & Team",c:T.pur},{v:"finance",l:"Finance",c:T.blu}].map(t=>(
+      {[{v:"operations",l:t("app.operations_team"),c:T.pur},{v:"finance",l:t("common.finance"),c:T.blu}].map(t=>(
         <button key={t.v} onClick={()=>setView(t.v)}
           style={{padding:"8px 18px", border:"none", background:view===t.v?t.c:"transparent", color:view===t.v?"#fff":T.t3, borderRadius:8, fontSize:12.5, fontWeight:700, cursor:"pointer", transition:"all .15s", fontFamily:"inherit"}}>
           {t.l}
@@ -250,7 +251,7 @@ function TabOverview({proj, onRequestPayment}) {
           <button onClick={onRequestPayment}
             style={{padding:"8px 16px", borderRadius:8, border:"none", background:T.blu, color:"#fff", fontSize:12.5, fontWeight:700, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:7, fontFamily:"inherit", boxShadow:`0 2px 8px ${T.blu}40`}}>
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-            Request Payment
+           {t("attendance.request_payment")}
           </button>
         )}
       </div>
@@ -259,23 +260,23 @@ function TabOverview({proj, onRequestPayment}) {
       {view==="operations" && (<>
         {/* KPI row */}
         <div style={{display:"grid", gridTemplateColumns:`repeat(${pipe?7:6},1fr)`, gap:10}}>
-          <Stat label="Progress"      value={`${proj?.progress||0}%`}   note="Physical completion" color={T.blu}/>
+          <Stat label={t("common.progress")}      value={`${proj?.progress||0}%`}   note="Physical completion" color={T.blu}/>
           {/* Tender site: MB wala sach alag tile me — bill isi se banta hai */}
-          {pipe && <Stat label="Pipeline (MB se)" value={`${pipe.pct||0}%`}
+          {pipe && <Stat label={t("overview.pipeline_mb_se")} value={`${pipe.pct||0}%`}
             note={`${pipe.done_m>=1000?(pipe.done_m/1000).toFixed(2)+" km":Math.round(pipe.done_m)+" m"} / ${pipe.length_m>=1000?(pipe.length_m/1000).toFixed(2)+" km":Math.round(pipe.length_m)+" m"}`}
             color={T.ind}/>}
-          <Stat label="Days Left"     value={daysLeft}                  note={daysNote}            color={T.pur}/>
-          <Stat label="Open Tasks"    value={String(ops.open.length)}   note={`${ops.ongoing.length} in progress`} color={T.amb}/>
-          <Stat label="Team On Site"  value={String(team.length)}       note="Workforce assigned"  color={T.grn}/>
-          <Stat label="Material Due"  value={String(ops.matPending)}    note="Requests in pipeline" color={T.slt}/>
-          <Stat label="Overdue"       value={String(ops.overdue.length)} note="Tasks need action"  color={ops.overdue.length?T.red:T.grn}/>
+          <Stat label={t("overview.days_left")}     value={daysLeft}                  note={daysNote}            color={T.pur}/>
+          <Stat label={t("overview.open_tasks")}    value={String(ops.open.length)}   note={`${ops.ongoing.length} in progress`} color={T.amb}/>
+          <Stat label={t("overview.team_on_site")}  value={String(team.length)}       note="Workforce assigned"  color={T.grn}/>
+          <Stat label={t("overview.material_due")}  value={String(ops.matPending)}    note="Requests in pipeline" color={T.slt}/>
+          <Stat label={t("common.overdue")}       value={String(ops.overdue.length)} note="Tasks need action"  color={ops.overdue.length?T.red:T.grn}/>
         </div>
 
         {/* Progress + Ongoing tasks */}
         <div style={{display:"grid", gridTemplateColumns:"1fr 1.4fr", gap:14}}>
           {/* Progress donut */}
           <Panel>
-            <PHead title="Project Progress"/>
+            <PHead title={t("app.project_progress")}/>
             <div style={{padding:"16px 15px", display:"flex", gap:16, alignItems:"center"}}>
               <svg width={92} height={92} viewBox="0 0 92 92" style={{flexShrink:0}}>
                 <circle r={36} cx={46} cy={46} fill="none" stroke={T.b1} strokeWidth={9}/>
@@ -286,14 +287,14 @@ function TabOverview({proj, onRequestPayment}) {
               </svg>
               <div style={{flex:1, minWidth:0}}>
                 <div style={{display:"flex", justifyContent:"space-between", marginBottom:8}}>
-                  <span style={{fontSize:11, color:T.t4}}>Tasks done</span>
+                  <span style={{fontSize:11, color:T.t4}}>{t("overview.tasks_done")}</span>
                   <span style={{fontSize:12, fontWeight:700, color:T.t1}}>{tasks.length-ops.open.length}/{tasks.length}</span>
                 </div>
                 <PBar pct={tasks.length?Math.round((tasks.length-ops.open.length)/tasks.length*100):0} color={T.grn} h={6}/>
                 <div style={{display:"flex", gap:14, marginTop:12}}>
-                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>In progress</div><div style={{fontSize:15, fontWeight:700, color:T.blu}}>{ops.ongoing.length}</div></div>
-                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>Overdue</div><div style={{fontSize:15, fontWeight:700, color:ops.overdue.length?T.red:T.t3}}>{ops.overdue.length}</div></div>
-                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>Total</div><div style={{fontSize:15, fontWeight:700, color:T.t1}}>{tasks.length}</div></div>
+                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("overview.in_progress")}</div><div style={{fontSize:15, fontWeight:700, color:T.blu}}>{ops.ongoing.length}</div></div>
+                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.overdue")}</div><div style={{fontSize:15, fontWeight:700, color:ops.overdue.length?T.red:T.t3}}>{ops.overdue.length}</div></div>
+                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.total")}</div><div style={{fontSize:15, fontWeight:700, color:T.t1}}>{tasks.length}</div></div>
                 </div>
               </div>
             </div>
@@ -301,10 +302,10 @@ function TabOverview({proj, onRequestPayment}) {
 
           {/* Ongoing tasks list */}
           <Panel>
-            <PHead title="Ongoing Tasks" action={<Pill label={`${ops.ongoing.length} active`} c={T.blu} bg={T.bluL}/>}/>
+            <PHead title={t("overview.ongoing_tasks")} action={<Pill label={`${ops.ongoing.length} active`} c={T.blu} bg={T.bluL}/>}/>
             <div style={{maxHeight:230, overflowY:"auto"}}>
               {ops.ongoing.length===0
-                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?"Loading…":"No tasks in progress"}</div>
+                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?t("common.loading_2"):t("overview.no_tasks_in_progress")}</div>
                 : ops.ongoing.slice(0,8).map((t,i)=>{
                     const pct=num(t.progress??t.progress_pct);
                     return (
@@ -315,8 +316,8 @@ function TabOverview({proj, onRequestPayment}) {
                         </div>
                         <PBar pct={pct} color={pct>70?T.grn:T.blu} h={4}/>
                         <div style={{display:"flex", justifyContent:"space-between", marginTop:5}}>
-                          <span style={{fontSize:11, color:T.t4}}>{t.assignee||t.assigned_to_name||t.owner||"Unassigned"}</span>
-                          {(t.base_end||t.end_date)&&<span style={{fontSize:11, color:T.t3}}>Due {new Date(t.base_end||t.end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</span>}
+                          <span style={{fontSize:11, color:T.t4}}>{t.assignee||t.assigned_to_name||t.owner||t("overview.unassigned")}</span>
+                          {(t.base_end||t.end_date)&&<span style={{fontSize:11, color:T.t3}}>{t("overview.due_vnew", { vnew: new Date(t.base_end||t.end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) })}</span>}
                         </div>
                       </div>
                     );
@@ -330,8 +331,8 @@ function TabOverview({proj, onRequestPayment}) {
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:14}}>
           {/* Material pipeline */}
           <Panel>
-            <PHead title="Material Status" action={
-              ops.matPending>0 ? <Pill label={`${ops.matPending} in pipeline`} c={T.amb} bg={T.ambL}/> : <Pill label="All clear" c={T.grn} bg={T.grnL}/>
+            <PHead title={t("mrdetail.material_status")} action={
+              ops.matPending>0 ? <Pill label={`${ops.matPending} in pipeline`} c={T.amb} bg={T.ambL}/> : <Pill label={t("overview.all_clear")} c={T.grn} bg={T.grnL}/>
             }/>
             <div style={{padding:"12px 15px"}}>
               <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:mrs.length?12:0}}>
@@ -339,17 +340,17 @@ function TabOverview({proj, onRequestPayment}) {
                   return <Pill key={s} label={`${s} · ${c}`} c={ss.c} bg={ss.bg}/>; })}
               </div>
               {mrs.length===0
-                ? <div style={{padding:"18px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?"Loading…":"No material requests yet"}</div>
+                ? <div style={{padding:"18px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?t("common.loading_2"):t("overview.no_material_requests_yet")}</div>
                 : (
                   <div style={{display:"flex", flexDirection:"column", gap:7}}>
                     {mrs.slice(0,5).map((m,i)=>{
                       const stage=(()=>{ const ms=(m.mat_status||"").toLowerCase(),rs=(m.mr_status||"").toLowerCase();
-                        if(ms.includes("used"))return"Used"; if(ms.includes("received"))return"Received"; if(ms.includes("ordered"))return"Ordered"; if(rs.includes("approve"))return"Approved"; return"Requested"; })();
+                        if(ms.includes("used"))return t("common.used"); if(ms.includes("received"))return t("common.received"); if(ms.includes("ordered"))return t("common.ordered"); if(rs.includes("approve"))return t("common.approved"); return t("overview.requested"); })();
                       const ss=STAGE_S[stage]||STAGE_S.Requested;
                       return (
                         <div key={m.id||i} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 10px", background:T.surfaceB, borderRadius:7, borderLeft:`3px solid ${ss.c}`}}>
                           <div style={{minWidth:0}}>
-                            <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.item_name||m.material_name||"Material"}</div>
+                            <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.item_name||m.material_name||t("common.material")}</div>
                             <div style={{fontSize:10.5, color:T.t4}}>{m.quantity?`${m.quantity} ${m.unit||""}`:""}{m.requested_by?` · ${m.requested_by}`:""}</div>
                           </div>
                           <Pill label={stage} c={ss.c} bg={ss.bg}/>
@@ -364,10 +365,10 @@ function TabOverview({proj, onRequestPayment}) {
 
           {/* Team / workforce */}
           <Panel>
-            <PHead title="Team On Site" action={<Pill label={`${team.length} assigned`} c={T.pur} bg={T.purL}/>}/>
+            <PHead title={t("overview.team_on_site")} action={<Pill label={`${team.length} assigned`} c={T.pur} bg={T.purL}/>}/>
             <div style={{padding:"6px 0 4px", maxHeight:240, overflowY:"auto"}}>
               {team.length===0
-                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?"Loading…":"No workforce assigned yet"}</div>
+                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?t("common.loading_2"):t("overview.no_workforce_assigned_yet")}</div>
                 : team.slice(0,8).map((w,i)=>{
                     const name=w.name||w.worker_name||w.company_name||w.subcon_name||"Member";
                     const role=w.role||w.skill||w.type||"";
@@ -389,7 +390,7 @@ function TabOverview({proj, onRequestPayment}) {
 
         {/* ── SITE PHOTOS & VIDEOS (full width, bottom) ── */}
         <Panel>
-          <PHead title="Site Photos & Videos" action={
+          <PHead title={t("overview.site_photos_videos")} action={
             <div style={{display:"flex", gap:6}}>
               {["Last week","Last month","Older"].map(b=>(
                 <button key={b} onClick={()=>setMBucket(b)}
@@ -402,11 +403,9 @@ function TabOverview({proj, onRequestPayment}) {
             </div>
           }/>
           <div style={{padding:"10px 15px 14px"}}>
-            {media===null && <div style={{padding:"24px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>Loading…</div>}
+            {media===null && <div style={{padding:"24px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>{t("common.loading_2")}</div>}
             {media!==null && mediaShown.length===0 && (
-              <div style={{padding:"24px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>
-                {mBucket} me koi site photo nahi.
-              </div>
+              <div style={{padding:"24px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>{t("overview.mbucket_me_koi_site_photo_nahi", { mBucket })}</div>
             )}
             {mediaShown.length>0 && (
               <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))", gap:8}}>
@@ -425,7 +424,7 @@ function TabOverview({proj, onRequestPayment}) {
                         whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{m.task_name}</div>
                     )}
                     {mCan && (
-                      <button onClick={(e)=>{e.stopPropagation(); archiveMedia(m.ref||m.id);}} title="Hatao (archive)"
+                      <button onClick={(e)=>{e.stopPropagation(); archiveMedia(m.ref||m.id);}} title={t("overview.hatao_archive")}
                         style={{position:"absolute", top:5, right:5, width:21, height:21, borderRadius:"50%",
                           border:"none", background:"rgba(15,23,42,.62)", color:"white", fontSize:11, fontWeight:700,
                           lineHeight:"21px", padding:0, cursor:"pointer", fontFamily:"inherit"}}>✕</button>
@@ -447,39 +446,38 @@ function TabOverview({proj, onRequestPayment}) {
       {view==="finance" && (<>
         {/* KPI row */}
         <div style={{display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10}}>
-          <Stat label="BOQ Value"   value={`₹${fmt(num(proj?.boq))}`}        note="Total contract"      color={T.slt}/>
-          <Stat label="Received"    value={`₹${fmt(fin.received)}`}          note={num(proj?.boq)?`${Math.round(fin.received/num(proj.boq)*100)}% of BOQ`:"Money in"} color={T.grn}/>
-          <Stat label="Spent"       value={`₹${fmt(num(proj?.expense)||fin.spent)}`} note={num(proj?.boq)?`${Math.round((num(proj?.expense)||fin.spent)/num(proj.boq)*100)}% utilised`:"Money out"} color={T.amb}/>
-          <Stat label="Margin"      value={signed(margin)}                  note={num(proj?.boq)?`${Math.round(margin/num(proj.boq)*100)}% buffer`:""} color={margin>=0?T.grn:T.red}/>
-          <Stat label="Receivable"  value={`₹${fmt(Math.max(0,num(proj?.boq)-fin.received))}`} note="Yet to collect" color={T.blu}/>
-          <Stat label="Payable"     value={`₹${fmt(fin.payable)}`}           note={`${fin.pendingPay.length} request${fin.pendingPay.length===1?"":"s"}`} color={fin.payable?T.red:T.grn}/>
+          <Stat label={t("app.boq_value")}   value={`₹${fmt(num(proj?.boq))}`}        note="Total contract"      color={T.slt}/>
+          <Stat label={t("common.received")}    value={`₹${fmt(fin.received)}`}          note={num(proj?.boq)?`${Math.round(fin.received/num(proj.boq)*100)}% of BOQ`:"Money in"} color={T.grn}/>
+          <Stat label={t("app.spent")}       value={`₹${fmt(num(proj?.expense)||fin.spent)}`} note={num(proj?.boq)?`${Math.round((num(proj?.expense)||fin.spent)/num(proj.boq)*100)}% utilised`:"Money out"} color={T.amb}/>
+          <Stat label={t("common.margin")}      value={signed(margin)}                  note={num(proj?.boq)?`${Math.round(margin/num(proj.boq)*100)}% buffer`:""} color={margin>=0?T.grn:T.red}/>
+          <Stat label={t("overview.receivable")}  value={`₹${fmt(Math.max(0,num(proj?.boq)-fin.received))}`} note="Yet to collect" color={T.blu}/>
+          <Stat label={t("payroll.payable")}     value={`₹${fmt(fin.payable)}`}           note={`${fin.pendingPay.length} request${fin.pendingPay.length===1?"":"s"}`} color={fin.payable?T.red:T.grn}/>
         </div>
 
         {/* Project P&L (invoice-basis) — actual profit/loss, distinct from BOQ "Margin" above.
             Numbers come from /finance/project-pnl (same shared formula as the Sahayak bot). */}
         {pnl && (
           <Panel>
-            <PHead title="Project P&L — Invoice basis" action={
-              <Pill label={pnl.pnl>=0?"Profit / Labh":"Loss / Haani"} c={pnl.pnl>=0?T.grn:T.red} bg={pnl.pnl>=0?T.grnL:T.redL}/>
+            <PHead title={t("overview.project_p_l_invoice_basis")} action={
+              <Pill label={pnl.pnl>=0?t("overview.profit_labh"):t("overview.loss_haani")} c={pnl.pnl>=0?T.grn:T.red} bg={pnl.pnl>=0?T.grnL:T.redL}/>
             }/>
             <div style={{display:"flex",alignItems:"center",padding:"14px 16px",gap:16,flexWrap:"wrap"}}>
               <div style={{minWidth:120}}>
-                <div style={{fontSize:10.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>Revenue (Invoiced)</div>
+                <div style={{fontSize:10.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>{t("overview.revenue_invoiced")}</div>
                 <div style={{fontSize:18,fontWeight:800,color:T.grn,marginTop:3}}>₹{fmt(num(pnl.revenue))}</div>
               </div>
               <div style={{fontSize:18,color:T.t4,fontWeight:600}}>−</div>
               <div style={{minWidth:120}}>
-                <div style={{fontSize:10.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>Cost</div>
+                <div style={{fontSize:10.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>{t("finance.cost")}</div>
                 <div style={{fontSize:18,fontWeight:800,color:T.amb,marginTop:3}}>₹{fmt(num(pnl.cost))}</div>
               </div>
               <div style={{fontSize:18,color:T.t4,fontWeight:600}}>=</div>
               <div style={{minWidth:130,background:pnl.pnl>=0?T.grnL:T.redL,borderRadius:8,padding:"7px 13px"}}>
-                <div style={{fontSize:10.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>Net P&L</div>
+                <div style={{fontSize:10.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>{t("finance.net_p_l")}</div>
                 <div style={{fontSize:20,fontWeight:800,color:pnl.pnl>=0?T.grn:T.red,marginTop:2}}>{signed(num(pnl.pnl))}</div>
               </div>
               <div style={{flex:1,minWidth:200,fontSize:11,color:T.t4,lineHeight:1.55,alignSelf:"center"}}>
-                Revenue = is project ki <b>invoice</b> (kaam ka bill). Cost = material + sub-con + site + equipment + transfer − material-return.
-                Payment/receipt <b>isme nahi</b> (wo cash flow hai). Upar wala <b>"Margin"</b> alag hai — wo BOQ − spent.
+               {t("overview.revenue_is_project_ki")} <b>invoice</b> {t("overview.kaam_ka_bill_cost_material_sub")} <b>{t("overview.isme_nahi")}</b> {t("overview.wo_cash_flow_hai_upar_wala")} <b>{t("overview.margin")}</b> {t("overview.alag_hai_wo_boq_spent")}
               </div>
             </div>
           </Panel>
@@ -488,29 +486,29 @@ function TabOverview({proj, onRequestPayment}) {
         {/* Cashflow + Expense breakdown */}
         <div style={{display:"grid", gridTemplateColumns:"1.7fr 1fr", gap:14}}>
           <Panel>
-            <PHead title="Cash Flow — Monthly" action={
+            <PHead title={t("overview.cash_flow_monthly")} action={
               <div style={{display:"flex", gap:12}}>
-                <span style={{fontSize:10.5}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:T.grn,marginRight:4}}/><span style={{color:T.t4}}>In</span></span>
-                <span style={{fontSize:10.5}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:T.red,marginRight:4}}/><span style={{color:T.t4}}>Out</span></span>
+                <span style={{fontSize:10.5}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:T.grn,marginRight:4}}/><span style={{color:T.t4}}>{t("overview.in")}</span></span>
+                <span style={{fontSize:10.5}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:T.red,marginRight:4}}/><span style={{color:T.t4}}>{t("overview.out")}</span></span>
               </div>
             }/>
             <div style={{padding:"12px 15px"}}>
               <CashBars data={fin.bars}/>
               <div style={{display:"flex", justifyContent:"space-around", marginTop:10, paddingTop:10, borderTop:`1px solid ${T.b1}`}}>
-                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>Received</div><div style={{fontSize:15, fontWeight:700, color:T.grn}}>₹{fmt(fin.received)}</div></div>
-                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>Spent</div><div style={{fontSize:15, fontWeight:700, color:T.red}}>₹{fmt(num(proj?.expense)||fin.spent)}</div></div>
-                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>Net</div><div style={{fontSize:15, fontWeight:700, color:fin.received-(num(proj?.expense)||fin.spent)>=0?T.blu:T.red}}>{signed(fin.received-(num(proj?.expense)||fin.spent))}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.received")}</div><div style={{fontSize:15, fontWeight:700, color:T.grn}}>₹{fmt(fin.received)}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("app.spent")}</div><div style={{fontSize:15, fontWeight:700, color:T.red}}>₹{fmt(num(proj?.expense)||fin.spent)}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.net")}</div><div style={{fontSize:15, fontWeight:700, color:fin.received-(num(proj?.expense)||fin.spent)>=0?T.blu:T.red}}>{signed(fin.received-(num(proj?.expense)||fin.spent))}</div></div>
               </div>
             </div>
           </Panel>
 
           <Panel>
-            <PHead title="Expense Breakdown" action={<span style={{fontSize:11, color:T.t4}}>Total: <strong style={{color:T.t1}}>₹{fmt(expTotal)}</strong></span>}/>
+            <PHead title={t("app.expense_breakdown")} action={<span style={{fontSize:11, color:T.t4}}>{t("common.total_2")} <strong style={{color:T.t1}}>₹{fmt(expTotal)}</strong></span>}/>
             <div style={{padding:"14px 15px", display:"flex", gap:14, alignItems:"center"}}>
               <DonutChart slices={fin.slices}/>
               <div style={{flex:1, minWidth:0}}>
                 {fin.slices.length===0
-                  ? <div style={{fontSize:12, color:T.t4}}>{loading?"Loading…":"No expenses recorded"}</div>
+                  ? <div style={{fontSize:12, color:T.t4}}>{loading?t("common.loading_2"):t("overview.no_expenses_recorded")}</div>
                   : fin.slices.map((s,i)=>(
                     <div key={i} style={{display:"flex", alignItems:"center", gap:7, marginBottom:7}}>
                       <div style={{width:9, height:9, borderRadius:3, background:s.color, flexShrink:0}}/>
@@ -528,16 +526,16 @@ function TabOverview({proj, onRequestPayment}) {
         {/* Recent transactions + payment requests */}
         <div style={{display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:14}}>
           <Panel>
-            <PHead title="Recent Transactions" action={<Pill label={`${txns.length} total`} c={T.slt} bg={T.sltL}/>}/>
+            <PHead title={t("overview.recent_transactions")} action={<Pill label={`${txns.length} total`} c={T.slt} bg={T.sltL}/>}/>
             <div>
               {fin.recent.length===0
-                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?"Loading…":"No transactions yet"}</div>
+                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?t("common.loading_2"):t("app.no_transactions_yet")}</div>
                 : fin.recent.map((t,i)=>{
                     const isIn=IN_TYPES.includes(t.type);
                     return (
                       <div key={t.id||i} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}}>
                         <div style={{minWidth:0}}>
-                          <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{t.party_name||t.description||t.head_name||"Transaction"}</div>
+                          <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{t.party_name||t.description||t.head_name||t("overview.transaction")}</div>
                           <div style={{fontSize:10.5, color:T.t4}}>{t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):""}{t.type?` · ${t.type.replace(/_/g," ")}`:""}</div>
                         </div>
                         <span style={{fontSize:12.5, fontWeight:700, color:isIn?T.grn:T.red, flexShrink:0, fontVariantNumeric:"tabular-nums"}}>{isIn?"+":"−"}₹{fmt(num(t.amount))}</span>
@@ -549,19 +547,19 @@ function TabOverview({proj, onRequestPayment}) {
           </Panel>
 
           <Panel>
-            <PHead title="Payment Requests" action={
-              fin.pendingPay.length>0 ? <Pill label={`${fin.pendingPay.length} pending`} c={T.amb} bg={T.ambL}/> : <Pill label="None" c={T.grn} bg={T.grnL}/>
+            <PHead title={t("common.payment_requests")} action={
+              fin.pendingPay.length>0 ? <Pill label={`${fin.pendingPay.length} pending`} c={T.amb} bg={T.ambL}/> : <Pill label={t("common.none")} c={T.grn} bg={T.grnL}/>
             }/>
             <div>
               {fin.pendingPay.length===0
-                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?"Loading…":"No pending payment requests"}</div>
+                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?t("common.loading_2"):t("overview.no_pending_payment_requests")}</div>
                 : fin.pendingPay.slice(0,6).map((p,i)=>{
                     const st=String(p.status||"").toLowerCase();
                     const sc=st==="approved"?{c:T.blu,bg:T.bluL}:{c:T.amb,bg:T.ambL};
                     return (
                       <div key={p.id||i} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}}>
                         <div style={{minWidth:0}}>
-                          <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{p.purpose||p.description||p.party_name||"Payment request"}</div>
+                          <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{p.purpose||p.description||p.party_name||t("overview.payment_request")}</div>
                           <div style={{fontSize:10.5, color:T.t4}}>{p.priority?`${p.priority} · `:""}{p.needed_by_date?`by ${new Date(p.needed_by_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}`:(p.requested_by||"")}</div>
                         </div>
                         <div style={{display:"flex", alignItems:"center", gap:8, flexShrink:0}}>
@@ -625,7 +623,7 @@ function MediaLightbox({items, index, onIndex, onClose, isVid, onRemove}){
         style={{display:"flex", alignItems:"center", gap:12, padding:"12px 18px", color:"white", flexShrink:0}}>
         <div style={{flex:1, minWidth:0}}>
           <div style={{fontSize:13, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
-            {m.task_name || m.caption || "Site photo"}
+            {m.task_name || m.caption || t("overview.site_photo")}
           </div>
           <div style={{fontSize:11, color:"rgba(255,255,255,.55)", marginTop:2}}>
             {new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
@@ -643,13 +641,13 @@ function MediaLightbox({items, index, onIndex, onClose, isVid, onRemove}){
         {!isVid(m) && (
           <>
             <span style={{fontSize:11.5, color:"rgba(255,255,255,.6)"}}>{z.toFixed(1)}×</span>
-            <button onClick={()=>{setZ(1);setOff({x:0,y:0});}} style={lbBtn}>Reset</button>
+            <button onClick={()=>{setZ(1);setOff({x:0,y:0});}} style={lbBtn}>{t("common.reset")}</button>
           </>
         )}
         {onRemove && (
-          <button onClick={()=>onRemove(m.ref||m.id)} style={{...lbBtn, background:"rgba(220,38,38,.85)"}}>Hatao</button>
+          <button onClick={()=>onRemove(m.ref||m.id)} style={{...lbBtn, background:"rgba(220,38,38,.85)"}}>{t("common.hatao")}</button>
         )}
-        <button onClick={onClose} style={lbBtn}>Band</button>
+        <button onClick={onClose} style={lbBtn}>{t("common.band")}</button>
       </div>
 
       <div onClick={e=>e.stopPropagation()} onWheel={onWheel}
@@ -666,11 +664,11 @@ function MediaLightbox({items, index, onIndex, onClose, isVid, onRemove}){
 
       <div onClick={e=>e.stopPropagation()}
         style={{display:"flex", alignItems:"center", justifyContent:"center", gap:16, padding:"10px 0 16px", flexShrink:0}}>
-        <button onClick={()=>index>0&&onIndex(index-1)} disabled={index===0} style={{...lbBtn, opacity:index===0?.35:1}}>← Pichhla</button>
+        <button onClick={()=>index>0&&onIndex(index-1)} disabled={index===0} style={{...lbBtn, opacity:index===0?.35:1}}>{t("overview.pichhla")}</button>
         <span style={{fontSize:11, color:"rgba(255,255,255,.4)"}}>
-          {isVid(m) ? "Video" : "Scroll se zoom · drag se ghumayein"}
+          {isVid(m) ? t("overview.video") : t("overview.scroll_se_zoom_drag_se_ghumayein")}
         </span>
-        <button onClick={()=>index<items.length-1&&onIndex(index+1)} disabled={index===items.length-1} style={{...lbBtn, opacity:index===items.length-1?.35:1}}>Agla →</button>
+        <button onClick={()=>index<items.length-1&&onIndex(index+1)} disabled={index===items.length-1} style={{...lbBtn, opacity:index===items.length-1?.35:1}}>{t("overview.agla")}</button>
       </div>
     </div>
   );

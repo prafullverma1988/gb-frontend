@@ -5,6 +5,7 @@ import LibrarySelect from "../components/LibrarySelect";
 import api from "../config/api";
 import apiCache from "../utils/apiCache";
 import useDebounce from "../utils/useDebounce";
+import { t, Rich } from "../i18n";
 
 // A party holds multiple roles: `roles` is the canonical comma list and
 // `type` is only the primary one. Matching on `type` alone dropped equipment
@@ -157,23 +158,23 @@ const printHTML=(title,bodyHTML)=>{
 // ── NAV GROUPS ───────────────────────────────────────────────────────
 const NAV_GROUPS=[
   {section:null,items:[
-    {id:"dashboard",label:"Dashboard",Icon:IcHome},
-    {id:"projects",label:"Projects",Icon:IcProj},
+    {id:"dashboard",get label() { return t("common.dashboard"); },Icon:IcHome},
+    {id:"projects",get label() { return t("common.projects"); },Icon:IcProj},
     {id:"crm",label:"CRM",Icon:IcCRM},
     {id:"mom",label:"MOM",Icon:IcMOM},
-    {id:"team",label:"Team Schedule",Icon:IcTeam},
-    {id:"design",label:"Design",Icon:IcDes,badge:"NEW",bc:C.a},
+    {id:"team",get label() { return t("common.team_schedule"); },Icon:IcTeam},
+    {id:"design",get label() { return t("common.design"); },Icon:IcDes,badge:"NEW",bc:C.a},
   ]},
   {section:"FINANCE & OPS",items:[
-    {id:"finance",label:"Finance",Icon:IcFin},
-    {id:"procurement",label:"Procurement",Icon:IcProc,badge:11,bc:C.p},
-    {id:"warehouse",label:"Warehouse",Icon:IcWH},
-    {id:"payroll",label:"Payroll",Icon:IcPay},
+    {id:"finance",get label() { return t("common.finance"); },Icon:IcFin},
+    {id:"procurement",get label() { return t("common.procurement"); },Icon:IcProc,badge:11,bc:C.p},
+    {id:"warehouse",get label() { return t("common.warehouse"); },Icon:IcWH},
+    {id:"payroll",get label() { return t("common.payroll"); },Icon:IcPay},
   ]},
   {section:"REPORTS",items:[
-    {id:"reports",label:"Reports",Icon:IcRep},
-    {id:"library",label:"Library",Icon:IcLib},
-    {id:"settings",label:"Settings",Icon:IcSet},
+    {id:"reports",get label() { return t("common.reports"); },Icon:IcRep},
+    {id:"library",get label() { return t("common.library"); },Icon:IcLib},
+    {id:"settings",get label() { return t("common.settings"); },Icon:IcSet},
   ]},
 ];
 
@@ -208,7 +209,7 @@ function DuplicateModal({project,onClose,onConfirm}){
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:500,maxWidth:"95vw",zIndex:301,boxShadow:"0 24px 70px rgba(0,0,0,0.32)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:T.blu,padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
         <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center"}}><IcCopy size={17} color="white"/></div>
-        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"white"}}>Duplicate Project</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.72)"}}>Tasks, dependencies & BOQ carry over automatically</div></div>
+        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"white"}}>{t("finance.duplicate_project")}</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.72)"}}>{t("finance.tasks_dependencies_boq_carry_over_automatically")}</div></div>
         <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"5px 7px",borderRadius:7,display:"flex"}}><IcX size={14}/></button>
       </div>
       <div style={{display:"flex",alignItems:"center",padding:"10px 20px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
@@ -225,8 +226,8 @@ function DuplicateModal({project,onClose,onConfirm}){
       <div style={{padding:"16px 20px",maxHeight:340,overflowY:"auto"}}>
         {step===1&&<div>
           <div style={{background:T.sltL,borderRadius:8,padding:"9px 12px",marginBottom:12,display:"flex",alignItems:"center",gap:8,border:`1px solid ${T.b1}`}}>
-            <span style={{fontSize:11,color:T.t3}}>Copying from:</span><strong style={{fontSize:11.5,color:T.t1,flex:1}}>{project.name}</strong>
-            <span style={{background:T.bluL,color:T.blu,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20}}>Template</span>
+            <span style={{fontSize:11,color:T.t3}}>{t("finance.copying_from")}</span><strong style={{fontSize:11.5,color:T.t1,flex:1}}>{project.name}</strong>
+            <span style={{background:T.bluL,color:T.blu,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20}}>{t("finance.template")}</span>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             {[["New Project Name *",form.name,"name","text",true],["City *",form.city,"city","text",false],["BOQ Value (₹) *",form.boq,"boq","number",false],["Type",project.type,"_type","text",false],["Start Date",form.start,"start","date",false],["End Date",form.end,"end","date",false]].map(([lbl,val,key,type,full])=>(
@@ -236,17 +237,17 @@ function DuplicateModal({project,onClose,onConfirm}){
               </div>
             ))}
           </div>
-          <div style={{background:T.grnL,borderRadius:8,padding:"8px 12px",fontSize:11,color:T.grn,display:"flex",gap:6,marginTop:12}}><span>✅</span><span>All tasks, BOQ items, dependencies & phases will be copied automatically.</span></div>
+          <div style={{background:T.grnL,borderRadius:8,padding:"8px 12px",fontSize:11,color:T.grn,display:"flex",gap:6,marginTop:12}}><span>✅</span><span>{t("finance.all_tasks_boq_items_dependencies_phases")}</span></div>
         </div>}
         {step===2&&<div>
-          <p style={{fontSize:11.5,color:T.t4,margin:"0 0 14px"}}>Click to assign team for the new project.</p>
+          <p style={{fontSize:11.5,color:T.t4,margin:"0 0 14px"}}>{t("finance.click_to_assign_team_for_the")}</p>
           {[{role:"Project Manager",val:pm,setter:setPM,prev:project.pm},{role:"Site Supervisor",val:sup,setter:setSup,prev:""}].map(({role,val,setter,prev})=>(
             <div key={role} style={{marginBottom:14}}>
               <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:7}}>{role}</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 {TEAM.map(t=><button key={t.id} onClick={()=>setter(t.name)} style={{padding:"6px 11px",borderRadius:7,border:`1.5px solid ${val===t.name?t.color:T.b1}`,background:val===t.name?t.color+"14":T.sltL,fontSize:11.5,color:val===t.name?t.color:T.t2,fontWeight:val===t.name?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
                   <div style={{width:20,height:20,borderRadius:"50%",background:val===t.name?t.color:T.b2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:val===t.name?"white":T.t4}}>{t.initials}</div>
-                  {t.name}{prev===t.name&&<span style={{fontSize:8.5,color:T.t4}}>(prev)</span>}
+                  {t.name}{prev===t.name&&<span style={{fontSize:8.5,color:T.t4}}>{t("finance.prev")}</span>}
                 </button>)}
               </div>
             </div>
@@ -254,18 +255,18 @@ function DuplicateModal({project,onClose,onConfirm}){
         </div>}
         {step===3&&(!done
           ?<div>
-            <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>Review before creating:</div>
+            <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>{t("finance.review_before_creating")}</div>
             {[["Project Name",form.name],["City",form.city],["BOQ",`₹${Number(form.boq).toLocaleString("en-IN")}`],["PM",pm],["Supervisor",sup],["Timeline",`${form.start||"TBD"} → ${form.end||"TBD"}`],["Initial Status","Not Started · 0%"],["Carry Over","Tasks · BOQ · Phases · Dependencies"]].map(([k,v])=>(
               <div key={k} style={{display:"flex",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}><span style={{width:140,fontSize:11.5,color:T.t3,flexShrink:0}}>{k}</span><span style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{v}</span></div>
             ))}
           </div>
-          :<div style={{textAlign:"center",padding:"28px 0"}}><div style={{fontSize:44,marginBottom:10}}>✅</div><div style={{fontSize:15,fontWeight:800,color:T.grn}}>Project Created!</div><div style={{fontSize:12,color:T.t4,marginTop:4}}>{form.name} added.</div></div>
+          :<div style={{textAlign:"center",padding:"28px 0"}}><div style={{fontSize:44,marginBottom:10}}>✅</div><div style={{fontSize:15,fontWeight:800,color:T.grn}}>{t("finance.project_created")}</div><div style={{fontSize:12,color:T.t4,marginTop:4}}>{t("finance.name_added", { name: form.name })}</div></div>
         )}
       </div>
       {!done&&<div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,background:T.surfaceB}}>
-        {step>1&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,padding:"9px",borderRadius:8,border:`1.5px solid ${T.b1}`,background:T.sltL,fontSize:12,fontWeight:600,color:T.t2,cursor:"pointer"}}>← Back</button>}
+        {step>1&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,padding:"9px",borderRadius:8,border:`1.5px solid ${T.b1}`,background:T.sltL,fontSize:12,fontWeight:600,color:T.t2,cursor:"pointer"}}>{t("common.back_2")}</button>}
         <button onClick={step<3?()=>setStep(s=>s+1):handleCreate} style={{flex:2,padding:"9px",borderRadius:8,background:step===3?T.grn:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-          {step===1?"Next: Team →":step===2?"Next: Review →":"✓ Create Duplicate"}
+          {step===1?t("finance.next_team"):step===2?t("finance.next_review"):t("finance.create_duplicate")}
         </button>
       </div>}
     </div>
@@ -377,7 +378,7 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
           },150);
         }}
         onKeyDown={onKeyDown}
-        placeholder={placeholder||"Type or select..."}
+        placeholder={placeholder||t("finance.type_or_select")}
         autoComplete="off"
         style={{height:ht,padding:`0 22px 0 7px`,borderRadius:5,
           border:`1.5px solid ${open?ac:T.b1}`,fontSize:compact?11:12,outline:"none",
@@ -394,7 +395,7 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
             boxShadow:"0 8px 28px rgba(0,0,0,0.2)",zIndex:99999,maxHeight:220,overflowY:"auto",
             animation:"fadeSlideIn 0.12s ease"}}>
           {filtered.length===0&&(
-            <div style={{padding:"12px 10px",fontSize:11,color:T.t4,textAlign:"center"}}>No match found</div>
+            <div style={{padding:"12px 10px",fontSize:11,color:T.t4,textAlign:"center"}}>{t("search_select.no_match_found")}</div>
           )}
           {filtered.map((opt,i)=>{
             const label=typeof opt==="string"?opt:opt.label;
@@ -442,11 +443,11 @@ function BillConflictModal({data, onCancel, onViewExisting, onForceNew}){
         <div style={{background:"#FEE2E2",borderBottom:"2px solid #FCA5A5",padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
           <span style={{fontSize:22}}>⚠️</span>
           <div style={{flex:1}}>
-            <div style={{fontSize:14,fontWeight:800,color:"#991B1B"}}>Duplicate Bill Warning</div>
+            <div style={{fontSize:14,fontWeight:800,color:"#991B1B"}}>{t("finance.duplicate_bill_warning")}</div>
             <div style={{fontSize:11.5,color:"#7F1D1D",marginTop:1}}>
-              {grnLocked && conflicts.length>0 ? "Ye GRN aur vendor+challan dono pehle bill ho chuke hain"
-              : grnLocked                       ? "Ye GRN pehle se bill ho chuka hai"
-              :                                   "Same vendor + challan pehle bill ho chuka hai"}
+              {grnLocked && conflicts.length>0 ? t("finance.ye_grn_aur_vendor_challan_dono")
+              : grnLocked                       ? t("finance.ye_grn_pehle_se_bill_ho")
+              :                                   t("finance.same_vendor_challan_pehle_bill_ho")}
             </div>
           </div>
         </div>
@@ -454,24 +455,22 @@ function BillConflictModal({data, onCancel, onViewExisting, onForceNew}){
         <div style={{padding:"14px 18px",maxHeight:"60vh",overflowY:"auto"}}>
           {grnLocked && (
             <div style={{padding:"10px 12px",background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:8,marginBottom:10}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#92400E",marginBottom:3}}>GRN already locked</div>
+              <div style={{fontSize:11,fontWeight:700,color:"#92400E",marginBottom:3}}>{t("finance.grn_already_locked")}</div>
               <div style={{fontSize:12.5,color:"#78350F"}}>
-                Linked transaction: <strong>TXN-{grnTxnId||"?"}</strong>
+               {t("finance.linked_transaction")} <strong>{t("finance.txn_grntxnid", { grnTxnId: grnTxnId||"?" })}</strong>
               </div>
             </div>
           )}
           {conflicts.length>0 && (
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:10.5,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>
-                Existing bills with same vendor + challan ({conflicts.length})
-              </div>
+              <div style={{fontSize:10.5,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{t("finance.existing_bills_with_same_vendor_challan", { conflicts: conflicts.length })}</div>
               {conflicts.map(c=>(
                 <div key={c.id} style={{padding:"8px 11px",background:"#F8F9FB",border:"1px solid #E5E7EB",borderRadius:7,marginBottom:5,display:"flex",alignItems:"center",gap:10}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:11.5,fontWeight:700,color:"#111827"}}>TXN-{c.id} · {c.party_name||"—"}</div>
+                    <div style={{fontSize:11.5,fontWeight:700,color:"#111827"}}>{t("finance.txn_id_c", { id: c.id, c: c.party_name||"—" })}</div>
                     <div style={{fontSize:10.5,color:"#6B7280"}}>{c.date?new Date(c.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—"} · ₹{Number(c.amount).toLocaleString("en-IN")}</div>
                   </div>
-                  <button onClick={()=>onViewExisting(c.id)} style={{padding:"4px 10px",borderRadius:5,background:"white",border:"1px solid #BFDBFE",color:"#2563EB",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>View</button>
+                  <button onClick={()=>onViewExisting(c.id)} style={{padding:"4px 10px",borderRadius:5,background:"white",border:"1px solid #BFDBFE",color:"#2563EB",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>{t("common.view_2")}</button>
                 </div>
               ))}
             </div>
@@ -481,36 +480,36 @@ function BillConflictModal({data, onCancel, onViewExisting, onForceNew}){
             <div style={{display:"flex",gap:8}}>
               <button onClick={onCancel}
                 style={{flex:1,padding:"10px",borderRadius:7,background:"white",border:"1px solid #E5E7EB",color:"#374151",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
-                Cancel
+               {t("common.cancel")}
               </button>
               {grnLocked && grnTxnId && (
                 <button onClick={()=>onViewExisting(grnTxnId)}
                   style={{flex:1.5,padding:"10px",borderRadius:7,background:"#EFF6FF",border:"1px solid #BFDBFE",color:"#2563EB",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
-                  View Existing Bill
+                 {t("finance.view_existing_bill")}
                 </button>
               )}
               <button onClick={()=>setShowForce(true)}
                 style={{flex:1.5,padding:"10px",borderRadius:7,background:"#FEE2E2",border:"1px solid #FCA5A5",color:"#991B1B",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
-                Force New Bill
+               {t("finance.force_new_bill")}
               </button>
             </div>
           ) : (
             <div style={{padding:"11px",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8}}>
               <div style={{fontSize:11,fontWeight:700,color:"#991B1B",marginBottom:6}}>
-                Force karne ke liye reason batao * <span style={{fontWeight:500}}>(admin ko notification jayega)</span>
+               {t("finance.force_karne_ke_liye_reason_batao")} <span style={{fontWeight:500}}>{t("finance.admin_ko_notification_jayega")}</span>
               </div>
               <textarea value={reason} onChange={e=>setReason(e.target.value)} autoFocus rows={3}
-                placeholder="e.g. Vendor ne 2nd partial delivery alag challan se bheji thi, dono ka payment alag karna hai"
+                placeholder={t("finance.e_g_vendor_ne_2nd_partial")}
                 style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #FCA5A5",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical",marginBottom:8,background:"white"}}/>
               <div style={{display:"flex",gap:7}}>
                 <button onClick={()=>{setShowForce(false);setReason("");}} disabled={submitting}
                   style={{flex:1,padding:"8px",borderRadius:6,background:"white",border:"1px solid #E5E7EB",color:"#6B7280",fontSize:11.5,fontWeight:600,cursor:submitting?"not-allowed":"pointer"}}>
-                  Back
+                 {t("common.back")}
                 </button>
                 <button onClick={()=>{setSubmitting(true);onForceNew(reason.trim());}}
                   disabled={submitting||!reason.trim()}
                   style={{flex:2,padding:"8px",borderRadius:6,background:submitting||!reason.trim()?"#9CA3AF":"#DC2626",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:submitting||!reason.trim()?"not-allowed":"pointer"}}>
-                  {submitting?"Opening bill...":"⚠ Force New Bill"}
+                  {submitting?t("finance.opening_bill"):t("finance.force_new_bill_2")}
                 </button>
               </div>
             </div>
@@ -664,14 +663,14 @@ function DualBillStrip({ row, onFields }){
         <span style={{width:30,height:17,borderRadius:9,background:on?T.blu:T.b2,position:"relative",transition:"background .15s",flexShrink:0}}>
           <span style={{position:"absolute",top:2,left:on?15:2,width:13,height:13,borderRadius:"50%",background:"#fff",transition:"left .15s",boxShadow:"0 1px 2px rgba(0,0,0,.25)"}}/>
         </span>
-        <span style={{fontSize:11,fontWeight:600,color:on?T.blu:T.t3}}>Billing unit alag?</span>
-        {row.grnHadAlt&&on&&<span style={{fontSize:9,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grnM}`,padding:"1px 6px",borderRadius:8}}>GRN weight</span>}
-        {!on&&learned?.alt_unit&&<span style={{fontSize:10,color:T.t4}}>· pichhli baar {learned.alt_unit} me bill hua tha</span>}
+        <span style={{fontSize:11,fontWeight:600,color:on?T.blu:T.t3}}>{t("finance.billing_unit_alag")}</span>
+        {row.grnHadAlt&&on&&<span style={{fontSize:9,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grnM}`,padding:"1px 6px",borderRadius:8}}>{t("finance.grn_weight")}</span>}
+        {!on&&learned?.alt_unit&&<span style={{fontSize:10,color:T.t4}}>{t("finance.pichhli_baar_alt_unit_me_bill", { alt_unit: learned.alt_unit })}</span>}
       </button>
       {on&&(
         <div style={{display:"flex",alignItems:"center",gap:9,marginTop:7,flexWrap:"wrap"}}>
-          <span style={{fontSize:10.5,color:T.t3}}>Received: <b style={{color:T.t2}}>{primaryQty} {primaryUnit}</b> 🔒</span>
-          <span style={{fontSize:11,color:T.t4}}>→ bill on:</span>
+          <span style={{fontSize:10.5,color:T.t3}}>{t("finance.received")} <b style={{color:T.t2}}>{primaryQty} {primaryUnit}</b> 🔒</span>
+          <span style={{fontSize:11,color:T.t4}}>{t("finance.bill_on")}</span>
           {/* The billing line lives here, not in the row above: on a dual-unit
               line the row's Qty column still shows the RECEIVED measure, so the
               full qty × rate = total triple is editable in this strip with the
@@ -679,7 +678,7 @@ function DualBillStrip({ row, onFields }){
               weighbridge reading, so Total edits always land on Rate. */}
           <input type="number" value={row.alt_qty||""}
             onChange={e=>onFields({altOn:true,alt_qty:e.target.value},"qty")}
-            placeholder={suggest!=null?String(suggest):"weight"} title="Weighbridge parchi ka weight — editable"
+            placeholder={suggest!=null?String(suggest):"weight"} title={t("finance.weighbridge_parchi_ka_weight_editable")}
             style={sInp({width:100})}/>
           <select value={row.alt_unit||""} onChange={e=>onFields({altOn:true,alt_unit:e.target.value})}
             style={{padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface}}>
@@ -688,16 +687,16 @@ function DualBillStrip({ row, onFields }){
           <span style={{fontSize:11,color:T.t3}}>× ₹</span>
           <input type="number" value={row.rate||""}
             onChange={e=>onFields({rate:e.target.value},"rate")}
-            placeholder="rate" title={row._d==="rate"?"Auto: Total ÷ billing qty":"Rate per billing unit"}
+            placeholder="rate" title={row._d==="rate"?t("finance.auto_total_billing_qty"):t("finance.rate_per_billing_unit")}
             style={sInp(row._d==="rate"?{width:92,borderStyle:"dashed",background:T.surfaceB,color:T.t2}:{width:92})}/>
           <span style={{fontSize:11,color:T.t3}}>=</span>
           <input type="number" value={row.total||""}
             onChange={e=>onFields({total:e.target.value},"total")}
-            placeholder="total" title={row._d==="total"?"Auto: billing qty × Rate — total seedha type bhi kar sakte ho":"Entered total — yahi bill amount banega"}
+            placeholder="total" title={row._d==="total"?t("finance.auto_billing_qty_rate_total_seedha"):t("finance.entered_total_yahi_bill_amount_banega")}
             style={sInp(row._d==="total"
               ?{width:110,fontWeight:800,borderStyle:"dashed",background:T.surfaceB,color:altTotal>0?T.grn:T.t4}
               :{width:110,fontWeight:800,borderColor:T.grnM,background:T.grnL,color:T.grn})}/>
-          {suggest!=null&&!row.alt_qty&&<span style={{fontSize:10,color:T.t4}}>~{suggest} suggested (×{ratio})</span>}
+          {suggest!=null&&!row.alt_qty&&<span style={{fontSize:10,color:T.t4}}>{t("finance.suggest_suggested_ratio", { suggest, ratio })}</span>}
         </div>
       )}
     </div>
@@ -750,10 +749,10 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
 
   const submit=async(force)=>{
     if(savingRef.current) return;
-    if(!payerObj||!payeeObj){ setErr("Payer aur Payee dono select karein."); return; }
-    if(samePartyErr){ setErr("Payer aur Payee alag hone chahiye."); return; }
-    if(!(amt>0)){ setErr("Amount daalein (positive)."); return; }
-    if(overBalance&&!ackAdvance){ setErr("Balance advance me jaayega — confirm checkbox tick karein."); return; }
+    if(!payerObj||!payeeObj){ setErr(t("finance.payer_aur_payee_dono_select_karein")); return; }
+    if(samePartyErr){ setErr(t("finance.payer_aur_payee_alag_hone_chahiye")); return; }
+    if(!(amt>0)){ setErr(t("finance.amount_daalein_positive")); return; }
+    if(overBalance&&!ackAdvance){ setErr(t("finance.balance_advance_me_jaayega_confirm_checkbox")); return; }
     savingRef.current=true; setSaving(true); setErr("");
     try{
       const body={
@@ -792,8 +791,8 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
         {/* Header */}
         <div style={{padding:"14px 20px",background:T.ind,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Party-to-Party Settlement</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.75)",marginTop:2}}>Ek party ka paisa doosri ki dues chukaye</div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>{t("finance.party_to_party_settlement")}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.75)",marginTop:2}}>{t("finance.ek_party_ka_paisa_doosri_ki")}</div>
           </div>
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",borderRadius:6,cursor:"pointer",color:"white",padding:"4px 8px",fontSize:13}}>✕</button>
         </div>
@@ -801,39 +800,39 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
         {done?(
           <div style={{padding:"40px 20px",textAlign:"center"}}>
             <div style={{fontSize:34,marginBottom:8}}>✓</div>
-            <div style={{fontSize:15,fontWeight:700,color:T.grn}}>Settlement save ho gaya</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.grn}}>{t("finance.settlement_save_ho_gaya")}</div>
           </div>
         ):(
         <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:14,overflowY:"auto"}}>
           {/* No-cash pill */}
           <div style={{display:"flex",alignItems:"center",gap:7,alignSelf:"flex-start",padding:"5px 12px",borderRadius:20,background:T.indL,border:`1px solid ${T.indM}`}}>
             <IcArrow size={13} color={T.ind}/>
-            <span style={{fontSize:11,fontWeight:700,color:T.ind}}>No cash / bank movement</span>
+            <span style={{fontSize:11,fontWeight:700,color:T.ind}}>{t("finance.no_cash_bank_movement")}</span>
           </div>
 
           {/* Payer + Payee */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div>
               {lbl("Payer — jiska paisa use hua")}
-              <SearchSelect options={PARTY_NAMES} value={payer} onChange={setPayer} placeholder="Client / Investor / Staff..." accent={T.ind} compact/>
-              <div style={{fontSize:10,color:T.t4,marginTop:4,lineHeight:1.35}}>Client / Investor / Staff / advance-wala vendor</div>
+              <SearchSelect options={PARTY_NAMES} value={payer} onChange={setPayer} placeholder={t("finance.client_investor_staff")} accent={T.ind} compact/>
+              <div style={{fontSize:10,color:T.t4,marginTop:4,lineHeight:1.35}}>{t("finance.client_investor_staff_advance_wala_vendor")}</div>
             </div>
             <div>
               {lbl("Payee — jisko paisa mila")}
-              <SearchSelect options={PARTY_NAMES} value={payee} onChange={v=>{setPayee(v);setLinkedBill(null);}} placeholder="Vendor / Sub-Con..." accent={T.ind} compact/>
-              <div style={{fontSize:10,color:T.t4,marginTop:4,lineHeight:1.35}}>Jisko paisa mila (hamari taraf se)</div>
+              <SearchSelect options={PARTY_NAMES} value={payee} onChange={v=>{setPayee(v);setLinkedBill(null);}} placeholder={t("finance.vendor_sub_con")} accent={T.ind} compact/>
+              <div style={{fontSize:10,color:T.t4,marginTop:4,lineHeight:1.35}}>{t("finance.jisko_paisa_mila_hamari_taraf_se")}</div>
             </div>
           </div>
-          {samePartyErr&&<div style={{padding:"7px 11px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,color:T.red,fontSize:11.5,fontWeight:600}}>Payer aur Payee alag hone chahiye.</div>}
+          {samePartyErr&&<div style={{padding:"7px 11px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,color:T.red,fontSize:11.5,fontWeight:600}}>{t("finance.payer_aur_payee_alag_hone_chahiye")}</div>}
 
           {/* STATE 4 — staff↔staff → Wallet Transfer */}
           {bothStaff&&!samePartyErr?(
             <div style={{padding:"12px 14px",background:T.indL,border:`1px solid ${T.indM}`,borderRadius:9}}>
-              <div style={{fontSize:12.5,fontWeight:700,color:T.ind,marginBottom:4}}>Ye entry Wallet Transfer se hogi</div>
-              <div style={{fontSize:11.5,color:T.t2,lineHeight:1.45}}>Dono parties staff hain — wallet balances update honge, cash/bank par asar nahi. Settlement iske liye nahi hai. Staff Wallets me jaakar transfer karein (sahi sender ke context me).</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:T.ind,marginBottom:4}}>{t("finance.ye_entry_wallet_transfer_se_hogi")}</div>
+              <div style={{fontSize:11.5,color:T.t2,lineHeight:1.45}}>{t("finance.dono_parties_staff_hain_wallet_balances")}</div>
               <button onClick={()=>{ onClose&&onClose(); onGoStaffWallets&&onGoStaffWallets(); }}
                 style={{marginTop:10,padding:"8px 16px",borderRadius:7,background:T.ind,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-                Staff Wallets me jaayein →
+               {t("finance.staff_wallets_me_jaayein")}
               </button>
             </div>
           ):(<>
@@ -845,7 +844,7 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
                 onChange={e=>setAmount(e.target.value)} placeholder="0"
                 style={{...inp,background:linkedBill?T.surfaceB:T.surface,color:linkedBill?T.t3:T.t1}}
                 onFocus={e=>{if(!linkedBill)e.target.style.borderColor=T.ind;}} onBlur={e=>e.target.style.borderColor=T.b1}/>
-              {linkedBill&&<div style={{fontSize:10,color:T.ind,marginTop:4,fontWeight:600}}>Bill linked — amount locked (full settle)</div>}
+              {linkedBill&&<div style={{fontSize:10,color:T.ind,marginTop:4,fontWeight:600}}>{t("finance.bill_linked_amount_locked_full_settle")}</div>}
             </div>
             <div>
               {lbl("Date")}
@@ -857,13 +856,13 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
           {/* Project (optional) */}
           <div>
             {lbl("Project (optional)")}
-            <SearchSelect options={PROJECTS} value={project} onChange={setProject} placeholder="Reference project..." accent={T.ind} compact/>
+            <SearchSelect options={PROJECTS} value={project} onChange={setProject} placeholder={t("finance.reference_project")} accent={T.ind} compact/>
           </div>
 
           {/* Settle against pending bill (payee) */}
           {payeeObj&&payeeBills.length>0&&(
             <div style={{border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden"}}>
-              <div style={{padding:"7px 12px",background:T.surfaceB,fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",borderBottom:`1px solid ${T.b1}`}}>Settle against pending bill (optional)</div>
+              <div style={{padding:"7px 12px",background:T.surfaceB,fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",borderBottom:`1px solid ${T.b1}`}}>{t("finance.settle_against_pending_bill_optional")}</div>
               {payeeBills.slice(0,6).map(b=>{
                 const on=linkedBill&&linkedBill.id===b.id;
                 return(
@@ -884,7 +883,7 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
           {/* Note */}
           <div>
             {lbl("Note (optional)")}
-            <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Kyun / kaise settle hua..."
+            <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder={t("finance.kyun_kaise_settle_hua")}
               style={{width:"100%",height:56,padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface,color:T.t1,resize:"none"}}
               onFocus={e=>e.target.style.borderColor=T.ind} onBlur={e=>e.target.style.borderColor=T.b1}/>
           </div>
@@ -892,22 +891,22 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
           {/* Impact preview */}
           {canPreview&&(
             <div style={{border:`1px solid ${T.indM}`,borderRadius:9,overflow:"hidden"}}>
-              <div style={{padding:"7px 12px",background:T.indL,fontSize:10.5,fontWeight:700,color:T.ind,textTransform:"uppercase",letterSpacing:"0.4px"}}>Iska asar</div>
+              <div style={{padding:"7px 12px",background:T.indL,fontSize:10.5,fontWeight:700,color:T.ind,textTransform:"uppercase",letterSpacing:"0.4px"}}>{t("finance.iska_asar")}</div>
               <div style={{padding:"4px 12px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}>
-                  <span style={{fontSize:12,color:T.t2}}><b>{payerObj.name}</b> <span style={{color:T.t4}}>(Payer)</span> — Receivable</span>
+                  <span style={{fontSize:12,color:T.t2}}><b>{payerObj.name}</b> <span style={{color:T.t4}}>{t("finance.payer")}</span> {t("finance.receivable")}</span>
                   <span style={{fontSize:12.5,fontWeight:700,color:T.grn}}>−₹{amt.toLocaleString("en-IN")}</span>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}>
                   <span style={{fontSize:12,color:T.t2}}>
-                    <b>{payeeObj.name}</b> <span style={{color:T.t4}}>(Payee)</span> — Payable
-                    {linkedBill&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:T.ind,background:T.indL,border:`1px solid ${T.indM}`,padding:"1px 6px",borderRadius:8}}>{linkedBill.no} → Paid</span>}
+                    <b>{payeeObj.name}</b> <span style={{color:T.t4}}>{t("finance.payee")}</span> {t("finance.dash_payable")}
+                    {linkedBill&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:T.ind,background:T.indL,border:`1px solid ${T.indM}`,padding:"1px 6px",borderRadius:8}}>{t("finance.no_paid", { no: linkedBill.no })}</span>}
                   </span>
                   <span style={{fontSize:12.5,fontWeight:700,color:T.grn}}>−₹{amt.toLocaleString("en-IN")}</span>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0"}}>
-                  <span style={{fontSize:12,color:T.t4}}>Company Cash / Bank</span>
-                  <span style={{fontSize:12,fontWeight:600,color:T.t4}}>No change</span>
+                  <span style={{fontSize:12,color:T.t4}}>{t("finance.company_cash_bank")}</span>
+                  <span style={{fontSize:12,fontWeight:600,color:T.t4}}>{t("finance.no_change")}</span>
                 </div>
               </div>
             </div>
@@ -916,12 +915,10 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
           {/* Soft balance warning */}
           {overBalance&&(
             <div style={{padding:"10px 12px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:9}}>
-              <div style={{fontSize:11.5,color:T.amb,fontWeight:600,lineHeight:1.45}}>
-                {payerObj.name} ka balance sirf ₹{payerBal.toLocaleString("en-IN")} hai — ₹{amt.toLocaleString("en-IN")} settle karne par balance advance me chala jayega.
-              </div>
+              <div style={{fontSize:11.5,color:T.amb,fontWeight:600,lineHeight:1.45}}>{t("finance.name_ka_balance_sirf_payerbal_hai", { name: payerObj.name, payerBal: payerBal.toLocaleString("en-IN"), amt: amt.toLocaleString("en-IN") })}</div>
               <label style={{display:"flex",alignItems:"center",gap:8,marginTop:8,cursor:"pointer"}}>
                 <input type="checkbox" checked={ackAdvance} onChange={e=>setAckAdvance(e.target.checked)} style={{width:15,height:15,cursor:"pointer",accentColor:T.amb}}/>
-                <span style={{fontSize:11.5,fontWeight:600,color:T.t2}}>Samajh gaya — phir bhi continue</span>
+                <span style={{fontSize:11.5,fontWeight:600,color:T.t2}}>{t("finance.samajh_gaya_phir_bhi_continue")}</span>
               </label>
             </div>
           )}
@@ -934,10 +931,10 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
         {/* Footer */}
         {!done&&!bothStaff&&(
           <div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.surfaceB,flexShrink:0}}>
-            <button onClick={onClose} style={{padding:"8px 18px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+            <button onClick={onClose} style={{padding:"8px 18px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
             <button onClick={()=>submit(false)} disabled={saving||!canPreview||(overBalance&&!ackAdvance)}
               style={{padding:"8px 22px",borderRadius:7,background:(saving||!canPreview||(overBalance&&!ackAdvance))?T.t4:T.ind,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:(saving||!canPreview||(overBalance&&!ackAdvance))?"not-allowed":"pointer"}}>
-              {saving?"Saving...":"Save Settlement"}
+              {saving?t("common.saving"):t("finance.save_settlement")}
             </button>
           </div>
         )}
@@ -1176,14 +1173,14 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // When projectId is provided (project-level Transaction tab), fetch real
   // estimate items via API. Otherwise fall back to mock data for company-level.
   const _MOCK_BOQ_ITEMS=[
-    {id:1,work:"Foundation Work",desc:"PCC M15 + RCC M25 footings",unit:"Sqft",boqQty:1500,rate:220,billed:0},
-    {id:2,work:"Column & Beam",desc:"RCC columns GF to FF, M25 grade",unit:"Nos",boqQty:24,rate:8500,billed:0},
-    {id:3,work:"Brickwork GF",desc:"9 inch brick wall ground floor",unit:"Sqft",boqQty:2400,rate:160,billed:0},
-    {id:4,work:"Roof Slab GF",desc:"RCC M25 slab 5 inch thick",unit:"Sqft",boqQty:1500,rate:180,billed:1500},
-    {id:5,work:"Plaster External",desc:"CM 1:4 external walls",unit:"Sqft",boqQty:3200,rate:55,billed:0},
-    {id:6,work:"Plaster Internal",desc:"CM 1:5 internal walls all floors",unit:"Sqft",boqQty:5800,rate:45,billed:0},
-    {id:7,work:"Flooring GF",desc:"Vitrified tiles 60x60 with bedding",unit:"Sqft",boqQty:1500,rate:85,billed:0},
-    {id:8,work:"Electrical Works",desc:"Point wiring, DB, mains",unit:"Point",boqQty:42,rate:2200,billed:0},
+    {id:1,work:"Foundation Work",desc:t("finance.pcc_m15_rcc_m25_footings"),unit:"Sqft",boqQty:1500,rate:220,billed:0},
+    {id:2,work:"Column & Beam",desc:t("finance.rcc_columns_gf_to_ff_m25"),unit:"Nos",boqQty:24,rate:8500,billed:0},
+    {id:3,work:"Brickwork GF",desc:t("finance.9_inch_brick_wall_ground_floor"),unit:"Sqft",boqQty:2400,rate:160,billed:0},
+    {id:4,work:"Roof Slab GF",desc:t("finance.rcc_m25_slab_5_inch_thick"),unit:"Sqft",boqQty:1500,rate:180,billed:1500},
+    {id:5,work:"Plaster External",desc:t("finance.cm_1_4_external_walls"),unit:"Sqft",boqQty:3200,rate:55,billed:0},
+    {id:6,work:"Plaster Internal",desc:t("finance.cm_1_5_internal_walls_all"),unit:"Sqft",boqQty:5800,rate:45,billed:0},
+    {id:7,work:"Flooring GF",desc:t("finance.vitrified_tiles_60x60_with_bedding"),unit:"Sqft",boqQty:1500,rate:85,billed:0},
+    {id:8,work:"Electrical Works",desc:t("finance.point_wiring_db_mains"),unit:"Point",boqQty:42,rate:2200,billed:0},
   ];
   // null = still loading, [] = no estimate on project, [...] = real items
   const [realBoqItems, setRealBoqItems] = useState(null);
@@ -1243,14 +1240,14 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     ? (realBoqItems || [])
     : _MOCK_BOQ_ITEMS;
   const SUBCON_BOQ=[
-    {id:1,work:"Foundation Work",desc:"PCC M15 + RCC M25 footings",unit:"Sqft",boqQty:1500,subRate:150,prevBilled:0},
-    {id:2,work:"Column & Beam",desc:"RCC columns GF to FF, M25 grade",unit:"Nos",boqQty:24,subRate:5500,prevBilled:0},
-    {id:3,work:"Brickwork GF",desc:"9 inch brick wall ground floor",unit:"Sqft",boqQty:2400,subRate:105,prevBilled:0},
-    {id:4,work:"Roof Slab GF",desc:"RCC M25 slab 5 inch thick",unit:"Sqft",boqQty:1500,subRate:120,prevBilled:1500},
-    {id:5,work:"Plaster External",desc:"CM 1:4 external walls",unit:"Sqft",boqQty:3200,subRate:35,prevBilled:0},
-    {id:6,work:"Plaster Internal",desc:"CM 1:5 internal walls all floors",unit:"Sqft",boqQty:5800,subRate:28,prevBilled:0},
-    {id:7,work:"Flooring GF",desc:"Vitrified tiles 60x60 with bedding",unit:"Sqft",boqQty:1500,subRate:55,prevBilled:0},
-    {id:8,work:"Electrical Works",desc:"Point wiring, DB, mains",unit:"Point",boqQty:42,subRate:1400,prevBilled:0},
+    {id:1,work:"Foundation Work",desc:t("finance.pcc_m15_rcc_m25_footings"),unit:"Sqft",boqQty:1500,subRate:150,prevBilled:0},
+    {id:2,work:"Column & Beam",desc:t("finance.rcc_columns_gf_to_ff_m25"),unit:"Nos",boqQty:24,subRate:5500,prevBilled:0},
+    {id:3,work:"Brickwork GF",desc:t("finance.9_inch_brick_wall_ground_floor"),unit:"Sqft",boqQty:2400,subRate:105,prevBilled:0},
+    {id:4,work:"Roof Slab GF",desc:t("finance.rcc_m25_slab_5_inch_thick"),unit:"Sqft",boqQty:1500,subRate:120,prevBilled:1500},
+    {id:5,work:"Plaster External",desc:t("finance.cm_1_4_external_walls"),unit:"Sqft",boqQty:3200,subRate:35,prevBilled:0},
+    {id:6,work:"Plaster Internal",desc:t("finance.cm_1_5_internal_walls_all"),unit:"Sqft",boqQty:5800,subRate:28,prevBilled:0},
+    {id:7,work:"Flooring GF",desc:t("finance.vitrified_tiles_60x60_with_bedding"),unit:"Sqft",boqQty:1500,subRate:55,prevBilled:0},
+    {id:8,work:"Electrical Works",desc:t("finance.point_wiring_db_mains"),unit:"Point",boqQty:42,subRate:1400,prevBilled:0},
   ];
   const [boqSelected,setBoqSelected]=useState({});
   const [boqQty,setBoqQty]=useState({});
@@ -1772,14 +1769,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         </div>
         <div>
           <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{b.work}</div>
-          {prev&&<span style={{fontSize:9,background:T.ambL,color:T.amb,padding:"1px 5px",borderRadius:20,fontWeight:700}}>Previously billed</span>}
+          {prev&&<span style={{fontSize:9,background:T.ambL,color:T.amb,padding:"1px 5px",borderRadius:20,fontWeight:700}}>{t("finance.previously_billed")}</span>}
         </div>
         <div style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.desc}</div>
         <div style={{fontSize:11.5,color:T.t3,textAlign:"right"}}>{b.boqQty.toLocaleString("en-IN")}</div>
         <div style={{fontSize:11,color:T.t3}}>{b.unit}</div>
-        <div style={{fontSize:12,fontWeight:600,color:T.t2,textAlign:"right"}}>
-          Rs.{b.subRate.toLocaleString("en-IN")}
-          <div style={{fontSize:9,color:T.t4,fontWeight:400}}>/{b.unit}</div>
+        <div style={{fontSize:12,fontWeight:600,color:T.t2,textAlign:"right"}}>{t("finance.rs_b", { b: b.subRate.toLocaleString("en-IN") })}<div style={{fontSize:9,color:T.t4,fontWeight:400}}>/{b.unit}</div>
         </div>
         <div>
           {isSel?(
@@ -1819,12 +1814,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         </div>
         <div>
           <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{b.work}</div>
-          {prev&&<span style={{fontSize:9,background:T.ambL,color:T.amb,padding:"1px 5px",borderRadius:20,fontWeight:700}}>Already billed</span>}
+          {prev&&<span style={{fontSize:9,background:T.ambL,color:T.amb,padding:"1px 5px",borderRadius:20,fontWeight:700}}>{t("finance.already_billed")}</span>}
         </div>
         <div style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.desc}</div>
         <div style={{fontSize:11.5,color:T.t3,textAlign:"right"}}>{b.boqQty.toLocaleString("en-IN")}</div>
         <div style={{fontSize:11,color:T.t3}}>{b.unit}</div>
-        <div style={{fontSize:11.5,fontWeight:600,color:T.t2,textAlign:"right"}}>Rs.{b.rate.toLocaleString("en-IN")}</div>
+        <div style={{fontSize:11.5,fontWeight:600,color:T.t2,textAlign:"right"}}>{t("finance.rs_b", { b: b.rate.toLocaleString("en-IN") })}</div>
         <div>
           {isSel?(
             <input type="number"
@@ -1862,8 +1857,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // ── total bar renderer ────────────────────────────────────────
   const TotalBar=({total,c,bg,brd,label})=>(
     <div style={{padding:"7px 16px",background:bg,borderRadius:7,border:`1.5px solid ${brd}`,display:"flex",gap:8,alignItems:"center"}}>
-      <span style={{fontSize:10,fontWeight:600,color:c,textTransform:"uppercase",letterSpacing:".4px"}}>{label||"Total"}</span>
-      <span style={{fontSize:16,fontWeight:800,color:c}}>Rs.{total.toLocaleString("en-IN")}</span>
+      <span style={{fontSize:10,fontWeight:600,color:c,textTransform:"uppercase",letterSpacing:".4px"}}>{label||t("common.total")}</span>
+      <span style={{fontSize:16,fontWeight:800,color:c}}>{t("finance.rs_total", { total: total.toLocaleString("en-IN") })}</span>
     </div>
   );
 
@@ -1885,7 +1880,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:800,color:"white"}}>{type}</div>
             <div style={{fontSize:10.5,color:"rgba(255,255,255,0.7)"}}>
-              {isMaterial?"Qty x Rate = Total per item":isSubcon?"Link with BOQ or enter work items":isInvoice?"Raise invoice — link with BOQ or fresh entry":""}
+              {isMaterial?t("finance.qty_x_rate_total_per_item"):isSubcon?t("finance.link_with_boq_or_enter_work"):isInvoice?t("finance.raise_invoice_link_with_boq_or"):""}
             </div>
           </div>
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"5px 7px",borderRadius:6,display:"flex"}}>
@@ -1910,7 +1905,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   {/* Read-only: the backend assigns MANINV-1, MANINV-2 … per
                       project inside the insert transaction, so anything typed
                       here would be silently replaced. */}
-                  <input value="auto (MANINV-…)" readOnly title="Save karte hi apne aap ban jata hai"
+                  <input value="auto (MANINV-…)" readOnly title={t("finance.save_karte_hi_apne_aap_ban")}
                     style={inp({fontFamily:"monospace",fontSize:12.5,fontWeight:700,background:T.surfaceB,color:T.t4,cursor:"not-allowed"})}/>
                 </div>
                 <div>
@@ -1927,13 +1922,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   {lbl("Client / Billed To *"+lockTag(partyLocked),T.grn)}
                   {partyLocked
                     ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
-                    : <LibrarySelect type="client" value={party} onChange={setParty} placeholder="Select client..." accent={T.grn}/>}
+                    : <LibrarySelect type="client" value={party} onChange={setParty} placeholder={t("finance.select_client")} accent={T.grn}/>}
                 </div>
                 <div>
                   {lbl("Project"+lockTag(projectLocked))}
                   {projectLocked
                     ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"—"}</div>
-                    : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>}
+                    : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder={t("common.select_project")}/>}
                 </div>
               </>
             )}
@@ -1957,20 +1952,20 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   {lbl("Supplier / Party *"+lockTag(partyLocked))}
                   {partyLocked
                     ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
-                    : <LibrarySelect type="supplier" value={party} onChange={setParty} placeholder="Select supplier..."/>}
+                    : <LibrarySelect type="supplier" value={party} onChange={setParty} placeholder={t("finance.select_supplier")}/>}
                 </div>
                 <div>
                   {lbl("Project"+lockTag(projectLocked))}
                   {projectLocked
                     ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"—"}</div>
-                    : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>}
+                    : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder={t("common.select_project")}/>}
                 </div>
                 <div>
                   {lbl(`Payment Due Date — ${partyCreditDays}d credit`)}
                   <input type="date" value={payDueDate} onChange={e=>{setPayDueDate(e.target.value);setPayDueDirty(true);}}
                     style={{...inp(),borderColor:payDueDirty?T.amb:T.b1}} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=payDueDirty?T.amb:T.b1}/>
                   <div style={{fontSize:10,color:payDueDirty?T.amb:T.t4,marginTop:2}}>
-                    {payDueDirty?"Custom — overridden by user":`Auto: bill date + ${partyCreditDays} days credit`}
+                    {payDueDirty?t("finance.custom_overridden_by_user"):`Auto: bill date + ${partyCreditDays} days credit`}
                   </div>
                 </div>
               </>
@@ -1988,13 +1983,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   {lbl("Contractor / Party *"+lockTag(partyLocked))}
                   {partyLocked
                     ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
-                    : <LibrarySelect type="subcon" value={party} onChange={setParty} placeholder="Select contractor..." accent={T.slt}/>}
+                    : <LibrarySelect type="subcon" value={party} onChange={setParty} placeholder={t("finance.select_contractor")} accent={T.slt}/>}
                 </div>
                 <div>
                   {lbl("Project"+lockTag(projectLocked))}
                   {projectLocked
                     ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"—"}</div>
-                    : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>}
+                    : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder={t("common.select_project")}/>}
                 </div>
               </>
             )}
@@ -2009,14 +2004,14 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 </div>
                 <div>
                   {lbl("From Account *",T.red)}
-                  <SearchSelect options={ACCOUNTS_LIST} value={account} onChange={setAccount} placeholder="From..." accent={T.red}/>
+                  <SearchSelect options={ACCOUNTS_LIST} value={account} onChange={setAccount} placeholder={t("finance.from")} accent={T.red}/>
                 </div>
                 <div style={{display:"flex",alignItems:"flex-end",paddingBottom:4,justifyContent:"center"}}>
                   <IcArrow size={18} color={T.t3}/>
                 </div>
                 <div>
                   {lbl("To Account *",T.grn)}
-                  <SearchSelect options={ACCOUNTS_LIST.filter(a=>a!==account)} value={toAccount} onChange={setToAccount} placeholder="To..." accent={T.grn}/>
+                  <SearchSelect options={ACCOUNTS_LIST.filter(a=>a!==account)} value={toAccount} onChange={setToAccount} placeholder={t("finance.to")} accent={T.grn}/>
                 </div>
               </>
             )}
@@ -2035,22 +2030,22 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
                   ) : isSiteExpense ? (
                     <input value={party} onChange={e=>setParty(e.target.value)}
-                      placeholder="e.g. Site supervisor, transport, tea-stall"
+                      placeholder={t("finance.e_g_site_supervisor_transport_tea")}
                       style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                   ) : (type==="Payment Made"||type==="Advance Payment") ? (
                     <SearchSelect options={PAYABLE_LIST} value={party} onChange={setParty}
-                      placeholder="Vendor / Subcon / Staff..."/>
+                      placeholder={t("finance.vendor_subcon_staff")}/>
                   ) : type==="Payment Received" ? (
                     // Inflow can come from a client OR a staff wallet (e.g.
                     // staff reimbursing the company / returning unused cash).
                     // SearchSelect on the merged list — LibrarySelect would
                     // restrict to type="client" and exclude staff.
                     <SearchSelect options={RECEIVABLE_LIST} value={party} onChange={setParty}
-                      placeholder="Client / Staff..."/>
+                      placeholder={t("finance.client_staff")}/>
                   ) : (
                     <LibrarySelect
                       type={isInvoice?"client":isMaterial?"supplier":isSubcon?"subcon":"any-party"}
-                      value={party} onChange={setParty} placeholder="Select party..."/>
+                      value={party} onChange={setParty} placeholder={t("finance.select_party")}/>
                   )}
                 </div>
                 {/* Tender RA bill — only when this party actually has open ones.
@@ -2062,7 +2057,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     <select value={raBillId||""} onChange={e=>setRaBillId(e.target.value?Number(e.target.value):null)}
                       style={{...inp(),cursor:"pointer"}}
                       onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}>
-                      <option value="">— Kisi RA bill se link nahi —</option>
+                      <option value="">{t("finance.kisi_ra_bill_se_link_nahi")}</option>
                       {raBills.map(b=>(
                         <option key={b.id} value={b.id}>
                           {`RA-${b.bill_no} · ${b.tender_no} · Net ₹${Number(b.net_payable).toLocaleString("en-IN")} · Balance ₹${Number(b.balance).toLocaleString("en-IN")}`}
@@ -2079,28 +2074,28 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       locks to "Company / Office". Otherwise editable
                       SearchSelect with "Company / Office" + project list. */}
                   {projectLocked ? (
-                    <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"Company / Office"}</div>
+                    <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||t("finance.company_office")}</div>
                   ) : partyObj?.is_staff===1 ? (
                     <div style={{padding:"7px 9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,color:T.t3,display:"flex",alignItems:"center",gap:6}}>
                       <IcBank size={12} color={T.t4}/>
-                      <span>Company / Office</span>
-                      <span style={{fontSize:10,color:T.t4,marginLeft:"auto"}}>(Wallet ops)</span>
+                      <span>{t("finance.company_office")}</span>
+                      <span style={{fontSize:10,color:T.t4,marginLeft:"auto"}}>{t("finance.wallet_ops")}</span>
                     </div>
                   ) : (
                     <SearchSelect
                       options={["Company / Office", ...PROJECTS_LIST]}
                       value={project || "Company / Office"}
                       onChange={(v)=>setProject(v==="Company / Office"?"":v)}
-                      placeholder="Project..."/>
+                      placeholder={t("finance.project")}/>
                   )}
                 </div>
                 <div>
                   {lbl("Account *",T.red)}
-                  <SearchSelect options={ACCOUNTS_LIST} value={account} onChange={setAccount} placeholder="Account..." accent={T.red}/>
+                  <SearchSelect options={ACCOUNTS_LIST} value={account} onChange={setAccount} placeholder={t("finance.account")} accent={T.red}/>
                 </div>
                 <div>
                   {lbl("MOP")}
-                  <SearchSelect options={MOPS_LIST} value={mop} onChange={setMop} placeholder="Mode..."/>
+                  <SearchSelect options={MOPS_LIST} value={mop} onChange={setMop} placeholder={t("finance.mode")}/>
                 </div>
               </>
             )}
@@ -2128,13 +2123,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   <input type="number" min="0" step="any" inputMode="decimal" value={payAmt}
                     onChange={e=>{const v=e.target.value; if(v===""||Number(v)>=0) setPayAmt(v);}}
                     onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E") e.preventDefault();}}
-                    onWheel={e=>e.currentTarget.blur()} placeholder="Enter amount"
+                    onWheel={e=>e.currentTarget.blur()} placeholder={t("finance.enter_amount")}
                     style={inp({fontSize:15,fontWeight:700,color:T.blu,borderColor:T.blu+"66",borderWidth:"2px"})}
                     onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.blu+"66"}/>
                 </div>
                 <div>
                   {lbl("Reference / Note")}
-                  <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Transfer ref, reason..."
+                  <input value={note} onChange={e=>setNote(e.target.value)} placeholder={t("finance.transfer_ref_reason")}
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 </div>
               </div>
@@ -2146,9 +2141,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           {settlesRef&&isPayment&&(
             <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderLeft:`3px solid ${T.blu}`,borderRadius:7,padding:"9px 12px",marginBottom:10,display:"flex",alignItems:"center",gap:9}}>
               <IcSend size={13} color={T.blu}/>
-              <div style={{flex:1,fontSize:11.5,color:T.t2}}>
-                Settling <b style={{color:T.blu}}>{settlesRef.label}</b> — on save, the source {settlesRef.kind==="pr"?"payment request":"bill"} will be marked paid.
-              </div>
+              <div style={{flex:1,fontSize:11.5,color:T.t2}}><Rich k="finance.settling_label_on_save_the_source" params={{ label: settlesRef.label, settlesRef: settlesRef.kind==="pr"?"payment request":"bill" }} /></div>
             </div>
           )}
 
@@ -2162,13 +2155,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 <input type="number" min="0" step="any" inputMode="decimal" autoFocus value={payAmt}
                   onChange={e=>{const v=e.target.value; if(v===""||Number(v)>=0) setPayAmt(v);}}
                   onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E") e.preventDefault();}}
-                  onWheel={e=>e.currentTarget.blur()} placeholder="Enter amount"
+                  onWheel={e=>e.currentTarget.blur()} placeholder={t("finance.enter_amount")}
                   style={inp({fontSize:15,fontWeight:700,color:tc,borderColor:tc+"66",borderWidth:"2px"})}
                   onFocus={e=>e.target.style.borderColor=tc} onBlur={e=>e.target.style.borderColor=tc+"66"}/>
               </div>
               <div>
                 {lbl("Description / Note")}
-                <input value={note} onChange={e=>setNote(e.target.value)} placeholder="What is this payment for?"
+                <input value={note} onChange={e=>setNote(e.target.value)} placeholder={t("finance.what_is_this_payment_for")}
                   style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
               </div>
             </div>
@@ -2181,7 +2174,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:12,overflow:"hidden"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
                 <span style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
-                  {isPaymentReceived?"Kis invoice ke against":"Kis bill ke against"} — {party} ke {outstanding.length} outstanding
+                  {isPaymentReceived?t("finance.kis_invoice_ke_against"):t("finance.kis_bill_ke_against")} — {party} ke {outstanding.length} outstanding
                 </span>
                 <div style={{display:"flex",gap:4,background:T.b1+"55",borderRadius:6,padding:2}}>
                   {[["auto","Auto (FIFO)"],["manual","Manual"]].map(([m,l])=>(
@@ -2205,12 +2198,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       </span>
                       <div style={{minWidth:0}}>
                         <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                          {isReimb?"On-behalf paid":(it.label||`Bill #${it.target_id}`)}
+                          {isReimb?t("finance.on_behalf_paid"):(it.label||`Bill #${it.target_id}`)}
                           {isReimb&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:T.ind,background:T.indL,padding:"1px 5px",borderRadius:7}}>REIMBURSE</span>}
                         </div>
-                        <div style={{fontSize:10,color:T.t4}}>{dt}{it.project_name?` · ${it.project_name}`:""} · remaining ₹{it.remaining.toLocaleString("en-IN")}</div>
+                        <div style={{fontSize:10,color:T.t4}}>{t("finance.dtit_remaining_it2", { dt, it: it.project_name?` · ${it.project_name}`:"", it2: it.remaining.toLocaleString("en-IN") })}</div>
                       </div>
-                      <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>of ₹{it.amount.toLocaleString("en-IN")}</div>
+                      <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>{t("finance.of_it", { it: it.amount.toLocaleString("en-IN") })}</div>
                       {allocAuto
                         ? <div style={{fontSize:12.5,fontWeight:700,color:on?T.grn:T.t4,textAlign:"right"}}>{on?`₹${alloc.toLocaleString("en-IN")}`:"—"}</div>
                         : <input type="number" min="0" step="any" inputMode="decimal" value={allocPick[it.target_id]||""} placeholder="0"
@@ -2223,10 +2216,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 })}
               </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`}}>
-                <span style={{fontSize:11,color:T.t3}}>Allocated <b style={{color:T.grn}}>₹{allocPreview.allocated.toLocaleString("en-IN")}</b></span>
+                <span style={{fontSize:11,color:T.t3}}>{t("finance.allocated")} <b style={{color:T.grn}}>₹{allocPreview.allocated.toLocaleString("en-IN")}</b></span>
                 {allocPreview.advance>0.5
-                  ? <span style={{fontSize:11,fontWeight:700,color:T.amb}}>Advance / bacha: ₹{allocPreview.advance.toLocaleString("en-IN")}</span>
-                  : <span style={{fontSize:11,color:T.t4}}>poora allocate ho gaya</span>}
+                  ? <span style={{fontSize:11,fontWeight:700,color:T.amb}}>{t("finance.advance_bacha_allocpreview", { allocPreview: allocPreview.advance.toLocaleString("en-IN") })}</span>
+                  : <span style={{fontSize:11,color:T.t4}}>{t("finance.poora_allocate_ho_gaya")}</span>}
               </div>
             </div>
           )}
@@ -2238,26 +2231,23 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
               {/* GRN prefill notice */}
               {prefillGRN&&<div style={{padding:"7px 12px",background:T.grnL,borderBottom:"1px solid "+T.grnM,fontSize:11.5,color:T.grn,display:"flex",gap:6,alignItems:"center"}}>
-                <span style={{fontWeight:700}}>GRN se linked</span> — Material, Qty locked. Rate aur Notes enter karo.
+                <span style={{fontWeight:700}}>{t("finance.grn_se_linked")}</span> {t("finance.material_qty_locked_rate_aur_notes")}
               </div>}
               {/* P1: GRN auto-suggest dropdown (only when modal opened WITHOUT prefill + vendor has unbilled GRNs) */}
               {!prefillGRN&&availableGRNs.length>0&&(
                 <div style={{padding:"9px 12px",background:T.ambL,borderBottom:`1px solid ${T.ambM}`,display:"flex",gap:9,alignItems:"center",flexWrap:"wrap"}}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.amb} strokeWidth="2.2" strokeLinecap="round" style={{flexShrink:0}}><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
                   <div style={{flex:1,minWidth:200}}>
-                    <div style={{fontSize:11.5,fontWeight:700,color:T.amb}}>
-                      {party} ke {projectLocked && project ? `${project} project me ` : ""}
-                      {availableGRNs.length} unbilled GRN {availableGRNs.length===1?"hai":"hain"}
-                    </div>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.amb}}>{t("finance.party_ke_projectlocked_availablegrns_unbilled_grn", { party, projectLocked: projectLocked && project ? `${project} project me ` : "", availableGRNs: availableGRNs.length, availableGRNs2: availableGRNs.length===1?"hai":"hain" })}</div>
                     <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>
                       {projectLocked && project
-                        ? "Sirf is project ke GRNs filter ho rahe hain — bill link karne se duplicate billing avoid hoti hai"
-                        : "Bill ko GRN se link karne se duplicate billing avoid hoti hai"}
+                        ? t("finance.sirf_is_project_ke_grns_filter")
+                        : t("finance.bill_ko_grn_se_link_karne")}
                     </div>
                   </div>
                   <select value={selectedGRNId||""} onChange={e=>pickGRN(e.target.value?parseInt(e.target.value):null)}
                     style={{height:32,padding:"0 9px",borderRadius:6,border:`1.5px solid ${selectedGRNId?T.grn:T.amb}`,background:selectedGRNId?T.grnL:T.surface,fontSize:12,fontWeight:600,color:selectedGRNId?T.grn:T.amb,outline:"none",cursor:"pointer",fontFamily:"inherit",minWidth:200}}>
-                    <option value="">— Direct purchase (no GRN) —</option>
+                    <option value="">{t("finance.direct_purchase_no_grn")}</option>
                     {availableGRNs.map(g=>{
                       const dt=g.received_date?new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
                       const itemCount=(g.items||[]).length;
@@ -2265,7 +2255,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     })}
                   </select>
                   {selectedGRNId&&(
-                    <span style={{fontSize:10.5,fontWeight:700,color:T.grn,padding:"3px 8px",background:T.grnL,borderRadius:12,border:`1px solid ${T.grnM}`}}>✓ Linked</span>
+                    <span style={{fontSize:10.5,fontWeight:700,color:T.grn,padding:"3px 8px",background:T.grnL,borderRadius:12,border:`1px solid ${T.grnM}`}}>{t("finance.linked")}</span>
                   )}
                 </div>
               )}
@@ -2276,16 +2266,14 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 <div style={{margin:"0 0 10px",padding:"10px 12px",background:T.redL,border:`1px solid ${T.redM}`,borderLeft:`3px solid ${T.red}`,borderRadius:7}}>
                   <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
                     <span style={{fontSize:13}}>⚠️</span>
-                    <span style={{fontSize:11.5,fontWeight:700,color:T.red}}>
-                      Is delivery me {grnIssueList.length} issue tha — bill par dikhana hai?
-                    </span>
+                    <span style={{fontSize:11.5,fontWeight:700,color:T.red}}>{t("finance.is_delivery_me_grnissuelist_issue_tha", { grnIssueList: grnIssueList.length })}</span>
                     <div style={{flex:1}}/>
                     <span style={{fontSize:10,color:T.t3}}>
                       {flaggedIssues.size} of {grnIssueList.length} ticked
                     </span>
                   </div>
                   <div style={{fontSize:10.5,color:T.t3,marginBottom:8}}>
-                    Ticked issue bill ke saath judega — baad me bill kholne par dikhega ki deduction kis wajah se hua. Untick karoge to issue GRN par khula rahega, bas is bill par nahi aayega.
+                   {t("finance.ticked_issue_bill_ke_saath_judega")}
                   </div>
                   {grnIssueList.map(iss=>{
                     const on=flaggedIssues.has(iss.id);
@@ -2306,7 +2294,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                         </span>
                         {iss.photo_url&&(
                           <a href={iss.photo_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}
-                            title="Photo proof kholo" style={{flexShrink:0,textDecoration:"none",fontSize:12}}>📎</a>
+                            title={t("finance.photo_proof_kholo")} style={{flexShrink:0,textDecoration:"none",fontSize:12}}>📎</a>
                         )}
                       </label>
                     );
@@ -2321,23 +2309,23 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               {rows.map((row,idx)=>(
                 <div key={row.id} style={{background:idx%2===0?T.surface:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
                 <div style={{display:"grid",gridTemplateColumns:colTpl,gap:7,padding:"7px 12px",alignItems:"center"}}>
-                  <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}{row.fromGRN&&<span title="Locked from GRN" style={{marginLeft:3,fontSize:9}}>🔒</span>}</span>
+                  <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}{row.fromGRN&&<span title={t("finance.locked_from_grn")} style={{marginLeft:3,fontSize:9}}>🔒</span>}</span>
                   {/* Material — locked only for rows from GRN, new added rows editable */}
                   {row.fromGRN
                     ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.material||"—"}</div>
-                    :<LibrarySelect type="material" inputRef={el=>{if(el) matRowRefs.current[row.id]=el;}} value={row.material} onChange={v=>updRow(row.id,"material",v)} placeholder="Search material..." compact={true}/>
+                    :<LibrarySelect type="material" inputRef={el=>{if(el) matRowRefs.current[row.id]=el;}} value={row.material} onChange={v=>updRow(row.id,"material",v)} placeholder={t("common.search_material")} compact={true}/>
                   }
                   <SearchSelect options={MAT_HEADS} value={row.head} onChange={v=>updRow(row.id,"head",v)} compact={true}/>
-                  <input data-field="desc" value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder="Grade, spec, brand..."
+                  <input data-field="desc" value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder={t("finance.grade_spec_brand")}
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                   {/* Qty — locked only for GRN rows; derived (dashed) when Rate+Total were typed.
                       On dual-unit rows this column is the RECEIVED measure, not the billing
                       basis — the strip below carries the qty that Rate/Total multiply. */}
                   {row.fromGRN
-                    ?<div title={row.altOn?"Received qty — bill neeche wali billing unit par ban raha hai":undefined}
+                    ?<div title={row.altOn?t("finance.received_qty_bill_neeche_wali_billing"):undefined}
                       style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:row.altOn?T.t3:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"flex-end"}}>{row.qty}</div>
                     :<input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0"
-                      title={row.altOn?"Received qty — bill neeche wali billing unit par ban raha hai":(row._d==="qty"?"Auto: Total ÷ Rate — type karke fix kar sakte ho":(row._pick==="qty"?"Selected — Total adjust karoge to Qty badlega":undefined))}
+                      title={row.altOn?t("finance.received_qty_bill_neeche_wali_billing"):(row._d==="qty"?t("finance.auto_total_rate_type_karke_fix"):(row._pick==="qty"?t("finance.selected_total_adjust_karoge_to_qty"):undefined))}
                       style={inp(row._d==="qty"
                         ?{textAlign:"right",borderStyle:"dashed",background:T.surfaceB,color:T.t2}
                         :row._pick==="qty"?{textAlign:"right",background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right"})}
@@ -2348,18 +2336,18 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     const isLocked=row.fromGRN||!!row.material;
                     const u=lib?.unit||row.unit||"—";
                     return isLocked
-                      ?<div title={row.fromGRN?"Locked from GRN":"Locked from Library — change in Library"} style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11.5,color:T.t2,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"center",gap:3}}><span style={{fontSize:9}}>🔒</span>{u}</div>
+                      ?<div title={row.fromGRN?t("finance.locked_from_grn"):t("finance.locked_from_library_change_in_library")} style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11.5,color:T.t2,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"center",gap:3}}><span style={{fontSize:9}}>🔒</span>{u}</div>
                       :<SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>;
                   })()}
                   <input type="number" value={row.rate} onChange={e=>updRow(row.id,"rate",e.target.value)} placeholder="0"
-                    title={row._d==="rate"?(lineApprox(row)?"Auto: Total ÷ Qty (≈ approx — bill amount Total se hi banega)":"Auto: Total ÷ Qty"):(row._pick==="rate"?"Selected — Total adjust karoge to Rate badlega":undefined)}
+                    title={row._d==="rate"?(lineApprox(row)?t("finance.auto_total_qty_approx_bill_amount"):t("finance.auto_total_qty")):(row._pick==="rate"?t("finance.selected_total_adjust_karoge_to_rate"):undefined)}
                     style={inp(row._d==="rate"
                       ?{textAlign:"right",borderStyle:"dashed",borderColor:T.amb,background:T.surfaceB,color:T.t2}
                       :row._pick==="rate"?{textAlign:"right",borderColor:T.amb,background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right",borderColor:T.amb,background:T.ambL})}
                     onFocus={e=>{e.target.style.borderColor=T.amb;updPick(row.id,"rate");}} onBlur={e=>e.target.style.borderColor=T.amb}
                     onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addRow();}}}/>
                   <input type="number" value={row.total} onChange={e=>updRow(row.id,"total",e.target.value)} placeholder="0"
-                    title={row._d==="total"?"Auto: Qty × Rate — bill ka final total yahin type bhi kar sakte ho":"Entered total — yahi bill amount banega"}
+                    title={row._d==="total"?t("finance.auto_qty_rate_bill_ka_final"):t("finance.entered_total_yahi_bill_amount_banega")}
                     style={inp(row._d==="total"
                       ?{textAlign:"right",fontWeight:700,borderStyle:"dashed",background:T.surfaceB,color:Number(row.total)>0?T.grn:T.t4}
                       :{textAlign:"right",fontWeight:700,borderColor:T.grnM,background:T.grnL,color:T.grn})}
@@ -2377,15 +2365,15 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.surface,border:`1.5px dashed ${T.b2}`,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.color=T.blu;}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.t3;}}>
-                  <IcAdd size={12} color="currentColor"/> Add Row
+                  <IcAdd size={12} color="currentColor"/> {t("finance.add_row")}
                 </button>
                 <span style={{fontSize:10.5,color:T.t4}}>{rows.length} item{rows.length>1?"s":""}</span>
                 <div style={{flex:1}}/>
-                <TotalBar total={grandTotal} c={T.grn} bg={T.grnL} brd={T.grnM} label="Grand Total"/>
+                <TotalBar total={grandTotal} c={T.grn} bg={T.grnL} brd={T.grnM} label={t("common.grand_total")}/>
               </div>
               <div style={{padding:"8px 12px 11px",borderTop:`1px solid ${T.b1}`}}>
                 {lbl("Remark / Note (optional)")}
-                <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Any additional remarks..."
+                <input value={note} onChange={e=>setNote(e.target.value)} placeholder={t("finance.any_additional_remarks")}
                   style={{...inp(),marginTop:3}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
               </div>
@@ -2411,7 +2399,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   <div style={{padding:"9px 12px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,display:"flex",alignItems:"center",gap:12}}>
                     <span style={{fontSize:11,color:T.t3}}>{Object.values(subBoqSel).filter(Boolean).length} item{Object.values(subBoqSel).filter(Boolean).length!==1?"s":""} selected</span>
                     <div style={{flex:1}}/>
-                    <TotalBar total={subBoqTotal} c={T.slt} bg={T.sltL} brd={T.b2} label="Bill Total"/>
+                    <TotalBar total={subBoqTotal} c={T.slt} bg={T.sltL} brd={T.b2} label={t("finance.bill_total")}/>
                   </div>
                 </div>
               )}
@@ -2429,26 +2417,26 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       <SearchSelect
                         inputRef={el=>{if(el) matRowRefs.current[row.id]=el;}}
                         options={WORK_TYPES} value={row.material} onChange={v=>updRow(row.id,"material",v)}
-                        compact={true} accent={T.slt} placeholder="Work type..."/>
+                        compact={true} accent={T.slt} placeholder={t("finance.work_type")}/>
                       <SearchSelect options={MAT_HEADS} value={row.head} onChange={v=>updRow(row.id,"head",v)} compact={true}/>
-                      <input value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder="Area, location, floor..."
+                      <input value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder={t("finance.area_location_floor")}
                         style={inp()} onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
                       <input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0"
-                        title={row._d==="qty"?"Auto: Total ÷ Rate — type karke fix kar sakte ho":(row._pick==="qty"?"Selected — Total adjust karoge to Qty badlega":undefined)}
+                        title={row._d==="qty"?t("finance.auto_total_rate_type_karke_fix"):(row._pick==="qty"?t("finance.selected_total_adjust_karoge_to_qty"):undefined)}
                         style={inp(row._d==="qty"
                           ?{textAlign:"right",borderStyle:"dashed",background:T.surfaceB,color:T.t2}
                           :row._pick==="qty"?{textAlign:"right",background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right"})}
                         onFocus={e=>{e.target.style.borderColor=T.slt;updPick(row.id,"qty");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
                       <SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>
                       <input type="number" value={row.rate} onChange={e=>updRow(row.id,"rate",e.target.value)} placeholder="0"
-                        title={row._d==="rate"?"Auto: Total ÷ Qty":(row._pick==="rate"?"Selected — Total adjust karoge to Rate badlega":undefined)}
+                        title={row._d==="rate"?t("finance.auto_total_qty"):(row._pick==="rate"?t("finance.selected_total_adjust_karoge_to_rate"):undefined)}
                         style={inp(row._d==="rate"
                           ?{textAlign:"right",borderStyle:"dashed",background:T.surfaceB,color:T.t2}
                           :row._pick==="rate"?{textAlign:"right",background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right"})}
                         onFocus={e=>{e.target.style.borderColor=T.slt;updPick(row.id,"rate");}} onBlur={e=>e.target.style.borderColor=T.b1}
                         onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addRow();}}}/>
                       <input type="number" value={row.total} onChange={e=>updRow(row.id,"total",e.target.value)} placeholder="0"
-                        title={row._d==="total"?"Auto: Qty × Rate — final total yahin type bhi kar sakte ho":"Entered total — yahi bill amount banega"}
+                        title={row._d==="total"?t("finance.auto_qty_rate_final_total_yahin"):t("finance.entered_total_yahi_bill_amount_banega")}
                         style={inp(row._d==="total"
                           ?{textAlign:"right",fontWeight:700,borderStyle:"dashed",background:T.surfaceB,color:Number(row.total)>0?T.slt:T.t4}
                           :{textAlign:"right",fontWeight:700,borderColor:T.b2,background:T.sltL,color:T.slt})}
@@ -2464,11 +2452,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.surface,border:`1.5px dashed ${T.b2}`,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor=T.slt;e.currentTarget.style.color=T.slt;}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.t3;}}>
-                      <IcAdd size={12} color="currentColor"/> Add Row
+                      <IcAdd size={12} color="currentColor"/> {t("finance.add_row")}
                     </button>
                     <span style={{fontSize:10.5,color:T.t4}}>{rows.length} item{rows.length>1?"s":""}</span>
                     <div style={{flex:1}}/>
-                    <TotalBar total={grandTotal} c={T.slt} bg={T.sltL} brd={T.b2} label="Bill Total"/>
+                    <TotalBar total={grandTotal} c={T.slt} bg={T.sltL} brd={T.b2} label={t("finance.bill_total")}/>
                   </div>
                 </div>
               )}
@@ -2476,7 +2464,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               {/* Remark */}
               <div style={{marginBottom:12}}>
                 {lbl("Remark / Note (optional)")}
-                <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Any remarks..."
+                <input value={note} onChange={e=>setNote(e.target.value)} placeholder={t("finance.any_remarks")}
                   style={{...inp(),marginTop:3}}
                   onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
               </div>
@@ -2492,11 +2480,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     {payOutLinked&&<IcChk size={12} color="white"/>}
                   </div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:payOutLinked?T.slt:T.t2}}>Payment Made to Contractor</div>
-                    <div style={{fontSize:10.5,color:T.t4}}>Mark payment as done at the same time as this bill</div>
+                    <div style={{fontSize:12.5,fontWeight:700,color:payOutLinked?T.slt:T.t2}}>{t("finance.payment_made_to_contractor")}</div>
+                    <div style={{fontSize:10.5,color:T.t4}}>{t("finance.mark_payment_as_done_at_the")}</div>
                   </div>
                   {payOutLinked&&subTotal>0&&(
-                    <span style={{fontSize:12,fontWeight:700,color:T.slt}}>Rs.{subTotal.toLocaleString("en-IN")}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:T.slt}}>{t("finance.rs_subtotal", { subTotal: subTotal.toLocaleString("en-IN") })}</span>
                   )}
                 </button>
                 {payOutLinked&&(
@@ -2508,7 +2496,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     </div>
                     <div>
                       {lbl("Description")}
-                      <input value={payOutDesc} onChange={e=>setPayOutDesc(e.target.value)} placeholder="e.g. March work payment..."
+                      <input value={payOutDesc} onChange={e=>setPayOutDesc(e.target.value)} placeholder={t("finance.e_g_march_work_payment")}
                         style={inp()} onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
                     </div>
                     <div>
@@ -2519,11 +2507,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     </div>
                     <div>
                       {lbl("Account *",T.red)}
-                      <SearchSelect options={ACCOUNTS_LIST} value={payOutAcc} onChange={setPayOutAcc} placeholder="Account..." accent={T.red}/>
+                      <SearchSelect options={ACCOUNTS_LIST} value={payOutAcc} onChange={setPayOutAcc} placeholder={t("finance.account")} accent={T.red}/>
                     </div>
                     <div>
                       {lbl("MOP")}
-                      <SearchSelect options={MOPS_LIST} value={payOutMop} onChange={setPayOutMop} placeholder="Mode..."/>
+                      <SearchSelect options={MOPS_LIST} value={payOutMop} onChange={setPayOutMop} placeholder={t("finance.mode")}/>
                     </div>
                   </div>
                 )}
@@ -2546,8 +2534,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               <ModeToggle mode="fresh" setMode={()=>{}} c={T.grn}
                 opts={[["fresh","Fresh Invoice","Enter work items manually"]]}/>
               <div style={{fontSize:11,color:T.t4,margin:"-2px 0 8px",lineHeight:1.5}}>
-                BOQ / milestone ke hisaab se bill karna ho to project ke <b>Estimate</b> tab se karein —
-                wahan pichhla billed qty aur over-billing dono track hote hain.
+               {t("finance.boq_milestone_ke_hisaab_se_bill")} <b>{t("common.estimate")}</b> {t("finance.tab_se_karein_wahan_pichhla_billed")}
               </div>
 
               {invMode==="boq"&&(
@@ -2558,15 +2545,15 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     ))}
                   </div>
                   {realBoqItems === null && projectId
-                    ? <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:13}}>Loading BOQ items…</div>
+                    ? <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:13}}>{t("finance.loading_boq_items")}</div>
                     : BOQ_ITEMS.length === 0
-                      ? <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:13}}>No BOQ items found for this project.</div>
+                      ? <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:13}}>{t("finance.no_boq_items_found_for_this")}</div>
                       : BOQ_ITEMS.map(b=><BoqRow key={b.id} b={b}/>)
                   }
                   <div style={{padding:"9px 12px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,display:"flex",alignItems:"center",gap:12}}>
                     <span style={{fontSize:11,color:T.t3}}>{Object.values(boqSelected).filter(Boolean).length} item{Object.values(boqSelected).filter(Boolean).length!==1?"s":""} selected</span>
                     <div style={{flex:1}}/>
-                    <TotalBar total={boqGrandTotal} c={T.grn} bg={T.grnL} brd={T.grnM} label="Invoice Total"/>
+                    <TotalBar total={boqGrandTotal} c={T.grn} bg={T.grnL} brd={T.grnM} label={t("finance.invoice_total")}/>
                   </div>
                 </div>
               )}
@@ -2582,26 +2569,26 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     <div key={row.id} style={{display:"grid",gridTemplateColumns:invColTpl,gap:7,padding:"7px 12px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:idx%2===0?T.surface:T.surfaceB}}>
                       <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}</span>
                       <input ref={el=>{if(el) invRowRefs.current[row.id]=el;}}
-                        value={row.work} onChange={e=>updInvRow(row.id,"work",e.target.value)} placeholder="e.g. Foundation Work"
+                        value={row.work} onChange={e=>updInvRow(row.id,"work",e.target.value)} placeholder={t("finance.e_g_foundation_work")}
                         style={inp()} onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                      <input value={row.desc} onChange={e=>updInvRow(row.id,"desc",e.target.value)} placeholder="Scope, location..."
+                      <input value={row.desc} onChange={e=>updInvRow(row.id,"desc",e.target.value)} placeholder={t("finance.scope_location")}
                         style={inp()} onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
                       <input type="number" value={row.qty} onChange={e=>updInvRow(row.id,"qty",e.target.value)} placeholder="0"
-                        title={row._d==="qty"?"Auto: Total ÷ Rate — type karke fix kar sakte ho":(row._pick==="qty"?"Selected — Total adjust karoge to Qty badlega":undefined)}
+                        title={row._d==="qty"?t("finance.auto_total_rate_type_karke_fix"):(row._pick==="qty"?t("finance.selected_total_adjust_karoge_to_qty"):undefined)}
                         style={inp(row._d==="qty"
                           ?{textAlign:"right",borderStyle:"dashed",background:T.surfaceB,color:T.t2}
                           :row._pick==="qty"?{textAlign:"right",background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right"})}
                         onFocus={e=>{e.target.style.borderColor=T.grn;updInvPick(row.id,"qty");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
                       <SearchSelect options={INV_UNITS} value={row.unit} onChange={v=>updInvRow(row.id,"unit",v)} compact={true} accent={T.grn}/>
                       <input type="number" value={row.rate} onChange={e=>updInvRow(row.id,"rate",e.target.value)} placeholder="0"
-                        title={row._d==="rate"?"Auto: Total ÷ Qty":(row._pick==="rate"?"Selected — Total adjust karoge to Rate badlega":undefined)}
+                        title={row._d==="rate"?t("finance.auto_total_qty"):(row._pick==="rate"?t("finance.selected_total_adjust_karoge_to_rate"):undefined)}
                         style={inp(row._d==="rate"
                           ?{textAlign:"right",borderStyle:"dashed",background:T.surfaceB,color:T.t2}
                           :row._pick==="rate"?{textAlign:"right",background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right"})}
                         onFocus={e=>{e.target.style.borderColor=T.grn;updInvPick(row.id,"rate");}} onBlur={e=>e.target.style.borderColor=T.b1}
                         onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addInvRow();}}}/>
                       <input type="number" value={row.total} onChange={e=>updInvRow(row.id,"total",e.target.value)} placeholder="0"
-                        title={row._d==="total"?"Auto: Qty × Rate — final total yahin type bhi kar sakte ho":"Entered total — yahi invoice amount banega"}
+                        title={row._d==="total"?t("finance.auto_qty_rate_final_total_yahin"):t("finance.entered_total_yahi_invoice_amount_banega")}
                         style={inp(row._d==="total"
                           ?{textAlign:"right",fontWeight:700,borderStyle:"dashed",background:T.surfaceB,color:Number(row.total)>0?T.grn:T.t4}
                           :{textAlign:"right",fontWeight:700,borderColor:T.grnM,background:T.grnL,color:T.grn})}
@@ -2617,11 +2604,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.surface,border:`1.5px dashed ${T.b2}`,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor=T.grn;e.currentTarget.style.color=T.grn;}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.t3;}}>
-                      <IcAdd size={12} color="currentColor"/> Add Work Item
+                      <IcAdd size={12} color="currentColor"/> {t("finance.add_work_item")}
                     </button>
                     <span style={{fontSize:10.5,color:T.t4}}>{invRows.length} item{invRows.length>1?"s":""}</span>
                     <div style={{flex:1}}/>
-                    <TotalBar total={invFreshTotal} c={T.grn} bg={T.grnL} brd={T.grnM} label="Invoice Total"/>
+                    <TotalBar total={invFreshTotal} c={T.grn} bg={T.grnL} brd={T.grnM} label={t("finance.invoice_total")}/>
                   </div>
                 </div>
               )}
@@ -2629,7 +2616,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               {/* Note */}
               <div style={{marginBottom:12}}>
                 {lbl("Note / Terms (optional)")}
-                <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Payment terms, notes for client..."
+                <input value={note} onChange={e=>setNote(e.target.value)} placeholder={t("finance.payment_terms_notes_for_client")}
                   style={{...inp(),marginTop:3}}
                   onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
               </div>
@@ -2645,11 +2632,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     {payInLinked&&<IcChk size={12} color="white"/>}
                   </div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:payInLinked?T.grn:T.t2}}>Payment Received at Same Time</div>
-                    <div style={{fontSize:10.5,color:T.t4}}>Client paid immediately — record payment along with this invoice</div>
+                    <div style={{fontSize:12.5,fontWeight:700,color:payInLinked?T.grn:T.t2}}>{t("finance.payment_received_at_same_time")}</div>
+                    <div style={{fontSize:10.5,color:T.t4}}>{t("finance.client_paid_immediately_record_payment_along")}</div>
                   </div>
                   {payInLinked&&invTotal>0&&(
-                    <span style={{fontSize:12,fontWeight:700,color:T.grn}}>Rs.{invTotal.toLocaleString("en-IN")}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:T.grn}}>{t("finance.rs_invtotal", { invTotal: invTotal.toLocaleString("en-IN") })}</span>
                   )}
                 </button>
                 {payInLinked&&(
@@ -2667,11 +2654,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     </div>
                     <div>
                       {lbl("Account *",T.red)}
-                      <SearchSelect options={ACCOUNTS_LIST} value={payInAcc} onChange={setPayInAcc} placeholder="Account..." accent={T.red}/>
+                      <SearchSelect options={ACCOUNTS_LIST} value={payInAcc} onChange={setPayInAcc} placeholder={t("finance.account")} accent={T.red}/>
                     </div>
                     <div>
                       {lbl("MOP")}
-                      <SearchSelect options={MOPS_LIST} value={payInMop} onChange={setPayInMop} placeholder="Mode..."/>
+                      <SearchSelect options={MOPS_LIST} value={payInMop} onChange={setPayInMop} placeholder={t("finance.mode")}/>
                     </div>
                   </div>
                 )}
@@ -2683,15 +2670,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         {/* ── Footer ── */}
         <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,background:T.surfaceB,flexShrink:0,alignItems:"center"}}>
           <div style={{flex:1,fontSize:13,fontWeight:700}}>
-            {isMaterial&&grandTotal>0&&<span style={{color:T.grn}}>Rs.{grandTotal.toLocaleString("en-IN")} · {rows.filter(r=>r.total>0).length} item{rows.filter(r=>r.total>0).length!==1?"s":""}</span>}
-            {isSubcon&&<span style={{color:T.slt}}>Rs.{subTotal.toLocaleString("en-IN")}
-              {payOutLinked?<span style={{color:T.t4,fontWeight:400,fontSize:11}}> · Payment out: Rs.{Number(payOutAmt||0).toLocaleString("en-IN")}</span>:null}
+            {isMaterial&&grandTotal>0&&<span style={{color:T.grn}}>{t("finance.rs_grandtotal_rows_itemrows2", { grandTotal: grandTotal.toLocaleString("en-IN"), rows: rows.filter(r=>r.total>0).length, rows2: rows.filter(r=>r.total>0).length!==1?"s":"" })}</span>}
+            {isSubcon&&<span style={{color:T.slt}}>{t("finance.rs_subtotal", { subTotal: subTotal.toLocaleString("en-IN") })}{payOutLinked?<span style={{color:T.t4,fontWeight:400,fontSize:11}}>{t("finance.payment_out_rs_number", { Number: Number(payOutAmt||0).toLocaleString("en-IN") })}</span>:null}
             </span>}
-            {isInvoice&&invTotal>0&&<span style={{color:T.grn}}>{invoiceNo} · Rs.{invTotal.toLocaleString("en-IN")}
-              {payInLinked?<span style={{color:T.t4,fontWeight:400,fontSize:11}}> · Received: Rs.{Number(payInAmt||0).toLocaleString("en-IN")}</span>:null}
+            {isInvoice&&invTotal>0&&<span style={{color:T.grn}}>{t("finance.invoiceno_rs_invtotal", { invoiceNo, invTotal: invTotal.toLocaleString("en-IN") })}{payInLinked?<span style={{color:T.t4,fontWeight:400,fontSize:11}}>{t("finance.received_rs_number", { Number: Number(payInAmt||0).toLocaleString("en-IN") })}</span>:null}
             </span>}
-            {isPayment&&payAmt&&<span style={{color:tc}}>Rs.{Number(payAmt).toLocaleString("en-IN")}{type==="Payment Received"?" received":type==="Payment Made"?" paid out":""}</span>}
-            {isBankTransfer&&payAmt&&<span style={{color:T.blu}}>Rs.{Number(payAmt).toLocaleString("en-IN")} — {account} → {toAccount}</span>}
+            {isPayment&&payAmt&&<span style={{color:tc}}>{t("finance.rs_numbertype", { Number: Number(payAmt).toLocaleString("en-IN"), type: type==="Payment Received"?" received":type==="Payment Made"?" paid out":"" })}</span>}
+            {isBankTransfer&&payAmt&&<span style={{color:T.blu}}>{t("finance.rs_number_account_toaccount", { Number: Number(payAmt).toLocaleString("en-IN"), account, toAccount })}</span>}
           </div>
           {/* Error message — supports multi-line for backend code-based errors */}
           {saveErr&&(
@@ -2701,24 +2686,24 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               <span onClick={()=>setSaveErr("")} style={{cursor:"pointer",opacity:0.6,fontSize:13,flexShrink:0}}>✕</span>
             </div>
           )}
-          <button onClick={onClose} style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+          <button onClick={onClose} style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
           {!saved?(
             <button onClick={handleSave} disabled={savingTxn}
               style={{padding:"8px 22px",borderRadius:7,background:savingTxn?"#9CA3AF":tc,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:savingTxn?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6,opacity:saveErr?0.85:1}}>
               {savingTxn ? (
                 <>
                   <span style={{width:12,height:12,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"white",borderRadius:"50%",display:"inline-block",animation:"spin 0.6s linear infinite"}}/>
-                  Saving...
+                 {t("common.saving")}
                 </>
               ) : (
                 <>
-                  <IcChk size={14} color="white"/> Save Entry
+                  <IcChk size={14} color="white"/> {t("finance.save_entry")}
                 </>
               )}
             </button>
           ):(
             <div style={{padding:"8px 22px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
-              <IcChk size={14} color={T.grn}/> Saved!
+              <IcChk size={14} color={T.grn}/> {t("finance.saved")}
             </div>
           )}
         </div>
@@ -2761,15 +2746,15 @@ function AddPartyModal({onClose,onAdd}){
           <IcAdd size={16} color="white"/>
         </div>
         <div style={{flex:1}}>
-          <div style={{fontSize:14,fontWeight:800,color:"white"}}>Add New Party</div>
-          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.7)"}}>Saved to master party library</div>
+          <div style={{fontSize:14,fontWeight:800,color:"white"}}>{t("finance.add_new_party")}</div>
+          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.7)"}}>{t("finance.saved_to_master_party_library")}</div>
         </div>
         <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"5px 7px",borderRadius:6,display:"flex"}}><IcX size={14}/></button>
       </div>
       <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:11}}>
         <div>
           {lbl("Party / Company Name *")}
-          <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Vendor Name"
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder={t("finance.e_g_vendor_name")}
             style={inp({fontSize:13,fontWeight:600})}
             onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}
             autoFocus/>
@@ -2796,25 +2781,24 @@ function AddPartyModal({onClose,onAdd}){
           </div>
           <div>
             {lbl("Phone / Contact")}
-            <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Mobile number"
+            <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder={t("finance.mobile_number")}
               style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
           </div>
         </div>
         <div style={{background:T.bluL,borderRadius:8,padding:"8px 11px",fontSize:11,color:T.blu,border:`1px solid ${T.bluM}`,display:"flex",gap:6,alignItems:"center"}}>
           <IcChk size={13} color={T.blu}/>
-          Party will be added to the master library and available in all transaction dropdowns.
+         {t("finance.party_will_be_added_to_the")}
         </div>
       </div>
       <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,background:T.surfaceB,borderRadius:"0 0 12px 12px"}}>
-        <button onClick={onClose} style={{flex:1,padding:"8px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+        <button onClick={onClose} style={{flex:1,padding:"8px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
         {!saved?(
           <button onClick={handleSave} style={{flex:2,padding:"8px",borderRadius:7,background:!name.trim()?T.b1:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:!name.trim()?"not-allowed":"pointer"}}>
-            Save to Library
+           {t("finance.save_to_library")}
           </button>
         ):(
           <div style={{flex:2,padding:"8px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            <IcChk size={14} color={T.grn}/> {name} Added!
-          </div>
+            <IcChk size={14} color={T.grn}/>{t("finance.name_added", { name })}</div>
         )}
       </div>
     </div>
@@ -2846,7 +2830,7 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
   const savingRef=useRef(false);
   const handleSave=async()=>{
     if(savingRef.current) return; // hard guard against double-fire
-    if(!party||!purpose||!amount){setErr("Party, Purpose & Amount are required");return;}
+    if(!party||!purpose||!amount){setErr(t("finance.party_purpose_amount_are_required"));return;}
     savingRef.current=true;
     setSaving(true);setErr("");
     try{
@@ -2874,8 +2858,8 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
         {/* Header */}
         <div style={{padding:"14px 20px",background:T.blu,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:"white"}}>New Payment Request</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginTop:2}}>Request will be sent for admin approval</div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>{t("payment_request.new_payment_request")}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginTop:2}}>{t("finance.request_will_be_sent_for_admin")}</div>
           </div>
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",borderRadius:6,cursor:"pointer",color:"white",padding:"4px 8px",fontSize:13}}>✕</button>
         </div>
@@ -2884,29 +2868,29 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
           {/* Party + Project */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Party / Vendor *</label>
-              <LibrarySelect type="any-party" value={party} onChange={setParty} placeholder="Select party..." accent={T.blu} compact/>
+              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>{t("finance.party_vendor")}</label>
+              <LibrarySelect type="any-party" value={party} onChange={setParty} placeholder={t("finance.select_party")} accent={T.blu} compact/>
             </div>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Project / Site</label>
-              <SearchSelect options={PROJECTS} value={project} onChange={setProject} placeholder="Select project..." accent={T.blu} compact/>
+              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>{t("finance.project_site")}</label>
+              <SearchSelect options={PROJECTS} value={project} onChange={setProject} placeholder={t("common.select_project")} accent={T.blu} compact/>
             </div>
           </div>
           {/* Purpose */}
           <div>
-            <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Purpose *</label>
-            <input value={purpose} onChange={e=>setPurpose(e.target.value)} placeholder="What is this payment for? e.g. TMT Steel purchase for slab casting" style={{...inp}}
+            <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>{t("finance.purpose")}</label>
+            <input value={purpose} onChange={e=>setPurpose(e.target.value)} placeholder={t("finance.what_is_this_payment_for_e")} style={{...inp}}
               onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
           </div>
           {/* Amount + Priority */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Amount (₹) *</label>
+              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>{t("common.amount")}</label>
               <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0" style={{...inp}}
                 onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
             </div>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Priority Level</label>
+              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>{t("finance.priority_level")}</label>
               <div style={{display:"flex",gap:6,marginTop:2}}>
                 {PRIORITIES.map(p=>{
                   const pc=PRIC[p];const sel=priority===p;
@@ -2922,8 +2906,8 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
           </div>
           {/* Note */}
           <div>
-            <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Additional Note (Optional)</label>
-            <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Any additional details, urgency reason, specifications..."
+            <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>{t("finance.additional_note_optional")}</label>
+            <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder={t("finance.any_additional_details_urgency_reason_specifications")}
               style={{width:"100%",height:70,padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface,color:T.t1,resize:"none"}}
               onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
           </div>
@@ -2932,10 +2916,10 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
         </div>
         {/* Footer */}
         <div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.surfaceB}}>
-          <button onClick={onClose} style={{padding:"8px 18px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+          <button onClick={onClose} style={{padding:"8px 18px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
           <button onClick={handleSave} disabled={saving}
             style={{padding:"8px 22px",borderRadius:7,background:saving?T.t4:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6}}>
-            {saving?"Submitting...":"Submit Request"}
+            {saving?t("common.submitting_2"):t("common.submit_request")}
           </button>
         </div>
       </div>
@@ -2957,20 +2941,20 @@ function SendToStaffModal({staff,onClose,onDone}){
   const [note,setNote]=useState("");
   const [busy,setBusy]=useState(false);
   const BUCKETS=[
-    {id:"salary", l:"Salary", sub:due>0?`Due ₹${fmtN(due)}`:"Koi due nahi", c:T.red},
-    {id:"imprest",l:"Imprest",sub:"Wallet credit (kharche ke liye)", c:T.blu},
-    {id:"petrol", l:"Petrol", sub:"Petrol allowance credit", c:T.amb},
+    {id:"salary", l:t("finance.salary"), sub:due>0?`Due ₹${fmtN(due)}`:"Koi due nahi", c:T.red},
+    {id:"imprest",l:t("finance.imprest"),sub:t("finance.wallet_credit_kharche_ke_liye"), c:T.blu},
+    {id:"petrol", l:t("finance.petrol"), sub:t("finance.petrol_allowance_credit"), c:T.amb},
   ];
   const doSend=async()=>{
     const amt=Number(amount);
-    if(!amt||amt<=0){window.alert("Amount sahi bharo");return;}
+    if(!amt||amt<=0){window.alert(t("finance.amount_sahi_bharo"));return;}
     if(bucket==="salary"&&amt>due){window.alert(`Salary due ₹${fmtN(due)} hi hai — usse zyada salary bucket me nahi ja sakta`);return;}
     setBusy(true);
     try{
       const r=await api.post("/wallets/send-to-staff",{staff_party_id:staff.id,amount:amt,bucket,payment_method:method,tx_ref:txRef||undefined,note:note||undefined});
       if(r&&r.success){ window.alert(bucket==="salary"?"Salary settle ho gayi ✓":"Wallet credit ho gaya ✓"); onDone(); }
       else window.alert((r&&r.message)||"Send failed");
-    }catch(e){ window.alert("Send failed"); }
+    }catch(e){ window.alert(t("finance.send_failed")); }
     setBusy(false);
   };
   return(
@@ -2984,30 +2968,30 @@ function SendToStaffModal({staff,onClose,onDone}){
           </button>
         ))}
       </div>
-      {bucket==="salary"&&due<=0&&<div style={{fontSize:11,color:T.amb,background:T.ambL,padding:"7px 10px",borderRadius:7,marginBottom:10}}>Is staff ka koi salary due pending nahi — pehle payroll finalize karo, ya imprest/petrol chuno.</div>}
-      {bucket==="salary"&&due>0&&<div style={{fontSize:11,color:T.t3,background:T.surfaceB,padding:"7px 10px",borderRadius:7,marginBottom:10}}>Salary bucket: paisa <b>salary ledger</b> me settle hoga — wallet balance nahi badhega. Current due <b style={{color:T.red}}>₹{fmtN(due)}</b>.</div>}
-      <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Amount</label>
+      {bucket==="salary"&&due<=0&&<div style={{fontSize:11,color:T.amb,background:T.ambL,padding:"7px 10px",borderRadius:7,marginBottom:10}}>{t("finance.is_staff_ka_koi_salary_due")}</div>}
+      {bucket==="salary"&&due>0&&<div style={{fontSize:11,color:T.t3,background:T.surfaceB,padding:"7px 10px",borderRadius:7,marginBottom:10}}>{t("finance.salary_bucket_paisa")} <b>{t("finance.salary_ledger")}</b> {t("finance.me_settle_hoga_wallet_balance_nahi")} <b style={{color:T.red}}>₹{fmtN(due)}</b>.</div>}
+      <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("common.amount_2")}</label>
       <input type="number" value={amount} onChange={e=>setAmount(e.target.value)}
         style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:13,fontWeight:700,boxSizing:"border-box",margin:"4px 0 10px"}}/>
       <div style={{display:"flex",gap:8}}>
         <div style={{flex:1}}>
-          <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Method</label>
+          <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("finance.method")}</label>
           <select value={method} onChange={e=>setMethod(e.target.value)}
             style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:12,boxSizing:"border-box",margin:"4px 0 10px",background:T.surface}}>
-            <option value="bank_transfer">Bank / NEFT</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="cheque">Cheque</option>
+            <option value="bank_transfer">{t("finance.bank_neft")}</option><option value="upi">UPI</option><option value="cash">{t("common.cash")}</option><option value="cheque">{t("common.cheque")}</option>
           </select>
         </div>
         <div style={{flex:1}}>
-          <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Tx Ref</label>
-          <input value={txRef} onChange={e=>setTxRef(e.target.value)} placeholder="UTR (optional)"
+          <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("finance.tx_ref")}</label>
+          <input value={txRef} onChange={e=>setTxRef(e.target.value)} placeholder={t("finance.utr_optional")}
             style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:12,boxSizing:"border-box",margin:"4px 0 10px"}}/>
         </div>
       </div>
-      <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (optional)"
+      <input value={note} onChange={e=>setNote(e.target.value)} placeholder={t("common.note_optional")}
         style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b1}`,fontSize:12,boxSizing:"border-box",marginBottom:12}}/>
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-        <button onClick={onClose} style={btnGhost()}>Cancel</button>
-        <button disabled={busy} onClick={doSend} style={btnSolid(bucket==="salary"?T.red:T.blu)}>{busy?"Sending…":`Send ₹${fmtN(Number(amount)||0)}`}</button>
+        <button onClick={onClose} style={btnGhost()}>{t("common.cancel")}</button>
+        <button disabled={busy} onClick={doSend} style={btnSolid(bucket==="salary"?T.red:T.blu)}>{busy?t("common.sending"):`Send ₹${fmtN(Number(amount)||0)}`}</button>
       </div>
     </ModalW>
   );
@@ -3084,9 +3068,9 @@ function ProjectPnlView(){
     </div>
   );
 
-  if(loading) return <div style={{padding:40,textAlign:"center",color:T.t4,fontSize:13}}>Loading project P&L…</div>;
-  if(err)     return <div style={{padding:40,textAlign:"center",color:T.red,fontSize:13}}>P&L load nahi ho paaya — thodi der baad try karein.</div>;
-  if(!items.length) return <div style={{padding:40,textAlign:"center",color:T.t4,fontSize:13}}>Abhi koi project P&L data nahi hai.</div>;
+  if(loading) return <div style={{padding:40,textAlign:"center",color:T.t4,fontSize:13}}>{t("finance.loading_project_p_l")}</div>;
+  if(err)     return <div style={{padding:40,textAlign:"center",color:T.red,fontSize:13}}>{t("finance.p_l_load_nahi_ho_paaya")}</div>;
+  if(!items.length) return <div style={{padding:40,textAlign:"center",color:T.t4,fontSize:13}}>{t("finance.abhi_koi_project_p_l_data")}</div>;
 
   const cell={padding:"10px 12px",fontSize:12.5,textAlign:"right",whiteSpace:"nowrap"};
   const head={padding:"9px 12px",fontSize:10.5,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,textAlign:"right",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,position:"sticky",top:0};
@@ -3100,28 +3084,25 @@ function ProjectPnlView(){
     <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"auto",gap:12,paddingBottom:14}}>
       {/* summary tiles */}
       <div style={{display:"flex",gap:10}}>
-        <Tile label="Total Revenue" val={`₹${fmtN(totals.revenue)}`} sub="Invoiced (earned billing)" col={T.grn}/>
-        <Tile label="Total Cost" val={`₹${fmtN(totals.cost)}`} sub="Material + subcon + site + equip + transfers" col={T.amb}/>
-        <Tile label="Net P&L" val={fmtS(totals.pnl)} sub={Number(totals.pnl)>=0?"Profit (labh)":"Loss (haani)"} col={pnlCol(totals.pnl)}/>
+        <Tile label={t("finance.total_revenue")} val={`₹${fmtN(totals.revenue)}`} sub={t("finance.invoiced_earned_billing")} col={T.grn}/>
+        <Tile label={t("finance.total_cost")} val={`₹${fmtN(totals.cost)}`} sub={t("finance.material_subcon_site_equip_transfers")} col={T.amb}/>
+        <Tile label={t("finance.net_p_l")} val={fmtS(totals.pnl)} sub={Number(totals.pnl)>=0?t("finance.profit_labh"):t("finance.loss_haani")} col={pnlCol(totals.pnl)}/>
         <div style={{display:"flex",alignItems:"flex-end",gap:7}}>
-          <button onClick={dlExcel} style={{padding:"7px 12px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><IcDown size={13} color={T.grn}/> Excel</button>
+          <button onClick={dlExcel} style={{padding:"7px 12px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><IcDown size={13} color={T.grn}/> {t("common.excel")}</button>
           <button onClick={dlPdf}   style={{padding:"7px 12px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><IcDown size={13} color={T.red}/> PDF</button>
         </div>
       </div>
 
       {/* basis banner */}
-      <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:8,padding:"9px 13px",fontSize:11.5,color:T.t2,lineHeight:1.5}}>
-        <b>Accrual (invoice-basis) P&L.</b> Revenue = project ki invoice (jitna kaam ka bill kata). Cost = material, sub-con, site, equipment + transfer-in − material-return − transfer-out.
-        Payment aur receipt yahan <b>nahi</b> ginte — wo cash flow hai (Cash Book me dekho). Exact hisaab ke liye har project ka ledger dekhein.
-        {data?.transfers_unvalued && <div style={{marginTop:5,color:T.amb,fontWeight:600}}>⚠ Kuch material-transfer bina rate ke hain — transfer ka cost adhoora ho sakta hai.</div>}
+      <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:8,padding:"9px 13px",fontSize:11.5,color:T.t2,lineHeight:1.5}}><Rich k="finance.t_revenue_project_ki_invoice_jitna" params={{ t: t("finance.accrual_invoice_basis_p_l") }} />{data?.transfers_unvalued && <div style={{marginTop:5,color:T.amb,fontWeight:600}}>{t("finance.kuch_material_transfer_bina_rate_ke")}</div>}
       </div>
 
       {/* table */}
       <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead><tr>
-            <th style={{...head,textAlign:"left"}}>Project</th>
-            <th style={head}>Revenue</th><th style={head}>Cost</th><th style={head}>P&L</th>
+            <th style={{...head,textAlign:"left"}}>{t("common.project")}</th>
+            <th style={head}>{t("app.revenue")}</th><th style={head}>{t("finance.cost")}</th><th style={head}>P&L</th>
             <th style={{...head,width:34}}></th>
           </tr></thead>
           <tbody>
@@ -3134,19 +3115,19 @@ function ProjectPnlView(){
                     <td style={{padding:"10px 12px",fontSize:12.5}}>
                       <span style={{fontWeight:600,color:T.t1}}>{i.project}</span>
                       {i.status&&<span style={{marginLeft:7,fontSize:10,color:T.t4}}>{i.status}</span>}
-                      {i.no_activity&&<span style={{marginLeft:7,fontSize:10,color:T.t4,fontStyle:"italic"}}>· no activity</span>}
+                      {i.no_activity&&<span style={{marginLeft:7,fontSize:10,color:T.t4,fontStyle:"italic"}}>{t("finance.no_activity")}</span>}
                     </td>
                     <td style={{...cell,color:T.grn}}>₹{fmtN(i.revenue)}</td>
                     <td style={{...cell,color:T.amb}}>₹{fmtN(i.cost)}</td>
                     <td style={{...cell,fontWeight:700,color:pnlCol(i.pnl)}}>{fmtS(i.pnl)}
-                      <span style={{marginLeft:6,fontSize:9.5,padding:"1px 6px",borderRadius:20,background:Number(i.pnl)>=0?T.grnL:T.redL,color:pnlCol(i.pnl),fontWeight:700,textTransform:"uppercase"}}>{i.verdict==="profit"?"Labh":i.verdict==="loss"?"Haani":"—"}</span>
+                      <span style={{marginLeft:6,fontSize:9.5,padding:"1px 6px",borderRadius:20,background:Number(i.pnl)>=0?T.grnL:T.redL,color:pnlCol(i.pnl),fontWeight:700,textTransform:"uppercase"}}>{i.verdict==="profit"?t("finance.labh"):i.verdict==="loss"?t("finance.haani"):"—"}</span>
                     </td>
                     <td style={{...cell,color:T.t4}}>{open?"▲":"▼"}</td>
                   </tr>
                   {open&&(
                     <tr style={{background:T.surfaceB}}>
                       <td colSpan={5} style={{padding:"4px 12px 12px 12px"}}>
-                        <div style={{fontSize:10.5,color:T.t4,fontWeight:600,margin:"6px 0 5px",textTransform:"uppercase",letterSpacing:0.4}}>Cost breakup</div>
+                        <div style={{fontSize:10.5,color:T.t4,fontWeight:600,margin:"6px 0 5px",textTransform:"uppercase",letterSpacing:0.4}}>{t("finance.cost_breakup")}</div>
                         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:7}}>
                           {brk.map(([lbl,key,minus])=>{
                             const v=i.cost_breakup[key]||0;
@@ -3287,29 +3268,29 @@ function CashDayBook({ txns, view="cashbook" }){ // view driven by parent sub-ta
               style={{padding:"4px 12px",borderRadius:20,border:`1.5px solid ${on?col:T.b1}`,background:on?(id==="Receipts"?T.grnL:id==="Payments"?T.redL:T.sltL):T.surfaceB,color:on?col:T.t3,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer"}}>{l}</button>
           );})}
           <div style={{width:1,height:20,background:T.b1,margin:"0 3px"}}/>
-          <select value={fSite}  onChange={e=>setFSite(e.target.value)}  style={{...selStyle,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}><option value="All">All Sites</option>{SITES.map(s=><option key={s}>{s}</option>)}</select>
-          <select value={fHead}  onChange={e=>setFHead(e.target.value)}  style={{...selStyle,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}><option value="All">All Heads</option>{HEADS.map(h=><option key={h}>{h}</option>)}</select>
-          <select value={fMOP}   onChange={e=>setFMOP(e.target.value)}   style={{...selStyle,borderColor:fMOP!=="All"?T.blu:T.b1,background:fMOP!=="All"?T.bluL:T.surface,color:fMOP!=="All"?T.blu:T.t2}}><option value="All">All MOP</option>{MOPS.map(m=><option key={m}>{m}</option>)}</select>
-          <select value={fAcc}   onChange={e=>setFAcc(e.target.value)}   style={{...selStyle,borderColor:fAcc!=="All"?T.blu:T.b1,background:fAcc!=="All"?T.bluL:T.surface,color:fAcc!=="All"?T.blu:T.t2}}><option value="All">All Accounts</option>{ACCTS.map(a=><option key={a}>{a}</option>)}</select>
-          <select value={fParty} onChange={e=>setFParty(e.target.value)} style={{...selStyle,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}><option value="All">All Parties</option>{PARTIES.map(p=><option key={p}>{p}</option>)}</select>
+          <select value={fSite}  onChange={e=>setFSite(e.target.value)}  style={{...selStyle,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}><option value="All">{t("common.all_sites")}</option>{SITES.map(s=><option key={s}>{s}</option>)}</select>
+          <select value={fHead}  onChange={e=>setFHead(e.target.value)}  style={{...selStyle,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}><option value="All">{t("finance.all_heads")}</option>{HEADS.map(h=><option key={h}>{h}</option>)}</select>
+          <select value={fMOP}   onChange={e=>setFMOP(e.target.value)}   style={{...selStyle,borderColor:fMOP!=="All"?T.blu:T.b1,background:fMOP!=="All"?T.bluL:T.surface,color:fMOP!=="All"?T.blu:T.t2}}><option value="All">{t("finance.all_mop")}</option>{MOPS.map(m=><option key={m}>{m}</option>)}</select>
+          <select value={fAcc}   onChange={e=>setFAcc(e.target.value)}   style={{...selStyle,borderColor:fAcc!=="All"?T.blu:T.b1,background:fAcc!=="All"?T.bluL:T.surface,color:fAcc!=="All"?T.blu:T.t2}}><option value="All">{t("finance.all_accounts")}</option>{ACCTS.map(a=><option key={a}>{a}</option>)}</select>
+          <select value={fParty} onChange={e=>setFParty(e.target.value)} style={{...selStyle,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}><option value="All">{t("finance.all_parties")}</option>{PARTIES.map(p=><option key={p}>{p}</option>)}</select>
           {(fSite!=="All"||fHead!=="All"||fMOP!=="All"||fAcc!=="All"||fParty!=="All"||chip!=="All"||search||fFrom||fTo)&&(
             <button onClick={()=>{setFSite("All");setFHead("All");setFMOP("All");setFAcc("All");setFParty("All");setChip("All");setSearch("");setFFrom("");setFTo("");}}
-              style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer"}}>Clear</button>
+              style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer"}}>{t("common.clear")}</button>
           )}
         </div>
         {/* Row 2: search + date range + exports (below the filters — same order as Fin Activity) */}
         <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
           <div style={{position:"relative",flex:1,minWidth:150}}>
             <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={12} color={T.t4}/></span>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search description or party..."
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("finance.search_description_or_party")}
               style={{...selStyle,width:"100%",paddingLeft:25,boxSizing:"border-box"}}/>
           </div>
           <input type="date" value={fFrom} onChange={e=>setFFrom(e.target.value)} style={{...selStyle,width:130}}/>
           <span style={{fontSize:11,color:T.t4}}>to</span>
           <input type="date" value={fTo} onChange={e=>setFTo(e.target.value)} style={{...selStyle,width:130}}/>
           <div style={{display:"flex",gap:6}}>
-            <button onClick={dlExcel} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
-            <button onClick={printOut} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF / Print</button>
+            <button onClick={dlExcel} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("common.excel")}</button>
+            <button onClick={printOut} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("finance.pdf_print")}</button>
           </div>
         </div>
       </div>
@@ -3336,10 +3317,10 @@ function CashDayBook({ txns, view="cashbook" }){ // view driven by parent sub-ta
                 <span style={{fontSize:12,fontWeight:700,color:e.runBal>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(e.runBal)}</span>
               </div>
             ))}
-            {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No cash entries for these filters</div>}
+            {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.no_cash_entries_for_these_filters")}</div>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:CB_COLS,padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
-            <span style={{gridColumn:"1/6",fontSize:12.5,fontWeight:700,color:T.t1}}>TOTAL ({filtered.length} entries)</span>
+            <span style={{gridColumn:"1/6",fontSize:12.5,fontWeight:700,color:T.t1}}>{t("finance.total_filtered_entries", { filtered: filtered.length })}</span>
             <span/>
             <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(totalPay)}</span>
@@ -3383,12 +3364,12 @@ function CashDayBook({ txns, view="cashbook" }){ // view driven by parent sub-ta
                 ))}
               </div>
             ))}
-            {daybook.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No cash entries for these filters</div>}
+            {daybook.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.no_cash_entries_for_these_filters")}</div>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:DB_COLS,padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
             <span style={{fontSize:12,fontWeight:700,color:T.t1}}>TOTAL</span>
             <span/>
-            <span style={{fontSize:11.5,color:T.t3}}>{daybook.length} days · {filtered.length} entries</span>
+            <span style={{fontSize:11.5,color:T.t3}}>{t("finance.daybook_days_filtered_entries", { daybook: daybook.length, filtered: filtered.length })}</span>
             <span/>
             <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(totalPay)}</span>
@@ -3729,7 +3710,7 @@ function FinanceModule(){
       // 'paid'/'cancelled', so a paid PR reappeared as "Pending" in the list +
       // pending-approval count (the "regenerated request" bug).
       status:(()=>{const s=String(r.status||"").toLowerCase();
-        return s==="approved"?"Approved":s==="rejected"?"Rejected":s==="paid"?"Paid":s==="cancelled"?"Cancelled":"Pending";})(),
+        return s==="approved"?t("common.approved"):s==="rejected"?t("common.rejected"):s==="paid"?t("common.paid"):s==="cancelled"?t("common.cancelled"):t("common.pending");})(),
       paid:String(r.status||"").toLowerCase()==="paid",
       by:r.requested_by_name||r.requested_by||r.created_by_name||"",
       purpose:r.purpose||r.description||r.note||"",
@@ -4018,16 +3999,16 @@ function FinanceModule(){
 
   const TILE_SETS={
     party:[
-      {l:"Amount Received",v:`₹${fmt(partyTotalCR)}`,sub:"Payments received",Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
-      {l:"Amount Paid Out",v:`₹${fmt(partyTotalDR)}`,sub:"Bills & payments",Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
-      {l:"To Receive",v:`₹${fmt(toReceive)}`,sub:"Against invoices raised",Icon:IcFileInv,c:T.blu,bg:T.bluL,brd:T.bluM},
-      {l:"To Pay",v:`₹${fmt(toPay)}`,sub:"Against bills received",Icon:IcBillDue,c:T.amb,bg:T.ambL,brd:T.ambM},
+      {l:t("finance.amount_received"),v:`₹${fmt(partyTotalCR)}`,sub:t("finance.payments_received"),Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
+      {l:t("finance.amount_paid_out"),v:`₹${fmt(partyTotalDR)}`,sub:t("finance.bills_payments"),Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
+      {l:t("finance.to_receive"),v:`₹${fmt(toReceive)}`,sub:t("finance.against_invoices_raised"),Icon:IcFileInv,c:T.blu,bg:T.bluL,brd:T.bluM},
+      {l:t("finance.to_pay"),v:`₹${fmt(toPay)}`,sub:t("finance.against_bills_received"),Icon:IcBillDue,c:T.amb,bg:T.ambL,brd:T.ambM},
     ],
     transaction:[
-      {l:"Total Income",v:`₹${fmt(allTxnIn)}`,sub:"All payment in",Icon:IcTrendUp,c:T.grn,bg:T.grnL,brd:T.grnM},
-      {l:"Total Expense",v:`₹${fmt(allTxnOut)}`,sub:"All payment out",Icon:IcTrendDn,c:T.red,bg:T.redL,brd:T.redM},
-      {l:"Unpaid Bills",v:`₹${fmt(unpaidBills)}`,sub:"Pending payment",Icon:IcCalDue,c:T.amb,bg:T.ambL,brd:T.ambM},
-      {l:"Net Cash Flow",v:`₹${fmt(Math.abs(netFlow))}`,sub:netFlow>=0?"Surplus":"Deficit",Icon:IcPulse,c:netFlow>=0?T.grn:T.red,bg:netFlow>=0?T.grnL:T.redL,brd:netFlow>=0?T.grnM:T.redM},
+      {l:t("finance.total_income"),v:`₹${fmt(allTxnIn)}`,sub:t("finance.all_payment_in"),Icon:IcTrendUp,c:T.grn,bg:T.grnL,brd:T.grnM},
+      {l:t("finance.total_expense"),v:`₹${fmt(allTxnOut)}`,sub:t("finance.all_payment_out"),Icon:IcTrendDn,c:T.red,bg:T.redL,brd:T.redM},
+      {l:t("finance.unpaid_bills"),v:`₹${fmt(unpaidBills)}`,sub:t("finance.pending_payment"),Icon:IcCalDue,c:T.amb,bg:T.ambL,brd:T.ambM},
+      {l:t("finance.net_cash_flow"),v:`₹${fmt(Math.abs(netFlow))}`,sub:netFlow>=0?"Surplus":"Deficit",Icon:IcPulse,c:netFlow>=0?T.grn:T.red,bg:netFlow>=0?T.grnL:T.redL,brd:netFlow>=0?T.grnM:T.redM},
     ],
     cashbook:(()=>{
       // Closing Balance = THE actual cash-in-hand right now = live sum of
@@ -4038,26 +4019,26 @@ function FinanceModule(){
       const openingBal=cashInHand-cbIn+cbOut;
       const sgn=(n)=>`${n<0?"-₹":"₹"}${fmt(Math.abs(n))}`;
       return [
-        {l:"Opening Balance",v:sgn(openingBal),sub:"Before period · all accounts",Icon:IcBank,c:openingBal>=0?T.blu:T.red,bg:openingBal>=0?T.bluL:T.redL,brd:openingBal>=0?T.bluM:T.redM},
-        {l:"Total Receipts",v:`₹${fmt(cbIn)}`,sub:`${cbTxns.filter(t=>!t.dr).length} entries`,Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
-        {l:"Total Payments",v:`₹${fmt(cbOut)}`,sub:`${cbTxns.filter(t=>t.dr).length} entries`,Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
+        {l:t("common.opening_balance"),v:sgn(openingBal),sub:t("finance.before_period_all_accounts"),Icon:IcBank,c:openingBal>=0?T.blu:T.red,bg:openingBal>=0?T.bluL:T.redL,brd:openingBal>=0?T.bluM:T.redM},
+        {l:t("finance.total_receipts"),v:`₹${fmt(cbIn)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>!t.dr).length }),Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
+        {l:t("finance.total_payments"),v:`₹${fmt(cbOut)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>t.dr).length }),Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
         // Split shown so it's obvious how much is COMPANY money (bank+cash)
         // vs money sitting in staff wallets — avoids "balance kyu kam hai"
         // confusion now that wallet spends don't touch the company book.
-        {l:"Cash in Hand",v:sgn(cashInHand),sub:`Company ${sgn(totalBal)} · Wallets ${sgn(totalWalletBal)}`,Icon:IcWallet,c:cashInHand>=0?T.blu:T.red,bg:cashInHand>=0?T.bluL:T.redL,brd:cashInHand>=0?T.bluM:T.redM},
+        {l:t("finance.cash_in_hand"),v:sgn(cashInHand),sub:`Company ${sgn(totalBal)} · Wallets ${sgn(totalWalletBal)}`,Icon:IcWallet,c:cashInHand>=0?T.blu:T.red,bg:cashInHand>=0?T.bluL:T.redL,brd:cashInHand>=0?T.bluM:T.redM},
       ];
     })(),
     payreq:[
-      {l:"Pending Approval",v:`${pendPR} PRs`,sub:`₹${fmt(prPendAmt)} awaiting`,Icon:IcPendClk,c:T.amb,bg:T.ambL,brd:T.ambM},
-      {l:"Approved",v:`₹${fmt(prApprovedAmt)}`,sub:"Ready to pay",Icon:IcThumbUp,c:T.grn,bg:T.grnL,brd:T.grnM},
-      {l:"Rejected",v:`${prRejected} PRs`,sub:`₹${fmt(prRejectedAmt)} blocked`,Icon:IcOverdue,c:T.red,bg:T.redL,brd:T.redM},
-      {l:"Total Submitted",v:`${payReqs.length} PRs`,sub:`₹${fmt(payReqs.reduce((s,r)=>s+r.amount,0))} total`,Icon:IcClip,c:T.slt,bg:T.sltL,brd:"#CBD5E0"},
+      {l:t("common.pending_approval"),v:`${pendPR} PRs`,sub:`₹${fmt(prPendAmt)} awaiting`,Icon:IcPendClk,c:T.amb,bg:T.ambL,brd:T.ambM},
+      {l:t("common.approved"),v:`₹${fmt(prApprovedAmt)}`,sub:t("finance.ready_to_pay"),Icon:IcThumbUp,c:T.grn,bg:T.grnL,brd:T.grnM},
+      {l:t("common.rejected"),v:`${prRejected} PRs`,sub:`₹${fmt(prRejectedAmt)} blocked`,Icon:IcOverdue,c:T.red,bg:T.redL,brd:T.redM},
+      {l:t("finance.total_submitted"),v:`${payReqs.length} PRs`,sub:`₹${fmt(payReqs.reduce((s,r)=>s+r.amount,0))} total`,Icon:IcClip,c:T.slt,bg:T.sltL,brd:"#CBD5E0"},
     ],
     pending:[
-      {l:"Approved PR Due",v:`₹${fmt(pendPRTotal)}`,sub:`${pendPmts.filter(p=>p.type==="pr").length} approved, ready`,Icon:IcThumbUp,c:T.grn,bg:T.grnL,brd:T.grnM},
-      {l:"Bills Due",v:`₹${fmt(pendBillDue)}`,sub:"Upcoming dues",Icon:IcBillDue,c:T.amb,bg:T.ambL,brd:T.ambM},
-      {l:"Overdue",v:`₹${fmt(pendOverdue)}`,sub:`${pendPmts.filter(p=>p.overdue).length} past due date`,Icon:IcOverdue,c:T.red,bg:T.redL,brd:T.redM},
-      {l:"Total Pending",v:`₹${fmt(pendTotal)}`,sub:`${pendPmts.length} items`,Icon:IcClock7,c:T.slt,bg:T.sltL,brd:"#CBD5E0"},
+      {l:t("finance.approved_pr_due"),v:`₹${fmt(pendPRTotal)}`,sub:t("finance.length_approved_ready", { length: pendPmts.filter(p=>p.type==="pr").length }),Icon:IcThumbUp,c:T.grn,bg:T.grnL,brd:T.grnM},
+      {l:t("finance.bills_due"),v:`₹${fmt(pendBillDue)}`,sub:t("finance.upcoming_dues"),Icon:IcBillDue,c:T.amb,bg:T.ambL,brd:T.ambM},
+      {l:t("common.overdue"),v:`₹${fmt(pendOverdue)}`,sub:t("finance.length_past_due_date", { length: pendPmts.filter(p=>p.overdue).length }),Icon:IcOverdue,c:T.red,bg:T.redL,brd:T.redM},
+      {l:t("finance.total_pending"),v:`₹${fmt(pendTotal)}`,sub:t("finance.length_items", { length: pendPmts.length }),Icon:IcClock7,c:T.slt,bg:T.sltL,brd:"#CBD5E0"},
     ],
   };
   const curTiles=TILE_SETS[tab==="daybook"?"cashbook":tab]||TILE_SETS.party;
@@ -4170,7 +4151,7 @@ function FinanceModule(){
     try {
       const res = await api.get(`/customer-estimates/invoices/${invoiceId}`);
       if (!res?.success || !res.data) {
-        window.alert("Could not load invoice");
+        window.alert(t("finance.could_not_load_invoice"));
         return;
       }
       const inv = res.data;
@@ -4187,7 +4168,7 @@ function FinanceModule(){
         </tr>`).join("") : `<tr><td colspan="6" style="text-align:center;padding:20px;color:#9CA3AF">No line items</td></tr>`;
       const statusColor = inv.status==="Paid"?"#059669":inv.status==="Approved"?"#2563EB":"#D97706";
       const w = window.open("", "_blank");
-      if (!w) { window.alert("Print window blocked — allow pop-ups."); return; }
+      if (!w) { window.alert(t("finance.print_window_blocked_allow_pop_ups")); return; }
       w.document.write(`<!doctype html><html><head><meta charset="utf-8"/>
         <title>Invoice ${inv.invoice_no} — ${(partyName||inv.customer_name||"")}</title>
         <style>
@@ -4272,11 +4253,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
     // Default: copy to clipboard
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(msg).then(
-        () => window.alert("Invoice details copied to clipboard"),
-        async () => await window.promptAsync("Copy invoice details:", msg)
+        () => window.alert(t("finance.invoice_details_copied_to_clipboard")),
+        async () => await window.promptAsync(t("finance.copy_invoice_details"), msg)
       );
     } else {
-      await window.promptAsync("Copy invoice details:", msg);
+      await window.promptAsync(t("finance.copy_invoice_details"), msg);
     }
   };
 
@@ -4350,25 +4331,25 @@ Status: ${ledgerRow.status||"unpaid"}`;
   // Tabs grouped into 3 logical sections (+ Equipment as its own group):
   //  A Ledgers & Cash · B Payments · C Materials · Equipment
   const TAB_GROUPS=[
-    {key:"ledgers",label:"Ledgers & Cash",tabs:[
-      {id:"party",l:"Party Ledger"},
-      {id:"transaction",l:"Fin Activity"},
-      {id:"cashbook",l:"Cash Book"},
-      {id:"daybook",l:"Day Book"},
+    {key:"ledgers",label:t("finance.ledgers_cash"),tabs:[
+      {id:"party",l:t("finance.party_ledger")},
+      {id:"transaction",l:t("finance.fin_activity")},
+      {id:"cashbook",l:t("finance.cash_book")},
+      {id:"daybook",l:t("finance.day_book")},
     ]},
-    {key:"payments",label:"Payments",tabs:[
+    {key:"payments",label:t("common.payments"),tabs:[
       {id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},
-      {id:"pending",l:"Pending Payments"},
+      {id:"pending",l:t("finance.pending_payments")},
     ]},
-    {key:"materials",label:"Materials",tabs:[
-      {id:"unbilled_grn",l:"Unbilled GRN"},
-      {id:"billed_mat",l:"Billed Material"},
+    {key:"materials",label:t("common.materials"),tabs:[
+      {id:"unbilled_grn",l:t("finance.unbilled_grn")},
+      {id:"billed_mat",l:t("finance.billed_material")},
     ]},
-    {key:"equipment",label:"Equipment",tabs:[
+    {key:"equipment",label:t("common.equipment"),tabs:[
       {id:"equipment_review",l:`Equipment Review${equipReviewCount>0?` (${equipReviewCount})`:""}`},
     ]},
-    {key:"reports",label:"Reports",tabs:[
-      {id:"pnl",l:"P&L (Project-wise)"},
+    {key:"reports",label:t("common.reports"),tabs:[
+      {id:"pnl",l:t("finance.p_l_project_wise")},
     ]},
   ];
   const TABS=TAB_GROUPS.flatMap(g=>g.tabs);
@@ -4420,7 +4401,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
           </div>
           <div style={{display:"flex",gap:6,padding:"2px 0",alignItems:"center",flexShrink:0}}>
             {/* Manual refresh */}
-            <button onClick={refreshAll} title="Refresh all data"
+            <button onClick={refreshAll} title={t("finance.refresh_all_data")}
               style={{display:"flex",alignItems:"center",gap:4,padding:"6px 11px",borderRadius:6,
                 border:"1px solid #CBD5E1",background:"#FFFFFF",
                 fontSize:11,color:"#475569",cursor:"pointer",fontFamily:"inherit",fontWeight:500,
@@ -4429,18 +4410,18 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 style={{animation:(loading.txns||loading.payreqs||loading.pendpmts)?"spin 1s linear infinite":"none"}}>
                 <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
               </svg>
-              Refresh
+             {t("common.refresh")}
             </button>
             {/* Accounts dropdown */}
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowAccPanel(!showAccPanel)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,border:`1px solid ${showAccPanel?"#1E40AF":"#CBD5E1"}`,background:"#FFFFFF",fontSize:11.5,fontWeight:600,color:"#475569",cursor:"pointer"}}>
-                <IcBank size={13} color="currentColor"/> Accounts <IcDown size={10} color="currentColor"/>
+                <IcBank size={13} color="currentColor"/> {t("finance.accounts")} <IcDown size={10} color="currentColor"/>
               </button>
               {showAccPanel&&(<>
                 <div onClick={()=>setShowAccPanel(false)} style={{position:"fixed",inset:0,zIndex:140}}/>
                 <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:T.surface,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:`1px solid ${T.b1}`,zIndex:150,width:320,overflow:"hidden"}}>
                   <div style={{display:"flex",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
-                    {[{id:"accounts",l:"Company Accounts"},{id:"wallets",l:"Staff Wallets"}].map(t=>(
+                    {[{id:"accounts",l:t("finance.company_accounts")},{id:"wallets",l:t("finance.staff_wallets")}].map(t=>(
                       <button key={t.id} onClick={()=>setAccTab(t.id)} style={{flex:1,padding:"9px 8px",border:"none",background:"none",color:accTab===t.id?T.blu:T.t3,fontSize:11.5,fontWeight:accTab===t.id?700:400,cursor:"pointer",borderBottom:accTab===t.id?`2px solid ${T.blu}`:"2px solid transparent"}}>{t.l}</button>
                     ))}
                   </div>
@@ -4450,37 +4431,37 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         {activeAccounts.map(a=>(
                           <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:7,marginBottom:3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderLeft:`3px solid ${a.color}`}}>
                             <IcBank size={14} color={a.color}/>
-                            <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.t1}}>{a.name}</div><div style={{fontSize:10,color:T.t4}}>{a.no||"Cash"}</div></div>
+                            <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.t1}}>{a.name}</div><div style={{fontSize:10,color:T.t4}}>{a.no||t("common.cash")}</div></div>
                             <div style={{fontSize:12.5,fontWeight:700,color:a.balance<0?T.red:T.grn}}>{fmtS(a.balance)}</div>
                           </div>
                         ))}
                         <div style={{height:1,background:T.b1,margin:"6px 0"}}/>
-                        <div style={{display:"flex",justifyContent:"space-between",padding:"5px 10px 3px"}}><span style={{fontSize:10.5,color:T.t4}}>Bank + Cash Total</span><span style={{fontSize:12,fontWeight:700,color:totalBal<0?T.red:T.blu}}>{fmtS(totalBal)}</span></div>
+                        <div style={{display:"flex",justifyContent:"space-between",padding:"5px 10px 3px"}}><span style={{fontSize:10.5,color:T.t4}}>{t("finance.bank_cash_total")}</span><span style={{fontSize:12,fontWeight:700,color:totalBal<0?T.red:T.blu}}>{fmtS(totalBal)}</span></div>
                         <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:7,marginTop:3,background:T.grnL,border:`1px solid ${T.grnM}`,borderLeft:`3px solid ${T.grn}`}}>
                           <IcWallet size={14} color={T.grn}/>
-                          <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.grn}}>Total Staff Wallets</div><div style={{fontSize:10,color:T.t4}}>{walletList.length} members</div></div>
+                          <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.grn}}>{t("finance.total_staff_wallets")}</div><div style={{fontSize:10,color:T.t4}}>{walletList.length} members</div></div>
                           <div style={{fontSize:12.5,fontWeight:700,color:T.grn}}>₹{fmtN(totalWalletBal)}</div>
                         </div>
-                        <div style={{display:"flex",justifyContent:"space-between",padding:"7px 10px 2px",borderTop:`1px solid ${T.b1}`,marginTop:5}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>Grand Total</span><span style={{fontSize:12.5,fontWeight:800,color:(totalBal+totalWalletBal)<0?T.red:T.blu}}>{fmtS(totalBal+totalWalletBal)}</span></div>
+                        <div style={{display:"flex",justifyContent:"space-between",padding:"7px 10px 2px",borderTop:`1px solid ${T.b1}`,marginTop:5}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>{t("common.grand_total")}</span><span style={{fontSize:12.5,fontWeight:800,color:(totalBal+totalWalletBal)<0?T.red:T.blu}}>{fmtS(totalBal+totalWalletBal)}</span></div>
                       </>
                     ):(
                       <>
-                      {walletList.length===0&&<div style={{padding:"14px 8px",textAlign:"center",fontSize:11,color:T.t4}}>Koi staff wallet nahi</div>}
+                      {walletList.length===0&&<div style={{padding:"14px 8px",textAlign:"center",fontSize:11,color:T.t4}}>{t("finance.koi_staff_wallet_nahi")}</div>}
                       {walletList.map(w=>{const pct=w.limit>0?Math.min(100,Math.round(w.balance/w.limit*100)):0;const due=Number(salaryDues[w.id])||0;return(
                         <div key={w.id} style={{padding:"8px 10px",borderRadius:7,marginBottom:4,background:T.surfaceB,border:`1px solid ${T.b1}`}}>
                           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                             <div style={{width:26,height:26,borderRadius:"50%",background:w.color+"22",border:`1px solid ${w.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:w.color,flexShrink:0}}>{w.initials}</div>
                             <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.pending>0?`₹${fmtN(w.pending)} pending`:w.role}</div></div>
-                            <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:T.t1}}>₹{fmtN(w.balance)}</div><div style={{fontSize:9,color:T.t4}}>{w.limit>0?`/ ₹${fmtN(w.limit)}`:"No limit"}</div></div>
+                            <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:T.t1}}>₹{fmtN(w.balance)}</div><div style={{fontSize:9,color:T.t4}}>{w.limit>0?`/ ₹${fmtN(w.limit)}`:t("finance.no_limit")}</div></div>
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:w.limit>0?5:0}}>
-                            {due>0&&<span style={{fontSize:9.5,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,padding:"2px 7px",borderRadius:10}}>Salary due ₹{fmtN(due)}</span>}
+                            {due>0&&<span style={{fontSize:9.5,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,padding:"2px 7px",borderRadius:10}}>{t("finance.salary_due_fmtn", { fmtN: fmtN(due) })}</span>}
                             <button onClick={()=>{setShowAccPanel(false);setSendStaff({...w,salaryDue:due});}}
-                              style={{marginLeft:"auto",fontSize:10,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>Send ₹</button>
+                              style={{marginLeft:"auto",fontSize:10,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>{t("finance.send")}</button>
                           </div>
                           {w.limit>0&&<>
                           <div style={{height:3,background:T.b1,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:pct>80?T.red:pct>50?T.amb:T.grn,borderRadius:2}}/></div>
-                          <div style={{fontSize:9,color:pct>80?T.red:T.t4,marginTop:2}}>{pct}% used</div>
+                          <div style={{fontSize:9,color:pct>80?T.red:T.t4,marginTop:2}}>{t("finance.pct_used", { pct })}</div>
                           </>}
                         </div>
                       );})}
@@ -4494,28 +4475,28 @@ Status: ${ledgerRow.status||"unpaid"}`;
             {/* Create Transaction dropdown */}
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowCreateTxn(!showCreateTxn)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-                <IcAdd size={13} color="white"/> Create Transaction <IcDown size={10} color="white"/>
+                <IcAdd size={13} color="white"/> {t("finance.create_transaction")} <IcDown size={10} color="white"/>
               </button>
               {showCreateTxn&&(<>
                 <div onClick={()=>setShowCreateTxn(false)} style={{position:"fixed",inset:0,zIndex:140}}/>
                 <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:T.surface,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:`1px solid ${T.b1}`,zIndex:150,width:260,overflow:"hidden"}}>
                   {[
                     {section:"Cash & Bank",items:[
-                      {l:"Payment Received",sub:"Client payment in",Icon:IcRecv,c:T.grn,bg:T.grnL},
-                      {l:"Payment Made",sub:"Pay vendor / labour",Icon:IcSend,c:T.red,bg:T.redL},
-                      {l:"Bank Transfer",sub:"Account to account",Icon:IcBank,c:T.blu,bg:T.bluL},
-                      {l:"Petty Cash Expense",sub:"Site / misc expense",Icon:IcWallet,c:T.amb,bg:T.ambL},
+                      {l:t("common.payment_received"),sub:t("finance.client_payment_in"),Icon:IcRecv,c:T.grn,bg:T.grnL},
+                      {l:t("common.payment_made"),sub:t("finance.pay_vendor_labour"),Icon:IcSend,c:T.red,bg:T.redL},
+                      {l:t("common.bank_transfer"),sub:t("finance.account_to_account"),Icon:IcBank,c:T.blu,bg:T.bluL},
+                      {l:t("finance.petty_cash_expense"),sub:t("finance.site_misc_expense"),Icon:IcWallet,c:T.amb,bg:T.ambL},
                     ]},
                     {section:"Billing & Purchases",items:[
-                      {l:"Material Purchase Bill",sub:"Record supplier bill",Icon:IcBillDue,c:T.blu,bg:T.bluL},
-                      {l:"Sales Invoice",sub:"Raise client invoice",Icon:IcFileInv,c:T.grn,bg:T.grnL},
-                      {l:"Sub-Con Bill",sub:"Labour / subcon work",Icon:IcTeam,c:T.slt,bg:T.sltL},
-                      {l:"Advance Payment",sub:"Advance to party",Icon:IcArrow,c:T.pur,bg:T.purL},
+                      {l:t("common.material_purchase_bill"),sub:t("finance.record_supplier_bill"),Icon:IcBillDue,c:T.blu,bg:T.bluL},
+                      {l:t("common.sales_invoice"),sub:t("finance.raise_client_invoice"),Icon:IcFileInv,c:T.grn,bg:T.grnL},
+                      {l:t("common.sub_con_bill"),sub:t("finance.labour_subcon_work"),Icon:IcTeam,c:T.slt,bg:T.sltL},
+                      {l:t("finance.advance_payment"),sub:t("finance.advance_to_party"),Icon:IcArrow,c:T.pur,bg:T.purL},
                     ]},
                     {section:"Adjustments",items:[
-                      {l:"Journal Entry",sub:"Manual debit / credit",Icon:IcFileInv,c:T.slt,bg:T.sltL},
-                      {l:"Credit Note",sub:"Party balance adjust",Icon:IcCopy,c:T.pur,bg:T.purL},
-                      {l:"Party-to-Party Settlement",sub:"Ek party ka paisa doosri ko",Icon:IcArrow,c:T.ind,bg:T.indL,p2p:true},
+                      {l:t("finance.journal_entry"),sub:t("finance.manual_debit_credit"),Icon:IcFileInv,c:T.slt,bg:T.sltL},
+                      {l:t("finance.credit_note"),sub:t("finance.party_balance_adjust"),Icon:IcCopy,c:T.pur,bg:T.purL},
+                      {l:t("finance.party_to_party_settlement"),sub:t("finance.ek_party_ka_paisa_doosri_ko"),Icon:IcArrow,c:T.ind,bg:T.indL,p2p:true},
                     ]},
                   ].map((grp,gi)=>(
                     <div key={gi}>
@@ -4589,7 +4570,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
         if(!cfg) return null;
         return(
           <div style={{margin:"0 18px 8px",padding:"7px 12px",background:T.surface,borderRadius:"0 0 8px 8px",border:`1px solid ${T.b1}`,borderTop:"none",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",flexShrink:0}}>
-            <span style={{fontSize:10.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.6px",marginRight:4}}>Filter</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.6px",marginRight:4}}>{t("finance.filter")}</span>
             {cfg.chips.map(chip=>{
               const isActive=cfg.active===chip;
               const col=cfg.colors[chip]||{c:T.slt,bg:T.sltL};
@@ -4618,7 +4599,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontFamily:"inherit"}}
                 onMouseEnter={e=>e.currentTarget.style.color=T.red}
                 onMouseLeave={e=>e.currentTarget.style.color=T.t4}>
-                <IcX size={10} color="currentColor"/> Clear
+                <IcX size={10} color="currentColor"/> {t("common.clear")}
               </button>
             )}
           </div>
@@ -4640,20 +4621,20 @@ Status: ${ledgerRow.status||"unpaid"}`;
             <div style={{width:selParty?290:420,flexShrink:0,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width 0.2s",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
               <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,flexShrink:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                  <span style={{fontSize:13,fontWeight:700,color:T.t1,flex:1}}>Parties <span style={{fontSize:11,color:T.t4,fontWeight:500}}>· {filteredParties.length}</span></span>
+                  <span style={{fontSize:13,fontWeight:700,color:T.t1,flex:1}}>{t("finance.parties")} <span style={{fontSize:11,color:T.t4,fontWeight:500}}>· {filteredParties.length}</span></span>
                   <button onClick={()=>setShowAddParty(true)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
-                    <IcAdd size={12} color="white"/> Party
+                    <IcAdd size={12} color="white"/> {t("common.party")}
                   </button>
                 </div>
                 <div style={{display:"flex",gap:6,alignItems:"center"}}>
                   <div style={{position:"relative",flex:1}}>
                     <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                    <input value={partySearch} onChange={e=>setPartySearch(e.target.value)} placeholder="Search parties..."
+                    <input value={partySearch} onChange={e=>setPartySearch(e.target.value)} placeholder={t("finance.search_parties")}
                       style={{width:"100%",height:30,padding:"0 8px 0 26px",borderRadius:6,border:`1.5px solid ${partySearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:partySearch?T.bluL:T.surface}}/>
                   </div>
-                  <select value={chipParty} onChange={e=>setChipParty(e.target.value)} title="Filter by type"
+                  <select value={chipParty} onChange={e=>setChipParty(e.target.value)} title={t("finance.filter_by_type")}
                     style={{height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${chipParty!=="All"?T.blu:T.b1}`,fontSize:11.5,color:chipParty!=="All"?T.blu:T.t2,background:chipParty!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
-                    {["All","Client","Vendor","Labour","Sub-Con","Material Supplier"].map(o=><option key={o} value={o}>{o==="All"?"All types":o}</option>)}
+                    {["All","Client","Vendor","Labour","Sub-Con","Material Supplier"].map(o=><option key={o} value={o}>{o==="All"?t("finance.all_types"):o}</option>)}
                   </select>
                 </div>
               </div>
@@ -4737,8 +4718,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       <div style={{fontSize:14,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selParty.name}</div>
                       <div style={{fontSize:11,color:T.t4}}>{selParty.type} · {ledgerRows.length} transactions</div>
                     </div>
-                    <span style={{fontSize:11,color:T.grn,fontWeight:600,whiteSpace:"nowrap"}}>CR ₹{fmtN(totalCR)}</span>
-                    <span style={{fontSize:11,color:T.red,fontWeight:600,whiteSpace:"nowrap"}}>DR ₹{fmtN(totalDR)}</span>
+                    <span style={{fontSize:11,color:T.grn,fontWeight:600,whiteSpace:"nowrap"}}>{t("finance.cr_fmtn", { fmtN: fmtN(totalCR) })}</span>
+                    <span style={{fontSize:11,color:T.red,fontWeight:600,whiteSpace:"nowrap"}}>{t("finance.dr_fmtn", { fmtN: fmtN(totalDR) })}</span>
                     <span style={{background:chipC.bg,color:chipC.fg,fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:8,border:`1px solid ${chipC.br}`}}>₹{fmtN(computedBal)} · {computedBalType}</span>
                     <button onClick={()=>downloadLedgerCSV(selParty)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>CSV</button>
                     <button onClick={()=>downloadLedgerPDF(selParty)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>PDF</button>
@@ -4751,34 +4732,32 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",background:T.surface,borderBottom:`1px solid ${T.b1}`,flexShrink:0,flexWrap:"wrap"}}>
                     <div style={{position:"relative",flex:1,minWidth:150}}>
                       <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={12} color={T.t4}/></span>
-                      <input value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="Search date, note, type or amount…"
+                      <input value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder={t("finance.search_date_note_type_or_amount")}
                         style={{width:"100%",height:28,padding:"0 8px 0 25px",borderRadius:6,border:`1.5px solid ${ledgerSearch?T.blu:T.b1}`,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:ledgerSearch?T.bluL:T.surface}}/>
                     </div>
-                    <input type="date" value={ledgerFrom} onChange={e=>setLedgerFrom(e.target.value)} title="From date"
+                    <input type="date" value={ledgerFrom} onChange={e=>setLedgerFrom(e.target.value)} title={t("finance.from_date")}
                       style={{height:28,padding:"0 7px",borderRadius:6,border:`1.5px solid ${ledgerFrom?T.blu:T.b1}`,fontSize:11,color:T.t2,background:ledgerFrom?T.bluL:T.surface,outline:"none",fontFamily:"inherit"}}/>
                     <span style={{fontSize:10.5,color:T.t4}}>–</span>
-                    <input type="date" value={ledgerTo} onChange={e=>setLedgerTo(e.target.value)} title="To date"
+                    <input type="date" value={ledgerTo} onChange={e=>setLedgerTo(e.target.value)} title={t("finance.to_date")}
                       style={{height:28,padding:"0 7px",borderRadius:6,border:`1.5px solid ${ledgerTo?T.blu:T.b1}`,fontSize:11,color:T.t2,background:ledgerTo?T.bluL:T.surface,outline:"none",fontFamily:"inherit"}}/>
                     <select value={ledgerProj} onChange={e=>setLedgerProj(e.target.value)}
                       style={{height:28,padding:"0 7px",borderRadius:6,border:`1.5px solid ${ledgerProj!=="All"?T.blu:T.b1}`,fontSize:11,color:ledgerProj!=="All"?T.blu:T.t2,background:ledgerProj!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",maxWidth:120}}>
-                      <option value="All">All Projects</option>{ledgerProjOpts.map(p=><option key={p}>{p}</option>)}
+                      <option value="All">{t("common.all_projects")}</option>{ledgerProjOpts.map(p=><option key={p}>{p}</option>)}
                     </select>
                     <select value={ledgerType} onChange={e=>setLedgerType(e.target.value)}
                       style={{height:28,padding:"0 7px",borderRadius:6,border:`1.5px solid ${ledgerType!=="All"?T.blu:T.b1}`,fontSize:11,color:ledgerType!=="All"?T.blu:T.t2,background:ledgerType!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",maxWidth:130}}>
-                      <option value="All">All Types</option>{ledgerTypeOpts.map(tp=><option key={tp}>{tp}</option>)}
+                      <option value="All">{t("common.all_types")}</option>{ledgerTypeOpts.map(tp=><option key={tp}>{tp}</option>)}
                     </select>
                     {ledgerFiltered&&(
-                      <button onClick={clearLedgerFilters} title="Clear filters"
+                      <button onClick={clearLedgerFilters} title={t("finance.clear_filters")}
                         style={{height:28,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontFamily:"inherit"}}>
-                        <IcX size={10} color="currentColor"/> Clear
+                        <IcX size={10} color="currentColor"/> {t("common.clear")}
                       </button>
                     )}
                   </div>
                   {/* Result count strip — only while filtering, so nothing looks "missing" */}
                   {ledgerFiltered&&(
-                    <div style={{padding:"4px 14px",background:T.bluL,borderBottom:`1px solid ${T.b1}`,fontSize:10.5,color:T.blu,fontWeight:600,flexShrink:0}}>
-                      Showing {viewRows.length} of {ledgerRows.length} entries
-                    </div>
+                    <div style={{padding:"4px 14px",background:T.bluL,borderBottom:`1px solid ${T.b1}`,fontSize:10.5,color:T.blu,fontWeight:600,flexShrink:0}}>{t("finance.showing_viewrows_of_ledgerrows_entries", { viewRows: viewRows.length, ledgerRows: ledgerRows.length })}</div>
                   )}
                   {/* 8-col ledger: Date | Project | Note | Type | Paid By | CR | DR | Balance */}
                   <div style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,flexShrink:0,gap:4}}>
@@ -4787,8 +4766,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     ))}
                   </div>
                   <div style={{flex:1,overflowY:"auto"}}>
-                    {ledgerRows.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions recorded</div>}
-                    {ledgerRows.length>0&&viewRows.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No entries match these filters</div>}
+                    {ledgerRows.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.no_transactions_recorded")}</div>}
+                    {ledgerRows.length>0&&viewRows.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.no_entries_match_these_filters")}</div>}
                     {/* Opening balance row — only on the full, unfiltered ledger */}
                     {ledgerRows.length>0 && !ledgerFiltered && (()=>{
                       const ob = parseFloat(selParty.opening_balance||0);
@@ -4799,7 +4778,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         <div style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"7px 14px",gap:4,background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,alignItems:"center"}}>
                           <span style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>—</span>
                           <span style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>—</span>
-                          <span style={{fontSize:12,color:T.t3,fontStyle:"italic",fontWeight:500}}>Opening Balance</span>
+                          <span style={{fontSize:12,color:T.t3,fontStyle:"italic",fontWeight:500}}>{t("common.opening_balance")}</span>
                           <span style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>—</span>
                           <span style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>—</span>
                           <span style={{fontSize:12,color:T.t4,textAlign:"right"}}>—</span>
@@ -4852,11 +4831,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
                                 {txn.invoiceNo ? `${typeLabel} · ${txn.invoiceNo}` : typeLabel}
                               </span>
                               {isBillType && txn.sourceKind!=="customer_invoice" && (
-                                <span onClick={e=>{e.stopPropagation();setSelBill(isExpanded?null:txn.id);}} style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer",marginTop:1}}>{isExpanded?"▲ hide":"▼ view bill"}{hasItems?` (${txn.items.length})`:""}</span>
+                                <span onClick={e=>{e.stopPropagation();setSelBill(isExpanded?null:txn.id);}} style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer",marginTop:1}}>{isExpanded?t("finance.hide"):t("finance.view_bill")}{hasItems?` (${txn.items.length})`:""}</span>
                               )}
                               {txn.sourceKind==="customer_invoice" && (
                                 /* Compact attach indicator — open the row to download / share in the side drawer */
-                                <span onClick={e=>{e.stopPropagation();setSelTxn(txn);}} title="Invoice attached — open to download / share"
+                                <span onClick={e=>{e.stopPropagation();setSelTxn(txn);}} title={t("finance.invoice_attached_open_to_download_share")}
                                   style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9.5,color:T.blu,fontWeight:600,cursor:"pointer",marginTop:1,width:"fit-content"}}>
                                   <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
                                   PDF
@@ -4897,9 +4876,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
                                     const lines=hasItems?txn.items.map(it=>`<tr><td>${it.name||it.item||""}</td><td style="text-align:center">${it.qty||""} ${it.unit||""}</td><td style="text-align:right">₹${fmtN(it.rate||it.amt/it.qty||0)}</td><td style="text-align:right;font-weight:700">₹${fmtN(it.amt||it.amount||0)}</td></tr>`).join(""):`<tr><td colspan="4" style="text-align:center;color:#6B7280">No line items recorded</td></tr>`;
                                     printHTML(`Bill — ${selParty.name}`,`<h2>Purchase Bill</h2><p><strong>Supplier:</strong> ${selParty.name} &nbsp;|&nbsp; <strong>Date:</strong> ${txn.date} &nbsp;|&nbsp; <strong>Status:</strong> ${txn.status}</p><p>${txn.note}</p><table><tr><th>Item</th><th style="text-align:center">Qty / Unit</th><th style="text-align:right">Rate</th><th style="text-align:right">Amount</th></tr>${lines}<tr><td colspan="3" style="text-align:right;font-weight:700;border-top:2px solid #E5E7EB">TOTAL</td><td style="text-align:right;font-weight:800;color:#2563EB">₹${fmtN(txn.amount)}</td></tr></table><p class="footer">Generated by Company · ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</p>`);
                                   }} style={{padding:"4px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
-                                    Print Bill
+                                   {t("finance.print_bill")}
                                   </button>
-                                  {txn.status!=="paid"&&<button onClick={()=>openTxn("Payment Made",selParty.name)} style={{padding:"4px 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700}}>Pay Now</button>}
+                                  {txn.status!=="paid"&&<button onClick={()=>openTxn("Payment Made",selParty.name)} style={{padding:"4px 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700}}>{t("finance.pay_now")}</button>}
                                 </div>
                               </div>
                               {/* Line items table */}
@@ -4918,12 +4897,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                                     </div>
                                   ))}
                                   <div style={{display:"flex",justifyContent:"flex-end",padding:"6px 0",borderTop:`1px solid ${T.bluM}`}}>
-                                    <span style={{fontSize:12.5,fontWeight:800,color:T.blu}}>Total: ₹{fmtN(txn.amount)}</span>
+                                    <span style={{fontSize:12.5,fontWeight:800,color:T.blu}}>{t("finance.total_fmtn", { fmtN: fmtN(txn.amount) })}</span>
                                   </div>
                                 </>
                               ):(
                                 <div style={{textAlign:"center",padding:"12px",fontSize:11.5,color:T.t4}}>
-                                  Line items not recorded for this bill
+                                 {t("finance.line_items_not_recorded_for_this")}
                                 </div>
                               )}
                             </div>
@@ -4943,7 +4922,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       <div style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"10px 14px",gap:4,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0,alignItems:"center"}}>
                         <span/>
                         <span/>
-                        <span style={{fontSize:12,color:T.t2,fontWeight:700,textTransform:"uppercase",letterSpacing:.3}}>Closing Balance</span>
+                        <span style={{fontSize:12,color:T.t2,fontWeight:700,textTransform:"uppercase",letterSpacing:.3}}>{t("finance.closing_balance")}</span>
                         <span/>
                         <span/>
                         <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.grn,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(totalCR)}</span>
@@ -4958,11 +4937,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   <div style={{padding:"9px 14px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:7,flexShrink:0,background:T.surfaceB}}>
                     <button onClick={()=>openTxn("Payment Received",selParty.name)}
                       style={{flex:1,padding:"7px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-                      <IcRecv size={13} color={T.grn}/> + Payment Received
+                      <IcRecv size={13} color={T.grn}/> {t("finance.payment_received")}
                     </button>
                     <button onClick={()=>openTxn("Payment Made",selParty.name)}
                       style={{flex:1,padding:"7px",borderRadius:6,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-                      <IcSend size={13} color={T.red}/> + Payment Made
+                      <IcSend size={13} color={T.red}/> {t("finance.payment_made")}
                     </button>
                     <button onClick={()=>{
                       // Bill type by party class: subcon/labour → Sub-Con Bill,
@@ -4975,13 +4954,13 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       openTxn(billType,selParty.name);
                     }}
                       style={{flex:1,padding:"7px",borderRadius:6,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-                      <IcBillDue size={13} color={T.blu}/> + New Bill
+                      <IcBillDue size={13} color={T.blu}/> {t("finance.new_bill")}
                     </button>
                   </div>
                 </div>
               );
             })()}
-            {!selParty&&<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{textAlign:"center"}}><IcFileInv size={36} color={T.b2}/><div style={{fontSize:13,fontWeight:600,color:T.t3,marginTop:10}}>Select a party to view ledger</div></div></div>}
+            {!selParty&&<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{textAlign:"center"}}><IcFileInv size={36} color={T.b2}/><div style={{fontSize:13,fontWeight:600,color:T.t3,marginTop:10}}>{t("finance.select_a_party_to_view_ledger")}</div></div></div>}
           </div>
         )}
 
@@ -5004,14 +4983,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 );})}
                 {chipTxn!=="All"&&(
                   <button onClick={()=>setChipTxn("All")}
-                    style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Clear</button>
+                    style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>{t("common.clear")}</button>
                 )}
               </div>
               {/* Row 2: search + date range + unbilled + exports */}
               <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
                 <div style={{position:"relative",flex:1,minWidth:160}}>
                   <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                  <input value={txnSearch} onChange={e=>setTxnSearch(e.target.value)} placeholder="Search narration or party..."
+                  <input value={txnSearch} onChange={e=>setTxnSearch(e.target.value)} placeholder={t("finance.search_narration_or_party")}
                     style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:7,border:`1.5px solid ${txnSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:txnSearch?T.bluL:T.surface}}/>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:5}}>
@@ -5021,10 +5000,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
                 </div>
                 <button onClick={()=>setShowUB(true)} style={{display:"flex",alignItems:"center",gap:5,height:31,padding:"0 11px",borderRadius:6,background:T.purL,border:`1px solid ${T.pur}22`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                  <IcUB size={13} color={T.pur}/> Unbilled
+                  <IcUB size={13} color={T.pur}/> {t("common.unbilled")}
                   <span style={{background:T.pur,color:"white",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{UNBILLED_PARTIES.length}</span>
                 </button>
-                <button onClick={dlTxnCSV} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
+                <button onClick={dlTxnCSV} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{t("common.excel")}</button>
                 <button onClick={dlTxnPDF} style={{height:31,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF</button>
               </div>
             </div>
@@ -5044,19 +5023,19 @@ Status: ${ledgerRow.status||"unpaid"}`;
               {(()=>{
                 // Type labels + color coding
                 const TYPE_META={
-                  "Payment In":    {label:"Payment In",     color:T.grn,  bg:T.grnL,  dir:"in"},
-                  "Payment Out":   {label:"Payment Out",    color:T.red,  bg:T.redL,  dir:"out"},
-                  "Material Purchase":{label:"Material Purchase",color:T.red,bg:T.redL,dir:"out"},
-                  "Site Expense":  {label:"Site Expense",   color:T.red,  bg:T.redL,  dir:"out"},
-                  "Party Payment": {label:"Party Payment",  color:T.red,  bg:T.redL,  dir:"out"},
-                  "Sub-Con Expense":{label:"Sub-Con",       color:T.red,  bg:T.redL,  dir:"out"},
-                  "Sales Invoice": {label:"Sales Invoice",  color:T.grn,  bg:T.grnL,  dir:"in"},
-                  "RA Bill":       {label:"RA Bill",        color:T.grn,  bg:T.grnL,  dir:"in"},
-                  "EMD Forfeit":   {label:"EMD Forfeit",    color:T.red,  bg:T.redL,  dir:"out"},
-                  "Bank Transfer": {label:"Bank Transfer",  color:T.t3,   bg:T.b1,    dir:"transfer"},
-                  "Wallet Payment":{label:"Wallet Out",     color:T.red,  bg:T.redL,  dir:"out"},
-                  "Wallet Top-up": {label:"Wallet Top-up",  color:T.slt,  bg:T.sltL,  dir:"internal"},
-                  "Material Return":{label:"Material Return",color:T.grn, bg:T.grnL,  dir:"in"},
+                  "Payment In":    {label:t("transaction_detail.payment_in"),     color:T.grn,  bg:T.grnL,  dir:"in"},
+                  "Payment Out":   {label:t("transaction_detail.payment_out"),    color:T.red,  bg:T.redL,  dir:"out"},
+                  "Material Purchase":{label:t("common.material_purchase"),color:T.red,bg:T.redL,dir:"out"},
+                  "Site Expense":  {label:t("common.site_expense"),   color:T.red,  bg:T.redL,  dir:"out"},
+                  "Party Payment": {label:t("transaction_detail.party_payment"),  color:T.red,  bg:T.redL,  dir:"out"},
+                  "Sub-Con Expense":{label:t("app.sub_con"),       color:T.red,  bg:T.redL,  dir:"out"},
+                  "Sales Invoice": {label:t("common.sales_invoice"),  color:T.grn,  bg:T.grnL,  dir:"in"},
+                  "RA Bill":       {label:t("finance.ra_bill"),        color:T.grn,  bg:T.grnL,  dir:"in"},
+                  "EMD Forfeit":   {label:t("finance.emd_forfeit"),    color:T.red,  bg:T.redL,  dir:"out"},
+                  "Bank Transfer": {label:t("common.bank_transfer"),  color:T.t3,   bg:T.b1,    dir:"transfer"},
+                  "Wallet Payment":{label:t("transaction_detail.wallet_out"),     color:T.red,  bg:T.redL,  dir:"out"},
+                  "Wallet Top-up": {label:t("transaction_detail.wallet_top_up"),  color:T.slt,  bg:T.sltL,  dir:"internal"},
+                  "Material Return":{label:t("transaction_detail.material_return"),color:T.grn, bg:T.grnL,  dir:"in"},
                 };
                 // P4 #67: render only the current page (max TXN_PAGE_SIZE rows
                 // instead of 5000). txnPageRows is already sorted descending
@@ -5123,28 +5102,28 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   );
                 });
               })()}
-              {txnFiltered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions recorded</div>}
+              {txnFiltered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.no_transactions_recorded")}</div>}
               </div>
               {/* Pagination strip — only when there are multiple pages */}
               {txnPageCount > 1 && (
                 <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"8px 14px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`,flexShrink:0}}>
                   <button onClick={()=>setTxnPage(0)} disabled={txnPage===0}
-                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage===0?T.b1:T.surface,color:txnPage===0?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage===0?"not-allowed":"pointer"}}>« First</button>
+                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage===0?T.b1:T.surface,color:txnPage===0?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage===0?"not-allowed":"pointer"}}>{t("finance.first")}</button>
                   <button onClick={()=>setTxnPage(p=>Math.max(0,p-1))} disabled={txnPage===0}
-                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage===0?T.b1:T.surface,color:txnPage===0?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage===0?"not-allowed":"pointer"}}>‹ Prev</button>
+                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage===0?T.b1:T.surface,color:txnPage===0?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage===0?"not-allowed":"pointer"}}>{t("finance.prev_2")}</button>
                   <span style={{fontSize:11.5,color:T.t3,padding:"0 8px",fontVariantNumeric:"tabular-nums"}}>
-                    Page <b style={{color:T.t1}}>{txnPage+1}</b> of <b style={{color:T.t1}}>{txnPageCount}</b>
+                   {t("finance.page")} <b style={{color:T.t1}}>{txnPage+1}</b> of <b style={{color:T.t1}}>{txnPageCount}</b>
                     <span style={{marginLeft:8,color:T.t4}}>· {txnFiltered.length} total</span>
                   </span>
                   <button onClick={()=>setTxnPage(p=>Math.min(txnPageCount-1,p+1))} disabled={txnPage>=txnPageCount-1}
-                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage>=txnPageCount-1?T.b1:T.surface,color:txnPage>=txnPageCount-1?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage>=txnPageCount-1?"not-allowed":"pointer"}}>Next ›</button>
+                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage>=txnPageCount-1?T.b1:T.surface,color:txnPage>=txnPageCount-1?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage>=txnPageCount-1?"not-allowed":"pointer"}}>{t("finance.next")}</button>
                   <button onClick={()=>setTxnPage(txnPageCount-1)} disabled={txnPage>=txnPageCount-1}
-                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage>=txnPageCount-1?T.b1:T.surface,color:txnPage>=txnPageCount-1?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage>=txnPageCount-1?"not-allowed":"pointer"}}>Last »</button>
+                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage>=txnPageCount-1?T.b1:T.surface,color:txnPage>=txnPageCount-1?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage>=txnPageCount-1?"not-allowed":"pointer"}}>{t("finance.last")}</button>
                 </div>
               )}
               {/* Footer totals — In / Out for the filtered set */}
               <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0,alignItems:"center"}}>
-                <span style={{gridColumn:"1/6",fontSize:12,fontWeight:700,color:T.t1}}>TOTAL — {txnFiltered.length} entries</span>
+                <span style={{gridColumn:"1/6",fontSize:12,fontWeight:700,color:T.t1}}>{t("finance.total_txnfiltered_entries", { txnFiltered: txnFiltered.length })}</span>
                 <span style={{fontSize:13,fontWeight:800,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>+ ₹{fmtN(tIn)} &nbsp;/&nbsp; − ₹{fmtN(tOut)}</span>
                 <span/>
               </div>
@@ -5165,19 +5144,19 @@ Status: ${ledgerRow.status||"unpaid"}`;
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
             {/* Toolbar */}
             <div style={{background:T.surface,borderRadius:8,padding:"9px 14px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,gap:10}}>
-              <div style={{fontSize:14,fontWeight:700,color:T.t1,whiteSpace:"nowrap"}}>All Payment Requests</div>
+              <div style={{fontSize:14,fontWeight:700,color:T.t1,whiteSpace:"nowrap"}}>{t("finance.all_payment_requests")}</div>
               <div style={{position:"relative",flex:1,maxWidth:380}}>
                 <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
                 <input value={searchPR} onChange={e=>setSearchPR(e.target.value)}
-                  placeholder="Search by no, party, project, purpose, amount, priority, status…"
+                  placeholder={t("finance.search_by_no_party_project_purpose")}
                   style={{width:"100%",height:30,padding:"0 28px 0 28px",borderRadius:7,border:`1.5px solid ${searchPR?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:searchPR?T.bluL:T.surface}}/>
-                {searchPR&&<button onClick={()=>setSearchPR("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.t4,padding:2,display:"flex",alignItems:"center"}} title="Clear"><IcX size={12}/></button>}
+                {searchPR&&<button onClick={()=>setSearchPR("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.t4,padding:2,display:"flex",alignItems:"center"}} title={t("common.clear")}><IcX size={12}/></button>}
               </div>
               <div style={{display:"flex",gap:7}}>
-                <button onClick={dlPRcsv} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> Excel</button>
+                <button onClick={dlPRcsv} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> {t("common.excel")}</button>
                 <button onClick={dlPRpdf} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
                 <button onClick={()=>setShowNewPR(true)} style={{padding:"5px 13px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:5,boxShadow:`0 2px 6px ${T.blu}44`}}>
-                  <IcAdd size={13} color="white"/> New Request
+                  <IcAdd size={13} color="white"/> {t("common.new_request")}
                 </button>
               </div>
             </div>
@@ -5195,17 +5174,17 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 };
                 return(
                 <div style={{display:"grid",gridTemplateColumns:"80px 72px 140px 100px 130px 1fr 110px 75px 90px 95px 130px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10,gap:6}}>
-                  <SortH label="Req No" col="no"/>
-                  <SortH label="Date" col="date"/>
-                  <SortH label="Party" col="party"/>
-                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",whiteSpace:"nowrap"}}>Type</span>
-                  <SortH label="Project" col="project"/>
-                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Purpose</span>
-                  <SortH label="Req By" col="by"/>
-                  <SortH label="Priority" col="priority"/>
-                  <SortH label="Amount" col="amount" align="right"/>
-                  <SortH label="Status" col="status"/>
-                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Action</span>
+                  <SortH label={t("finance.req_no")} col="no"/>
+                  <SortH label={t("common.date")} col="date"/>
+                  <SortH label={t("common.party")} col="party"/>
+                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{t("common.type")}</span>
+                  <SortH label={t("common.project")} col="project"/>
+                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("finance.purpose_2")}</span>
+                  <SortH label={t("finance.req_by")} col="by"/>
+                  <SortH label={t("common.priority")} col="priority"/>
+                  <SortH label={t("common.amount_2")} col="amount" align="right"/>
+                  <SortH label={t("common.status")} col="status"/>
+                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("finance.action")}</span>
                 </div>
                 );
               })()}
@@ -5276,7 +5255,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         {req.status==="Pending"&&(<>
                           <button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));}}}
                             style={{padding:"4px 7px",borderRadius:5,background:isEditing?T.bluL:T.sltL,color:isEditing?T.blu:T.t3,border:`1px solid ${isEditing?T.blu:T.b1}`,fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
-                            <IcEdit size={10} color="currentColor"/> Edit
+                            <IcEdit size={10} color="currentColor"/> {t("common.edit_2")}
                           </button>
                           <button onClick={()=>approveReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✓</button>
                           <button onClick={()=>rejectReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✗</button>
@@ -5288,54 +5267,53 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           </div>
                         )}
                         {req.status==="Rejected"&&(
-                          <span style={{fontSize:10.5,color:T.red,fontWeight:600}}>✗ Rejected</span>
+                          <span style={{fontSize:10.5,color:T.red,fontWeight:600}}>{t("common.rejected_2")}</span>
                         )}
                       </div>
                     </div>
                     {/* Edit panel */}
                     {isEditing&&req.status==="Pending"&&(
                       <div style={{borderTop:`1px solid ${T.bluM}`,background:T.bluL,padding:"12px 14px"}}>
-                        <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:10}}>Modify Payment Before Approving</div>
+                        <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:10}}>{t("finance.modify_payment_before_approving")}</div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                           <div>
-                            <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Requested Amount</label>
+                            <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("finance.requested_amount")}</label>
                             <input readOnly value={"₹"+fmtN(req.amount)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t4,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                           </div>
                           <div>
-                            <label style={{fontSize:10,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Approve Amount</label>
-                            <input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} placeholder="Enter amount"
+                            <label style={{fontSize:10,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("finance.approve_amount")}</label>
+                            <input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} placeholder={t("finance.enter_amount")}
                               style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.blu}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                           </div>
                         </div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                           <div>
-                            <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Reason</label>
+                            <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.reason")}</label>
                             <select style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                              <option>Partial stock available</option><option>Budget limit</option><option>Price negotiated</option><option>Split payment</option><option>Other</option>
+                              <option>{t("finance.partial_stock_available")}</option><option>{t("finance.budget_limit")}</option><option>{t("finance.price_negotiated")}</option><option>{t("finance.split_payment")}</option><option>{t("common.other")}</option>
                             </select>
                           </div>
                           <div>
-                            <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Note</label>
-                            <input type="text" placeholder="Optional note..." style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                            <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.note")}</label>
+                            <input type="text" placeholder={t("finance.optional_note")} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                           </div>
                         </div>
                         <div style={{display:"flex",gap:7,justifyContent:"flex-end"}}>
-                          <button onClick={()=>setEditReqId(null)} style={{padding:"6px 14px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+                          <button onClick={()=>setEditReqId(null)} style={{padding:"6px 14px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
                           <button onClick={()=>{
                             const newAmt=Number(editAmt);if(!newAmt||newAmt<=0) return;const orig=req.amount;
                             // pendPmts derives from payReqs automatically — no separate push needed
                             setPayReqs(prev=>prev.map(r=>r.id===req.id?{...r,status:"Approved",amount:newAmt,originalAmt:newAmt!==orig?orig:undefined,modified:newAmt!==orig,approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}:r));
                             setEditReqId(null);
                           }} style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-                            <IcThumbUp size={13} color="white"/> Approve {Number(editAmt)?"₹"+fmtN(Number(editAmt)):"..."}
-                          </button>
+                            <IcThumbUp size={13} color="white"/>{t("finance.approve_number", { Number: Number(editAmt)?"₹"+fmtN(Number(editAmt)):"..." })}</button>
                         </div>
                       </div>
                     )}
                   </div>
                 );
               })}
-              {payReqs.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No payment requests found</div>}
+              {payReqs.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.no_payment_requests_found")}</div>}
               </div>{/* /scrollable */}
             </div>
           </div>
@@ -5345,16 +5323,16 @@ Status: ${ledgerRow.status||"unpaid"}`;
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
             {/* Toolbar */}
             <div style={{background:T.surface,borderRadius:8,padding:"9px 14px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,gap:10}}>
-              <div style={{fontSize:14,fontWeight:700,color:T.t1,whiteSpace:"nowrap"}}>Pending Payments</div>
+              <div style={{fontSize:14,fontWeight:700,color:T.t1,whiteSpace:"nowrap"}}>{t("finance.pending_payments")}</div>
               <div style={{position:"relative",flex:1,maxWidth:380}}>
                 <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
                 <input value={searchPend} onChange={e=>setSearchPend(e.target.value)}
-                  placeholder="Search by no, type, party, amount, priority…"
+                  placeholder={t("finance.search_by_no_type_party_amount")}
                   style={{width:"100%",height:30,padding:"0 28px 0 28px",borderRadius:7,border:`1.5px solid ${searchPend?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:searchPend?T.bluL:T.surface}}/>
-                {searchPend&&<button onClick={()=>setSearchPend("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.t4,padding:2,display:"flex",alignItems:"center"}} title="Clear"><IcX size={12}/></button>}
+                {searchPend&&<button onClick={()=>setSearchPend("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.t4,padding:2,display:"flex",alignItems:"center"}} title={t("common.clear")}><IcX size={12}/></button>}
               </div>
               <div style={{display:"flex",gap:7,alignItems:"center"}}>
-                <button onClick={dlPendCSV} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> Excel</button>
+                <button onClick={dlPendCSV} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> {t("common.excel")}</button>
                 <button onClick={dlPendPDF} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
               </div>
             </div>
@@ -5413,14 +5391,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
               <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
                 {/* Sticky header */}
                 <div style={{display:"grid",gridTemplateColumns:COLS,padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10,gap:6,flexShrink:0}}>
-                  <SortHdr label="Invoice No" col="no"/>
-                  <SortHdr label="Type" col="type"/>
-                  <SortHdr label="Party Name" col="party"/>
-                  <SortHdr label="Invoice Amt" col="amount" align="right"/>
-                  <SortHdr label="Balance Due" col="amount" align="right"/>
-                  <SortHdr label="Due Date" col="date"/>
-                  <SortHdr label="Priority" col="priority"/>
-                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Action</span>
+                  <SortHdr label={t("finance.invoice_no")} col="no"/>
+                  <SortHdr label={t("common.type")} col="type"/>
+                  <SortHdr label={t("finance.party_name")} col="party"/>
+                  <SortHdr label={t("finance.invoice_amt")} col="amount" align="right"/>
+                  <SortHdr label={t("finance.balance_due")} col="amount" align="right"/>
+                  <SortHdr label={t("common.due_date")} col="date"/>
+                  <SortHdr label={t("common.priority")} col="priority"/>
+                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{t("finance.action")}</span>
                 </div>
                 <div style={{flex:1,overflowY:"auto"}}>
                 {filtered.map((pmt,i)=>{
@@ -5460,7 +5438,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {/* Due Date */}
                       <div>
                         <div style={{fontSize:12,color:pmt.overdue?T.red:T.t2,fontWeight:pmt.overdue?700:400}}>{pmt.date||"—"}</div>
-                        <div style={{fontSize:9.5,color:pmt.overdue?T.red:T.grn,fontWeight:600}}>{pmt.overdue?"OVERDUE":"Upcoming"}</div>
+                        <div style={{fontSize:9.5,color:pmt.overdue?T.red:T.grn,fontWeight:600}}>{pmt.overdue?"OVERDUE":t("finance.upcoming")}</div>
                       </div>
                       {/* Priority — plain muted text (High stays red) */}
                       <span style={{fontSize:11,fontWeight:500,color:pri==="High"?T.red:T.t3,whiteSpace:"nowrap"}}>{pri}</span>
@@ -5471,9 +5449,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           // Pay routing (vendor cash + against-party contra) is Phase 2.
                           return (
                             <button onClick={()=>{ setSettleAcct(""); setSettleDate(new Date().toISOString().slice(0,10)); setSettleMop("Cash"); setSettleNote(""); setSettlePay(pmt); }}
-                              title="Record payment"
+                              title={t("finance.record_payment")}
                               style={{padding:"5px 9px",borderRadius:5,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",gap:3}}>
-                              <IcSend size={9} color="white"/> Pay
+                              <IcSend size={9} color="white"/> {t("finance.pay")}
                             </button>
                           );
                         }
@@ -5484,7 +5462,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         const refresh = ()=>{ refreshPayReqs(); refreshPendPmts(); };
                         const onExtend = async ()=>{
                           const cur = pmt.dueDateRaw ? new Date(pmt.dueDateRaw).toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
-                          const newDate = await window.promptAsync(`Extend ${pmt.no} due date — enter new YYYY-MM-DD`, cur);
+                          const newDate = await window.promptAsync(t("finance.extend_no_due_date_enter_new", { no: pmt.no }), cur);
                           if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return;
                           try {
                             const r = await api.post(`/finance/pending-payments/${sourceKind}/${sourceId}/extend`, { new_date:newDate });
@@ -5503,15 +5481,15 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         return (
                           <div style={{display:"flex",gap:4,alignItems:"center"}}>
                             <button onClick={()=>openTxn("Payment Made",pmt.party,null,{kind:sourceKind,id:sourceId,amount:pmt.amount,label:pmt.no})}
-                              title="Record payment"
+                              title={t("finance.record_payment")}
                               style={{padding:"5px 9px",borderRadius:5,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",gap:3}}>
-                              <IcSend size={9} color="white"/> Pay
+                              <IcSend size={9} color="white"/> {t("finance.pay")}
                             </button>
-                            <button onClick={onExtend} title="Extend due date"
+                            <button onClick={onExtend} title={t("finance.extend_due_date")}
                               style={{padding:"5px 7px",borderRadius:5,background:T.ambL,color:T.amb,border:`1px solid ${T.ambM}`,cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center"}}>
                               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zM16 2v4M8 2v4M3 10h18M12 14v4M10 16h4"/></svg>
                             </button>
-                            <button onClick={onClose} title="Close without paying"
+                            <button onClick={onClose} title={t("finance.close_without_paying")}
                               style={{padding:"5px 7px",borderRadius:5,background:T.surfaceB,color:T.t3,border:`1px solid ${T.b1}`,cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center"}}>
                               <IcX size={11} color={T.t3}/>
                             </button>
@@ -5521,12 +5499,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     </div>
                   );
                 })}
-                {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No pending payments</div>}
+                {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.no_pending_payments")}</div>}
                 </div>
                 {/* Total footer */}
                 {filtered.length>0&&(
                   <div style={{display:"grid",gridTemplateColumns:COLS,padding:"9px 14px",gap:6,background:"#EEF2FF",borderTop:`2px solid ${T.b1}`,flexShrink:0}}>
-                    <span style={{gridColumn:"1/4",fontSize:12,fontWeight:700,color:T.t1}}>Total Outstanding — {filtered.length} items</span>
+                    <span style={{gridColumn:"1/4",fontSize:12,fontWeight:700,color:T.t1}}>{t("finance.total_outstanding_filtered_items", { filtered: filtered.length })}</span>
                     <span/>
                     <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(filtered.reduce((s,p)=>s+p.amount,0))}</span>
                     <span/><span/><span/>
@@ -5548,9 +5526,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
               const totVal=equipReview.reduce((s,r)=>s+Number(r.total_amount||0),0);
               const rateCnt=equipReview.filter(r=>r.approval_status==="pending"&&Number(r.rate_changed)===1).length;
               const stat=[
-                {l:"Pending Review",v:equipReview.length,c:T.blu,bg:T.bluL,brd:T.bluM},
-                {l:"Total Value",v:`₹${fmtN(totVal)}`,c:T.t1,bg:T.surfaceB,brd:T.b1},
-                {l:"Rate Approvals",v:rateCnt,c:rateCnt>0?T.amb:T.t4,bg:rateCnt>0?T.ambL:T.surfaceB,brd:rateCnt>0?T.ambM:T.b1},
+                {l:t("finance.pending_review"),v:equipReview.length,c:T.blu,bg:T.bluL,brd:T.bluM},
+                {l:t("common.total_value"),v:`₹${fmtN(totVal)}`,c:T.t1,bg:T.surfaceB,brd:T.b1},
+                {l:t("finance.rate_approvals"),v:rateCnt,c:rateCnt>0?T.amb:T.t4,bg:rateCnt>0?T.ambL:T.surfaceB,brd:rateCnt>0?T.ambM:T.b1},
               ];
               return(
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:12}}>
@@ -5564,24 +5542,24 @@ Status: ${ledgerRow.status||"unpaid"}`;
               );
             })()}
             {equipReviewLoading && (
-              <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>Loading equipment usage...</div>
+              <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.loading_equipment_usage")}</div>
             )}
             {!equipReviewLoading && equipReview.length === 0 && (
               <div style={{background:T.surface,borderRadius:12,border:`1px solid ${T.b1}`,padding:"56px 20px",textAlign:"center"}}>
                 <div style={{width:52,height:52,borderRadius:"50%",background:T.grnL,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}>
                   <IcChk size={26} color={T.grn}/>
                 </div>
-                <div style={{fontSize:15,fontWeight:700,color:T.t1}}>All caught up</div>
-                <div style={{fontSize:12.5,color:T.t4,marginTop:6}}>No equipment usage entries pending review</div>
+                <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{t("finance.all_caught_up")}</div>
+                <div style={{fontSize:12.5,color:T.t4,marginTop:6}}>{t("finance.no_equipment_usage_entries_pending_review")}</div>
               </div>
             )}
             {!equipReviewLoading && equipReview.map(row=>{
               const routeOf = (r) => {
                 const route = r.finance_confirmed_route || r.suggested_route || "";
-                if (route === "vendor") return { label: "Rental against vendor", party: equipParties.find(p=>p.id===r.vendor_id)?.name || r.vendor_party_name || "" };
-                if (route === "subcon_against") return { label: "Subcon against", party: equipParties.find(p=>p.id===r.subcon_id)?.name || r.subcon_party_name || "" };
-                if (route === "owned") return { label: "Owned equipment", party: "" };
-                if (route === "site_exp") return { label: "Site expense", party: equipParties.find(p=>p.id===r.vendor_id)?.name || r.vendor_party_name || "" };
+                if (route === "vendor") return { label: t("finance.rental_against_vendor"), party: equipParties.find(p=>p.id===r.vendor_id)?.name || r.vendor_party_name || "" };
+                if (route === "subcon_against") return { label: t("finance.subcon_against"), party: equipParties.find(p=>p.id===r.subcon_id)?.name || r.subcon_party_name || "" };
+                if (route === "owned") return { label: t("finance.owned_equipment"), party: "" };
+                if (route === "site_exp") return { label: t("finance.site_expense"), party: equipParties.find(p=>p.id===r.vendor_id)?.name || r.vendor_party_name || "" };
                 return { label: route || "—", party: "" };
               };
               const r = routeOf(row);
@@ -5667,41 +5645,37 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           <div style={{fontSize:14.5,fontWeight:700,color:T.t1}}>{row.equipment_name || `Equipment #${row.equipment_id||""}`}</div>
                           <span style={{fontSize:11,color:T.t3,padding:"2px 9px",background:T.sltL,borderRadius:20,fontWeight:600}}>{dur}</span>
                           {isRateBlocking
-                            ? <span style={{fontSize:9.5,fontWeight:800,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,padding:"2px 8px",borderRadius:20,textTransform:"uppercase",letterSpacing:".4px"}}>Rate Approval</span>
-                            : <span style={{fontSize:9.5,fontWeight:800,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,padding:"2px 8px",borderRadius:20,textTransform:"uppercase",letterSpacing:".4px"}}>Pending</span>}
+                            ? <span style={{fontSize:9.5,fontWeight:800,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,padding:"2px 8px",borderRadius:20,textTransform:"uppercase",letterSpacing:".4px"}}>{t("finance.rate_approval")}</span>
+                            : <span style={{fontSize:9.5,fontWeight:800,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,padding:"2px 8px",borderRadius:20,textTransform:"uppercase",letterSpacing:".4px"}}>{t("common.pending")}</span>}
                         </div>
                         <div style={{fontSize:12,color:T.t3,marginBottom:4,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                          <span style={{fontWeight:600,color:T.t2}}>{row.project_name || "Unknown project"}</span>
-                          <span style={{color:T.b2}}>·</span>{row.created_by_name || "Unknown user"}
+                          <span style={{fontWeight:600,color:T.t2}}>{row.project_name || t("finance.unknown_project")}</span>
+                          <span style={{color:T.b2}}>·</span>{row.created_by_name || t("finance.unknown_user")}
                           <span style={{color:T.b2}}>·</span>{row.usage_date || ""}
                         </div>
                         <div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                          <span style={{fontSize:11.5,color:T.blu,background:T.bluL,padding:"4px 10px",borderRadius:20,fontWeight:600,border:`1px solid ${T.bluM}`}}>
-                            Suggests: {r.label}{r.party ? ` — ${r.party}` : ""}
-                          </span>
+                          <span style={{fontSize:11.5,color:T.blu,background:T.bluL,padding:"4px 10px",borderRadius:20,fontWeight:600,border:`1px solid ${T.bluM}`}}>{t("finance.suggests_labelr", { label: r.label, r: r.party ? ` — ${r.party}` : "" })}</span>
                         </div>
                         {isRateBlocking && (
-                          <div style={{marginTop:10,padding:"8px 12px",background:T.ambL,border:`1px solid ${T.amb}55`,borderRadius:6,fontSize:12,color:T.amb,fontWeight:600}}>
-                            Rate ₹{Number(row.rate_used||0).toLocaleString()} (master ₹{Number(row.master_default_rate||0).toLocaleString()}) — needs approval
-                          </div>
+                          <div style={{marginTop:10,padding:"8px 12px",background:T.ambL,border:`1px solid ${T.amb}55`,borderRadius:6,fontSize:12,color:T.amb,fontWeight:600}}>{t("finance.rate_number_master_number2_needs_approval", { Number: Number(row.rate_used||0).toLocaleString(), Number2: Number(row.master_default_rate||0).toLocaleString() })}</div>
                         )}
                       </div>
                     </div>
                     <div style={{textAlign:"right",minWidth:130,padding:"4px 0"}}>
                       <div style={{fontSize:20,fontWeight:800,color:T.t1,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>₹{Number(row.total_amount||0).toLocaleString()}</div>
-                      <div style={{fontSize:10,color:T.t4,marginTop:4,textTransform:"uppercase",letterSpacing:".5px"}}>Total Amount</div>
+                      <div style={{fontSize:10,color:T.t4,marginTop:4,textTransform:"uppercase",letterSpacing:".5px"}}>{t("finance.total_amount")}</div>
                     </div>
                   </div>
 
                   {/* Route editor */}
                   {isEditingRoute && (
                     <div style={{marginTop:12,padding:"10px 12px",background:T.bluL,border:`1px solid ${T.blu}33`,borderRadius:8}}>
-                      <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:8}}>Change route</div>
+                      <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:8}}>{t("finance.change_route")}</div>
                       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
                         {/* Keys MUST match routes/equipment.js PAYMENT_ROUTES.
                             "log_only" is not a route — it is a finance_status
                             set at entry time, and sending it here 400'd. */}
-                        {[{k:"vendor",l:"Rental against vendor"},{k:"subcon_against",l:"Subcon against"},{k:"owned",l:"Owned equipment"},{k:"site_exp",l:"Site expense"}].map(o=>(
+                        {[{k:"vendor",l:t("finance.rental_against_vendor")},{k:"subcon_against",l:t("finance.subcon_against")},{k:"owned",l:t("finance.owned_equipment")},{k:"site_exp",l:t("finance.site_expense")}].map(o=>(
                           <button key={o.k} onClick={()=>setEquipRouteEdit({...equipRouteEdit,route:o.k})}
                             style={{
                               padding:"6px 12px",borderRadius:6,border:`1.5px solid ${equipRouteEdit.route===o.k?T.blu:T.b1}`,
@@ -5713,7 +5687,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {(equipRouteEdit.route === "vendor" || equipRouteEdit.route === "site_exp") && (
                         <select value={equipRouteEdit.vendor_id || ""} onChange={e=>setEquipRouteEdit({...equipRouteEdit,vendor_id:e.target.value?parseInt(e.target.value,10):null})}
                           style={{width:"100%",height:34,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                          <option value="">{equipRouteEdit.route === "site_exp" ? "— No payee (site cash) —" : "— Select vendor —"}</option>
+                          <option value="">{equipRouteEdit.route === "site_exp" ? t("finance.no_payee_site_cash") : t("finance.select_vendor")}</option>
                           {equipParties.filter(p=>equipHasRole(p,["material_vendor","equipment_vendor","equipment","vendor","supplier","material vendor","material supplier","transporter"])).map(p=>(
                             <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
@@ -5722,7 +5696,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {equipRouteEdit.route === "subcon_against" && (
                         <select value={equipRouteEdit.subcon_id || ""} onChange={e=>setEquipRouteEdit({...equipRouteEdit,subcon_id:e.target.value?parseInt(e.target.value,10):null})}
                           style={{width:"100%",height:34,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                          <option value="">— Select sub-contractor —</option>
+                          <option value="">{t("finance.select_sub_contractor")}</option>
                           {equipParties.filter(p=>equipHasRole(p,["subcontractor","subcon","sub-con"])).map(p=>(
                             <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
@@ -5730,10 +5704,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       )}
                       <div style={{display:"flex",gap:6,justifyContent:"flex-end",marginTop:10}}>
                         <button onClick={()=>setEquipRouteEdit(null)} disabled={acting}
-                          style={{padding:"7px 14px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                          style={{padding:"7px 14px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
                         <button onClick={submitRouteChange} disabled={acting}
                           style={{padding:"7px 16px",borderRadius:6,background:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",opacity:acting?0.6:1}}>
-                          {acting ? "Saving..." : "Apply & Confirm"}
+                          {acting ? t("common.saving") : t("finance.apply_confirm")}
                         </button>
                       </div>
                     </div>
@@ -5746,22 +5720,22 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         <>
                           <button onClick={doRejectRate} disabled={acting}
                             style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.red}`,background:T.redL,color:T.red,fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:acting?0.6:1}}>
-                            Reject rate
+                           {t("finance.reject_rate")}
                           </button>
                           <button onClick={doApproveRate} disabled={acting}
                             style={{padding:"8px 16px",borderRadius:7,background:T.grn,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:acting?0.6:1}}>
-                            Approve rate
+                           {t("finance.approve_rate")}
                           </button>
                         </>
                       ) : (
                         <>
                           <button onClick={()=>setEquipRouteEdit({usageId:row.id,route:row.suggested_route||"vendor",vendor_id:row.vendor_id||null,subcon_id:row.subcon_id||null})} disabled={acting}
                             style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.b2}`,background:T.surface,color:T.t2,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                            Change route
+                           {t("finance.change_route")}
                           </button>
                           <button onClick={doConfirm} disabled={acting}
                             style={{padding:"8px 18px",borderRadius:7,background:T.grn,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:acting?0.6:1}}>
-                            {acting ? "Working..." : "Confirm"}
+                            {acting ? t("finance.working") : t("common.confirm")}
                           </button>
                         </>
                       )}
@@ -5778,35 +5752,35 @@ Status: ${ledgerRow.status||"unpaid"}`;
           <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
           {/* Filter bar */}
           <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"8px 12px",marginBottom:12,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{fontSize:12,fontWeight:600,color:T.t2}}>Filters:</span>
+            <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{t("finance.filters")}</span>
             <select value={grnFilter.project} onChange={e=>setGrnFilter(p=>({...p,project:e.target.value}))}
               style={{height:30,padding:"0 8px",borderRadius:6,border:`1.5px solid ${grnFilter.project!=="All"?T.blu:T.b1}`,background:grnFilter.project!=="All"?T.bluL:T.surface,fontSize:11.5,color:grnFilter.project!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-              <option value="All">All Projects</option>
+              <option value="All">{t("common.all_projects")}</option>
               {[...new Set(grnList.map(g=>g.project_name).filter(Boolean))].map(p=><option key={p}>{p}</option>)}
             </select>
             <select value={grnFilter.head} onChange={e=>setGrnFilter(p=>({...p,head:e.target.value}))}
               style={{height:30,padding:"0 8px",borderRadius:6,border:`1.5px solid ${grnFilter.head!=="All"?T.blu:T.b1}`,background:grnFilter.head!=="All"?T.bluL:T.surface,fontSize:11.5,color:grnFilter.head!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-              <option value="All">All Categories</option>
+              <option value="All">{t("common.all_categories")}</option>
               {["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"].map(h=><option key={h}>{h}</option>)}
             </select>
             <div style={{position:"relative",flex:1,minWidth:160}}>
               <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
-              <input value={grnFilter.material} onChange={e=>setGrnFilter(p=>({...p,material:e.target.value}))} placeholder="Search material..."
+              <input value={grnFilter.material} onChange={e=>setGrnFilter(p=>({...p,material:e.target.value}))} placeholder={t("common.search_material")}
                 style={{width:"100%",height:30,padding:"0 8px 0 27px",borderRadius:6,border:`1.5px solid ${grnFilter.material?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:grnFilter.material?T.bluL:T.surface}}/>
             </div>
             {(grnFilter.project!=="All"||grnFilter.head!=="All"||grnFilter.material)&&(
               <button onClick={()=>setGrnFilter({project:"All",material:"",head:"All"})}
-                style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>Clear ×</button>
+                style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>{t("finance.clear")}</button>
             )}
           </div>
 
           {/* GRN List */}
-          {grnLoading&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>Loading GRN data...</div>}
+          {grnLoading&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.loading_grn_data")}</div>}
 
           {!grnLoading&&grnList.length===0&&(
             <div style={{textAlign:"center",padding:"60px",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-              <div style={{fontSize:14,fontWeight:600,color:T.t3,marginBottom:4}}>No GRN entries found</div>
-              <div style={{fontSize:12,color:T.t4}}>Procurement mein GRN complete hone ke baad yahan aayega</div>
+              <div style={{fontSize:14,fontWeight:600,color:T.t3,marginBottom:4}}>{t("finance.no_grn_entries_found")}</div>
+              <div style={{fontSize:12,color:T.t4}}>{t("finance.procurement_mein_grn_complete_hone_ke")}</div>
             </div>
           )}
 
@@ -5822,7 +5796,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
               return true;
             });
 
-            if(filtered.length===0) return <div style={{textAlign:"center",padding:"40px",color:T.t4}}>No GRN matches filters</div>;
+            if(filtered.length===0) return <div style={{textAlign:"center",padding:"40px",color:T.t4}}>{t("finance.no_grn_matches_filters")}</div>;
 
             // Vendor-wise grouping: collect every GRN under its vendor name,
             // flatten items with their parent-GRN ref for checkbox-driven billing.
@@ -5911,7 +5885,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
 
             const handleCreateBill=async(vendorName)=>{
               const prefill=buildPrefillFromSelected(vendorName);
-              if(!prefill){alert("Pehle kuch items tick karo");return;}
+              if(!prefill){alert(t("finance.pehle_kuch_items_tick_karo"));return;}
               const primary=groups[vendorName].items.find(it=>selectedUBItems.has(it.key))?.grn;
               try{
                 const params=new URLSearchParams({
@@ -5955,16 +5929,13 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {grp.hasOrphan&&(
                         <div style={{padding:"5px 14px",background:T.ambL,borderBottom:`1px solid ${T.ambM}`,fontSize:10.5,color:T.amb,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
-                          <span>⚠ Is vendor ke kuch bills already bina GRN-link ke hain — Fin Activity me check karo, duplicate na ban jaaye</span>
+                          <span>{t("finance.is_vendor_ke_kuch_bills_already")}</span>
                         </div>
                       )}
                       {grp.issues.length>0&&(
                         <div style={{padding:"6px 14px",background:T.redL,borderBottom:`1px solid ${T.redM}`,fontSize:10.5,color:T.red,fontWeight:600,display:"flex",alignItems:"flex-start",gap:6}}>
                           <span style={{flexShrink:0}}>⚠</span>
-                          <span>
-                            Is vendor ki delivery me {grp.issues.length} open issue hai — bill banate waqt deduction ka faisla lo.
-                            {" "}{[...new Set(grp.issues.map(i=>i.issue_type))].join(" / ")}
-                          </span>
+                          <span>{t("finance.is_vendor_ki_delivery_me_grp", { grp: grp.issues.length, v: " ", vnew: [...new Set(grp.issues.map(i=>i.issue_type))].join(" / ") })}</span>
                         </div>
                       )}
                       {/* Vendor row */}
@@ -5982,7 +5953,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           </div>
                         </div>
                         {grp.issues.length>0&&(
-                          <span title="Is vendor ki delivery me open issue hai"
+                          <span title={t("finance.is_vendor_ki_delivery_me_open")}
                             style={{fontSize:10.5,color:T.red,fontWeight:700,background:T.redL,padding:"3px 9px",borderRadius:20,border:`1px solid ${T.redM}`,whiteSpace:"nowrap"}}>
                             ⚠ {grp.issues.length} issue
                           </span>
@@ -6001,9 +5972,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {/* Expanded — checkbox list of items */}
                       {isOpen&&(
                         <div style={{borderTop:`1px solid ${T.b1}`,background:T.surfaceB,padding:"10px 14px"}}>
-                          <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>
-                            SELECT MATERIAL RECEIVED — {grp.vendor}
-                          </div>
+                          <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>{t("finance.select_material_received_vendor", { vendor: grp.vendor })}</div>
                           {/* Header w/ master checkbox */}
                           <div style={{display:"grid",gridTemplateColumns:"26px 1fr 90px 70px 60px 110px 100px",gap:6,padding:"6px 8px",background:T.surface,borderRadius:6,border:`1px solid ${T.b1}`,alignItems:"center"}}>
                             <input type="checkbox" checked={allTicked}
@@ -6052,12 +6021,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           {/* Footer — Create Bill */}
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:10,borderTop:`1.5px solid ${T.b1}`}}>
                             <span style={{fontSize:11.5,color:T.t3}}>
-                              {selectedInGrp>0?`${selectedInGrp} item${selectedInGrp===1?"":"s"} ticked — bill banayenge`:"Select items above to bill them"}
+                              {selectedInGrp>0?`${selectedInGrp} item${selectedInGrp===1?"":"s"} ticked — bill banayenge`:t("finance.select_items_above_to_bill_them")}
                             </span>
                             <button disabled={selectedInGrp===0}
                               onClick={()=>handleCreateBill(grp.vendor)}
                               style={{padding:"7px 16px",borderRadius:7,background:selectedInGrp>0?T.blu:T.t4,color:"white",border:"none",cursor:selectedInGrp>0?"pointer":"not-allowed",fontSize:12,fontWeight:700,opacity:selectedInGrp>0?1:0.55,display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
-                              + Create Bill
+                             {t("finance.create_bill")}
                             </button>
                           </div>
                         </div>
@@ -6109,7 +6078,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   <div style={{background:T.surface,borderRadius:8,padding:"6px 10px",marginBottom:6,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
                     <div style={{position:"relative",flex:1,minWidth:200}}>
                       <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                      <input value={txnSearch} onChange={e=>setTxnSearch(e.target.value)} placeholder="Search material, vendor or project..."
+                      <input value={txnSearch} onChange={e=>setTxnSearch(e.target.value)} placeholder={t("finance.search_material_vendor_or_project")}
                         style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:7,border:`1.5px solid ${txnSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:txnSearch?T.bluL:T.surface}}/>
                     </div>
                     <span style={{fontSize:11,color:T.t4,whiteSpace:"nowrap"}}>{filtered.length} item{filtered.length===1?"":"s"} · ₹{fmtN(totalAmt)}</span>
@@ -6121,7 +6090,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       ))}
                     </div>
                     <div style={{flex:1,overflowY:"auto"}}>
-                      {filtered.length===0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No billed materials yet</div>}
+                      {filtered.length===0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.no_billed_materials_yet")}</div>}
                       {filtered.map((r,i) => (
                         <div key={r.key} onClick={()=>{
                           // Pass which line item was clicked so the drawer
@@ -6146,7 +6115,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     </div>
                     {filtered.length > 0 && (
                       <div style={{display:"grid",gridTemplateColumns:"80px 1.4fr 1.2fr 1.2fr 70px 60px 80px 100px",padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
-                        <span style={{gridColumn:"1 / 8",fontSize:12,fontWeight:700,color:T.t1}}>TOTAL — {filtered.length} entr{filtered.length===1?"y":"ies"}</span>
+                        <span style={{gridColumn:"1 / 8",fontSize:12,fontWeight:700,color:T.t1}}>{t("finance.total_filtered_entrfiltered2", { filtered: filtered.length, filtered2: filtered.length===1?"y":"ies" })}</span>
                         <span style={{fontSize:13,fontWeight:800,color:T.blu,textAlign:"right"}}>₹{fmtN(totalAmt)}</span>
                       </div>
                     )}
@@ -6163,7 +6132,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
         <div onClick={()=>{setShowUB(false);setSelUBParty(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
         <div style={{position:"fixed",right:0,top:0,bottom:0,width:400,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.14)",display:"flex",flexDirection:"column"}}>
           <div style={{background:T.surface,padding:"12px 14px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
-            <div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>Unbilled Materials</div><div style={{fontSize:10,color:T.t4}}>Received but not yet billed</div></div>
+            <div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>{t("finance.unbilled_materials")}</div><div style={{fontSize:10,color:T.t4}}>{t("finance.received_but_not_yet_billed")}</div></div>
             <span style={{background:T.purL,color:T.pur,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.pur}33`}}>₹{fmt(UNBILLED_PARTIES.flatMap(p=>p.billItems||[]).reduce((s,i)=>s+i.amt,0))}</span>
             <button onClick={()=>{setShowUB(false);setSelUBParty(null);}} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex"}}><IcX size={15}/></button>
           </div>
@@ -6191,8 +6160,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       </div>
                     ))}
                     <div style={{display:"flex",justifyContent:"space-between",marginTop:8,alignItems:"center"}}>
-                      <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>Total: ₹{fmtN(p.billItems.reduce((s,i)=>s+i.amt,0))}</span>
-                      <button onClick={()=>openTxn("Material Purchase Bill",p.name)} style={{padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700}}>Create Bill</button>
+                      <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{t("finance.total_fmtn", { fmtN: fmtN(p.billItems.reduce((s,i)=>s+i.amt,0)) })}</span>
+                      <button onClick={()=>openTxn("Material Purchase Bill",p.name)} style={{padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700}}>{t("finance.create_bill_2")}</button>
                     </div>
                   </div>
                 )}
@@ -6279,16 +6248,16 @@ Status: ${ledgerRow.status||"unpaid"}`;
           <>
             <div onClick={()=>!settleBusy&&setSettlePay(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:3000,backdropFilter:"blur(2px)"}}/>
             <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(440px,92vw)",background:T.surface,borderRadius:12,zIndex:3001,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",overflow:"hidden"}}>
-              <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,fontSize:14,fontWeight:700,color:T.t1}}>Record Payment</div>
+              <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,fontSize:14,fontWeight:700,color:T.t1}}>{t("common.record_payment")}</div>
               <div style={{padding:"16px 18px"}}>
                 {/* Payee + amount are locked — they come from the settlement (contra routing depends on them) */}
-                <div style={{fontSize:11,color:T.t4,marginBottom:2,fontWeight:600}}>Paid to</div>
+                <div style={{fontSize:11,color:T.t4,marginBottom:2,fontWeight:600}}>{t("finance.paid_to")}</div>
                 <div style={{fontSize:13.5,color:T.t1,fontWeight:600,marginBottom:8}}>{settlePay.party}{settlePay.itemType?` · ${settlePay.itemType}`:""}</div>
                 <div style={{fontSize:22,fontWeight:800,color:T.t1,marginBottom:10}}>₹{fmtN(settlePay.amount)}</div>
-                {onBehalf&&(<div style={{fontSize:11.5,color:T.amb,background:T.ambL,padding:"8px 10px",borderRadius:8,marginBottom:12,lineHeight:1.4}}><b>{settlePay.party}</b> ko cash jaayega · cost <b>{settlePay.against}</b> ({settlePay.costAgainstType}) ke against charge hoga.</div>)}
+                {onBehalf&&(<div style={{fontSize:11.5,color:T.amb,background:T.ambL,padding:"8px 10px",borderRadius:8,marginBottom:12,lineHeight:1.4}}><Rich k="finance.party_ko_cash_jaayega_cost_against" params={{ party: settlePay.party, against: settlePay.against, costAgainstType: settlePay.costAgainstType }} /></div>)}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                   <div>
-                    <div style={lblStyle}>Date</div>
+                    <div style={lblStyle}>{t("common.date")}</div>
                     <input type="date" value={settleDate} onChange={e=>setSettleDate(e.target.value)} style={inStyle}/>
                   </div>
                   <div>
@@ -6298,16 +6267,16 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     </select>
                   </div>
                 </div>
-                <div style={lblStyle}>Pay from account</div>
+                <div style={lblStyle}>{t("finance.pay_from_account")}</div>
                 <select value={settleAcct} onChange={e=>setSettleAcct(e.target.value)} style={{...inStyle,marginBottom:12}}>
-                  <option value="">Select account…</option>
+                  <option value="">{t("finance.select_account")}</option>
                   {activeAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
-                <div style={lblStyle}>Note (optional)</div>
-                <input type="text" value={settleNote} onChange={e=>setSettleNote(e.target.value)} placeholder="What is this payment for?" style={{...inStyle,marginBottom:16}}/>
+                <div style={lblStyle}>{t("common.note_optional")}</div>
+                <input type="text" value={settleNote} onChange={e=>setSettleNote(e.target.value)} placeholder={t("finance.what_is_this_payment_for")} style={{...inStyle,marginBottom:16}}/>
                 <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-                  <button onClick={()=>setSettlePay(null)} disabled={settleBusy} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${T.b1}`,background:T.surface,color:T.t2,fontWeight:600,cursor:"pointer",fontSize:13}}>Cancel</button>
-                  <button onClick={doPay} disabled={settleBusy||!settleAcct} style={{padding:"9px 18px",borderRadius:8,border:"none",background:(settleBusy||!settleAcct)?T.t4:T.blu,color:"white",fontWeight:700,cursor:(settleBusy||!settleAcct)?"default":"pointer",fontSize:13}}>{settleBusy?"Paying…":"Confirm Pay"}</button>
+                  <button onClick={()=>setSettlePay(null)} disabled={settleBusy} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${T.b1}`,background:T.surface,color:T.t2,fontWeight:600,cursor:"pointer",fontSize:13}}>{t("common.cancel")}</button>
+                  <button onClick={doPay} disabled={settleBusy||!settleAcct} style={{padding:"9px 18px",borderRadius:8,border:"none",background:(settleBusy||!settleAcct)?T.t4:T.blu,color:"white",fontWeight:700,cursor:(settleBusy||!settleAcct)?"default":"pointer",fontSize:13}}>{settleBusy?t("finance.paying"):t("finance.confirm_pay")}</button>
                 </div>
               </div>
             </div>

@@ -14,6 +14,7 @@ import SearchSelect from "./SearchSelect";
 import { Credit, fmtTimeAgo } from "./Credit";
 import uploadManager from "../utils/uploadManager";
 import RevisionNoteModal from "./RevisionNoteModal";
+import { t, Rich } from "../i18n";
 
 const T = {
   surface: "#FFFFFF",
@@ -52,7 +53,7 @@ const PRIORITIES = [
 
 const STATUS_META = {
   Pending:     { label: "PENDING",     c: T.amb, bg: T.ambL, brd: T.ambM },
-  "In Progress": { label: "IN PROGRESS", c: T.blu, bg: T.bluL, brd: T.bluM },
+  "In Progress": { get label() { return t("lead_design.in_progress"); }, c: T.blu, bg: T.bluL, brd: T.bluM },
   Uploaded:    { label: "UPLOADED",    c: T.grn, bg: T.grnL, brd: T.grnM },
   Rejected:    { label: "REJECTED",    c: T.red, bg: T.redL, brd: T.redM },
 };
@@ -156,7 +157,7 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
       uploadManager.add({
         file,
         folder: "gb_buildcon/lead-design-refs",
-        label: `Reference: ${file.name}`,
+        label: t("lead_design.reference_name", { name: file.name }),
         onDone: (url) => {
           setRefImages(prev => prev.map(r => r.tempId === tempId ? { ...r, url, uploading: false } : r));
         },
@@ -174,9 +175,9 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
   };
 
   const handleSubmit = async () => {
-    if (!title.trim()) { setErr("Title is required"); return; }
+    if (!title.trim()) { setErr(t("lead_design.title_is_required")); return; }
     const stillUploading = refImages.some(r => r.uploading);
-    if (stillUploading) { setErr("Wait for photos to finish uploading"); return; }
+    if (stillUploading) { setErr(t("lead_design.wait_for_photos_to_finish_uploading")); return; }
     setSaving(true);
     setErr("");
     try {
@@ -223,20 +224,17 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
         <div style={{ padding: "13px 16px", background: "#0D1B2A", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
             {mode === "form" && (
-              <button onClick={() => setMode("list")} title="Back to list"
+              <button onClick={() => setMode("list")} title={t("lead_design.back_to_list")}
                 style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", color: "rgba(255,255,255,0.7)", padding: "5px 9px", borderRadius: 6, fontSize: 11, fontFamily: "inherit", flexShrink: 0 }}>
-                ← Back
+               {t("common.back_2")}
               </button>
             )}
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: "white", display: "flex", alignItems: "center", gap: 6 }}>
                 <span>🎨</span>
-                <span>{mode === "form" ? "New Design Request" : "Design Requests"}</span>
+                <span>{mode === "form" ? t("lead_design.new_design_request") : t("lead_design.design_requests")}</span>
               </div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                Lead: {lead?.name}
-                {mode === "list" && requests.length > 0 && ` · ${drawingsCount} drawing${drawingsCount === 1 ? "" : "s"}, ${pendingCount} pending`}
-              </div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("lead_design.lead_name_mode", { name: lead?.name, mode: mode === "list" && requests.length > 0 && ` · ${drawingsCount} drawing${drawingsCount === 1 ? "" : "s"}, ${pendingCount} pending` })}</div>
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
@@ -244,10 +242,10 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
               <button onClick={() => setMode("form")}
                 style={{ padding: "6px 12px", borderRadius: 6, background: T.blu, border: "none", color: "white", fontSize: 11.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit" }}>
                 <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                Request Design
+               {t("lead_design.request_design")}
               </button>
             )}
-            <button onClick={onClose} title="Close"
+            <button onClick={onClose} title={t("common.close")}
               style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", padding: 6, borderRadius: 6, display: "flex" }}
               onMouseEnter={el => el.currentTarget.style.background = "rgba(255,255,255,0.1)"}
               onMouseLeave={el => el.currentTarget.style.background = "none"}>
@@ -260,13 +258,13 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
         {mode === "list" && (
           <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
             {loading ? (
-              <div style={{ padding: "32px", textAlign: "center", color: T.t4, fontSize: 12 }}>Loading...</div>
+              <div style={{ padding: "32px", textAlign: "center", color: T.t4, fontSize: 12 }}>{t("common.loading")}</div>
             ) : requests.length === 0 ? (
               <div style={{ padding: "60px 20px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                 <div style={{ width: 56, height: 56, borderRadius: "50%", border: `1.5px dashed ${T.b2}`, display: "flex", alignItems: "center", justifyContent: "center", color: T.t4, fontSize: 24 }}>🎨</div>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>No design requests yet</div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>{t("common.no_design_requests_yet")}</div>
                 <div style={{ fontSize: 11.5, color: T.t3, maxWidth: 320, lineHeight: 1.5 }}>
-                  Click <b>+ Request Design</b> to ask for a building plan or 3D view that you can share with this client.
+                 {t("common.click")} <b>{t("lead_design.request_design_2")}</b> {t("lead_design.to_ask_for_a_building_plan")}
                 </div>
               </div>
             ) : requests.map(r => {
@@ -350,13 +348,13 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12.5, fontWeight: 700, color: isApproved?T.grn:isRejected?T.red:T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.drawing_title || "Drawing"}</div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: isApproved?T.grn:isRejected?T.red:T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.drawing_title || t("common.drawing")}</div>
                           <div style={{ fontSize: 10.5, color: T.t3 }}>{r.current_version || "v1"} · {r.drawing_size || ""} · {fmtTimeAgo(r.drawing_created_at)}</div>
                         </div>
                         {r.drawing_url && (
                           <a href={r.drawing_url} target="_blank" rel="noreferrer"
                             style={{ padding: "5px 10px", borderRadius: 5, background: T.surface, border: `1px solid ${T.b1}`, color: T.blu, fontSize: 10.5, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                            👁 View
+                           {t("common.view")}
                           </a>
                         )}
                       </div>
@@ -364,21 +362,19 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
                       {/* Internal admin review status (stages 2-3) */}
                       {!isAdminApproved && ds === "Pending" && (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 9px", background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 5, fontSize: 10.5, color: T.t3 }}>
-                          🔒 <span><b style={{ color: T.t2 }}>Awaiting admin approval</b> — drawing uploaded, internal review pending</span>
+                          🔒 <span><b style={{ color: T.t2 }}>{t("common.awaiting_admin_approval")}</b> {t("lead_design.drawing_uploaded_internal_review_pending")}</span>
                         </div>
                       )}
                       {ds === "Revision" && (
-                        <div style={{ padding: "5px 9px", background: T.surface, borderLeft: `3px solid ${T.amb}`, borderRadius: 4, fontSize: 10.5, color: T.amb }}>
-                          ↻ <b>Revision requested by admin</b>{r.note?` — "${r.note}"`:""} — drawing team is updating
-                        </div>
+                        <div style={{ padding: "5px 9px", background: T.surface, borderLeft: `3px solid ${T.amb}`, borderRadius: 4, fontSize: 10.5, color: T.amb }}><Rich k="lead_design.revision_requested_by_admin_r_drawing" params={{ r: r.note?` — "${r.note}"`:"" }} /></div>
                       )}
 
                       {/* Client status badge — only after admin approval */}
                       {isAdminApproved && (() => {
-                        const csMeta = cs === "Approved"   ? { label: "✓ CLIENT APPROVED", c: T.grn, bg: T.grnL, brd: T.grnM }
-                                    : cs === "Rejected"   ? { label: "✗ CLIENT REJECTED",  c: T.red, bg: T.redL, brd: T.redM }
-                                    : cs === "SharedWithClient" ? { label: "📤 SHARED, AWAITING REPLY", c: T.blu, bg: T.bluL, brd: T.bluM }
-                                    : { label: "🟢 READY TO SHARE WITH CLIENT", c: T.grn, bg: T.grnL, brd: T.grnM };
+                        const csMeta = cs === "Approved"   ? { label: t("design_overview.client_approved"), c: T.grn, bg: T.grnL, brd: T.grnM }
+                                    : cs === "Rejected"   ? { label: t("design_overview.client_rejected"),  c: T.red, bg: T.redL, brd: T.redM }
+                                    : cs === "SharedWithClient" ? { label: t("design_overview.shared_awaiting_reply"), c: T.blu, bg: T.bluL, brd: T.bluM }
+                                    : { label: t("design_overview.ready_to_share_with_client"), c: T.grn, bg: T.grnL, brd: T.grnM };
                         return <div style={{ display: "inline-flex", padding: "3px 9px", borderRadius: 11, background: csMeta.bg, color: csMeta.c, border: `1px solid ${csMeta.brd}`, fontSize: 9.5, fontWeight: 700, letterSpacing: ".3px", marginBottom: 7 }}>{csMeta.label}</div>;
                       })()}
 
@@ -394,35 +390,35 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
                         {isReadyToShare && (<>
                           <button onClick={() => onShareClick && onShareClick({ ...r, lead_id: lead.id, lead_name: lead.name })}
                             style={{ padding: "5px 10px", borderRadius: 5, background: "#25D366", color: "white", border: "none", fontSize: 10.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            💬 Share on WhatsApp
+                           {t("common.share_on_whatsapp")}
                           </button>
                           <button onClick={() => markShared(r)} disabled={act==="marking"}
                             style={{ padding: "5px 10px", borderRadius: 5, background: T.bluL, color: T.blu, border: `1px solid ${T.bluM}`, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
-                            {act==="marking"?"…":"✓ Mark as Shared"}
+                            {act==="marking"?"…":t("common.mark_as_shared")}
                           </button>
                         </>)}
                         {isShared && (<>
                           <button onClick={() => patchClientStatus(r, "Approved")} disabled={!!act}
                             style={{ padding: "5px 10px", borderRadius: 5, background: T.grn, border: "none", color: "white", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
-                            {act==="Approved"?"…":"✓ Client Approved"}
+                            {act==="Approved"?"…":t("common.client_approved")}
                           </button>
                           <button onClick={() => patchClientStatus(r, "Revision")} disabled={!!act}
                             style={{ padding: "5px 10px", borderRadius: 5, background: T.ambL, border: `1px solid ${T.ambM}`, color: T.amb, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
-                            ↻ Revision Requested
+                           {t("lead_design.revision_requested")}
                           </button>
                           <button onClick={() => patchClientStatus(r, "Rejected")} disabled={!!act}
                             style={{ padding: "5px 10px", borderRadius: 5, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
-                            ✗ Rejected
+                           {t("common.rejected_2")}
                           </button>
                           <button onClick={() => onShareClick && onShareClick({ ...r, lead_id: lead.id, lead_name: lead.name })}
                             style={{ padding: "5px 10px", borderRadius: 5, background: T.surface, border: `1px solid ${T.b2}`, color: T.t3, fontSize: 10.5, fontWeight: 600, cursor: "pointer" }}>
-                            💬 Re-share
+                           {t("common.re_share")}
                           </button>
                         </>)}
                         {(isApproved || isRejected) && (
                           <button onClick={() => onShareClick && onShareClick({ ...r, lead_id: lead.id, lead_name: lead.name })}
                             style={{ padding: "5px 10px", borderRadius: 5, background: T.surface, border: `1px solid ${T.b1}`, color: T.t3, fontSize: 10.5, fontWeight: 600, cursor: "pointer" }}>
-                            💬 Re-share
+                           {t("common.re_share")}
                           </button>
                         )}
                       </div>
@@ -432,7 +428,7 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
 
                   {/* Audit */}
                   <div style={{ display: "flex", gap: 14, flexWrap: "wrap", paddingTop: 6, borderTop: `1px dashed ${T.b1}` }}>
-                    {(r.requested_by) && <Credit label="Requested by" name={r.requested_by} time={r.created_at} />}
+                    {(r.requested_by) && <Credit label={t("common.requested_by")} name={r.requested_by} time={r.created_at} />}
                   </div>
                 </div>
               );
@@ -444,41 +440,41 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
         {mode === "form" && (<>
           <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px" }}>
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Title *</label>
+              <label style={lbl}>{t("common.title")}</label>
               <input value={title} onChange={e => setTitle(e.target.value)}
-                placeholder="e.g. 3D View Front · Master Plan"
+                placeholder={t("lead_design.e_g_3d_view_front_master")}
                 style={inp} onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
               <div>
-                <label style={lbl}>Category</label>
-                <SearchSelect value={category} options={CATEGORIES} onChange={setCategory} placeholder="Category..." />
+                <label style={lbl}>{t("common.category")}</label>
+                <SearchSelect value={category} options={CATEGORIES} onChange={setCategory} placeholder={t("lead_design.category")} />
               </div>
               <div>
-                <label style={lbl}>Type</label>
-                <SearchSelect value={drawingType} options={DRAWING_TYPES} onChange={setDrawingType} placeholder="Type..." />
+                <label style={lbl}>{t("common.type")}</label>
+                <SearchSelect value={drawingType} options={DRAWING_TYPES} onChange={setDrawingType} placeholder={t("lead_design.type")} />
               </div>
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Description / Requirements</label>
+              <label style={lbl}>{t("lead_design.description_requirements")}</label>
               <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
-                placeholder="Describe what's needed — area, style, key requirements..."
+                placeholder={t("lead_design.describe_what_s_needed_area_style")}
                 style={{ ...inp, padding: "9px 11px", height: "auto", resize: "vertical", lineHeight: 1.5 }}
                 onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
             </div>
 
             {/* Reference photos */}
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Reference Photos {refImages.length > 0 && `(${refImages.length})`}</label>
+              <label style={lbl}>{t("lead_design.reference_photos_refimages", { refImages: refImages.length > 0 && `(${refImages.length})` })}</label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 {refImages.map(img => (
                   <div key={img.tempId} style={{ position: "relative", width: 72, height: 72, borderRadius: 7, border: `1px solid ${T.b1}`, overflow: "hidden", background: T.surfaceB }}>
                     {img.uploading ? (
                       <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: T.t4, fontSize: 10, flexDirection: "column", gap: 2 }}>
                         <div style={{ width: 16, height: 16, border: `2px solid ${T.b1}`, borderTopColor: T.blu, borderRadius: "50%", animation: "spin .7s linear infinite" }} />
-                        <span style={{ fontSize: 9 }}>Uploading</span>
+                        <span style={{ fontSize: 9 }}>{t("lead_design.uploading")}</span>
                       </div>
                     ) : (
                       <div style={{ width: "100%", height: "100%", background: `url(${img.url}) center/cover` }} />
@@ -501,14 +497,14 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
                     <circle cx="8.5" cy="8.5" r="1.5" />
                     <polyline points="21 15 16 10 5 21" />
                   </svg>
-                  Add
+                 {t("common.add")}
                 </label>
               </div>
-              <div style={{ fontSize: 10.5, color: T.t4, marginTop: 5 }}>Upload reference images, sketches, or inspiration photos to help the designer.</div>
+              <div style={{ fontSize: 10.5, color: T.t4, marginTop: 5 }}>{t("lead_design.upload_reference_images_sketches_or_inspiration")}</div>
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Priority</label>
+              <label style={lbl}>{t("common.priority")}</label>
               <div style={{ display: "flex", gap: 4, padding: 2, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 7 }}>
                 {PRIORITIES.map(p => {
                   const active = priority === p.id;
@@ -532,11 +528,11 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
           <div style={{ padding: "12px 18px", borderTop: `1px solid ${T.b1}`, display: "flex", gap: 8, justifyContent: "flex-end", flexShrink: 0, background: T.surfaceB }}>
             <button onClick={() => setMode("list")} disabled={saving}
               style={{ padding: "9px 16px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b2}`, color: T.t2, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-              Cancel
+             {t("common.cancel")}
             </button>
             <button onClick={handleSubmit} disabled={saving}
               style={{ padding: "9px 22px", borderRadius: 7, background: T.blu, border: "none", color: "white", fontSize: 12.5, fontWeight: 700, cursor: saving ? "wait" : "pointer", boxShadow: `0 2px 8px ${T.blu}40`, fontFamily: "inherit", opacity: saving ? 0.7 : 1 }}>
-              {saving ? "Sending..." : "Send Request"}
+              {saving ? t("lead_design.sending") : t("lead_design.send_request")}
             </button>
           </div>
         </>)}

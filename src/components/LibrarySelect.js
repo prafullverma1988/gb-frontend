@@ -26,6 +26,7 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "./SearchSelect";
+import { t } from "../i18n";
 
 // Module-level cache so multiple instances on the same page reuse the result
 const _cache = {
@@ -40,12 +41,12 @@ const _cache = {
 
 const TYPE_CONFIG = {
   supplier: {
-    label: "material vendor",
+    get label() { return t("library_select.material_vendor"); },
     addTitle: "Add new Material Vendor (saved to Party Master)",
     fields: [
-      { key: "name",  label: "Material Vendor name *", flex: 2, autoFocus: true, required: true },
-      { key: "phone", label: "Phone",                  flex: 1 },
-      { key: "city",  label: "City",                   flex: 1 },
+      { key: "name",  get label() { return t("library_select.material_vendor_name"); }, flex: 2, autoFocus: true, required: true },
+      { key: "phone", get label() { return t("library_select.phone"); },                  flex: 1 },
+      { key: "city",  get label() { return t("library_select.city"); },                   flex: 1 },
     ],
     fetch: async () => {
       const r = await api.get("/finance/parties");
@@ -85,9 +86,9 @@ const TYPE_CONFIG = {
     label: "subcontractor",
     addTitle: "Add new subcontractor (saved to Party Master)",
     fields: [
-      { key: "name",  label: "Subcon name *",  flex: 2, autoFocus: true, required: true },
-      { key: "phone", label: "Phone",          flex: 1 },
-      { key: "city",  label: "City",           flex: 1 },
+      { key: "name",  get label() { return t("library_select.subcon_name"); },  flex: 2, autoFocus: true, required: true },
+      { key: "phone", get label() { return t("library_select.phone"); },          flex: 1 },
+      { key: "city",  get label() { return t("library_select.city"); },           flex: 1 },
     ],
     fetch: async () => {
       const r = await api.get("/finance/parties");
@@ -115,9 +116,9 @@ const TYPE_CONFIG = {
     label: "client",
     addTitle: "Add new client (saved to Party Master)",
     fields: [
-      { key: "name",  label: "Client name *", flex: 2, autoFocus: true, required: true },
-      { key: "phone", label: "Phone",         flex: 1 },
-      { key: "city",  label: "City",          flex: 1 },
+      { key: "name",  get label() { return t("library_select.client_name"); }, flex: 2, autoFocus: true, required: true },
+      { key: "phone", get label() { return t("library_select.phone"); },         flex: 1 },
+      { key: "city",  get label() { return t("library_select.city"); },          flex: 1 },
     ],
     fetch: async () => {
       const r = await api.get("/finance/parties");
@@ -139,12 +140,12 @@ const TYPE_CONFIG = {
     },
   },
   labour: {
-    label: "labour contractor",
+    get label() { return t("library_select.labour_contractor"); },
     addTitle: "Add new labour contractor (saved to Party Master)",
     fields: [
-      { key: "name",  label: "Contractor name *", flex: 2, autoFocus: true, required: true },
-      { key: "phone", label: "Phone",             flex: 1 },
-      { key: "city",  label: "City",              flex: 1 },
+      { key: "name",  get label() { return t("library_select.contractor_name"); }, flex: 2, autoFocus: true, required: true },
+      { key: "phone", get label() { return t("library_select.phone"); },             flex: 1 },
+      { key: "city",  get label() { return t("library_select.city"); },              flex: 1 },
     ],
     fetch: async () => {
       const r = await api.get("/finance/parties");
@@ -170,10 +171,10 @@ const TYPE_CONFIG = {
     label: "party",
     addTitle: "Add new party (saved to Party Master)",
     fields: [
-      { key: "name",  label: "Party name *", flex: 2, autoFocus: true, required: true },
-      { key: "type",  label: "Type",         flex: 1, type: "select",
+      { key: "name",  get label() { return t("library_select.party_name"); }, flex: 2, autoFocus: true, required: true },
+      { key: "type",  get label() { return t("common.type"); },         flex: 1, type: "select",
         options: ["Client", "Material Supplier", "Sub-Con", "Labour Contractor", "Other Vendor"] },
-      { key: "phone", label: "Phone",        flex: 1 },
+      { key: "phone", get label() { return t("library_select.phone"); },        flex: 1 },
     ],
     fetch: async () => {
       const r = await api.get("/finance/parties");
@@ -191,8 +192,8 @@ const TYPE_CONFIG = {
     label: "material",
     addTitle: "Add new material (saved to Library)",
     fields: [
-      { key: "name", label: "Material name *", flex: 2, autoFocus: true, required: true },
-      { key: "unit", label: "Unit",            flex: 1, type: "select",
+      { key: "name", get label() { return t("library_select.material_name"); }, flex: 2, autoFocus: true, required: true },
+      { key: "unit", get label() { return t("common.unit"); },            flex: 1, type: "select",
         options: ["Bags", "MT", "Nos", "Sqft", "Mtrs", "Kg", "Sheets", "Ltrs", "Cu.m", "Ton", "RFT", "Brass", "CFT"] },
     ],
     fetch: async () => {
@@ -212,8 +213,8 @@ const TYPE_CONFIG = {
     label: "worker",
     addTitle: "Add new worker (saved to Library)",
     fields: [
-      { key: "name",  label: "Worker name *", flex: 2, autoFocus: true, required: true },
-      { key: "phone", label: "Phone",         flex: 1 },
+      { key: "name",  get label() { return t("library_select.worker_name"); }, flex: 2, autoFocus: true, required: true },
+      { key: "phone", get label() { return t("library_select.phone"); },         flex: 1 },
     ],
     fetch: async () => {
       const r = await api.get("/library/workers");
@@ -295,7 +296,7 @@ export default function LibrarySelect({
     const name = (form.name || "").trim();
     if (!name) return;
     if (items.some((it) => (it.name || "").toLowerCase() === name.toLowerCase())) {
-      alert(`This ${cfg.label} already exists in library`);
+      alert(t("library_select.this_label_already_exists_in_library", { label: cfg.label }));
       return;
     }
     setSaving(true);
@@ -353,9 +354,7 @@ export default function LibrarySelect({
             fontFamily: "inherit",
             opacity: disabled ? 0.5 : 1,
           }}
-        >
-          + Add New {cfg.label.replace(/^\w/, (c) => c.toUpperCase())} to Library
-        </button>
+        >{t("library_select.add_new_cfg_to_library", { cfg: cfg.label.replace(/^\w/, (c) => c.toUpperCase()) })}</button>
       ) : (
         <div
           style={{
@@ -406,7 +405,7 @@ export default function LibrarySelect({
               onClick={() => { setShowAdd(false); setForm({}); }}
               style={btnCancel}
             >
-              Cancel
+             {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -418,7 +417,7 @@ export default function LibrarySelect({
                 cursor: saving || !(form.name || "").trim() ? "not-allowed" : "pointer",
               }}
             >
-              {saving ? "Saving..." : "Save & use"}
+              {saving ? t("common.saving") : t("library_select.save_use")}
             </button>
           </div>
         </div>

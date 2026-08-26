@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
+import { t } from "../../i18n";
 
 /* ────────────────────────────────────────────────────────────────────
    KAL KA PLAN — "kal kya karna hai?" (Sahayak idea b)
@@ -53,14 +54,14 @@ export default function KalKaPlanModal({ projectId, onClose }) {
         maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         <div style={{ padding: "13px 17px", borderBottom: `1px solid ${T.b1}` }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>🌅 Kal ka plan</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{t("kal_ka_plan.kal_ka_plan")}</div>
           <div style={{ fontSize: 11, color: T.t4, marginTop: 1 }}>
-            Raftar + schedule + rukavat, sab ganit se — ye sujhaav hai, faisla aapka
+           {t("kal_ka_plan.raftar_schedule_rukavat_sab_ganit_se")}
           </div>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "14px 17px" }}>
-          {data === null && <div style={{ padding: "26px 0", textAlign: "center", fontSize: 12.5, color: T.t3 }}>Hisaab lag raha hai…</div>}
+          {data === null && <div style={{ padding: "26px 0", textAlign: "center", fontSize: 12.5, color: T.t3 }}>{t("kal_ka_plan.hisaab_lag_raha_hai")}</div>}
           {!!err && <div style={{ background: T.redL, border: `1px solid ${T.redM}`, color: "#991B1B",
             borderRadius: 8, padding: "9px 12px", fontSize: 12 }}>{err}</div>}
 
@@ -103,7 +104,7 @@ export default function KalKaPlanModal({ projectId, onClose }) {
               <Sec title={`Shuru ho sakta hai (${data.start.length})`} color="#047857">
                 {data.start.map((r) => (
                   <Row key={r.task_id} main={r.name}
-                    sub={r.scope_qty ? `${fq(r.scope_qty, r.unit)} ka kaam · koi rukavat nahi` : "koi rukavat nahi"}
+                    sub={r.scope_qty ? `${fq(r.scope_qty, r.unit)} ka kaam · koi rukavat nahi` : t("kal_ka_plan.koi_rukavat_nahi")}
                     chip="TAIYAAR" chipC="#047857" chipBg={T.grnL} />
                 ))}
               </Sec>
@@ -121,23 +122,21 @@ export default function KalKaPlanModal({ projectId, onClose }) {
 
             {!data.continue?.length && !data.start?.length && !data.stalled?.length && !data.blocked?.length && (
               <div style={{ padding: "22px 0", textAlign: "center", fontSize: 12.5, color: T.t3 }}>
-                Koi chalu kaam nahi mila — pehle Tasks me plan banao.
+               {t("kal_ka_plan.koi_chalu_kaam_nahi_mila_pehle")}
               </div>
             )}
 
-            <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>
-              Yahi Sahayak se bhi: "{`kal ${data.project?.name || "site"} par kya karna hai`}"
-            </div>
+            <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>{t("kal_ka_plan.yahi_sahayak_se_bhi_kal", { kal: `kal ${data.project?.name || "site"} par kya karna hai` })}</div>
           </>)}
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "10px 15px",
           borderTop: `1px solid ${T.b1}` }}>
           <button onClick={load} style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${T.b1}`,
-            background: T.surface, color: T.t2, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>↻ Dobara</button>
+            background: T.surface, color: T.t2, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>{t("din_ka_byora.dobara")}</button>
           <button onClick={onClose} style={{ padding: "7px 16px", borderRadius: 7, border: "none",
             background: T.blu, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
-            fontFamily: "inherit" }}>Band</button>
+            fontFamily: "inherit" }}>{t("common.band")}</button>
         </div>
       </div>
     </div>

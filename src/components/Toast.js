@@ -24,6 +24,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { t } from "../i18n";
 
 // Design tokens — kept inline for portability
 const T = {
@@ -117,7 +118,7 @@ function ToastItem({ toast, onDismiss }) {
       </div>
       <button
         onClick={() => onDismiss(toast.id)}
-        title="Dismiss"
+        title={t("common.dismiss")}
         style={{
           background: "none",
           border: "none",

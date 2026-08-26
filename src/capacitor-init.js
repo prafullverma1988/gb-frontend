@@ -6,6 +6,7 @@ import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { SplashScreen } from "@capacitor/splash-screen";
 import { App as CapApp } from "@capacitor/app";
+import { t } from "./i18n";
 
 export function initCapacitor() {
   if (!Capacitor.isNativePlatform()) return;
@@ -29,7 +30,7 @@ export function initCapacitor() {
     if (canGoBack || window.history.length > 1) {
       window.history.back();
     } else {
-      if (await window.confirmAsync("Exit Sanchalan?")) {
+      if (await window.confirmAsync(t("capacitor_init.exit_sanchalan"))) {
         CapApp.exitApp();
       }
     }

@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../config/api";
 import { Credit, fmtTimeAgo } from "./Credit";
 import RevisionNoteModal from "./RevisionNoteModal";
+import { t } from "../i18n";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -26,11 +27,11 @@ const T = {
 };
 
 const BUCKETS = [
-  { id: "awaiting_drawing",  label: "Awaiting Drawing",  short: "Pending Upload",  c: T.amb, bg: T.ambL, brd: T.ambM, ic: "⏳" },
-  { id: "awaiting_approval", label: "Awaiting Approval", short: "For Approval",    c: T.blu, bg: T.bluL, brd: T.bluM, ic: "👀" },
-  { id: "approved",          label: "Approved",          short: "Approved",        c: T.grn, bg: T.grnL, brd: T.grnM, ic: "✓" },
-  { id: "revision",          label: "Needs Revision",    short: "Revision",        c: T.pur, bg: T.purL, brd: T.purM, ic: "↻" },
-  { id: "rejected",          label: "Rejected",          short: "Rejected",        c: T.red, bg: T.redL, brd: T.redM, ic: "✕" },
+  { id: "awaiting_drawing",  get label() { return t("design_overview.awaiting_drawing"); },  short: "Pending Upload",  c: T.amb, bg: T.ambL, brd: T.ambM, ic: "⏳" },
+  { id: "awaiting_approval", get label() { return t("design_overview.awaiting_approval"); }, short: "For Approval",    c: T.blu, bg: T.bluL, brd: T.bluM, ic: "👀" },
+  { id: "approved",          get label() { return t("common.approved"); },          short: "Approved",        c: T.grn, bg: T.grnL, brd: T.grnM, ic: "✓" },
+  { id: "revision",          get label() { return t("design_overview.needs_revision"); },    short: "Revision",        c: T.pur, bg: T.purL, brd: T.purM, ic: "↻" },
+  { id: "rejected",          get label() { return t("common.rejected"); },          short: "Rejected",        c: T.red, bg: T.redL, brd: T.redM, ic: "✕" },
 ];
 
 export default function DesignOverviewDrawer({ open, onClose, onOpenLead, onShareClick }) {
@@ -85,10 +86,10 @@ export default function DesignOverviewDrawer({ open, onClose, onOpenLead, onShar
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-                🎨 Design Status
+                {t("design_overview.design_status")}
               </div>
               <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.55)", marginTop: 3 }}>
-                All lead design requests across CRM
+                {t("design_overview.all_lead_design_requests_across_crm")}
               </div>
             </div>
             <button onClick={onClose}
@@ -99,7 +100,7 @@ export default function DesignOverviewDrawer({ open, onClose, onOpenLead, onShar
           {/* Search */}
           <div style={{ marginTop: 12, position: "relative" }}>
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search lead name, phone, or title..."
+              placeholder={t("design_overview.search_lead_name_phone_or_title")}
               style={{ width: "100%", height: 32, padding: "0 10px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.15)",
                 background: "rgba(255,255,255,0.1)", fontSize: 12, color: "#fff", outline: "none", boxSizing: "border-box" }}/>
           </div>
@@ -109,7 +110,7 @@ export default function DesignOverviewDrawer({ open, onClose, onOpenLead, onShar
         <div style={{ padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, flexShrink: 0,
           display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" }}>
           <Chip active={filter === "all"} onClick={() => setFilter("all")}
-            label="All" count={counts.all} c={T.t2} bg={T.surface} brd={T.b1}/>
+            label={t("common.all")} count={counts.all} c={T.t2} bg={T.surface} brd={T.b1}/>
           {BUCKETS.map(b => (
             <Chip key={b.id} active={filter === b.id} onClick={() => setFilter(b.id)}
               label={b.short} count={counts[b.id] || 0}
@@ -123,16 +124,16 @@ export default function DesignOverviewDrawer({ open, onClose, onOpenLead, onShar
             <div style={{ padding: "40px 0", textAlign: "center", color: T.t3, fontSize: 12.5 }}>
               <div style={{ width: 28, height: 28, border: "3px solid #E2E8F0", borderTopColor: T.blu,
                 borderRadius: "50%", animation: "spin 0.7s linear infinite", margin: "0 auto 10px" }}/>
-              Loading...
+              {t("common.loading")}
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ padding: "60px 20px", textAlign: "center", color: T.t4, fontSize: 13 }}>
               <div style={{ fontSize: 32, marginBottom: 8 }}>🎨</div>
               <div style={{ fontWeight: 600, color: T.t2, marginBottom: 4 }}>
-                {filter === "all" ? "No design requests yet" : "Nothing in this bucket"}
+                {filter === "all" ? t("common.no_design_requests_yet") : t("design_overview.nothing_in_this_bucket")}
               </div>
               <div style={{ fontSize: 11.5 }}>
-                Open any lead → 🎨 Design Plan to create one.
+                {t("design_overview.open_any_lead_design_plan_to")}
               </div>
             </div>
           ) : (
@@ -243,10 +244,10 @@ function RequestCard({ r: initial, onOpenLead, onShareClick, onClose }) {
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: T.t1, marginBottom: 2,
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {r.title || "Untitled"}
+            {r.title || t("design_overview.untitled")}
           </div>
           <div style={{ fontSize: 11.5, color: T.t3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 600, color: T.t2 }}>👤 {r.lead_name || "Unknown lead"}</span>
+            <span style={{ fontWeight: 600, color: T.t2 }}>👤 {r.lead_name || t("design_overview.unknown_lead")}</span>
             {r.lead_city && <span>· {r.lead_city}</span>}
             {r.category && <span>· {r.category}</span>}
           </div>
@@ -288,7 +289,7 @@ function RequestCard({ r: initial, onOpenLead, onShareClick, onClose }) {
           {r.drawing_url && (
             <a href={r.drawing_url} target="_blank" rel="noreferrer"
               style={{ padding: "4px 9px", borderRadius: 5, background: T.surface, border: `1px solid ${T.b1}`, color: T.blu, fontSize: 10.5, fontWeight: 600, textDecoration: "none", flexShrink: 0 }}>
-              👁 View
+              {t("common.view")}
             </a>
           )}
         </div>
@@ -297,19 +298,19 @@ function RequestCard({ r: initial, onOpenLead, onShareClick, onClose }) {
       {/* Stage-specific info banner */}
       {hasDrawing && !isAdminApproved && ds === "Pending" && (
         <div style={{ padding: "5px 9px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 5, fontSize: 10.5, color: T.t3, marginBottom: 8 }}>
-          🔒 <b style={{ color: T.t2 }}>Awaiting admin approval</b> — internal review pending
+          🔒 <b style={{ color: T.t2 }}>{t("common.awaiting_admin_approval")}</b> {t("design_overview.internal_review_pending")}
         </div>
       )}
       {hasDrawing && ds === "Revision" && (
         <div style={{ padding: "5px 9px", background: T.ambL, borderLeft: `3px solid ${T.amb}`, borderRadius: 4, fontSize: 10.5, color: T.amb, marginBottom: 8 }}>
-          ↻ <b>Revision requested</b>{r.drawing_note ? ` — "${r.drawing_note}"` : ""}
+          ↻ <b>{t("design_overview.revision_requested")}</b>{r.drawing_note ? ` — "${r.drawing_note}"` : ""}
         </div>
       )}
       {hasDrawing && isAdminApproved && (() => {
-        const csMeta = cs === "Approved" ? { label: "✓ CLIENT APPROVED", c: T.grn, bg: T.grnL, brd: T.grnM }
-                    : cs === "Rejected" ? { label: "✗ CLIENT REJECTED", c: T.red, bg: T.redL, brd: T.redM }
-                    : cs === "SharedWithClient" ? { label: "📤 SHARED, AWAITING REPLY", c: T.blu, bg: T.bluL, brd: T.bluM }
-                    : { label: "🟢 READY TO SHARE WITH CLIENT", c: T.grn, bg: T.grnL, brd: T.grnM };
+        const csMeta = cs === "Approved" ? { label: t("design_overview.client_approved"), c: T.grn, bg: T.grnL, brd: T.grnM }
+                    : cs === "Rejected" ? { label: t("design_overview.client_rejected"), c: T.red, bg: T.redL, brd: T.redM }
+                    : cs === "SharedWithClient" ? { label: t("design_overview.shared_awaiting_reply"), c: T.blu, bg: T.bluL, brd: T.bluM }
+                    : { label: t("design_overview.ready_to_share_with_client"), c: T.grn, bg: T.grnL, brd: T.grnM };
         return <div style={{ display: "inline-flex", padding: "3px 9px", borderRadius: 11, background: csMeta.bg, color: csMeta.c, border: `1px solid ${csMeta.brd}`, fontSize: 9.5, fontWeight: 700, letterSpacing: ".3px", marginBottom: 7 }}>{csMeta.label}</div>;
       })()}
       {r.client_note && (cs === "Rejected" || cs === "SharedWithClient") && (
@@ -324,35 +325,35 @@ function RequestCard({ r: initial, onOpenLead, onShareClick, onClose }) {
           {isReadyToShare && (<>
             <button onClick={() => onShareClick && onShareClick({ drawing_id: r.drawing_id, drawing_title: r.drawing_title || r.title, drawing_url: r.drawing_url, current_version: r.current_version, lead_id: r.lead_id, lead_name: r.lead_name, lead_phone: r.lead_phone })}
               style={{ padding: "5px 10px", borderRadius: 5, background: "#25D366", color: "white", border: "none", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
-              💬 Share on WhatsApp
+              {t("common.share_on_whatsapp")}
             </button>
             <button onClick={markShared} disabled={acting==="marking"}
               style={{ padding: "5px 10px", borderRadius: 5, background: T.bluL, color: T.blu, border: `1px solid ${T.bluM}`, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
-              {acting==="marking" ? "…" : "✓ Mark as Shared"}
+              {acting==="marking" ? "…" : t("common.mark_as_shared")}
             </button>
           </>)}
           {isShared && (<>
             <button onClick={() => patchClientStatus("Approved")} disabled={!!acting}
               style={{ padding: "5px 10px", borderRadius: 5, background: T.grn, border: "none", color: "white", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
-              {acting==="Approved" ? "…" : "✓ Client Approved"}
+              {acting==="Approved" ? "…" : t("common.client_approved")}
             </button>
             <button onClick={() => patchClientStatus("Revision")} disabled={!!acting}
               style={{ padding: "5px 10px", borderRadius: 5, background: T.ambL, border: `1px solid ${T.ambM}`, color: T.amb, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
-              ↻ Revision
+              {t("design_overview.revision")}
             </button>
             <button onClick={() => patchClientStatus("Rejected")} disabled={!!acting}
               style={{ padding: "5px 10px", borderRadius: 5, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
-              ✗ Rejected
+              {t("common.rejected_2")}
             </button>
             <button onClick={() => onShareClick && onShareClick({ drawing_id: r.drawing_id, drawing_title: r.drawing_title || r.title, drawing_url: r.drawing_url, current_version: r.current_version, lead_id: r.lead_id, lead_name: r.lead_name, lead_phone: r.lead_phone })}
               style={{ padding: "5px 10px", borderRadius: 5, background: T.surface, border: `1px solid ${T.b2}`, color: T.t3, fontSize: 10.5, fontWeight: 600, cursor: "pointer" }}>
-              💬 Re-share
+              {t("common.re_share")}
             </button>
           </>)}
           {(isApproved || isRejected) && (
             <button onClick={() => onShareClick && onShareClick({ drawing_id: r.drawing_id, drawing_title: r.drawing_title || r.title, drawing_url: r.drawing_url, current_version: r.current_version, lead_id: r.lead_id, lead_name: r.lead_name, lead_phone: r.lead_phone })}
               style={{ padding: "5px 10px", borderRadius: 5, background: T.surface, border: `1px solid ${T.b1}`, color: T.t3, fontSize: 10.5, fontWeight: 600, cursor: "pointer" }}>
-              💬 Re-share
+              {t("common.re_share")}
             </button>
           )}
         </div>
@@ -367,7 +368,7 @@ function RequestCard({ r: initial, onOpenLead, onShareClick, onClose }) {
           <button onClick={() => { onOpenLead(r.lead_id); onClose && onClose(); }}
             style={{ padding: "5px 11px", borderRadius: 6, background: T.surfaceB, color: T.t2,
               border: `1px solid ${T.b1}`, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
-            View Lead →
+            {t("design_overview.view_lead")}
           </button>
         )}
       </div>

@@ -13,6 +13,7 @@ import { useState, useEffect, useRef } from "react";
 import api from "../config/api";
 import LibrarySelect from "./LibrarySelect";
 import ActivityLog from "./ActivityLog";
+import { t } from "../i18n";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -26,14 +27,14 @@ const T = {
 };
 
 const STAGE_META = {
-  Requested: { label: "Pending Approval", c: T.amb, bg: T.ambL },
-  Approved:  { label: "Approved",         c: T.blu, bg: T.bluL },
-  Ordered:   { label: "Ordered",          c: T.pur, bg: T.purL },
-  Received:  { label: "Received",         c: T.grn, bg: T.grnL },
-  PartialReceived: { label: "Partial Received", c: T.amb, bg: T.ambL },
-  Rejected:  { label: "Rejected",         c: T.red, bg: T.redL },
-  Used:      { label: "Used",             c: T.t3,  bg: T.b1  },
-  Closed:    { label: "Closed",           c: T.t3,  bg: T.b1  },
+  Requested: { get label() { return t("material_transfer.pending_approval"); }, c: T.amb, bg: T.ambL },
+  Approved:  { get label() { return t("common.approved"); },         c: T.blu, bg: T.bluL },
+  Ordered:   { get label() { return t("common.ordered"); },          c: T.pur, bg: T.purL },
+  Received:  { get label() { return t("common.received"); },         c: T.grn, bg: T.grnL },
+  PartialReceived: { get label() { return t("material_transfer.partial_received"); }, c: T.amb, bg: T.ambL },
+  Rejected:  { get label() { return t("common.rejected"); },         c: T.red, bg: T.redL },
+  Used:      { get label() { return t("mrdetail.used"); },             c: T.t3,  bg: T.b1  },
+  Closed:    { get label() { return t("common.closed"); },           c: T.t3,  bg: T.b1  },
 };
 
 const fmtDate = (d) => {
@@ -97,7 +98,7 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
   const handleSave = async () => {
     if (savingRef.current) return;
     if (!editNote.trim()) {
-      setErr("Edit reason is compulsory — log mein dikhega kyu change kiya");
+      setErr(t("mrdetail.edit_reason_is_compulsory_log_mein"));
       return;
     }
     savingRef.current = true; setSavingState(true); setErr("");
@@ -131,7 +132,7 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
 
   const handleClose = async () => {
     const reason = closeReason.trim();
-    if (!reason) { setErr("Reason is required to close — log dekhne wale ko pata chalega kyu close hua"); return; }
+    if (!reason) { setErr(t("mrdetail.reason_is_required_to_close_log")); return; }
     if (closing) return;
     setClosing(true); setErr("");
     try {
@@ -165,9 +166,7 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
         <div style={{ background: "#0D1B2A", padding: "16px 20px", color: "#fff", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3, fontWeight: 600, letterSpacing: ".4px", textTransform: "uppercase" }}>
-                Material Request · MR-{mr.id}
-              </div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 3, fontWeight: 600, letterSpacing: ".4px", textTransform: "uppercase" }}>{t("mrdetail.material_request_mr_id", { id: mr.id })}</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: "#fff", letterSpacing: "-.3px",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {mr.item_name || mr.item}
@@ -199,33 +198,33 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
           {!editing ? (
             <>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-                <Tile label="Material" value={mr.item_name || mr.item || "—"}/>
-                <Tile label="Quantity" value={`${mr.quantity || mr.qty || "—"} ${mr.unit || ""}`}/>
-                <Tile label="Project" value={mr.project_name || "—"}/>
-                <Tile label="Requested By" value={mr.requested_by || "—"}/>
-                {mr.required_date && <Tile label="Required By" value={fmtDate(mr.required_date)}/>}
-                {mr.approx_amount > 0 && <Tile label="Approx. Amount" value={`₹${Number(mr.approx_amount).toLocaleString("en-IN")}`}/>}
-                {mr.linked_vendor && <Tile label="Vendor" value={mr.linked_vendor} c={T.blu}/>}
-                {mr.expected_delivery && <Tile label="Expected Delivery" value={fmtDate(mr.expected_delivery)} c={T.amb}/>}
-                {mr.challan_no && <Tile label="Challan No." value={mr.challan_no}/>}
-                {mr.received_qty != null && <Tile label="Received Qty" value={`${mr.received_qty} ${mr.unit||""}`} c={T.grn}/>}
+                <Tile label={t("common.material")} value={mr.item_name || mr.item || "—"}/>
+                <Tile label={t("common.quantity")} value={`${mr.quantity || mr.qty || "—"} ${mr.unit || ""}`}/>
+                <Tile label={t("common.project")} value={mr.project_name || "—"}/>
+                <Tile label={t("mrdetail.requested_by")} value={mr.requested_by || "—"}/>
+                {mr.required_date && <Tile label={t("common.required_by")} value={fmtDate(mr.required_date)}/>}
+                {mr.approx_amount > 0 && <Tile label={t("mrdetail.approx_amount")} value={`₹${Number(mr.approx_amount).toLocaleString("en-IN")}`}/>}
+                {mr.linked_vendor && <Tile label={t("common.vendor")} value={mr.linked_vendor} c={T.blu}/>}
+                {mr.expected_delivery && <Tile label={t("common.expected_delivery")} value={fmtDate(mr.expected_delivery)} c={T.amb}/>}
+                {mr.challan_no && <Tile label={t("material_flow.challan_no")} value={mr.challan_no}/>}
+                {mr.received_qty != null && <Tile label={t("mrdetail.received_qty")} value={`${mr.received_qty} ${mr.unit||""}`} c={T.grn}/>}
               </div>
               {(mr.notes || mr.note) && (
                 <div style={{ padding: "10px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, marginBottom: 14 }}>
-                  <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>Notes</div>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>{t("common.notes")}</div>
                   <div style={{ fontSize: 12.5, color: T.t1, lineHeight: 1.5 }}>{mr.notes || mr.note}</div>
                 </div>
               )}
               {mr.rejected_reason && (
                 <div style={{ padding: "10px 12px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 8, marginBottom: 14 }}>
-                  <div style={{ fontSize: 9.5, fontWeight: 700, color: T.red, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>Reject Reason</div>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, color: T.red, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>{t("mrdetail.reject_reason")}</div>
                   <div style={{ fontSize: 12.5, color: T.red, lineHeight: 1.5 }}>{mr.rejected_reason}</div>
                 </div>
               )}
               {mr.closed_reason && (
                 <div style={{ padding: "10px 12px", background: "#FEF3C7", border: `1px solid #FDE68A`, borderRadius: 8, marginBottom: 14 }}>
                   <div style={{ fontSize: 9.5, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>
-                    Close Reason {mr.closed_at && <span style={{ marginLeft: 6, fontWeight: 500, color: T.t4 }}>· {fmtDate(mr.closed_at)}</span>}
+                    {t("mr_detail.close_reason")} {mr.closed_at && <span style={{ marginLeft: 6, fontWeight: 500, color: T.t4 }}>· {fmtDate(mr.closed_at)}</span>}
                   </div>
                   <div style={{ fontSize: 12.5, color: "#92400E", lineHeight: 1.5 }}>{mr.closed_reason}</div>
                 </div>
@@ -238,14 +237,14 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ padding: "10px 12px", background: "#FFFBEB", border: `1px solid #FDE68A`, borderRadius: 8 }}>
                 <label style={{ ...lblStyle, color: "#92400E" }}>
-                  Edit Reason * <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>(compulsory — log me record hoga)</span>
+                 {t("material_flow.edit_reason")} <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>{t("mrdetail.compulsory_log_me_record_hoga")}</span>
                 </label>
                 <textarea value={editNote} onChange={e => setEditNote(e.target.value)} rows={2}
-                  placeholder="e.g. Site team ne 56 kg ki jagah 50 kg nikala, baki return — qty correct kar raha hu"
+                  placeholder={t("mrdetail.e_g_site_team_ne_56")}
                   style={{ ...inpStyle, resize: "vertical", fontFamily: "inherit", borderColor: "#FDE68A", background: "#fff" }}/>
               </div>
               <div>
-                <label style={lblStyle}>Material *</label>
+                <label style={lblStyle}>{t("mrdetail.material")}</label>
                 <LibrarySelect type="material"
                   value={form.item_name}
                   onChange={v => {
@@ -254,46 +253,46 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
                   }}/>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
-                <Field label="Quantity *" type="number" value={form.quantity} onChange={v => setForm(p => ({ ...p, quantity: v }))}/>
-                <Field label="Unit *" value={form.unit} onChange={v => setForm(p => ({ ...p, unit: v }))}/>
+                <Field label={t("mrdetail.quantity")} type="number" value={form.quantity} onChange={v => setForm(p => ({ ...p, quantity: v }))}/>
+                <Field label={t("mrdetail.unit")} value={form.unit} onChange={v => setForm(p => ({ ...p, unit: v }))}/>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <Field label="Required By" type="date" value={form.required_date} onChange={v => setForm(p => ({ ...p, required_date: v }))}/>
-                <Field label="Approx. Amount" type="number" value={form.approx_amount} onChange={v => setForm(p => ({ ...p, approx_amount: v }))}/>
+                <Field label={t("common.required_by")} type="date" value={form.required_date} onChange={v => setForm(p => ({ ...p, required_date: v }))}/>
+                <Field label={t("mrdetail.approx_amount")} type="number" value={form.approx_amount} onChange={v => setForm(p => ({ ...p, approx_amount: v }))}/>
               </div>
-              <Field label="Requested By" value={form.requested_by} onChange={v => setForm(p => ({ ...p, requested_by: v }))}/>
+              <Field label={t("mrdetail.requested_by")} value={form.requested_by} onChange={v => setForm(p => ({ ...p, requested_by: v }))}/>
               <div>
-                <label style={lblStyle}>Vendor (Material Supplier)</label>
+                <label style={lblStyle}>{t("mrdetail.vendor_material_supplier")}</label>
                 <LibrarySelect type="supplier"
                   value={form.linked_vendor}
                   onChange={v => setForm(p => ({ ...p, linked_vendor: v }))}/>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <Field label="Expected Delivery" type="date" value={form.expected_delivery} onChange={v => setForm(p => ({ ...p, expected_delivery: v }))}/>
-                <Field label="Challan No." value={form.challan_no} onChange={v => setForm(p => ({ ...p, challan_no: v }))}/>
+                <Field label={t("common.expected_delivery")} type="date" value={form.expected_delivery} onChange={v => setForm(p => ({ ...p, expected_delivery: v }))}/>
+                <Field label={t("material_flow.challan_no")} value={form.challan_no} onChange={v => setForm(p => ({ ...p, challan_no: v }))}/>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
-                  <label style={lblStyle}>MR Status</label>
+                  <label style={lblStyle}>{t("mrdetail.mr_status")}</label>
                   <select value={form.mr_status} onChange={e => setForm(p => ({ ...p, mr_status: e.target.value }))} style={inpStyle}>
-                    <option value="Pending">Pending</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Rejected">Rejected</option>
+                    <option value="Pending">{t("common.pending")}</option>
+                    <option value="Approved">{t("common.approved")}</option>
+                    <option value="Rejected">{t("common.rejected")}</option>
                   </select>
                 </div>
                 <div>
-                  <label style={lblStyle}>Material Status</label>
+                  <label style={lblStyle}>{t("mrdetail.material_status")}</label>
                   <select value={form.mat_status} onChange={e => setForm(p => ({ ...p, mat_status: e.target.value }))} style={inpStyle}>
-                    <option value="Pending">Pending</option>
-                    <option value="Ordered">Ordered</option>
-                    <option value="PartialReceived">Partial Received</option>
-                    <option value="Received">Received</option>
-                    <option value="Used">Used</option>
+                    <option value="Pending">{t("common.pending")}</option>
+                    <option value="Ordered">{t("common.ordered")}</option>
+                    <option value="PartialReceived">{t("material_transfer.partial_received")}</option>
+                    <option value="Received">{t("common.received")}</option>
+                    <option value="Used">{t("common.used")}</option>
                   </select>
                 </div>
               </div>
               <div>
-                <label style={lblStyle}>Notes</label>
+                <label style={lblStyle}>{t("common.notes")}</label>
                 <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={3}
                   style={{ ...inpStyle, resize: "vertical", fontFamily: "inherit" }}/>
               </div>
@@ -306,23 +305,23 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
           <div style={{ padding: "12px 20px", background: closeMode === "received" ? "#FEE2E2" : "#FEF3C7", borderTop: `1px solid ${closeMode === "received" ? "#FECACA" : "#FDE68A"}` }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: closeMode === "received" ? "#991B1B" : "#92400E", marginBottom: 6 }}>
               {closeMode === "received"
-                ? "Close Received MR — inventory se bhi ye qty hat jayega. Reason compulsory hai:"
-                : "Close MR — kyu close kar rahe ho? (will show in Closed tab log)"}
+                ? t("mrdetail.close_received_mr_inventory_se_bhi")
+                : t("mrdetail.close_mr_kyu_close_kar_rahe")}
             </div>
             <textarea value={closeReason} onChange={e => setCloseReason(e.target.value)} autoFocus
               placeholder={closeMode === "received"
-                ? "e.g. Galat material aaya, vendor ko wapas kar diya — stock se hata do"
-                : "e.g. Project cancelled, vendor rate too high, alternate material chosen..."}
+                ? t("mrdetail.e_g_galat_material_aaya_vendor")
+                : t("mrdetail.e_g_project_cancelled_vendor_rate")}
               rows={2}
               style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: `1.5px solid #FDE68A`, fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", marginBottom: 7 }}/>
             <div style={{ display: "flex", gap: 6 }}>
               <button onClick={() => { setShowCloseForm(false); setCloseReason(""); setErr(""); }} disabled={closing}
                 style={{ flex: 1, padding: "7px", borderRadius: 6, background: "white", border: `1px solid ${T.b1}`, color: T.t3, fontSize: 11.5, fontWeight: 600, cursor: closing ? "not-allowed" : "pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={handleClose} disabled={closing || !closeReason.trim()}
                 style={{ flex: 2, padding: "7px", borderRadius: 6, background: closing || !closeReason.trim() ? "#9CA3AF" : "#D97706", border: "none", color: "white", fontSize: 11.5, fontWeight: 700, cursor: closing || !closeReason.trim() ? "not-allowed" : "pointer" }}>
-                {closing ? "Closing..." : "Confirm Close"}
+                {closing ? t("common.closing") : t("mrdetail.confirm_close")}
               </button>
             </div>
           </div>
@@ -334,11 +333,11 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
             <>
               <button onClick={() => setEditing(false)} disabled={savingState}
                 style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, color: T.t3, fontSize: 12, fontWeight: 600, cursor: savingState ? "not-allowed" : "pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={handleSave} disabled={savingState}
                 style={{ flex: 2, padding: "9px", borderRadius: 7, background: savingState ? "#9CA3AF" : T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: savingState ? "not-allowed" : "pointer" }}>
-                {savingState ? "Saving..." : "✓ Save Changes"}
+                {savingState ? t("common.saving") : t("mrdetail.save_changes")}
               </button>
             </>
           ) : (
@@ -346,20 +345,20 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
               {isAdmin && canClose && !showCloseForm && (
                 <button onClick={() => { setShowCloseForm(true); setCloseReason(""); setCloseMode("close"); }}
                   style={{ padding: "9px 14px", borderRadius: 7, background: "#FFFBEB", border: `1px solid #FDE68A`, color: "#D97706", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  ⊘ Close
+                 {t("mrdetail.close")}
                 </button>
               )}
               {isAdmin && canDelete && !showCloseForm && (
                 <button onClick={() => { setShowCloseForm(true); setCloseReason(""); setCloseMode("received"); }}
                   style={{ padding: "9px 14px", borderRadius: 7, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  🗑 Delete → Close (drops inventory)
+                 {t("mrdetail.delete_close_drops_inventory")}
                 </button>
               )}
               <div style={{ flex: 1 }}/>
               {isAdmin && (
                 <button onClick={() => setEditing(true)}
                   style={{ padding: "9px 18px", borderRadius: 7, background: T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  ✏ Edit
+                 {t("common.edit")}
                 </button>
               )}
             </>

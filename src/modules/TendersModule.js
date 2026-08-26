@@ -20,6 +20,7 @@ import { useToast } from "../components/Toast";
 // Receipt lene ke liye Finance ka hi form dobara use hota hai — TabParty aur
 // TabTransaction bhi yahi karte hain, taaki receipt banane ke rules ek jagah rahein.
 import { CreateTransactionModal } from "./FinanceModule";
+import { t, Rich } from "../i18n";
 
 // ── THEME TOKENS ────────────────────────────────────────────────────
 // Module self-contained rehta hai (Finance/CRM/Projects jaisa) — inhi
@@ -107,35 +108,35 @@ const nextStageOf = (s) => {
 };
 
 const STATUS_META = {
-  bidding:    {label:"Bidding",    c:T.slt, bg:T.sltL},
-  won:        {label:"Won",        c:T.grn, bg:T.grnL},
-  lost:       {label:"Lost",       c:T.red, bg:T.redL},
-  agreement:  {label:"Agreement",  c:T.ind, bg:T.indL},
-  execution:  {label:"Execution",  c:T.blu, bg:T.bluL},
-  completed:  {label:"Completed",  c:T.pur, bg:T.purL},
+  bidding:    {get label() { return t("tenders.bidding"); },    c:T.slt, bg:T.sltL},
+  won:        {get label() { return t("tenders.won"); },        c:T.grn, bg:T.grnL},
+  lost:       {get label() { return t("crm.lost"); },       c:T.red, bg:T.redL},
+  agreement:  {get label() { return t("tenders.agreement"); },  c:T.ind, bg:T.indL},
+  execution:  {get label() { return t("tenders.execution"); },  c:T.blu, bg:T.bluL},
+  completed:  {get label() { return t("material_transfer.completed"); },  c:T.pur, bg:T.purL},
   dlp:        {label:"DLP",        c:T.amb, bg:T.ambL},
-  closed:     {label:"Closed",     c:T.t4,  bg:T.sltL},
+  closed:     {get label() { return t("common.closed"); },     c:T.t4,  bg:T.sltL},
 };
 const sMeta = (s) => STATUS_META[s] || {label:s||"--", c:T.t3, bg:T.sltL};
 
 const INSTRUMENT_TYPES = [
   {v:"emd",              l:"EMD"},
-  {v:"bg",               l:"Bank Guarantee"},
+  {v:"bg",               get l() { return t("tenders.bank_guarantee"); }},
   {v:"fdr",              l:"FDR"},
-  {v:"security_deposit", l:"Security Deposit"},
+  {v:"security_deposit", get l() { return t("tenders.security_deposit"); }},
 ];
 // Bid ke saath sirf EMD jama hoti hai — BG/FDR/SD tender jeetne ke baad.
 const instrumentTypesFor = (status) =>
   status === "bidding" ? INSTRUMENT_TYPES.filter(t=>t.v==="emd") : INSTRUMENT_TYPES;
 
-const BID_SUBMISSION_TYPES = [{v:"online", l:"Online"}, {v:"offline", l:"Offline / By Post"}];
+const BID_SUBMISSION_TYPES = [{v:"online", get l() { return t("tenders.online"); }}, {v:"offline", get l() { return t("tenders.offline_by_post"); }}];
 
 // Bid kaise price hui — isse tay hota hai ki bill kis rate par banega.
 //   percentage — department ke SOR rate par ±X% (premium alag line)
 //   item_rate  — har item ka apna quoted rate, premium hota hi nahi
 const RATE_TYPES = [
-  {v:"percentage", l:"Percentage — SOR rate par ±%"},
-  {v:"item_rate",  l:"Item Rate — har item ka apna rate"},
+  {v:"percentage", get l() { return t("tenders.percentage_sor_rate_par"); }},
+  {v:"item_rate",  get l() { return t("tenders.item_rate_har_item_ka_apna"); }},
 ];
 
 // Party dropdown ka aakhri option — ye koi party id nahi, add-modal kholta hai.
@@ -144,22 +145,22 @@ const INSTRUMENT_MODES = [
   {v:"dd",     l:"DD"},
   {v:"bg",     l:"BG"},
   {v:"fdr",    l:"FDR"},
-  {v:"online", l:"Online"},
-  {v:"cash",   l:"Cash"},
+  {v:"online", get l() { return t("tenders.online"); }},
+  {v:"cash",   get l() { return t("tenders.cash"); }},
 ];
 const INST_STATUS_META = {
-  active:    {label:"Active",    c:T.blu, bg:T.bluL},
-  released:  {label:"Released",  c:T.slt, bg:T.sltL},
-  refunded:  {label:"Refunded",  c:T.grn, bg:T.grnL},
-  forfeited: {label:"Forfeited", c:T.red, bg:T.redL},
-  expired:   {label:"Expired",   c:T.amb, bg:T.ambL},
+  active:    {get label() { return t("tenders.active"); },    c:T.blu, bg:T.bluL},
+  released:  {get label() { return t("tenders.released"); },  c:T.slt, bg:T.sltL},
+  refunded:  {get label() { return t("tenders.refunded"); },  c:T.grn, bg:T.grnL},
+  forfeited: {get label() { return t("tenders.forfeited"); }, c:T.red, bg:T.redL},
+  expired:   {get label() { return t("tenders.expired"); },   c:T.amb, bg:T.ambL},
 };
 const DOC_TYPES = [
   {v:"nit",       l:"NIT"},
   {v:"loa",       l:"LOA"},
-  {v:"agreement", l:"Agreement"},
-  {v:"bg_copy",   l:"BG Copy"},
-  {v:"other",     l:"Other"},
+  {v:"agreement", get l() { return t("tenders.agreement"); }},
+  {v:"bg_copy",   get l() { return t("tenders.bg_copy"); }},
+  {v:"other",     get l() { return t("common.other"); }},
 ];
 const docLabel = (t) => (DOC_TYPES.find(d=>d.v===t)||{l:t||"Other"}).l;
 const typeLabel = (t) => (INSTRUMENT_TYPES.find(x=>x.v===t)||{l:t||"--"}).l;
@@ -347,9 +348,7 @@ function AlertsStrip({alerts, onJump}) {
     <div style={{background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, padding:"9px 13px", marginBottom:12}}>
       <div style={{display:"flex", alignItems:"center", gap:7, marginBottom:shown.length?7:0}}>
         <IcWarn size={14} color={T.amb}/>
-        <span style={{fontSize:11.5, fontWeight:700, color:T.amb, textTransform:"uppercase", letterSpacing:".5px"}}>
-          Dhyaan dein — {alerts.length} alert{alerts.length>1?"s":""}
-        </span>
+        <span style={{fontSize:11.5, fontWeight:700, color:T.amb, textTransform:"uppercase", letterSpacing:".5px"}}>{t("tenders.dhyaan_dein_alerts_alertalerts2", { alerts: alerts.length, alerts2: alerts.length>1?"s":"" })}</span>
         {highCount>0 && (
           <span style={{background:T.red, color:"#fff", fontSize:9, fontWeight:800, padding:"1px 6px", borderRadius:10}}>
             {highCount} urgent
@@ -359,7 +358,7 @@ function AlertsStrip({alerts, onJump}) {
         {alerts.length>3 && (
           <button onClick={()=>setOpen(o=>!o)}
             style={{background:"none", border:"none", color:T.amb, fontSize:11, fontWeight:600, cursor:"pointer", padding:0}}>
-            {open ? "Kam dikhao" : `+${alerts.length-3} aur`}
+            {open ? t("tenders.kam_dikhao") : `+${alerts.length-3} aur`}
           </button>
         )}
       </div>
@@ -396,7 +395,7 @@ function AddPartyInlineModal({onClose, onAdded}) {
 
   const save = async () => {
     setErr("");
-    if (!name.trim()) return setErr("Department ka naam zaroori hai");
+    if (!name.trim()) return setErr(t("tenders.department_ka_naam_zaroori_hai"));
     setBusy(true);
     const res = await api.post("/finance/parties", {
       name: name.trim(), type: "client", roles: "client",
@@ -410,24 +409,23 @@ function AddPartyInlineModal({onClose, onAdded}) {
   };
 
   return (
-    <Modal title="Naya Department" Icon={IcAdd} width={480}
-      sub="Party Library me Client ban kar jud jayega"
+    <Modal title={t("tenders.naya_department")} Icon={IcAdd} width={480}
+      sub={t("tenders.party_library_me_client_ban_kar")}
       onClose={onClose}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        <PrimBtn label={busy ? "Save ho raha..." : "Jodo"} Icon={IcChk} onClick={save} disabled={busy}/>
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy ? t("tenders.save_ho_raha") : t("machinery.jodo")} Icon={IcChk} onClick={save} disabled={busy}/>
       </>}>
       <ErrLine msg={err}/>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
-        <Field label="Department / Party ka naam *" full>
+        <Field label={t("tenders.department_party_ka_naam")} full>
           <TxtIn value={name} onChange={setName} ph="e.g. PWD Division Dhamtari"/>
         </Field>
         <Field label="GSTIN"><TxtIn value={gstin} onChange={setGstin} ph="Optional"/></Field>
-        <Field label="Phone"><TxtIn value={phone} onChange={setPhone} ph="Optional"/></Field>
+        <Field label={t("common.phone")}><TxtIn value={phone} onChange={setPhone} ph="Optional"/></Field>
       </div>
       <div style={{marginTop:12, fontSize:11, color:T.t4, lineHeight:1.5}}>
-        Ye Finance → Parties me Client-type party ban jayegi — wahan se bhi dikhegi aur
-        edit ho sakegi.
+       {t("tenders.ye_finance_parties_me_client_type")}
       </div>
     </Modal>
   );
@@ -465,20 +463,20 @@ function NewTenderModal({onClose, onCreated}) {
 
   const goNext = () => {
     setErr("");
-    if (!form.tender_no.trim()) return setErr("Tender number zaroori hai");
-    if (!form.title.trim())     return setErr("Tender ka title zaroori hai");
+    if (!form.tender_no.trim()) return setErr(t("tenders.tender_number_zaroori_hai"));
+    if (!form.title.trim())     return setErr(t("tenders.tender_ka_title_zaroori_hai"));
     // NIT date hamesha zaroori — tender ki pehchaan wahi se banti hai.
-    if (!form.nit_date)             return setErr("NIT date zaroori hai");
+    if (!form.nit_date)             return setErr(t("tenders.nit_date_zaroori_hai"));
     // Baaki bid-stage ki info sirf BIDDING par compulsory hai. Won tender
     // aksar purana record hota hai (jeet chuke kaam ko system me daal rahe
     // ho) — tab bid ki details haath me hoti hi nahi, kaam ki cheez contract
     // value aur agreement hai. Baad me Edit se bhar sakte ho.
     if (!isWon) {
-      if (!form.submission_date)      return setErr("Bid submission date zaroori hai");
-      if (!form.bid_submission_type)  return setErr("Bid submission type chuno (Online / Offline)");
-      if (form.estimated_cost === "") return setErr("Estimated cost zaroori hai — pata na ho to 0 daalo");
-      if (form.emd_amount === "")     return setErr("EMD amount zaroori hai — pata na ho to 0 daalo");
-      if (form.tender_fee === "")     return setErr("Tender fee zaroori hai — pata na ho to 0 daalo");
+      if (!form.submission_date)      return setErr(t("tenders.bid_submission_date_zaroori_hai"));
+      if (!form.bid_submission_type)  return setErr(t("tenders.bid_submission_type_chuno_online_offline"));
+      if (form.estimated_cost === "") return setErr(t("tenders.estimated_cost_zaroori_hai_pata_na"));
+      if (form.emd_amount === "")     return setErr(t("tenders.emd_amount_zaroori_hai_pata_na"));
+      if (form.tender_fee === "")     return setErr(t("tenders.tender_fee_zaroori_hai_pata_na"));
     }
     if (isWon) { setStep(2); return; }
     submit();
@@ -487,8 +485,8 @@ function NewTenderModal({onClose, onCreated}) {
   const submit = async () => {
     setErr(""); setBusy(true);
     if (isWon) {
-      if (!form.contract_value) { setBusy(false); return setErr("Won tender ke liye contract value zaroori hai"); }
-      if (!form.party_id)       { setBusy(false); return setErr("Won tender ke liye department/party zaroori hai"); }
+      if (!form.contract_value) { setBusy(false); return setErr(t("tenders.won_tender_ke_liye_contract_value")); }
+      if (!form.party_id)       { setBusy(false); return setErr(t("tenders.won_tender_ke_liye_department_party")); }
     }
     const body = {
       tender_no: form.tender_no.trim(),
@@ -526,17 +524,17 @@ function NewTenderModal({onClose, onCreated}) {
   // Party dropdown — Client-type parties (department yahi se aata hai)
   // List ke aakhir me "+ Naya Department" — dropdown me na mile to yahin se jod do.
   const partyOpts = [...parties.map(p=>({v:String(p.id), l:p.name})),
-                     {v:NEW_PARTY, l:"+ Naya Department jodo..."}];
+                     {v:NEW_PARTY, l:t("tenders.naya_department_jodo")}];
 
   return (
-    <Modal title="Naya Tender" Icon={IcGavel} onClose={onClose} width={600}
-      sub={isWon ? `Step ${step} of 2 — ${step===1?"Tender Info":"Won Details"}` : "Tender Info"}
+    <Modal title={t("tenders.naya_tender")} Icon={IcGavel} onClose={onClose} width={600}
+      sub={isWon ? `Step ${step} of 2 — ${step===1?"Tender Info":"Won Details"}` : t("tenders.tender_info")}
       footer={<>
-        {step===2 && <SecBtn label="Peeche" onClick={()=>setStep(1)}/>}
-        <SecBtn label="Cancel" onClick={onClose}/>
+        {step===2 && <SecBtn label={t("common.peeche")} onClick={()=>setStep(1)}/>}
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
         {step===1
-          ? <PrimBtn label={isWon ? "Aage" : (busy?"Save ho raha...":"Tender Banao")} onClick={goNext} disabled={busy}/>
-          : <PrimBtn label={busy?"Save ho raha...":"Tender Banao"} onClick={submit} disabled={busy}/>}
+          ? <PrimBtn label={isWon ? t("tenders.aage") : (busy?t("tenders.save_ho_raha"):t("tenders.tender_banao"))} onClick={goNext} disabled={busy}/>
+          : <PrimBtn label={busy?t("tenders.save_ho_raha"):t("tenders.tender_banao")} onClick={submit} disabled={busy}/>}
       </>}>
 
       <ErrLine msg={err}/>
@@ -560,40 +558,40 @@ function NewTenderModal({onClose, onCreated}) {
 
       {step===1 && (
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
-          <Field label="Tender Number *"><TxtIn value={form.tender_no} onChange={v=>set("tender_no",v)} ph="e.g. NIT/PWD/2026/114"/></Field>
-          <Field label="Status"><SelIn value={form.status} onChange={v=>set("status",v)}
-            options={[{v:"bidding",l:"Bidding"},{v:"won",l:"Won"}]}/></Field>
-          <Field label="Title *" full><TxtIn value={form.title} onChange={v=>set("title",v)} ph="Kaam ka naam — e.g. Durg–Bhilai road strengthening"/></Field>
+          <Field label={t("tenders.tender_number")}><TxtIn value={form.tender_no} onChange={v=>set("tender_no",v)} ph="e.g. NIT/PWD/2026/114"/></Field>
+          <Field label={t("common.status")}><SelIn value={form.status} onChange={v=>set("status",v)}
+            options={[{v:"bidding",l:t("tenders.bidding")},{v:"won",l:t("tenders.won")}]}/></Field>
+          <Field label={t("common.title")} full><TxtIn value={form.title} onChange={v=>set("title",v)} ph="Kaam ka naam — e.g. Durg–Bhilai road strengthening"/></Field>
 
-          <Field label="Department (Party)" full
-            hint="Yeh list Finance ki Client-type parties se aati hai. Department na mile to pehle Finance → Parties me Client banao.">
+          <Field label={t("tenders.department_party")} full
+            hint={t("tenders.yeh_list_finance_ki_client_type")}>
             <SelIn value={form.party_id} options={partyOpts} ph="Department chuno..."
               onChange={v=>{ if (v === NEW_PARTY) { setAddParty(true); return; } set("party_id", v); }}/>
           </Field>
-          <Field label="Department Name (free text)" full>
+          <Field label={t("tenders.department_name_free_text")} full>
             <TxtIn value={form.department_name} onChange={v=>set("department_name",v)} ph="e.g. PWD Durg Division"/>
           </Field>
 
-          <Field label="NIT Date *"><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
+          <Field label={t("tenders.nit_date")}><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
           <Field label={`Bid Submission Date${bidReq ? " *" : ""}`}><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
-          <Field label="Techno-Commercial Date"><TxtIn type="date" value={form.techno_commercial_date} onChange={v=>set("techno_commercial_date",v)}/></Field>
+          <Field label={t("tenders.techno_commercial_date")}><TxtIn type="date" value={form.techno_commercial_date} onChange={v=>set("techno_commercial_date",v)}/></Field>
           <Field label={`Bid Submission Type${bidReq ? " *" : ""}`}>
             <SelIn value={form.bid_submission_type} onChange={v=>set("bid_submission_type",v)}
               options={BID_SUBMISSION_TYPES} ph="Chuno..."/>
           </Field>
-          <Field label="Reverse Auction Date" full
-            hint="Bid ke baad reverse auction ho to uski date.">
+          <Field label={t("tenders.reverse_auction_date")} full
+            hint={t("tenders.bid_ke_baad_reverse_auction_ho")}>
             <TxtIn type="date" value={form.reverse_auction_date} onChange={v=>set("reverse_auction_date",v)}/>
           </Field>
-          <Field label="NIT ke Main Points" full
-            hint="Zaroori clause — SD %, completion period, penalty wagairah. NIT ki copy Documents tab me attach karo.">
+          <Field label={t("tenders.nit_ke_main_points")} full
+            hint={t("tenders.zaroori_clause_sd_completion_period_penalty")}>
             <textarea value={form.nit_clauses} onChange={e=>set("nit_clauses",e.target.value)} rows={3}
               style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
-              placeholder="e.g. Clause 5.2 — SD 10%, completion 12 months, LD 0.5%/week"/>
+              placeholder={t("tenders.e_g_clause_5_2_sd")}/>
           </Field>
 
           <Field label={`Estimated Cost (₹)${bidReq ? " *" : ""}`}
-            hint={bidReq ? "Pata na ho to 0 — baad me Edit se sudhaar lena." : "Won tender me optional — baad me bhar sakte ho."}>
+            hint={bidReq ? t("tenders.pata_na_ho_to_0_baad") : t("tenders.won_tender_me_optional_baad_me")}>
             <TxtIn type="number" value={form.estimated_cost} onChange={v=>set("estimated_cost",v)} ph="0"/></Field>
           <Field label={`EMD Amount (₹)${bidReq ? " *" : ""}`}><TxtIn type="number" value={form.emd_amount} onChange={v=>set("emd_amount",v)} ph="0"/></Field>
           <Field label={`Tender Fee (₹)${bidReq ? " *" : ""}`}><TxtIn type="number" value={form.tender_fee} onChange={v=>set("tender_fee",v)} ph="0"/></Field>
@@ -604,19 +602,19 @@ function NewTenderModal({onClose, onCreated}) {
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
           <div style={{gridColumn:"1/3", background:T.indL, border:`1px solid ${T.indM}`, borderRadius:7,
             padding:"9px 12px", fontSize:11.5, color:T.ind, lineHeight:1.5}}>
-            Won tender ke liye <b>Contract Value</b> aur <b>Department/Party</b> dono zaroori hain — backend inke bina status won nahi karta.
+           {t("tenders.won_tender_ke_liye")} <b>{t("tenders.contract_value")}</b> aur <b>{t("tenders.department_party_2")}</b> {t("tenders.dono_zaroori_hain_backend_inke_bina")}
           </div>
-          <Field label="Contract Value (₹) *"><TxtIn type="number" value={form.contract_value} onChange={v=>set("contract_value",v)} ph="0"/></Field>
-          <Field label="LOA Date"><TxtIn type="date" value={form.loa_date} onChange={v=>set("loa_date",v)}/></Field>
-          <Field label="Agreement No."><TxtIn value={form.agreement_no} onChange={v=>set("agreement_no",v)} ph="e.g. AGR/2026/41"/></Field>
-          <Field label="Agreement Date"><TxtIn type="date" value={form.agreement_date} onChange={v=>set("agreement_date",v)}/></Field>
-          <Field label="Work Order Date"><TxtIn type="date" value={form.work_order_date} onChange={v=>set("work_order_date",v)}/></Field>
-          <Field label="Stipulated Completion"><TxtIn type="date" value={form.stipulated_completion} onChange={v=>set("stipulated_completion",v)}/></Field>
-          <Field label="DLP (months)"><TxtIn type="number" value={form.dlp_months} onChange={v=>set("dlp_months",v)} ph="e.g. 12"/></Field>
+          <Field label={t("tenders.contract_value_2")}><TxtIn type="number" value={form.contract_value} onChange={v=>set("contract_value",v)} ph="0"/></Field>
+          <Field label={t("tenders.loa_date")}><TxtIn type="date" value={form.loa_date} onChange={v=>set("loa_date",v)}/></Field>
+          <Field label={t("tenders.agreement_no")}><TxtIn value={form.agreement_no} onChange={v=>set("agreement_no",v)} ph="e.g. AGR/2026/41"/></Field>
+          <Field label={t("tenders.agreement_date")}><TxtIn type="date" value={form.agreement_date} onChange={v=>set("agreement_date",v)}/></Field>
+          <Field label={t("tenders.work_order_date")}><TxtIn type="date" value={form.work_order_date} onChange={v=>set("work_order_date",v)}/></Field>
+          <Field label={t("tenders.stipulated_completion")}><TxtIn type="date" value={form.stipulated_completion} onChange={v=>set("stipulated_completion",v)}/></Field>
+          <Field label={t("tenders.dlp_months")}><TxtIn type="number" value={form.dlp_months} onChange={v=>set("dlp_months",v)} ph="e.g. 12"/></Field>
           {!form.party_id && (
             <div style={{gridColumn:"1/3"}}>
               <div style={{background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:7, padding:"8px 12px", fontSize:11.5, color:T.amb}}>
-                Department/Party abhi khali hai — Step 1 me jaakar chuno.
+               {t("tenders.department_party_abhi_khali_hai_step")}
               </div>
             </div>
           )}
@@ -702,13 +700,13 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
 
   const submit = async () => {
     setErr("");
-    if (!form.tender_no.trim()) return setErr("Tender number zaroori hai");
-    if (!form.title.trim())     return setErr("Tender ka title zaroori hai");
-    if (wonMissing) return setErr("Is stage ke liye contract value aur department/party dono bharna zaroori hai");
-    if (completionMissing) return setErr("Completion date zaroori hai — DLP isi se count hota hai.");
+    if (!form.tender_no.trim()) return setErr(t("tenders.tender_number_zaroori_hai"));
+    if (!form.title.trim())     return setErr(t("tenders.tender_ka_title_zaroori_hai"));
+    if (wonMissing) return setErr(t("tenders.is_stage_ke_liye_contract_value"));
+    if (completionMissing) return setErr(t("tenders.completion_date_zaroori_hai_dlp_isi"));
     if (stageChange && !stageChange.ok) return setErr(stageChange.msg);
     if (stageChange?.noteRequired && !form.status_note.trim())
-      return setErr("Is stage change ke liye note likhna zaroori hai.");
+      return setErr(t("tenders.is_stage_change_ke_liye_note"));
     setBusy(true);
     const body = {
       tender_no: form.tender_no.trim(),
@@ -755,7 +753,7 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
   };
 
   const handleDelete = async () => {
-    if (!deleteMatch) return setErr("Type DELETE to confirm");
+    if (!deleteMatch) return setErr(t("projects.type_delete_to_confirm"));
     setErr(""); setDeleting(true);
     const res = await api.del(`/tenders/${tender.id}`);
     setDeleting(false);
@@ -770,7 +768,7 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
 
   // List ke aakhir me "+ Naya Department" — dropdown me na mile to yahin se jod do.
   const partyOpts = [...parties.map(p=>({v:String(p.id), l:p.name})),
-                     {v:NEW_PARTY, l:"+ Naya Department jodo..."}];
+                     {v:NEW_PARTY, l:t("tenders.naya_department_jodo")}];
   // Dropdown me sirf wahi stage jahan asli me ja sakte hain — mojooda stage
   // hamesha, baaki checkTransition se. Asli rok backend par hai; ye sirf
   // galat option dikhne se rokta hai.
@@ -780,103 +778,97 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
     ? checkTransition(tender.status, form.status, isAdmin) : null;
 
   return (
-    <Modal title="Tender Edit" Icon={IcEdit} onClose={onClose} width={640}
+    <Modal title={t("tenders.tender_edit")} Icon={IcEdit} onClose={onClose} width={640}
       sub={tender.tender_no}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        <PrimBtn label={busy?"Save ho raha...":"Save"} onClick={submit} disabled={busy}/>
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy?t("tenders.save_ho_raha"):t("common.save")} onClick={submit} disabled={busy}/>
       </>}>
       <ErrLine msg={err}/>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
-        <Field label="Tender Number *"><TxtIn value={form.tender_no} onChange={v=>set("tender_no",v)}/></Field>
-        <Field label="Status"
+        <Field label={t("tenders.tender_number")}><TxtIn value={form.tender_no} onChange={v=>set("tender_no",v)}/></Field>
+        <Field label={t("common.status")}
           hint={stageChange && !stageChange.ok ? stageChange.msg : undefined}>
           <SelIn value={form.status} onChange={v=>set("status",v)} options={statusOpts}/>
         </Field>
         {stageChange?.ok && (
-          <Field label={stageChange.noteRequired ? "Stage Change Note *" : "Stage Change Note"} full
+          <Field label={stageChange.noteRequired ? t("tenders.stage_change_note") : t("tenders.stage_change_note_2")} full
             hint={stageChange.kind === "backward"
-              ? "Stage peeche ja raha hai — kyun, ye likhna zaroori hai."
-              : "Ye note tender ki Stage History me dikhega."}>
+              ? t("tenders.stage_peeche_ja_raha_hai_kyun")
+              : t("tenders.ye_note_tender_ki_stage_history")}>
             <TxtIn value={form.status_note} onChange={v=>set("status_note",v)}
               ph={sMeta(tender.status).label + " se " + sMeta(form.status).label + " — kyun?"}/>
           </Field>
         )}
-        <Field label="Title *" full><TxtIn value={form.title} onChange={v=>set("title",v)}/></Field>
+        <Field label={t("common.title")} full><TxtIn value={form.title} onChange={v=>set("title",v)}/></Field>
 
         {needsWonFields && (
           <div style={{gridColumn:"1/3", background:wonMissing?T.ambL:T.indL,
             border:`1px solid ${wonMissing?T.ambM:T.indM}`, borderRadius:7, padding:"9px 12px",
-            fontSize:11.5, color:wonMissing?T.amb:T.ind, lineHeight:1.5}}>
-            <b>{sMeta(form.status).label}</b> stage ke liye Contract Value aur Department/Party dono zaroori hain.
-            {wonMissing && " Abhi ek ya dono khali hain — save block ho jayega."}
-          </div>
+            fontSize:11.5, color:wonMissing?T.amb:T.ind, lineHeight:1.5}}><Rich k="tenders.label_stage_ke_liye_contract_value" params={{ label: sMeta(form.status).label, wonMissing: wonMissing && " Abhi ek ya dono khali hain — save block ho jayega." }} /></div>
         )}
 
         {needsCompletion && (
           <div style={{gridColumn:"1/3", background:completionMissing?T.ambL:T.indL,
             border:`1px solid ${completionMissing?T.ambM:T.indM}`, borderRadius:7, padding:"9px 12px",
-            fontSize:11.5, color:completionMissing?T.amb:T.ind, lineHeight:1.5}}>
-            <b>{sMeta(form.status).label}</b> stage ke liye <b>Actual Completion Date</b> zaroori hai — DLP isi se count hota hai.
-            {completionMissing && " Abhi khali hai — save block ho jayega."}
-          </div>
+            fontSize:11.5, color:completionMissing?T.amb:T.ind, lineHeight:1.5}}><Rich k="tenders.label_stage_ke_liye_actual_completion" params={{ label: sMeta(form.status).label, completionMissing: completionMissing && " Abhi khali hai — save block ho jayega." }} /></div>
         )}
 
         <Field label={`Department (Party)${needsWonFields?" *":""}`} full
-          hint="Finance ki Client-type parties. Naya department Finance → Parties me banao.">
+          hint={t("tenders.finance_ki_client_type_parties_naya")}>
           <SelIn value={form.party_id} options={partyOpts} ph="Department chuno..."
             onChange={v=>{ if (v === NEW_PARTY) { setAddParty(true); return; } set("party_id", v); }}/>
         </Field>
-        <Field label="Department Name (free text)" full><TxtIn value={form.department_name} onChange={v=>set("department_name",v)}/></Field>
+        <Field label={t("tenders.department_name_free_text")} full><TxtIn value={form.department_name} onChange={v=>set("department_name",v)}/></Field>
 
-        <Field label="Estimated Cost (₹)"><TxtIn type="number" value={form.estimated_cost} onChange={v=>set("estimated_cost",v)}/></Field>
+        <Field label={t("tenders.estimated_cost")}><TxtIn type="number" value={form.estimated_cost} onChange={v=>set("estimated_cost",v)}/></Field>
         <Field label={`Contract Value (₹)${needsWonFields?" *":""}`}><TxtIn type="number" value={form.contract_value} onChange={v=>set("contract_value",v)}/></Field>
-        <Field label="EMD Amount (₹)"><TxtIn type="number" value={form.emd_amount} onChange={v=>set("emd_amount",v)}/></Field>
-        <Field label="Tender Fee (₹)"><TxtIn type="number" value={form.tender_fee} onChange={v=>set("tender_fee",v)}/></Field>
+        <Field label={t("tenders.emd_amount")}><TxtIn type="number" value={form.emd_amount} onChange={v=>set("emd_amount",v)}/></Field>
+        <Field label={t("tenders.tender_fee")}><TxtIn type="number" value={form.tender_fee} onChange={v=>set("tender_fee",v)}/></Field>
 
-        <Field label="Rate Type" full
-          hint="Percentage me bill par premium ki alag line banti hai. Item-rate me har item ka apna rate hi final hai.">
+        <Field label={t("tenders.rate_type")} full
+          hint={t("tenders.percentage_me_bill_par_premium_ki")}>
           <SelIn value={form.rate_type} onChange={v=>set("rate_type",v)} options={RATE_TYPES}/>
         </Field>
-        <Field label="GST %" hint="Khali = bill me GST ki line nahi.">
+        <Field label={t("estimate_builder.gst")} hint={t("tenders.khali_bill_me_gst_ki_line")}>
           <TxtIn type="number" value={form.gst_pct} onChange={v=>set("gst_pct",v)} ph="e.g. 18"/>
         </Field>
-        <Field label="Deviation Limit %"
-          hint="BOQ qty se itne % tak chhoot. Khali = sirf batayenge, rokenge nahi.">
+        <Field label={t("tenders.deviation_limit")}
+          hint={t("tenders.boq_qty_se_itne_tak_chhoot")}>
           <TxtIn type="number" value={form.deviation_limit_pct} onChange={v=>set("deviation_limit_pct",v)} ph="e.g. 10"/>
         </Field>
-        <Field label="NIT Date"><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
-        <Field label="Bid Submission Date"><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
-        <Field label="Techno-Commercial Date"><TxtIn type="date" value={form.techno_commercial_date} onChange={v=>set("techno_commercial_date",v)}/></Field>
-        <Field label="Bid Submission Type">
+        <Field label={t("tenders.nit_date_2")}><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
+        <Field label={t("tenders.bid_submission_date")}><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
+        <Field label={t("tenders.techno_commercial_date")}><TxtIn type="date" value={form.techno_commercial_date} onChange={v=>set("techno_commercial_date",v)}/></Field>
+        <Field label={t("tenders.bid_submission_type")}>
           <SelIn value={form.bid_submission_type} onChange={v=>set("bid_submission_type",v)}
             options={BID_SUBMISSION_TYPES} ph="Chuno..."/>
         </Field>
-        <Field label="Reverse Auction Date" full hint="Bid ke baad reverse auction ho to uski date.">
+        <Field label={t("tenders.reverse_auction_date")} full hint={t("tenders.bid_ke_baad_reverse_auction_ho")}>
           <TxtIn type="date" value={form.reverse_auction_date} onChange={v=>set("reverse_auction_date",v)}/>
         </Field>
-        <Field label="NIT ke Main Points" full
-          hint="Zaroori clause — SD %, completion period, penalty wagairah. NIT ki copy Documents tab me attach karo.">
+        <Field label={t("tenders.nit_ke_main_points")} full
+          hint={t("tenders.zaroori_clause_sd_completion_period_penalty")}>
           <textarea value={form.nit_clauses} onChange={e=>set("nit_clauses",e.target.value)} rows={3}
             style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
-            placeholder="e.g. Clause 5.2 — SD 10%, completion 12 months, LD 0.5%/week"/>
+            placeholder={t("tenders.e_g_clause_5_2_sd")}/>
         </Field>
-        <Field label="LOA Date"><TxtIn type="date" value={form.loa_date} onChange={v=>set("loa_date",v)}/></Field>
-        <Field label="Agreement No."><TxtIn value={form.agreement_no} onChange={v=>set("agreement_no",v)}/></Field>
-        <Field label="Agreement Date"><TxtIn type="date" value={form.agreement_date} onChange={v=>set("agreement_date",v)}/></Field>
-        <Field label="Work Order Date"><TxtIn type="date" value={form.work_order_date} onChange={v=>set("work_order_date",v)}/></Field>
-        <Field label="Stipulated Completion"><TxtIn type="date" value={form.stipulated_completion} onChange={v=>set("stipulated_completion",v)}/></Field>
+        <Field label={t("tenders.loa_date")}><TxtIn type="date" value={form.loa_date} onChange={v=>set("loa_date",v)}/></Field>
+        <Field label={t("tenders.agreement_no")}><TxtIn value={form.agreement_no} onChange={v=>set("agreement_no",v)}/></Field>
+        <Field label={t("tenders.agreement_date")}><TxtIn type="date" value={form.agreement_date} onChange={v=>set("agreement_date",v)}/></Field>
+        <Field label={t("tenders.work_order_date")}><TxtIn type="date" value={form.work_order_date} onChange={v=>set("work_order_date",v)}/></Field>
+        <Field label={t("tenders.stipulated_completion")}><TxtIn type="date" value={form.stipulated_completion} onChange={v=>set("stipulated_completion",v)}/></Field>
         <Field label={`Actual Completion Date${needsCompletion?" *":""}`}
-          hint="Kaam asli me kab khatam hua. DLP isi se count hota hai.">
+          hint={t("tenders.kaam_asli_me_kab_khatam_hua")}>
           <TxtIn type="date" value={form.actual_completion_date} onChange={v=>set("actual_completion_date",v)}/>
         </Field>
-        <Field label="DLP (months)"><TxtIn type="number" value={form.dlp_months} onChange={v=>set("dlp_months",v)}/></Field>
-        <Field label="DLP End Date"
+        <Field label={t("tenders.dlp_months")}><TxtIn type="number" value={form.dlp_months} onChange={v=>set("dlp_months",v)}/></Field>
+        <Field label={t("tenders.dlp_end_date")}
           hint={form.dlp_end_date
-            ? "Aapne khud set ki hai — yahi save hogi (auto calculation band)."
+            ? t("tenders.aapne_khud_set_ki_hai_yahi")
             : autoDlpEnd
               ? `Khali chhodo to auto — ${fmtDate(autoDlpEnd)} ban jayegi.`
-              : "Khali chhodo to auto — completion date aur DLP months bharte hi ban jayegi."}>
+              : t("tenders.khali_chhodo_to_auto_completion_date")}>
           {/* type="date" input placeholder attribute ko ignore karta hai
               (browser khud dd-mm-yyyy dikhata hai), isliye auto value ek
               ghost chip me right side par overlay ki hai. */}
@@ -886,14 +878,12 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
             {!form.dlp_end_date && !!autoDlpEnd && (
               <div style={{position:"absolute", right:10, top:"50%", transform:"translateY(-50%)",
                 pointerEvents:"none", fontSize:10.5, fontWeight:700, color:T.ind,
-                background:T.indL, border:`1px solid ${T.indM}`, borderRadius:20, padding:"1px 8px"}}>
-                auto: {fmtDate(autoDlpEnd)}
-              </div>
+                background:T.indL, border:`1px solid ${T.indM}`, borderRadius:20, padding:"1px 8px"}}>{t("tenders.auto_fmtdate", { fmtDate: fmtDate(autoDlpEnd) })}</div>
             )}
           </div>
         </Field>
 
-        <Field label="Notes" full>
+        <Field label={t("common.notes")} full>
           <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={3}
             style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
             onFocus={e=>e.target.style.borderColor=T.ind} onBlur={e=>e.target.style.borderColor=T.b1}/>
@@ -902,26 +892,24 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
         {/* ── DANGER ZONE — admin/super_admin only ── */}
         {isAdmin && (
           <div style={{gridColumn:"1/3", marginTop:4, paddingTop:14, borderTop:`1px solid ${T.b1}`}}>
-            <div style={{fontSize:13, fontWeight:700, color:T.red, marginBottom:8}}>Danger Zone</div>
+            <div style={{fontSize:13, fontWeight:700, color:T.red, marginBottom:8}}>{t("common.danger_zone")}</div>
             <div style={{background:T.redL, border:`1px solid ${T.redM}`, borderRadius:8, padding:"14px 16px"}}>
-              <div style={{fontSize:13, fontWeight:600, color:T.red, marginBottom:4}}>Delete Tender</div>
+              <div style={{fontSize:13, fontWeight:600, color:T.red, marginBottom:4}}>{t("tenders.delete_tender")}</div>
               <div style={{fontSize:12, color:T.t3, lineHeight:1.55, marginBottom:12}}>
-                Tender ka record, uske saare instruments aur documents hide ho jayenge.
-                Isse judi <b>projects delete NAHI hongi</b> — wo sirf is tender se free ho
-                jayengi aur baad me kisi doosre tender se jodi ja sakti hain.
+               {t("tenders.tender_ka_record_uske_saare_instruments")} <b>{t("tenders.projects_delete_nahi_hongi")}</b> {t("tenders.wo_sirf_is_tender_se_free")}
               </div>
               {!confirmDelete ? (
                 <button onClick={()=>setConfirmDelete(true)}
                   style={{padding:"7px 14px", borderRadius:7, background:T.surface,
                     border:`1.5px solid ${T.redM}`, color:T.red, fontSize:12, fontWeight:600, cursor:"pointer"}}>
-                  Delete Tender
+                 {t("tenders.delete_tender")}
                 </button>
               ) : (
                 <div>
                   <div style={{fontSize:12, color:T.red, marginBottom:8}}>
-                    Confirm karne ke liye <strong>DELETE</strong> type karo:
+                   {t("projects.confirm_karne_ke_liye")} <strong>DELETE</strong> {t("projects.type_karo")}
                   </div>
-                  <input value={deleteText} onChange={e=>setDeleteText(e.target.value)} placeholder="Type DELETE to confirm"
+                  <input value={deleteText} onChange={e=>setDeleteText(e.target.value)} placeholder={t("projects.type_delete_to_confirm")}
                     style={{width:"100%", padding:"8px 11px", borderRadius:7, border:`1.5px solid ${T.redM}`,
                       fontSize:12.5, color:T.t1, background:T.surface, outline:"none",
                       boxSizing:"border-box", fontFamily:"inherit", marginBottom:10}}/>
@@ -929,13 +917,13 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
                     <button onClick={()=>{setConfirmDelete(false); setDeleteText("");}}
                       style={{flex:1, padding:"8px", borderRadius:7, background:T.surface,
                         border:`1px solid ${T.b1}`, color:T.t3, fontSize:12, fontWeight:600, cursor:"pointer"}}>
-                      Cancel
+                     {t("common.cancel")}
                     </button>
                     <button onClick={handleDelete} disabled={deleting||!deleteMatch}
                       style={{flex:2, padding:"8px", borderRadius:7, background:deleteMatch?T.red:T.b1,
                         border:"none", color:"white", fontSize:12, fontWeight:700,
                         cursor:deleteMatch?"pointer":"not-allowed"}}>
-                      {deleting ? "Deleting..." : "Permanently Delete"}
+                      {deleting ? t("common.deleting") : t("projects.permanently_delete")}
                     </button>
                   </div>
                 </div>
@@ -957,9 +945,9 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
 // ════════════════════════════════════════════════════════════════════
 // Poora pipeline + Lost sabse aakhir me (wo stage nahi, dead-end hai).
 const CHIPS = [
-  {id:"all",       label:"All"},
+  {id:"all",       get label() { return t("tenders.all"); }},
   ...PIPELINE.map(s => ({id:s, label:sMeta(s).label})),
-  {id:"lost",      label:"Lost"},
+  {id:"lost",      get label() { return t("crm.lost"); }},
 ];
 
 function TenderList({onOpen}) {
@@ -1014,11 +1002,11 @@ function TenderList({onOpen}) {
   }, [rows, chip, search]);
 
   const KPI_TILES = kpis ? [
-    {label:"Active Tenders",    value:kpis.active_count,                note:"lost + closed chhod kar", color:T.ind, Icon:IcGavel},
-    {label:"Contract Value",    value:money(kpis.contract_value_sum),   note:"won aur uske aage",       color:T.grn, Icon:IcRupee},
-    {label:"EMD Locked",        value:money(kpis.emd_locked),           note:"active EMD",              color:T.blu, Icon:IcLock},
-    {label:"BG Expiring ≤30d",  value:kpis.bg_expiring_30d,             note:"BG / FDR validity",       color:kpis.bg_expiring_30d?T.red:T.slt, Icon:IcBank},
-    {label:"EMD Refund Pending",value:kpis.emd_refund_pending,          note:"lost tenders ka EMD",     color:kpis.emd_refund_pending?T.amb:T.slt, Icon:IcClock},
+    {label:t("tenders.active_tenders"),    value:kpis.active_count,                note:"lost + closed chhod kar", color:T.ind, Icon:IcGavel},
+    {label:t("tenders.contract_value"),    value:money(kpis.contract_value_sum),   note:"won aur uske aage",       color:T.grn, Icon:IcRupee},
+    {label:t("tenders.emd_locked"),        value:money(kpis.emd_locked),           note:"active EMD",              color:T.blu, Icon:IcLock},
+    {label:t("tenders.bg_expiring_30d"),  value:kpis.bg_expiring_30d,             note:"BG / FDR validity",       color:kpis.bg_expiring_30d?T.red:T.slt, Icon:IcBank},
+    {label:t("tenders.emd_refund_pending"),value:kpis.emd_refund_pending,          note:"lost tenders ka EMD",     color:kpis.emd_refund_pending?T.amb:T.slt, Icon:IcClock},
   ] : [];
 
   return (
@@ -1057,7 +1045,7 @@ function TenderList({onOpen}) {
           <div style={{position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", lineHeight:0}}>
             <IcSrch size={13} color={T.t4}/>
           </div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Tender no, title ya department dhoondo..."
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("tenders.tender_no_title_ya_department_dhoondo")}
             style={{width:"100%", height:32, padding:"0 9px 0 28px", borderRadius:6,
               border:`1.5px solid ${search?T.ind:T.b1}`, fontSize:12.5, color:T.t1,
               background:search?T.indL:T.surfaceB, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}
@@ -1065,7 +1053,7 @@ function TenderList({onOpen}) {
             onBlur={e=>{if(!search){e.target.style.borderColor=T.b1; e.target.style.background=T.surfaceB;}}}/>
         </div>
 
-        <PrimBtn label="Naya Tender" Icon={IcAdd} onClick={()=>setShowNew(true)}/>
+        <PrimBtn label={t("tenders.naya_tender")} Icon={IcAdd} onClick={()=>setShowNew(true)}/>
       </div>
 
       {/* Table */}
@@ -1077,12 +1065,12 @@ function TenderList({onOpen}) {
           ))}
         </div>
 
-        {loading && <Loading text="Tenders load ho rahe hain..."/>}
+        {loading && <Loading text={t("tenders.tenders_load_ho_rahe_hain")}/>}
 
         {!loading && !filtered.length && (
           <Empty Icon={IcGavel}
-            text={rows.length ? "Is filter me koi tender nahi." : "Abhi koi tender nahi."}
-            sub={rows.length ? "Doosra status chip try karo." : "Upar \"Naya Tender\" se pehla record banao."}/>
+            text={rows.length ? t("tenders.is_filter_me_koi_tender_nahi") : t("tenders.abhi_koi_tender_nahi")}
+            sub={rows.length ? t("tenders.doosra_status_chip_try_karo") : t("tenders.upar_naya_tender_se_pehla_record")}/>
         )}
 
         {!loading && filtered.map((r,i)=>{
@@ -1144,14 +1132,14 @@ function TenderList({onOpen}) {
 // form: kitna, kab, kis reference se, aur kyun. Forfeit par wajah compulsory
 // (paisa doob raha hai).
 const ACTION_META = {
-  release: {title:"Release", c:T.blu,
-    sub:"Bank / department ne instrument release kar diya",
+  release: {get title() { return t("tenders.release"); }, c:T.blu,
+    get sub() { return t("tenders.bank_department_ne_instrument_release_kar"); },
     amtLabel:"Released amount (₹)", refLabel:"Release letter / reference"},
-  refund:  {title:"Refund",  c:T.grn,
-    sub:"Paisa wapas aa gaya",
+  refund:  {get title() { return t("tenders.refund"); },  c:T.grn,
+    get sub() { return t("tenders.paisa_wapas_aa_gaya"); },
     amtLabel:"Wapas aaya amount (₹)", refLabel:"UTR / cheque / reference"},
-  forfeit: {title:"Forfeit", c:T.red,
-    sub:"Instrument zabt ho gaya — paisa wapas nahi aayega",
+  forfeit: {get title() { return t("tenders.forfeit"); }, c:T.red,
+    get sub() { return t("tenders.instrument_zabt_ho_gaya_paisa_wapas"); },
     amtLabel:"Zabt hua amount (₹)", refLabel:"Department letter / order no"},
 };
 
@@ -1189,11 +1177,11 @@ function InstrumentActionModal({tenderId, inst, action, onClose, onDone}) {
 
   const submit = async () => {
     setErr("");
-    if (!form.date) return setErr("Date zaroori hai");
-    if (form.date > todayYMD()) return setErr("Date aaj se aage ki nahi ho sakti");
-    if (amtNum <= 0) return setErr("Amount 0 se bada hona chahiye");
+    if (!form.date) return setErr(t("tenders.date_zaroori_hai"));
+    if (form.date > todayYMD()) return setErr(t("tenders.date_aaj_se_aage_ki_nahi"));
+    if (amtNum <= 0) return setErr(t("tenders.amount_0_se_bada_hona_chahiye"));
     if (amtNum > instAmt + 0.009) return setErr(`Instrument ${moneyF(instAmt)} ka hai — usse zyada nahi ho sakta`);
-    if (shortReason) return setErr("Forfeit karne ki wajah likhna zaroori hai (kam se kam 10 akshar).");
+    if (shortReason) return setErr(t("tenders.forfeit_karne_ki_wajah_likhna_zaroori"));
     setBusy(true);
     const res = await api.put(`/tenders/${tenderId}/instruments/${inst.id}`, {
       action,
@@ -1214,8 +1202,8 @@ function InstrumentActionModal({tenderId, inst, action, onClose, onDone}) {
     <Modal title={`${typeLabel(inst.type)} — ${meta.title}`} Icon={IcBank} width={560}
       sub={meta.sub} onClose={onClose}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        <PrimBtn label={busy ? "Ho raha hai..." : `${meta.title} karo`} Icon={IcChk}
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy ? t("tenders.ho_raha_hai") : `${meta.title} karo`} Icon={IcChk}
           color={meta.c} onClick={submit} disabled={busy}/>
       </>}>
       <ErrLine msg={err}/>
@@ -1239,9 +1227,8 @@ function InstrumentActionModal({tenderId, inst, action, onClose, onDone}) {
           borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:13,
           display:"flex", gap:8, alignItems:"flex-start"}}>
           <IcWarn size={14} color={T.red}/>
-          <span><b style={{color:T.red}}>Ye paisa wapas nahi aayega.</b> Finance me isi amount ki
-            <b> EMD Forfeit</b> expense entry ban jayegi. Galti ho to admin Undo kar sakta hai —
-            tab wo entry bhi hat jayegi.</span>
+          <span><b style={{color:T.red}}>{t("tenders.ye_paisa_wapas_nahi_aayega")}</b> {t("tenders.finance_me_isi_amount_ki")}
+            <b> {t("finance.emd_forfeit")}</b> {t("tenders.expense_entry_ban_jayegi_galti_ho")}</span>
         </div>
       )}
 
@@ -1257,21 +1244,21 @@ function InstrumentActionModal({tenderId, inst, action, onClose, onDone}) {
           <TxtIn value={form.ref} onChange={v=>set("ref",v)} ph="e.g. UTR 1234567890 / EE/2026/442"/>
         </Field>
         {action === "refund" && (
-          <Field label="Kaise wapas aaya" full>
+          <Field label={t("tenders.kaise_wapas_aaya")} full>
             <SelIn value={form.mode} onChange={v=>set("mode",v)} options={INSTRUMENT_MODES} ph="Chuno..."/>
           </Field>
         )}
         {isForfeit && (
-          <Field label="Kis account se gaya" full
-            hint="Finance me is amount ki expense entry banegi — account chuno to usi ka balance ghatega.">
+          <Field label={t("tenders.kis_account_se_gaya")} full
+            hint={t("tenders.finance_me_is_amount_ki_expense")}>
             <SelIn value={form.account_id} onChange={v=>set("account_id",v)} ph="Account chuno (optional)..."
               options={accounts.map(a=>({v:String(a.id), l:a.name}))}/>
           </Field>
         )}
-        <Field label={isForfeit ? "Wajah *" : "Remarks"} full
-          hint={isForfeit ? "Kam se kam 10 akshar — record me hamesha rahega." : undefined}>
+        <Field label={isForfeit ? t("tenders.wajah") : t("common.remarks")} full
+          hint={isForfeit ? t("tenders.kam_se_kam_10_akshar_record") : undefined}>
           <textarea value={form.remarks} onChange={e=>set("remarks",e.target.value)} rows={2}
-            placeholder={isForfeit ? "e.g. Bid withdraw kiya, EMD zabt hui" : "Optional"}
+            placeholder={isForfeit ? t("tenders.e_g_bid_withdraw_kiya_emd") : t("common.optional")}
             style={{...inputStyle, resize:"vertical", lineHeight:1.5}}/>
         </Field>
       </div>
@@ -1314,7 +1301,7 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
 
   const go = async () => {
     setErr("");
-    if (noteMissing) return setErr("Is stage change ke liye note likhna zaroori hai.");
+    if (noteMissing) return setErr(t("tenders.is_stage_change_ke_liye_note"));
     setBusy(true);
     const body = {status: target};
     if (note.trim()) body.status_note = note.trim();
@@ -1328,12 +1315,12 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
   const fm = sMeta(from), tm = sMeta(target);
 
   return (
-    <Modal title="Stage Change" Icon={IcGavel} width={560}
+    <Modal title={t("tenders.stage_change")} Icon={IcGavel} width={560}
       sub={`${fm.label} se ${tm.label}`}
       onClose={onClose}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        <PrimBtn label={busy ? "Ho raha hai..." : `${tm.label} karo`} Icon={IcChk}
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy ? t("tenders.ho_raha_hai") : `${tm.label} karo`} Icon={IcChk}
           onClick={go} disabled={busy || blocked}/>
       </>}>
       <ErrLine msg={err}/>
@@ -1358,31 +1345,23 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
       {/* Hard gates — Edit modal me jaakar bharna padega */}
       {wonMissing && (
         <div style={{padding:"10px 12px", background:T.ambL, border:`1px solid ${T.ambM}`,
-          borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}>
-          <b style={{color:T.amb}}>Pehle ye bharo</b> — {tm.label} par jaane ke liye
-          <b> Contract Value</b> aur <b>Department/Party</b> dono zaroori hain.
-          Upar <b>Edit</b> button se bhar do, phir yahan wapas aao.
-        </div>
+          borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}><Rich k="tenders.pehle_ye_bharo_label_par_jaane" params={{ label: tm.label }} /></div>
       )}
       {completionMissing && (
         <div style={{padding:"10px 12px", background:T.ambL, border:`1px solid ${T.ambM}`,
-          borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}>
-          <b style={{color:T.amb}}>Pehle ye bharo</b> — <b>Actual Completion Date</b> ke bina
-          {" "}{tm.label} nahi hota (DLP isi date se count hota hai). Edit me bhar do.
-        </div>
+          borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}><Rich k="tenders.pehle_ye_bharo_actual_completion_date" params={{ v: " ", label: tm.label }} /></div>
       )}
 
       {/* Won — instrument reminder (sirf yaad dilana) */}
       {t.ok && target === "won" && (
         <div style={{padding:"10px 12px", background:T.indL, border:`1px solid ${T.indM}`,
           borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}>
-          <b style={{color:T.ind}}>Jeetne ke baad</b> — <b>BG / FDR / Security Deposit</b> jo bhi
-          department maange, wo abhi add kar sakte ho (bid stage me sirf EMD chalti thi).
+          <b style={{color:T.ind}}>{t("tenders.jeetne_ke_baad")}</b> — <b>{t("tenders.bg_fdr_security_deposit")}</b> {t("tenders.jo_bhi_department_maange_wo_abhi")}
           <label style={{display:"flex", alignItems:"center", gap:7, marginTop:8, cursor:"pointer"}}>
             <input type="checkbox" checked={addInstAfter} onChange={e=>setAddInstAfter(e.target.checked)}
               style={{width:15, height:15, accentColor:T.ind, cursor:"pointer"}}/>
             <span style={{fontSize:12, color:T.t1, fontWeight:600}}>
-              Won karte hi instrument jodne ka form kholo
+             {t("tenders.won_karte_hi_instrument_jodne_ka")}
             </span>
           </label>
         </div>
@@ -1392,7 +1371,7 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
       {t.ok && !!openProjects.length && (
         <div style={{padding:"10px 12px", background:T.ambL, border:`1px solid ${T.ambM}`,
           borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}>
-          <b style={{color:T.amb}}>{openProjects.length} site abhi complete nahi hai</b>
+          <b style={{color:T.amb}}>{t("tenders.openprojects_site_abhi_complete_nahi_hai", { openProjects: openProjects.length })}</b>
           <div style={{marginTop:5}}>
             {openProjects.map(p=>(
               <div key={p.id} style={{fontSize:11.5}}>
@@ -1401,21 +1380,21 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
             ))}
           </div>
           <div style={{marginTop:6, color:T.t3, fontSize:11}}>
-            Phir bhi aage badh sakte ho — kaagzi taur par tender pehle band ho jata hai.
+           {t("tenders.phir_bhi_aage_badh_sakte_ho")}
           </div>
         </div>
       )}
 
       {/* Note */}
       {t.ok && (
-        <Field label={t.noteRequired ? "Note *" : "Note (optional)"}
+        <Field label={t.noteRequired ? t("tenders.note") : t("common.note_optional")}
           hint={t.kind === "backward"
-            ? "Stage peeche ja raha hai — kyun, ye record me rahega."
-            : "Ye note tender ki Stage History me dikhega."}>
+            ? t("tenders.stage_peeche_ja_raha_hai_kyun_2")
+            : t("tenders.ye_note_tender_ki_stage_history")}>
           <textarea value={note} onChange={e=>setNote(e.target.value)} rows={3}
             style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
             placeholder={t.kind === "lost"
-              ? "e.g. L1 se 4% zyada the"
+              ? t("tenders.e_g_l1_se_4_zyada")
               : `${fm.label} se ${tm.label} — kyun?`}/>
         </Field>
       )}
@@ -1435,7 +1414,7 @@ function AddInstrumentModal({tenderId, tenderStatus, onClose, onSaved}) {
 
   const submit = async () => {
     setErr("");
-    if (!form.amount || Number(form.amount) <= 0) return setErr("Amount zaroori hai aur 0 se bada hona chahiye");
+    if (!form.amount || Number(form.amount) <= 0) return setErr(t("tenders.amount_zaroori_hai_aur_0_se"));
     setBusy(true);
     const res = await api.post(`/tenders/${tenderId}/instruments`, {
       type: form.type,
@@ -1460,27 +1439,27 @@ function AddInstrumentModal({tenderId, tenderStatus, onClose, onSaved}) {
   const bidOnly  = tenderStatus === "bidding";
 
   return (
-    <Modal title="Naya Instrument" Icon={IcBank} onClose={onClose} width={560}
-      sub={bidOnly ? "Bid stage — sirf EMD" : "EMD / BG / FDR / Security Deposit"}
+    <Modal title={t("tenders.naya_instrument")} Icon={IcBank} onClose={onClose} width={560}
+      sub={bidOnly ? t("tenders.bid_stage_sirf_emd") : t("tenders.emd_bg_fdr_security_deposit")}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        <PrimBtn label={busy?"Save ho raha...":"Jodo"} onClick={submit} disabled={busy}/>
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy?t("tenders.save_ho_raha"):t("machinery.jodo")} onClick={submit} disabled={busy}/>
       </>}>
       <ErrLine msg={err}/>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
-        <Field label="Type *" hint={bidOnly ? "BG / FDR / Security Deposit tender won hone ke baad." : undefined}>
+        <Field label={t("projects.type")} hint={bidOnly ? t("tenders.bg_fdr_security_deposit_tender_won") : undefined}>
           <SelIn value={form.type} onChange={v=>set("type",v)} options={typeOpts}/>
         </Field>
-        <Field label="Mode"><SelIn value={form.mode} onChange={v=>set("mode",v)} options={INSTRUMENT_MODES}/></Field>
-        <Field label="Amount (₹) *"><TxtIn type="number" value={form.amount} onChange={v=>set("amount",v)} ph="0"/></Field>
-        <Field label="Reference No."><TxtIn value={form.ref_no} onChange={v=>set("ref_no",v)} ph="DD / BG number"/></Field>
-        <Field label="Bank Name" full><TxtIn value={form.bank_name} onChange={v=>set("bank_name",v)} ph="e.g. SBI Durg"/></Field>
-        <Field label="Issue Date"><TxtIn type="date" value={form.issue_date} onChange={v=>set("issue_date",v)}/></Field>
+        <Field label={t("common.mode")}><SelIn value={form.mode} onChange={v=>set("mode",v)} options={INSTRUMENT_MODES}/></Field>
+        <Field label={t("common.amount")}><TxtIn type="number" value={form.amount} onChange={v=>set("amount",v)} ph="0"/></Field>
+        <Field label={t("common.reference_no")}><TxtIn value={form.ref_no} onChange={v=>set("ref_no",v)} ph="DD / BG number"/></Field>
+        <Field label={t("common.bank_name")} full><TxtIn value={form.bank_name} onChange={v=>set("bank_name",v)} ph="e.g. SBI Durg"/></Field>
+        <Field label={t("tenders.issue_date")}><TxtIn type="date" value={form.issue_date} onChange={v=>set("issue_date",v)}/></Field>
         <Field label={`Validity Date${needsValidity?" (alert isi par)":""}`}
-          hint={needsValidity ? "BG/FDR ki validity 30 din me aane par alert bajta hai." : undefined}>
+          hint={needsValidity ? t("tenders.bg_fdr_ki_validity_30_din") : undefined}>
           <TxtIn type="date" value={form.validity_date} onChange={v=>set("validity_date",v)}/>
         </Field>
-        <Field label="Remarks" full>
+        <Field label={t("common.remarks")} full>
           <textarea value={form.remarks} onChange={e=>set("remarks",e.target.value)} rows={2}
             style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
             onFocus={e=>e.target.style.borderColor=T.ind} onBlur={e=>e.target.style.borderColor=T.b1}/>
@@ -1512,7 +1491,7 @@ function LinkProjectModal({tenderId, onClose, onSaved}) {
 
   const submit = async () => {
     setErr("");
-    if (!pick) return setErr("Project chunna zaroori hai");
+    if (!pick) return setErr(t("tenders.project_chunna_zaroori_hai"));
     setBusy(true);
     const res = await api.put(`/tenders/${tenderId}/link-project`, {project_id: Number(pick), action:"link"});
     setBusy(false);
@@ -1523,20 +1502,20 @@ function LinkProjectModal({tenderId, onClose, onSaved}) {
   };
 
   return (
-    <Modal title="Existing Project Jodo" Icon={IcLink} onClose={onClose} width={520}
-      sub="Sirf wo projects jo abhi kisi tender se jude nahi hain"
+    <Modal title={t("tenders.existing_project_jodo")} Icon={IcLink} onClose={onClose} width={520}
+      sub={t("tenders.sirf_wo_projects_jo_abhi_kisi")}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        <PrimBtn label={busy?"Jud raha...":"Link Karo"} onClick={submit} disabled={busy||!projects.length}/>
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy?t("tenders.jud_raha"):t("tenders.link_karo")} onClick={submit} disabled={busy||!projects.length}/>
       </>}>
       <ErrLine msg={err}/>
-      {loading && <Loading text="Projects load ho rahe hain..."/>}
+      {loading && <Loading text={t("tenders.projects_load_ho_rahe_hain")}/>}
       {!loading && !projects.length && (
-        <Empty Icon={IcSite} text="Koi free project nahi mila."
-          sub="Saare projects pehle se kisi tender se jude hain, ya abhi koi project bana hi nahi."/>
+        <Empty Icon={IcSite} text={t("tenders.koi_free_project_nahi_mila")}
+          sub={t("tenders.saare_projects_pehle_se_kisi_tender")}/>
       )}
       {!loading && !!projects.length && (
-        <Field label="Project *">
+        <Field label={t("common.project_2")}>
           <SelIn value={pick} onChange={setPick} ph="Project chuno..."
             options={projects.map(p=>({v:String(p.id), l:`${p.name}${p.city_name?` — ${p.city_name}`:""}`}))}/>
         </Field>
@@ -1574,9 +1553,9 @@ function NewSiteModal({tender, onClose, onSaved}) {
 
   const submit = async () => {
     setErr("");
-    if (!form.name.trim())          return setErr("Site ka naam zaroori hai");
-    if (!form.cityId)               return setErr("City zaroori hai");
-    if (!form.constructionTypeId)   return setErr("Construction type zaroori hai");
+    if (!form.name.trim())          return setErr(t("tenders.site_ka_naam_zaroori_hai"));
+    if (!form.cityId)               return setErr(t("tenders.city_zaroori_hai"));
+    if (!form.constructionTypeId)   return setErr(t("tenders.construction_type_zaroori_hai"));
     setBusy(true);
 
     const city  = cities.find(c=>String(c.id)===String(form.cityId));
@@ -1609,31 +1588,30 @@ function NewSiteModal({tender, onClose, onSaved}) {
   };
 
   return (
-    <Modal title="Nayi Site" Icon={IcSite} onClose={onClose} width={560}
+    <Modal title={t("tenders.nayi_site")} Icon={IcSite} onClose={onClose} width={560}
       sub={`Tender ${tender.tender_no} ke against`}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        <PrimBtn label={busy?"Ban raha...":"Site Banao"} onClick={submit} disabled={busy}/>
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy?t("tenders.ban_raha"):t("tenders.site_banao")} onClick={submit} disabled={busy}/>
       </>}>
       <ErrLine msg={err}/>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
-        <Field label="Site / Project Name *" full>
+        <Field label={t("tenders.site_project_name")} full>
           <TxtIn value={form.name} onChange={v=>set("name",v)} ph="e.g. Package-2 Durg Bypass"/>
         </Field>
-        <Field label="City *">
+        <Field label={t("common.city_2")}>
           <SelIn value={form.cityId} onChange={v=>set("cityId",v)} ph="City chuno..."
             options={cities.map(c=>({v:String(c.id), l:c.name}))}/>
         </Field>
-        <Field label="Construction Type *">
+        <Field label={t("crm.construction_type")}>
           <SelIn value={form.constructionTypeId} onChange={v=>set("constructionTypeId",v)} ph="Type chuno..."
             options={ctypes.map(c=>({v:String(c.id), l:c.name}))}/>
         </Field>
-        <Field label="Start Date"><TxtIn type="date" value={form.start_date} onChange={v=>set("start_date",v)}/></Field>
-        <Field label="End Date"><TxtIn type="date" value={form.end_date} onChange={v=>set("end_date",v)}/></Field>
+        <Field label={t("common.start_date")}><TxtIn type="date" value={form.start_date} onChange={v=>set("start_date",v)}/></Field>
+        <Field label={t("common.end_date")}><TxtIn type="date" value={form.end_date} onChange={v=>set("end_date",v)}/></Field>
         <div style={{gridColumn:"1/3", background:T.sltL, border:`1px solid ${T.b1}`, borderRadius:7,
           padding:"9px 12px", fontSize:11.5, color:T.t3, lineHeight:1.5}}>
-          Site banne ke baad poora kaam — tasks, budget, material, billing — normal Project screen se hoga.
-          Yahan sirf tender ke saath link ban raha hai.
+         {t("tenders.site_banne_ke_baad_poora_kaam")}
         </div>
       </div>
     </Modal>
@@ -1681,8 +1659,8 @@ function AddDocumentModal({tenderId, onClose, onSaved}) {
 
   const submit = async () => {
     setErr("");
-    if (!url) return setErr("Pehle file upload karo");
-    if (!name.trim()) return setErr("Document ka naam zaroori hai");
+    if (!url) return setErr(t("tenders.pehle_file_upload_karo"));
+    if (!name.trim()) return setErr(t("tenders.document_ka_naam_zaroori_hai"));
     setBusy(true);
     const res = await api.post(`/tenders/${tenderId}/documents`,
       {doc_type: docType, name: name.trim(), url});
@@ -1694,24 +1672,24 @@ function AddDocumentModal({tenderId, onClose, onSaved}) {
   };
 
   return (
-    <Modal title="Document Jodo" Icon={IcDoc} onClose={onClose} width={520}
+    <Modal title={t("tenders.document_jodo")} Icon={IcDoc} onClose={onClose} width={520}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        <PrimBtn label={busy?"Save ho raha...":"Jodo"} onClick={submit} disabled={busy||uploading}/>
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy?t("tenders.save_ho_raha"):t("machinery.jodo")} onClick={submit} disabled={busy||uploading}/>
       </>}>
       <ErrLine msg={err}/>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
-        <Field label="Document Type *"><SelIn value={docType} onChange={setDocType} options={DOC_TYPES}/></Field>
-        <Field label="Name *"><TxtIn value={name} onChange={setName} ph="e.g. NIT copy"/></Field>
+        <Field label={t("tenders.document_type")}><SelIn value={docType} onChange={setDocType} options={DOC_TYPES}/></Field>
+        <Field label={t("common.name")}><TxtIn value={name} onChange={setName} ph="e.g. NIT copy"/></Field>
 
-        <Field label="File *" full>
+        <Field label={t("common.file")} full>
           <input ref={fileRef} type="file" style={{display:"none"}}
             onChange={e=>pickFile(e.target.files && e.target.files[0])}/>
           <div onClick={()=>!uploading && fileRef.current && fileRef.current.click()}
             style={{border:`1.5px dashed ${url?T.grn:T.b2}`, borderRadius:8, padding:"16px 14px",
               textAlign:"center", cursor:uploading?"wait":"pointer", background:url?T.grnL:T.bg}}>
             {uploading ? (
-              <div style={{fontSize:12.5, color:T.t3}}>Upload ho raha hai...</div>
+              <div style={{fontSize:12.5, color:T.t3}}>{t("fuel.upload_ho_raha_hai")}</div>
             ) : url ? (
               <div style={{display:"flex", alignItems:"center", justifyContent:"center", gap:7}}>
                 <IcChk size={15} color={T.grn}/>
@@ -1720,7 +1698,7 @@ function AddDocumentModal({tenderId, onClose, onSaved}) {
             ) : (
               <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:6}}>
                 <IcUpload size={20} color={T.t4}/>
-                <span style={{fontSize:12.5, color:T.t3}}>File chuno — PDF ya image</span>
+                <span style={{fontSize:12.5, color:T.t3}}>{t("tenders.file_chuno_pdf_ya_image")}</span>
               </div>
             )}
           </div>
@@ -1763,12 +1741,12 @@ const isBlank = (v) => v === null || v === undefined || String(v).trim() === "";
 
 const BOQ_TARGETS = [
   {key:"item_no",     label:"S.No / Item",  re:/^s\.?\s*no|^sr|serial|^#|^item\s*no/i},
-  {key:"sor_code",    label:"SOR / Code",   re:/sor|code|ref/i},
-  {key:"description", label:"Description",  re:/description|item|particular|work/i, required:true},
-  {key:"unit",        label:"Unit",         re:/^unit|units|uom/i},
-  {key:"qty",         label:"Quantity",     re:/qty|quantity|nos/i, required:true},
-  {key:"rate",        label:"Rate",         re:/rate|price/i, required:true},
-  {key:"amount",      label:"Amount",       re:/amount|total|value/i},
+  {key:"sor_code",    get label() { return t("boq_import_wizard.sor_code"); },   re:/sor|code|ref/i},
+  {key:"description", get label() { return t("boq_import_wizard.description"); },  re:/description|item|particular|work/i, required:true},
+  {key:"unit",        get label() { return t("common.unit"); },         re:/^unit|units|uom/i},
+  {key:"qty",         get label() { return t("boq_import_wizard.quantity"); },     re:/qty|quantity|nos/i, required:true},
+  {key:"rate",        get label() { return t("common.rate"); },         re:/rate|price/i, required:true},
+  {key:"amount",      get label() { return t("boq_import_wizard.amount"); },       re:/amount|total|value/i},
 ];
 
 // Total / sub-total / carried-over jaisi rows — na continuation hain
@@ -1940,8 +1918,8 @@ function BoqReasonModal({title, sub, warn, confirmLabel, onCancel, onConfirm}) {
   return (
     <Modal title={title} Icon={IcLock} sub={sub} width={520} onClose={onCancel}
       footer={<>
-        <SecBtn label="Cancel" onClick={onCancel}/>
-        <PrimBtn label={busy ? "Ho raha hai..." : confirmLabel} Icon={IcChk} disabled={busy || short}
+        <SecBtn label={t("common.cancel")} onClick={onCancel}/>
+        <PrimBtn label={busy ? t("tenders.ho_raha_hai") : confirmLabel} Icon={IcChk} disabled={busy || short}
           onClick={async ()=>{ setBusy(true); await onConfirm(reason.trim()); setBusy(false); }}/>
       </>}>
       {warn && (
@@ -1950,10 +1928,10 @@ function BoqReasonModal({title, sub, warn, confirmLabel, onCancel, onConfirm}) {
           <IcWarn size={13} color={T.amb}/> {warn}
         </div>
       )}
-      <Field label="Badalne ka reason *"
-        hint="Kam se kam 10 akshar. Ye BOQ ki Change History me hamesha rahega.">
+      <Field label={t("tenders.badalne_ka_reason")}
+        hint={t("tenders.kam_se_kam_10_akshar_ye")}>
         <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={3}
-          placeholder="e.g. EE ki manzoori 12/8/2026 se rate revise hua"
+          placeholder={t("tenders.e_g_ee_ki_manzoori_12")}
           style={{...inputStyle, resize:"vertical", lineHeight:1.5}}/>
       </Field>
     </Modal>
@@ -1961,9 +1939,9 @@ function BoqReasonModal({title, sub, warn, confirmLabel, onCancel, onConfirm}) {
 }
 
 const ITEM_TYPE_OPTS = [
-  {v:"boq",         l:"Tendered (BOQ me tha)"},
-  {v:"extra",       l:"Extra — BOQ me tha hi nahi"},
-  {v:"substituted", l:"Substituted — kisi item ki jagah"},
+  {v:"boq",         get l() { return t("tenders.tendered_boq_me_tha"); }},
+  {v:"extra",       get l() { return t("tenders.extra_boq_me_tha_hi_nahi"); }},
+  {v:"substituted", get l() { return t("tenders.substituted_kisi_item_ki_jagah"); }},
 ];
 
 function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems, boqFinal}) {
@@ -1993,13 +1971,13 @@ function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems, b
 
   const submit = async () => {
     setErr("");
-    if (!form.description.trim()) return setErr("Item ka description zaroori hai");
-    if (form.qty === "")  return setErr("Qty zaroori hai");
-    if (form.rate === "") return setErr("Rate zaroori hai");
+    if (!form.description.trim()) return setErr(t("tenders.item_ka_description_zaroori_hai"));
+    if (form.qty === "")  return setErr(t("tenders.qty_zaroori_hai"));
+    if (form.rate === "") return setErr(t("tenders.rate_zaroori_hai"));
     if (form.item_type === "substituted" && !form.substitutes_item_id)
-      return setErr("Substituted item ke liye batao kis item ki jagah hai");
+      return setErr(t("tenders.substituted_item_ke_liye_batao_kis"));
     if (needsReason && form.reason.trim().length < 10)
-      return setErr("Final BOQ badalne ka reason likhna zaroori hai (kam se kam 10 akshar).");
+      return setErr(t("tenders.final_boq_badalne_ka_reason_likhna"));
     setBusy(true);
     const body = {
       item_no: form.item_no.trim() || null,
@@ -2026,69 +2004,69 @@ function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems, b
   };
 
   return (
-    <Modal title={isEdit ? "BOQ Item Edit" : "Naya BOQ Item"} Icon={IcTable} onClose={onClose} width={560}
+    <Modal title={isEdit ? t("tenders.boq_item_edit") : t("tenders.naya_boq_item")} Icon={IcTable} onClose={onClose} width={560}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        <PrimBtn label={busy?"Save ho raha...":"Save"} onClick={submit} disabled={busy}/>
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy?t("tenders.save_ho_raha"):t("common.save")} onClick={submit} disabled={busy}/>
       </>}>
       <ErrLine msg={err}/>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
-        <Field label="Item No."><TxtIn value={form.item_no} onChange={v=>set("item_no",v)} ph="e.g. 1.2"/></Field>
-        <Field label="SOR Code"><TxtIn value={form.sor_code} onChange={v=>set("sor_code",v)} ph="e.g. 2.8.1"/></Field>
-        <Field label="Description *" full>
+        <Field label={t("tenders.item_no")}><TxtIn value={form.item_no} onChange={v=>set("item_no",v)} ph="e.g. 1.2"/></Field>
+        <Field label={t("tenders.sor_code")}><TxtIn value={form.sor_code} onChange={v=>set("sor_code",v)} ph="e.g. 2.8.1"/></Field>
+        <Field label={t("tenders.description")} full>
           <textarea value={form.description} onChange={e=>set("description",e.target.value)} rows={3}
-            placeholder="Kaam ka poora vivran"
+            placeholder={t("tenders.kaam_ka_poora_vivran")}
             style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
             onFocus={e=>e.target.style.borderColor=T.ind} onBlur={e=>e.target.style.borderColor=T.b1}/>
         </Field>
-        <Field label="Item Type" full
+        <Field label={t("tenders.item_type")} full
           hint={form.item_type === "boq"
-            ? "Tendered item BOQ total me ginta hai aur premium usi par lagta hai."
-            : "Extra / Substituted item BOQ total se bahar rehta hai — premium us par nahi lagta."}>
+            ? t("tenders.tendered_item_boq_total_me_ginta")
+            : t("tenders.extra_substituted_item_boq_total_se")}>
           <SelIn value={form.item_type} onChange={v=>set("item_type",v)} options={ITEM_TYPE_OPTS}/>
         </Field>
         {form.item_type === "substituted" && (
-          <Field label="Kis item ki jagah *" full>
+          <Field label={t("tenders.kis_item_ki_jagah")} full>
             <BoqItemPicker items={(boqItems||[]).filter(x=>(x.item_type||"boq")==="boq" && x.id!==item?.id)}
               value={form.substitutes_item_id} onChange={v=>set("substitutes_item_id",String(v))}/>
           </Field>
         )}
         {form.item_type !== "boq" && (<>
-          <Field label="Manzoori Ref" hint="Department ka letter jisme is rate ki manzoori hai.">
+          <Field label={t("tenders.manzoori_ref")} hint={t("tenders.department_ka_letter_jisme_is_rate")}>
             <TxtIn value={form.approval_ref} onChange={v=>set("approval_ref",v)} ph="e.g. EE/2026/442"/>
           </Field>
-          <Field label="Manzoori Date">
+          <Field label={t("tenders.manzoori_date")}>
             <TxtIn type="date" value={form.approval_date} onChange={v=>set("approval_date",v)}/>
           </Field>
         </>)}
-        <Field label="Unit"><TxtIn value={form.unit} onChange={v=>set("unit",v)} ph="cum / sqm / MT"/></Field>
-        <Field label="Qty *"><TxtIn type="number" value={form.qty} onChange={v=>set("qty",v)} ph="0"/></Field>
-        <Field label={isItemRate ? "SOR Rate (₹) *" : "Rate (₹) *"}
-          hint={isItemRate ? "Department ka rate." : undefined}>
+        <Field label={t("common.unit")}><TxtIn value={form.unit} onChange={v=>set("unit",v)} ph="cum / sqm / MT"/></Field>
+        <Field label={t("tenders.qty")}><TxtIn type="number" value={form.qty} onChange={v=>set("qty",v)} ph="0"/></Field>
+        <Field label={isItemRate ? t("tenders.sor_rate") : t("tenders.rate")}
+          hint={isItemRate ? t("tenders.department_ka_rate") : undefined}>
           <TxtIn type="number" value={form.rate} onChange={v=>set("rate",v)} ph="0"/>
         </Field>
         {isItemRate && (
-          <Field label="Apna Rate (₹)" hint="Isi rate par bill banega.">
+          <Field label={t("tenders.apna_rate")} hint={t("tenders.isi_rate_par_bill_banega")}>
             <TxtIn type="number" value={form.quoted_rate} onChange={v=>set("quoted_rate",v)} ph="0"/>
           </Field>
         )}
-        <Field label="Amount">
+        <Field label={t("common.amount_2")}>
           <div style={{...inputStyle, background:T.sltL, color:T.t1, fontWeight:700,
             display:"flex", alignItems:"center", justifyContent:"space-between"}}>
             <span>{moneyF(liveAmount)}</span>
-            <span style={{fontSize:10.5, fontWeight:600, color:T.t4}}>qty × rate</span>
+            <span style={{fontSize:10.5, fontWeight:600, color:T.t4}}>{t("tenders.qty_rate")}</span>
           </div>
         </Field>
         {needsReason && (
-          <Field label="Badalne ka reason *" full
-            hint="Tender won ho chuka hai — BOQ ab final hai. Ye reason Change History me rahega.">
+          <Field label={t("tenders.badalne_ka_reason")} full
+            hint={t("tenders.tender_won_ho_chuka_hai_boq")}>
             <textarea value={form.reason} onChange={e=>set("reason",e.target.value)} rows={2}
-              placeholder="e.g. EE ki manzoori 12/8/2026 se rate revise hua"
+              placeholder={t("tenders.e_g_ee_ki_manzoori_12")}
               style={{...inputStyle, resize:"vertical", lineHeight:1.5}}/>
           </Field>
         )}
         <div style={{gridColumn:"1/3", fontSize:11, color:T.t4, lineHeight:1.5}}>
-          Amount server par hi nikalta hai (qty × rate) — yahan sirf preview hai.
+         {t("tenders.amount_server_par_hi_nikalta_hai")}
         </div>
       </div>
     </Modal>
@@ -2145,7 +2123,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
       const book = XLSX.read(new Uint8Array(buf), {
         type: "array", cellFormula: false, cellText: true, cellDates: false, cellNF: false,
       });
-      if (!book.SheetNames.length) { setErr("File me koi sheet nahi mili"); return; }
+      if (!book.SheetNames.length) { setErr(t("machinery.file_me_koi_sheet_nahi_mili")); return; }
       setFileName(f.name);
       setWb(book);
       // Department ke estimate workbook me 200 tak sheets hoti hain (ROAD5,
@@ -2156,7 +2134,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
       const best = scores.length ? scores[0].name : book.SheetNames[0];
       loadSheet(book, best);
     } catch (_) {
-      setErr("File padhne me dikkat — sahi .xlsx / .xls file chuno");
+      setErr(t("tenders.file_padhne_me_dikkat_sahi_xlsx"));
     }
     e.target.value = "";
   };
@@ -2186,7 +2164,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
     setErr(""); setReconcile(null);
     // Final BOQ par naya import = poora jod badalna. Reason zaroori hai.
     if (boqFinal && importReason.trim().length < 10) {
-      setErr("BOQ final hai — naya import karne ka reason likhna zaroori hai (kam se kam 10 akshar).");
+      setErr(t("tenders.boq_final_hai_naya_import_karne"));
       return;
     }
     setBusy(true);
@@ -2227,14 +2205,14 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
     whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"};
 
   return (
-    <Modal title="BOQ Import" Icon={IcUpload} onClose={onClose} width={940}
+    <Modal title={t("boq_import_wizard.boq_import")} Icon={IcUpload} onClose={onClose} width={940}
       sub={`Step ${step} of 4 — ${WIZ_STEPS[step-1]}${fileName ? ` · ${fileName}` : ""}`}
       footer={<>
-        {step > 1 && <SecBtn label="Peeche" onClick={()=>{setStep(s=>s-1); setErr("");}}/>}
-        <SecBtn label="Cancel" onClick={onClose}/>
+        {step > 1 && <SecBtn label={t("common.peeche")} onClick={()=>{setStep(s=>s-1); setErr("");}}/>}
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
         {step < 4
-          ? <PrimBtn label="Aage" onClick={()=>{setStep(s=>s+1); setErr("");}} disabled={!canNext}/>
-          : <PrimBtn label={busy?"Import ho raha...":"Import Karo"} onClick={commit} disabled={busy||!liveRows.length}/>}
+          ? <PrimBtn label={t("tenders.aage")} onClick={()=>{setStep(s=>s+1); setErr("");}} disabled={!canNext}/>
+          : <PrimBtn label={busy?t("tenders.import_ho_raha"):t("tenders.import_karo")} onClick={commit} disabled={busy||!liveRows.length}/>}
       </>}>
 
       <ErrLine msg={err}/>
@@ -2265,13 +2243,13 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
             <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:6}}>
               <IcChk size={20} color={T.grn}/>
               <span style={{fontSize:13, color:T.grn, fontWeight:700}}>{fileName}</span>
-              <span style={{fontSize:11.5, color:T.t3}}>{aoa.length} rows padhi gayi — badalne ke liye phir se click karo</span>
+              <span style={{fontSize:11.5, color:T.t3}}>{t("tenders.aoa_rows_padhi_gayi_badalne_ke", { aoa: aoa.length })}</span>
             </div>
           ) : (
             <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:7}}>
               <IcUpload size={22} color={T.t4}/>
-              <span style={{fontSize:13, color:T.t2, fontWeight:600}}>Excel file chuno (.xlsx / .xls)</span>
-              <span style={{fontSize:11.5, color:T.t4}}>File aapke browser me hi padhi jati hai — upload nahi hoti</span>
+              <span style={{fontSize:13, color:T.t2, fontWeight:600}}>{t("tenders.excel_file_chuno_xlsx_xls")}</span>
+              <span style={{fontSize:11.5, color:T.t4}}>{t("tenders.file_aapke_browser_me_hi_padhi")}</span>
             </div>
           )}
         </div>
@@ -2284,19 +2262,14 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
                   .map(s=>({v:s.name, l:`${s.name}${s.score>=400?" ✓ BOQ jaisi":s.rows===0?" (khaali)":""}`}))}/>
             </Field>
             {sheetScores.length > 0 && sheetScores[0].score >= 400 && sheetName === sheetScores[0].name && (
-              <div style={{fontSize:11, color:"#059669", marginTop:5}}>
-                ✓ "{sheetScores[0].name}" sabse BOQ-jaisi lagi (header + {sheetScores[0].rows} data rows) — galat lage to upar se badal do.
-                Baaki sheets me zyada-tar L×B×H measurement detail hoti hai, wo import nahi karni chahiye.
-              </div>
+              <div style={{fontSize:11, color:"#059669", marginTop:5}}>{t("tenders.name_sabse_boq_jaisi_lagi_header", { name: sheetScores[0].name, rows: sheetScores[0].rows })}</div>
             )}
           </div>
         )}
 
         <div style={{marginTop:14, background:T.sltL, border:`1px solid ${T.b1}`, borderRadius:7,
           padding:"9px 12px", fontSize:11.5, color:T.t3, lineHeight:1.55}}>
-          Sheet me jo value <b>dikh rahi hai</b> wahi padhi jati hai. Formula dobara calculate
-          nahi hote — government BOQ aksar doosri file ko reference karti hai, aur wo link toota
-          ho to <code>#REF!</code> aata hai. Aisi cell khali maan li jati hai.
+         {t("tenders.sheet_me_jo_value")} <b>{t("tenders.dikh_rahi_hai")}</b> {t("tenders.wahi_padhi_jati_hai_formula_dobara")} <code>{t("tenders.ref")}</code> {t("tenders.aata_hai_aisi_cell_khali_maan")}
         </div>
       </>)}
 
@@ -2304,14 +2277,14 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
       {step===2 && (<>
         <div style={{display:"flex", gap:10, alignItems:"flex-end", marginBottom:14, flexWrap:"wrap"}}>
           <div style={{width:170}}>
-            <Field label="Header row">
+            <Field label={t("common.header_row")}>
               <SelIn value={String(headerRow)}
                 onChange={v=>{const h=Number(v); setHeaderRow(h); setMapping(autoMapCols(aoa[h]||[]));}}
                 options={aoa.slice(0, 30).map((_,i)=>({v:String(i), l:`Row ${i+1}`}))}/>
             </Field>
           </div>
           <div style={{flex:1, minWidth:220, fontSize:11.5, color:T.t3, lineHeight:1.5, paddingBottom:6}}>
-            Column apne aap pehchane gaye hain. Galat lage to dropdown se badal do.
+           {t("tenders.column_apne_aap_pehchane_gaye_hain")}
           </div>
         </div>
 
@@ -2343,25 +2316,22 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
         {!!missing.length && (
           <div style={{background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:7, padding:"9px 12px",
             fontSize:11.5, color:T.amb, marginBottom:12}}>
-            Ye column zaroori hain par map nahi hue: <b>{missing.join(", ")}</b>
+           {t("tenders.ye_column_zaroori_hain_par_map")} <b>{missing.join(", ")}</b>
           </div>
         )}
 
-        <div style={{fontSize:11.5, color:T.t3, marginBottom:6}}>
-          {parsed.rows.length} item bane
-          {parsed.rows.some(r=>r.merged_lines>0) &&
-            ` · ${parsed.rows.reduce((s,r)=>s+(r.merged_lines||0),0)} continuation line upar wale item me jodi gayi`}
-        </div>
+        <div style={{fontSize:11.5, color:T.t3, marginBottom:6}}>{t("tenders.parsed_item_bane_parsed2", { parsed: parsed.rows.length, parsed2: parsed.rows.some(r=>r.merged_lines>0) &&
+            ` · ${parsed.rows.reduce((s,r)=>s+(r.merged_lines||0),0)} continuation line upar wale item me jodi gayi` })}</div>
         <div style={{maxHeight:210, overflow:"auto", border:`1px solid ${T.b1}`, borderRadius:7}}>
           <table style={{width:"100%", borderCollapse:"collapse", tableLayout:"fixed"}}>
             <thead><tr>
-              <th style={{...th, width:60}}>Item</th>
+              <th style={{...th, width:60}}>{t("common.item")}</th>
               <th style={{...th, width:70}}>SOR</th>
-              <th style={th}>Description</th>
-              <th style={{...th, width:50}}>Unit</th>
-              <th style={{...th, width:70}}>Qty</th>
-              <th style={{...th, width:80}}>Rate</th>
-              <th style={{...th, width:90}}>Amount</th>
+              <th style={th}>{t("common.description")}</th>
+              <th style={{...th, width:50}}>{t("common.unit")}</th>
+              <th style={{...th, width:70}}>{t("common.qty")}</th>
+              <th style={{...th, width:80}}>{t("common.rate")}</th>
+              <th style={{...th, width:90}}>{t("common.amount_2")}</th>
             </tr></thead>
             <tbody>
               {parsed.rows.slice(0, 40).map(r=>(
@@ -2383,7 +2353,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
           </table>
         </div>
         {parsed.rows.length > 40 && (
-          <div style={{fontSize:11, color:T.t4, marginTop:6}}>… aur {parsed.rows.length-40} rows (Preview me sab dikhengi)</div>
+          <div style={{fontSize:11, color:T.t4, marginTop:6}}>{t("tenders.aur_parsed_rows_preview_me_sab", { parsed: parsed.rows.length-40 })}</div>
         )}
       </>)}
 
@@ -2392,17 +2362,15 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
         {reconcile && (
           <div style={{background:T.redL, border:`1px solid ${T.redM}`, borderRadius:7, padding:"10px 13px",
             marginBottom:12, fontSize:12, color:T.red, lineHeight:1.55}}>
-            <b>Server ne import rok diya.</b><div style={{marginTop:3}}>{reconcile.message}</div>
-            <div style={{marginTop:5, color:T.t3}}>
-              Farak {moneyF(reconcile.diff)} — ya to file total sudhaaro, ya galat rows exclude karo.
-            </div>
+            <b>{t("tenders.server_ne_import_rok_diya")}</b><div style={{marginTop:3}}>{reconcile.message}</div>
+            <div style={{marginTop:5, color:T.t3}}>{t("tenders.farak_moneyf_ya_to_file_total", { moneyF: moneyF(reconcile.diff) })}</div>
           </div>
         )}
 
         <div style={{display:"flex", gap:10, alignItems:"flex-end", marginBottom:12, flexWrap:"wrap"}}>
           <div style={{width:200}}>
-            <Field label="File ka total (₹)"
-              hint="Khali chhodo to reconcile check nahi hoga.">
+            <Field label={t("tenders.file_ka_total")}
+              hint={t("tenders.khali_chhodo_to_reconcile_check_nahi")}>
               <TxtIn type="number" value={fileTotal}
                 onChange={v=>{setTotalTouched(true); setFileTotal(v);}} ph="0"/>
             </Field>
@@ -2410,11 +2378,11 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
           <div style={{flex:1, minWidth:240, paddingBottom:6}}>
             <div style={{display:"flex", gap:16, flexWrap:"wrap"}}>
               <div>
-                <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px"}}>Items ka jod</div>
+                <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px"}}>{t("tenders.items_ka_jod")}</div>
                 <div style={{fontSize:15, fontWeight:700, color:T.t1}}>{moneyF(liveTotal)}</div>
               </div>
               <div>
-                <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px"}}>Rows</div>
+                <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px"}}>{t("tenders.rows")}</div>
                 <div style={{fontSize:15, fontWeight:700, color:T.t1}}>
                   {liveRows.length}
                   {parsed.rows.length !== liveRows.length &&
@@ -2423,7 +2391,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
               </div>
               {diff !== null && (
                 <div>
-                  <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px"}}>Farak</div>
+                  <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px"}}>{t("tenders.farak")}</div>
                   <div style={{fontSize:15, fontWeight:700, color:reconcileOk?T.grn:T.red}}>
                     {diff>0?"+":""}{moneyF(diff)}
                   </div>
@@ -2438,25 +2406,25 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
             borderRadius:7, padding:"9px 12px", fontSize:11.5, color:reconcileOk?T.grn:T.amb,
             marginBottom:12, lineHeight:1.5}}>
             {reconcileOk
-              ? "Total match ho gaya — import ho jayega."
+              ? t("tenders.total_match_ho_gaya_import_ho")
               : `Farak ₹1 se zyada hai — server import rok dega. Mapping galat hai ya koi total row item ban gayi hai.`}
           </div>
         )}
 
         <div style={{fontSize:11.5, color:T.t3, marginBottom:6}}>
-          Jo row BOQ ka hissa nahi hai (section heading, sub-total) uska checkbox hata do.
+         {t("tenders.jo_row_boq_ka_hissa_nahi")}
         </div>
         <div style={{maxHeight:280, overflow:"auto", border:`1px solid ${T.b1}`, borderRadius:7}}>
           <table style={{width:"100%", borderCollapse:"collapse", tableLayout:"fixed"}}>
             <thead><tr>
               <th style={{...th, width:34}}></th>
-              <th style={{...th, width:56}}>Item</th>
+              <th style={{...th, width:56}}>{t("common.item")}</th>
               <th style={{...th, width:66}}>SOR</th>
-              <th style={th}>Description</th>
-              <th style={{...th, width:48}}>Unit</th>
-              <th style={{...th, width:68}}>Qty</th>
-              <th style={{...th, width:78}}>Rate</th>
-              <th style={{...th, width:92}}>Amount</th>
+              <th style={th}>{t("common.description")}</th>
+              <th style={{...th, width:48}}>{t("common.unit")}</th>
+              <th style={{...th, width:68}}>{t("common.qty")}</th>
+              <th style={{...th, width:78}}>{t("common.rate")}</th>
+              <th style={{...th, width:92}}>{t("common.amount_2")}</th>
             </tr></thead>
             <tbody>
               {parsed.rows.map(r=>{
@@ -2480,9 +2448,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
                       {moneyF(r.amount)}
                       {/* Sheet ka apna amount alag ho to batao — aksar formula ya rounding ka fark */}
                       {Math.abs(r.sheet_amount - r.amount) > 1 && r.sheet_amount > 0 && (
-                        <div style={{fontSize:9.5, color:T.amb, fontWeight:600}}>
-                          sheet: {moneyF(r.sheet_amount)}
-                        </div>
+                        <div style={{fontSize:9.5, color:T.amb, fontWeight:600}}>{t("tenders.sheet_moneyf", { moneyF: moneyF(r.sheet_amount) })}</div>
                       )}
                     </td>
                   </tr>
@@ -2497,7 +2463,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
       {step===4 && (
         <div>
           <div style={{background:T.indL, border:`1px solid ${T.indM}`, borderRadius:8, padding:"14px 16px", marginBottom:14}}>
-            <div style={{fontSize:13, fontWeight:700, color:T.ind, marginBottom:8}}>Import karne se pehle ek nazar</div>
+            <div style={{fontSize:13, fontWeight:700, color:T.ind, marginBottom:8}}>{t("tenders.import_karne_se_pehle_ek_nazar")}</div>
             <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:13}}>
               {[
                 ["File", fileName || "--"],
@@ -2520,25 +2486,22 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
               padding:"12px 14px", marginBottom:14}}>
               <div style={{fontSize:12, fontWeight:700, color:T.amb, marginBottom:7,
                 display:"flex", alignItems:"center", gap:6}}>
-                <IcLock size={13} color={T.amb}/>BOQ final hai
+                <IcLock size={13} color={T.amb}/>{t("tenders.boq_final_hai")}
               </div>
-              <Field label="Naya import karne ka reason *"
-                hint="Kam se kam 10 akshar. Ye BOQ ki Change History me rahega.">
+              <Field label={t("tenders.naya_import_karne_ka_reason")}
+                hint={t("tenders.kam_se_kam_10_akshar_ye_2")}>
                 <textarea value={importReason} onChange={e=>setImportReason(e.target.value)} rows={2}
-                  placeholder="e.g. Department ne revised BOQ bheja, letter 12/8/2026"
+                  placeholder={t("tenders.e_g_department_ne_revised_boq")}
                   style={{...inputStyle, resize:"vertical", lineHeight:1.5}}/>
               </Field>
             </div>
           )}
           {parsed.rows.length !== liveRows.length && (
-            <div style={{fontSize:11.5, color:T.t3, marginBottom:10}}>
-              {parsed.rows.length - liveRows.length} row exclude ki gayi hain — wo import nahi hongi.
-            </div>
+            <div style={{fontSize:11.5, color:T.t3, marginBottom:10}}>{t("tenders.parsed_row_exclude_ki_gayi_hain", { parsed: parsed.rows.length - liveRows.length })}</div>
           )}
           <div style={{background:T.sltL, border:`1px solid ${T.b1}`, borderRadius:7, padding:"9px 12px",
             fontSize:11.5, color:T.t3, lineHeight:1.55}}>
-            Har row ka amount server dobara nikalta hai (qty × rate). File ka total diya hai to
-            usse ₹1 se zyada farak hone par import ruk jayega aur kuch bhi save nahi hoga.
+           {t("tenders.har_row_ka_amount_server_dobara")}
           </div>
         </div>
       )}
@@ -2557,7 +2520,7 @@ function RevertImportModal({tenderId, imp, onClose, onDone}) {
   const match = txt.trim().toUpperCase() === "REVERT";
 
   const submit = async () => {
-    if (!match) return setErr("Confirm karne ke liye REVERT likho");
+    if (!match) return setErr(t("tenders.confirm_karne_ke_liye_revert_likho"));
     setErr(""); setBusy(true);
     const res = await api.post(`/tenders/${tenderId}/boq/imports/${imp.id}/revert`);
     setBusy(false);
@@ -2568,28 +2531,27 @@ function RevertImportModal({tenderId, imp, onClose, onDone}) {
   };
 
   return (
-    <Modal title="Import Revert" Icon={IcUndo} onClose={onClose} width={480}
+    <Modal title={t("tenders.import_revert")} Icon={IcUndo} onClose={onClose} width={480}
       sub={imp.file_name || `Import #${imp.id}`}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
         <button onClick={submit} disabled={busy||!match}
           style={{height:32, padding:"0 14px", borderRadius:6, background:match?T.red:T.b1,
             border:"none", color:"#fff", fontSize:12.5, fontWeight:700,
             cursor:match?"pointer":"not-allowed"}}>
-          {busy ? "Revert ho raha..." : "Revert Karo"}
+          {busy ? t("tenders.revert_ho_raha") : t("tenders.revert_karo")}
         </button>
       </>}>
       <ErrLine msg={err}/>
       <div style={{background:T.redL, border:`1px solid ${T.redM}`, borderRadius:8, padding:"12px 14px", marginBottom:14}}>
         <div style={{fontSize:12, color:T.t2, lineHeight:1.6}}>
-          Is import ki <b>{imp.active_items ?? imp.row_count} items</b> BOQ se hat jayengi.
-          Haath se jode gaye items aur baaki imports ki items par <b>koi asar nahi</b> padega.
+         {t("tenders.is_import_ki")} <b>{imp.active_items ?? imp.row_count} items</b> {t("tenders.boq_se_hat_jayengi_haath_se")} <b>{t("tenders.koi_asar_nahi")}</b> {t("tenders.padega")}
         </div>
       </div>
       <div style={{fontSize:12, color:T.red, marginBottom:8}}>
-        Confirm karne ke liye <strong>REVERT</strong> type karo:
+       {t("projects.confirm_karne_ke_liye")} <strong>REVERT</strong> {t("projects.type_karo")}
       </div>
-      <input value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Type REVERT to confirm"
+      <input value={txt} onChange={e=>setTxt(e.target.value)} placeholder={t("tenders.type_revert_to_confirm")}
         style={{width:"100%", padding:"8px 11px", borderRadius:7, border:`1.5px solid ${T.redM}`,
           fontSize:12.5, color:T.t1, background:T.surface, outline:"none",
           boxSizing:"border-box", fontFamily:"inherit"}}/>
@@ -2689,7 +2651,7 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
     if (ok) { toast.success(`${ok} package save hue — map ka ankda ab naya hai`); onChanged?.(); }
   };
   const del = async (p) => {
-    if (!await window.confirmAsync(`"${p.name}" package hataayein? Items BOQ me rahenge, bas bina package ke ho jayenge.`)) return;
+    if (!await window.confirmAsync(t("tenders.name_package_hataayein_items_boq_me", { name: p.name }))) return;
     const r = await api.del(`/tenders/${tenderId}/boq/packages/${p.id}`);
     if (!r?.success) { toast.error(r?.message || "Delete nahi hua"); return; }
     toast.success("Package hat gaya"); setData(r.data); onChanged?.();
@@ -2703,25 +2665,24 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
 
   return (
     <Panel style={{marginBottom:11}}>
-      <PHead title="Work Packages"
+      <PHead title={t("tenders.work_packages")}
         sub={pkgs.length ? `${pkgs.length} package · map me ${fmtKm(mapKm)}${data.unassigned?` · ${data.unassigned} item bina package`:""}`
-                         : "BOQ ko kaam ke hisaab se baanto — map ka ankda aur site ka plan isi se banta hai"}
+                         : t("tenders.boq_ko_kaam_ke_hisaab_se")}
         action={canEdit && <div style={{display:"flex", gap:7}}>
           {/* Flat BOQ (bina Sub Head) ya bache hue items ke liye — AI padh
               kar groups SUJHATA hai, lagta review ke baad hi hai. */}
           {(!pkgs.length || data?.unassigned > 0) && (
-            <SecBtn label={ai?.loading ? "AI padh raha… (1-2 min)" : "AI se baanto"}
+            <SecBtn label={ai?.loading ? t("tenders.ai_padh_raha_1_2_min") : t("tenders.ai_se_baanto")}
               onClick={aiSuggest} disabled={!!ai?.loading || busy}/>
           )}
-          <SecBtn label={busy?"...":(pkgs.length?"Naye item baanto":"Packages banao (sub-head se)")}
+          <SecBtn label={busy?"...":(pkgs.length?t("tenders.naye_item_baanto"):t("tenders.packages_banao_sub_head_se"))}
             Icon={IcChk} onClick={auto} disabled={busy}/>
         </div>}/>
 
       {!pkgs.length ? (
         <div style={{padding:"16px 14px", fontSize:12, color:T.t3, lineHeight:1.6}}>
-          BOQ me pipeline bhi hoti hai, UGR structure bhi, road aur electrical bhi — par sabka unit metre
-          ho sakta hai. Package banaye bina map har metre-wale item ko pipeline maan leta hai.
-          <br/><b>"Packages banao"</b> dabao — BOQ ke Sub Head se apne aap bant jayega, phir aap sudhar sakte ho.
+         {t("tenders.boq_me_pipeline_bhi_hoti_hai")}
+          <br/><b>{t("tenders.packages_banao")}</b> {t("tenders.dabao_boq_ke_sub_head_se")}
         </div>
       ) : (
         <div style={{padding:"2px 0"}}>
@@ -2748,7 +2709,7 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
                 (()=>{ const cur = p.id in pendingMap ? pendingMap[p.id] : !!p.map_count;
                   const changed = p.id in pendingMap && pendingMap[p.id] !== !!p.map_count;
                   return (
-                    <label title="Map ke km me ye kaam ginega? (Save dabane par lagta hai)"
+                    <label title={t("tenders.map_ke_km_me_ye_kaam")}
                       style={{display:"flex", alignItems:"center", gap:5, fontSize:10.5,
                         color:cur?"#059669":T.t4, cursor:canEdit?"pointer":"default", whiteSpace:"nowrap",
                         background: changed ? "#FEF9C3" : "transparent", padding:"2px 5px", borderRadius:5}}>
@@ -2760,14 +2721,12 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
                             if (v === !!p.map_count) delete n[p.id]; else n[p.id] = v;
                             return n;
                           });
-                        }}/>
-                      map me gino{changed ? " *" : ""}
-                    </label>
+                        }}/>{t("tenders.map_me_ginochanged", { changed: changed ? " *" : "" })}</label>
                   ); })()
               ) : (
-                <span title={'Structure/electrical map par "Structure pin lagao" se dikhte hain — km me nahi ginte'}
+                <span title={t("tenders.structure_electrical_map_par_structure_pin")}
                   style={{fontSize:10, color:T.t4, whiteSpace:"nowrap"}}>
-                  {p.wtype === "electrical" ? "km me nahi ginta" : "map par pin se"}
+                  {p.wtype === "electrical" ? t("tenders.km_me_nahi_ginta") : t("tenders.map_par_pin_se")}
                 </span>
               )}
               {canEdit && (<>
@@ -2779,30 +2738,26 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
             </div>
           ))}
           {!!data.unassigned && (
-            <div style={{padding:"8px 14px", fontSize:11, color:T.amb}}>
-              ⚠ {data.unassigned} item abhi kisi package me nahi — wo map ke ankde me nahi ginte aur site plan me bhi nahi aayenge.
-            </div>
+            <div style={{padding:"8px 14px", fontSize:11, color:T.amb}}>{t("tenders.unassigned_item_abhi_kisi_package_me", { unassigned: data.unassigned })}</div>
           )}
           {!!dirtyIds.length && (
             <div style={{display:"flex", alignItems:"center", gap:10, padding:"9px 14px",
               background:"#FEFCE8", borderTop:`1px solid #FDE68A`}}>
-              <span style={{flex:1, fontSize:11.5, color:"#92400E"}}>
-                {dirtyIds.length} badlav abhi save nahi hue — map ka ankda Save ke baad hi badlega.
-              </span>
-              <SecBtn label="Wapas" onClick={()=>setPendingMap({})}/>
-              <PrimBtn label={busy?"...":"Save"} Icon={IcChk} onClick={saveMapChanges} disabled={busy}/>
+              <span style={{flex:1, fontSize:11.5, color:"#92400E"}}>{t("tenders.dirtyids_badlav_abhi_save_nahi_hue", { dirtyIds: dirtyIds.length })}</span>
+              <SecBtn label={t("project_files.wapas")} onClick={()=>setPendingMap({})}/>
+              <PrimBtn label={busy?"...":t("common.save")} Icon={IcChk} onClick={saveMapChanges} disabled={busy}/>
             </div>
           )}
         </div>
       )}
 
       {ai && !ai.loading && (
-        <Modal title="AI ka sujhaav — packages" Icon={IcChk} width={620}
-          sub="Ye sirf sujhaav hai — jo group theek lage wahi rakho, baaki untick. Lagega Save par hi."
+        <Modal title={t("tenders.ai_ka_sujhaav_packages")} Icon={IcChk} width={620}
+          sub={t("tenders.ye_sirf_sujhaav_hai_jo_group")}
           onClose={()=>setAi(null)}
           footer={<>
-            <SecBtn label="Cancel" onClick={()=>setAi(null)}/>
-            <PrimBtn label={busy?"...":"In packages me baanto"} Icon={IcChk} onClick={aiApply} disabled={busy}/>
+            <SecBtn label={t("common.cancel")} onClick={()=>setAi(null)}/>
+            <PrimBtn label={busy?"...":t("tenders.in_packages_me_baanto")} Icon={IcChk} onClick={aiApply} disabled={busy}/>
           </>}>
           {!!ai.warnings.length && (
             <div style={{background:"#FFFBEB", border:"1px solid #FCD34D", borderRadius:7,
@@ -2829,25 +2784,24 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
             ))}
           </div>
           <div style={{fontSize:10.5, color:T.t4, marginTop:9, lineHeight:1.5}}>
-            Type baad me bhi badal sakte ho (edit se), items idhar-udhar bhi. AI qty/rate ko kabhi nahi chhoota.
+           {t("tenders.type_baad_me_bhi_badal_sakte")}
           </div>
         </Modal>
       )}
 
       {edit && (
-        <Modal title="Package" Icon={IcChk} width={460} onClose={()=>setEdit(null)}
-          footer={<><SecBtn label="Cancel" onClick={()=>setEdit(null)}/>
-            <PrimBtn label="Save" Icon={IcChk} onClick={()=>save(edit.id, {name:edit.name, wtype:edit.wtype})}/></>}>
-          <Field label="Naam" full><TxtIn value={edit.name} onChange={v=>setEdit(e=>({...e,name:v}))}/></Field>
+        <Modal title={t("subcon.package")} Icon={IcChk} width={460} onClose={()=>setEdit(null)}
+          footer={<><SecBtn label={t("common.cancel")} onClick={()=>setEdit(null)}/>
+            <PrimBtn label={t("common.save")} Icon={IcChk} onClick={()=>save(edit.id, {name:edit.name, wtype:edit.wtype})}/></>}>
+          <Field label={t("common.naam")} full><TxtIn value={edit.name} onChange={v=>setEdit(e=>({...e,name:v}))}/></Field>
           <div style={{marginTop:11}}>
-            <Field label="Kaam ka type">
+            <Field label={t("tenders.kaam_ka_type")}>
               <SelIn value={edit.wtype} onChange={v=>setEdit(e=>({...e,wtype:v}))}
                 options={Object.entries(WTYPE_LABEL).map(([v,l])=>({v,l}))}/>
             </Field>
           </div>
           <div style={{fontSize:11, color:T.t4, marginTop:10, lineHeight:1.55}}>
-            Type se tay hota hai ki site par is package ka plan kaise banega. "map me gino" alag switch hai —
-            usse tay hota hai ki map ka km ka ankda isme se banega ya nahi.
+           {t("tenders.type_se_tay_hota_hai_ki")}
           </div>
         </Modal>
       )}
@@ -2929,15 +2883,15 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
     : "70px 84px minmax(200px,2.2fr) 56px 88px 92px 106px 92px 96px 74px";
 
   const TILES = summary ? [
-    {label:"Items", value:summary.item_count, note:`${imports.filter(i=>i.status==="committed").length} import se`,
+    {label:t("common.items"), value:summary.item_count, note:`${imports.filter(i=>i.status==="committed").length} import se`,
       color:T.ind, Icon:IcTable},
-    {label:"BOQ Total", value:money(summary.boq_total), note:moneyF(summary.boq_total),
+    {label:t("tenders.boq_total"), value:money(summary.boq_total), note:moneyF(summary.boq_total),
       color:T.blu, Icon:IcRupee},
     // Extra item hon to unka apna tile — wo BOQ total me nahi ginte.
     summary.extra_count > 0
-      ? {label:"Extra Items", value:money(summary.extra_total),
+      ? {label:t("tenders.extra_items"), value:money(summary.extra_total),
          note:`${summary.extra_count} item · BOQ total se bahar`, color:T.amb, Icon:IcRupee}
-      : {label:"vs Estimated",
+      : {label:t("tenders.vs_estimated"),
          value: summary.diff_vs_estimated === null ? "--"
            : `${summary.diff_vs_estimated>=0?"+":"−"}${money(Math.abs(summary.diff_vs_estimated))}`,
          note: summary.estimated_cost === null ? "Estimate set nahi" : `Estimate ${money(summary.estimated_cost)}`,
@@ -2965,7 +2919,7 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
          Icon:IcGavel},
   ] : [];
 
-  if (loading) return <Panel><Loading text="BOQ load ho raha hai..."/></Panel>;
+  if (loading) return <Panel><Loading text={t("tenders.boq_load_ho_raha_hai")}/></Panel>;
 
   return (<>
     {/* Tiles */}
@@ -2978,12 +2932,12 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
     {/* Change history — BOQ final hone ke baad ke sab badlaav */}
     {!!changeLog.length && (
       <Panel style={{marginBottom:11}}>
-        <PHead title="Change History" sub="Final BOQ me kya-kya badla"/>
+        <PHead title={t("tenders.change_history")} sub={t("tenders.final_boq_me_kya_kya_badla")}/>
         <div style={{padding:"10px 14px", display:"flex", flexDirection:"column", gap:9}}>
           {changeLog.map(l=>{
-            const act = {edit:{l:"Edit", c:T.amb, bg:T.ambL}, delete:{l:"Deleted", c:T.red, bg:T.redL},
-                         add:{l:"Added", c:T.grn, bg:T.grnL}, add_extra:{l:"Extra Added", c:T.amb, bg:T.ambL},
-                         add_substituted:{l:"Substituted", c:T.blu, bg:T.bluL}}[l.action]
+            const act = {edit:{l:t("common.edit_2"), c:T.amb, bg:T.ambL}, delete:{l:t("activity_log.deleted"), c:T.red, bg:T.redL},
+                         add:{l:t("tenders.added"), c:T.grn, bg:T.grnL}, add_extra:{l:t("tenders.extra_added"), c:T.amb, bg:T.ambL},
+                         add_substituted:{l:t("tenders.substituted"), c:T.blu, bg:T.bluL}}[l.action]
                      || {l:l.action, c:T.t3, bg:T.sltL};
             let ch = null;
             try { ch = l.changes_json ? JSON.parse(l.changes_json) : null; } catch (_) {}
@@ -3034,7 +2988,7 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
     {/* Imports history */}
     {!!imports.length && (
       <Panel style={{marginBottom:11}}>
-        <PHead title="Import History" sub={`${imports.length} import`}/>
+        <PHead title={t("tenders.import_history")} sub={`${imports.length} import`}/>
         <div style={{padding:"9px 14px", display:"flex", flexDirection:"column", gap:7}}>
           {imports.map(im=>{
             const gone = im.status === "reverted";
@@ -3051,8 +3005,8 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
                 <span style={{fontSize:11, color:T.t3}}>{im.row_count} rows</span>
                 <span style={{fontSize:11.5, fontWeight:700, color:T.t2}}>{money(im.committed_total)}</span>
                 {gone
-                  ? <Pill label="Reverted" c={T.t4} bg={T.sltL}/>
-                  : <SecBtn label="Revert" Icon={IcUndo} color={T.red} onClick={()=>setRevertOf(im)}/>}
+                  ? <Pill label={t("tenders.reverted")} c={T.t4} bg={T.sltL}/>
+                  : <SecBtn label={t("tenders.revert")} Icon={IcUndo} color={T.red} onClick={()=>setRevertOf(im)}/>}
               </div>
             );
           })}
@@ -3065,28 +3019,24 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
 
     {/* Items */}
     <Panel>
-      <PHead title="BOQ Items" sub={summary ? `${summary.item_count} items · ${moneyF(summary.boq_total)}` : undefined}
+      <PHead title={t("tenders.boq_items")} sub={summary ? `${summary.item_count} items · ${moneyF(summary.boq_total)}` : undefined}
         action={<div style={{display:"flex", gap:7, alignItems:"center"}}>
           {boqFinal && (
             <span style={{display:"inline-flex", alignItems:"center", gap:5, fontSize:11,
               color:T.amb, fontWeight:600, marginRight:2}}>
-              <IcLock size={12} color={T.amb}/>Final
+              <IcLock size={12} color={T.amb}/>{t("tenders.final")}
             </span>
           )}
-          {canEdit && <SecBtn label="Import Excel" Icon={IcUpload} onClick={()=>setShowImport(true)}/>}
-          <PrimBtn label="Add Item" Icon={IcAdd} onClick={()=>setItemModal({})}/>
+          {canEdit && <SecBtn label={t("tenders.import_excel")} Icon={IcUpload} onClick={()=>setShowImport(true)}/>}
+          <PrimBtn label={t("common.add_item_2")} Icon={IcAdd} onClick={()=>setItemModal({})}/>
         </div>}/>
       {boqFinal && (
         <div style={{padding:"9px 14px", background:T.ambL, borderBottom:`1px solid ${T.ambM}`,
           fontSize:11.5, color:T.t2, lineHeight:1.55, display:"flex", gap:7, alignItems:"flex-start"}}>
           <IcLock size={13} color={T.amb}/>
-          <span>
-            <b style={{color:T.amb}}>BOQ final hai</b> — tender won ho chuka hai, ab yahi agreement ka
-            BOQ hai. {isAdmin
+          <span><Rich k="tenders.boq_final_hai_tender_won_ho" params={{ isAdmin: isAdmin
               ? "Badalna hai to reason likhna zaroori hai; har badlaav Change History me rehta hai."
-              : "Ab ise sirf admin badal sakta hai."}
-            {" "}Extra / Substituted item jodna khula hai — wo BOQ total se bahar rehte hain.
-          </span>
+              : "Ab ise sirf admin badal sakta hai.", v: " " }} /></span>
         </div>
       )}
 
@@ -3096,7 +3046,7 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
             <div style={{position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", lineHeight:0}}>
               <IcSrch size={13} color={T.t4}/>
             </div>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Item, SOR code ya description dhoondo..."
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("tenders.item_sor_code_ya_description_dhoondo")}
               style={{width:"100%", height:30, padding:"0 9px 0 28px", borderRadius:6,
                 border:`1.5px solid ${search?T.ind:T.b1}`, fontSize:12, color:T.t1,
                 background:search?T.indL:T.surface, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}/>
@@ -3105,8 +3055,8 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
       )}
 
       {!items.length && (
-        <Empty Icon={IcTable} text="Abhi koi BOQ item nahi."
-          sub="Excel se import karo ya haath se item jodo."/>
+        <Empty Icon={IcTable} text={t("tenders.abhi_koi_boq_item_nahi")}
+          sub={t("tenders.excel_se_import_karo_ya_haath")}/>
       )}
 
       {!!items.length && (<>
@@ -3121,15 +3071,15 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
           ))}
         </div>
 
-        {!filtered.length && <Empty text="Is search me koi item nahi."/>}
+        {!filtered.length && <Empty text={t("tenders.is_search_me_koi_item_nahi")}/>}
 
         {filtered.map((it,i)=>(
           <div key={it.id} style={{display:"grid", gridTemplateColumns:COLS, padding:"9px 14px", gap:9,
             alignItems:"center", borderBottom:i<filtered.length-1?`1px solid ${T.b1}`:"none"}}>
             <span style={{fontSize:11.5, color:T.t2, fontWeight:600, display:"flex", alignItems:"center", gap:4}}>
               {it.item_no || "--"}
-              {it.item_type === "extra" && <Pill label="Extra" c={T.amb} bg={T.ambL}/>}
-              {it.item_type === "substituted" && <Pill label="Sub" c={T.blu} bg={T.bluL}/>}
+              {it.item_type === "extra" && <Pill label={t("tenders.extra")} c={T.amb} bg={T.ambL}/>}
+              {it.item_type === "substituted" && <Pill label={t("tenders.sub")} c={T.blu} bg={T.bluL}/>}
             </span>
             <span style={{fontSize:11.5, color:T.t3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
               {it.sor_code || "--"}
@@ -3167,27 +3117,27 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
                     <span style={{fontSize:11.5, fontWeight:over?700:400, textAlign:"right",
                       color:over?T.amb:pct>0?T.t2:T.t4, fontVariantNumeric:"tabular-nums"}}>{pct}%</span>
                   )}
-                  {over && <Pill label="Deviation" c={T.amb} bg={T.ambL}/>}
+                  {over && <Pill label={t("tenders.deviation")} c={T.amb} bg={T.ambL}/>}
                 </div>
               </>);
             })()}
             <div style={{display:"flex", gap:4, justifyContent:"flex-end"}}>
               {canEdit ? (<>
                 <button onClick={()=>setItemModal({item:it})}
-                  title={boqFinal ? "Edit (reason zaroori)" : "Edit"}
+                  title={boqFinal ? t("tenders.edit_reason_zaroori") : t("common.edit_2")}
                   style={{width:26, height:26, borderRadius:6, border:`1px solid ${boqFinal?T.ambM:T.b1}`,
                     background:boqFinal?T.ambL:T.surfaceB,
                     cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
                   <IcEdit size={12} color={boqFinal?T.amb:T.t3}/>
                 </button>
                 <button onClick={()=>delItem(it)}
-                  title={boqFinal ? "Delete (reason zaroori)" : "Delete"}
+                  title={boqFinal ? t("tenders.delete_reason_zaroori") : t("common.delete")}
                   style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
                     cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
                   <IcTrash size={12} color={T.red}/>
                 </button>
               </>) : (
-                <span title="Tender won ho chuka hai — BOQ ab sirf admin badal sakta hai."
+                <span title={t("tenders.tender_won_ho_chuka_hai_boq_2")}
                   style={{lineHeight:0, cursor:"help", opacity:.55}}><IcLock size={13} color={T.t4}/></span>
               )}
             </div>
@@ -3217,7 +3167,7 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
       onClose={()=>setItemModal(null)} onSaved={reload}/>}
     {delOf && (
       <BoqReasonModal
-        title="BOQ Item Hatao"
+        title={t("tenders.boq_item_hatao")}
         sub={`${delOf.item_no || "--"} · ${String(delOf.description||"").slice(0,60)}`}
         warn="BOQ final hai — item hatane se jod ghat jayega. Ye record hamesha Change History me rahega."
         confirmLabel="Hatao"
@@ -3260,7 +3210,7 @@ const below1000 = (n) => {
 };
 const numToWordsIN = (amount) => {
   const total = Math.round(Number(amount) || 0);
-  if (total === 0) return "Zero Rupees Only";
+  if (total === 0) return t("tenders.zero_rupees_only");
   const rupees = Math.floor(total);
   const parts = [];
   const crore = Math.floor(rupees/10000000);
@@ -3276,9 +3226,9 @@ const numToWordsIN = (amount) => {
 
 // Har bill ke status ka rang — list aur drawer dono me wahi.
 const RA_STATUS_STYLE = {
-  draft:     {label:"Draft",     c:T.slt, bg:T.sltL},
-  submitted: {label:"Submitted", c:T.blu, bg:T.bluL},
-  cancelled: {label:"Cancelled", c:T.t4,  bg:T.sltL},
+  draft:     {get label() { return t("tenders.draft"); },     c:T.slt, bg:T.sltL},
+  submitted: {get label() { return t("tenders.submitted"); }, c:T.blu, bg:T.bluL},
+  cancelled: {get label() { return t("tenders.cancelled"); }, c:T.t4,  bg:T.sltL},
 };
 
 // Non-cancelled bills me sabse aage ka upto_date = lock date.
@@ -3309,7 +3259,7 @@ function BoqItemPicker({items, value, onChange}) {
         alignItems:"center", justifyContent:"space-between", gap:8}}>
         <span style={{minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
           color:sel?T.t1:T.t4}}>
-          {sel ? `${sel.item_no||"--"} · ${sel.description}` : "BOQ item dhoondo..."}
+          {sel ? `${sel.item_no||"--"} · ${sel.description}` : t("tenders.boq_item_dhoondo")}
         </span>
         <IcDown size={12} color={T.t4}/>
       </div>
@@ -3319,11 +3269,11 @@ function BoqItemPicker({items, value, onChange}) {
           boxShadow:"0 10px 30px rgba(0,0,0,.14)", overflow:"hidden"}}>
           <div style={{padding:8, borderBottom:`1px solid ${T.b1}`}}>
             <input autoFocus value={q} onChange={e=>setQ(e.target.value)}
-              placeholder="Item no ya description..."
+              placeholder={t("tenders.item_no_ya_description")}
               style={{...inputStyle, padding:"7px 10px", fontSize:12}}/>
           </div>
           <div style={{maxHeight:230, overflowY:"auto"}}>
-            {!list.length && <div style={{padding:"14px 12px", fontSize:12, color:T.t4}}>Koi item nahi mila.</div>}
+            {!list.length && <div style={{padding:"14px 12px", fontSize:12, color:T.t4}}>{t("tenders.koi_item_nahi_mila")}</div>}
             {list.map(i=>(
               <div key={i.id} onClick={()=>{onChange(i.id); setOpen(false); setQ("");}}
                 style={{padding:"8px 11px", cursor:"pointer", borderBottom:`1px solid ${T.b1}`,
@@ -3332,9 +3282,7 @@ function BoqItemPicker({items, value, onChange}) {
                   textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
                   {i.item_no||"--"} · {i.description}
                 </div>
-                <div style={{fontSize:10.5, color:T.t4, marginTop:2}}>
-                  BOQ {fmtQty(i.qty)} {i.unit||""} · Rate {fmtQty(i.rate)}
-                </div>
+                <div style={{fontSize:10.5, color:T.t4, marginTop:2}}>{t("tenders.boq_fmtqty_i_rate_fmtqty2", { fmtQty: fmtQty(i.qty), i: i.unit||"", fmtQty2: fmtQty(i.rate) })}</div>
               </div>
             ))}
           </div>
@@ -3383,40 +3331,37 @@ function MeasurementModal({tenderId, sites, boqItems, edit, onClose, onDone}) {
   };
 
   return (
-    <Modal title={isEdit ? "Measurement Edit" : "Nayi Measurement"} Icon={IcTable}
-      sub={isEdit ? `MB entry #${edit.id}` : "Measurement book (MB) ki entry"}
+    <Modal title={isEdit ? t("tenders.measurement_edit") : t("tenders.nayi_measurement")} Icon={IcTable}
+      sub={isEdit ? `MB entry #${edit.id}` : t("tenders.measurement_book_mb_ki_entry")}
       onClose={onClose} width={620}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        <PrimBtn label={busy ? "Save ho raha hai..." : "Save"} Icon={IcChk} onClick={save} disabled={busy}/>
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy ? t("tenders.save_ho_raha_hai") : t("common.save")} Icon={IcChk} onClick={save} disabled={busy}/>
       </>}>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
-        <Field label="Site *" hint={!sites.length ? "Pehle Sites tab me project link karo." : undefined}>
+        <Field label={t("tenders.site")} hint={!sites.length ? t("tenders.pehle_sites_tab_me_project_link") : undefined}>
           <SelIn value={f.project_id} onChange={v=>set("project_id",v)} ph="Site chuno..."
             options={sites.map(s=>({v:s.id, l:s.name}))}/>
         </Field>
-        <Field label="Date *">
+        <Field label={t("tenders.date")}>
           <TxtIn type="date" value={f.mdate} onChange={v=>set("mdate",v)}/>
         </Field>
-        <Field label="BOQ Item *" full>
+        <Field label={t("tenders.boq_item")} full>
           <BoqItemPicker items={boqItems} value={f.boq_item_id} onChange={v=>set("boq_item_id",v)}/>
         </Field>
         <Field label={`Qty *${item?.unit ? ` (${item.unit})` : ""}`}>
           <TxtIn type="number" value={f.qty} onChange={v=>set("qty",v)} ph="0"/>
         </Field>
-        <Field label="MB Ref">
+        <Field label={t("tenders.mb_ref")}>
           <TxtIn value={f.mb_ref} onChange={v=>set("mb_ref",v)} ph="e.g. MB-12 / Page 44"/>
         </Field>
-        <Field label="Remarks" full>
+        <Field label={t("common.remarks")} full>
           <TxtIn value={f.remarks} onChange={v=>set("remarks",v)} ph="Optional"/>
         </Field>
       </div>
       {item && (
         <div style={{marginTop:13, padding:"9px 12px", background:T.indL, border:`1px solid ${T.indM}`,
-          borderRadius:7, fontSize:11.5, color:T.t2, lineHeight:1.6}}>
-          <b style={{color:T.ind}}>{item.item_no || "--"}</b> · BOQ qty {fmtQty(item.qty)} {item.unit||""}
-          · Rate {money(item.rate)}
-          {Number(f.qty) > 0 && <> · Is entry ki value <b>{money(round2(Number(f.qty)*Number(item.rate||0)))}</b></>}
+          borderRadius:7, fontSize:11.5, color:T.t2, lineHeight:1.6}}><Rich k="tenders.item_boq_qty_fmtqty_item2_rate" params={{ item: item.item_no || "--", fmtQty: fmtQty(item.qty), item2: item.unit||"", money: money(item.rate) }} />{Number(f.qty) > 0 && <> {t("tenders.is_entry_ki_value")} <b>{money(round2(Number(f.qty)*Number(item.rate||0)))}</b></>}
         </div>
       )}
     </Modal>
@@ -3454,23 +3399,23 @@ function loadGoogleMaps(apiKey) {
 }
 
 const LINE_TYPES  = [
-  {v:"rising",  l:"Rising main", c:"#DC2626"},
-  {v:"gravity", l:"Gravity",     c:"#2563EB"},
-  {v:"inlet",   l:"Inlet",       c:"#059669"},
-  {v:"outlet",  l:"Outlet",      c:"#D97706"},
+  {v:"rising",  get l() { return t("tenders.rising_main"); }, c:"#DC2626"},
+  {v:"gravity", get l() { return t("tenders.gravity"); },     c:"#2563EB"},
+  {v:"inlet",   get l() { return t("tenders.inlet"); },       c:"#059669"},
+  {v:"outlet",  get l() { return t("tenders.outlet"); },      c:"#D97706"},
   // Ratna wale ne drain/road bhi map par utaare — apna type milna chahiye,
   // warna sab "other" me dab jaate hain aur filter ka matlab nahi rehta.
-  {v:"drain",   l:"Drain line",  c:"#0E7490"},
-  {v:"road",    l:"Road",        c:"#92400E"},
-  {v:"other",   l:"Other",       c:"#6B7280"},
+  {v:"drain",   get l() { return t("tenders.drain_line"); },  c:"#0E7490"},
+  {v:"road",    get l() { return t("tenders.road"); },        c:"#92400E"},
+  {v:"other",   get l() { return t("common.other"); },       c:"#6B7280"},
 ];
 const POINT_TYPES = [
   {v:"ugr",        l:"UGR"},
-  {v:"pump_house", l:"Pump House"},
-  {v:"hdd",        l:"HDD crossing"},
-  {v:"valve",      l:"Valve chamber"},
-  {v:"culvert",    l:"Culvert"},
-  {v:"other",      l:"Other"},
+  {v:"pump_house", get l() { return t("tenders.pump_house"); }},
+  {v:"hdd",        get l() { return t("tenders.hdd_crossing"); }},
+  {v:"valve",      get l() { return t("tenders.valve_chamber"); }},
+  {v:"culvert",    get l() { return t("tenders.culvert"); }},
+  {v:"other",      get l() { return t("common.other"); }},
 ];
 const lineColour = (t) => (LINE_TYPES.find(x=>x.v===t) || LINE_TYPES[LINE_TYPES.length-1]).c;
 
@@ -3966,7 +3911,7 @@ function MapTab({tenderId, sites}) {
   };
 
   const del = async (it) => {
-    if (!await window.confirmAsync(`"${it.name}" hataayein?`)) return;
+    if (!await window.confirmAsync(t("tenders.name_hataayein", { name: it.name }))) return;
     const res = await api.del(`/tenders/${tenderId}/alignments/${it.id}`);
     if (!res?.success) { toast.error(res?.message || "Delete nahi hua"); return; }
     toast.success("Hat gaya"); load();
@@ -3992,14 +3937,14 @@ function MapTab({tenderId, sites}) {
 
   return (<>
     <Panel style={{marginBottom:11}}>
-      <PHead title="Pipeline Map" sub={items.length ? `${items.length} alignment` : "Line draw karo ya KML import karo"}
+      <PHead title={t("tenders.pipeline_map")} sub={items.length ? `${items.length} alignment` : t("tenders.line_draw_karo_ya_kml_import")}
         action={<div style={{display:"flex", gap:8, alignItems:"center"}}>
           <div style={{minWidth:170}}>
             <SelIn value={fSite} onChange={setFSite} ph="Saari sites" options={sites.map(s=>({v:s.id, l:s.name}))}/>
           </div>
           <label style={{display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:7,
             border:`1px solid ${T.b1}`, background:T.surface, fontSize:12, color:T.t2, cursor:"pointer", whiteSpace:"nowrap"}}>
-            <IcUpload size={13}/> KML import
+            <IcUpload size={13}/> {t("tenders.kml_import")}
             <input type="file" accept=".kml,application/vnd.google-earth.kml+xml" style={{display:"none"}}
               onChange={e=>{ importKml(e.target.files?.[0]); e.target.value=""; }}/>
           </label>
@@ -4032,10 +3977,8 @@ function MapTab({tenderId, sites}) {
           {summary.boq_running_qty > 0 && (
             <div style={{marginTop:5, fontSize:10.5, color:T.t4}}>
               {summary.boq_from_packages
-                ? <>BOQ ka ankda {summary.boq_counted_items} item se · {fmtKm(summary.boq_other_qty)} chhoda gaya
-                    ({summary.boq_other_items} item — jinke package par "map me gino" band hai)</>
-                : <>⚠ Packages nahi bane — abhi har metre-wala item gina ja raha hai (electrical cable, plumbing sab).
-                    BOQ tab me "Packages banao" se sahi ankda milega.</>}
+                ? <>{t("tenders.boq_ka_ankda_boq_counted_items", { boq_counted_items: summary.boq_counted_items, fmtKm: fmtKm(summary.boq_other_qty), boq_other_items: summary.boq_other_items })}</>
+                : <>{t("tenders.packages_nahi_bane_abhi_har_metre")}</>}
             </div>
           )}
           {(() => {
@@ -4055,8 +3998,8 @@ function MapTab({tenderId, sites}) {
 
       {!apiKey || mapErr ? (
         <div style={{padding:"26px 16px", textAlign:"center", fontSize:12.5, color:T.t3}}>
-          {mapErr || "Map key set nahi hai."}<br/>
-          <span style={{fontSize:11.5, color:T.t4}}>KML import phir bhi chalega — list neeche dikhegi.</span>
+          {mapErr || t("tenders.map_key_set_nahi_hai")}<br/>
+          <span style={{fontSize:11.5, color:T.t4}}>{t("tenders.kml_import_phir_bhi_chalega_list")}</span>
         </div>
       ) : (
         <div style={{position:"relative"}}>
@@ -4064,27 +4007,25 @@ function MapTab({tenderId, sites}) {
           <div style={{display:"flex", gap:7, alignItems:"center", flexWrap:"wrap",
             padding:"8px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surface}}>
             {!mode && (<>
-              <SecBtn label="Pipeline line draw karo" Icon={IcMapPin} onClick={()=>startMode("line")}/>
-              <SecBtn label="Structure pin lagao" Icon={IcMapPin} onClick={()=>startMode("point")}/>
+              <SecBtn label={t("tenders.pipeline_line_draw_karo")} Icon={IcMapPin} onClick={()=>startMode("line")}/>
+              <SecBtn label={t("tenders.structure_pin_lagao")} Icon={IcMapPin} onClick={()=>startMode("point")}/>
               {/* E — photo layer ka switch */}
               <button onClick={()=>setPhotosOn(o=>!o)}
                 style={{fontSize:12, padding:"7px 12px", borderRadius:7, cursor:"pointer", fontFamily:"inherit",
                   border:`1px solid ${photosOn ? "#7C3AED" : T.b1}`,
                   background: photosOn ? "#F5F3FF" : T.surface,
-                  color: photosOn ? "#6D28D9" : T.t2, fontWeight: photosOn ? 700 : 400}}>
-                📷 Photos {photosOn ? "on" : ""}
-              </button>
+                  color: photosOn ? "#6D28D9" : T.t2, fontWeight: photosOn ? 700 : 400}}>{t("tenders.photos_photoson", { photosOn: photosOn ? "on" : "" })}</button>
               {/* Purani photos (WhatsApp wali bhi) apni jagah khud bataati
                   hain — aadmi se "kaunsi line?" poochhna bekaar hai. */}
               <button onClick={()=>setLocatePhoto(true)}
                 style={{fontSize:12, padding:"7px 12px", borderRadius:7, cursor:"pointer", fontFamily:"inherit",
                   border:`1px solid ${T.b1}`, background:T.surface, color:T.t2}}>
-                📍 Photo se jagah
+               {t("tenders.photo_se_jagah")}
               </button>
               {/* F — jagah ka search: type karte hi suggestions (Google mile
                   to Google, warna OSM), Enter par pehla; click par wahi */}
               <div style={{position:"relative", flex:"1 1 190px", minWidth:170, maxWidth:280}}>
-                <input ref={searchBoxRef} placeholder="Jagah dhoondo — e.g. Atal Nagar Sector 5"
+                <input ref={searchBoxRef} placeholder={t("tenders.jagah_dhoondo_e_g_atal_nagar")}
                   onChange={e=>fetchSugg(e.target.value)}
                   onBlur={()=>setTimeout(()=>setSugg([]), 200)}
                   onKeyDown={e=>{
@@ -4114,25 +4055,21 @@ function MapTab({tenderId, sites}) {
                   </div>
                 )}
               </div>
-              <span style={{fontSize:11, color:T.t4}}>Line = pipeline · Pin = UGR / pump house / HDD · Line par click = stretch ka dashboard</span>
+              <span style={{fontSize:11, color:T.t4}}>{t("tenders.line_pipeline_pin_ugr_pump_house")}</span>
             </>)}
             {mode === "point" && (<>
-              <span style={{fontSize:12, fontWeight:700, color:T.ind}}>Map par jahan structure hai wahan click karo</span>
-              <SecBtn label="Cancel" onClick={stopMode}/>
+              <span style={{fontSize:12, fontWeight:700, color:T.ind}}>{t("tenders.map_par_jahan_structure_hai_wahan")}</span>
+              <SecBtn label={t("common.cancel")} onClick={stopMode}/>
             </>)}
             {mode === "line" && (<>
-              <span style={{fontSize:12, fontWeight:700, color:T.ind}}>
-                Road ke saath click karte jao — {draftPts.length} point
-                {/* F — har click/drag par chalti hui lambai, poori hone ka
-                    intezaar nahi. BOQ se milaana yahin ho jaata hai. */}
-                {draftPts.length >= 2 && (
+              <span style={{fontSize:12, fontWeight:700, color:T.ind}}>{t("tenders.road_ke_saath_click_karte_jao", { draftPts: draftPts.length })}{draftPts.length >= 2 && (
                   <span style={{marginLeft:7, color:"#059669"}}>· {fmtKm(pathLenM(draftPts))}</span>
                 )}
               </span>
-              <SecBtn label="Ek point wapas" onClick={undoPoint} disabled={!draftPts.length}/>
-              <PrimBtn label="Line poori hui" Icon={IcChk} onClick={finishLine} disabled={draftPts.length < 2}/>
-              <SecBtn label="Cancel" onClick={()=>{ clearDraft(); stopMode(); }}/>
-              <span style={{fontSize:11, color:T.t4}}>Point ko drag karke theek bhi kar sakte ho</span>
+              <SecBtn label={t("tenders.ek_point_wapas")} onClick={undoPoint} disabled={!draftPts.length}/>
+              <PrimBtn label={t("tenders.line_poori_hui")} Icon={IcChk} onClick={finishLine} disabled={draftPts.length < 2}/>
+              <SecBtn label={t("common.cancel")} onClick={()=>{ clearDraft(); stopMode(); }}/>
+              <span style={{fontSize:11, color:T.t4}}>{t("tenders.point_ko_drag_karke_theek_bhi")}</span>
             </>)}
           </div>
 
@@ -4143,13 +4080,13 @@ function MapTab({tenderId, sites}) {
             const cnt = {}; let pins = 0;
             items.forEach(it=>{ if (it.kind === "line") cnt[it.atype] = (cnt[it.atype]||0)+1; else pins++; });
             const chips = LINE_TYPES.filter(t=>cnt[t.v]).map(t=>({key:t.v, label:t.l, n:cnt[t.v], c:t.c}));
-            if (pins) chips.push({key:"__pins", label:"Structures", n:pins, c:"#4338CA"});
+            if (pins) chips.push({key:"__pins", label:t("tenders.structures"), n:pins, c:"#4338CA"});
             if (chips.length < 2) return null;   // ek hi type hai to filter bekaar
             const anyHidden = hidden.size > 0;
             return (
               <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center",
                 padding:"7px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
-                <span style={{fontSize:10.5, color:T.t4, marginRight:2}}>Dikhao:</span>
+                <span style={{fontSize:10.5, color:T.t4, marginRight:2}}>{t("tenders.dikhao")}</span>
                 {chips.map(c=>{
                   const on = !hidden.has(c.key);
                   return (
@@ -4170,7 +4107,7 @@ function MapTab({tenderId, sites}) {
                   <button onClick={()=>setHidden(new Set())}
                     style={{fontSize:10.5, padding:"3px 9px", borderRadius:20, cursor:"pointer",
                       border:`1px solid ${T.b1}`, background:T.surface, color:T.ind, fontFamily:"inherit"}}>
-                    sab dikhao
+                   {t("tenders.sab_dikhao")}
                   </button>
                 )}
               </div>
@@ -4179,7 +4116,7 @@ function MapTab({tenderId, sites}) {
 
           <div ref={mapDiv} style={{width:"100%", height:430, background:T.surfaceB}}/>
           {!mapReady && <div style={{position:"absolute", inset:0, display:"flex", alignItems:"center",
-            justifyContent:"center", fontSize:12.5, color:T.t3}}>Map load ho raha hai…</div>}
+            justifyContent:"center", fontSize:12.5, color:T.t3}}>{t("tenders.map_load_ho_raha_hai")}</div>}
 
           {/* C — stretch ka dashboard: line par click karte hi yahan khulta
               hai. PM ko map chhode bina poori kahani — kitna pakka, kitna
@@ -4189,7 +4126,7 @@ function MapTab({tenderId, sites}) {
               background:T.surface, border:`1px solid ${T.b1}`, borderRadius:11, zIndex:5,
               boxShadow:"0 8px 28px rgba(15,23,42,.16)", padding:"12px 13px"}}>
               {panel.loading ? (
-                <div style={{fontSize:12, color:T.t3, textAlign:"center", padding:"18px 0"}}>Stretch load ho raha hai…</div>
+                <div style={{fontSize:12, color:T.t3, textAlign:"center", padding:"18px 0"}}>{t("tenders.stretch_load_ho_raha_hai")}</div>
               ) : (() => { const d = panel.data; return (<>
                 <div style={{display:"flex", alignItems:"flex-start", gap:8}}>
                   <div style={{flex:1, minWidth:0}}>
@@ -4211,17 +4148,17 @@ function MapTab({tenderId, sites}) {
                         background:"#6EE7B7"}}/>
                     </div>
                     <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"3px 10px", marginTop:7, fontSize:11}}>
-                      <span style={{color:T.t3}}>Pakka (MB se)</span><b style={{color:"#059669", textAlign:"right"}}>{fmtKm(d.pakka_m)}</b>
-                      <span style={{color:T.t3}}>Task par likha</span><b style={{color:T.t1, textAlign:"right"}}>{fmtKm(d.kachcha_m)}</b>
-                      <span style={{color:T.t3}}>Geo-verified</span>
+                      <span style={{color:T.t3}}>{t("tenders.pakka_mb_se")}</span><b style={{color:"#059669", textAlign:"right"}}>{fmtKm(d.pakka_m)}</b>
+                      <span style={{color:T.t3}}>{t("tenders.task_par_likha")}</span><b style={{color:T.t1, textAlign:"right"}}>{fmtKm(d.kachcha_m)}</b>
+                      <span style={{color:T.t3}}>{t("tenders.geo_verified")}</span>
                       <b style={{color: d.verified_m >= d.kachcha_m && d.kachcha_m > 0 ? "#059669" : "#B45309", textAlign:"right"}}>{fmtKm(d.verified_m)}</b>
-                      <span style={{color:T.t3}}>Baaki</span><b style={{color:T.t1, textAlign:"right"}}>{fmtKm(d.baaki_m)}</b>
+                      <span style={{color:T.t3}}>{t("common.baaki")}</span><b style={{color:T.t1, textAlign:"right"}}>{fmtKm(d.baaki_m)}</b>
                     </div>
                   </div>
                 )}
 
                 {!!d.tasks?.length && (<>
-                  <div style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>Tasks</div>
+                  <div style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>{t("common.tasks")}</div>
                   {d.tasks.slice(0,5).map(t=>(
                     <div key={t.id} style={{display:"flex", justifyContent:"space-between", gap:8, fontSize:11.5, padding:"2px 0"}}>
                       <span style={{color:T.t2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{t.name}</span>
@@ -4231,9 +4168,7 @@ function MapTab({tenderId, sites}) {
                 </>)}
 
                 {!!d.photos?.length && (<>
-                  <div style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>
-                    Photos {d.photo_total > d.photos.length ? `(${d.photo_total})` : ""}
-                  </div>
+                  <div style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>{t("tenders.photos_d", { d: d.photo_total > d.photos.length ? `(${d.photo_total})` : "" })}</div>
                   <div style={{display:"flex", gap:4, flexWrap:"wrap"}}>
                     {d.photos.slice(0,8).map(p=>(
                       <a key={p.id} href={p.url} target="_blank" rel="noreferrer" title={p.taken_on||""}>
@@ -4245,14 +4180,14 @@ function MapTab({tenderId, sites}) {
                 </>)}
 
                 {!!d.issues?.length && (<>
-                  <div style={{fontSize:9.5, fontWeight:700, color:"#B91C1C", textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>Khule issues</div>
+                  <div style={{fontSize:9.5, fontWeight:700, color:"#B91C1C", textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>{t("tenders.khule_issues")}</div>
                   {d.issues.slice(0,4).map(i=>(
                     <div key={i.id} style={{fontSize:11, color:T.t2, padding:"2px 0"}}>⚠ {i.title}</div>
                   ))}
                 </>)}
 
                 {!!d.measurements?.length && (<>
-                  <div style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>Aakhri MB entries</div>
+                  <div style={{fontSize:9.5, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".4px", margin:"10px 0 4px"}}>{t("tenders.aakhri_mb_entries")}</div>
                   {d.measurements.slice(0,4).map(m=>(
                     <div key={m.id} style={{display:"flex", justifyContent:"space-between", gap:8, fontSize:11, padding:"2px 0"}}>
                       <span style={{color:T.t3}}>{String(m.mdate).slice(0,10)}{m.mb_ref ? ` · ${m.mb_ref}` : ""}</span>
@@ -4266,8 +4201,7 @@ function MapTab({tenderId, sites}) {
 
                 {!d.tasks?.length && !d.photos?.length && (
                   <div style={{fontSize:11, color:T.t4, marginTop:9, lineHeight:1.5}}>
-                    Is stretch se abhi koi task juda nahi. Task edit me "Tender se jodo" se jodo —
-                    phir uska kaam, photos aur progress yahan dikhega.
+                   {t("tenders.is_stretch_se_abhi_koi_task")}
                   </div>
                 )}
               </>); })()}
@@ -4284,30 +4218,30 @@ function MapTab({tenderId, sites}) {
 
     {/* Naya drawn feature — naam + type + site */}
     {pending && (
-      <Modal title={pending.kind==="line" ? "Nayi pipeline line" : "Naya structure"} Icon={IcMapPin} width={560}
-        sub={pending.kind==="line" ? `${pending.coords.length} point draw huye` : "Map par lagaya gaya pin"}
+      <Modal title={pending.kind==="line" ? t("tenders.nayi_pipeline_line") : t("tenders.naya_structure")} Icon={IcMapPin} width={560}
+        sub={pending.kind==="line" ? `${pending.coords.length} point draw huye` : t("tenders.map_par_lagaya_gaya_pin")}
         onClose={()=>setPending(null)}
         footer={<>
-          <SecBtn label="Hatao" onClick={()=>setPending(null)}/>
-          <PrimBtn label={busy?"Save ho raha hai...":"Save"} Icon={IcChk} onClick={savePending} disabled={busy}/>
+          <SecBtn label={t("common.hatao")} onClick={()=>setPending(null)}/>
+          <PrimBtn label={busy?t("tenders.save_ho_raha_hai"):t("common.save")} Icon={IcChk} onClick={savePending} disabled={busy}/>
         </>}>
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
-          <Field label="Site *">
+          <Field label={t("tenders.site")}>
             <SelIn value={pending.project_id} onChange={v=>setPending(p=>({...p, project_id:v}))}
               ph="Site chuno" options={sites.map(s=>({v:s.id, l:s.name}))}/>
           </Field>
-          <Field label="Type">
+          <Field label={t("common.type")}>
             <SelIn value={pending.atype} onChange={v=>setPending(p=>({...p, atype:v}))}
               options={(pending.kind==="line"?LINE_TYPES:POINT_TYPES).map(t=>({v:t.v, l:t.l}))}/>
           </Field>
-          <Field label="Naam" full>
+          <Field label={t("common.naam")} full>
             <TxtIn value={pending.name} onChange={v=>setPending(p=>({...p, name:v}))}
               ph={pending.kind==="line" ? "e.g. Sec-25 | CH 0–500" : "e.g. UGR Sec-25"}/>
           </Field>
           {/* Chaudai — sadak ki ROW, ya bade pipe ka daayra. Sadak ki
               chaudai har jagah alag hoti hai, aur naali usi se nikalti hai. */}
           {pending.kind==="line" && (
-            <Field label={pending.atype==="road" ? "Chaudai / ROW (m)" : "Chaudai / daayra (m)"}>
+            <Field label={pending.atype==="road" ? t("tenders.chaudai_row_m") : t("tenders.chaudai_daayra_m")}>
               <TxtIn value={pending.width_m} onChange={v=>setPending(p=>({...p, width_m:v}))}
                 ph={pending.atype==="road" ? "e.g. 10" : "e.g. 1.2"}/>
             </Field>
@@ -4319,7 +4253,7 @@ function MapTab({tenderId, sites}) {
           <div style={{marginTop:12, padding:"10px 12px", borderRadius:9,
             background:T.surfaceB, border:`1px solid ${T.b1}`}}>
             <div style={{fontSize:11.5, color:T.t2, fontWeight:600, marginBottom:7}}>
-              Iske saath naali (drain) bhi mark kar dein?
+             {t("tenders.iske_saath_naali_drain_bhi_mark")}
             </div>
             <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center"}}>
               {[["","Nahi"],["both","Dono taraf"],["left","Sirf bayan"],["right","Sirf dayan"]].map(([v,l])=>(
@@ -4332,7 +4266,7 @@ function MapTab({tenderId, sites}) {
               ))}
               {!!pending.drain_side && (
                 <span style={{display:"inline-flex", alignItems:"center", gap:6, marginLeft:4}}>
-                  <span style={{fontSize:11, color:T.t4}}>kinare se</span>
+                  <span style={{fontSize:11, color:T.t4}}>{t("tenders.kinare_se")}</span>
                   <input value={pending.drain_offset_m ?? ""} onChange={e=>setPending(p=>({...p, drain_offset_m:e.target.value}))}
                     placeholder="0.5"
                     style={{width:54, padding:"4px 7px", borderRadius:6, border:`1px solid ${T.b1}`,
@@ -4342,28 +4276,24 @@ function MapTab({tenderId, sites}) {
               )}
             </div>
             {!!pending.drain_side && (
-              <div style={{fontSize:10.5, color:T.t4, marginTop:7, lineHeight:1.5}}>
-                Naali sadak ki beech-lakeer se {((Number(pending.width_m)||0)/2 + (Number(pending.drain_offset_m)||0.5)).toFixed(2)} m
-                {pending.drain_side==="both" ? " dono taraf" : pending.drain_side==="left" ? " bayan taraf" : " dayan taraf"} banegi —
-                asli line ki tarah, jise baad me khiska ya mita sakte ho.
-              </div>
+              <div style={{fontSize:10.5, color:T.t4, marginTop:7, lineHeight:1.5}}>{t("tenders.naali_sadak_ki_beech_lakeer_se", { Number: ((Number(pending.width_m)||0)/2 + (Number(pending.drain_offset_m)||0.5)).toFixed(2), pending: pending.drain_side==="both" ? " dono taraf" : pending.drain_side==="left" ? " bayan taraf" : " dayan taraf" })}</div>
             )}
           </div>
         )}
 
         <div style={{fontSize:11.5, color:T.t4, marginTop:10}}>
-          Naam me hissa likhoge (CH 0–500) to aage segment-wise progress dikhana aasan ho jayega.
+         {t("tenders.naam_me_hissa_likhoge_ch_0")}
         </div>
       </Modal>
     )}
 
     {/* Alignment list */}
     <Panel>
-      <PHead title="Alignments" sub={summary ? `${fmtKm(summary.total_length_m)} · ${summary.total_points} structure` : undefined}/>
-      {loading && <Loading text="Alignment load ho raha hai..."/>}
+      <PHead title={t("tenders.alignments")} sub={summary ? `${fmtKm(summary.total_length_m)} · ${summary.total_points} structure` : undefined}/>
+      {loading && <Loading text={t("tenders.alignment_load_ho_raha_hai")}/>}
       {!loading && !items.length && (
-        <Empty Icon={IcMapPin} text="Abhi koi alignment nahi."
-          sub="Map par line draw karo, ya department ki KML import karo."/>
+        <Empty Icon={IcMapPin} text={t("tenders.abhi_koi_alignment_nahi")}
+          sub={t("tenders.map_par_line_draw_karo_ya")}/>
       )}
       {!loading && !!items.length && (
         <div style={{padding:"4px 0"}}>
@@ -4375,7 +4305,7 @@ function MapTab({tenderId, sites}) {
               <div style={{flex:1, minWidth:0}}>
                 <div style={{fontSize:12.5, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{it.name}</div>
                 <div style={{fontSize:11, color:T.t4}}>
-                  {it.project_name || "site nahi"} · {alignLabel(it.kind, it.atype)}
+                  {it.project_name || t("tenders.site_nahi")} · {alignLabel(it.kind, it.atype)}
                   {it.source==="kml" && it.source_file ? ` · ${it.source_file}` : ""}
                 </div>
               </div>
@@ -4393,7 +4323,7 @@ function MapTab({tenderId, sites}) {
                   </div>
                 );
               })()}
-              <button onClick={()=>del(it)} title="Delete"
+              <button onClick={()=>del(it)} title={t("common.delete")}
                 style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
                   cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
                 <IcTrash size={12} color={T.red}/>
@@ -4424,7 +4354,7 @@ const PC_STYLE = {
 // purani saari photos par location hai hi nahi, uspar roz ghanti bajana
 // matlab ghanti ka matlab hi khatam kar dena.
 const LOC_STYLE = {
-  theek:       { fg:"#065F46", icon:"📍", text:"Photo isi line par" },
+  theek:       { fg:"#065F46", icon:"📍", get text() { return t("tenders.photo_isi_line_par"); } },
   doosri_line: { fg:"#991B1B", icon:"⚠", text:null },
   door:        { fg:"#991B1B", icon:"⚠", text:null },
   kuch_door:   { fg:"#92400E", icon:"⚠", text:null },
@@ -4492,14 +4422,14 @@ function PhotoCheckCell({row, tenderId, from, to, onDone, open, onToggle}) {
       <button onClick={()=>run(false)} disabled={busy}
         style={{fontSize:10.5, padding:"4px 9px", borderRadius:6, cursor:busy?"default":"pointer",
           border:`1px solid ${T.b1}`, background:T.surface, color:T.t3, fontFamily:"inherit", whiteSpace:"nowrap"}}>
-        {busy ? "dekh raha…" : "Photo se jaanch"}
+        {busy ? t("tenders.dekh_raha") : t("tenders.photo_se_jaanch")}
       </button>
     );
   }
   const s = PC_STYLE[c.verdict] || PC_STYLE.sirf_ginti;
   const L = c.location ? (LOC_STYLE[c.location.flag] || null) : null;
   return (
-    <button onClick={onToggle} title="Detail dekho"
+    <button onClick={onToggle} title={t("tenders.detail_dekho")}
       style={{display:"flex", flexDirection:"column", alignItems:"flex-start", gap:2,
         padding:"4px 8px", borderRadius:6, cursor:"pointer", width:"100%",
         border:`1px solid ${open ? s.fg : s.bd}`, background:s.bg, fontFamily:"inherit", textAlign:"left"}}>
@@ -4508,7 +4438,7 @@ function PhotoCheckCell({row, tenderId, from, to, onDone, open, onToggle}) {
           sawaal hain aur PM ko pata rehna chahiye kaunsa kis se aaya. */}
       {L && L.icon && (
         <span style={{fontSize:9.5, color:L.fg, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%"}}>
-          {L.icon} {L.text || (c.location.flag === "doosri_line" ? "Doosri line par" : "Jagah dekho")}
+          {L.icon} {L.text || (c.location.flag === "doosri_line" ? t("tenders.doosri_line_par") : t("tenders.jagah_dekho"))}
         </span>
       )}
     </button>
@@ -4534,7 +4464,7 @@ function PhotoCheckDetail({row, tenderId, from, to, onDone}) {
       {!!c.photos?.length && (
         <div style={{display:"flex", gap:5, flexShrink:0}}>
           {c.photos.slice(0,5).map(p=>(
-            <a key={p.id} href={p.url} target="_blank" rel="noreferrer" title={p.taken_on||"Poori photo kholo"}>
+            <a key={p.id} href={p.url} target="_blank" rel="noreferrer" title={p.taken_on||t("tenders.poori_photo_kholo")}>
               <img src={thumb(p.url)} alt="" loading="lazy"
                 style={{width:58, height:58, objectFit:"cover", borderRadius:5,
                   border:`1px solid ${T.b1}`, display:"block"}}/>
@@ -4546,7 +4476,7 @@ function PhotoCheckDetail({row, tenderId, from, to, onDone}) {
         {c.note && <div>{c.note}</div>}
         {!!c.kya_dikha?.length && (
           <div style={{marginTop:3, color:T.t3}}>
-            <span style={{color:T.t4}}>Photo me: </span>{c.kya_dikha.join(" · ")}
+            <span style={{color:T.t4}}>{t("tenders.photo_me")} </span>{c.kya_dikha.join(" · ")}
           </div>
         )}
         <div style={{marginTop:5, fontSize:10.5, color:T.t4}}>{bits.join(" · ")}</div>
@@ -4554,7 +4484,7 @@ function PhotoCheckDetail({row, tenderId, from, to, onDone}) {
       <button onClick={()=>run(true)} disabled={busy}
         style={{flexShrink:0, fontSize:10.5, padding:"5px 10px", borderRadius:6, cursor:busy?"default":"pointer",
           border:`1px solid ${T.b1}`, background:T.surface, color:T.t3, fontFamily:"inherit", whiteSpace:"nowrap"}}>
-        {busy ? "…" : "Dobara jaancho"}
+        {busy ? "…" : t("tenders.dobara_jaancho")}
       </button>
     </div>
   );
@@ -4616,31 +4546,30 @@ function MBDraftModal({tenderId, onClose, onDone}) {
   const td = {fontSize:12, color:T.t2, padding:"7px 8px", borderBottom:`1px solid ${T.b1}`};
 
   return (
-    <Modal title="MB Draft — DPR se" Icon={IcTable} width={900}
-      sub="Site ki daily DPR entries ka jod — cross-check karke MB me daalo"
+    <Modal title={t("tenders.mb_draft_dpr_se")} Icon={IcTable} width={900}
+      sub={t("tenders.site_ki_daily_dpr_entries_ka")}
       onClose={onClose}
       footer={<>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        <PrimBtn label={busy ? "Ruko..." : `${chosen.length} row MB me daalo`} Icon={IcChk}
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy ? t("tenders.ruko") : `${chosen.length} row MB me daalo`} Icon={IcChk}
           onClick={commit} disabled={busy || !chosen.length}/>
       </>}>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1.2fr auto", gap:11, alignItems:"end", marginBottom:13}}>
-        <Field label="Period se"><TxtIn type="date" value={from} onChange={setFrom}/></Field>
-        <Field label="Period tak"><TxtIn type="date" value={to} onChange={setTo}/></Field>
-        <Field label="MB date *"><TxtIn type="date" value={mdate} onChange={setMdate}/></Field>
-        <Field label="MB ref (page no.)"><TxtIn value={mbRef} onChange={setMbRef} ph="MB-01 / Pg-12"/></Field>
-        <SecBtn label={busy?"...":"Draft banao"} onClick={fetchDraft} disabled={busy}/>
+        <Field label={t("tenders.period_se")}><TxtIn type="date" value={from} onChange={setFrom}/></Field>
+        <Field label={t("tenders.period_tak")}><TxtIn type="date" value={to} onChange={setTo}/></Field>
+        <Field label={t("tenders.mb_date")}><TxtIn type="date" value={mdate} onChange={setMdate}/></Field>
+        <Field label={t("tenders.mb_ref_page_no")}><TxtIn value={mbRef} onChange={setMbRef} ph="MB-01 / Pg-12"/></Field>
+        <SecBtn label={busy?"...":t("tenders.draft_banao")} onClick={fetchDraft} disabled={busy}/>
       </div>
 
       {rows === null && (
         <div style={{padding:"22px 12px", textAlign:"center", fontSize:12.5, color:T.t3}}>
-          Period chuno aur <b>Draft banao</b> dabao — DPR se site-wise, item-wise jod aa jayega.
+         {t("tenders.period_chuno_aur")} <b>{t("tenders.draft_banao")}</b> {t("tenders.dabao_dpr_se_site_wise_item")}
         </div>
       )}
       {rows && !rows.length && (
-        <div style={{padding:"18px 12px", textAlign:"center", fontSize:12.5, color:T.t3}}>
-          Is period me BOQ-item se juda koi DPR kaam nahi mila. ({scanned} DPR dekhe gaye)<br/>
-          <span style={{fontSize:11.5, color:T.t4}}>Jis task par kaam likha gaya wo BOQ item se juda hoga tabhi yahan aayega — task edit me "Tender se jodo".</span>
+        <div style={{padding:"18px 12px", textAlign:"center", fontSize:12.5, color:T.t3}}>{t("tenders.is_period_me_boq_item_se", { scanned })}<br/>
+          <span style={{fontSize:11.5, color:T.t4}}>{t("tenders.jis_task_par_kaam_likha_gaya")}</span>
         </div>
       )}
       {!!warn && (
@@ -4649,14 +4578,14 @@ function MBDraftModal({tenderId, onClose, onDone}) {
         </div>
       )}
       {!!rows?.length && (<>
-        <div style={{fontSize:11.5, color:T.t4, marginBottom:7}}>{scanned} DPR se {rows.length} line · qty edit kar sakte ho, jo verify na ho uska tick hata do</div>
+        <div style={{fontSize:11.5, color:T.t4, marginBottom:7}}>{t("tenders.scanned_dpr_se_rows_line_qty", { scanned, rows: rows.length })}</div>
         <div style={{border:`1px solid ${T.b1}`, borderRadius:9, overflow:"hidden", maxHeight:340, overflowY:"auto"}}>
           <table style={{width:"100%", borderCollapse:"collapse"}}>
             <thead style={{position:"sticky", top:0, background:T.surfaceB, zIndex:1}}>
-              <tr><th style={{...th,width:34}}></th><th style={th}>Site</th><th style={th}>Item</th>
-                <th style={th}>Description</th><th style={{...th,textAlign:"right"}}>DPR qty</th>
-                <th style={{...th,textAlign:"right"}}>MB me lo</th><th style={{...th,textAlign:"right"}}>Is period me pehle se</th>
-                <th style={{...th,width:132}}>Photo se jaanch</th></tr>
+              <tr><th style={{...th,width:34}}></th><th style={th}>{t("common.site")}</th><th style={th}>{t("common.item")}</th>
+                <th style={th}>{t("common.description")}</th><th style={{...th,textAlign:"right"}}>{t("tenders.dpr_qty")}</th>
+                <th style={{...th,textAlign:"right"}}>{t("tenders.mb_me_lo")}</th><th style={{...th,textAlign:"right"}}>{t("tenders.is_period_me_pehle_se")}</th>
+                <th style={{...th,width:132}}>{t("tenders.photo_se_jaanch")}</th></tr>
             </thead>
             <tbody>
               {rows.map((r,i)=>{
@@ -4682,10 +4611,10 @@ function MBDraftModal({tenderId, onClose, onDone}) {
                           Rok nahi — PM ke saamne sach, faisla uska. */}
                       {r.verified_qty != null && Number(r.dpr_qty) > 0 && (
                         Number(r.verified_qty) >= Number(r.dpr_qty)
-                          ? <div style={{fontSize:10, color:"#059669", fontWeight:700}}>✓ poora geo-verified</div>
+                          ? <div style={{fontSize:10, color:"#059669", fontWeight:700}}>{t("tenders.poora_geo_verified")}</div>
                           : Number(r.verified_qty) > 0
                             ? <div style={{fontSize:10, color:"#B45309", fontWeight:700}}>✓ {fmtQty(r.verified_qty)} verified</div>
-                            : <div style={{fontSize:10, color:"#B91C1C", fontWeight:700}}>geo-verify 0</div>
+                            : <div style={{fontSize:10, color:"#B91C1C", fontWeight:700}}>{t("tenders.geo_verify_0")}</div>
                       )}</td>
                     <td style={{...td, textAlign:"right"}}>
                       <input type="number" value={r.take} onChange={e=>setRow(i,"take",e.target.value)} disabled={!r.include}
@@ -4694,7 +4623,7 @@ function MBDraftModal({tenderId, onClose, onDone}) {
                     </td>
                     <td style={{...td, textAlign:"right", color: dup ? T.amb : T.t4, fontWeight: dup?700:400}}>
                       {dup ? `${fmtQty(r.measured_in_period)} ${r.unit||""}` : "—"}
-                      {dup && <div style={{fontSize:10}}>dobara na ho</div>}
+                      {dup && <div style={{fontSize:10}}>{t("tenders.dobara_na_ho")}</div>}
                     </td>
                     {/* AI sirf ishara deta hai. Row ka tick, qty aur commit —
                         teeno aadmi ke haath me hi rehte hain. */}
@@ -4775,10 +4704,10 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
 
   return (<>
     <Panel style={{marginBottom:11}}>
-      <PHead title="Measurements (MB)" sub={rows.length ? `${rows.length} entry` : undefined}
+      <PHead title={t("tenders.measurements_mb")} sub={rows.length ? `${rows.length} entry` : undefined}
         action={<div style={{display:"flex", gap:8}}>
-          <SecBtn label="MB Draft (DPR se)" Icon={IcTable} onClick={()=>setDraftOpen(true)}/>
-          <PrimBtn label="Nayi Measurement" Icon={IcAdd} onClick={()=>setModal({})}/>
+          <SecBtn label={t("tenders.mb_draft_dpr_se_2")} Icon={IcTable} onClick={()=>setDraftOpen(true)}/>
+          <PrimBtn label={t("tenders.nayi_measurement")} Icon={IcAdd} onClick={()=>setModal({})}/>
         </div>}/>
 
       {/* Filters */}
@@ -4792,11 +4721,11 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
           <SelIn value={fItem} onChange={setFItem} ph="Saare BOQ items"
             options={boqItems.map(i=>({v:i.id, l:`${i.item_no||"--"} · ${String(i.description||"").slice(0,44)}`}))}/>
         </div>
-        {(fSite||fItem) && <SecBtn label="Filter hatao" Icon={IcX} onClick={()=>{setFSite("");setFItem("");}}/>}
+        {(fSite||fItem) && <SecBtn label={t("tenders.filter_hatao")} Icon={IcX} onClick={()=>{setFSite("");setFItem("");}}/>}
         {lockDate && (
           <div style={{marginLeft:"auto", display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.t3}}>
             <IcLock size={12} color={T.amb}/>
-            <span>{fmtDate(lockDate)} tak bill ho chuka — us tarikh tak ki entry lock hai</span>
+            <span>{t("tenders.fmtdate_tak_bill_ho_chuka_us", { fmtDate: fmtDate(lockDate) })}</span>
           </div>
         )}
       </div>
@@ -4806,30 +4735,28 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
         <div style={{padding:"8px 14px", borderBottom:`1px solid ${T.b1}`, display:"flex", gap:6,
           flexWrap:"wrap", alignItems:"center"}}>
           <span style={{fontSize:10, fontWeight:800, color:T.t4, textTransform:"uppercase", letterSpacing:".5px"}}>
-            AI jaanch
+           {t("tenders.ai_jaanch")}
           </span>
           {[
-            {n:score.committed.thik, l:"photo se pushti", c:"#047857", bg:T.grnL},
-            {n:score.committed.dekhne_layak, l:"dekhne layak", c:"#B45309", bg:T.ambL},
-            {n:score.committed.photo_nahi, l:"photo hi nahi", c:"#B91C1C", bg:T.redL},
-            {n:score.committed.loc_theek, l:"GPS line par", c:"#1D4ED8", bg:T.bluL},
-            {n:score.committed.loc_doosri_line, l:"GPS doosri line", c:"#B91C1C", bg:T.redL},
-            {n:score.committed.bina_jaanch, l:"bina jaanch (purani)", c:T.t3, bg:T.sltL},
+            {n:score.committed.thik, l:t("tenders.photo_se_pushti"), c:"#047857", bg:T.grnL},
+            {n:score.committed.dekhne_layak, l:t("tenders.dekhne_layak"), c:"#B45309", bg:T.ambL},
+            {n:score.committed.photo_nahi, l:t("tenders.photo_hi_nahi"), c:"#B91C1C", bg:T.redL},
+            {n:score.committed.loc_theek, l:t("tenders.gps_line_par"), c:"#1D4ED8", bg:T.bluL},
+            {n:score.committed.loc_doosri_line, l:t("tenders.gps_doosri_line"), c:"#B91C1C", bg:T.redL},
+            {n:score.committed.bina_jaanch, l:t("tenders.bina_jaanch_purani"), c:T.t3, bg:T.sltL},
           ].filter(x=>x.n>0).map(x=>(
             <span key={x.l} style={{fontSize:10.5, fontWeight:700, color:x.c, background:x.bg,
               padding:"2px 9px", borderRadius:12}}>{x.n} {x.l}</span>
           ))}
-          <span style={{marginLeft:"auto", fontSize:10, color:T.t4}}>
-            {score.committed.rows} committed rows{score.checks.ai_ran ? ` · ${score.checks.ai_ran} par AI chala` : ""}
-          </span>
+          <span style={{marginLeft:"auto", fontSize:10, color:T.t4}}>{t("tenders.rows_committed_rowsscore", { rows: score.committed.rows, score: score.checks.ai_ran ? ` · ${score.checks.ai_ran} par AI chala` : "" })}</span>
         </div>
       )}
 
-      {loading && <Loading text="Measurements load ho rahe hain..."/>}
+      {loading && <Loading text={t("tenders.measurements_load_ho_rahe_hain")}/>}
 
       {!loading && !rows.length && (
-        <Empty Icon={IcTable} text={fSite||fItem ? "Is filter me koi entry nahi." : "Abhi koi measurement nahi."}
-          sub={fSite||fItem ? undefined : "Site par kaam hone ke baad MB entry yahan darj karo."}/>
+        <Empty Icon={IcTable} text={fSite||fItem ? t("tenders.is_filter_me_koi_entry_nahi") : t("tenders.abhi_koi_measurement_nahi")}
+          sub={fSite||fItem ? undefined : t("tenders.site_par_kaam_hone_ke_baad")}/>
       )}
 
       {!loading && !!rows.length && (<>
@@ -4870,14 +4797,14 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
               </span>
               <div style={{display:"flex", gap:4, justifyContent:"flex-end"}}>
                 {locked ? (
-                  <span title={LOCK_MSG} style={{fontSize:10, color:T.amb, cursor:"help", fontWeight:600}}>Locked</span>
+                  <span title={LOCK_MSG} style={{fontSize:10, color:T.amb, cursor:"help", fontWeight:600}}>{t("tenders.locked")}</span>
                 ) : (<>
-                  <button onClick={()=>setModal({edit:m})} title="Edit"
+                  <button onClick={()=>setModal({edit:m})} title={t("common.edit_2")}
                     style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
                       cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
                     <IcEdit size={12} color={T.t3}/>
                   </button>
-                  <button onClick={()=>del(m)} title="Delete"
+                  <button onClick={()=>del(m)} title={t("common.delete")}
                     style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
                       cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
                     <IcTrash size={12} color={T.red}/>
@@ -4893,7 +4820,7 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
     {/* Item-wise cumulative strip */}
     {!!summary.length && (
       <Panel>
-        <PHead title="Item-wise Cumulative" sub={`${summary.length} BOQ item par kaam hua`}/>
+        <PHead title={t("tenders.item_wise_cumulative")} sub={`${summary.length} BOQ item par kaam hua`}/>
         <div style={{padding:"10px 14px", display:"flex", gap:8, flexWrap:"wrap"}}>
           {summary.map((s,i)=>(
             <div key={i} style={{border:`1px solid ${T.b1}`, borderRadius:8, padding:"8px 11px",
@@ -4925,9 +4852,9 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
 
 // ── DEDUCTION SETUP MODAL ───────────────────────────────────────────
 const CALC_OPTS = [
-  {v:"pct_gross", l:"% of subtotal"},
-  {v:"fixed",     l:"Fixed amount"},
-  {v:"manual",    l:"Manual (har bill par bharo)"},
+  {v:"pct_gross", get l() { return t("tenders.of_subtotal"); }},
+  {v:"fixed",     get l() { return t("tenders.fixed_amount"); }},
+  {v:"manual",    get l() { return t("tenders.manual_har_bill_par_bharo"); }},
 ];
 const CALC_LABEL = {pct_gross:"% of subtotal", fixed:"Fixed", manual:"Manual"};
 
@@ -4969,7 +4896,7 @@ function DeductionSetupModal({tenderId, onClose, onDone}) {
   };
 
   const remove = async (r) => {
-    if (!await window.confirmAsync(`"${r.head_name}" head hataayein?\n\nPehle ban chuke bills par asar nahi padega — unme amount snapshot ho chuka hai.`)) return;
+    if (!await window.confirmAsync(t("tenders.head_name_head_hataayein_pehle_ban", { head_name: r.head_name }))) return;
     const res = await api.del(`/tenders/${tenderId}/deductions/${r.id}`);
     if (!res?.success) { toast.error(res?.message || "Delete nahi hua"); return; }
     toast.success("Head hat gaya"); setDirty(true); load();
@@ -4978,11 +4905,11 @@ function DeductionSetupModal({tenderId, onClose, onDone}) {
   const COLS = "minmax(150px,1.6fr) 150px 100px 70px 62px";
 
   return (
-    <Modal title="Deduction Setup" Icon={IcRupee} width={760}
-      sub="Har RA bill par yahi heads lagte hain"
+    <Modal title={t("tenders.deduction_setup")} Icon={IcRupee} width={760}
+      sub={t("tenders.har_ra_bill_par_yahi_heads")}
       onClose={()=>{ onClose(); if (dirty) onDone(); }}
-      footer={<PrimBtn label="Done" Icon={IcChk} onClick={()=>{ onClose(); if (dirty) onDone(); }}/>}>
-      {loading && <Loading text="Config load ho raha hai..."/>}
+      footer={<PrimBtn label={t("common.done")} Icon={IcChk} onClick={()=>{ onClose(); if (dirty) onDone(); }}/>}>
+      {loading && <Loading text={t("tenders.config_load_ho_raha_hai")}/>}
       {!loading && (<>
         <div style={{display:"grid", gridTemplateColumns:COLS, gap:9, padding:"0 0 7px"}}>
           {["Head","Type","Rate","Order",""].map((h,i)=>(
@@ -5012,7 +4939,7 @@ function DeductionSetupModal({tenderId, onClose, onDone}) {
               }}
               style={{...inputStyle, padding:"7px 9px", fontSize:12, textAlign:"right"}}/>
             <div style={{display:"flex", justifyContent:"flex-end"}}>
-              <button onClick={()=>remove(r)} title="Hatao"
+              <button onClick={()=>remove(r)} title={t("common.hatao")}
                 style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
                   cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>
                 <IcTrash size={12} color={T.red}/>
@@ -5024,7 +4951,7 @@ function DeductionSetupModal({tenderId, onClose, onDone}) {
         {/* Naya head */}
         <div style={{marginTop:13, paddingTop:12, borderTop:`2px solid ${T.b1}`}}>
           <div style={{fontSize:11, fontWeight:700, color:T.t3, marginBottom:8, textTransform:"uppercase",
-            letterSpacing:".5px"}}>Naya Head</div>
+            letterSpacing:".5px"}}>{t("tenders.naya_head")}</div>
           <div style={{display:"grid", gridTemplateColumns:COLS, gap:9, alignItems:"center"}}>
             <TxtIn value={add.head_name} onChange={v=>setAdd(p=>({...p,head_name:v}))} ph="e.g. Withheld"/>
             <SelIn value={add.calc_type} options={CALC_OPTS}
@@ -5038,16 +4965,15 @@ function DeductionSetupModal({tenderId, onClose, onDone}) {
               onChange={e=>setAdd(p=>({...p,sort_order:e.target.value}))}
               style={{...inputStyle, padding:"7px 9px", fontSize:12, textAlign:"right"}}/>
             <div style={{display:"flex", justifyContent:"flex-end"}}>
-              <PrimBtn label="Add" Icon={IcAdd} onClick={create} disabled={busy}/>
+              <PrimBtn label={t("common.add")} Icon={IcAdd} onClick={create} disabled={busy}/>
             </div>
           </div>
         </div>
 
         <div style={{marginTop:13, padding:"9px 12px", background:T.ambL, border:`1px solid ${T.ambM}`,
           borderRadius:7, fontSize:11.5, color:T.t2, lineHeight:1.6}}>
-          Bill par sirf yahi heads lagte hain. Kisi ek bill me alag se kuch kaatna ho (jaise
-          <b> Withheld</b>) to yahan <b>Manual</b> type ka head banao — phir har bill me uska
-          amount alag bhara ja sakta hai. Bill ke andar se naya head nahi jud sakta.
+         {t("tenders.bill_par_sirf_yahi_heads_lagte")}
+          <b> {t("tenders.withheld")}</b>{t("tenders.to_yahan")} <b>{t("common.manual")}</b> {t("tenders.type_ka_head_banao_phir_har")}
         </div>
       </>)}
     </Modal>
@@ -5132,15 +5058,15 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
   const STEPS = ["Qty & Premium", "Deductions", "Review"];
 
   return (
-    <Modal title={edit ? `RA-${edit.bill_no} Edit` : "Naya RA Bill"} Icon={IcRupee} width={860}
+    <Modal title={edit ? `RA-${edit.bill_no} Edit` : t("tenders.naya_ra_bill")} Icon={IcRupee} width={860}
       sub={`Step ${step} of 3 — ${STEPS[step-1]}`}
       onClose={onClose}
       footer={<>
-        {step > 1 && <SecBtn label="Peeche" onClick={()=>setStep(s=>s-1)}/>}
+        {step > 1 && <SecBtn label={t("common.peeche")} onClick={()=>setStep(s=>s-1)}/>}
         <div style={{flex:1}}/>
-        <SecBtn label="Cancel" onClick={onClose}/>
-        {step < 3 && <PrimBtn label="Aage" Icon={IcDown} onClick={()=>setStep(s=>s+1)} disabled={!prev||busy}/>}
-        {step === 3 && <PrimBtn label={busy?"Save ho raha hai...":(edit?"Update Draft":"Save Draft")} Icon={IcChk} onClick={save} disabled={busy||!prev}/>}
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        {step < 3 && <PrimBtn label={t("tenders.aage")} Icon={IcDown} onClick={()=>setStep(s=>s+1)} disabled={!prev||busy}/>}
+        {step === 3 && <PrimBtn label={busy?t("tenders.save_ho_raha_hai"):(edit?t("tenders.update_draft"):t("crm.save_draft"))} Icon={IcChk} onClick={save} disabled={busy||!prev}/>}
       </>}>
 
       {/* Step strip */}
@@ -5158,28 +5084,27 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
       {/* ── STEP 1 ── */}
       {step === 1 && (<>
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13, marginBottom:14}}>
-          <Field label="Upto Date *" hint="Is tarikh tak ki saari measurement is bill me aayegi.">
+          <Field label={t("tenders.upto_date")} hint={t("tenders.is_tarikh_tak_ki_saari_measurement")}>
             <TxtIn type="date" value={upto} onChange={setUpto}/>
           </Field>
           {!isItemRate && (
-            <Field label="Premium / Tender %" hint="Award par lock hua premium — is bill ke liye badal sakte ho.">
+            <Field label={t("tenders.premium_tender")} hint={t("tenders.award_par_lock_hua_premium_is")}>
               <div style={{display:"flex", gap:7}}>
                 <TxtIn type="number" value={prem} onChange={setPrem} ph="0"/>
-                <SecBtn label="Lagao" Icon={IcChk} onClick={runPreview}/>
+                <SecBtn label={t("tenders.lagao")} Icon={IcChk} onClick={runPreview}/>
               </div>
             </Field>
           )}
           {isItemRate && (
             <div style={{padding:"9px 12px", background:T.indL, border:`1px solid ${T.indM}`,
               borderRadius:7, fontSize:11.5, color:T.t2, lineHeight:1.5, alignSelf:"end"}}>
-              <b style={{color:T.ind}}>Item-rate tender</b> — bill apne quoted rate par banta hai,
-              premium alag se nahi lagta.
+              <b style={{color:T.ind}}>{t("tenders.item_rate_tender")}</b> {t("tenders.bill_apne_quoted_rate_par_banta")}
             </div>
           )}
-          <Field label="GST %" hint="Khali chhodo to bill me GST ki line nahi aayegi.">
+          <Field label={t("estimate_builder.gst")} hint={t("tenders.khali_chhodo_to_bill_me_gst")}>
             <div style={{display:"flex", gap:7}}>
               <TxtIn type="number" value={gst} onChange={setGst} ph="0"/>
-              <SecBtn label="Lagao" Icon={IcChk} onClick={runPreview}/>
+              <SecBtn label={t("tenders.lagao")} Icon={IcChk} onClick={runPreview}/>
             </div>
           </Field>
         </div>
@@ -5190,27 +5115,24 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
         <div style={{padding:"11px 13px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8,
           fontSize:12, color:T.t2, marginBottom:12}}>
           <div style={{fontWeight:700, display:"flex", alignItems:"center", gap:7, color:T.amb}}>
-            <IcWarn size={14} color={T.amb}/>BOQ qty se zyada kaam ho gaya hai
+            <IcWarn size={14} color={T.amb}/>{t("tenders.boq_qty_se_zyada_kaam_ho")}
           </div>
           <div style={{marginTop:7, fontSize:11.5, lineHeight:1.7}}>
             {devBlock.map((d,i)=>(
-              <div key={i}>
-                <b>{d.item_no || d.boq_item_id}</b> — BOQ {fmtQty(d.effective_qty)} {d.unit||""},
-                {" "}kaam {fmtQty(d.upto_qty)} {d.unit||""}
-                {d.allowed_qty != null && <> · limit tak {fmtQty(d.allowed_qty)}</>}
+              <div key={i}><Rich k="tenders.boq_item_id_boq_fmtqty_d" params={{ boq_item_id: d.item_no || d.boq_item_id, fmtQty: fmtQty(d.effective_qty), d: d.unit||"", v: " ", fmtQty2: fmtQty(d.upto_qty), d2: d.unit||"" }} />{d.allowed_qty != null && <>{t("tenders.limit_tak_fmtqty", { fmtQty: fmtQty(d.allowed_qty) })}</>}
                 {" "}(<b style={{color:T.amb}}>+{fmtQty(d.deviation_qty)}</b>)
               </div>
             ))}
           </div>
           <div style={{marginTop:9}}>
-            <Field label="Deviation ka reason *"
-              hint="Kam se kam 10 akshar. Ye bill ke saath record me rahega.">
+            <Field label={t("tenders.deviation_ka_reason")}
+              hint={t("tenders.kam_se_kam_10_akshar_ye_3")}>
               <textarea value={devReason} onChange={e=>setDevReason(e.target.value)} rows={2}
-                placeholder="e.g. Site condition badla, EE approval 12/8/2026"
+                placeholder={t("tenders.e_g_site_condition_badla_ee")}
                 style={{...inputStyle, resize:"vertical", lineHeight:1.5}}/>
             </Field>
             <div style={{marginTop:7}}>
-              <PrimBtn label="Reason ke saath aage badho" Icon={IcChk}
+              <PrimBtn label={t("tenders.reason_ke_saath_aage_badho")} Icon={IcChk}
                 onClick={runPreview} disabled={devReason.trim().length < 10}/>
             </div>
           </div>
@@ -5227,23 +5149,20 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
           {!!err.negatives?.length && (
             <div style={{marginTop:7, color:T.t2, fontSize:11.5, lineHeight:1.7}}>
               {err.negatives.map((n,i)=>(
-                <div key={i}>
-                  <b>{n.item_no || n.boq_item_id}</b> — measured {fmtQty(n.measured_cum)},
-                  bill ho chuka {fmtQty(n.billed_cum)}
-                </div>
+                <div key={i}><Rich k="tenders.boq_item_id_measured_fmtqty_bill" params={{ boq_item_id: n.item_no || n.boq_item_id, fmtQty: fmtQty(n.measured_cum), fmtQty2: fmtQty(n.billed_cum) }} /></div>
               ))}
             </div>
           )}
         </div>
       )}
 
-      {busy && !prev && <Loading text="Preview ban raha hai..."/>}
+      {busy && !prev && <Loading text={t("tenders.preview_ban_raha_hai")}/>}
 
       {/* ── STEP 1 preview: item table ── */}
       {step === 1 && prev && (<>
         <div style={{fontSize:11, fontWeight:700, color:T.t3, marginBottom:7, textTransform:"uppercase",
-          letterSpacing:".5px"}}>Is bill ke items</div>
-        {!prev.items?.length && <Empty Icon={IcTable} text="Is date tak koi billable measurement nahi."/>}
+          letterSpacing:".5px"}}>{t("tenders.is_bill_ke_items")}</div>
+        {!prev.items?.length && <Empty Icon={IcTable} text={t("tenders.is_date_tak_koi_billable_measurement")}/>}
         {!!prev.items?.length && (
           <div style={{border:`1px solid ${T.b1}`, borderRadius:8, overflow:"hidden"}}>
             <div style={{display:"grid", gridTemplateColumns:"70px minmax(160px,2fr) 52px 84px 84px 84px 84px 104px",
@@ -5289,7 +5208,7 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
       {/* ── STEP 2: deduction sheet ── */}
       {step === 2 && prev && (<>
         <div style={{fontSize:11, fontWeight:700, color:T.t3, marginBottom:7, textTransform:"uppercase",
-          letterSpacing:".5px"}}>Deduction Sheet</div>
+          letterSpacing:".5px"}}>{t("tenders.deduction_sheet")}</div>
         <div style={{border:`1px solid ${T.b1}`, borderRadius:8, overflow:"hidden"}}>
           <div style={{display:"grid", gridTemplateColumns:"minmax(160px,2fr) 140px 90px 120px", gap:9,
             padding:"7px 12px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`}}>
@@ -5299,7 +5218,7 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
             ))}
           </div>
           {!prev.deductions?.length && (
-            <div style={{padding:"14px 12px", fontSize:12, color:T.t4}}>Koi deduction head configured nahi.</div>
+            <div style={{padding:"14px 12px", fontSize:12, color:T.t4}}>{t("tenders.koi_deduction_head_configured_nahi")}</div>
           )}
           {(prev.deductions||[]).map((d,i)=>(
             <div key={i} style={{display:"grid", gridTemplateColumns:"minmax(160px,2fr) 140px 90px 120px", gap:9,
@@ -5325,8 +5244,8 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
         {!manualHeads.length && (
           <div style={{marginTop:11, padding:"9px 12px", background:T.surfaceB, border:`1px solid ${T.b1}`,
             borderRadius:7, fontSize:11.5, color:T.t3, lineHeight:1.6}}>
-            Is bill me alag se kuch kaatna ho (jaise Withheld) to pehle <b>Deduction Setup</b> me
-            <b> Manual</b> type ka head banao. Bill ke andar se naya head nahi jud sakta.
+           {t("tenders.is_bill_me_alag_se_kuch")} <b>{t("tenders.deduction_setup")}</b> me
+            <b> {t("common.manual")}</b> {t("tenders.type_ka_head_banao_bill_ke")}
           </div>
         )}
         <div style={{marginTop:12, padding:"10px 13px", background:T.surfaceB, borderRadius:8,
@@ -5342,8 +5261,7 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
           </div>
           {prev.gst_pct > 0 && (
             <div style={{marginTop:6, fontSize:10.5, color:T.t4, lineHeight:1.5}}>
-              Deductions GST se pehle wali value (Subtotal) par lagte hain — SD/TDS/cess
-              sab "value of work done" par bante hain.
+             {t("tenders.deductions_gst_se_pehle_wali_value")}
             </div>
           )}
         </div>
@@ -5352,10 +5270,10 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
       {/* ── STEP 3: review ── */}
       {step === 3 && prev && (<>
         <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:9, marginBottom:13}}>
-          <Stat label="Upto Date"  value={fmtDate(upto)}            color={T.ind} Icon={IcClock}/>
-          <Stat label="Items"      value={prev.items?.length || 0}  color={T.ind} Icon={IcTable}/>
-          <Stat label="Subtotal"   value={money(prev.subtotal)}     color={T.blu} Icon={IcRupee}/>
-          <Stat label="Net Payable" value={money(prev.net_payable)} color={T.grn} Icon={IcRupee}/>
+          <Stat label={t("tenders.upto_date_2")}  value={fmtDate(upto)}            color={T.ind} Icon={IcClock}/>
+          <Stat label={t("common.items")}      value={prev.items?.length || 0}  color={T.ind} Icon={IcTable}/>
+          <Stat label={t("tenders.subtotal")}   value={money(prev.subtotal)}     color={T.blu} Icon={IcRupee}/>
+          <Stat label={t("subcon.net_payable")} value={money(prev.net_payable)} color={T.grn} Icon={IcRupee}/>
         </div>
         <div style={{padding:"11px 13px", background:T.surfaceB, borderRadius:8, border:`1px solid ${T.b1}`}}>
           <Row l="Gross" v={money(prev.gross)}/>
@@ -5377,8 +5295,7 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
         </div>
         <div style={{marginTop:12, padding:"9px 12px", background:T.indL, border:`1px solid ${T.indM}`,
           borderRadius:7, fontSize:11.5, color:T.t2, lineHeight:1.6}}>
-          Save karne par bill <b>Draft</b> banega. Finance me transaction tab banegi jab tum
-          bill <b>Submit</b> karoge.
+         {t("tenders.save_karne_par_bill")} <b>{t("payroll.draft")}</b> {t("tenders.banega_finance_me_transaction_tab_banegi")} <b>{t("tenders.submit")}</b> {t("tenders.karoge")}
         </div>
       </>)}
     </Modal>
@@ -5412,7 +5329,7 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
   };
 
   const cancel = async () => {
-    if (!await window.confirmAsync(`RA-${d.bill_no} cancel karein?`)) return;
+    if (!await window.confirmAsync(t("tenders.ra_bill_no_cancel_karein", { bill_no: d.bill_no }))) return;
     setBusy(true);
     const res = await api.post(`/tenders/${tenderId}/ra-bills/${billId}/cancel`);
     setBusy(false);
@@ -5526,12 +5443,9 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
         <div style={{display:"flex", alignItems:"center", gap:10, minWidth:0}}>
           <IcRupee size={18} color={T.ind}/>
           <div style={{minWidth:0}}>
-            <div style={{fontSize:15, fontWeight:800, color:T.t1}}>
-              RA-{d?.bill_no ?? "--"} {st && <span style={{marginLeft:7}}><Pill label={st.label} c={st.c} bg={st.bg}/></span>}
+            <div style={{fontSize:15, fontWeight:800, color:T.t1}}>{t("tenders.ra_d", { d: d?.bill_no ?? "--" })}{st && <span style={{marginLeft:7}}><Pill label={st.label} c={st.c} bg={st.bg}/></span>}
             </div>
-            <div style={{fontSize:11, color:T.t4, marginTop:1}}>
-              {tender?.tender_no} · Upto {fmtDate(d?.upto_date)}
-            </div>
+            <div style={{fontSize:11, color:T.t4, marginTop:1}}>{t("tenders.tender_no_upto_fmtdate", { tender_no: tender?.tender_no, fmtDate: fmtDate(d?.upto_date) })}</div>
           </div>
         </div>
         <button onClick={onClose} style={{background:"none", border:"none", cursor:"pointer", color:T.t3,
@@ -5539,16 +5453,16 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
       </div>
 
       <div style={{flex:1, overflowY:"auto", padding:"14px 18px"}}>
-        {loading && <Loading text="Bill load ho raha hai..."/>}
+        {loading && <Loading text={t("tenders.bill_load_ho_raha_hai")}/>}
         {!loading && d && (<>
           <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:9, marginBottom:12}}>
-            <Stat label="Net Payable" value={money(d.net_payable)} color={T.t1}  Icon={IcRupee}/>
-            <Stat label="Received"    value={money(d.received ?? 0)} color={T.grn} Icon={IcRupee}/>
-            <Stat label="Balance"     value={money(bal)} color={bal>0?T.amb:T.grn} Icon={IcClock}/>
+            <Stat label={t("subcon.net_payable")} value={money(d.net_payable)} color={T.t1}  Icon={IcRupee}/>
+            <Stat label={t("common.received")}    value={money(d.received ?? 0)} color={T.grn} Icon={IcRupee}/>
+            <Stat label={t("common.balance")}     value={money(bal)} color={bal>0?T.amb:T.grn} Icon={IcClock}/>
           </div>
 
           <Panel style={{marginBottom:11}}>
-            <PHead title="Items" sub={`${(d.items||[]).length} item`}/>
+            <PHead title={t("common.items")} sub={`${(d.items||[]).length} item`}/>
             <div style={{display:"grid", gridTemplateColumns:"64px minmax(140px,2fr) 46px 76px 76px 96px",
               gap:8, padding:"7px 13px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`}}>
               {["Item","Description","Unit","This Qty","Rate","Amount"].map((h,i)=>(
@@ -5572,7 +5486,7 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
           </Panel>
 
           <Panel>
-            <PHead title="Deduction Sheet"/>
+            <PHead title={t("tenders.deduction_sheet")}/>
             <div style={{padding:"10px 14px"}}>
               {[
                 ["Gross", d.gross, null],
@@ -5602,7 +5516,7 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
               ))}
               <div style={{display:"flex", justifyContent:"space-between", padding:"7px 0 0", marginTop:4,
                 borderTop:`2px solid ${T.b1}`, fontSize:14, fontWeight:800, color:T.grn}}>
-                <span>Net Payable</span><span style={{fontVariantNumeric:"tabular-nums"}}>{money(d.net_payable)}</span>
+                <span>{t("subcon.net_payable")}</span><span style={{fontVariantNumeric:"tabular-nums"}}>{money(d.net_payable)}</span>
               </div>
             </div>
           </Panel>
@@ -5614,20 +5528,20 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
         <div style={{padding:"11px 18px", background:T.surface, borderTop:`1px solid ${T.b1}`,
           display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
           {d.status === "draft" && (<>
-            <PrimBtn label="Submit" Icon={IcChk} onClick={submit} disabled={busy}/>
-            <SecBtn label="Edit" Icon={IcEdit} onClick={()=>onEdit(d)} disabled={busy}/>
-            <SecBtn label="Cancel Bill" Icon={IcX} color={T.red} onClick={cancel} disabled={busy}/>
+            <PrimBtn label={t("tenders.submit")} Icon={IcChk} onClick={submit} disabled={busy}/>
+            <SecBtn label={t("common.edit_2")} Icon={IcEdit} onClick={()=>onEdit(d)} disabled={busy}/>
+            <SecBtn label={t("tenders.cancel_bill")} Icon={IcX} color={T.red} onClick={cancel} disabled={busy}/>
             <span style={{fontSize:10.5, color:T.t4, marginLeft:2}}>
-              Draft delete ka endpoint nahi hai — cancel hi karo.
+             {t("tenders.draft_delete_ka_endpoint_nahi_hai")}
             </span>
           </>)}
           {d.status === "submitted" && (<>
-            <PrimBtn label="Receive" Icon={IcRupee} color={T.grn} onClick={()=>onReceive(d)}/>
-            <SecBtn label="Print" Icon={IcDoc} onClick={print}/>
-            <SecBtn label="Cancel Bill" Icon={IcX} color={T.red} onClick={cancel} disabled={busy}/>
+            <PrimBtn label={t("tenders.receive")} Icon={IcRupee} color={T.grn} onClick={()=>onReceive(d)}/>
+            <SecBtn label={t("mom.print")} Icon={IcDoc} onClick={print}/>
+            <SecBtn label={t("tenders.cancel_bill")} Icon={IcX} color={T.red} onClick={cancel} disabled={busy}/>
           </>)}
           {d.status === "cancelled" && (
-            <span style={{fontSize:12, color:T.t4}}>Ye bill cancel ho chuka hai.</span>
+            <span style={{fontSize:12, color:T.t4}}>{t("tenders.ye_bill_cancel_ho_chuka_hai")}</span>
           )}
         </div>
       )}
@@ -5675,26 +5589,26 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
   return (<>
     {!!(bills||[]).length && (
       <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:10, marginBottom:11}}>
-        <Stat label="Bills"        value={totals.count}           note="cancelled chhod kar" color={T.ind} Icon={IcDoc}/>
-        <Stat label="Total Billed" value={money(totals.billed)}   note={moneyF(totals.billed)}   color={T.blu} Icon={IcRupee}/>
-        <Stat label="Received"     value={money(totals.received)} note={moneyF(totals.received)} color={T.grn} Icon={IcRupee}/>
-        <Stat label="Balance"      value={money(totals.balance)}  note="abhi aana baaki"
+        <Stat label={t("tenders.bills")}        value={totals.count}           note="cancelled chhod kar" color={T.ind} Icon={IcDoc}/>
+        <Stat label={t("tenders.total_billed")} value={money(totals.billed)}   note={moneyF(totals.billed)}   color={T.blu} Icon={IcRupee}/>
+        <Stat label={t("common.received")}     value={money(totals.received)} note={moneyF(totals.received)} color={T.grn} Icon={IcRupee}/>
+        <Stat label={t("common.balance")}      value={money(totals.balance)}  note="abhi aana baaki"
           color={totals.balance>0?T.amb:T.grn} Icon={IcClock}/>
       </div>
     )}
 
     <Panel>
-      <PHead title="RA Bills" sub={(bills||[]).length ? `${bills.length} bill` : undefined}
+      <PHead title={t("tenders.ra_bills")} sub={(bills||[]).length ? `${bills.length} bill` : undefined}
         action={<div style={{display:"flex", gap:7}}>
-          <SecBtn label="Deduction Setup" Icon={IcRupee} onClick={()=>setSetup(true)}/>
-          <PrimBtn label="Naya RA Bill" Icon={IcAdd} onClick={()=>setNew(true)}/>
+          <SecBtn label={t("tenders.deduction_setup")} Icon={IcRupee} onClick={()=>setSetup(true)}/>
+          <PrimBtn label={t("tenders.naya_ra_bill")} Icon={IcAdd} onClick={()=>setNew(true)}/>
         </div>}/>
 
-      {loading && <Loading text="RA bills load ho rahe hain..."/>}
+      {loading && <Loading text={t("tenders.ra_bills_load_ho_rahe_hain")}/>}
 
       {!loading && !(bills||[]).length && (
-        <Empty Icon={IcRupee} text="Abhi koi RA bill nahi."
-          sub="Measurement (MB) darj hone ke baad naya RA bill banao."/>
+        <Empty Icon={IcRupee} text={t("tenders.abhi_koi_ra_bill_nahi")}
+          sub={t("tenders.measurement_mb_darj_hone_ke_baad")}/>
       )}
 
       {!loading && !!(bills||[]).length && (<>
@@ -5714,7 +5628,7 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
                 alignItems:"center", cursor:"pointer",
                 borderBottom:i<bills.length-1?`1px solid ${T.b1}`:"none",
                 opacity:b.status==="cancelled"?0.6:1}}>
-              <span style={{fontSize:12.5, fontWeight:700, color:T.ind}}>RA-{b.bill_no}</span>
+              <span style={{fontSize:12.5, fontWeight:700, color:T.ind}}>{t("tenders.ra_bill_no", { bill_no: b.bill_no })}</span>
               <span style={{fontSize:11.5, color:T.t3}}>{fmtDate(b.bill_date)}</span>
               <span style={{fontSize:11.5, color:T.t3}}>{fmtDate(b.upto_date)}</span>
               <span style={{fontSize:11.5, color:T.t2, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{moneyF(b.gross)}</span>
@@ -5777,14 +5691,14 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
 // Measurement / RA bill / site tabhi jab kaam shuru ho (execution).
 // Instruments + Documents hamesha — EMD aur NIT ki copy bid ke saath hi lagti hai.
 const DETAIL_TABS = [
-  {id:"overview",    label:"Overview",    Icon:IcGavel},
+  {id:"overview",    get label() { return t("project_detail.overview"); },    Icon:IcGavel},
   {id:"boq",         label:"BOQ",         Icon:IcTable},
-  {id:"measure",     label:"Measurements",Icon:IcTable,  minStage:"execution"},
-  {id:"rabills",     label:"RA Bills",    Icon:IcRupee,  minStage:"execution"},
-  {id:"map",         label:"Map",         Icon:IcMapPin, minStage:"execution"},
-  {id:"sites",       label:"Sites",       Icon:IcSite,   minStage:"execution"},
-  {id:"instruments", label:"Instruments", Icon:IcBank},
-  {id:"documents",   label:"Documents",   Icon:IcDoc},
+  {id:"measure",     get label() { return t("tenders.measurements"); },Icon:IcTable,  minStage:"execution"},
+  {id:"rabills",     get label() { return t("tenders.ra_bills"); },    Icon:IcRupee,  minStage:"execution"},
+  {id:"map",         get label() { return t("tenders.map"); },         Icon:IcMapPin, minStage:"execution"},
+  {id:"sites",       get label() { return t("tenders.sites"); },       Icon:IcSite,   minStage:"execution"},
+  {id:"instruments", get label() { return t("tenders.instruments"); }, Icon:IcBank},
+  {id:"documents",   get label() { return t("tenders.documents"); },   Icon:IcDoc},
 ];
 // Lost tender bidding par hi ruka hua mana jata hai — uske aage ka kuch
 // nahi khulta.
@@ -5865,11 +5779,11 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
     }).catch(()=>{});
   },[]);
 
-  if (loading) return <div style={{padding:"14px 18px", background:T.bg, minHeight:"100%"}}><Loading text="Tender khul raha hai..."/></div>;
+  if (loading) return <div style={{padding:"14px 18px", background:T.bg, minHeight:"100%"}}><Loading text={t("tenders.tender_khul_raha_hai")}/></div>;
   if (!data)   return (
     <div style={{padding:"14px 18px", background:T.bg, minHeight:"100%"}}>
-      <SecBtn label="Peeche" Icon={IcBack} onClick={onBack}/>
-      <Empty Icon={IcGavel} text="Tender nahi mila."/>
+      <SecBtn label={t("common.peeche")} Icon={IcBack} onClick={onBack}/>
+      <Empty Icon={IcGavel} text={t("tenders.tender_nahi_mila")}/>
     </div>
   );
 
@@ -5916,7 +5830,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
   };
 
   const unlink = async (p) => {
-    if (!await window.confirmAsync(`"${p.name}" ko is tender se alag karein?\n\nProject khud delete nahi hoga.`)) return;
+    if (!await window.confirmAsync(t("tenders.name_ko_is_tender_se_alag", { name: p.name }))) return;
     const res = await api.put(`/tenders/${tenderId}/link-project`, {project_id:p.id, action:"unlink"});
     if (!res?.success) { toast.error(res?.message || "Unlink nahi hua"); return; }
     toast.success(res.message || "Alag kar diya");
@@ -5924,7 +5838,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
   };
 
   const delDoc = async (d) => {
-    if (!await window.confirmAsync(`Document "${d.name}" hataayein?`)) return;
+    if (!await window.confirmAsync(t("tenders.document_name_hataayein", { name: d.name }))) return;
     const res = await api.del(`/tenders/${tenderId}/documents/${d.id}`);
     if (!res?.success) { toast.error(res?.message || "Delete nahi hua"); return; }
     toast.success("Document hat gaya");
@@ -5962,16 +5876,16 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
             </div>
             <div style={{fontSize:16, fontWeight:700, color:T.t1, letterSpacing:"-.2px", lineHeight:1.3}}>{data.title}</div>
             <div style={{fontSize:12, color:T.t3, marginTop:3}}>
-              {data.party_name || data.department_name || "Department set nahi"}
+              {data.party_name || data.department_name || t("tenders.department_set_nahi")}
             </div>
           </div>
           <div style={{textAlign:"right", flexShrink:0}}>
-            <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px"}}>Contract Value</div>
+            <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px"}}>{t("tenders.contract_value")}</div>
             <div style={{fontSize:20, fontWeight:700, color:contract?T.grn:T.t4, fontVariantNumeric:"tabular-nums", lineHeight:1.2}}>
               {contract ? moneyF(contract) : "--"}
             </div>
           </div>
-          <SecBtn label="Edit" Icon={IcEdit} onClick={()=>setShowEdit(true)}/>
+          <SecBtn label={t("common.edit_2")} Icon={IcEdit} onClick={()=>setShowEdit(true)}/>
         </div>
       </div>
 
@@ -6005,8 +5919,8 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
 
         {/* Pipeline */}
         <Panel style={{marginBottom:11}}>
-          <PHead title="Tender Pipeline"
-            sub={data.status==="lost" ? "Yeh tender lost hai — pipeline aage nahi badhi." : undefined}
+          <PHead title={t("tenders.tender_pipeline")}
+            sub={data.status==="lost" ? t("tenders.yeh_tender_lost_hai_pipeline_aage") : undefined}
             action={(()=>{
               // Aage sirf ek step. Peeche jaana Edit modal me hai (admin-only) —
               // usko pipeline par button banane se galti se click hone ka dar hai.
@@ -6016,9 +5930,9 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
               if (!nxt && !canLost && !canRevive) return null;
               return (
                 <div style={{display:"flex", gap:7}}>
-                  {canLost && <SecBtn label="Lost mark karo" Icon={IcX} color={T.red}
+                  {canLost && <SecBtn label={t("tenders.lost_mark_karo")} Icon={IcX} color={T.red}
                     onClick={()=>setMoveTo("lost")}/>}
-                  {canRevive && <SecBtn label="Wapas Bidding me" Icon={IcUndo}
+                  {canRevive && <SecBtn label={t("tenders.wapas_bidding_me")} Icon={IcUndo}
                     onClick={()=>setMoveTo("bidding")}/>}
                   {nxt && <PrimBtn label={sMeta(nxt).label + " karo"} Icon={IcChk}
                     onClick={()=>setMoveTo(nxt)}/>}
@@ -6028,9 +5942,9 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
           <div style={{padding:"16px 18px"}}>
             {data.status==="lost" ? (
               <div style={{display:"flex", alignItems:"center", gap:10}}>
-                <Pill label="Lost" c={T.red} bg={T.redL}/>
+                <Pill label={t("crm.lost")} c={T.red} bg={T.redL}/>
                 <span style={{fontSize:12.5, color:T.t3}}>
-                  Bid haar gaye. EMD refund pending hai to upar alert dikhega.
+                 {t("tenders.bid_haar_gaye_emd_refund_pending")}
                 </span>
               </div>
             ) : (
@@ -6063,24 +5977,24 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
 
         {/* Tiles */}
         <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))", gap:10, marginBottom:11}}>
-          <Stat label="Estimated Cost" color={T.slt} Icon={IcRupee}
+          <Stat label={t("tenders.estimated_cost_2")} color={T.slt} Icon={IcRupee}
             value={estimated ? money(estimated) : "--"}
             note={estimated ? moneyF(estimated) : "Set nahi"}/>
-          <Stat label="Contract Value" color={T.grn} Icon={IcRupee}
+          <Stat label={t("tenders.contract_value")} color={T.grn} Icon={IcRupee}
             value={contract ? money(contract) : "--"}
             note={vsEstimate === null ? (contract ? moneyF(contract) : "Set nahi")
               : `${vsEstimate>=0?"+":""}${vsEstimate.toFixed(1)}% vs estimate`}/>
-          <Stat label="Security Held" color={securityHeld?T.blu:T.slt} Icon={IcLock}
+          <Stat label={t("tenders.security_held")} color={securityHeld?T.blu:T.slt} Icon={IcLock}
             value={money(securityHeld)}
             note={`${activeInst.length} active instrument${activeInst.length===1?"":"s"}`}/>
-          <Stat label="Time Elapsed" color={timePct===null?T.slt:timePct>100?T.red:timePct>80?T.amb:T.blu} Icon={IcClock}
+          <Stat label={t("tenders.time_elapsed")} color={timePct===null?T.slt:timePct>100?T.red:timePct>80?T.amb:T.blu} Icon={IcClock}
             value={timePct===null ? "--" : `${timePct}%`}
             note={timeNote}/>
         </div>
 
         {/* Key dates */}
         <Panel style={{marginBottom:11}}>
-          <PHead title="Key Dates"/>
+          <PHead title={t("tenders.key_dates")}/>
           <div style={{padding:"13px 16px", display:"grid",
             gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:13}}>
             {KEY_DATES.map(([label,val])=>(
@@ -6090,7 +6004,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
               </div>
             ))}
             <div>
-              <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", marginBottom:3}}>Agreement No.</div>
+              <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", marginBottom:3}}>{t("tenders.agreement_no")}</div>
               <div style={{fontSize:12.5, color:data.agreement_no?T.t1:T.t4, fontWeight:data.agreement_no?600:400}}>{data.agreement_no || "--"}</div>
             </div>
             <div>
@@ -6100,7 +6014,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
               </div>
             </div>
             <div>
-              <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", marginBottom:3}}>Bid Submission Type</div>
+              <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", marginBottom:3}}>{t("tenders.bid_submission_type")}</div>
               <div style={{fontSize:12.5, color:data.bid_submission_type?T.t1:T.t4, fontWeight:data.bid_submission_type?600:400}}>
                 {(BID_SUBMISSION_TYPES.find(o=>o.v===data.bid_submission_type)||{}).l || "--"}
               </div>
@@ -6108,13 +6022,13 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
           </div>
           {data.nit_clauses && (
             <div style={{padding:"11px 16px", borderTop:`1px solid ${T.b1}`, background:T.surfaceB}}>
-              <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", marginBottom:4}}>NIT ke Main Points</div>
+              <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", marginBottom:4}}>{t("tenders.nit_ke_main_points")}</div>
               <div style={{fontSize:12.5, color:T.t2, lineHeight:1.55, whiteSpace:"pre-wrap"}}>{data.nit_clauses}</div>
             </div>
           )}
           {data.notes && (
             <div style={{padding:"11px 16px", borderTop:`1px solid ${T.b1}`, background:T.surfaceB}}>
-              <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", marginBottom:4}}>Notes</div>
+              <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px", marginBottom:4}}>{t("common.notes")}</div>
               <div style={{fontSize:12.5, color:T.t2, lineHeight:1.55, whiteSpace:"pre-wrap"}}>{data.notes}</div>
             </div>
           )}
@@ -6123,7 +6037,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
         {/* Stage history — pichhle 5 change */}
         {!!(data.stage_log||[]).length && (
           <Panel style={{marginBottom:11}}>
-            <PHead title="Stage History" sub="Pichhle 5 change"/>
+            <PHead title={t("tenders.stage_history")} sub={t("tenders.pichhle_5_change")}/>
             <div style={{padding:"11px 16px", display:"flex", flexDirection:"column", gap:9}}>
               {data.stage_log.map(l=>{
                 const f = sMeta(l.from_status), t2 = sMeta(l.to_status);
@@ -6153,9 +6067,9 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
             dikhte hain. Gating se pehle bane galat link bhi padhne chahiye. */}
         {!!projects.length && (
         <Panel>
-          <PHead title="Sites" sub={`${projects.length} project is tender se jude hain`}
+          <PHead title={t("team_schedule.sites")} sub={`${projects.length} project is tender se jude hain`}
             action={stageReached(data.status,"execution")
-              ? <SecBtn label="Sites tab" onClick={()=>setTab("sites")}/> : undefined}/>
+              ? <SecBtn label={t("tenders.sites_tab")} onClick={()=>setTab("sites")}/> : undefined}/>
           {!!projects.length && (<>
             <div style={{display:"grid", gridTemplateColumns:"2.2fr 1fr 1fr", padding:"7px 16px",
               background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, gap:10}}>
@@ -6203,14 +6117,14 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
       {/* ══ SITES ══ */}
       {tab==="sites" && (
         <Panel>
-          <PHead title="Linked Sites" sub="Is tender ke against chal rahe projects"
+          <PHead title={t("tenders.linked_sites")} sub={t("tenders.is_tender_ke_against_chal_rahe")}
             action={<div style={{display:"flex", gap:7}}>
-              <SecBtn label="Link Existing Project" Icon={IcLink} onClick={()=>setShowLink(true)}/>
-              <PrimBtn label="New Site" Icon={IcAdd} onClick={()=>setShowSite(true)}/>
+              <SecBtn label={t("tenders.link_existing_project")} Icon={IcLink} onClick={()=>setShowLink(true)}/>
+              <PrimBtn label={t("tenders.new_site")} Icon={IcAdd} onClick={()=>setShowSite(true)}/>
             </div>}/>
           {!projects.length && (
-            <Empty Icon={IcSite} text="Abhi koi site nahi."
-              sub="Naya project banao ya pehle se bana project link karo."/>
+            <Empty Icon={IcSite} text={t("tenders.abhi_koi_site_nahi")}
+              sub={t("tenders.naya_project_banao_ya_pehle_se")}/>
           )}
           {!!projects.length && (<>
             <div style={{display:"grid", gridTemplateColumns:"2fr 1.2fr 1fr 1.2fr 150px", padding:"8px 16px",
@@ -6239,8 +6153,8 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
                     </div>
                   </div>
                   <div style={{display:"flex", gap:6, justifyContent:"flex-end"}}>
-                    <SecBtn label="Open" onClick={()=>onOpenProject && onOpenProject(p.id)}/>
-                    <SecBtn label="Unlink" Icon={IcUnlink} color={T.red} onClick={()=>unlink(p)}/>
+                    <SecBtn label={t("material_flow.open")} onClick={()=>onOpenProject && onOpenProject(p.id)}/>
+                    <SecBtn label={t("tenders.unlink")} Icon={IcUnlink} color={T.red} onClick={()=>unlink(p)}/>
                   </div>
                 </div>
               );
@@ -6252,21 +6166,21 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
       {/* ══ INSTRUMENTS ══ */}
       {tab==="instruments" && (<>
         <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))", gap:10, marginBottom:11}}>
-          <Stat label="Held with Dept" color={securityHeld?T.blu:T.slt} Icon={IcLock}
+          <Stat label={t("tenders.held_with_dept")} color={securityHeld?T.blu:T.slt} Icon={IcLock}
             value={money(securityHeld)} note={`${activeInst.length} active`}/>
-          <Stat label="Released / Refunded" color={T.grn} Icon={IcChk}
+          <Stat label={t("tenders.released_refunded")} color={T.grn} Icon={IcChk}
             value={money(releasedSum)}
             note={`${instruments.filter(i=>["released","refunded"].includes(i.status)).length} instrument`}/>
-          <Stat label="Expiring ≤30d" color={expiringInst.length?T.red:T.slt} Icon={IcWarn}
+          <Stat label={t("tenders.expiring_30d")} color={expiringInst.length?T.red:T.slt} Icon={IcWarn}
             value={expiringInst.length} note="validity nazdeek"/>
         </div>
 
         <Panel>
-          <PHead title="Instrument Register" sub="EMD · BG · FDR · Security Deposit"
-            action={<PrimBtn label="Add Instrument" Icon={IcAdd} onClick={()=>setShowInst(true)}/>}/>
+          <PHead title={t("tenders.instrument_register")} sub={t("tenders.emd_bg_fdr_security_deposit_2")}
+            action={<PrimBtn label={t("tenders.add_instrument")} Icon={IcAdd} onClick={()=>setShowInst(true)}/>}/>
           {!instruments.length && (
-            <Empty Icon={IcBank} text="Abhi koi instrument nahi."
-              sub="EMD, BG, FDR ya security deposit yahan record karo."/>
+            <Empty Icon={IcBank} text={t("tenders.abhi_koi_instrument_nahi")}
+              sub={t("tenders.emd_bg_fdr_ya_security_deposit")}/>
           )}
           {!!instruments.length && (<>
             <div style={{display:"grid", gridTemplateColumns:"1.3fr 1.3fr 1.3fr 1fr 1fr 1fr 1fr 190px",
@@ -6301,14 +6215,14 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
                   <span><Pill label={im.label} c={im.c} bg={im.bg}/></span>
                   <div style={{display:"flex", gap:5, justifyContent:"flex-end", flexWrap:"wrap"}}>
                     {isActive ? (<>
-                      <SecBtn label="Release" onClick={()=>setInstActionOn({inst, action:"release"})}/>
-                      <SecBtn label="Refund"  color={T.grn} onClick={()=>setInstActionOn({inst, action:"refund"})}/>
-                      <SecBtn label="Forfeit" color={T.red} onClick={()=>setInstActionOn({inst, action:"forfeit"})}/>
+                      <SecBtn label={t("tenders.release")} onClick={()=>setInstActionOn({inst, action:"release"})}/>
+                      <SecBtn label={t("tenders.refund")}  color={T.grn} onClick={()=>setInstActionOn({inst, action:"refund"})}/>
+                      <SecBtn label={t("tenders.forfeit")} color={T.red} onClick={()=>setInstActionOn({inst, action:"forfeit"})}/>
                     </>) : (
                       <div style={{textAlign:"right", fontSize:10.5, color:T.t4, lineHeight:1.5}}>
                         <div style={{display:"flex", gap:6, alignItems:"center", justifyContent:"flex-end"}}>
                           <span style={{color:T.t3, fontWeight:600}}>{fmtDate(inst.release_date)}</span>
-                          {isAdmin && <SecBtn label="Undo" Icon={IcUndo} onClick={()=>setUndoOn(inst)}/>}
+                          {isAdmin && <SecBtn label={t("tenders.undo")} Icon={IcUndo} onClick={()=>setUndoOn(inst)}/>}
                         </div>
                         {inst.action_amount != null && Number(inst.action_amount) !== Number(inst.amount) && (
                           <div style={{color:T.amb, fontWeight:700}}>{money(inst.action_amount)}</div>
@@ -6328,13 +6242,13 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
         {/* Instrument par kya-kya hua — action aur unka undo dono */}
         {!!(data.instrument_log || []).length && (
           <Panel style={{marginTop:11}}>
-            <PHead title="Instrument History" sub="Release / Refund / Forfeit aur undo"/>
+            <PHead title={t("tenders.instrument_history")} sub={t("tenders.release_refund_forfeit_aur_undo")}/>
             <div style={{padding:"11px 16px", display:"flex", flexDirection:"column", gap:9}}>
               {data.instrument_log.map(l=>{
-                const am = {release:{l:"Release", c:T.blu, bg:T.bluL},
-                            refund:{l:"Refund", c:T.grn, bg:T.grnL},
-                            forfeit:{l:"Forfeit", c:T.red, bg:T.redL},
-                            undo:{l:"Undo", c:T.amb, bg:T.ambL}}[l.action]
+                const am = {release:{l:t("tenders.release"), c:T.blu, bg:T.bluL},
+                            refund:{l:t("tenders.refund"), c:T.grn, bg:T.grnL},
+                            forfeit:{l:t("tenders.forfeit"), c:T.red, bg:T.redL},
+                            undo:{l:t("tenders.undo"), c:T.amb, bg:T.ambL}}[l.action]
                         || {l:l.action, c:T.t3, bg:T.sltL};
                 const isUndo = l.action === "undo";
                 return (
@@ -6347,10 +6261,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
                         {l.amount != null && <span style={{marginLeft:8, color:T.t2}}>{money(l.amount)}</span>}
                       </div>
                       {isUndo && (
-                        <div style={{fontSize:11, color:T.t3, marginTop:2}}>
-                          {(INST_STATUS_META[l.from_status]||{}).label || l.from_status} → Active
-                          {l.remarks ? ` · purani wajah: ${l.remarks}` : ""}
-                        </div>
+                        <div style={{fontSize:11, color:T.t3, marginTop:2}}>{t("tenders.from_status_active_l", { from_status: (INST_STATUS_META[l.from_status]||{}).label || l.from_status, l: l.remarks ? ` · purani wajah: ${l.remarks}` : "" })}</div>
                       )}
                       {!isUndo && (l.ref || l.remarks) && (
                         <div style={{fontSize:11.5, color:T.t2, marginTop:2, lineHeight:1.5}}>
@@ -6375,11 +6286,11 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
       {/* ══ DOCUMENTS ══ */}
       {tab==="documents" && (
         <Panel>
-          <PHead title="Documents" sub="NIT · LOA · Agreement · BG copy"
-            action={<PrimBtn label="Upload Document" Icon={IcUpload} onClick={()=>setShowDoc(true)}/>}/>
+          <PHead title={t("common.documents")} sub={t("tenders.nit_loa_agreement_bg_copy")}
+            action={<PrimBtn label={t("tenders.upload_document")} Icon={IcUpload} onClick={()=>setShowDoc(true)}/>}/>
           {!documents.length && (
-            <Empty Icon={IcDoc} text="Abhi koi document nahi."
-              sub="NIT, LOA, agreement ya BG copy upload karo."/>
+            <Empty Icon={IcDoc} text={t("tenders.abhi_koi_document_nahi")}
+              sub={t("tenders.nit_loa_agreement_ya_bg_copy")}/>
           )}
           {!!documents.length && (<>
             <div style={{display:"grid", gridTemplateColumns:"110px 2.2fr 1.4fr 160px", padding:"8px 16px",
@@ -6399,8 +6310,8 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
                   <div style={{fontSize:10.5, color:T.t4}}>{fmtDate(d.created_at)}</div>
                 </span>
                 <div style={{display:"flex", gap:6, justifyContent:"flex-end"}}>
-                  <SecBtn label="View" Icon={IcEye} onClick={()=>window.open(d.url, "_blank", "noopener")}/>
-                  <SecBtn label="Delete" color={T.red} onClick={()=>delDoc(d)}/>
+                  <SecBtn label={t("common.view_2")} Icon={IcEye} onClick={()=>window.open(d.url, "_blank", "noopener")}/>
+                  <SecBtn label={t("common.delete")} color={T.red} onClick={()=>delDoc(d)}/>
                 </div>
               </div>
             ))}
@@ -6420,7 +6331,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
       )}
       {undoOn && (
         <BoqReasonModal
-          title="Action Wapas Lo"
+          title={t("tenders.action_wapas_lo")}
           sub={`${typeLabel(undoOn.type)} ${undoOn.ref_no || ""} · abhi ${(INST_STATUS_META[undoOn.status]||{}).label || undoOn.status}`}
           warn={`Instrument phir se Active ho jayega aur ${(INST_STATUS_META[undoOn.status]||{}).label || undoOn.status} wale saare details (amount, reference, wajah) hat jayenge — wo history me bach jayenge.`}
           confirmLabel="Wapas lo"

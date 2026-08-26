@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { t } from "../i18n";
 
 // ────────────────────────────────────────────────────────────────
 // Google Maps script loader (singleton — one fetch per page)
@@ -25,7 +26,7 @@ function loadGoogleMaps(apiKey) {
 // Humanized "time ago" for the info window (mins → min/h/d)
 function agoText(min) {
   if (min == null) return "";
-  if (min < 1) return "Just now";
+  if (min < 1) return t("live_location_map.just_now");
   if (min < 60) return `${min} min ago`;
   const h = Math.floor(min / 60);
   if (h < 24) return `${h}h ago`;
@@ -225,10 +226,10 @@ export default function LiveLocationMap({
         background:"#F8F9FB",border:"1px dashed #D1D5DB",borderRadius:10,
         fontFamily:"'Segoe UI',sans-serif",padding:30,textAlign:"center" }}>
         <div>
-          <div style={{ fontSize:14,fontWeight:700,color:"#374151",marginBottom:6 }}>Google Maps API key missing</div>
+          <div style={{ fontSize:14,fontWeight:700,color:"#374151",marginBottom:6 }}>{t("live_location_map.google_maps_api_key_missing")}</div>
           <div style={{ fontSize:12,color:"#6B7280",lineHeight:1.5 }}>
-            Add <code style={{background:"#EEF2FF",padding:"1px 6px",borderRadius:4,fontSize:11}}>REACT_APP_GOOGLE_MAPS_KEY=...</code> to your <code>.env</code> file<br/>
-            and restart <code>npm start</code>.
+           {t("common.add")} <code style={{background:"#EEF2FF",padding:"1px 6px",borderRadius:4,fontSize:11}}>{t("live_location_map.react_app_google_maps_key")}</code> {t("live_location_map.to_your")} <code>{t("live_location_map.env")}</code> file<br/>
+           {t("live_location_map.and_restart")} <code>{t("live_location_map.npm_start")}</code>.
           </div>
         </div>
       </div>
@@ -239,9 +240,7 @@ export default function LiveLocationMap({
     return (
       <div style={{ height,display:"flex",alignItems:"center",justifyContent:"center",
         background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,
-        color:"#DC2626",fontSize:13,fontFamily:"'Segoe UI',sans-serif" }}>
-        Map failed to load: {error}
-      </div>
+        color:"#DC2626",fontSize:13,fontFamily:"'Segoe UI',sans-serif" }}>{t("live_location_map.map_failed_to_load_error", { error })}</div>
     );
   }
 
@@ -250,7 +249,7 @@ export default function LiveLocationMap({
       <div ref={containerRef} style={{ width:"100%",height:"100%",background:"#F1F5F9" }}/>
       {status !== "ready" && (
         <div style={{ position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(248,249,251,0.85)",fontFamily:"'Segoe UI',sans-serif" }}>
-          <div style={{ fontSize:12,color:"#6B7280" }}>Loading map…</div>
+          <div style={{ fontSize:12,color:"#6B7280" }}>{t("live_location_map.loading_map")}</div>
         </div>
       )}
     </div>

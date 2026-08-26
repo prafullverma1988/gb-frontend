@@ -20,6 +20,7 @@
 import { useState, useEffect, useMemo } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import { t, Rich } from "../i18n";
 
 const inrIN = (n) => Math.round(Number(n) || 0).toLocaleString("en-IN");
 const isSet = (v) => v !== null && v !== undefined && v !== "";
@@ -76,7 +77,7 @@ export default function EstimateBuilderModal({
     // eslint-disable-next-line
   }, []);
   const saveProjectRates = async () => {
-    if (!pickCityId || !pickTypeId) { alert("Pick both City and Construction Type"); return; }
+    if (!pickCityId || !pickTypeId) { alert(t("estimate_builder.pick_both_city_and_construction_type")); return; }
     setSavingRates(true);
     try {
       const r = await api.put("/projects/" + proj.id, {
@@ -383,7 +384,7 @@ export default function EstimateBuilderModal({
   // sections live only in local state — handle them inline. Deleting a
   // section also clears its measurement entry so totals recompute clean.
   const renameSection = async (sec) => {
-    const name = prompt(`Rename section "${sec.name}":`, sec.name);
+    const name = prompt(t("estimate_builder.rename_section_name", { name: sec.name }), sec.name);
     if (!name || !name.trim() || name.trim() === sec.name) return;
     if (sec._scratch) {
       setPkgStructures(p => p.map(s => s.id === sec.id ? { ...s, name: name.trim() } : s));
@@ -394,7 +395,7 @@ export default function EstimateBuilderModal({
     else alert(r?.message || "Rename failed");
   };
   const deleteSection = async (sec) => {
-    if (!await window.confirmAsync(`Delete section "${sec.name}"? This will remove it from the library along with all its categories + items.`)) return;
+    if (!await window.confirmAsync(t("estimate_builder.delete_section_name_this_will_remove", { name: sec.name }))) return;
     if (sec._scratch) {
       setPkgStructures(p => p.filter(s => s.id !== sec.id));
       setMeasurements(m => {
@@ -417,14 +418,14 @@ export default function EstimateBuilderModal({
 
   // ── RENAME / DELETE category ────────────────────────────────────
   const renameCategory = async (sec, cat) => {
-    const name = prompt(`Rename category "${cat.name}":`, cat.name);
+    const name = prompt(t("estimate_builder.rename_category_name", { name: cat.name }), cat.name);
     if (!name || !name.trim() || name.trim() === cat.name) return;
     const r = await api.put("/library/categories/" + cat.id, { category_name: name.trim() });
     if (r?.success) await refreshPackageTree();
     else alert(r?.message || "Rename failed");
   };
   const deleteCategory = async (sec, cat) => {
-    if (!await window.confirmAsync(`Delete category "${cat.name}"? This removes it from the library + drops its items in this section.`)) return;
+    if (!await window.confirmAsync(t("estimate_builder.delete_category_name_this_removes_it", { name: cat.name }))) return;
     const r = await api.del("/library/categories/" + cat.id);
     if (r?.success) {
       setMeasurements(m => {
@@ -746,9 +747,9 @@ export default function EstimateBuilderModal({
     if (!project?.id) return;
     if (!customerName.trim()) {
       setShowSettings(true); // open the panel so the highlighted field is visible
-      return alert("Customer name is required.");
+      return alert(t("estimate_builder.customer_name_is_required"));
     }
-    if (!hasMeasurements) return alert("Add at least one section before saving");
+    if (!hasMeasurements) return alert(t("estimate_builder.add_at_least_one_section_before"));
     setSaving(true);
     try {
       // breakdown.sections is the computed tree (handles per-item qty mode)
@@ -783,7 +784,7 @@ export default function EstimateBuilderModal({
       }).filter(s => s.items.length > 0);
 
       if (sectionsPayload.length === 0) {
-        alert("No items to save. Add at least one item with qty + rate.");
+        alert(t("estimate_builder.no_items_to_save_add_at"));
         setSaving(false);
         return;
       }
@@ -849,9 +850,9 @@ export default function EstimateBuilderModal({
                     display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <div>
           <div style={{ fontSize:14, fontWeight:700, display:"flex", gap:10, alignItems:"center" }}>
-            {initialMode === "scratch" ? "New Estimate · Scratch"
-             : initialMode === "from_quote" ? "New Estimate · From CRM Quote"
-             : "New Estimate · From Library"}
+            {initialMode === "scratch" ? t("estimate_builder.new_estimate_scratch")
+             : initialMode === "from_quote" ? t("estimate_builder.new_estimate_from_crm_quote")
+             : t("estimate_builder.new_estimate_from_library")}
           </div>
           <div style={{ fontSize:11, color:"rgba(255,255,255,0.55)", marginTop:2 }}>
             {proj.name} · {proj.city_name || proj.city || "—"} · {proj.construction_type_name || proj.type || "—"}
@@ -867,7 +868,7 @@ export default function EstimateBuilderModal({
       <div style={{ flex:1, overflowY:"auto", background:"#F8FAFC" }}>
         {step === "loading" && (
           <div style={{ padding:"60px 20px", textAlign:"center", color:"#64748B", fontSize:13 }}>
-            Loading quotation…
+           {t("crm.loading_quotation")}
           </div>
         )}
 
@@ -878,25 +879,24 @@ export default function EstimateBuilderModal({
                           padding:"22px 22px 18px", boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
               <div style={{ fontSize:11, fontWeight:700, color:"#6B7280",
                             textTransform:"uppercase", letterSpacing:".5px", marginBottom:6 }}>
-                Step 1 · Project rate scope
+               {t("estimate_builder.step_1_project_rate_scope")}
               </div>
               <div style={{ fontSize:15, fontWeight:700, color:"#0F172A", marginBottom:4 }}>
-                Set city and construction type
+               {t("estimate_builder.set_city_and_construction_type")}
               </div>
               <div style={{ fontSize:12, color:"#64748B", marginBottom:18, lineHeight:1.45 }}>
-                Library rates and packages depend on both. We'll save these
-                to the project so future estimates pick the right defaults.
+               {t("estimate_builder.library_rates_and_packages_depend_on")}
               </div>
 
               <div style={{ marginBottom:12 }}>
                 <label style={{ fontSize:10.5, fontWeight:700, color:"#6B7280",
                                 display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:".4px" }}>
-                  City
+                 {t("common.city")}
                 </label>
                 <select value={pickCityId} onChange={e => setPickCityId(e.target.value)}
                   style={{ width:"100%", padding:"9px 10px", fontSize:13,
                            border:"1px solid #CBD5E1", borderRadius:7, background:"white" }}>
-                  <option value="">— Select city —</option>
+                  <option value="">{t("estimate_builder.select_city")}</option>
                   {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
@@ -904,12 +904,12 @@ export default function EstimateBuilderModal({
               <div style={{ marginBottom:18 }}>
                 <label style={{ fontSize:10.5, fontWeight:700, color:"#6B7280",
                                 display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:".4px" }}>
-                  Construction Type
+                 {t("common.construction_type")}
                 </label>
                 <select value={pickTypeId} onChange={e => setPickTypeId(e.target.value)}
                   style={{ width:"100%", padding:"9px 10px", fontSize:13,
                            border:"1px solid #CBD5E1", borderRadius:7, background:"white" }}>
-                  <option value="">— Select type —</option>
+                  <option value="">{t("estimate_builder.select_type")}</option>
                   {ctypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
@@ -920,7 +920,7 @@ export default function EstimateBuilderModal({
                            background:"white", color:"#475569",
                            border:"1px solid #CBD5E1", borderRadius:7,
                            cursor: savingRates ? "not-allowed" : "pointer" }}>
-                  Cancel
+                 {t("common.cancel")}
                 </button>
                 <button onClick={saveProjectRates}
                   disabled={savingRates || !pickCityId || !pickTypeId}
@@ -928,7 +928,7 @@ export default function EstimateBuilderModal({
                            background: (savingRates || !pickCityId || !pickTypeId) ? "#9CA3AF" : COL_BLUE,
                            color:"white", border:"none", borderRadius:7,
                            cursor: (savingRates || !pickCityId || !pickTypeId) ? "not-allowed" : "pointer" }}>
-                  {savingRates ? "Saving…" : "Save & Continue →"}
+                  {savingRates ? t("common.saving_2") : t("estimate_builder.save_continue")}
                 </button>
               </div>
             </div>
@@ -940,7 +940,7 @@ export default function EstimateBuilderModal({
           <div style={{ maxWidth:880, margin:"0 auto", padding:"24px 20px" }}>
             <div style={{ fontSize:11, fontWeight:700, color:"#6B7280", textTransform:"uppercase",
                           letterSpacing:".5px", marginBottom:8 }}>
-              Pick a package
+             {t("crm.pick_a_package")}
             </div>
             {loadError && (
               <div style={{ padding:"10px 14px", background:"#FEE2E2", border:"1px solid #FECACA",
@@ -951,9 +951,9 @@ export default function EstimateBuilderModal({
             {filteredPackages.length === 0 ? (
               <div style={{ padding:"30px 18px", background:"white", border:"1px dashed #CBD5E1",
                             borderRadius:10, textAlign:"center", color:"#64748B", fontSize:13 }}>
-                No packages defined for <strong>{proj.construction_type_name || "this construction type"}</strong> yet.
+               {t("crm.no_packages_defined_for")} <strong>{proj.construction_type_name || t("crm.this_construction_type")}</strong> {t("crm.yet")}
                 <div style={{ marginTop:6, fontSize:12, color:"#9CA3AF" }}>
-                  Go to <strong>Library → Client BOQ Rate</strong> to set one up.
+                 {t("crm.go_to")} <strong>{t("crm.library_client_boq_rate")}</strong> {t("crm.to_set_one_up")}
                 </div>
               </div>
             ) : (
@@ -966,7 +966,7 @@ export default function EstimateBuilderModal({
                     onMouseLeave={e => { e.currentTarget.style.borderColor = "#E5E7EB"; e.currentTarget.style.boxShadow = "none"; }}>
                     <div style={{ fontSize:14, fontWeight:700, color:"#0F172A", marginBottom:4 }}>{pkg.name}</div>
                     {pkg.sqft_rate > 0 && (
-                      <div style={{ fontSize:12, color:"#64748B" }}>Rs.{inrIN(pkg.sqft_rate)}/sqft</div>
+                      <div style={{ fontSize:12, color:"#64748B" }}>{t("estimate_builder.rs_inrin_sqft", { inrIN: inrIN(pkg.sqft_rate) })}</div>
                     )}
                     {pkg.description && (
                       <div style={{ fontSize:11, color:"#94A3B8", marginTop:6, lineHeight:1.4 }}>{pkg.description}</div>
@@ -994,11 +994,9 @@ export default function EstimateBuilderModal({
                   <polyline points="9 18 15 12 9 6"/>
                 </svg>
                 <span style={{ fontSize:12, fontWeight:700, color:"#0F172A", textTransform:"uppercase", letterSpacing:".4px" }}>
-                  Estimate Settings
+                 {t("estimate_builder.estimate_settings")}
                 </span>
-                <span style={{ fontSize:11, color:"#64748B", marginLeft:"auto" }}>
-                  Retention {retentionPct}% · TDS {tdsPct}% · GST {taxPct}%
-                </span>
+                <span style={{ fontSize:11, color:"#64748B", marginLeft:"auto" }}>{t("estimate_builder.retention_retentionpct_tds_tdspct_gst_taxpct", { retentionPct, tdsPct, taxPct })}</span>
               </div>
               {showSettings && (() => {
                 // Shared compact styles for inputs in this settings panel.
@@ -1011,7 +1009,7 @@ export default function EstimateBuilderModal({
                   {/* Row 1: Customer (datalist combobox) + Description — single line */}
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:9 }}>
                     <div>
-                      <label style={lblC}>Customer <span style={{color:"#DC2626"}}>*</span></label>
+                      <label style={lblC}>{t("common.customer")} <span style={{color:"#DC2626"}}>*</span></label>
                       {/* Proper searchable dropdown — sourced ONLY from the
                           party library (client-type, junk names excluded
                           server-side). value = customerId; we mirror the
@@ -1024,51 +1022,51 @@ export default function EstimateBuilderModal({
                           setCustomerId(match?.id || null);
                           setCustomerName(match?.name || "");
                         }}
-                        placeholder="Search or pick a customer"
+                        placeholder={t("estimate_builder.search_or_pick_a_customer")}
                         accent={custInvalid ? "#DC2626" : "#2563EB"}
                       />
                     </div>
                     <div>
-                      <label style={lblC}>Description / Note</label>
+                      <label style={lblC}>{t("estimate_builder.description_note")}</label>
                       <input value={description} onChange={e => setDescription(e.target.value)}
-                        placeholder="Optional summary or internal note"
+                        placeholder={t("estimate_builder.optional_summary_or_internal_note")}
                         style={inpC}/>
                     </div>
                   </div>
                   {/* Row 2: Retention / TDS / Tax / Start / End — five compact columns on one line */}
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1.3fr 1.3fr", gap:10, marginBottom:9 }}>
                     <div>
-                      <label style={lblC}>Retention %</label>
+                      <label style={lblC}>{t("common.retention")}</label>
                       <input type="number" value={retentionPct} onChange={e => setRetentionPct(e.target.value)} style={inpN}/>
                     </div>
                     <div>
-                      <label style={lblC}>TDS %</label>
+                      <label style={lblC}>{t("common.tds")}</label>
                       <input type="number" value={tdsPct} onChange={e => setTdsPct(e.target.value)} style={inpN}/>
                     </div>
                     <div>
-                      <label style={lblC}>GST %</label>
+                      <label style={lblC}>{t("estimate_builder.gst")}</label>
                       <input type="number" value={taxPct} onChange={e => setTaxPct(e.target.value)} style={inpN}/>
                     </div>
                     <div>
-                      <label style={lblC}>Start Date</label>
+                      <label style={lblC}>{t("common.start_date")}</label>
                       <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inpC}/>
                     </div>
                     <div>
-                      <label style={lblC}>End Date</label>
+                      <label style={lblC}>{t("common.end_date")}</label>
                       <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={inpC}/>
                     </div>
                   </div>
                   {/* Row 3: Attachment + Terms — attachment is single-line affordance */}
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1.6fr", gap:12, marginBottom:0 }}>
                     <div>
-                      <label style={lblC}>Attachment</label>
+                      <label style={lblC}>{t("estimate_builder.attachment")}</label>
                       {!attachmentUrl ? (
                         <label style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 10px",
                                         borderRadius:5, border:"1.5px dashed #94A3B8", background:"white",
                                         cursor: attaching ? "not-allowed" : "pointer",
                                         fontSize:11.5, color:"#475569", fontWeight:600 }}>
                           <span style={{fontSize:13}}>📎</span>
-                          {attaching ? "Uploading…" : "Attach PDF / image / DWG"}
+                          {attaching ? t("estimate_builder.uploading") : t("estimate_builder.attach_pdf_image_dwg")}
                           <input type="file"
                             accept=".pdf,.dwg,.dxf,.doc,.docx,.xls,.xlsx,image/*"
                             onChange={e => { const f = e.target.files?.[0]; if (f) uploadAttachment(f); e.target.value = ""; }}
@@ -1084,15 +1082,15 @@ export default function EstimateBuilderModal({
                             📎 {attachmentName} <span style={{color:"#64748B"}}>· {attachmentSize}</span>
                           </a>
                           <button onClick={clearAttachment}
-                            title="Remove attachment"
+                            title={t("estimate_builder.remove_attachment")}
                             style={{background:"none", border:"none", color:"#DC2626", cursor:"pointer", fontSize:14, lineHeight:1, padding:0}}>×</button>
                         </div>
                       )}
                     </div>
                     <div>
-                      <label style={lblC}>Terms &amp; Conditions</label>
+                      <label style={lblC}>{t("crm.terms_conditions")}</label>
                       <textarea value={terms} onChange={e => setTerms(e.target.value)}
-                        rows={2} placeholder="Payment terms, warranty, exclusions..."
+                        rows={2} placeholder={t("crm.payment_terms_warranty_exclusions")}
                         style={{ ...inpC, resize:"vertical" }}/>
                     </div>
                   </div>
@@ -1106,22 +1104,22 @@ export default function EstimateBuilderModal({
               <div style={{ display:"flex", gap:8, justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
                 <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                   <button onClick={() => setEditMode(m => !m)}
-                    title={canEdit ? "Exit edit mode — back to quoting view" : "Unlock structural edits + master rate changes"}
+                    title={canEdit ? t("crm.exit_edit_mode_back_to_quoting") : t("crm.unlock_structural_edits_master_rate_changes")}
                     style={{ padding:"6px 14px", borderRadius:6,
                              background: canEdit ? "#10B981" : "white",
                              border:"1.5px solid " + (canEdit ? "#10B981" : "#94A3B8"),
                              color: canEdit ? "white" : "#334155",
                              fontSize:11.5, fontWeight:700, cursor:"pointer",
                              display:"flex", alignItems:"center", gap:5 }}>
-                    {canEdit ? "✓ Done Editing" : "✎ Edit Package"}
+                    {canEdit ? t("common.done_editing") : t("common.edit_package")}
                   </button>
                   {canEdit && (
                     <button onClick={openEditPkg}
-                      title="Edit package name / per-sqft rate / description"
+                      title={t("crm.edit_package_name_per_sqft_rate")}
                       style={{ padding:"6px 11px", borderRadius:6, background:"white",
                                border:"1px dashed #94A3B8", fontSize:11, fontWeight:600,
                                color:"#475569", cursor:"pointer" }}>
-                      Package basics…
+                     {t("crm.package_basics")}
                     </button>
                   )}
                 </div>
@@ -1130,7 +1128,7 @@ export default function EstimateBuilderModal({
                     style={{ padding:"6px 12px", borderRadius:6, background:"white",
                              border:"1.5px solid " + COL_DARK, fontSize:11.5, fontWeight:700,
                              color: COL_DARK, cursor:"pointer" }}>
-                    + Add Section
+                   {t("common.add_section")}
                   </button>
                 )}
               </div>
@@ -1140,7 +1138,7 @@ export default function EstimateBuilderModal({
             {breakdown.sections.length === 0 ? (
               <div style={{ padding:"30px 18px", background:"white", border:"1px dashed #CBD5E1",
                             borderRadius:10, textAlign:"center", color:"#64748B", fontSize:13 }}>
-                This package has no sections yet. {!readOnly && <span>Click <strong>+ Add Section</strong> above.</span>}
+                {t("crm.package_no_sections")} {!readOnly && <span>{t("common.click")} <strong>{t("common.add_section")}</strong> {t("crm.above")}</span>}
               </div>
             ) : breakdown.sections.map(sec => {
               const sCollapsed = !!collapsedSections[sec.id];
@@ -1166,13 +1164,13 @@ export default function EstimateBuilderModal({
                     </span>
                     {canEdit && (
                       <span style={{ display:"flex", gap:4, marginLeft:2 }}>
-                        <button onClick={() => renameSection(sec)} title="Rename section"
+                        <button onClick={() => renameSection(sec)} title={t("estimate_builder.rename_section")}
                           style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.18)",
                                    color:"rgba(255,255,255,0.85)", borderRadius:4, width:22, height:22,
                                    fontSize:11, cursor:"pointer", padding:0, lineHeight:1 }}>
                           ✎
                         </button>
-                        <button onClick={() => deleteSection(sec)} title="Delete section"
+                        <button onClick={() => deleteSection(sec)} title={t("estimate_builder.delete_section")}
                           style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.35)",
                                    color:"#FCA5A5", borderRadius:4, width:22, height:22,
                                    fontSize:11, cursor:"pointer", padding:0, lineHeight:1 }}>
@@ -1183,7 +1181,7 @@ export default function EstimateBuilderModal({
                     {noAreaHint && !readOnly && !secPerItem && (
                       <span style={{ marginLeft:6, padding:"2px 8px", fontSize:10.5, fontWeight:600,
                                      background:"rgba(252,211,77,0.18)", color:"#FCD34D", borderRadius:4, border:"1px solid rgba(252,211,77,0.35)" }}>
-                        set area
+                       {t("crm.set_area")}
                       </span>
                     )}
                     {secPerItem && (
@@ -1191,7 +1189,7 @@ export default function EstimateBuilderModal({
                                      background:"rgba(245,158,11,0.22)", color:"#FCD34D",
                                      border:"1px solid #F59E0B", borderRadius:4,
                                      letterSpacing:".3px", textTransform:"uppercase" }}>
-                        Per-item Qty
+                       {t("common.per_item_qty")}
                       </span>
                     )}
                     <div style={{ marginLeft:"auto", display:"flex", gap:12, alignItems:"center", fontSize:11.5, fontWeight:600 }}>
@@ -1206,16 +1204,14 @@ export default function EstimateBuilderModal({
                               section-level area input: one editable place for
                               a number, and rate × qty always equals total. */}
                           <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-                            <span style={{ color:"rgba(255,255,255,0.55)", fontSize:11, textTransform:"uppercase" }}>Qty</span>
+                            <span style={{ color:"rgba(255,255,255,0.55)", fontSize:11, textTransform:"uppercase" }}>{t("common.qty")}</span>
                             <strong style={{ color:"white", fontSize:12.5 }}>{inrIN(sec.qty || 0)}</strong>
                           </span>
                           <span style={{ padding:"3px 9px", background:COL_TEAL_BG, color:COL_TEAL, borderRadius:4, fontWeight:700 }}
-                            title="Blended rate — total ÷ total area">
-                            Rs.{inrIN(Math.round(sec.rate || 0))}/{sec.unit || "sqft"}
-                          </span>
+                            title={t("estimate_builder.blended_rate_total_total_area")}>{t("estimate_builder.rs_inrin_sec", { inrIN: inrIN(Math.round(sec.rate || 0)), sec: sec.unit || "sqft" })}</span>
                         </>
                       )}
-                      <span style={{ color:"rgba(255,255,255,0.6)" }}>Total <strong style={{ color:COL_TEAL_BG, fontSize:13 }}>Rs.{inrIN(sec.total)}</strong></span>
+                      <span style={{ color:"rgba(255,255,255,0.6)" }}>{t("common.total")} <strong style={{ color:COL_TEAL_BG, fontSize:13 }}>{t("estimate_builder.rs_inrin", { inrIN: inrIN(sec.total) })}</strong></span>
                     </div>
                   </div>
 
@@ -1224,7 +1220,7 @@ export default function EstimateBuilderModal({
                     <div style={{ padding:10 }}>
                       {sec.categories.length === 0 && (
                         <div style={{ padding:"14px 12px", textAlign:"center", color:"#9CA3AF", fontSize:12.5 }}>
-                          No categories.
+                         {t("crm.no_categories")}
                         </div>
                       )}
                       {sec.categories.map(cat => {
@@ -1250,13 +1246,13 @@ export default function EstimateBuilderModal({
                               <span style={{ fontSize:10.5, color:"#94A3B8" }}>· {cat.items.length} item{cat.items.length === 1 ? "" : "s"}</span>
                               {canEdit && (
                                 <span style={{ display:"flex", gap:4, marginLeft:2 }}>
-                                  <button onClick={() => renameCategory(sec, cat)} title="Rename category"
+                                  <button onClick={() => renameCategory(sec, cat)} title={t("estimate_builder.rename_category")}
                                     style={{ background:"white", border:"1px solid #CBD5E1",
                                              color:"#475569", borderRadius:4, width:20, height:20,
                                              fontSize:10.5, cursor:"pointer", padding:0, lineHeight:1 }}>
                                     ✎
                                   </button>
-                                  <button onClick={() => deleteCategory(sec, cat)} title="Delete category"
+                                  <button onClick={() => deleteCategory(sec, cat)} title={t("estimate_builder.delete_category")}
                                     style={{ background:"#FEF2F2", border:"1px solid #FECACA",
                                              color:COL_RED, borderRadius:4, width:20, height:20,
                                              fontSize:10.5, cursor:"pointer", padding:0, lineHeight:1 }}>
@@ -1271,17 +1267,17 @@ export default function EstimateBuilderModal({
                                     cross-verify rates instantly. */}
                                 {!secPerItem && (
                                   <>
-                                    <span style={{ color:"#64748B" }}>Base <strong style={{ color:"#0F172A" }}>Rs.{inrIN(cat.base || 0)}</strong></span>
-                                    <span style={{ color:"#64748B" }}>Add-on <strong style={{ color:COL_AMBER }}>Rs.{inrIN(cat.addOn || 0)}</strong></span>
+                                    <span style={{ color:"#64748B" }}>{t("common.base")} <strong style={{ color:"#0F172A" }}>{t("estimate_builder.rs_inrin", { inrIN: inrIN(cat.base || 0) })}</strong></span>
+                                    <span style={{ color:"#64748B" }}>{t("common.add_on")} <strong style={{ color:COL_AMBER }}>{t("estimate_builder.rs_inrin", { inrIN: inrIN(cat.addOn || 0) })}</strong></span>
                                     <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-                                      <span style={{ color:"#64748B", fontSize:10.5, textTransform:"uppercase" }}>Area</span>
+                                      <span style={{ color:"#64748B", fontSize:10.5, textTransform:"uppercase" }}>{t("common.area")}</span>
                                       {readOnly ? (
                                         <span style={{ padding:"3px 7px", color:"#0F172A", fontWeight:700, fontSize:12 }}>{inrIN(cat.area)}</span>
                                       ) : (
                                         <input type="number" value={areaVal}
                                           onChange={e => patchCategory(sec.id, cat.id, { area_override: e.target.value === "" ? null : e.target.value })}
                                           placeholder="0"
-                                          title="Is category ki area / qty — section ka total inhi ka sum hai"
+                                          title={t("estimate_builder.is_category_ki_area_qty_section")}
                                           style={{ width:70, padding:"4px 7px", borderRadius:5, textAlign:"right",
                                                    fontFamily:"inherit", fontSize:11.5, fontWeight:700,
                                                    border:"1.5px solid #CBD5E1", background:"white",
@@ -1290,7 +1286,7 @@ export default function EstimateBuilderModal({
                                     </span>
                                   </>
                                 )}
-                                <span style={{ color:"#64748B" }}>Total <strong style={{ color:COL_GREEN }}>Rs.{inrIN(cat.total)}</strong></span>
+                                <span style={{ color:"#64748B" }}>{t("common.total")} <strong style={{ color:COL_GREEN }}>{t("estimate_builder.rs_inrin", { inrIN: inrIN(cat.total) })}</strong></span>
                               </div>
                             </div>
 
@@ -1299,18 +1295,18 @@ export default function EstimateBuilderModal({
                               <table style={{ width:"100%", borderCollapse:"collapse" }}>
                                 <thead>
                                   <tr style={{ background:"#FAFAFA" }}>
-                                    <th style={{ padding:"7px 12px", textAlign:"left", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase" }}>Item</th>
-                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase", width:100 }}>Base</th>
-                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_AMBER, textTransform:"uppercase", width:100 }}>Add-on</th>
-                                    <th style={{ padding:"7px 12px", textAlign:"left", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase" }}>Description</th>
-                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_TEAL, textTransform:"uppercase", width:70 }}>Area</th>
-                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_GREEN, textTransform:"uppercase", width:110 }}>Total</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"left", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase" }}>{t("common.item")}</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase", width:100 }}>{t("common.base")}</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_AMBER, textTransform:"uppercase", width:100 }}>{t("common.add_on")}</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"left", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase" }}>{t("common.description")}</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_TEAL, textTransform:"uppercase", width:70 }}>{t("common.area")}</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_GREEN, textTransform:"uppercase", width:110 }}>{t("common.total")}</th>
                                     <th style={{ width:36 }}/>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {cat.items.length === 0 && (
-                                    <tr><td colSpan={7} style={{ padding:"12px", textAlign:"center", color:"#9CA3AF", fontSize:12 }}>No items.</td></tr>
+                                    <tr><td colSpan={7} style={{ padding:"12px", textAlign:"center", color:"#9CA3AF", fontSize:12 }}>{t("common.no_items")}</td></tr>
                                   )}
                                   {cat.items.map((it, idx) => {
                                     // Look up master item name from boqItems? We don't have it here.
@@ -1360,9 +1356,9 @@ export default function EstimateBuilderModal({
                                         </td>
                                         <td style={{ padding:"8px 12px" }}>
                                           {canEdit ? (
-                                            <input type="text" value={descVal} placeholder={it.masterDesc || "Optional"}
+                                            <input type="text" value={descVal} placeholder={it.masterDesc || t("common.optional")}
                                               onChange={e => patchItem(sec.id, cat.id, it.item_id, { description_override: e.target.value || null })}
-                                              title={it.masterDesc ? `Master: ${it.masterDesc}` : "Leave blank to use master"}
+                                              title={it.masterDesc ? `Master: ${it.masterDesc}` : t("crm.leave_blank_to_use_master")}
                                               style={{ width:"100%", padding:"5px 9px", borderRadius:5, fontFamily:"inherit", fontSize:11.5,
                                                        border:"1.5px solid " + (descVal ? COL_AMBER : "#E5E7EB"),
                                                        background: descVal ? "#FFFBEB" : "white", outline:"none", boxSizing:"border-box" }}/>
@@ -1394,13 +1390,11 @@ export default function EstimateBuilderModal({
                                             inrIN(it.qty != null ? it.qty : cat.area)
                                           )}
                                         </td>
-                                        <td style={{ padding:"8px 12px", textAlign:"right", fontSize:13, fontWeight:700, color:COL_GREEN }}>
-                                          Rs.{inrIN(it.total)}
-                                        </td>
+                                        <td style={{ padding:"8px 12px", textAlign:"right", fontSize:13, fontWeight:700, color:COL_GREEN }}>{t("estimate_builder.rs_inrin", { inrIN: inrIN(it.total) })}</td>
                                         <td style={{ padding:"8px 6px", textAlign:"center" }}>
                                           {it.hasOverride && canEdit && (
                                             <button onClick={() => resetItemRow(sec.id, cat.id, it.item_id)}
-                                              title="Reset to master rates"
+                                              title={t("crm.reset_to_master_rates")}
                                               style={{ background:"transparent", border:"1px solid #E5E7EB", color:"#64748B", borderRadius:4, width:22, height:22, fontSize:11, cursor:"pointer" }}>
                                               ↺
                                             </button>
@@ -1418,9 +1412,7 @@ export default function EstimateBuilderModal({
                                 <button onClick={() => openAddItem(sec, cat)}
                                   style={{ background:"transparent", border:"1px dashed #BFDBFE",
                                            color: COL_BLUE, borderRadius:5,
-                                           padding:"4px 11px", fontSize:11, fontWeight:700, cursor:"pointer" }}>
-                                  + Add Item to {cat.name}
-                                </button>
+                                           padding:"4px 11px", fontSize:11, fontWeight:700, cursor:"pointer" }}>{t("estimate_builder.add_item_to_name", { name: cat.name })}</button>
                               </div>
                             )}
                           </div>
@@ -1433,7 +1425,7 @@ export default function EstimateBuilderModal({
                             style={{ background:"white", border:"1px dashed #94A3B8",
                                      color:"#475569", borderRadius:6,
                                      padding:"5px 13px", fontSize:11.5, fontWeight:700, cursor:"pointer" }}>
-                            + Add Category
+                           {t("common.add_category")}
                           </button>
                         </div>
                       )}
@@ -1448,11 +1440,9 @@ export default function EstimateBuilderModal({
               <div style={{ marginTop:10, padding:"14px 20px", background:COL_DARK, color:"white",
                             borderRadius:10, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                 <span style={{ fontSize:13, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px", color:"rgba(255,255,255,0.7)" }}>
-                  Grand Total
+                 {t("common.grand_total")}
                 </span>
-                <span style={{ fontSize:20, fontWeight:700, color:COL_TEAL_BG }}>
-                  Rs.{inrIN(breakdown.grandTotal)}
-                </span>
+                <span style={{ fontSize:20, fontWeight:700, color:COL_TEAL_BG }}>{t("estimate_builder.rs_inrin", { inrIN: inrIN(breakdown.grandTotal) })}</span>
               </div>
             )}
           </div>
@@ -1467,26 +1457,24 @@ export default function EstimateBuilderModal({
             <button onClick={() => setStep("package")} disabled={saving}
               style={{ padding:"9px 16px", borderRadius:7, border:"1px solid #D1D5DB", background:"white",
                        fontSize:12.5, color:"#475569", fontWeight:600, cursor:saving?"not-allowed":"pointer" }}>
-              ← Back to Packages
+             {t("crm.back_to_packages")}
             </button>
           )}
           <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center" }}>
-            <span style={{ fontSize:12, color:"#64748B", fontWeight:500 }}>
-              Subtotal: <strong style={{ color:"#0F172A" }}>₹{inrIN(breakdown.grandTotal)}</strong>
-              {Number(taxPct) > 0 && <> · GST {taxPct}%: ₹{inrIN(breakdown.grandTotal * (Number(taxPct)/100))}</>}
-              {Number(taxPct) > 0 && <> · <span style={{color:"#059669",fontWeight:700}}>Total ₹{inrIN(breakdown.grandTotal * (1 + Number(taxPct)/100))}</span></>}
+            <span style={{ fontSize:12, color:"#64748B", fontWeight:500 }}><Rich k="estimate_builder.subtotal_inrin" params={{ inrIN: inrIN(breakdown.grandTotal) }} />{Number(taxPct) > 0 && <>{t("estimate_builder.gst_taxpct_inrin", { taxPct, inrIN: inrIN(breakdown.grandTotal * (Number(taxPct)/100)) })}</>}
+              {Number(taxPct) > 0 && <> · <span style={{color:"#059669",fontWeight:700}}>{t("estimate_builder.total_inrin", { inrIN: inrIN(breakdown.grandTotal * (1 + Number(taxPct)/100)) })}</span></>}
             </span>
             <button onClick={onClose} disabled={saving}
               style={{ padding:"9px 18px", borderRadius:7, background:"#F8FAFC", border:"1px solid #D1D5DB",
                        fontSize:12.5, fontWeight:600, color:"#374151", cursor:saving?"not-allowed":"pointer" }}>
-              Cancel
+             {t("common.cancel")}
             </button>
             <button onClick={saveEstimate} disabled={!canSave}
               style={{ padding:"9px 22px", borderRadius:7,
                        background: canSave ? COL_BLUE : "#9CA3AF",
                        color:"white", border:"none", fontSize:12.5, fontWeight:700,
                        cursor: canSave ? "pointer" : "not-allowed" }}>
-              {saving ? "Saving…" : "Save Estimate"}
+              {saving ? t("common.saving_2") : t("estimate_builder.save_estimate")}
             </button>
           </div>
         </div>
@@ -1507,9 +1495,9 @@ export default function EstimateBuilderModal({
             <div style={{ background:COL_DARK, padding:"13px 18px", borderRadius:"12px 12px 0 0",
                           display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <div style={{ fontSize:14, fontWeight:700, color:"white" }}>Edit Package</div>
+                <div style={{ fontSize:14, fontWeight:700, color:"white" }}>{t("common.edit_package_2")}</div>
                 <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>
-                  Changes save to library — affects future quotes too
+                 {t("crm.changes_save_to_library_affects_future")}
                 </div>
               </div>
               <button onClick={() => !pkgEditSaving && setPkgEditOpen(false)}
@@ -1517,24 +1505,24 @@ export default function EstimateBuilderModal({
             </div>
             <div style={{ padding:18 }}>
               <div style={{ marginBottom:10 }}>
-                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Name *</label>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.name")}</label>
                 <input autoFocus value={pkgEditForm.name || ""}
                   onChange={e => setPkgEditForm(p => ({ ...p, name: e.target.value }))}
                   style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                            fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
               </div>
               <div style={{ marginBottom:10 }}>
-                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Per-sqft Rate (Rs.)</label>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("crm.per_sqft_rate_rs")}</label>
                 <input type="number" value={pkgEditForm.sqft_rate ?? 0}
                   onChange={e => setPkgEditForm(p => ({ ...p, sqft_rate: e.target.value }))}
                   style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                            fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", textAlign:"right" }}/>
               </div>
               <div>
-                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Description</label>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.description")}</label>
                 <input value={pkgEditForm.description || ""}
                   onChange={e => setPkgEditForm(p => ({ ...p, description: e.target.value }))}
-                  placeholder="Optional"
+                  placeholder={t("common.optional")}
                   style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                            fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
               </div>
@@ -1543,14 +1531,14 @@ export default function EstimateBuilderModal({
               <button onClick={() => !pkgEditSaving && setPkgEditOpen(false)} disabled={pkgEditSaving}
                 style={{ flex:1, padding:"9px", borderRadius:6, border:"1px solid #D1D5DB",
                          background:"white", fontSize:13, color:"#374151", cursor: pkgEditSaving ? "not-allowed":"pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={saveEditPkg} disabled={pkgEditSaving || !pkgEditForm.name?.trim()}
                 style={{ flex:2, padding:"9px", borderRadius:6,
                          background:(pkgEditSaving||!pkgEditForm.name?.trim())?"#9CA3AF":COL_BLUE,
                          color:"white", border:"none", fontSize:13, fontWeight:700,
                          cursor:(pkgEditSaving||!pkgEditForm.name?.trim())?"not-allowed":"pointer" }}>
-                {pkgEditSaving ? "Saving…" : "Save"}
+                {pkgEditSaving ? t("common.saving_2") : t("common.save")}
               </button>
             </div>
           </div>
@@ -1571,26 +1559,24 @@ export default function EstimateBuilderModal({
             <div style={{ background:COL_DARK, padding:"13px 18px", borderRadius:"12px 12px 0 0",
                           display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <div style={{ fontSize:14, fontWeight:700, color:"white" }}>Add Section</div>
-                <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>
-                  Saves to library. Package: {selectedPackage?.name}
-                </div>
+                <div style={{ fontSize:14, fontWeight:700, color:"white" }}>{t("common.add_section_2")}</div>
+                <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>{t("estimate_builder.saves_to_library_package_name", { name: selectedPackage?.name })}</div>
               </div>
               <button onClick={() => !addSecSaving && setAddSecModal(false)}
                 style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
             </div>
             <div style={{ padding:18 }}>
               <div style={{ marginBottom:10 }}>
-                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Name *</label>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.name")}</label>
                 <input autoFocus value={addSecForm.name}
                   onChange={e => setAddSecForm(p => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. Ground Floor, Other Civil Work"
+                  placeholder={t("crm.e_g_ground_floor_other_civil")}
                   style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                            fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
                 <div>
-                  <label style={{ fontSize:10, fontWeight:700, color:COL_TEAL, display:"block", marginBottom:3, textTransform:"uppercase" }}>Area / Qty</label>
+                  <label style={{ fontSize:10, fontWeight:700, color:COL_TEAL, display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("crm.area_qty")}</label>
                   <input type="number" value={addSecForm.default_qty}
                     onChange={e => setAddSecForm(p => ({ ...p, default_qty: e.target.value }))}
                     placeholder="0"
@@ -1598,16 +1584,16 @@ export default function EstimateBuilderModal({
                              fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", textAlign:"right", background:"#F0FDFA" }}/>
                 </div>
                 <div>
-                  <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Unit</label>
+                  <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>{t("common.unit")}</label>
                   <select value={addSecForm.unit}
                     onChange={e => setAddSecForm(p => ({ ...p, unit: e.target.value }))}
                     style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
                              fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", background:"white" }}>
                     <option value="sqft">sqft</option>
-                    <option value="lump_sum">lump sum</option>
+                    <option value="lump_sum">{t("common.lump_sum")}</option>
                     <option value="rft">rft</option>
                     <option value="nos">nos</option>
-                    <option value="cubic_ft">cubic ft</option>
+                    <option value="cubic_ft">{t("common.cubic_ft")}</option>
                   </select>
                 </div>
               </div>
@@ -1620,11 +1606,9 @@ export default function EstimateBuilderModal({
                   <input type="checkbox" checked={!!addSecForm.per_item_qty} onChange={() => {}}
                     style={{ width:15, height:15, cursor:"pointer", flexShrink:0 }}/>
                   <div>
-                    <div style={{ fontSize:11.5, fontWeight:700, color:"#0F172A" }}>
-                      Per-item quantity {addSecForm.per_item_qty ? "(ON)" : "(OFF — uniform area)"}
-                    </div>
+                    <div style={{ fontSize:11.5, fontWeight:700, color:"#0F172A" }}>{t("estimate_builder.per_item_quantity_addsecform", { addSecForm: addSecForm.per_item_qty ? "(ON)" : "(OFF — uniform area)" })}</div>
                     <div style={{ fontSize:10, color:"#6B7280", marginTop:1 }}>
-                      Each item has its own qty. Best for mixed sections like Other Civil Work.
+                     {t("crm.each_item_has_its_own_qty")}
                     </div>
                   </div>
                 </label>
@@ -1634,14 +1618,14 @@ export default function EstimateBuilderModal({
               <button onClick={() => !addSecSaving && setAddSecModal(false)} disabled={addSecSaving}
                 style={{ flex:1, padding:"9px", borderRadius:6, border:"1px solid #D1D5DB",
                          background:"white", fontSize:13, color:"#374151", cursor: addSecSaving?"not-allowed":"pointer" }}>
-                Cancel
+               {t("common.cancel")}
               </button>
               <button onClick={saveAddSec} disabled={addSecSaving || !addSecForm.name?.trim()}
                 style={{ flex:2, padding:"9px", borderRadius:6,
                          background:(addSecSaving||!addSecForm.name?.trim())?"#9CA3AF":COL_BLUE,
                          color:"white", border:"none", fontSize:13, fontWeight:700,
                          cursor:(addSecSaving||!addSecForm.name?.trim())?"not-allowed":"pointer" }}>
-                {addSecSaving ? "Adding…" : "Add Section"}
+                {addSecSaving ? t("common.adding") : t("common.add_section_2")}
               </button>
             </div>
           </div>
@@ -1666,8 +1650,8 @@ export default function EstimateBuilderModal({
               <div style={{ background:COL_DARK, padding:"13px 16px", color:"white",
                             display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div>
-                  <div style={{ fontSize:14, fontWeight:700 }}>Add Category</div>
-                  <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>Section: {addCatDrawer.section_name}</div>
+                  <div style={{ fontSize:14, fontWeight:700 }}>{t("common.add_category_2")}</div>
+                  <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>{t("estimate_builder.section_section_name", { section_name: addCatDrawer.section_name })}</div>
                 </div>
                 <button onClick={() => !addCatSaving && setAddCatDrawer(null)}
                   style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
@@ -1696,7 +1680,7 @@ export default function EstimateBuilderModal({
                       )}
                       <span style={{ flex:1 }}>
                         <span style={{ fontSize:12.5, fontWeight:600, color:"#0F172A" }}>{c.name}</span>
-                        {exists && <span style={{ marginLeft:8, fontSize:10, color:"#9CA3AF" }}>(already added)</span>}
+                        {exists && <span style={{ marginLeft:8, fontSize:10, color:"#9CA3AF" }}>{t("common.already_added")}</span>}
                       </span>
                     </label>
                   );
@@ -1707,32 +1691,32 @@ export default function EstimateBuilderModal({
                       style={{ width:"100%", padding:"8px 12px", background:"#F0FDF4",
                                border:"1px dashed #10B981", color:"#10B981",
                                borderRadius:6, fontSize:12, fontWeight:700, cursor:"pointer" }}>
-                      + Create new category
+                     {t("common.create_new_category")}
                     </button>
                   ) : (
                     <div style={{ padding:10, background:"#F9FAFB", borderRadius:6, border:"1px solid #E5E7EB" }}>
                       <input autoFocus value={addCatNewForm.name}
                         onChange={e => setAddCatNewForm(p => ({ ...p, name: e.target.value }))}
-                        placeholder="Name"
+                        placeholder={t("common.name_2")}
                         style={{ width:"100%", padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB",
                                  fontSize:12, marginBottom:6, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
                       <input value={addCatNewForm.code}
                         onChange={e => setAddCatNewForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
-                        placeholder="Code (optional)"
+                        placeholder={t("common.code_optional")}
                         style={{ width:"100%", padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB",
                                  fontSize:12, marginBottom:6, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
                       <div style={{ display:"flex", gap:6 }}>
                         <button onClick={() => setAddCatNewForm(null)}
                           style={{ flex:1, padding:6, borderRadius:5, background:"white",
                                    border:"1px solid #D1D5DB", fontSize:11.5, color:"#6B7280", cursor:"pointer" }}>
-                          Cancel
+                         {t("common.cancel")}
                         </button>
                         <button onClick={createAndAddCat} disabled={addCatSaving || !addCatNewForm.name?.trim()}
                           style={{ flex:2, padding:6, borderRadius:5,
                                    background: (addCatSaving||!addCatNewForm.name?.trim())?"#9CA3AF":"#10B981",
                                    color:"white", border:"none", fontSize:11.5, fontWeight:700,
                                    cursor: (addCatSaving||!addCatNewForm.name?.trim())?"not-allowed":"pointer" }}>
-                          {addCatSaving ? "Saving…" : "Create + Add"}
+                          {addCatSaving ? t("common.saving_2") : t("common.create_add")}
                         </button>
                       </div>
                     </div>
@@ -1743,14 +1727,14 @@ export default function EstimateBuilderModal({
                 <button onClick={() => !addCatSaving && setAddCatDrawer(null)} disabled={addCatSaving}
                   style={{ flex:1, padding:"8px", borderRadius:6, border:"1px solid #D1D5DB",
                            background:"white", fontSize:12, color:"#374151", cursor: addCatSaving?"not-allowed":"pointer" }}>
-                  Cancel
+                 {t("common.cancel")}
                 </button>
                 <button onClick={confirmAddCat} disabled={addCatSaving || addCatPicks.length === 0}
                   style={{ flex:2, padding:"8px", borderRadius:6,
                            background:(addCatSaving||addCatPicks.length===0)?"#9CA3AF":COL_BLUE,
                            color:"white", border:"none", fontSize:12, fontWeight:700,
                            cursor:(addCatSaving||addCatPicks.length===0)?"not-allowed":"pointer" }}>
-                  {addCatSaving ? "Adding…" : `Add Selected (${addCatPicks.length})`}
+                  {addCatSaving ? t("common.adding") : `Add Selected (${addCatPicks.length})`}
                 </button>
               </div>
             </div>
@@ -1784,7 +1768,7 @@ export default function EstimateBuilderModal({
               <div style={{ background:COL_DARK, padding:"13px 16px", color:"white",
                             display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:14, fontWeight:700 }}>Add Item</div>
+                  <div style={{ fontSize:14, fontWeight:700 }}>{t("common.add_item_2")}</div>
                   <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1,
                                 whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
                     {addItemDrawer.section_name} › {addItemDrawer.category_name}
@@ -1796,7 +1780,7 @@ export default function EstimateBuilderModal({
               <div style={{ padding:"10px 14px", borderBottom:"1px solid #E5E7EB", background:"#F9FAFB" }}>
                 <input value={addItemSearch}
                   onChange={e => setAddItemSearch(e.target.value)}
-                  placeholder="Search items…"
+                  placeholder={t("common.search_items")}
                   style={{ width:"100%", padding:"7px 11px", borderRadius:6,
                            border:"1.5px solid #E5E7EB", fontSize:12.5, outline:"none",
                            fontFamily:"inherit", boxSizing:"border-box" }}/>
@@ -1832,11 +1816,9 @@ export default function EstimateBuilderModal({
                           )}
                           <span style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontSize:12.5, fontWeight:600, color:"#0F172A" }}>
-                              {i.name}{here && <span style={{ marginLeft:8, fontSize:10, color:"#9CA3AF" }}>(already here)</span>}
+                              {i.name}{here && <span style={{ marginLeft:8, fontSize:10, color:"#9CA3AF" }}>{t("common.already_here")}</span>}
                             </div>
-                            <div style={{ fontSize:10.5, color:"#64748B", marginTop:1 }}>
-                              base Rs.{inrIN(i.base_rate)} · {i.unit}
-                            </div>
+                            <div style={{ fontSize:10.5, color:"#64748B", marginTop:1 }}>{t("estimate_builder.base_rs_inrin_unit", { inrIN: inrIN(i.base_rate), unit: i.unit })}</div>
                           </span>
                         </label>
                       );
@@ -1849,13 +1831,13 @@ export default function EstimateBuilderModal({
                       style={{ width:"100%", padding:"8px 12px", background:"#F0FDF4",
                                border:"1px dashed #10B981", color:"#10B981",
                                borderRadius:6, fontSize:12, fontWeight:700, cursor:"pointer" }}>
-                      + Create new item
+                     {t("common.create_new_item")}
                     </button>
                   ) : (
                     <div style={{ padding:10, background:"#F9FAFB", borderRadius:6, border:"1px solid #E5E7EB" }}>
                       <input autoFocus value={addItemNewForm.name}
                         onChange={e => setAddItemNewForm(p => ({ ...p, name: e.target.value }))}
-                        placeholder="Item name"
+                        placeholder={t("common.item_name")}
                         style={{ width:"100%", padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB",
                                  fontSize:12, marginBottom:6, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:6 }}>
@@ -1866,21 +1848,21 @@ export default function EstimateBuilderModal({
                         </select>
                         <input type="number" value={addItemNewForm.base_rate}
                           onChange={e => setAddItemNewForm(p => ({ ...p, base_rate: e.target.value }))}
-                          placeholder="Base rate"
+                          placeholder={t("common.base_rate")}
                           style={{ padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB", fontSize:12, fontFamily:"inherit", textAlign:"right", boxSizing:"border-box" }}/>
                       </div>
                       <div style={{ display:"flex", gap:6 }}>
                         <button onClick={() => setAddItemNewForm(null)}
                           style={{ flex:1, padding:6, borderRadius:5, background:"white",
                                    border:"1px solid #D1D5DB", fontSize:11.5, color:"#6B7280", cursor:"pointer" }}>
-                          Cancel
+                         {t("common.cancel")}
                         </button>
                         <button onClick={createAndAddItem} disabled={addItemSaving || !addItemNewForm.name?.trim()}
                           style={{ flex:2, padding:6, borderRadius:5,
                                    background:(addItemSaving||!addItemNewForm.name?.trim())?"#9CA3AF":"#10B981",
                                    color:"white", border:"none", fontSize:11.5, fontWeight:700,
                                    cursor:(addItemSaving||!addItemNewForm.name?.trim())?"not-allowed":"pointer" }}>
-                          {addItemSaving ? "Saving…" : "Create + Add"}
+                          {addItemSaving ? t("common.saving_2") : t("common.create_add")}
                         </button>
                       </div>
                     </div>
@@ -1891,14 +1873,14 @@ export default function EstimateBuilderModal({
                 <button onClick={() => !addItemSaving && setAddItemDrawer(null)} disabled={addItemSaving}
                   style={{ flex:1, padding:"8px", borderRadius:6, border:"1px solid #D1D5DB",
                            background:"white", fontSize:12, color:"#374151", cursor: addItemSaving?"not-allowed":"pointer" }}>
-                  Cancel
+                 {t("common.cancel")}
                 </button>
                 <button onClick={confirmAddItems} disabled={addItemSaving || addItemPicks.length === 0}
                   style={{ flex:2, padding:"8px", borderRadius:6,
                            background:(addItemSaving||addItemPicks.length===0)?"#9CA3AF":COL_BLUE,
                            color:"white", border:"none", fontSize:12, fontWeight:700,
                            cursor:(addItemSaving||addItemPicks.length===0)?"not-allowed":"pointer" }}>
-                  {addItemSaving ? "Adding…" : `Add Selected (${addItemPicks.length})`}
+                  {addItemSaving ? t("common.adding") : `Add Selected (${addItemPicks.length})`}
                 </button>
               </div>
             </div>
