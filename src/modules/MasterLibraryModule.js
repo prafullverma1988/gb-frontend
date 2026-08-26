@@ -2847,12 +2847,14 @@ function ClientBOQSection() {
   // ═══════════════════════════════════════════════════════════════════
   // PENDING EDITS — kept until "Save Rates"
   //   sectionEdits[sid]   = { name?, default_qty? }
+  //   catEdits[cid]       = { qty? }   ← area, entered per category
   //   itemEdits[sid][iid] = { base_rate?, add_on_rate?, description? }
   //   pendingNewItems[sid]= rows picked from the +Add Item drawer
   //                         (each row has client-side _isNew flag)
   //   pendingDelItems[sid][iid] = true   (soft-deleted in UI)
   // ═══════════════════════════════════════════════════════════════════
   const [sectionEdits,    setSectionEdits]    = useState({});
+  const [catEdits,        setCatEdits]        = useState({});
   const [itemEdits,       setItemEdits]       = useState({});
   const [pendingNewItems, setPendingNewItems] = useState({});
   const [pendingDelItems, setPendingDelItems] = useState({});
@@ -2989,14 +2991,14 @@ function ClientBOQSection() {
   useEffect(() => {
     if (!selPkg) {
       setPkgStructures([]); setPkgCategories([]); setSectionItems({});
-      setSectionEdits({}); setItemEdits({}); setPendingNewItems({}); setPendingDelItems({});
+      setSectionEdits({}); setCatEdits({}); setItemEdits({}); setPendingNewItems({}); setPendingDelItems({});
       setEditingSections({});
       return;
     }
     (async () => {
       await Promise.all([loadStructures(selPkg.id), loadCategories(selPkg.id)]);
     })();
-    setSectionEdits({}); setItemEdits({}); setPendingNewItems({}); setPendingDelItems({});
+    setSectionEdits({}); setCatEdits({}); setItemEdits({}); setPendingNewItems({}); setPendingDelItems({});
     setEditingSections({});
     // eslint-disable-next-line
   }, [selPkg]);
@@ -3031,6 +3033,24 @@ function ClientBOQSection() {
   };
   const patchSection = (sid, patch) => setSectionEdits(p => ({
     ...p, [sid]: { ...(p[sid] || {}), ...patch }
+  }));
+
+  // Effective category area — the ONLY place an area is entered now
+  // (mirrors the Estimate builder, where GF/FF/Roof each carry their own).
+  //   staged edit > rate_package_categories.qty > section.default_qty
+  // The section fallback keeps every existing package on the exact same
+  // totals until a category is actually given its own number.
+  const getCatArea = (sec, cat) => {
+    const ed = catEdits[cat.id];
+    // Blank field = clear the override, which is exactly what Save writes
+    // (qty → NULL). Fall back to the section default right away so the
+    // live totals match what the row will look like after saving.
+    if (ed && ed.qty !== undefined) return ed.qty === "" ? getSecArea(sec) : (Number(ed.qty) || 0);
+    if (cat.qty !== null && cat.qty !== undefined && cat.qty !== "") return Number(cat.qty) || 0;
+    return getSecArea(sec);
+  };
+  const patchCategoryArea = (cid, patch) => setCatEdits(p => ({
+    ...p, [cid]: { ...(p[cid] || {}), ...patch }
   }));
 
   // Item base/addon/desc — itemEdits[sid][iid] wins over the row's saved value.
@@ -3108,18 +3128,27 @@ function ClientBOQSection() {
     return { base, addOn, perSqft, total, count };
   };
   const calcSection = (sec) => {
-    const area    = getSecArea(sec);
     const perItem = getSecPerItem(sec);
-    let base = 0, addOn = 0, total = 0;
+    let base = 0, addOn = 0, total = 0, area = 0;
     for (const cat of catsOfSection(sec.id)) {
-      const c = calcCategory(sec.id, cat.id, area, perItem);
+      const cArea = getCatArea(sec, cat);
+      const c = calcCategory(sec.id, cat.id, cArea, perItem);
       base += c.base; addOn += c.addOn; total += c.total;
+      area += cArea;
     }
-    const perSqft = base + addOn;
-    // Per-item mode: section total = Σ category totals (already qty-weighted)
-    // Uniform mode:  section total = (Σ base + Σ addOn) × area
-    const sectionTotal = perItem ? total : (perSqft * area);
-    return { area, perItem, base, addOn, perSqft, total: sectionTotal };
+    // Section rollup is DERIVED — area lives on the categories, so the
+    // header shows Σ area and the BLENDED rate (total ÷ Σ area). The old
+    // "Σ of the category rates × ONE section area" stopped reconciling the
+    // moment two categories had different areas: rate × qty ≠ total.
+    // Section total is Σ category totals in BOTH modes now.
+    //
+    // With no area anywhere there is nothing to blend, so fall back to the
+    // Σ of the per-sqft rates — that keeps this a readable RATE CARD before
+    // any area is entered (which is the normal state here, unlike the
+    // Estimate builder where an area always exists). The two agree exactly
+    // whenever the categories share one area, so nothing is lost.
+    const perSqft = area > 0 ? total / area : (base + addOn);
+    return { area, perItem, base, addOn, perSqft, total };
   };
   const calcGrand = () => {
     let base = 0, addOn = 0, total = 0;
@@ -3132,6 +3161,7 @@ function ClientBOQSection() {
 
   const hasChanged =
        Object.keys(sectionEdits).length > 0
+    || Object.values(catEdits).some(o => Object.keys(o).length > 0)
     || Object.values(itemEdits).some(o => Object.keys(o).length > 0)
     || Object.values(pendingNewItems).some(a => a.length > 0)
     || Object.values(pendingDelItems).some(o => Object.keys(o).length > 0);
@@ -3348,9 +3378,10 @@ function ClientBOQSection() {
 
   // ═══════════════════════════════════════════════════════════════════
   // SAVE RATES — Promise.allSettled so partial failures keep dirty flags
-  //   1. Section name + default_qty PUTs (one per dirty section)
-  //   2. Per-section bulk POST /rate-matrix/bulk (one per dirty section)
-  //   3. Master base_rate PUTs (dedup'd across sections)
+  //   1. Section name + per_item_qty PUTs (one per dirty section)
+  //   2. Category area PUTs (one per category whose area was edited)
+  //   3. Per-section bulk POST /rate-matrix/bulk (one per dirty section)
+  //   4. Master base_rate PUTs (dedup'd across sections)
   // ═══════════════════════════════════════════════════════════════════
   const saveRates = async () => {
     if (!selPkg || !selCity) return;
@@ -3367,7 +3398,16 @@ function ClientBOQSection() {
       if (Object.keys(body).length) sectionOps.push({ sid, body });
     }
 
-    // ── (2) Dirty section list = anything with item changes.
+    // ── (2) Category area edits — one PUT per edited category.
+    //    Blank ("") clears the override back to NULL so the category
+    //    goes back to inheriting the section's default_qty.
+    const catOps = []; // { cid, qty }
+    for (const [cidStr, ed] of Object.entries(catEdits)) {
+      if (ed.qty === undefined) continue;
+      catOps.push({ cid: Number(cidStr), qty: ed.qty === "" ? null : (Number(ed.qty) || 0) });
+    }
+
+    // ── (3) Dirty section list = anything with item changes.
     const dirtySids = new Set();
     Object.keys(itemEdits).forEach(s => { if (Object.keys(itemEdits[s] || {}).length) dirtySids.add(Number(s)); });
     Object.keys(pendingNewItems).forEach(s => { if ((pendingNewItems[s] || []).length) dirtySids.add(Number(s)); });
@@ -3379,32 +3419,42 @@ function ClientBOQSection() {
       if ((s.body.default_qty !== undefined || s.body.per_item_qty !== undefined)
           && (sectionItems[s.sid] || []).length) dirtySids.add(s.sid);
     });
+    // A category area edit changes the qty mirrored onto that category's
+    // pcr rows, so its section needs the item bulk-save too.
+    catOps.forEach(({ cid }) => {
+      const cat = pkgCategories.find(c => c.id === cid);
+      if (cat && (sectionItems[cat.structure_id] || []).length) dirtySids.add(cat.structure_id);
+    });
 
-    const itemOps = []; // { sid, items, area }
+    const itemOps = []; // { sid, items }
     for (const sid of dirtySids) {
       const sec = pkgStructures.find(s => s.id === sid);
       if (!sec) continue;
-      const area    = getSecArea(sec);
       const perItem = getSecPerItem(sec);
       const delMap = pendingDelItems[sid] || {};
       const saved  = (sectionItems[sid] || []).filter(r => !delMap[r.item_id]);
       const news   = pendingNewItems[sid] || [];
       const all    = [...saved, ...news];
-      const items  = all.map(r => ({
-        item_id:     r.item_id,
-        category_id: r.category_id,
-        base_rate:   Number(getRowBase(sid, r))  || 0,
-        add_on_rate: Number(getRowAddOn(sid, r)) || 0,
-        description: getRowDesc(sid, r),
-        // Per-item mode: each row keeps its own qty (from edits or saved).
-        // Uniform mode:  mirror section.area onto each pcr row so backend
-        //   compute can use either column without mode-checks.
-        qty:         perItem ? (Number(getRowQty(sid, r)) || 0) : area,
-      }));
+      const items  = all.map(r => {
+        const cat = pkgCategories.find(c => c.id === Number(r.category_id));
+        return {
+          item_id:     r.item_id,
+          category_id: r.category_id,
+          base_rate:   Number(getRowBase(sid, r))  || 0,
+          add_on_rate: Number(getRowAddOn(sid, r)) || 0,
+          description: getRowDesc(sid, r),
+          // Per-item mode: each row keeps its own qty (from edits or saved).
+          // Uniform mode:  mirror the row's CATEGORY area onto each pcr row
+          //   so backend compute can use either column without mode-checks.
+          qty:         perItem
+            ? (Number(getRowQty(sid, r)) || 0)
+            : (cat ? getCatArea(sec, cat) : getSecArea(sec)),
+        };
+      });
       itemOps.push({ sid, items });
     }
 
-    // ── (3) Master base_rate edits — push to boq_items, dedup'd.
+    // ── (4) Master base_rate edits — push to boq_items, dedup'd.
     const masterEdits = new Map(); // itemId → { newBase, item }
     for (const [sidStr, byItem] of Object.entries(itemEdits)) {
       for (const [iidStr, ed] of Object.entries(byItem)) {
@@ -3424,6 +3474,12 @@ function ClientBOQSection() {
       ops.push((async () => {
         const r = await api.put("/library/structures/" + sid, body);
         return { kind: "section", sid, ok: !!r?.success, msg: r?.message };
+      })());
+    }
+    for (const { cid, qty } of catOps) {
+      ops.push((async () => {
+        const r = await api.put("/library/categories/" + cid, { qty });
+        return { kind: "category", cid, ok: !!r?.success, msg: r?.message };
       })());
     }
     for (const { sid, items } of itemOps) {
@@ -3455,6 +3511,7 @@ function ClientBOQSection() {
 
     // Selectively clear dirty flags for SUCCESSFUL ops only.
     const okSidSection = new Set();
+    const okCatIds     = new Set();
     const okSidItems   = new Set();
     const okItemIds    = new Set();
     const failures     = [];
@@ -3463,11 +3520,15 @@ function ClientBOQSection() {
       const v = r.value;
       if (!v?.ok) { failures.push(v?.msg || "unknown"); continue; }
       if (v.kind === "section")  okSidSection.add(v.sid);
+      if (v.kind === "category") okCatIds.add(v.cid);
       if (v.kind === "items")    okSidItems.add(v.sid);
       if (v.kind === "boq-item") okItemIds.add(v.iid);
     }
     if (okSidSection.size) {
       setSectionEdits(p => { const n = {...p}; okSidSection.forEach(s => delete n[s]); return n; });
+    }
+    if (okCatIds.size) {
+      setCatEdits(p => { const n = {...p}; okCatIds.forEach(c => delete n[c]); return n; });
     }
     if (okSidItems.size) {
       setItemEdits(p => { const n = {...p}; okSidItems.forEach(s => delete n[s]); return n; });
@@ -4033,18 +4094,20 @@ function ClientBOQSection() {
           {/* ── SECTIONS ── */}
           {pkgStructures.map(sec => {
             const sCalc      = calcSection(sec);
-            const area       = sCalc.area;
             const perItem    = sCalc.perItem;
             const collapsed  = !!collapsedSections[sec.id];
             const editable   = !!editingSections[sec.id];
             const cats       = catsOfSection(sec.id);
             const renaming   = editable && renameSecId === sec.id;
             const dirty      = !!sectionEdits[sec.id]
+                            || cats.some(c => catEdits[c.id] && Object.keys(catEdits[c.id]).length)
                             || !!(itemEdits[sec.id] && Object.keys(itemEdits[sec.id]).length)
                             || !!(pendingNewItems[sec.id] && pendingNewItems[sec.id].length)
                             || !!(pendingDelItems[sec.id] && Object.keys(pendingDelItems[sec.id]).length);
-            // "set area" hint only matters in uniform mode — per-item sections show per-row qty
-            const noAreaHint = !perItem && area === 0;
+            // "set area" hint only matters in uniform mode — per-item sections
+            // show per-row qty. sCalc.area is Σ of the category areas, so this
+            // fires only when NO category has an area yet.
+            const noAreaHint = !perItem && sCalc.area === 0;
             return (
               <div key={sec.id}
                 style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB",
@@ -4102,10 +4165,18 @@ function ClientBOQSection() {
                                 fontSize: 11.5, fontWeight: 600 }}>
                     {!perItem && (
                       <>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>{t("common.base")} <strong style={{ color: "white" }}>{t("master_library.rs_inr", { inr: inr(sCalc.base) })}</strong></span>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>{t("common.add_on")} <strong style={{ color: COL_AMBER }}>{t("master_library.rs_inr", { inr: inr(sCalc.addOn) })}</strong></span>
+                        {/* Section rollup is DERIVED — area is entered per
+                            category, so the header shows Σ area and the
+                            blended rate. No section-level area input: one
+                            editable place for a number, and rate × qty
+                            always equals total. */}
+                        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, textTransform: "uppercase" }}>{t("common.qty")}</span>
+                          <strong style={{ color: "white", fontSize: 12.5 }}>{inr(sCalc.area)}</strong>
+                        </span>
                         <span style={{ padding: "3px 9px", background: COL_TEAL_BG, color: COL_TEAL,
-                                       borderRadius: 4, fontWeight: 700 }}>{t("master_library.rs_inr_sec", { inr: inr(sCalc.perSqft), sec: sec.unit || "sqft" })}</span>
+                                       borderRadius: 4, fontWeight: 700 }}
+                          title={t("estimate_builder.blended_rate_total_total_area")}>{t("master_library.rs_inr_sec", { inr: inr(Math.round(sCalc.perSqft)), sec: sec.unit || "sqft" })}</span>
                       </>
                     )}
                     {/* Per-item qty toggle (only when section is editable) */}
@@ -4121,30 +4192,6 @@ function ClientBOQSection() {
                                  cursor: "pointer", letterSpacing: ".3px", textTransform: "uppercase" }}>
                         {perItem ? t("common.per_item_qty") : t("master_library.uniform_area")}
                       </button>
-                    )}
-                    {/* Area — input/text in uniform mode; in per-item mode, hidden
-                        (each row carries its own qty in the table below). */}
-                    {!perItem && (
-                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, textTransform: "uppercase" }}>{t("common.area")}</span>
-                        {editable ? (
-                          <input type="number"
-                            value={sectionEdits[sec.id]?.default_qty ?? (sec.default_qty || 0)}
-                            onChange={e => patchSection(sec.id, { default_qty: e.target.value })}
-                            style={{
-                              width: 80, padding: "5px 8px", borderRadius: 5, textAlign: "right",
-                              fontFamily: "inherit", fontSize: 12, fontWeight: 700,
-                              border: "1.5px solid " + (sectionEdits[sec.id]?.default_qty !== undefined ? COL_AMBER : "rgba(255,255,255,0.2)"),
-                              background: sectionEdits[sec.id]?.default_qty !== undefined ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.08)",
-                              color: "white", outline: "none",
-                            }}/>
-                        ) : (
-                          <span style={{ minWidth: 50, padding: "4px 8px", textAlign: "right",
-                                         color: "white", fontWeight: 700, fontSize: 12 }}>
-                            {inr(area)}
-                          </span>
-                        )}
-                      </span>
                     )}
                     <span style={{ color: "rgba(255,255,255,0.6)" }}>{t("common.total")} <strong style={{ color: COL_TEAL_BG, fontSize: 13 }}>{t("master_library.rs_inr", { inr: inr(sCalc.total) })}</strong></span>
 
@@ -4195,11 +4242,19 @@ function ClientBOQSection() {
                       </div>
                     )}
                     {cats.map(cat => {
-                      const cCalc        = calcCategory(sec.id, cat.id, area, perItem);
+                      const cArea        = getCatArea(sec, cat);
+                      const cCalc        = calcCategory(sec.id, cat.id, cArea, perItem);
                       const catKey       = `${sec.id}:${cat.id}`;
                       const catCollapsed = !!collapsedCats[catKey];
                       const rows         = rowsOfCategory(sec.id, cat.id);
                       const catRenaming  = editable && renameCatId === cat.id;
+                      const areaEdited   = catEdits[cat.id]?.qty !== undefined;
+                      // Show the EFFECTIVE area (own qty, else the section
+                      // default it inherits) so the field always reads what
+                      // is actually in use. Blank invites a first entry.
+                      const areaVal      = areaEdited
+                        ? catEdits[cat.id].qty
+                        : (cArea === 0 ? "" : String(cArea));
                       return (
                         <div key={cat.id} style={{ marginBottom: 10, border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden" }}>
                           {/* Category subheader */}
@@ -4241,6 +4296,26 @@ function ClientBOQSection() {
                                 <>
                                   <span style={{ color: "#64748B" }}>{t("common.base")} <strong style={{ color: "#0F172A" }}>{t("master_library.rs_inr", { inr: inr(cCalc.base) })}</strong></span>
                                   <span style={{ color: "#64748B" }}>{t("common.add_on")} <strong style={{ color: COL_AMBER }}>{t("master_library.rs_inr", { inr: inr(cCalc.addOn) })}</strong></span>
+                                  {/* AREA — the one place a qty is entered.
+                                      Editable only while the section is
+                                      unlocked; hidden in per-item mode where
+                                      every row carries its own qty instead. */}
+                                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                    <span style={{ color: "#64748B", fontSize: 10.5, textTransform: "uppercase" }}>{t("common.area")}</span>
+                                    {editable ? (
+                                      <input type="number" value={areaVal}
+                                        onChange={e => patchCategoryArea(cat.id, { qty: e.target.value })}
+                                        placeholder="0"
+                                        title={t("estimate_builder.is_category_ki_area_qty_section")}
+                                        style={{ width: 70, padding: "4px 7px", borderRadius: 5, textAlign: "right",
+                                                 fontFamily: "inherit", fontSize: 11.5, fontWeight: 700,
+                                                 border: "1.5px solid " + (areaEdited ? COL_AMBER : "#CBD5E1"),
+                                                 background: areaEdited ? "#FFFBEB" : "white",
+                                                 color: areaEdited ? "#92400E" : "#0F172A", outline: "none" }}/>
+                                    ) : (
+                                      <span style={{ padding: "3px 7px", color: "#0F172A", fontWeight: 700, fontSize: 12 }}>{inr(cArea)}</span>
+                                    )}
+                                  </span>
                                 </>
                               )}
                               <span style={{ color: "#64748B" }}>{t("common.total")} <strong style={{ color: COL_GREEN }}>{t("master_library.rs_inr", { inr: inr(cCalc.total) })}</strong></span>
@@ -4282,7 +4357,7 @@ function ClientBOQSection() {
                                     const masterItem = boqItems.find(b => b.id === r.item_id);
                                     const name  = masterItem?.name || ("Item #" + r.item_id);
                                     const unit  = masterItem?.unit || "—";
-                                    const calc  = calcRow(sec.id, r, area, perItem);
+                                    const calc  = calcRow(sec.id, r, cArea, perItem);
                                     const ed    = itemEdits[sec.id]?.[r.item_id];
                                     const isNew = !!r._isNew;
                                     const hasEdit = !!ed && Object.keys(ed).length > 0;
@@ -4346,7 +4421,8 @@ function ClientBOQSection() {
                                         </td>
                                         {/* Area / Qty column. Per-item mode: editable qty input
                                             when section unlocked; read-only span when locked.
-                                            Uniform mode: shows section's area (read-only either way). */}
+                                            Uniform mode: shows the CATEGORY's area (read-only
+                                            either way — it is edited in the category header). */}
                                         <td style={{ padding: "8px 12px", textAlign: "right", fontSize: 12, color: COL_TEAL, fontWeight: 600 }}>
                                           {perItem && editable ? (
                                             <input type="number"
@@ -4360,7 +4436,7 @@ function ClientBOQSection() {
                                                        background: itemEdits[sec.id]?.[r.item_id]?.qty !== undefined ? "#FFFBEB" : "white",
                                                        outline: "none", color: COL_TEAL, fontWeight: 700 }}/>
                                           ) : (
-                                            inr(perItem ? getRowQty(sec.id, r) : area)
+                                            inr(perItem ? getRowQty(sec.id, r) : cArea)
                                           )}
                                         </td>
                                         <td style={{ padding: "8px 12px", textAlign: "right", fontSize: 13, fontWeight: 700, color: COL_GREEN }}>{t("master_library.rs_inr", { inr: inr(calc.total) })}</td>
