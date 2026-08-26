@@ -74,9 +74,11 @@ async function buildDigest(file) {
     if (/abstract|length|lenght|summary/i.test(name)) keyNames.push(name);
   }
 
-  // BOQ master ke items — naam se, warna sabse badi chaudi sheet
+  // BOQ master ke items — pehle "BOQ" se shuru, phir naam me kahin bhi BOQ
+  // ("Modified BOQ" jaisi sheets isi se pakdi jaati hain), warna sabse badi
   let boq_master = null;
   const bname = wb.SheetNames.find((n) => /^boq/i.test(n))
+    || wb.SheetNames.find((n) => /boq/i.test(n))
     || wb.SheetNames.reduce((best, n) => {
       const ws = wb.Sheets[n]; if (!ws || !ws["!ref"]) return best;
       const R = XLSX.utils.decode_range(ws["!ref"]);
