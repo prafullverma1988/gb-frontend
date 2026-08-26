@@ -728,7 +728,6 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
   const [showCreateCo,setShowCreateCo]=useState(false);
   const [newCo,setNewCo]=useState({name:"",domain:"surya_ghar",city:""});
   const [creating,setCreating]=useState(false);
-  const [showProfileMenu,setShowProfileMenu]=useState(false);
   const switcherRef=useRef(null);
   const profileMenuRef=useRef(null);
 
@@ -741,12 +740,6 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
   },[showSwitcher]);
 
   // Close profile menu on outside click
-  useEffect(()=>{
-    if(!showProfileMenu) return;
-    const handler=(e)=>{if(profileMenuRef.current&&!profileMenuRef.current.contains(e.target)) setShowProfileMenu(false);};
-    document.addEventListener("mousedown",handler);
-    return()=>document.removeEventListener("mousedown",handler);
-  },[showProfileMenu]);
 
   const domainIcons={"surya_ghar":"☀️","surya_ghar_plus":"☀️","solar_commercial":"⚡","construction_individual":"🏗️","housing_projects":"🏠","government_contractor":"🏛️"};
   const domainColors={"surya_ghar":"#E65100","surya_ghar_plus":"#FF8F00","solar_commercial":"#1565C0","construction_individual":"#2E7D32","housing_projects":"#6A1B9A","government_contractor":"#4B45C4"};
@@ -941,35 +934,32 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
           );
         })}
       </nav>
-      {/* User profile — click opens menu with personal settings + logout */}
-      <div ref={profileMenuRef} style={{position:"relative",borderTop:"1px solid rgba(255,255,255,0.08)"}}>
-        <div onClick={()=>{if(showLabel) setShowProfileMenu(!showProfileMenu);}}
-          style={{padding:(!isMobile&&collapsed)?"10px 0":"10px 12px",display:"flex",alignItems:"center",gap:10,justifyContent:(!isMobile&&collapsed)?"center":"flex-start",cursor:showLabel?"pointer":"default",transition:"background .12s",background:showProfileMenu?"rgba(255,255,255,0.05)":"transparent"}}
-          onMouseEnter={e=>{if(showLabel && !showProfileMenu) e.currentTarget.style.background="rgba(255,255,255,0.04)";}}
-          onMouseLeave={e=>{if(!showProfileMenu) e.currentTarget.style.background="transparent";}}>
-          <div style={{width:32,height:32,borderRadius:"50%",background:`linear-gradient(135deg,${C.a},#FF8F00)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:13,fontWeight:700,color:"white"}}>{(user?.name||"U")[0].toUpperCase()}</div>
-          {showLabel&&<div style={{flex:1,minWidth:0,overflow:"hidden"}}>
-            <div style={{color:"#fff",fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:"-.1px"}}>{user?.name||t("common.user")}</div>
-            <div style={{color:"rgba(255,255,255,0.4)",fontSize:9.5,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.role||t("common.user")}</div>
-          </div>}
-          {showLabel&&<svg width={12} height={12} viewBox="0 0 12 12" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={1.5}><path d={showProfileMenu?"M2 4l4 4 4-4":"M2 8l4-4 4 4"}/></svg>}
-        </div>
+    </div>
+  </>);
+}
 
-        {/* Profile menu popover (opens upward) */}
-        {showProfileMenu&&showLabel&&(
-          <div style={{position:"absolute",bottom:"100%",left:8,right:8,marginBottom:6,background:"#0F172A",borderRadius:9,boxShadow:"0 -8px 30px rgba(0,0,0,0.4)",border:"1px solid rgba(255,255,255,0.08)",overflow:"hidden",animation:"fadeIn .12s ease"}}>
+
+// ── TOPBAR ────────────────────────────────────────────────────────────
+
+// ── PROFILE MENU ────────────────────────────────────────────────────
+// Pehle ye sidebar ke sabse neeche baithta tha aur poori chaudai gherta tha.
+// Ab TopBar ke avatar se khulta hai — wahi jagah jahan log dhoondhte hain,
+// aur sidebar me neeche ki jagah bach jaati hai.
+function ProfileMenu({user,onNav,onLogout,close}){
+  return(
+          <div style={{position:"absolute",top:"100%",right:0,marginTop:8,width:260,background:"#0F172A",borderRadius:9,boxShadow:"0 10px 34px rgba(0,0,0,0.32)",border:"1px solid rgba(255,255,255,0.08)",overflow:"hidden",animation:"fadeIn .12s ease"}}>
             <div style={{padding:"10px 12px 8px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
               <div style={{color:"#fff",fontSize:12,fontWeight:700}}>{user?.name||t("common.user")}</div>
               <div style={{color:"rgba(255,255,255,0.45)",fontSize:10.5,marginTop:1}}>{user?.email||user?.phone||""}</div>
             </div>
-            <button onClick={()=>{setShowProfileMenu(false);handleNav("profile");}}
+            <button onClick={()=>{close();onNav("profile");}}
               style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.75)",fontSize:12,fontFamily:"inherit",textAlign:"left",transition:"background .12s"}}
               onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#fff";}}
               onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.75)";}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               <span>{t("app.my_profile")}</span>
             </button>
-            {["admin","super_admin"].includes(user?.role)&&<button onClick={()=>{setShowProfileMenu(false);handleNav("settings");}}
+            {["admin","super_admin"].includes(user?.role)&&<button onClick={()=>{close();onNav("settings");}}
               style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.75)",fontSize:12,fontFamily:"inherit",textAlign:"left",transition:"background .12s"}}
               onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#fff";}}
               onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.75)";}}>
@@ -989,7 +979,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
                   return (
                     <button key={l.code}
                       onClick={async()=>{
-                        setShowProfileMenu(false);
+                        close();
                         if(on) return;
                         try{ await api.put("/auth/language",{language:l.code}); }catch(_){}
                         setLang(l.code);
@@ -1006,7 +996,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
               </div>
             </div>
             {onLogout&&<div style={{borderTop:"1px solid rgba(255,255,255,0.06)"}}>
-              <button onClick={()=>{setShowProfileMenu(false);onLogout();}}
+              <button onClick={()=>{close();onLogout();}}
                 style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"#F87171",fontSize:12,fontFamily:"inherit",fontWeight:600,textAlign:"left",transition:"background .12s"}}
                 onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,0.15)";}}
                 onMouseLeave={e=>{e.currentTarget.style.background="none";}}>
@@ -1015,15 +1005,20 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
               </button>
             </div>}
           </div>
-        )}
-      </div>
-    </div>
-  </>);
+  );
 }
 
-
-// ── TOPBAR ────────────────────────────────────────────────────────────
-function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onSearch,onCheatsheet,onNotificationNav,isMobile}){
+function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onNav,onSearch,onCheatsheet,onNotificationNav,isMobile}){
+  const [showProfile,setShowProfile]=useState(false);
+  const profileRef=useRef(null);
+  // Bahar kahin bhi click karo to menu band ho jaye — warna wo khula reh
+  // jaata hai aur agla click uske neeche wale button tak pahunchta hi nahi.
+  useEffect(()=>{
+    if(!showProfile) return;
+    const h=(e)=>{if(profileRef.current&&!profileRef.current.contains(e.target)) setShowProfile(false);};
+    document.addEventListener("mousedown",h);
+    return()=>document.removeEventListener("mousedown",h);
+  },[showProfile]);
   return(
     <div style={{height:60,background:T.surface,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",padding:isMobile?"0 14px":"0 20px",gap:isMobile?10:14,flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
       {!isMobile&&<button onClick={()=>setCollapsed(!collapsed)} style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:7,borderRadius:7,display:"flex"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}><IcMenu size={19}/></button>}
@@ -1045,7 +1040,19 @@ function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onSea
         onMouseEnter={e=>e.currentTarget.style.background=T.sltL}
         onMouseLeave={e=>e.currentTarget.style.background=T.bg}>?</button>}
       <NotificationBell onNavigate={onNotificationNav}/>
-      <div style={{width:34,height:34,borderRadius:"50%",background:`linear-gradient(135deg,${C.a},#FF8F00)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"white",cursor:"pointer"}}>{(user?.name||"U")[0].toUpperCase()}</div>
+      <div ref={profileRef} style={{position:"relative"}}>
+
+        <div onClick={()=>setShowProfile(v=>!v)} title={user?.name||""}
+
+          style={{width:34,height:34,borderRadius:"50%",background:`linear-gradient(135deg,${C.a},#FF8F00)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"white",cursor:"pointer",outline:showProfile?`2px solid ${T.blu}`:"none",outlineOffset:2}}>
+
+          {(user?.name||"U")[0].toUpperCase()}
+
+        </div>
+
+        {showProfile&&<ProfileMenu user={user} onNav={onNav} onLogout={onLogout} close={()=>setShowProfile(false)}/>}
+
+      </div>
     </div>
   );
 }
@@ -2135,7 +2142,7 @@ function App(){
       </div>}
       {!hideAppShell && !isMobile && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany} ticketCount={ticketCount} sahayakNotifCount={sahayakNotifCount}/>}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        {!hideAppShell && <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={handleNotifNav} isMobile={isMobile}/>}
+        {!hideAppShell && <TopBar title={page.title} sub={page.sub} onNav={setNav} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={handleNotifNav} isMobile={isMobile}/>}
         <div style={{flex:1,overflowY:"auto",paddingBottom:isMobile&&!hideAppShell?68:0}}>
           {/* Inner ErrorBoundary: if a single module's chunk fails or
               the module throws on mount, recover the module area only —
