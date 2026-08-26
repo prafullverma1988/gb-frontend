@@ -86,8 +86,17 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
     onDeleted && onDeleted();
   };
 
-  const nameOk = String(typed).trim().toLowerCase().replace(/\s+/g, " ")
-    === String(prev?.name || name || "").trim().toLowerCase().replace(/\s+/g, " ");
+  // Naam ka milaan — chhoti-badi, jagah aur DASH ka farak maaf. Tender ka
+  // naam "NIT-99 — Sendh road" jaisa banta hai jisme EM-DASH hai, jo aam
+  // keyboard se type hi nahi hota; taala "sahi record hai" jaanchne ke liye
+  // hai, "sahi dash type kar sakte ho" ke liye nahi. Backend ka nameMatches
+  // bhi bilkul yahi karta hai — dono ek jaise rehne chahiye.
+  const normName = (s) => String(s || "")
+    .replace(/[‐-―−⁃]/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/\s*-\s*/g, "-")
+    .trim().toLowerCase();
+  const nameOk = normName(typed) === normName(prev?.name || name);
 
   // ── mit chuka — natija ──
   if (done) {
@@ -197,10 +206,19 @@ export default function DangerDelete({ kind, id, name, onArchived, onDeleted }) 
           Aakhri pushti — {prev.total.toLocaleString("en-IN")} rows mitne ja rahi hain
         </div>
         <div style={{ fontSize: 12, color: T.t3, marginBottom: 5 }}>
-          1. {label} ka poora naam hubahu likho:
+          1. {label} ka poora naam likho <span style={{ color: T.t4 }}>(dash aur chhoti-badi ka farak nahi padta)</span>:
         </div>
-        <div style={{ background: "white", border: `1px solid ${T.b1}`, borderRadius: 6, padding: "5px 9px", fontSize: 12, color: T.t1, fontWeight: 700, marginBottom: 6, wordBreak: "break-word" }}>
-          {prev.name}
+        <div style={{ display: "flex", gap: 6, alignItems: "stretch", marginBottom: 6 }}>
+          <div style={{ flex: 1, background: "white", border: `1px solid ${T.b1}`, borderRadius: 6, padding: "5px 9px", fontSize: 12, color: T.t1, fontWeight: 700, wordBreak: "break-word" }}>
+            {prev.name}
+          </div>
+          {/* Naam me em-dash jaise akshar hote hain jo keyboard se type nahi
+              hote — copy ka raasta rakhna hi theek hai. */}
+          <button type="button" onClick={() => setTyped(prev.name)} title="Naam neeche bhar do"
+            style={{ border: `1px solid ${T.b2}`, background: T.surface, borderRadius: 6, padding: "0 10px",
+              fontSize: 11, fontWeight: 700, color: T.t3, cursor: "pointer", whiteSpace: "nowrap" }}>
+            Bhar do
+          </button>
         </div>
         <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="yahan wahi naam likho"
           style={{ width: "100%", padding: "8px 11px", borderRadius: 7, marginBottom: 11, boxSizing: "border-box",
