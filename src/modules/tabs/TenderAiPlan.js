@@ -29,6 +29,8 @@ const fmtQty = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDi
    hota hai) + tooti (#REF!/error) cells ki ginti. BOQ-jaisi sheet ke
    items ki list, aur ABSTRACT/LENGTH jaisi summary sheets poori
    (values only). Error cell ka number KABHI nahi jaata — "#ERR" jaata. */
+const TOT_RE = /totals*amount|costs*pers*(meter|metre|mtr|rmt)|totals*length|grands*total|totals*qty|totals*quantity/i;
+
 async function buildDigest(file) {
   const XLSX = await import("xlsx");
   const buf = await file.arrayBuffer();
@@ -48,7 +50,27 @@ async function buildDigest(file) {
     }
     let seen = 0;
     for (const k in ws) { if (k[0] === "!") continue; if (++seen > 3000) break; if (ws[k].t === "e") err++; }
-    sheets.push({ name, rows: R.e.r + 1, cols: R.e.c + 1, heads, err });
+    // Har detail sheet ke NEECHE ka jod: "Total amount (INR)" + "Cost per
+    // Meter in INR". Prafull: inhi do se us kaam ki lambai nikal aati hai
+    // (1,80,017 / 4,856 = 37.08 m). Iske bina AI ko lambai kahin se milti
+    // hi nahi thi aur wo qty 0 chhod deta tha.
+    const tot = [];
+    for (let r = 0; r <= R.e.r && tot.length < 4; r++) {
+      let label = null;
+      for (let c = 0; c <= Math.min(R.e.c, 20); c++) {
+        const cl = ws[enc({ r, c })];
+        if (cl && typeof cl.v === "string" && TOT_RE.test(cl.v)) { label = cl.v.trim().slice(0, 42); break; }
+      }
+      if (!label) continue;
+      const nums = [];
+      for (let c = 0; c <= Math.min(R.e.c, 25); c++) {
+        const cl = ws[enc({ r, c })];
+        if (cl && cl.t === "n") nums.push(Math.round(cl.v * 100) / 100);
+        else if (cl && cl.t === "e") nums.push("#ERR");
+      }
+      if (nums.length) tot.push([label, ...nums.slice(-2)]);
+    }
+    sheets.push({ name, rows: R.e.r + 1, cols: R.e.c + 1, heads, err, tot });
     if (/abstract|length|lenght|summary/i.test(name)) keyNames.push(name);
   }
 
