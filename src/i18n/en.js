@@ -1357,6 +1357,7 @@ const dict = {
   "estimate.build_from_scratch":                               "✏️ Build from Scratch",
   "estimate.by":                                               "· by",
   "estimate.capped_at_remaining_qty":                          "Capped at remaining qty",
+  "estimate.category_qty_sets_all_items":                      "This category's qty — sets every item below. A single item can still be changed on its own row.",
   "estimate.change_link_or_trigger":                           "Change link or trigger %",
   "estimate.change_reason_required_for_approval":              "⚠ Change Reason (Required for Approval)",
   "estimate.changes_require_admin_approval_before_they":       "⚠ Changes require admin approval before they can be applied.",
