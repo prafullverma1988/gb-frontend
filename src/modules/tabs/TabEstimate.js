@@ -2380,6 +2380,13 @@ function TabEstimate({ project }) {
               const secQtyDisp = secPerItem
                 ? secItems.reduce((s,it) => s + (parseFloat(it.qty)||0), 0)
                 : catOrder.reduce((a,cn) => a + (parseFloat(groups[cn][0]?.it.qty) || 0), 0);
+              // Section rate is BLENDED (total ÷ qty) — categories can carry
+              // different qtys, so Σ of their rates would not reconcile. Only
+              // meaningful when every item shares one unit; hidden otherwise
+              // and in per-item mode. Same rule as the read-only BOQ view.
+              const secBlended   = secQtyDisp > 0 ? secTotal / secQtyDisp : 0;
+              const secUnits     = new Set(secItems.map(i => String(i.unit||"").trim().toLowerCase()).filter(Boolean));
+              const secRateShown = !secPerItem && secUnits.size <= 1 && secQtyDisp > 0;
               return (
                 <div key={si} style={{background:T.surfaceB,border:"1px solid "+T.b1,borderRadius:8,marginBottom:10,overflow:"hidden"}}>
                   <div style={{padding:"8px 12px",background:T.bluL,borderBottom:"1px solid "+T.bluM,display:"flex",gap:8,alignItems:"center"}}>
@@ -2402,6 +2409,12 @@ function TabEstimate({ project }) {
                     <span style={{fontSize:11,color:T.blu,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>
                       QTY <b>{Math.round(secQtyDisp).toLocaleString("en-IN")}</b>
                     </span>
+                    {secRateShown && (
+                      <span title={t("estimate_builder.blended_rate_total_total_area")}
+                        style={{fontSize:11,fontWeight:700,color:T.blu,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>
+                        {fmtC(Math.round(secBlended))}/sqft
+                      </span>
+                    )}
                     <span style={{fontSize:12,fontWeight:700,color:T.blu}}>{fmtC(secTotal)}</span>
                     <button onClick={async ()=>{
                       if (!await window.confirmAsync(t("estimate.delete_this_section_its_items_from"))) return;
@@ -2419,6 +2432,11 @@ function TabEstimate({ project }) {
                   {catOrder.map(catName => {
                     const rows     = groups[catName];
                     const catTotal = rows.reduce((s,r) => s + (parseFloat(r.it.qty)||0)*(parseFloat(r.it.rate)||0), 0);
+                    // Category rate = Σ of its item rates (300+100+100+100+150
+                    // = ₹750/sqft), NOT total ÷ qty — every item in a category
+                    // shares one qty, so the sum IS the per-unit rate and
+                    // rate × qty = amount. Same as the read-only BOQ view.
+                    const catRateSum = rows.reduce((s,r) => s + (parseFloat(r.it.rate)||0), 0);
                     // Category Qty box shows the shared number when every row
                     // agrees; blank when they don't, so a per-item tweak below
                     // is never silently hidden behind one value.
@@ -2457,7 +2475,9 @@ function TabEstimate({ project }) {
                                 title={t("estimate.category_qty_sets_all_items")}
                                 style={{padding:"5px 8px",border:"1.5px solid "+T.bluM,borderRadius:4,fontSize:11.5,fontWeight:700,outline:"none",textAlign:"right",background:"white",color:T.blu}}/>
                             )}
-                            <span/>
+                            <span style={{fontSize:11,fontWeight:700,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>
+                              {secPerItem ? "" : fmtC(catRateSum) + "/sqft"}
+                            </span>
                             <span style={{fontSize:11.5,fontWeight:700,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(catTotal)}</span>
                             <span/>
                           </div>
@@ -2492,10 +2512,42 @@ function TabEstimate({ project }) {
                             </div>
                           );
                         })}
+                        {/* New row goes right after this category's last row so
+                            the flat array keeps each category contiguous, and it
+                            inherits the category qty when they all agree. */}
+                        {catName && (
+                          <div style={{padding:"4px 12px 6px 22px",background:"#FAFAFA",borderBottom:"1px solid "+T.b1}}>
+                            <button onClick={()=>setAmendForm(p=>{
+                              const next  = [...p.sections];
+                              const items = [...next[si].items];
+                              items.splice(rows[rows.length-1].ii + 1, 0,
+                                { description:`[${catName}] `, unit:rows[0]?.it.unit||"", qty: uniform ? catQty : "", rate:"" });
+                              next[si] = { ...next[si], items };
+                              return { ...p, sections: next };
+                            })}
+                              style={{background:"transparent",border:"1px dashed "+T.bluM,color:T.blu,borderRadius:4,padding:"3px 9px",fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
+                              {t("master_library.add_item_to_category_name", { category_name: catName })}
+                            </button>
+                          </div>
+                        )}
                       </React.Fragment>
                     );
                   })}
-                  <div style={{padding:"6px 12px",background:T.surfaceB,borderTop:"1px solid "+T.b1}}>
+                  <div style={{padding:"6px 12px",background:T.surfaceB,borderTop:"1px solid "+T.b1,display:"flex",gap:8}}>
+                    {/* A category exists only as the [prefix] on its items, so
+                        "add category" = seed its first row with that prefix. */}
+                    <button onClick={async ()=>{
+                      const name = ((await window.promptAsync(t("master_library.category_name"))) || "").trim();
+                      if (!name) return;
+                      setAmendForm(p=>{
+                        const next = [...p.sections];
+                        next[si] = { ...next[si], items: [...next[si].items, { description:`[${name}] `, unit:"", qty:"", rate:"" }] };
+                        return { ...p, sections: next };
+                      });
+                    }}
+                      style={{background:"transparent",border:"1px dashed "+T.blu,color:T.blu,borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                     {t("common.add_category")}
+                    </button>
                     <button onClick={()=>setAmendForm(p=>{
                       const next = [...p.sections];
                       next[si] = { ...next[si], items: [...next[si].items, { description:"", unit:"", qty:"", rate:"" }] };
