@@ -729,6 +729,20 @@ function TabEstimate({ project }) {
 
   const reloadSel = async () => { if (selEst) await selectEst(selEst); };
 
+  // Deep-link from Pending Approvals → "Open in Project — full details".
+  // Without this the drawer only opened the Estimate tab and the approver had
+  // to hunt for the right estimate and then its Amendments tab. Runs once per
+  // navigation; selectEst forces subTab back to "boq", so "amend" is set after.
+  const focusAmend = project?.focusAmendment;
+  const [focusAmendDone, setFocusAmendDone] = useState(false);
+  useEffect(() => {
+    if (focusAmendDone || !focusAmend?.estimate_id || !estimates.length) return;
+    setFocusAmendDone(true);
+    const est = estimates.find(e => Number(e.id) === Number(focusAmend.estimate_id));
+    if (!est) return;
+    (async () => { await selectEst(est); setSubTab("amend"); })();
+  }, [focusAmend, estimates, focusAmendDone]);
+
   const submitEst = async () => {
     const validSecs = estForm.sections
       .map(s => ({ title: s.title, items: s.items.filter(i => i.description && i.qty && i.rate) }))

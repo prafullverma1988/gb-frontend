@@ -2304,7 +2304,16 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
       if (!item.project_id || !onSelectProject) return;
       // Same source→tab map the Pulse action strip uses (module-level helper).
       onClose();
-      onSelectProject({ id:item.project_id, name:item.project_name, initialTab:approvalTab({_source:src,module:item.module}) });
+      onSelectProject({
+        id:item.project_id, name:item.project_name,
+        initialTab:approvalTab({_source:src,module:item.module}),
+        // Estimate amendment: land on THAT estimate's Amendments tab rather
+        // than the generic Estimate tab, so the approver sees what they are
+        // approving without hunting for it.
+        ...(isCeAmend && item.estimate_id
+          ? { focusAmendment:{ estimate_id:item.estimate_id, amendment_id:item._source_id } }
+          : {}),
+      });
     };
     return(
       <div onClick={isPO ? (e)=>{ if(e.target===e.currentTarget||!e.target.closest("button")) togglePoExpand(); } : undefined}
