@@ -29,7 +29,7 @@ const fmtQty = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDi
    hota hai) + tooti (#REF!/error) cells ki ginti. BOQ-jaisi sheet ke
    items ki list, aur ABSTRACT/LENGTH jaisi summary sheets poori
    (values only). Error cell ka number KABHI nahi jaata — "#ERR" jaata. */
-const TOT_RE = /totals*amount|costs*pers*(meter|metre|mtr|rmt)|totals*length|grands*total|totals*qty|totals*quantity/i;
+const TOT_RE = /total\s*amount|cost\s*per\s*(meter|metre|mtr|rmt)|total\s*length|grand\s*total|total\s*qty|total\s*quantity/i;
 
 async function buildDigest(file) {
   const XLSX = await import("xlsx");
@@ -155,11 +155,15 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
   const [cities, setCities] = useState([]); const [ctypes, setCtypes] = useState([]);
   const [cityId, setCityId] = useState(""); const [ctypeId, setCtypeId] = useState("");
   const [execResult, setExecResult] = useState(null);
+  const [job, setJob] = useState(null);        // {status,kind,error} — peechhe chal raha kaam
   const [err, setErr] = useState("");
   const fileRef = useRef(null); const chatEndRef = useRef(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // silent=true → polling ke liye; spinner nahi dikhana (warna har 5 second
+  // poori screen "Loading…" par chali jaati).
+  const load = useCallback(async (silent) => {
+    if (!silent) setLoading(true);
+    let draft = null;
     try {
       const r = await api.get(`/tenders/${tenderId}/ai-plan`);
       if (r?.success) {
@@ -169,11 +173,34 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
         setMsgs(r.data.messages || []);
         setLlmReady(r.data.llm_ready !== false);
         setCanExec(!!r.data.can_execute);
+        setJob(r.data.draft ? { status: r.data.draft.job_status, kind: r.data.draft.job_kind, error: r.data.draft.job_error } : null);
+        draft = r.data.draft;
       }
     } catch (_) {}
     setLoading(false);
+    return draft;
   }, [tenderId]);
   useEffect(() => { load(); }, [load]);
+
+  // ── peechhe chal rahe kaam par nazar ────────────────────────────
+  // Bada workbook ka plan 5 minute se zyada le sakta hai, aur Railway ka
+  // proxy utni lambi request kaat deta hai (live: 502 @300s). Isliye server
+  // turant lauta deta hai aur asli kaam peechhe chalta hai — screen har 5
+  // second poochhti rehti hai ki hua ya nahi.
+  useEffect(() => {
+    if (job?.status !== "running") return;
+    let alive = true;
+    const id = setInterval(async () => {
+      if (!alive) return;
+      const d = await load(true);
+      if (d && d.job_status !== "running") {
+        clearInterval(id);
+        if (d.job_status === "failed") setErr(d.job_error || "AI ka kaam poora nahi hua");
+        setBusy("");
+      }
+    }, 5000);
+    return () => { alive = false; clearInterval(id); };
+  }, [job?.status, load]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
   const onFile = async (f) => {
@@ -181,9 +208,14 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
     setErr(""); setBusy("analyze");
     try {
       const digest = await buildDigest(f);
-      const r = await api.post(`/tenders/${tenderId}/ai-plan/analyze`, { digest }, { timeoutMs: 300000 });
-      if (r?.success) { setPlan(r.data.plan); setDirty(false); setExecResult(null); setMsgs([{ role: "ai", text: r.data.reply }]); }
-      else setErr(r?.message || "Analyze fail");
+      const r = await api.post(`/tenders/${tenderId}/ai-plan/analyze`, { digest }, { timeoutMs: 120000 });
+      if (r?.success) {
+        // Server ne kaam pakad liya; ab plan polling se aayega.
+        setPlan(null); setDirty(false); setExecResult(null); setMsgs([]);
+        setJob({ status: "running", kind: "analyze" });
+        return;   // busy chalta rahe — polling khatam hone par hatega
+      }
+      setErr(r?.message || "Analyze fail");
     } catch (e) { setErr("File padhne me dikkat: " + (e?.message || "error")); }
     setBusy("");
   };
@@ -195,9 +227,9 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
     try {
       // Haath ke edit pehle save — warna AI purane plan par baat karega
       if (dirty && plan) { await api.put(`/tenders/${tenderId}/ai-plan`, { plan }); setDirty(false); }
-      const r = await api.post(`/tenders/${tenderId}/ai-plan/discuss`, { text }, { timeoutMs: 300000 });
-      if (r?.success) { if (r.data.plan) { setPlan(r.data.plan); setDirty(false); } setMsgs((m) => [...m, { role: "ai", text: r.data.reply }]); }
-      else setMsgs((m) => [...m, { role: "ai", text: "⚠ " + (r?.message || "AI se baat nahi ho payi") }]);
+      const r = await api.post(`/tenders/${tenderId}/ai-plan/discuss`, { text }, { timeoutMs: 120000 });
+      if (r?.success) { setJob({ status: "running", kind: "discuss" }); return; }
+      setMsgs((m) => [...m, { role: "ai", text: "⚠ " + (r?.message || "AI se baat nahi ho payi") }]);
     } catch (e) { setMsgs((m) => [...m, { role: "ai", text: "⚠ " + (e?.message || "error") }]); }
     setBusy("");
   };
@@ -253,14 +285,20 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.xlsm" style={{ display: "none" }} onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
       {err && <div style={{ padding: "8px 12px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 8, fontSize: 12, color: T.red }}>{err}</div>}
       {!llmReady && <div style={{ padding: "8px 12px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, fontSize: 12, color: "#92400E" }}>AI abhi uplabdh nahi (server par LLM key nahi lagi) — plan haath se edit/execute phir bhi chalega.</div>}
+      {job?.status === "running" && (
+        <div style={{ padding: "10px 14px", background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 8, fontSize: 12.5, color: T.blu, fontWeight: 600 }}>
+          ⏳ AI {job.kind === "discuss" ? "plan sudhaar raha hai" : "workbook padh raha hai"}… bade workbook par 2–5 minute lag sakte hain.
+          <div style={{ fontSize: 11, color: T.t3, fontWeight: 400, marginTop: 3 }}>Ye tab band karke doosra kaam kar sakte ho — kaam server par chalta rahega, wapas aakar dekh lena.</div>
+        </div>
+      )}
 
       {/* empty state */}
       {!plan && (
         <div onClick={() => !busy && fileRef.current?.click()}
           style={{ border: `2px dashed ${T.b2}`, borderRadius: 12, padding: "44px 20px", textAlign: "center", cursor: busy ? "default" : "pointer", background: T.surfaceB }}>
-          {busy === "analyze"
+          {busy === "analyze" || job?.status === "running"
             ? <><div style={{ fontSize: 14, fontWeight: 700, color: T.blu }}>AI workbook padh raha hai…</div>
-              <div style={{ fontSize: 11.5, color: T.t4, marginTop: 6 }}>Badi file (100+ sheets) par 1–3 minute lag sakte hain — browser sirf saar bhejta hai, poori file nahi.</div></>
+              <div style={{ fontSize: 11.5, color: T.t4, marginTop: 6 }}>Badi file (100+ sheets) par 2–5 minute lag sakte hain — browser sirf saar bhejta hai, poori file nahi.</div></>
             : <><div style={{ fontSize: 15, fontWeight: 700, color: T.t2 }}>📄 BOQ / estimate workbook yahan do</div>
               <div style={{ fontSize: 12, color: T.t4, marginTop: 6 }}>AI saari sheets padh kar propose karega: village/area-wise <b>sites</b> → main <b>kaam</b> → execution <b>stages</b> qty ke saath.<br />Phir neeche chat me AI se bahas karke plan final karo.</div></>}
         </div>
