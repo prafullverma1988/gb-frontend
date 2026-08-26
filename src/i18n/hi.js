@@ -3626,6 +3626,9 @@ const dict = {
   "mom.ye_meeting_abhi_review_me_hai":                         "ये मीटिंग अभी रिव्यू में है — आइटम्स क्रिएट नहीं हुए।",
   "mom.yyyy_mm_dd":                                            "YYYY-MM-DD",
 
+  // ── more ────────────────────────────────────────────────────
+  "more.language":                                             "भाषा",
+
   // ── mr_detail ───────────────────────────────────────────────
   "mr_detail.close_reason":                                    "क्लोज रीज़न",
 

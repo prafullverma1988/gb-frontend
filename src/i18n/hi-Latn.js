@@ -3629,6 +3629,9 @@ const dict = {
   "mom.ye_meeting_abhi_review_me_hai":                         "Ye meeting abhi review me hai — items create nahi hue.",
   "mom.yyyy_mm_dd":                                            "YYYY-MM-DD",
 
+  // ── more ────────────────────────────────────────────────────
+  "more.language":                                             "Language",
+
   // ── mr_detail ───────────────────────────────────────────────
   "mr_detail.close_reason":                                    "Close Reason",
 

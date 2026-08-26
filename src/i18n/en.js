@@ -3627,6 +3627,9 @@ const dict = {
   "mom.ye_meeting_abhi_review_me_hai":                         "This meeting is currently under review — items have not been created.",
   "mom.yyyy_mm_dd":                                            "YYYY-MM-DD",
 
+  // ── more ────────────────────────────────────────────────────
+  "more.language":                                             "Language",
+
   // ── mr_detail ───────────────────────────────────────────────
   "mr_detail.close_reason":                                    "Close Reason",
 

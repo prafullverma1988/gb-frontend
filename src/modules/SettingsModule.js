@@ -2,6 +2,7 @@ import { useState, useEffect, Fragment } from "react";
 import api from "../config/api";
 import { clearPhotoPolicyCache } from "../utils/photoPolicy";
 import MapPicker from "../components/MapPicker";
+import { t, getLang, setLang, LANGS } from "../i18n";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -2907,6 +2908,38 @@ function MyProfile() {
           <FormField label="Company (admin managed)" value={prof.company_name || ""} onChange={() => {}} disabled half />
         </div>
         {msg && <div style={{ marginTop: 12, fontSize: 12.5, fontWeight: 600, color: msg.startsWith("✓") ? T.green : T.red }}>{msg}</div>}
+      </SectionCard>
+
+      {/* Language user ki apni setting hai (admin config nahi), isliye is
+          English-only file me bhi iske labels t() se aate hain — Hindi user ko
+          apni bhasha ka naam apni bhasha me dikhna chahiye. Chunte hi
+          setLang() reload karta hai (module-level constants aur apiCache
+          sirf re-render se nahi badalte), aur backend par save hota hai
+          taaki setting naye device / dobara login par saath chale. Backend
+          call fail ho to bhi local setting lag chuki hoti hai. */}
+      <SectionCard title={t("more.language")} desc={t("settings.language.hint")}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {LANGS.map(l => {
+            const on = l.code === getLang();
+            return (
+              <button key={l.code}
+                onClick={async () => {
+                  if (on) return;
+                  try { await api.put("/auth/language", { language: l.code }); } catch (_) {}
+                  setLang(l.code);
+                }}
+                style={{ flex: "1 1 140px", padding: "13px 16px", borderRadius: 10, cursor: "pointer",
+                  fontFamily: "inherit", fontSize: 13.5, fontWeight: on ? 700 : 500, textAlign: "left",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  background: on ? T.blueSoft : "white",
+                  color: on ? T.blue : T.text,
+                  border: `1.5px solid ${on ? T.blue : T.border}` }}>
+                <span>{l.label}</span>
+                {on && <span style={{ fontSize: 15 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
       </SectionCard>
 
       <SectionCard title="Change Password" desc="Apna login password update karein" action={<SaveBtn onClick={changePw} label={pwBusy ? "Updating…" : "Update Password"} />}>
