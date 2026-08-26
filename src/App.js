@@ -947,7 +947,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
 // aur sidebar me neeche ki jagah bach jaati hai.
 function ProfileMenu({user,onNav,onLogout,close}){
   return(
-          <div style={{position:"absolute",top:"100%",right:0,marginTop:8,width:260,background:"#0F172A",borderRadius:9,boxShadow:"0 10px 34px rgba(0,0,0,0.32)",border:"1px solid rgba(255,255,255,0.08)",overflow:"hidden",animation:"fadeIn .12s ease"}}>
+          <div style={{position:"absolute",top:"100%",right:0,marginTop:8,width:260,zIndex:400,background:"#0F172A",borderRadius:9,boxShadow:"0 10px 34px rgba(0,0,0,0.32)",border:"1px solid rgba(255,255,255,0.08)",overflow:"hidden",animation:"fadeIn .12s ease"}}>
             <div style={{padding:"10px 12px 8px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
               <div style={{color:"#fff",fontSize:12,fontWeight:700}}>{user?.name||t("common.user")}</div>
               <div style={{color:"rgba(255,255,255,0.45)",fontSize:10.5,marginTop:1}}>{user?.email||user?.phone||""}</div>
@@ -1020,7 +1020,7 @@ function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onNav
     return()=>document.removeEventListener("mousedown",h);
   },[showProfile]);
   return(
-    <div style={{height:60,background:T.surface,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",padding:isMobile?"0 14px":"0 20px",gap:isMobile?10:14,flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+    <div style={{height:60,position:"relative",zIndex:210,background:T.surface,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",padding:isMobile?"0 14px":"0 20px",gap:isMobile?10:14,flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
       {!isMobile&&<button onClick={()=>setCollapsed(!collapsed)} style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:7,borderRadius:7,display:"flex"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}><IcMenu size={19}/></button>}
       <div style={{flex:1}}><div style={{fontSize:isMobile?13.5:15,fontWeight:700,color:T.t1}}>{title}</div>{!isMobile&&sub&&<div style={{fontSize:11,color:T.t3}}>{sub}</div>}</div>
       {isMobile?(
