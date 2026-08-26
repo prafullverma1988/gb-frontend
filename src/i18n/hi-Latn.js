@@ -1359,6 +1359,7 @@ const dict = {
   "estimate.build_from_scratch":                               "✏️ Build from Scratch",
   "estimate.by":                                               "· by",
   "estimate.capped_at_remaining_qty":                          "Remaining qty pe capped hai",
+  "estimate.category_qty_sets_all_items":                      "Is category ki qty — neeche ke saare items par lag jayegi. Koi ek item apni row me alag se bhi badal sakte ho.",
   "estimate.change_link_or_trigger":                           "Link ya trigger % change karo",
   "estimate.change_reason_required_for_approval":              "⚠ Change Reason (Approval ke liye required hai)",
   "estimate.changes_require_admin_approval_before_they":       "⚠ Changes apply hone se pehle admin approval required hai.",

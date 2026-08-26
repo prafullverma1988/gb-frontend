@@ -1356,6 +1356,7 @@ const dict = {
   "estimate.build_from_scratch":                               "✏️ स्क्रैच से बिल्ड करो",
   "estimate.by":                                               "· बाय",
   "estimate.capped_at_remaining_qty":                          "रीमेनिंग क्वांटिटी पर कैप्ड है",
+  "estimate.category_qty_sets_all_items":                      "इस कैटेगरी की क्वांटिटी — नीचे के सभी आइटम्स पर लग जाएगी। कोई एक आइटम अपनी रो में अलग से भी बदला जा सकता है।",
   "estimate.change_link_or_trigger":                           "लिंक या ट्रिगर % चेंज करो",
   "estimate.change_reason_required_for_approval":              "⚠ चेंज रीज़न (अप्रूवल के लिए रिक्वायर्ड है)",
   "estimate.changes_require_admin_approval_before_they":       "⚠ चेंजेस अप्लाई होने से पहले एडमिन अप्रूवल रिक्वायर्ड है।",

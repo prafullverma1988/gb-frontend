@@ -2358,7 +2358,28 @@ function TabEstimate({ project }) {
 
             {/* Sections + items editor */}
             {amendForm.sections.map((sec, si) => {
-              const secTotal = (sec.items||[]).reduce((s,it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.rate)||0), 0);
+              const secItems = sec.items || [];
+              const secTotal = secItems.reduce((s,it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.rate)||0), 0);
+              const secPerItem = !!Number(sec.per_item_qty);
+              const EG = "1fr 70px 70px 95px 90px 30px";
+              // Group rows by the [Category] prefix stuffed into the description
+              // (the 2-level estimate schema has no category column — the prefix
+              // IS the carrier). Same regex the read-only BOQ view uses, so both
+              // screens always group identically. `ii` is kept so every patch
+              // still writes back to the flat items array.
+              const groups = {}; const catOrder = [];
+              secItems.forEach((it, ii) => {
+                const m = /^\[([^\]]+)\]\s*(.*)$/.exec(it.description || "");
+                const catName   = m ? m[1] : "";
+                const cleanDesc = m ? m[2] : (it.description || "");
+                if (!groups[catName]) { groups[catName] = []; catOrder.push(catName); }
+                groups[catName].push({ it, ii, cleanDesc });
+              });
+              // Section Qty = Σ of the category qtys (uniform) — matches the
+              // read-only view, where a category's qty is its first row's qty.
+              const secQtyDisp = secPerItem
+                ? secItems.reduce((s,it) => s + (parseFloat(it.qty)||0), 0)
+                : catOrder.reduce((a,cn) => a + (parseFloat(groups[cn][0]?.it.qty) || 0), 0);
               return (
                 <div key={si} style={{background:T.surfaceB,border:"1px solid "+T.b1,borderRadius:8,marginBottom:10,overflow:"hidden"}}>
                   <div style={{padding:"8px 12px",background:T.bluL,borderBottom:"1px solid "+T.bluM,display:"flex",gap:8,alignItems:"center"}}>
@@ -2373,6 +2394,14 @@ function TabEstimate({ project }) {
                       }}
                       placeholder={t("estimate.section_title")}
                       style={{flex:1,padding:"5px 9px",border:"1px solid "+T.bluM,borderRadius:5,fontSize:12.5,fontWeight:700,color:T.blu,background:"white",outline:"none"}}/>
+                    {secPerItem && (
+                      <span style={{padding:"1px 6px",fontSize:9.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",borderRadius:3,letterSpacing:".3px",whiteSpace:"nowrap"}}>
+                        {t("estimate.per_item_qty")}
+                      </span>
+                    )}
+                    <span style={{fontSize:11,color:T.blu,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>
+                      QTY <b>{Math.round(secQtyDisp).toLocaleString("en-IN")}</b>
+                    </span>
                     <span style={{fontSize:12,fontWeight:700,color:T.blu}}>{fmtC(secTotal)}</span>
                     <button onClick={async ()=>{
                       if (!await window.confirmAsync(t("estimate.delete_this_section_its_items_from"))) return;
@@ -2382,41 +2411,88 @@ function TabEstimate({ project }) {
                       🗑
                     </button>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 70px 70px 95px 90px 30px",padding:"5px 12px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
+                  <div style={{display:"grid",gridTemplateColumns:EG,padding:"5px 12px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
                     {["Description","Unit","Qty","Rate","Amount",""].map(h => (
                       <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{h}</span>
                     ))}
                   </div>
-                  {sec.items.map((it, ii) => {
-                    const amt = (parseFloat(it.qty)||0) * (parseFloat(it.rate)||0);
-                    const patch = (k, v) => setAmendForm(p => {
-                      const next = [...p.sections];
+                  {catOrder.map(catName => {
+                    const rows     = groups[catName];
+                    const catTotal = rows.reduce((s,r) => s + (parseFloat(r.it.qty)||0)*(parseFloat(r.it.rate)||0), 0);
+                    // Category Qty box shows the shared number when every row
+                    // agrees; blank when they don't, so a per-item tweak below
+                    // is never silently hidden behind one value.
+                    const qtys     = rows.map(r => String(r.it.qty ?? ""));
+                    const uniform  = qtys.every(q => q === qtys[0]);
+                    const catQty   = uniform ? qtys[0] : "";
+                    // Writing here sets qty on EVERY row of the category; each
+                    // row's own box below still overrides just that row.
+                    const setCatQty = (v) => setAmendForm(p => {
+                      const next  = [...p.sections];
+                      const items = [...next[si].items];
+                      rows.forEach(r => { items[r.ii] = { ...items[r.ii], qty: v }; });
+                      next[si] = { ...next[si], items };
+                      return { ...p, sections: next };
+                    });
+                    const patch = (ii, k, v) => setAmendForm(p => {
+                      const next  = [...p.sections];
                       const items = [...next[si].items];
                       items[ii] = { ...items[ii], [k]: v };
                       next[si] = { ...next[si], items };
                       return { ...p, sections: next };
                     });
                     return (
-                      <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 70px 95px 90px 30px",padding:"5px 12px",borderBottom:"1px solid "+T.b1,gap:6,alignItems:"center",background:"white"}}>
-                        <input value={it.description} onChange={e=>patch("description", e.target.value)}
-                          placeholder={t("estimate.item_description")}
-                          style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:12,outline:"none"}}/>
-                        <input value={it.unit} onChange={e=>patch("unit", e.target.value)}
-                          placeholder={t("estimate.sq_ft")}
-                          style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none"}}/>
-                        <input type="number" value={it.qty} onChange={e=>patch("qty", e.target.value)}
-                          style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none",textAlign:"right"}}/>
-                        <input type="number" value={it.rate} onChange={e=>patch("rate", e.target.value)}
-                          style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none",textAlign:"right"}}/>
-                        <span style={{fontSize:12,fontWeight:600,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(amt)}</span>
-                        <button onClick={()=>setAmendForm(p=>{
-                          const next = [...p.sections];
-                          next[si] = { ...next[si], items: next[si].items.filter((_,j)=> j !== ii) };
-                          return { ...p, sections: next };
+                      <React.Fragment key={catName || "__none__"}>
+                        {catName && (
+                          <div style={{display:"grid",gridTemplateColumns:EG,padding:"5px 12px",gap:6,alignItems:"center",background:"#F1F5F9",borderBottom:"1px solid "+T.b1}}>
+                            <span style={{fontSize:11.5,fontWeight:700,color:T.t1,paddingLeft:2}}>
+                              {catName}
+                              <span style={{fontSize:10,color:T.t4,fontWeight:500,marginLeft:6}}>· {rows.length} item{rows.length===1?"":"s"}</span>
+                            </span>
+                            <span/>
+                            {secPerItem ? <span/> : (
+                              <input type="number" value={catQty}
+                                onChange={e=>setCatQty(e.target.value)}
+                                placeholder={uniform ? "0" : "—"}
+                                title={t("estimate.category_qty_sets_all_items")}
+                                style={{padding:"5px 8px",border:"1.5px solid "+T.bluM,borderRadius:4,fontSize:11.5,fontWeight:700,outline:"none",textAlign:"right",background:"white",color:T.blu}}/>
+                            )}
+                            <span/>
+                            <span style={{fontSize:11.5,fontWeight:700,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(catTotal)}</span>
+                            <span/>
+                          </div>
+                        )}
+                        {rows.map(({ it, ii, cleanDesc }) => {
+                          const amt = (parseFloat(it.qty)||0) * (parseFloat(it.rate)||0);
+                          return (
+                            <div key={ii} style={{display:"grid",gridTemplateColumns:EG,padding:"5px 12px",borderBottom:"1px solid "+T.b1,gap:6,alignItems:"center",background:"white"}}>
+                              {/* The [Category] prefix is hidden here but kept in
+                                  the data — it is what carries the category into
+                                  the read view / PDF / Excel. Re-attached on every
+                                  keystroke so a rename can't orphan the row. */}
+                              <input value={cleanDesc}
+                                onChange={e=>patch(ii, "description", catName ? `[${catName}] ${e.target.value}` : e.target.value)}
+                                placeholder={t("estimate.item_description")}
+                                style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:12,outline:"none",marginLeft:catName?10:0}}/>
+                              <input value={it.unit} onChange={e=>patch(ii, "unit", e.target.value)}
+                                placeholder={t("estimate.sq_ft")}
+                                style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none"}}/>
+                              <input type="number" value={it.qty} onChange={e=>patch(ii, "qty", e.target.value)}
+                                style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none",textAlign:"right"}}/>
+                              <input type="number" value={it.rate} onChange={e=>patch(ii, "rate", e.target.value)}
+                                style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none",textAlign:"right"}}/>
+                              <span style={{fontSize:12,fontWeight:600,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(amt)}</span>
+                              <button onClick={()=>setAmendForm(p=>{
+                                const next = [...p.sections];
+                                next[si] = { ...next[si], items: next[si].items.filter((_,j)=> j !== ii) };
+                                return { ...p, sections: next };
+                              })}
+                                title={t("estimate.delete_row")}
+                                style={{background:"transparent",border:"none",color:"#DC2626",cursor:"pointer",fontSize:13}}>×</button>
+                            </div>
+                          );
                         })}
-                          title={t("estimate.delete_row")}
-                          style={{background:"transparent",border:"none",color:"#DC2626",cursor:"pointer",fontSize:13}}>×</button>
-                      </div>
+                      </React.Fragment>
                     );
                   })}
                   <div style={{padding:"6px 12px",background:T.surfaceB,borderTop:"1px solid "+T.b1}}>
