@@ -8,7 +8,7 @@ import { ConfirmProvider } from "./components/ConfirmDialog";
 import { PromptProvider } from "./components/PromptDialog";
 import NotificationBell from "./components/NotificationBell";
 import AppErrorBoundary from "./components/AppErrorBoundary";
-import { t, setLang, getLang, LANGS } from "./i18n";
+import { t } from "./i18n";
 
 // ── LAZY + PRELOAD: shared promise so prefetch & React.lazy use same cache ──
 // When preload() resolves, React.lazy gets already-resolved promise = NO spinner
@@ -959,42 +959,6 @@ function ProfileMenu({user,onNav,onLogout,close}){
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               <span>{t("app.my_profile")}</span>
             </button>
-            {["admin","super_admin"].includes(user?.role)&&<button onClick={()=>{close();onNav("settings");}}
-              style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.75)",fontSize:12,fontFamily:"inherit",textAlign:"left",transition:"background .12s"}}
-              onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#fff";}}
-              onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.75)";}}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-              <span>{t("app.company_settings")}</span>
-            </button>}
-            {/* ── Language ────────────────────────────────────
-                 setLang() reload karta hai — poori UI ek hi bhasha me aati
-                 hai. Backend call isliye ki setting device ke bahar bhi
-                 chale (naya login, Sahayak bot); wo fail ho jaye to bhi
-                 local setting lag chuki hoti hai. */}
-            <div style={{borderTop:"1px solid rgba(255,255,255,0.06)",padding:"9px 12px"}}>
-              <div style={{color:"rgba(255,255,255,0.45)",fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("more.language")}</div>
-              <div style={{display:"flex",gap:6}}>
-                {LANGS.map(l=>{
-                  const on=l.code===getLang();
-                  return (
-                    <button key={l.code}
-                      onClick={async()=>{
-                        close();
-                        if(on) return;
-                        try{ await api.put("/auth/language",{language:l.code}); }catch(_){}
-                        setLang(l.code);
-                      }}
-                      style={{flex:1,padding:"6px 4px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
-                        fontSize:11,fontWeight:on?700:500,
-                        background:on?"rgba(59,130,246,0.22)":"rgba(255,255,255,0.05)",
-                        color:on?"#93C5FD":"rgba(255,255,255,0.7)",
-                        border:"1px solid "+(on?"rgba(59,130,246,0.55)":"rgba(255,255,255,0.08)")}}>
-                      {l.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
             {onLogout&&<div style={{borderTop:"1px solid rgba(255,255,255,0.06)"}}>
               <button onClick={()=>{close();onLogout();}}
                 style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"#F87171",fontSize:12,fontFamily:"inherit",fontWeight:600,textAlign:"left",transition:"background .12s"}}

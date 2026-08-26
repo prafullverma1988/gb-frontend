@@ -1929,7 +1929,11 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
       let sTotal = 0;
       const catRows = sCats.map(c => {
         const cm = (sm.categories && sm.categories[c.id]) || {};
-        const cArea = isSet(cm.area_override) ? Number(cm.area_override) || 0 : sArea;
+        // Area cascade: this quote's override > the library category's own
+        // area (Client BOQ Rate) > the section default it inherits.
+        const cArea = isSet(cm.area_override) ? Number(cm.area_override) || 0
+                    : isSet(c.qty)            ? Number(c.qty)            || 0
+                    : sArea;
         const items = (pkgItems[s.id] || []).filter(it => Number(it.category_id) === Number(c.id));
         const itemOverrides = cm.items || {};
         let cBase = 0, cAddOn = 0, cItemTotalSum = 0;
