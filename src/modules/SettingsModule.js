@@ -2,6 +2,7 @@ import { useState, useEffect, Fragment } from "react";
 import api from "../config/api";
 import { clearPhotoPolicyCache } from "../utils/photoPolicy";
 import MapPicker from "../components/MapPicker";
+import RecycleBin from "./shared/RecycleBin";
 import { t, getLang, setLang, LANGS } from "../i18n";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
@@ -3140,6 +3141,7 @@ const settingsSections = [
   { id: "notifications", label: "Notifications",        Icon: IcBell,      Comp: NotificationSettings,   section: "SYSTEM" },
   { id: "sequences",     label: "Number Sequences",     Icon: IcHash,      Comp: NumberSequences,        section: null },
   { id: "audit",         label: "Audit Trail",          Icon: IcClipboard, Comp: AuditSettings,          section: null },
+  { id: "recyclebin",    label: "Recycle Bin",          Icon: IcClipboard, Comp: RecycleBin,             section: null },
   { id: "features",      label: "Feature Requests",     Icon: IcEdit,      Comp: FeatureRequests,        section: "FEEDBACK" },
 ];
 
@@ -3148,6 +3150,7 @@ export default function SettingsModule({ initialSection = "company" } = {}) {
   const ActiveComp = settingsSections.find(s => s.id === activeSection)?.Comp || CompanySettings;
   const activeLabel = settingsSections.find(s => s.id === activeSection)?.label || "Settings";
   const descMap = {
+    recyclebin: "Permanently hataye gaye project/tender — 30 din tak wapas laye ja sakte hain",
     profile: "Manage your personal account and password",
     company: "Manage your company profile and regional settings", roles: "Configure user roles, permissions and project access",
     approval: "Set up multi-level approval workflows", backdate: "Control back-dated entry permissions",
