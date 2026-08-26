@@ -94,7 +94,7 @@ async function buildDigest(file) {
       for (let c = 0; c <= R.e.c; c++) { const cl = bws[enc({ r, c })]; if (cl && typeof cl.v === "string") cells[c] = cl.v.toLowerCase(); }
       const find = (re) => { for (const c in cells) if (re.test(cells[c])) return Number(c); return -1; };
       const d = find(/desc/), u = find(/^unit/), q = find(/^quantity|^qty/), rt = find(/^rate/), am = find(/^amount/);
-      if (d >= 0 && (u >= 0 || q >= 0)) { hr = r; colMap = { no: find(/^s\.?\s*no/), ref: find(/ref/), desc: d, unit: u, qty: q, rate: rt, amount: am }; }
+      if (d >= 0 && (u >= 0 || q >= 0)) { hr = r; colMap = { no: find(/^s\.?\s*no|^item\s*no/), ref: find(/ref|sor/), desc: d, unit: u, qty: q, rate: rt, amount: am }; }
     }
     if (hr >= 0) {
       const items = [];
