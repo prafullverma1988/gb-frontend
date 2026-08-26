@@ -2031,9 +2031,12 @@ function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems, b
 // ════════════════════════════════════════════════════════════════════
 const WIZ_STEPS = ["Upload", "Mapping", "Preview", "Commit"];
 
-function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
+function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
   const toast = useToast();
   const fileRef = useRef(null);
+  // Asli File object bacha kar rakhte hain — import ke baad "AI se plan
+  // banao" isi file ko AI Plan tab ko saunp deta hai, dobara chunna nahi.
+  const [rawFile, setRawFile] = useState(null);
   const [step, setStep] = useState(1);
   const [err, setErr]   = useState("");
   const [busy, setBusy] = useState(false);
@@ -2068,6 +2071,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
   const onFile = async (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
+    setRawFile(f);
     setErr("");
     try {
       const buf = await f.arrayBuffer();
@@ -2143,6 +2147,11 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal}) {
     }
     toast.success(`${res.data.row_count} items import ho gaye`);
     onDone && onDone();
+    // Prafull ka idea 1: import hote hi wahi file AI Plan me le jao —
+    // items ki ids ab DB me hain, isliye AI plan ko unse jod bhi payega.
+    if (onAiPlan && rawFile && window.confirm("BOQ import ho gaya ✓\n\nAb isi file se AI ka site/task plan banayein? (AI Plan tab khulega)")) {
+      onAiPlan(rawFile);
+    }
     onClose();
   };
 
@@ -2762,7 +2771,7 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
   );
 }
 
-function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
+function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, onAiPlan}) {
   const toast = useToast();
   const [search, setSearch]   = useState("");
   const [showImport, setShowImport] = useState(false);
@@ -3114,7 +3123,7 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport}) {
     </Panel>
 
     {showImport && <BoqImportModal tenderId={tenderId} boqFinal={boqFinal}
-      onClose={()=>setShowImport(false)} onDone={reload}/>}
+      onClose={()=>setShowImport(false)} onDone={reload} onAiPlan={onAiPlan}/>}
     {itemModal && <BoqItemModal tenderId={tenderId} item={itemModal.item}
       isItemRate={isItemRate} boqItems={items} boqFinal={boqFinal}
       onClose={()=>setItemModal(null)} onSaved={reload}/>}
@@ -5670,6 +5679,8 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab]         = useState(initialTab || "overview");
+  // BOQ import se AI Plan tak file ka haath-badal (Prafull ka idea 1)
+  const [aiPlanFile, setAiPlanFile] = useState(null);
   const [showEdit, setShowEdit]   = useState(false);
   const [showInst, setShowInst]   = useState(false);
   const [moveTo, setMoveTo]       = useState(null);   // stage change modal ka target
@@ -6049,7 +6060,8 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
       {/* ══ BOQ ══ */}
       {tab==="boq" && (
         <BoqTab tenderId={tenderId} boq={boq} loading={boqLoading} reload={loadBoq}
-          rateType={data.rate_type} autoImport={freshBoq}/>
+          rateType={data.rate_type} autoImport={freshBoq}
+          onAiPlan={(file)=>{ setAiPlanFile(file); setTab("aiplan"); }}/>
       )}
 
       {/* ══ MEASUREMENTS ══ */}
@@ -6072,7 +6084,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
 
       {/* ══ AI PLAN — workbook se site/task plan, AI ke saath ══ */}
       {tab==="aiplan" && (
-        <TenderAiPlan tenderId={tenderId} onOpenProject={onOpenProject}/>
+        <TenderAiPlan tenderId={tenderId} onOpenProject={onOpenProject} initialFile={aiPlanFile}/>
       )}
 
       {/* ══ SITES ══ */}

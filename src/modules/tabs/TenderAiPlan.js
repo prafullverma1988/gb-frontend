@@ -140,7 +140,19 @@ async function buildDigest(file) {
 
 const inp = (extra = {}) => ({ padding: "5px 8px", borderRadius: 6, border: `1.5px solid ${T.b1}`, fontSize: 12, color: T.t1, background: T.surface, outline: "none", boxSizing: "border-box", fontFamily: "inherit", ...extra });
 
-export default function TenderAiPlan({ tenderId, onOpenProject }) {
+// BOQ se juda hai? — chhota chip. Ek id = pakka link (execute par task
+// boq_item_id se jud jayega, MB/RA ki kadi); kai id = sirf yaad ke liye.
+const boqChip = (ids) => (Array.isArray(ids) && ids.length > 0)
+  ? <span title={"BOQ item id: " + ids.join(", ") + (ids.length === 1 ? " — task isse judega (MB/RA)" : " — kai items, link nahi hoga")}
+      style={{ fontSize: 9, fontWeight: 700, borderRadius: 9, padding: "1px 7px", whiteSpace: "nowrap",
+        color: ids.length === 1 ? "#065F46" : "#92400E",
+        background: ids.length === 1 ? "#D1FAE5" : "#FEF3C7",
+        border: "1px solid " + (ids.length === 1 ? "#A7F3D0" : "#FDE68A") }}>
+      BOQ{ids.length === 1 ? " #" + ids[0] : " ×" + ids.length}
+    </span>
+  : null;
+
+export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState(null);
   const [draftMeta, setDraftMeta] = useState(null);
@@ -157,8 +169,10 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
   const [execResult, setExecResult] = useState(null);
   const [job, setJob] = useState(null);        // {status,kind,error} — peechhe chal raha kaam
   const [dinfo, setDinfo] = useState(null);    // digest ka saar — screen par dikhta hai
+  const [boqCount, setBoqCount] = useState(0); // tender me imported BOQ items
   const [err, setErr] = useState("");
   const fileRef = useRef(null); const chatEndRef = useRef(null);
+  const initialUsed = useRef(null);
 
   // silent=true → polling ke liye; spinner nahi dikhana (warna har 5 second
   // poori screen "Loading…" par chali jaati).
@@ -175,6 +189,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
         setLlmReady(r.data.llm_ready !== false);
         setCanExec(!!r.data.can_execute);
         setJob(r.data.draft ? { status: r.data.draft.job_status, kind: r.data.draft.job_kind, error: r.data.draft.job_error } : null);
+        setBoqCount(Number(r.data.imported_boq_count) || 0);
         draft = r.data.draft;
       }
     } catch (_) {}
@@ -182,6 +197,16 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
     return draft;
   }, [tenderId]);
   useEffect(() => { load(); }, [load]);
+
+  // BOQ Import se seedha aaye ho (Prafull ka idea 1): wahi file yahan
+  // pahunchti hai aur analyze apne aap chal jaata hai — dobara chunna nahi.
+  useEffect(() => {
+    if (initialFile && initialUsed.current !== initialFile) {
+      initialUsed.current = initialFile;
+      onFile(initialFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile]);
 
   // ── peechhe chal rahe kaam par nazar ────────────────────────────
   // Bada workbook ka plan 5 minute se zyada le sakta hai, aur Railway ka
@@ -307,16 +332,32 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
       )}
 
       {/* empty state */}
-      {!plan && (
+      {!plan && (<>
         <div onClick={() => !busy && fileRef.current?.click()}
           style={{ border: `2px dashed ${T.b2}`, borderRadius: 12, padding: "44px 20px", textAlign: "center", cursor: busy ? "default" : "pointer", background: T.surfaceB }}>
           {busy === "analyze" || job?.status === "running"
             ? <><div style={{ fontSize: 14, fontWeight: 700, color: T.blu }}>AI workbook padh raha hai…</div>
               <div style={{ fontSize: 11.5, color: T.t4, marginTop: 6 }}>Badi file (100+ sheets) par 2–5 minute lag sakte hain — browser sirf saar bhejta hai, poori file nahi.</div></>
             : <><div style={{ fontSize: 15, fontWeight: 700, color: T.t2 }}>📄 BOQ / estimate workbook yahan do</div>
-              <div style={{ fontSize: 12, color: T.t4, marginTop: 6 }}>AI saari sheets padh kar propose karega: village/area-wise <b>sites</b> → main <b>kaam</b> → execution <b>stages</b> qty ke saath.<br />Phir neeche chat me AI se bahas karke plan final karo.</div></>}
+              <div style={{ fontSize: 12, color: T.t4, marginTop: 6 }}>AI saari sheets padh kar propose karega: sites → kaam → hissa → step, qty aur BOQ ke jod ke saath.<br />Phir neeche chat me AI se bahas karke plan final karo — area-wise, stretch-wise ya apne zone, jaise tum kaho.</div></>}
         </div>
-      )}
+        {/* Idea 2 (Prafull): file na ho to imported BOQ se hi — imandaar seema
+            ke saath, kyunki BOQ me sirf item/qty/rate hota hai. */}
+        {boqCount > 0 && !(busy === "analyze" || job?.status === "running") && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <button onClick={async () => {
+              setErr(""); setBusy("analyze"); setDinfo(null);
+              const r = await api.post(`/tenders/${tenderId}/ai-plan/analyze`, { from_boq: true }, { timeoutMs: 120000 }).catch((e) => ({ success: false, message: e?.message }));
+              if (r?.success) { setPlan(null); setDirty(false); setExecResult(null); setMsgs([]); setJob({ status: "running", kind: "analyze" }); return; }
+              setErr(r?.message || "Analyze fail"); setBusy("");
+            }}
+              style={{ padding: "8px 16px", borderRadius: 8, border: `1.5px solid ${T.bluM}`, background: T.bluL, color: T.blu, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              📋 Imported BOQ se banao ({boqCount} items — file nahi chahiye)
+            </button>
+            <span style={{ fontSize: 11, color: T.t4 }}>Seema: BOQ me sirf item/qty/rate hai — village/lambai ka byora poori file se behtar aata hai.</span>
+          </div>
+        )}
+      </>)}
 
       {/* PLAN TREE */}
       {plan && <>
@@ -354,6 +395,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
                     <input value={w.unit || ""} placeholder="unit" onChange={(e) => upd((p) => { p.sites[si].works[wi].unit = e.target.value; })} style={inp({ width: 58 })} />
                     <input type="number" value={w.amount || ""} placeholder="₹" onChange={(e) => upd((p) => { p.sites[si].works[wi].amount = Number(e.target.value) || 0; })} style={inp({ width: 110, textAlign: "right", color: T.grn, fontWeight: 700 })} />
                     {w.needs_review && <span title="AI ko number pakka nahi mila — jaanch lo" style={{ fontSize: 10, color: "#B45309", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 10, padding: "1px 8px", fontWeight: 700 }}>jaanch lo</span>}
+                    {boqChip(w.boq_item_ids)}
                     <button onClick={() => setOpen((o) => ({ ...o, [key]: !exp }))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, color: T.blu, fontWeight: 700 }}>
                       {w.stages.length ? `${w.stages.length} stages ${exp ? "▴" : "▾"}` : (exp ? "stages ▴" : "+ stages")}
                     </button>
@@ -362,19 +404,39 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
                   {exp && (
                     <div style={{ padding: "4px 12px 10px 35px", display: "flex", flexDirection: "column", gap: 5 }}>
                       {w.stages.map((st, ti) => (
-                        <div key={ti} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                          <span style={{ fontSize: 10, color: T.t4, width: 18 }}>{ti + 1}.</span>
-                          <input value={st.name} onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].name = e.target.value; })} style={inp({ flex: "1 1 180px" })} />
-                          <input type="number" value={st.qty || ""} placeholder={w.qty ? String(w.qty) : "qty"} onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].qty = Number(e.target.value) || 0; })} style={inp({ width: 80, textAlign: "right" })} />
-                          <input value={st.unit || ""} placeholder={w.unit || "unit"} onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].unit = e.target.value; })} style={inp({ width: 52 })} />
-                          <input type="number" value={st.amount || ""} placeholder="₹" onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].amount = Number(e.target.value) || 0; })} style={inp({ width: 100, textAlign: "right", color: T.grn })} />
-                          <button onClick={() => upd((p) => { p.sites[si].works[wi].stages.splice(ti, 1); })} style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 13 }}>×</button>
+                        <div key={ti}>
+                          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                            <span style={{ fontSize: 10, color: T.t4, width: 18 }}>{ti + 1}.</span>
+                            <input value={st.name} onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].name = e.target.value; })} style={inp({ flex: "1 1 180px" })} />
+                            <input type="number" value={st.qty || ""} placeholder={w.qty ? String(w.qty) : "qty"} onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].qty = Number(e.target.value) || 0; })} style={inp({ width: 80, textAlign: "right" })} />
+                            <input value={st.unit || ""} placeholder={w.unit || "unit"} onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].unit = e.target.value; })} style={inp({ width: 52 })} />
+                            <input type="number" value={st.amount || ""} placeholder="₹" onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].amount = Number(e.target.value) || 0; })} style={inp({ width: 100, textAlign: "right", color: T.grn })} />
+                            {boqChip(st.boq_item_ids)}
+                            <button onClick={() => upd((p) => { p.sites[si].works[wi].stages.splice(ti, 1); })} style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 13 }}>×</button>
+                          </div>
+                          {/* ── TEESRA LEVEL (steps) — Prafull ka case-3: stretch →
+                              road/structure → asli kaam (GSB, WMM, RCC…). Yahi
+                              leaf hai jahan roz qty likhi jayegi aur jo BOQ item
+                              se judti hai. ── */}
+                          {(st.steps || []).map((x, xi) => (
+                            <div key={xi} style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4, marginLeft: 26 }}>
+                              <span style={{ fontSize: 9.5, color: T.t4, width: 26 }}>{ti + 1}.{xi + 1}</span>
+                              <input value={x.name} onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].steps[xi].name = e.target.value; })} style={inp({ flex: "1 1 150px", fontSize: 11.5 })} />
+                              <input type="number" value={x.qty || ""} placeholder="qty" onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].steps[xi].qty = Number(e.target.value) || 0; })} style={inp({ width: 74, textAlign: "right", fontSize: 11.5 })} />
+                              <input value={x.unit || ""} placeholder="unit" onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].steps[xi].unit = e.target.value; })} style={inp({ width: 48, fontSize: 11.5 })} />
+                              <input type="number" value={x.amount || ""} placeholder="₹" onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].steps[xi].amount = Number(e.target.value) || 0; })} style={inp({ width: 94, textAlign: "right", color: T.grn, fontSize: 11.5 })} />
+                              {boqChip(x.boq_item_ids)}
+                              <button onClick={() => upd((p) => { p.sites[si].works[wi].stages[ti].steps.splice(xi, 1); })} style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 12 }}>×</button>
+                            </div>
+                          ))}
+                          <button onClick={() => upd((p) => { const stg = p.sites[si].works[wi].stages[ti]; stg.steps = stg.steps || []; stg.steps.push({ name: "", qty: 0, unit: "", amount: 0, boq_item_ids: [] }); })}
+                            style={{ marginLeft: 26, marginTop: 3, border: `1px dashed ${T.b2}`, background: "none", borderRadius: 5, padding: "1px 8px", fontSize: 10, color: T.t4, cursor: "pointer" }}>＋ step</button>
                         </div>
                       ))}
-                      <button onClick={() => upd((p) => { p.sites[si].works[wi].stages.push({ name: "", qty: 0, unit: w.unit || "", amount: 0 }); })}
+                      <button onClick={() => upd((p) => { p.sites[si].works[wi].stages.push({ name: "", qty: 0, unit: w.unit || "", amount: 0, boq_item_ids: [], steps: [] }); })}
                         style={{ alignSelf: "flex-start", border: `1px dashed ${T.b2}`, background: "none", borderRadius: 6, padding: "3px 10px", fontSize: 11, color: T.t3, cursor: "pointer" }}>＋ stage</button>
                       <div style={{ fontSize: 10, color: T.t4, lineHeight: 1.5 }}>
-                        Line-kaam (road/drain/pipe) me stage ki qty khali chhodo to har stage par kaam ki poori lambai jayegi ({fmtQty(w.qty)} {w.unit}); structure ke stage % me chalte hain. ₹ na baanto to poora paisa pehle stage par jayega.
+                        Line-kaam me stage ki qty khali chhodo to poori lambai jayegi ({fmtQty(w.qty)} {w.unit}); structure ke stage % me. Step = asli kaam (GSB, RCC…) apni qty apne unit me — roz ki entry aur BOQ ka jod wahi hai. ₹ na baanto to poora paisa pehle bachche par jayega.
                       </div>
                     </div>
                   )}
@@ -396,7 +458,11 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
                 </button>
               ))}
             </div>
-            <div>{execResult.works_created} kaam + {execResult.stages_created} stages bane{execResult.skipped?.length ? ` · ${execResult.skipped.length} pehle se the (skip)` : ""}</div>
+            <div>
+              {execResult.works_created} kaam + {execResult.stages_created} stages{execResult.steps_created ? ` + ${execResult.steps_created} steps` : ""} bane
+              {execResult.boq_linked ? <> · <b style={{ color: T.grn }}>{execResult.boq_linked} task BOQ se jude</b> (inki qty MB draft tak jayegi)</> : ""}
+              {execResult.skipped?.length ? ` · ${execResult.skipped.length} pehle se the (skip)` : ""}
+            </div>
             {execResult.skipped?.length > 0 && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{execResult.skipped.join(" · ")}</div>}
           </div>
         )}
