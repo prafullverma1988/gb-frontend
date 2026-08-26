@@ -1546,11 +1546,11 @@ function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged
   const [editType, setEditType]       = useState(null);
   const [busyTypeId, setBusyTypeId]   = useState(null);
 
-  const handleDeleteType = async (t) => {
-    if (!await window.confirmAsync(t("township_crm.delete_unit_type_type_name_units", { type_name: t.type_name }))) return;
-    setBusyTypeId(t.id);
+  const handleDeleteType = async (item) => {
+    if (!await window.confirmAsync(t("township_crm.delete_unit_type_type_name_units", { type_name: item.type_name }))) return;
+    setBusyTypeId(item.id);
     try {
-      const r = await api.del(`/township-crm/unit-types/${t.id}`);
+      const r = await api.del(`/township-crm/unit-types/${item.id}`);
       if (r?.success) onChanged?.();
       else alert("Delete failed: " + (r?.message || "unknown"));
     } catch (e) { alert("Delete failed: " + (e?.message || e)); }
@@ -1603,19 +1603,19 @@ function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged
               <tr>{["Type","Plot","Built-up","Base rate","Price","Units",""].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr>
             </thead>
             <tbody>
-              {unitTypes.map(t => (
-                <tr key={t.id}>
-                  <td style={td}>{t.type_name} ({t.type_code})</td>
-                  <td style={td}>{t.plot_area_sqft ? `${Number(t.plot_area_sqft)} sqft` : "—"}</td>
-                  <td style={td}>{t.built_up_area_sqft ? `${Number(t.built_up_area_sqft)} sqft` : "—"}</td>
-                  <td style={td}>{t.base_rate_per_sqft ? `₹${Number(t.base_rate_per_sqft).toLocaleString("en-IN")}/sqft` : "—"}</td>
-                  <td style={{ ...td, fontWeight:600 }}>{inr(t.base_price)}</td>
-                  <td style={td}>{t.unit_count ?? 0}</td>
+              {unitTypes.map(item2 => (
+                <tr key={item2.id}>
+                  <td style={td}>{item2.type_name} ({item2.type_code})</td>
+                  <td style={td}>{item2.plot_area_sqft ? `${Number(item2.plot_area_sqft)} sqft` : "—"}</td>
+                  <td style={td}>{item2.built_up_area_sqft ? `${Number(item2.built_up_area_sqft)} sqft` : "—"}</td>
+                  <td style={td}>{item2.base_rate_per_sqft ? `₹${Number(item2.base_rate_per_sqft).toLocaleString("en-IN")}/sqft` : "—"}</td>
+                  <td style={{ ...td, fontWeight:600 }}>{inr(item2.base_price)}</td>
+                  <td style={td}>{item2.unit_count ?? 0}</td>
                   <td style={{ ...td, whiteSpace:"nowrap" }}>
                     <span style={{ display:"inline-flex", gap:6 }}>
-                      <Btn small label={t("common.edit_2")} onClick={() => setEditType(t)}/>
-                      <Btn small danger label={busyTypeId === t.id ? "…" : t("common.delete")}
-                        disabled={busyTypeId === t.id} onClick={() => handleDeleteType(t)}/>
+                      <Btn small label={t("common.edit_2")} onClick={() => setEditType(item2)}/>
+                      <Btn small danger label={busyTypeId === item2.id ? "…" : t("common.delete")}
+                        disabled={busyTypeId === item2.id} onClick={() => handleDeleteType(item2)}/>
                     </span>
                   </td>
                 </tr>

@@ -930,7 +930,7 @@ const dict = {
   "crm.lead_source":                                           "Lead Source",
   "crm.leave_blank_to_use_master":                             "Master use karne ke liye blank chhodo",
   "crm.length_deals_conversionrate_rate":                      "{length} deals · {conversionRate}% rate",
-  "crm.length_new_length_followup":                            "{length} new · {length} followup",
+  "crm.length_new_length_followup":                            "{length} new · {followup} followup",
   "crm.library_client_boq_rate":                               "Library → Client BOQ Rate",
   "crm.live_quotations_built_from_your_rate":                  "Live quotations built from your rate library.",
   "crm.loading_crm":                                           "Loading CRM...",

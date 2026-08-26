@@ -331,35 +331,35 @@ export default function TabBudget({ project }) {
                 ))}
               </tr></thead>
               <tbody>
-                {tree.map((t) => {
-                  const node = t.is_budget_node;
-                  const fl = flags[t.id] || {};
+                {tree.map((item) => {
+                  const node = item.is_budget_node;
+                  const fl = flags[item.id] || {};
                   const canBudget = node || (!fl.cover && !fl.hasDesc);
-                  const v = Number(t.variance || 0);
-                  const openDrawer = canBudget ? () => openTask(t.id)
+                  const v = Number(item.variance || 0);
+                  const openDrawer = canBudget ? () => openTask(item.id)
                     : () => flash(fl.cover ? `Covered by ${fl.cover.task_no} — budget at that level` : "A sub-task already has a budget — remove it first", "error");
-                  const rowClick = t._hasKids ? () => toggleCollapse(t.id) : openDrawer;  // parents expand, leaves open the drawer
+                  const rowClick = item._hasKids ? () => toggleCollapse(item.id) : openDrawer;  // parents expand, leaves open the drawer
                   return (
-                    <tr key={t.id} onClick={rowClick} style={{ cursor: (t._hasKids || canBudget) ? "pointer" : "not-allowed", background: "transparent" }}
+                    <tr key={item.id} onClick={rowClick} style={{ cursor: (item._hasKids || canBudget) ? "pointer" : "not-allowed", background: "transparent" }}
                       onMouseEnter={(e) => e.currentTarget.style.background = T.surfaceB}
                       onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                      <td style={{ ...td, paddingLeft: 10 + t._d * 18 }}>
-                        {t._hasKids
-                          ? <span onClick={(e) => { e.stopPropagation(); toggleCollapse(t.id); }} title={collapsed[t.id] ? t("budget.expand") : t("common.collapse")} style={{ display: "inline-block", width: 18, marginRight: 4, color: T.t2, cursor: "pointer", fontSize: 11, textAlign: "center", userSelect: "none" }}>{collapsed[t.id] ? "▶" : "▼"}</span>
+                      <td style={{ ...td, paddingLeft: 10 + item._d * 18 }}>
+                        {item._hasKids
+                          ? <span onClick={(e) => { e.stopPropagation(); toggleCollapse(item.id); }} title={collapsed[item.id] ? t("budget.expand") : t("common.collapse")} style={{ display: "inline-block", width: 18, marginRight: 4, color: T.t2, cursor: "pointer", fontSize: 11, textAlign: "center", userSelect: "none" }}>{collapsed[item.id] ? "▶" : "▼"}</span>
                           : <span style={{ display: "inline-block", width: 18, marginRight: 4 }} />}
-                        <span style={{ color: T.t4, marginRight: 6, fontSize: 11 }}>{t.task_no}</span>
-                        <span style={{ fontWeight: node ? 700 : 400, color: node ? T.t1 : T.t3 }}>{t.name}</span>
-                        {collapsed[t.id] && descCount[t.id] ? <span style={{ marginLeft: 6, fontSize: 10, color: T.t4 }}>+{descCount[t.id]}</span> : null}
-                        {node ? <span style={{ marginLeft: 7, fontSize: 9, color: T.blu, background: T.bluL, padding: "1px 6px", borderRadius: 10, fontWeight: 700 }}>BUDGET{t.roll_pct != null ? " · " + t.roll_pct + "%" : ""}</span>
+                        <span style={{ color: T.t4, marginRight: 6, fontSize: 11 }}>{item.task_no}</span>
+                        <span style={{ fontWeight: node ? 700 : 400, color: node ? T.t1 : T.t3 }}>{item.name}</span>
+                        {collapsed[item.id] && descCount[item.id] ? <span style={{ marginLeft: 6, fontSize: 10, color: T.t4 }}>+{descCount[item.id]}</span> : null}
+                        {node ? <span style={{ marginLeft: 7, fontSize: 9, color: T.blu, background: T.bluL, padding: "1px 6px", borderRadius: 10, fontWeight: 700 }}>BUDGET{item.roll_pct != null ? " · " + item.roll_pct + "%" : ""}</span>
                           : fl.cover ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.t4 }}>{t("budget.covered_by_task_no", { task_no: fl.cover.task_no })}</span>
                           : fl.hasDesc ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.amb }}>{t("budget.has_budgeted_sub_task")}</span>
                           : <span style={{ marginLeft: 7, fontSize: 9.5, color: T.t4 }}>operational</span>}
                       </td>
-                      <td style={{ ...td, color: T.t3 }}>{node ? (t.unit || "—") : ""}</td>
-                      <td style={{ ...td, textAlign: "right", fontWeight: node ? 600 : 400, color: node ? T.t1 : T.t4 }}>{node ? inr(t.scope_amt) : ""}</td>
-                      <td style={{ ...td, textAlign: "right", color: node ? T.amb : T.t4 }}>{node ? inr(t.estimate_amt) : ""}</td>
-                      <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? inr(t.earned) : ""}</td>
-                      <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? (Number(t.actual_amt) ? inr(t.actual_amt) : "—") : ""}</td>
+                      <td style={{ ...td, color: T.t3 }}>{node ? (item.unit || "—") : ""}</td>
+                      <td style={{ ...td, textAlign: "right", fontWeight: node ? 600 : 400, color: node ? T.t1 : T.t4 }}>{node ? inr(item.scope_amt) : ""}</td>
+                      <td style={{ ...td, textAlign: "right", color: node ? T.amb : T.t4 }}>{node ? inr(item.estimate_amt) : ""}</td>
+                      <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? inr(item.earned) : ""}</td>
+                      <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? (Number(item.actual_amt) ? inr(item.actual_amt) : "—") : ""}</td>
                       <td style={{ ...td, textAlign: "right", fontWeight: 700, color: node ? (v >= 0 ? T.grn : T.red) : T.t4 }}>{node ? inr(v) : ""}</td>
                       <td style={{ ...td, textAlign: "center" }} onClick={(e) => { e.stopPropagation(); openDrawer(); }}>{node ? <span style={{ color: T.blu, cursor: "pointer" }}>{t("budget.open")}</span> : canBudget ? <span style={{ fontSize: 10.5, color: T.blu, cursor: "pointer", whiteSpace: "nowrap" }}>{t("budget.budget")}</span> : <span style={{ fontSize: 10.5, color: T.t4 }}>—</span>}</td>
                     </tr>

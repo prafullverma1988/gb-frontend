@@ -4281,34 +4281,34 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
       <div style={{flex:1,overflow:"auto",padding:"10px 14px"}}>
         {loading?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>{t("common.loading")}</div>
         :filtered.length===0?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>{t("projects.no_todos_found")}</div>
-        :filtered.map(t=>{
-          const pr=priC[t.priority]||priC["Medium"];
-          const clDone=(t.checklist||[]).filter(c=>c.done).length;
-          const isExpanded = expandedId === t.id;
-          const hasChecklist = t.checklist && t.checklist.length > 0;
+        :filtered.map(item=>{
+          const pr=priC[item.priority]||priC["Medium"];
+          const clDone=(item.checklist||[]).filter(c=>c.done).length;
+          const isExpanded = expandedId === item.id;
+          const hasChecklist = item.checklist && item.checklist.length > 0;
           return(
-            <div key={t.id}
+            <div key={item.id}
               style={{background:"white",borderRadius:8,border:`1px solid ${isExpanded?"#3B82F6":"#E2E8F0"}`,marginBottom:8,borderLeft:`3px solid ${pr.c}`,transition:"all .15s",overflow:"hidden",boxShadow:isExpanded?"0 4px 14px rgba(59,130,246,0.15)":"none"}}>
-              <div onClick={()=>setExpandedId(isExpanded?null:t.id)}
+              <div onClick={()=>setExpandedId(isExpanded?null:item.id)}
                 style={{padding:"10px 13px",cursor:"pointer"}}
                 onMouseEnter={e=>{if(!isExpanded){e.currentTarget.parentElement.style.boxShadow="0 4px 14px rgba(15,23,42,0.08)";e.currentTarget.parentElement.style.borderColor="#BFDBFE";}}}
                 onMouseLeave={e=>{if(!isExpanded){e.currentTarget.parentElement.style.boxShadow="none";e.currentTarget.parentElement.style.borderColor="#E2E8F0";}}}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
-                  <div onClick={(e)=>toggleDone(t,e)} title={t.done?t("projects.mark_as_pending"):t("projects.mark_as_done")}
-                    style={{width:18,height:18,borderRadius:4,border:t.done?`none`:`1.5px solid #CBD5E1`,background:t.done?"#22C55E":"transparent",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-                    {t.done&&<svg width={10} height={10} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>}
+                  <div onClick={(e)=>toggleDone(item,e)} title={item.done?t("projects.mark_as_pending"):t("projects.mark_as_done")}
+                    style={{width:18,height:18,borderRadius:4,border:item.done?`none`:`1.5px solid #CBD5E1`,background:item.done?"#22C55E":"transparent",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                    {item.done&&<svg width={10} height={10} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:t.done?"#94A3B8":"#1E293B",textDecoration:t.done?"line-through":"none",marginBottom:4,lineHeight:1.4}}>{t.title}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:item.done?"#94A3B8":"#1E293B",textDecoration:item.done?"line-through":"none",marginBottom:4,lineHeight:1.4}}>{item.title}</div>
                     <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                      {t.project_name && <span onClick={(e)=>{e.stopPropagation();goToProject(t);}}
-                        style={{fontSize:10,fontWeight:600,color:"#3B82F6",background:"#EFF6FF",padding:"1px 7px",borderRadius:10,cursor:"pointer",border:"1px solid #BFDBFE"}}>{t.project_name}</span>}
-                      {!t.project_id&&<span style={{fontSize:10,fontWeight:600,color:"#7C3AED",background:"#F5F3FF",padding:"1px 7px",borderRadius:10,border:"1px solid #DDD6FE"}}>{t("projects.company")}</span>}
-                      {t.category&&t.category!=="Other"&&<span style={{fontSize:10,color:"#64748B",background:"#F1F5F9",padding:"1px 6px",borderRadius:10}}>{t.category}</span>}
-                      <span style={{fontSize:10,fontWeight:600,color:pr.c,background:pr.bg,padding:"1px 6px",borderRadius:10}}>{t.priority}</span>
-                      {t.assigned_name&&<span style={{fontSize:10,color:"#64748B"}}>@{t.assigned_name.split(" ")[0]}</span>}
-                      {t.due_date&&<span style={{fontSize:10,color:"#64748B"}}>{t("projects.due_fmtdate", { fmtDate: fmtDate(t.due_date) })}</span>}
-                      {hasChecklist&&<span style={{fontSize:10,fontWeight:600,color:clDone===t.checklist.length?"#22C55E":"#94A3B8"}}>☑ {clDone}/{t.checklist.length}</span>}
+                      {item.project_name && <span onClick={(e)=>{e.stopPropagation();goToProject(item);}}
+                        style={{fontSize:10,fontWeight:600,color:"#3B82F6",background:"#EFF6FF",padding:"1px 7px",borderRadius:10,cursor:"pointer",border:"1px solid #BFDBFE"}}>{item.project_name}</span>}
+                      {!item.project_id&&<span style={{fontSize:10,fontWeight:600,color:"#7C3AED",background:"#F5F3FF",padding:"1px 7px",borderRadius:10,border:"1px solid #DDD6FE"}}>{t("projects.company")}</span>}
+                      {item.category&&item.category!=="Other"&&<span style={{fontSize:10,color:"#64748B",background:"#F1F5F9",padding:"1px 6px",borderRadius:10}}>{item.category}</span>}
+                      <span style={{fontSize:10,fontWeight:600,color:pr.c,background:pr.bg,padding:"1px 6px",borderRadius:10}}>{item.priority}</span>
+                      {item.assigned_name&&<span style={{fontSize:10,color:"#64748B"}}>@{item.assigned_name.split(" ")[0]}</span>}
+                      {item.due_date&&<span style={{fontSize:10,color:"#64748B"}}>{t("projects.due_fmtdate", { fmtDate: fmtDate(item.due_date) })}</span>}
+                      {hasChecklist&&<span style={{fontSize:10,fontWeight:600,color:clDone===item.checklist.length?"#22C55E":"#94A3B8"}}>☑ {clDone}/{item.checklist.length}</span>}
                     </div>
                   </div>
                   <span style={{fontSize:11,color:"#94A3B8",flexShrink:0,marginTop:2,transition:"transform .2s",transform:isExpanded?"rotate(180deg)":"rotate(0)"}}>▼</span>
@@ -4319,11 +4319,11 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
               {isExpanded && (
                 <div style={{padding:"0 13px 12px",borderTop:"1px dashed #E2E8F0",background:"#F8FAFC"}}>
                   {/* Raised-by row — created_by_name + created_at (matches mobile) */}
-                  {(t.created_by_name || t.created_at) && (() => {
+                  {(item.created_by_name || item.created_at) && (() => {
                     const stamp = (() => {
-                      if (!t.created_at) return "";
+                      if (!item.created_at) return "";
                       try {
-                        const d = new Date(t.created_at);
+                        const d = new Date(item.created_at);
                         const date = d.toLocaleDateString("en-IN", { day:"2-digit", month:"short" });
                         const time = d.toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", hour12: true });
                         return date + " · " + time;
@@ -4332,7 +4332,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                     return (
                       <div style={{paddingTop:10,fontSize:11,color:"#64748B"}}>
                         <span style={{fontWeight:600,color:"#475569"}}>{t("projects.raised_by")}</span>{" "}
-                        {t.created_by_name || "—"}{stamp ? " · " + stamp : ""}
+                        {item.created_by_name || "—"}{stamp ? " · " + stamp : ""}
                       </div>
                     );
                   })()}
@@ -4341,61 +4341,61 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                     <div style={{paddingTop:10}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                         <div style={{fontSize:10,fontWeight:700,color:"#64748B",letterSpacing:".5px"}}>{t("projects.checklist")}</div>
-                        <span style={{fontSize:10,fontWeight:700,color:clDone===t.checklist.length?"#15803D":"#7C3AED"}}>{clDone}/{t.checklist.length}</span>
+                        <span style={{fontSize:10,fontWeight:700,color:clDone===item.checklist.length?"#15803D":"#7C3AED"}}>{clDone}/{item.checklist.length}</span>
                       </div>
                       {/* Progress bar — drives task status via toggleChecklistItem */}
                       <div style={{height:4,background:"#E2E8F0",borderRadius:2,marginBottom:8,overflow:"hidden"}}>
                         <div style={{
                           height:"100%",
-                          width: Math.round((clDone/t.checklist.length)*100)+"%",
-                          background: clDone===t.checklist.length ? "#15803D" : "#7C3AED",
+                          width: Math.round((clDone/item.checklist.length)*100)+"%",
+                          background: clDone===item.checklist.length ? "#15803D" : "#7C3AED",
                           borderRadius:2,
                           transition:"width .3s",
                         }}/>
                       </div>
-                      {t.checklist.map((c,idx)=>(
-                        <div key={idx} onClick={(e)=>toggleChecklistItem(t,idx,e)}
+                      {item.checklist.map((c,idx)=>(
+                        <div key={idx} onClick={(e)=>toggleChecklistItem(item,idx,e)}
                           style={{display:"flex",alignItems:"center",gap:9,padding:"7px 8px",borderRadius:6,cursor:"pointer",marginBottom:3,background:c.done?"#F0FDF4":"transparent",transition:"background .12s"}}
                           onMouseEnter={e=>{if(!c.done)e.currentTarget.style.background="#F1F5F9";}}
                           onMouseLeave={e=>{if(!c.done)e.currentTarget.style.background="transparent";}}>
-                          <div style={{width:16,height:16,borderRadius:4,border:c.done?"none":"1.5px solid #CBD5E1",background:c.done?"#22C55E":"white",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",opacity:savingChk===`${t.id}-${idx}`?.5:1}}>
+                          <div style={{width:16,height:16,borderRadius:4,border:c.done?"none":"1.5px solid #CBD5E1",background:c.done?"#22C55E":"white",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",opacity:savingChk===`${item.id}-${idx}`?.5:1}}>
                             {c.done&&<svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.5}><path d="M2 5l2.5 2.5L8 3"/></svg>}
                           </div>
                           <span style={{flex:1,fontSize:12.5,color:c.done?"#94A3B8":"#1E293B",textDecoration:c.done?"line-through":"none"}}>{c.text||c.t||c.title||c.item||c.label||c.name||t("common.item")}</span>
-                          {savingChk===`${t.id}-${idx}`&&<span style={{fontSize:9,color:"#94A3B8"}}>{t("projects.saving")}</span>}
+                          {savingChk===`${item.id}-${idx}`&&<span style={{fontSize:9,color:"#94A3B8"}}>{t("projects.saving")}</span>}
                         </div>
                       ))}
                     </div>
                   ):(
                     <div style={{padding:"12px 4px",fontSize:11.5,color:"#94A3B8",fontStyle:"italic"}}>{t("projects.no_checklist_items")}</div>
                   )}
-                  {t.description && (
+                  {item.description && (
                     <div style={{marginTop:10,paddingTop:8,borderTop:"1px dashed #E2E8F0",fontSize:11.5,color:"#475569",lineHeight:1.5}}>
                       <div style={{fontSize:9.5,fontWeight:700,color:"#64748B",letterSpacing:".5px",marginBottom:4}}>DESCRIPTION</div>
-                      {t.description}
+                      {item.description}
                     </div>
                   )}
                   <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap"}}>
                     {/* Ping the assignee — backend writes a todo_ping notification. */}
-                    {t.assigned_to && (
+                    {item.assigned_to && (
                       <button onClick={async(e)=>{
                         e.stopPropagation();
-                        if (pinging === t.id) return;
-                        setPinging(t.id);
-                        const path = t._source === "company_todo" || (t._source !== "project_task" && !t.project_id)
-                          ? "/projects/company-todos/" + t.id + "/ping"
-                          : "/tasks/" + t.id + "/ping";
+                        if (pinging === item.id) return;
+                        setPinging(item.id);
+                        const path = item._source === "company_todo" || (item._source !== "project_task" && !item.project_id)
+                          ? "/projects/company-todos/" + item.id + "/ping"
+                          : "/tasks/" + item.id + "/ping";
                         try { await api.post(path, {}); } catch (_) {}
                         setPinging(null);
                       }}
-                        disabled={pinging === t.id}
-                        style={{padding:"6px 12px",borderRadius:6,border:"none",background:"#D97706",color:"white",fontSize:11,fontWeight:700,cursor:pinging===t.id?"wait":"pointer",display:"flex",alignItems:"center",gap:4,opacity:pinging===t.id?0.7:1}}>
-                        <span>{pinging === t.id ? t("projects.pinging") : t("projects.ping")}</span>
-                        {pinging !== t.id && <span>🔔</span>}
+                        disabled={pinging === item.id}
+                        style={{padding:"6px 12px",borderRadius:6,border:"none",background:"#D97706",color:"white",fontSize:11,fontWeight:700,cursor:pinging===item.id?"wait":"pointer",display:"flex",alignItems:"center",gap:4,opacity:pinging===item.id?0.7:1}}>
+                        <span>{pinging === item.id ? t("projects.pinging") : t("projects.ping")}</span>
+                        {pinging !== item.id && <span>🔔</span>}
                       </button>
                     )}
-                    {t.project_id && (
-                      <button onClick={(e)=>{e.stopPropagation();goToProject(t);}}
+                    {item.project_id && (
+                      <button onClick={(e)=>{e.stopPropagation();goToProject(item);}}
                         style={{padding:"6px 12px",borderRadius:6,border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#3B82F6",fontSize:11,fontWeight:600,cursor:"pointer"}}>
                        {t("projects.open_in_project")}
                       </button>

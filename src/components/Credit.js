@@ -69,10 +69,10 @@ export function Avatar({ name, size = 20, title, style }) {
   );
 }
 
-export function fmtTimeAgo(t) {
-  if (!t) return "";
+export function fmtTimeAgo(item) {
+  if (!item) return "";
   try {
-    const d = new Date(t);
+    const d = new Date(item);
     if (isNaN(d.getTime())) return "";
     const diff = (Date.now() - d.getTime()) / 1000;
     if (diff < 60) return t("common.just_now");

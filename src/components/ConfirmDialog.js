@@ -52,12 +52,12 @@ function detectVariant(text) {
 }
 
 function detectConfirmLabel(text, variant) {
-  const t = String(text || "").toLowerCase();
-  if (/delete/.test(t)) return t("common.delete");
-  if (/remove/.test(t)) return t("common.remove");
-  if (/cancel.*payment|cancel.*po|cancel.*subscription/.test(t)) return t("confirm_dialog.yes_cancel");
-  if (/reset|factory/.test(t)) return t("common.reset");
-  if (/wipe|destroy/.test(t)) return t("confirm_dialog.continue");
+  const str = String(text || "").toLowerCase();
+  if (/delete/.test(str)) return t("common.delete");
+  if (/remove/.test(str)) return t("common.remove");
+  if (/cancel.*payment|cancel.*po|cancel.*subscription/.test(str)) return t("confirm_dialog.yes_cancel");
+  if (/reset|factory/.test(str)) return t("common.reset");
+  if (/wipe|destroy/.test(str)) return t("confirm_dialog.continue");
   return variant === "danger" ? t("common.confirm") : "OK";
 }
 

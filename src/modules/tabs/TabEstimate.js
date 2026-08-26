@@ -3770,22 +3770,22 @@ function TabEstimate({ project }) {
               {projectTasks.length > 0 && displayRows.length === 0 && (
                 <div style={{padding:"30px 20px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("estimate.no_tasks_match_taskpickersearch", { taskPickerSearch })}</div>
               )}
-              {displayRows.map(({ node: t, depth }) => {
-                const isSel  = linkSelectedTaskId === t.id;
-                const taskName = t.title || t.name;
-                const progress = Number(t.progress) || 0;
-                const status   = t.status || "Not Started";
+              {displayRows.map(({ node: item, depth }) => {
+                const isSel  = linkSelectedTaskId === item.id;
+                const taskName = item.title || item.name;
+                const progress = Number(item.progress) || 0;
+                const status   = item.status || "Not Started";
                 const statusColor = status === "Completed" ? T.grn : status === "Ongoing" ? T.blu : status === "Hold" ? T.red : T.t4;
-                const hasKids = (t._children || []).length > 0;
-                const isExpanded = !!taskPickerExpanded[t.id];
+                const hasKids = (item._children || []).length > 0;
+                const isExpanded = !!taskPickerExpanded[item.id];
                 return (
-                  <div key={t.id} onClick={()=>setLinkSelectedTaskId(t.id)}
+                  <div key={item.id} onClick={()=>setLinkSelectedTaskId(item.id)}
                     style={{padding:"10px 18px 10px "+(18 + depth*18)+"px",borderBottom:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",gap:8,background: isSel ? "#EFF6FF" : "white"}}
                     onMouseEnter={e=>{ if(!isSel) e.currentTarget.style.background="#F8FAFC"; }}
                     onMouseLeave={e=>{ if(!isSel) e.currentTarget.style.background="white"; }}>
                     {/* Expand chevron for parents (collapse state); spacer for leaves */}
                     {hasKids ? (
-                      <button onClick={(e)=>{ e.stopPropagation(); setTaskPickerExpanded(p=>({...p,[t.id]:!p[t.id]})); }}
+                      <button onClick={(e)=>{ e.stopPropagation(); setTaskPickerExpanded(p=>({...p,[item.id]:!p[item.id]})); }}
                         title={isExpanded?t("common.collapse"):t("estimate.expand_subtasks")}
                         style={{background:"none",border:"none",cursor:"pointer",color:T.t3,fontSize:10,width:16,flexShrink:0,padding:0}}>
                         {isExpanded ? "▼" : "▶"}
@@ -3798,12 +3798,12 @@ function TabEstimate({ project }) {
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12.5,fontWeight: hasKids ? 700 : 600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                         {taskName}
-                        {hasKids && <span style={{fontSize:9.5,color:T.t4,fontWeight:500,marginLeft:6}}>({t._children.length})</span>}
+                        {hasKids && <span style={{fontSize:9.5,color:T.t4,fontWeight:500,marginLeft:6}}>({item._children.length})</span>}
                       </div>
                       <div style={{fontSize:10,color:T.t4,marginTop:2,display:"flex",alignItems:"center",gap:6}}>
                         <span style={{padding:"1px 6px",borderRadius:3,background:statusColor+"22",color:statusColor,fontWeight:600}}>{status}</span>
                         <span>· {progress}%</span>
-                        {t.task_no && <span>· {t.task_no}</span>}
+                        {item.task_no && <span>· {item.task_no}</span>}
                       </div>
                       <div style={{marginTop:5,height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>
                         <div style={{width: progress+"%",height:"100%",background: progress >= linkTriggerPct ? T.grn : T.blu, transition:"width .2s"}}/>

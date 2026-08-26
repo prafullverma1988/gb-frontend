@@ -1284,7 +1284,7 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
   const [addInstAfter, setAddInstAfter] = useState(true);
 
   const from = tender.status;
-  const t = checkTransition(from, target, isAdmin);
+  const val = checkTransition(from, target, isAdmin);
 
   // Backend ke do hard gate — yahan pehle hi pakad lete hain.
   const needsWon = WON_OR_LATER.includes(target);
@@ -1297,8 +1297,8 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
     ? (projects || []).filter(p => String(p.status||"").toLowerCase() !== "completed")
     : [];
 
-  const blocked = !t.ok || wonMissing || completionMissing;
-  const noteMissing = t.noteRequired && !note.trim();
+  const blocked = !val.ok || wonMissing || completionMissing;
+  const noteMissing = val.noteRequired && !note.trim();
 
   const go = async () => {
     setErr("");
@@ -1335,11 +1335,11 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
       </div>
 
       {/* Transition hi allowed nahi */}
-      {!t.ok && (
+      {!val.ok && (
         <div style={{padding:"10px 12px", background:T.redL, border:`1px solid ${T.redM}`,
           borderRadius:7, fontSize:12, color:T.red, display:"flex", gap:8, alignItems:"flex-start",
           marginBottom:11}}>
-          <IcWarn size={14} color={T.red}/><span>{t.msg}</span>
+          <IcWarn size={14} color={T.red}/><span>{val.msg}</span>
         </div>
       )}
 
@@ -1354,7 +1354,7 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
       )}
 
       {/* Won — instrument reminder (sirf yaad dilana) */}
-      {t.ok && target === "won" && (
+      {val.ok && target === "won" && (
         <div style={{padding:"10px 12px", background:T.indL, border:`1px solid ${T.indM}`,
           borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}>
           <b style={{color:T.ind}}>{t("tenders.jeetne_ke_baad")}</b> — <b>{t("tenders.bg_fdr_security_deposit")}</b> {t("tenders.jo_bhi_department_maange_wo_abhi")}
@@ -1369,7 +1369,7 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
       )}
 
       {/* Completed — adhoore project, warning bhar */}
-      {t.ok && !!openProjects.length && (
+      {val.ok && !!openProjects.length && (
         <div style={{padding:"10px 12px", background:T.ambL, border:`1px solid ${T.ambM}`,
           borderRadius:7, fontSize:12, color:T.t2, lineHeight:1.6, marginBottom:11}}>
           <b style={{color:T.amb}}>{t("tenders.openprojects_site_abhi_complete_nahi_hai", { openProjects: openProjects.length })}</b>
@@ -1387,14 +1387,14 @@ function TransitionModal({tender, projects, target, onClose, onDone}) {
       )}
 
       {/* Note */}
-      {t.ok && (
-        <Field label={t.noteRequired ? t("tenders.note") : t("common.note_optional")}
-          hint={t.kind === "backward"
+      {val.ok && (
+        <Field label={val.noteRequired ? t("tenders.note") : t("common.note_optional")}
+          hint={val.kind === "backward"
             ? t("tenders.stage_peeche_ja_raha_hai_kyun_2")
             : t("tenders.ye_note_tender_ki_stage_history")}>
           <textarea value={note} onChange={e=>setNote(e.target.value)} rows={3}
             style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
-            placeholder={t.kind === "lost"
+            placeholder={val.kind === "lost"
               ? t("tenders.e_g_l1_se_4_zyada")
               : `${fm.label} se ${tm.label} — kyun?`}/>
         </Field>

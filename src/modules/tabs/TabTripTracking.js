@@ -108,29 +108,29 @@ function MonitorTab({ projectId, onChange }) {
   }, [projectId, filter]);
   useEffect(() => { load(); }, [load]);
 
-  const act = async (t, action) => {
-    const note = (notes[t.id] || "").trim();
+  const act = async (item, action) => {
+    const note = (notes[item.id] || "").trim();
     if (action === "reject" && !note) { window.alert(t("trip_tracking.reject_ke_liye_note_zaroori_hai")); return; }
-    setBusyId(t.id);
-    const r = await api.post("/trips/" + t.id + "/review", { action, note: note || null });
+    setBusyId(item.id);
+    const r = await api.post("/trips/" + item.id + "/review", { action, note: note || null });
     setBusyId(null);
     if (!r || r.success === false) { window.alert((r && r.message) || "Action fail"); return; }
     setOpenId(null); load(); onChange && onChange();
   };
-  const stuckAct = async (t, kind) => {
-    const remark = (notes[t.id] || "").trim();
+  const stuckAct = async (item2, kind) => {
+    const remark = (notes[item2.id] || "").trim();
     if (!remark) { window.alert(t("trip_tracking.remark_zaroori_hai")); return; }
-    setBusyId(t.id);
+    setBusyId(item2.id);
     const r = kind === "cancel"
-      ? await api.post("/trips/" + t.id + "/cancel", { remark })
-      : await api.post("/trips/" + t.id + "/manual-close", { remark });
+      ? await api.post("/trips/" + item2.id + "/cancel", { remark })
+      : await api.post("/trips/" + item2.id + "/manual-close", { remark });
     setBusyId(null);
     if (!r || r.success === false) { window.alert((r && r.message) || "Action fail"); return; }
     setOpenId(null); load(); onChange && onChange();
   };
 
-  const verifyPill = (t) => {
-    const v = t.verify_status;
+  const verifyPill = (item3) => {
+    const v = item3.verify_status;
     if (v === "auto_verified") return <Pill label={t("trip_tracking.auto_verified")} c={T.grn} bg={T.grnL} />;
     if (v === "approved")      return <Pill label={t("common.approved")} c={T.grn} bg={T.grnL} />;
     if (v === "flagged")       return <Pill label={t("trip_tracking.flagged")} c={T.red} bg={T.redL} />;
@@ -160,26 +160,26 @@ function MonitorTab({ projectId, onChange }) {
           <>
             <THead cols="150px 1.3fr 1fr 90px 100px 1fr 40px"
               headers={["Truck / Trip", "Route", "Loaded", "Travel", "Amount", "Status", ""]} />
-            {rows.map(t => {
-              const flags = parseFlags(t.flag_reasons);
-              const open = openId === t.id;
+            {rows.map(item4 => {
+              const flags = parseFlags(item4.flag_reasons);
+              const open = openId === item4.id;
               return (
-                <div key={t.id} style={{ borderBottom: `1px solid ${T.b1}` }}>
-                  <div onClick={() => setOpenId(open ? null : t.id)}
+                <div key={item4.id} style={{ borderBottom: `1px solid ${T.b1}` }}>
+                  <div onClick={() => setOpenId(open ? null : item4.id)}
                     style={{ display: "grid", gridTemplateColumns: "150px 1.3fr 1fr 90px 100px 1fr 40px",
                       padding: "10px 15px", alignItems: "center", gap: 6, cursor: "pointer", background: open ? T.surfaceB : "transparent" }}>
                     <div>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t.registration_no || t.truck_name || t("trip_tracking.truck")}</div>
-                      <div style={{ fontSize: 10.5, color: T.t4 }}>#{t.trip_no} · {fmtD(t.trip_date)}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{item4.registration_no || item4.truck_name || t("trip_tracking.truck")}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4 }}>#{item4.trip_no} · {fmtD(item4.trip_date)}</div>
                     </div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 12, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.route_name || "—"}</div>
-                      {t.task_name && <div style={{ fontSize: 10.5, color: T.t4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.task_name}</div>}
+                      <div style={{ fontSize: 12, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item4.route_name || "—"}</div>
+                      {item4.task_name && <div style={{ fontSize: 10.5, color: T.t4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item4.task_name}</div>}
                     </div>
-                    <span style={{ fontSize: 11.5, color: T.t2 }}>{fmtClock(t.load_at)}</span>
-                    <span style={{ fontSize: 11.5, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{t.travel_min != null ? t.travel_min + " min" : "—"}</span>
-                    <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{t.amount != null ? rs(t.amount) : "—"}</span>
-                    <span style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>{verifyPill(t)}
+                    <span style={{ fontSize: 11.5, color: T.t2 }}>{fmtClock(item4.load_at)}</span>
+                    <span style={{ fontSize: 11.5, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{item4.travel_min != null ? item4.travel_min + " min" : "—"}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{item4.amount != null ? rs(item4.amount) : "—"}</span>
+                    <span style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>{verifyPill(item4)}
                       {flags.slice(0, 1).map(f => { const m = flagMeta(f); return <Pill key={f} label={m.label} c={m.tone === "red" ? T.red : T.amb} bg={m.tone === "red" ? T.redL : T.ambL} />; })}
                       {flags.length > 1 && <span style={{ fontSize: 10, color: T.t4 }}>+{flags.length - 1}</span>}
                     </span>
@@ -196,34 +196,34 @@ function MonitorTab({ projectId, onChange }) {
                         </div>
                       )}
                       <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                        <PhotoThumb label={t("trip_tracking.load")} url={t.load_photo_url} />
-                        <PhotoThumb label={t("trip_tracking.unload")} url={t.unload_photo_url} />
+                        <PhotoThumb label={t("trip_tracking.load")} url={item4.load_photo_url} />
+                        <PhotoThumb label={t("trip_tracking.unload")} url={item4.unload_photo_url} />
                         <div style={{ flex: 1, fontSize: 11.5, color: T.t2, lineHeight: 1.9 }}>
-                          <div><Rich k="trip_tracking.travel_t_t2" params={{ t: t.travel_min != null ? t.travel_min + " min" : "—", t2: t.expected_travel_min != null ? ` (expected ${t.expected_travel_min} ± ${t.tolerance_min || 0})` : "" }} /></div>
-                          <div>{t("trip_tracking.loaded_by_t_fmtclock", { t: t.load_by_name || "—", fmtClock: fmtClock(t.load_at) })}</div>
-                          <div>{t("trip_tracking.unloaded_by_t_fmtclock", { t: t.unload_by_name || "—", fmtClock: fmtClock(t.unload_at) })}</div>
-                          <div>{t("trip_tracking.vendor_t_rate_t2", { t: t.vendor_name || "—", t2: t.rate_snap != null ? rs(t.rate_snap) : "RATE PENDING" })}</div>
-                          {t.delay_reason && <div style={{ color: T.amb }}>{t("trip_tracking.delay_delay_reason", { delay_reason: t.delay_reason })}</div>}
-                          {t.review_note && <div style={{ color: T.t3 }}>{t("trip_tracking.review_note_review_note", { review_note: t.review_note })}</div>}
+                          <div><Rich k="trip_tracking.travel_t_t2" params={{ t: item4.travel_min != null ? item4.travel_min + " min" : "—", t2: item4.expected_travel_min != null ? ` (expected ${item4.expected_travel_min} ± ${item4.tolerance_min || 0})` : "" }} /></div>
+                          <div>{t("trip_tracking.loaded_by_t_fmtclock", { t: item4.load_by_name || "—", fmtClock: fmtClock(item4.load_at) })}</div>
+                          <div>{t("trip_tracking.unloaded_by_t_fmtclock", { t: item4.unload_by_name || "—", fmtClock: fmtClock(item4.unload_at) })}</div>
+                          <div>{t("trip_tracking.vendor_t_rate_t2", { t: item4.vendor_name || "—", t2: item4.rate_snap != null ? rs(item4.rate_snap) : "RATE PENDING" })}</div>
+                          {item4.delay_reason && <div style={{ color: T.amb }}>{t("trip_tracking.delay_delay_reason", { delay_reason: item4.delay_reason })}</div>}
+                          {item4.review_note && <div style={{ color: T.t3 }}>{t("trip_tracking.review_note_review_note", { review_note: item4.review_note })}</div>}
                         </div>
                       </div>
 
-                      {(t.verify_status === "flagged" || t.status === "in_transit") && (
+                      {(item4.verify_status === "flagged" || item4.status === "in_transit") && (
                         <div>
-                          <input value={notes[t.id] || ""} onChange={e => setNotes(n => ({ ...n, [t.id]: e.target.value }))}
-                            placeholder={t.status === "in_transit" ? t("trip_tracking.remark_cancel_manual_close_ke_liye") : t("trip_tracking.note_reject_ke_liye_zaroori")}
+                          <input value={notes[item4.id] || ""} onChange={e => setNotes(n => ({ ...n, [item4.id]: e.target.value }))}
+                            placeholder={item4.status === "in_transit" ? t("trip_tracking.remark_cancel_manual_close_ke_liye") : t("trip_tracking.note_reject_ke_liye_zaroori")}
                             style={{ ...inp, marginBottom: 8 }} />
                           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                            {t.verify_status === "flagged" && t.status !== "in_transit" && (
+                            {item4.verify_status === "flagged" && item4.status !== "in_transit" && (
                               <>
-                                <BtnOutline label={t("common.reject_2")} color={T.red} busy={busyId === t.id} onClick={() => act(t, "reject")} />
-                                <BtnSolid label={t("common.approve_2")} color={T.grn} busy={busyId === t.id} onClick={() => act(t, "approve")} />
+                                <BtnOutline label={t("common.reject_2")} color={T.red} busy={busyId === item4.id} onClick={() => act(item4, "reject")} />
+                                <BtnSolid label={t("common.approve_2")} color={T.grn} busy={busyId === item4.id} onClick={() => act(item4, "approve")} />
                               </>
                             )}
-                            {t.status === "in_transit" && (
+                            {item4.status === "in_transit" && (
                               <>
-                                <BtnOutline label={t("trip_tracking.cancel_trip")} color={T.red} busy={busyId === t.id} onClick={() => stuckAct(t, "cancel")} />
-                                <BtnOutline label={t("trip_tracking.manual_close_2")} color={T.amb} busy={busyId === t.id} onClick={() => stuckAct(t, "close")} />
+                                <BtnOutline label={t("trip_tracking.cancel_trip")} color={T.red} busy={busyId === item4.id} onClick={() => stuckAct(item4, "cancel")} />
+                                <BtnOutline label={t("trip_tracking.manual_close_2")} color={T.amb} busy={busyId === item4.id} onClick={() => stuckAct(item4, "close")} />
                               </>
                             )}
                           </div>
@@ -439,13 +439,13 @@ function TrucksTab() {
       {!loading && list.length > 0 && (
         <>
           <THead cols="1.4fr 1fr 1.4fr 110px 110px" headers={["Registration", "Ownership", "Vendor", "Today trips", "Status"]} />
-          {list.map(t => (
-            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr 110px 110px", padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>{t.registration_no || t.name}</span>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>{t.ownership || "—"}</span>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>{t.default_vendor_name || "—"}</span>
-              <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{Number(t.today_trip_count || 0)}</span>
-              <span>{Number(t.open_trip_count) > 0 ? <Pill label={t("trip_tracking.in_transit")} c={T.amb} bg={T.ambL} /> : <Pill label={t("common.idle")} c={T.t3} bg={T.sltL} />}</span>
+          {list.map(item5 => (
+            <div key={item5.id} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr 110px 110px", padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>{item5.registration_no || item5.name}</span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{item5.ownership || "—"}</span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{item5.default_vendor_name || "—"}</span>
+              <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{Number(item5.today_trip_count || 0)}</span>
+              <span>{Number(item5.open_trip_count) > 0 ? <Pill label={t("trip_tracking.in_transit")} c={T.amb} bg={T.ambL} /> : <Pill label={t("common.idle")} c={T.t3} bg={T.sltL} />}</span>
             </div>
           ))}
         </>
@@ -607,10 +607,10 @@ function BillingTab({ projectId }) {
             {expanded && expanded.billId === b.id && (
               <div style={{ padding: "6px 15px 12px", background: T.surfaceB }}>
                 {expanded.trips.length === 0 && <div style={{ fontSize: 11.5, color: T.t4, padding: "6px 0" }}>{t("trip_tracking.koi_trip_detail_nahi")}</div>}
-                {expanded.trips.map(t => (
-                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 11.5 }}>
-                    <span style={{ color: T.t3 }}>{(t.registration_no || t("trip_tracking.truck"))} · #{t.trip_no} · {t.route_name || "—"}</span>
-                    <span style={{ color: T.t1, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{rs(t.amount)}</span>
+                {expanded.trips.map(item6 => (
+                  <div key={item6.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 11.5 }}>
+                    <span style={{ color: T.t3 }}>{(item6.registration_no || t("trip_tracking.truck"))} · #{item6.trip_no} · {item6.route_name || "—"}</span>
+                    <span style={{ color: T.t1, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{rs(item6.amount)}</span>
                   </div>
                 ))}
               </div>

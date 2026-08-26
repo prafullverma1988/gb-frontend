@@ -2897,7 +2897,7 @@ function TeleMap({ dash, height = 540 }) {
 // number nahi bolenge.
 function TeleDash({ dash, onAction }) {
   if (!dash) return <Empty>{t("common.loading")}</Empty>;
-  const t = dash.tiles || {};
+  const tiles = dash.tiles || {};
   const machines = (dash.machines || []).slice().sort((a, b) => {
     if (a.linked !== b.linked) return a.linked ? -1 : 1;
     return ((b.yday && b.yday.engine_sec) || 0) - ((a.yday && a.yday.engine_sec) || 0);
@@ -2918,15 +2918,15 @@ function TeleDash({ dash, onAction }) {
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
-        <StatCard label={t("machinery.kal_ka_kaam")} value={hhmm(t.engine_sec_yday) + " hrs"}
-          sub={`${fmtN(t.diesel_yday)} L diesel (sensor)`} color={T.ind} icon={IcClock} />
-        <StatCard label={t("machinery.sensors")} value={`${t.online || 0}/${t.units || 0} online`}
-          sub={t.silent ? `${t.silent} chup — dekhna padega` : `${t.linked || 0} machine se jude`}
-          color={t.silent ? T.red : T.grn} icon={IcSignal} />
-        <StatCard label={t("machinery.fuel_drop_bina_jaanch")} value={t.drops_pending || 0}
-          sub={t("machinery.engine_band_tha_level_gira")} color={t.drops_pending ? T.red : T.grn} icon={IcDrop} />
-        <StatCard label={t("machinery.fill_bina_entry")} value={t.fills_no_entry || 0}
-          sub={t("machinery.36_ghante_nikal_gaye_entry_nahi")} color={t.fills_no_entry ? T.amb : T.grn} icon={IcAlert} />
+        <StatCard label={t("machinery.kal_ka_kaam")} value={hhmm(tiles.engine_sec_yday) + " hrs"}
+          sub={`${fmtN(tiles.diesel_yday)} L diesel (sensor)`} color={T.ind} icon={IcClock} />
+        <StatCard label={t("machinery.sensors")} value={`${tiles.online || 0}/${tiles.units || 0} online`}
+          sub={tiles.silent ? `${tiles.silent} chup — dekhna padega` : `${tiles.linked || 0} machine se jude`}
+          color={tiles.silent ? T.red : T.grn} icon={IcSignal} />
+        <StatCard label={t("machinery.fuel_drop_bina_jaanch")} value={tiles.drops_pending || 0}
+          sub={t("machinery.engine_band_tha_level_gira")} color={tiles.drops_pending ? T.red : T.grn} icon={IcDrop} />
+        <StatCard label={t("machinery.fill_bina_entry")} value={tiles.fills_no_entry || 0}
+          sub={t("machinery.36_ghante_nikal_gaye_entry_nahi")} color={tiles.fills_no_entry ? T.amb : T.grn} icon={IcAlert} />
       </div>
 
       <Panel title={t("machinery.fleet_kal_ka_kaam_aur_7")}>

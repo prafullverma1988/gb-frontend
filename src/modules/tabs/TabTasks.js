@@ -559,13 +559,13 @@ function TabTasks({ projectId, isAdmin }) {
     return out;
   }
 
-  function renderRow(t, depth=0, sno=[]){
-    const hasKids=t.children?.length>0;
-    const isOpen = !collapsed[t.id];
-    const ss=STATUS_C[t.status]||STATUS_C["Not Started"];
-    const delay=ptDelayDays(t);
+  function renderRow(item, depth=0, sno=[]){
+    const hasKids=item.children?.length>0;
+    const isOpen = !collapsed[item.id];
+    const ss=STATUS_C[item.status]||STATUS_C["Not Started"];
+    const delay=ptDelayDays(item);
     const lvlColors=[T.blu,T.grn,T.amb,"#7C3AED","#EC4899","#0891B2","#84CC16"];
-    const pcd=phaseCodeMap[t.id]||{};
+    const pcd=phaseCodeMap[item.id]||{};
     const lvl=pcd.phaseColor||lvlColors[Math.min(depth,6)];
     const indent=depth*16;
     const GRID=GRID_TEMPLATE;
@@ -576,7 +576,7 @@ function TabTasks({ projectId, isAdmin }) {
     // stopPropagation keeps the innermost row — the one actually clicked — as
     // the menu's subject.
     return(
-      <div key={t.id} onContextMenu={e=>{e.preventDefault();e.stopPropagation();setContextMenu({x:e.clientX,y:e.clientY,task:t});}} style={{position:"relative"}}>
+      <div key={item.id} onContextMenu={e=>{e.preventDefault();e.stopPropagation();setContextMenu({x:e.clientX,y:e.clientY,task:item});}} style={{position:"relative"}}>
         <div style={{display:"grid",gridTemplateColumns:GRID,alignItems:"center",height:32,borderBottom:"1px solid #F1F5F9",background:depth===0?"#F8FAFC":"white",transition:"background .1s"}}
           onMouseEnter={e=>{
             e.currentTarget.style.background="#EFF6FF";
@@ -590,7 +590,7 @@ function TabTasks({ projectId, isAdmin }) {
           }}>
 
           {/* Toggle */}
-          <div onClick={()=>hasKids&&toggleCollapse(t.id)} style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",cursor:hasKids?"pointer":"default",...SEP}}>
+          <div onClick={()=>hasKids&&toggleCollapse(item.id)} style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",cursor:hasKids?"pointer":"default",...SEP}}>
             {hasKids
               ?<div style={{width:14,height:14,borderRadius:3,background:isOpen?lvl:T.surfaceB,border:"1px solid "+(isOpen?lvl:T.b2),display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <svg width={7} height={7} viewBox="0 0 12 12" fill="none" stroke={isOpen?"white":T.t4} strokeWidth={2.5}><path d={isOpen?"M2 4l4 4 4-4":"M4 2l4 4-4 4"}/></svg>
@@ -601,40 +601,40 @@ function TabTasks({ projectId, isAdmin }) {
 
           {/* Phase code pill (B+C: code + colour-by-phase) */}
           <div style={{padding:"0 5px",display:"flex",alignItems:"center",...SEP}} title={pcd.phaseName||""}>
-            <span style={{display:"inline-block",fontSize:pcd.isPhase?10:9.5,fontWeight:700,fontFamily:"monospace",letterSpacing:.2,color:"white",background:pcd.phaseColor||"#64748B",padding:pcd.isPhase?"2px 7px":"1.5px 6px",borderRadius:5,whiteSpace:"nowrap",lineHeight:1.4}}>{pcd.code||t.no}</span>
+            <span style={{display:"inline-block",fontSize:pcd.isPhase?10:9.5,fontWeight:700,fontFamily:"monospace",letterSpacing:.2,color:"white",background:pcd.phaseColor||"#64748B",padding:pcd.isPhase?"2px 7px":"1.5px 6px",borderRadius:5,whiteSpace:"nowrap",lineHeight:1.4}}>{pcd.code||item.no}</span>
           </div>
 
           {/* Task Name + hover buttons */}
           <div style={{display:"flex",alignItems:"center",paddingLeft:6+indent,paddingRight:4,overflow:"hidden",...SEP,height:"100%",position:"relative"}}>
-            <div onClick={(e)=>{e.stopPropagation();handleOpen(t);}} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",flex:1,minWidth:0}}>
-              {t.dhyanRakhen&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
-              <span style={{fontSize:depth===0?13:12.5,fontWeight:depth===0?600:depth===1?500:400,color:"#1E293B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
-              {t.tag&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{t.tag}</span>}
+            <div onClick={(e)=>{e.stopPropagation();handleOpen(item);}} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",flex:1,minWidth:0}}>
+              {item.dhyanRakhen&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
+              <span style={{fontSize:depth===0?13:12.5,fontWeight:depth===0?600:depth===1?500:400,color:"#1E293B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</span>
+              {item.tag&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{item.tag}</span>}
               {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:8,fontWeight:600,padding:"1px 4px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
-              {(()=>{const fv=ptFinishVar(t);
+              {(()=>{const fv=ptFinishVar(item);
                 if(fv.kind==="late")   return <span style={{background:"#FEE2E2",color:"#DC2626",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t("tasks.daysd_late", { days: fv.days })}</span>;
                 if(fv.kind==="early")  return <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t("tasks.daysd_early", { days: fv.days })}</span>;
-                if(fv.kind==="ontime"&&(t.status==="Completed"||Number(t.progress)===100)) return <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t("tasks.on_time")}</span>;
+                if(fv.kind==="ontime"&&(item.status==="Completed"||Number(item.progress)===100)) return <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t("tasks.on_time")}</span>;
                 return null;})()}
               {/* P4: delay reason chip — shown on late tasks; click to set/change */}
-              {(()=>{const fv=ptFinishVar(t); if(fv.kind!=="late"&&fv.kind!=="running") return null;
-                const r=t.delay_reason?PT_REASON_MAP[t.delay_reason]:null;
+              {(()=>{const fv=ptFinishVar(item); if(fv.kind!=="late"&&fv.kind!=="running") return null;
+                const r=item.delay_reason?PT_REASON_MAP[item.delay_reason]:null;
                 return r
-                  ? <span onClick={e=>{e.stopPropagation();setReasonMenu({x:e.clientX,y:e.clientY,task:t});}} title={t("tasks.delay_kaaron_badalne_ke_liye_click")} style={{background:r.color,color:"white",fontSize:8,fontWeight:700,padding:"1px 6px",borderRadius:3,flexShrink:0,cursor:"pointer",whiteSpace:"nowrap"}}>{r.label}</span>
-                  : <span onClick={e=>{e.stopPropagation();setReasonMenu({x:e.clientX,y:e.clientY,task:t});}} title={t("tasks.delay_ka_kaaron_set_karo")} style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #F59E0B",fontSize:8,fontWeight:700,padding:"0px 5px",borderRadius:3,flexShrink:0,cursor:"pointer",whiteSpace:"nowrap"}}>{t("tasks.kaaron")}</span>;
+                  ? <span onClick={e=>{e.stopPropagation();setReasonMenu({x:e.clientX,y:e.clientY,task:item});}} title={t("tasks.delay_kaaron_badalne_ke_liye_click")} style={{background:r.color,color:"white",fontSize:8,fontWeight:700,padding:"1px 6px",borderRadius:3,flexShrink:0,cursor:"pointer",whiteSpace:"nowrap"}}>{r.label}</span>
+                  : <span onClick={e=>{e.stopPropagation();setReasonMenu({x:e.clientX,y:e.clientY,task:item});}} title={t("tasks.delay_ka_kaaron_set_karo")} style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #F59E0B",fontSize:8,fontWeight:700,padding:"0px 5px",borderRadius:3,flexShrink:0,cursor:"pointer",whiteSpace:"nowrap"}}>{t("tasks.kaaron")}</span>;
               })()}
             </div>
             {/* Buttons on hover */}
             <div className="tsk-act" onClick={e=>e.stopPropagation()} style={{display:"none",alignItems:"center",gap:3,flexShrink:0,paddingLeft:5,background:"linear-gradient(to right,transparent,"+T.bluL+"dd 15%)"}}>
-                <button onClick={()=>setInfoTask(infoTask?.id===t.id?null:t)} title={t("tasks.info")}
-                  style={{width:22,height:22,borderRadius:4,background:infoTask?.id===t.id?"#FEF3C7":T.surface,border:"1px solid "+(infoTask?.id===t.id?"#FCD34D":T.b1),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===t.id?"#D97706":T.t3} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
+                <button onClick={()=>setInfoTask(infoTask?.id===item.id?null:item)} title={t("tasks.info")}
+                  style={{width:22,height:22,borderRadius:4,background:infoTask?.id===item.id?"#FEF3C7":T.surface,border:"1px solid "+(infoTask?.id===item.id?"#FCD34D":T.b1),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===item.id?"#D97706":T.t3} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
                 </button>
-                {isAdmin&&depth<6&&<button onClick={()=>{setAddParent(t);setShowAdd(true);}} title={t("tasks.add_subtask")}
+                {isAdmin&&depth<6&&<button onClick={()=>{setAddParent(item);setShowAdd(true);}} title={t("tasks.add_subtask")}
                   style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
                 </button>}
-                {isAdmin&&<button onClick={()=>setEditTask(t)} title={t("common.edit_2")}
+                {isAdmin&&<button onClick={()=>setEditTask(item)} title={t("common.edit_2")}
                   style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>}
@@ -643,26 +643,26 @@ function TabTasks({ projectId, isAdmin }) {
 
           {/* Status */}
           <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%"}}>
-            <span style={{background:ss.bg,color:ss.c,fontSize:9.5,fontWeight:600,padding:"2px 8px",borderRadius:4,whiteSpace:"nowrap",border:"1px solid "+ss.brd}}>{t.status}</span>
+            <span style={{background:ss.bg,color:ss.c,fontSize:9.5,fontWeight:600,padding:"2px 8px",borderRadius:4,whiteSpace:"nowrap",border:"1px solid "+ss.brd}}>{item.status}</span>
           </div>
 
           {/* Progress — parents show a rolled-up value; "M" marks a pinned override */}
           <div style={{padding:"0 8px",...SEP,display:"flex",flexDirection:"column",justifyContent:"center",height:"100%"}}
-            title={hasKids?(ptIsOverridden(t)?ptOverrideTitle(t):t("tasks.children_se_auto_calculated_duration_weighted")):""}>
+            title={hasKids?(ptIsOverridden(item)?ptOverrideTitle(item):t("tasks.children_se_auto_calculated_duration_weighted")):""}>
             <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
               <div style={{flex:1,height:4,background:"#E2E8F0",borderRadius:2,overflow:"hidden"}}>
-                <div style={{height:"100%",width:t.progress+"%",background:t.progress===100?"#10B981":t.progress>0?"#3B82F6":"#E2E8F0",borderRadius:2,transition:"width .3s"}}/>
+                <div style={{height:"100%",width:item.progress+"%",background:item.progress===100?"#10B981":item.progress>0?"#3B82F6":"#E2E8F0",borderRadius:2,transition:"width .3s"}}/>
               </div>
-              {hasKids&&ptIsOverridden(t)&&(
+              {hasKids&&ptIsOverridden(item)&&(
                 <span style={{fontSize:8,fontWeight:800,padding:"1px 3px",borderRadius:3,flexShrink:0,lineHeight:1.3,
-                  background:ptOverrideDrift(t)>10?"#FEF3C7":"#EEF2FF",
-                  color:ptOverrideDrift(t)>10?"#B45309":"#4B45C4"}}>M</span>
+                  background:ptOverrideDrift(item)>10?"#FEF3C7":"#EEF2FF",
+                  color:ptOverrideDrift(item)>10?"#B45309":"#4B45C4"}}>M</span>
               )}
-              <span style={{fontSize:10,fontWeight:600,color:t.progress===100?"#10B981":t.progress>0?"#3B82F6":"#94A3B8",flexShrink:0,minWidth:24,textAlign:"right"}}>{t.progress}%</span>
+              <span style={{fontSize:10,fontWeight:600,color:item.progress===100?"#10B981":item.progress>0?"#3B82F6":"#94A3B8",flexShrink:0,minWidth:24,textAlign:"right"}}>{item.progress}%</span>
             </div>
-            {Number(t.scope_qty)>0&&(
+            {Number(item.scope_qty)>0&&(
               <div style={{fontSize:8.5,color:"#94A3B8",textAlign:"right",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>
-                {Math.round(Number(t.done_qty)||0)}/{Math.round(Number(t.scope_qty))}{t.unit?" "+t.unit:""}
+                {Math.round(Number(item.done_qty)||0)}/{Math.round(Number(item.scope_qty))}{item.unit?" "+item.unit:""}
               </div>
             )}
           </div>
@@ -670,13 +670,13 @@ function TabTasks({ projectId, isAdmin }) {
           {/* Start — click opens date picker (locked → read-only) */}
           <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:canEditSchedule?"pointer":"default",position:"relative"}}
             onClick={e=>{if(!canEditSchedule)return;e.stopPropagation();const inp=e.currentTarget.querySelector("input");inp&&inp.showPicker&&inp.showPicker();}}>
-            <span style={{fontSize:10,color:T.t3,whiteSpace:"nowrap",pointerEvents:"none"}}>{fmtDate(t.baseStart)||"—"}</span>
-            {canEditSchedule && <input type="date" defaultValue={t.baseStart||""}
+            <span style={{fontSize:10,color:T.t3,whiteSpace:"nowrap",pointerEvents:"none"}}>{fmtDate(item.baseStart)||"—"}</span>
+            {canEditSchedule && <input type="date" defaultValue={item.baseStart||""}
               style={{position:"absolute",inset:0,opacity:0,cursor:"pointer",width:"100%"}}
               onChange={async e=>{
                 const v=e.target.value;
-                await api.put("/tasks/"+t.id,{base_start:v});
-                setTasks(updateInTree(tasks,t.id,{baseStart:v}));
+                await api.put("/tasks/"+item.id,{base_start:v});
+                setTasks(updateInTree(tasks,item.id,{baseStart:v}));
               }}
               onClick={e=>e.stopPropagation()}/>}
           </div>
@@ -684,19 +684,19 @@ function TabTasks({ projectId, isAdmin }) {
           {/* End — click opens date picker (locked → read-only) */}
           <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:canEditSchedule?"pointer":"default",position:"relative"}}
             onClick={e=>{if(!canEditSchedule)return;e.stopPropagation();const inp=e.currentTarget.querySelector("input");inp&&inp.showPicker&&inp.showPicker();}}>
-            <span style={{fontSize:10,color:delay>0?T.red:T.t3,fontWeight:delay>0?700:400,whiteSpace:"nowrap",pointerEvents:"none"}}>{fmtDate(t.baseEnd)||"—"}</span>
-            {canEditSchedule && <input type="date" defaultValue={t.baseEnd||""}
+            <span style={{fontSize:10,color:delay>0?T.red:T.t3,fontWeight:delay>0?700:400,whiteSpace:"nowrap",pointerEvents:"none"}}>{fmtDate(item.baseEnd)||"—"}</span>
+            {canEditSchedule && <input type="date" defaultValue={item.baseEnd||""}
               style={{position:"absolute",inset:0,opacity:0,cursor:"pointer",width:"100%"}}
               onChange={async e=>{
                 const v=e.target.value;
-                await api.put("/tasks/"+t.id,{base_end:v});
-                setTasks(updateInTree(tasks,t.id,{baseEnd:v}));
+                await api.put("/tasks/"+item.id,{base_end:v});
+                setTasks(updateInTree(tasks,item.id,{baseEnd:v}));
                 // P2: if dependents exist, offer to cascade the shift
-                const hasDependents = allFlat.some(x => (x.dependencies||[]).map(Number).includes(Number(t.id)));
+                const hasDependents = allFlat.some(x => (x.dependencies||[]).map(Number).includes(Number(item.id)));
                 if (v && hasDependents) {
                   try {
-                    const pv = await api.post(`/tasks/${t.id}/reschedule`, { base_start:t.baseStart||null, base_end:v, mode:"preview" });
-                    if (pv.success && pv.data?.affected?.length) setCascadePreview({ taskId:t.id, base_start:t.baseStart||null, base_end:v, changed:pv.data.changed, affected:pv.data.affected });
+                    const pv = await api.post(`/tasks/${item.id}/reschedule`, { base_start:item.baseStart||null, base_end:v, mode:"preview" });
+                    if (pv.success && pv.data?.affected?.length) setCascadePreview({ taskId:item.id, base_start:item.baseStart||null, base_end:v, changed:pv.data.changed, affected:pv.data.affected });
                   } catch(_){}
                 }
               }}
@@ -705,19 +705,19 @@ function TabTasks({ projectId, isAdmin }) {
 
           {/* Days */}
           <div style={{padding:"0 4px",...SEP,display:"flex",alignItems:"center",justifyContent:"center",height:"100%"}}>
-            {(()=>{const d=t.duration>0?t.duration:(t.baseStart&&t.baseEnd?Math.round((new Date(t.baseEnd)-new Date(t.baseStart))/86400000)+1:0);return <span style={{fontSize:10,color:"#94A3B8",fontWeight:d>0?500:400}}>{d>0?d+"d":"—"}</span>;})()}
+            {(()=>{const d=item.duration>0?item.duration:(item.baseStart&&item.baseEnd?Math.round((new Date(item.baseEnd)-new Date(item.baseStart))/86400000)+1:0);return <span style={{fontSize:10,color:"#94A3B8",fontWeight:d>0?500:400}}>{d>0?d+"d":"—"}</span>;})()}
           </div>
 
           {/* Assigned */}
           <div style={{padding:"0 6px",display:"flex",alignItems:"center",height:"100%",...(showBaseline?SEP:{})}}>
-            <span style={{fontSize:10,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(t.assignee||"").split(" ")[0]||"—"}</span>
+            <span style={{fontSize:10,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(item.assignee||"").split(" ")[0]||"—"}</span>
           </div>
 
           {/* Baseline columns (toggleable) */}
           {showBaseline && (()=>{
-            const blS = t.current_baseline_start || t.currentBaselineStart;
-            const blE = t.current_baseline_end   || t.currentBaselineEnd;
-            const slip = (blE && t.baseEnd) ? Math.round((new Date(t.baseEnd) - new Date(blE)) / 86400000) : null;
+            const blS = item.current_baseline_start || item.currentBaselineStart;
+            const blE = item.current_baseline_end   || item.currentBaselineEnd;
+            const slip = (blE && item.baseEnd) ? Math.round((new Date(item.baseEnd) - new Date(blE)) / 86400000) : null;
             return (
               <>
                 <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%"}}>
@@ -736,15 +736,15 @@ function TabTasks({ projectId, isAdmin }) {
         </div>
 
         {/* Info panel */}
-        {infoTask?.id===t.id&&(
+        {infoTask?.id===item.id&&(
           <div style={{padding:"10px 18px",background:"#FFFBEB",borderBottom:"1px solid #FDE68A",borderLeft:"3px solid "+lvl,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
             {[
-              {l:t("common.code"),v:pcd.code||t.no||"—"},{l:t("tasks.phase"),v:pcd.phaseName||"—"},
-              {l:t("common.category"),v:t.category||"—"},{l:t("common.status"),v:t.status||"—"},
-              {l:t("common.progress"),v:(t.progress||0)+"%"},{l:t("crm.assigned"),v:t.assignee||"—"},
-              {l:t("common.start"),v:fmtDate(t.baseStart)},{l:t("tasks.end"),v:fmtDate(t.baseEnd)},
-              {l:t("tasks.duration"),v:t.duration>0?t.duration+"d":"—"},{l:t("tasks.tag"),v:t.tag||"—"},
-              {l:t("tasks.last_update"),v:fmtDate(t.lastUpdate)},{l:t("tasks.dhyan_alert"),v:t.dhyanRakhen?"Yes":"No"},
+              {l:t("common.code"),v:pcd.code||item.no||"—"},{l:t("tasks.phase"),v:pcd.phaseName||"—"},
+              {l:t("common.category"),v:item.category||"—"},{l:t("common.status"),v:item.status||"—"},
+              {l:t("common.progress"),v:(item.progress||0)+"%"},{l:t("crm.assigned"),v:item.assignee||"—"},
+              {l:t("common.start"),v:fmtDate(item.baseStart)},{l:t("tasks.end"),v:fmtDate(item.baseEnd)},
+              {l:t("tasks.duration"),v:item.duration>0?item.duration+"d":"—"},{l:t("tasks.tag"),v:item.tag||"—"},
+              {l:t("tasks.last_update"),v:fmtDate(item.lastUpdate)},{l:t("tasks.dhyan_alert"),v:item.dhyanRakhen?"Yes":"No"},
             ].map(({l,v})=>(
               <div key={l}>
                 <div style={{fontSize:9,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px",marginBottom:1}}>{l}</div>
@@ -753,7 +753,7 @@ function TabTasks({ projectId, isAdmin }) {
             ))}
           </div>
         )}
-        {hasKids&&isOpen&&t.children.map(ch=>renderRow(ch,depth+1))}
+        {hasKids&&isOpen&&item.children.map(ch=>renderRow(ch,depth+1))}
       </div>
     );
   }
@@ -2048,23 +2048,23 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
 
           {list && list.length === 0 && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>{t("tasks.no_templates_available_yet")}</div>}
 
-          {list && list.map(t => {
-            const isSelected = selected === t.id;
+          {list && list.map(item2 => {
+            const isSelected = selected === item2.id;
             return (
-              <div key={t.id} onClick={() => !applying && setSelected(t.id)}
+              <div key={item2.id} onClick={() => !applying && setSelected(item2.id)}
                 style={{padding:"12px 14px",marginBottom:9,borderRadius:8,border:`2px solid ${isSelected?"#EC4899":"#E5E7EB"}`,background:isSelected?"#FDF2F8":"white",cursor:applying?"wait":"pointer",transition:"all .15s"}}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:13.5,fontWeight:700,color:isSelected?"#BE185D":"#111827",marginBottom:3}}>{t.name}</div>
-                    <div style={{fontSize:11.5,color:"#6B7280",lineHeight:1.45,marginBottom:6}}>{t.description}</div>
+                    <div style={{fontSize:13.5,fontWeight:700,color:isSelected?"#BE185D":"#111827",marginBottom:3}}>{item2.name}</div>
+                    <div style={{fontSize:11.5,color:"#6B7280",lineHeight:1.45,marginBottom:6}}>{item2.description}</div>
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",fontSize:10.5}}>
-                      <span style={{background:"#FCE7F3",color:"#9D174D",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t.phase_count} phases</span>
-                      <span style={{background:"#E0F2FE",color:"#075985",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t.package_count} packages</span>
-                      <span style={{background:"#DCFCE7",color:"#14532D",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t.activity_count} activities</span>
-                      <span style={{background:"#FEF3C7",color:"#78350F",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t("tasks.boq_count_boq_items", { boq_count: t.boq_count })}</span>
+                      <span style={{background:"#FCE7F3",color:"#9D174D",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{item2.phase_count} phases</span>
+                      <span style={{background:"#E0F2FE",color:"#075985",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{item2.package_count} packages</span>
+                      <span style={{background:"#DCFCE7",color:"#14532D",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{item2.activity_count} activities</span>
+                      <span style={{background:"#FEF3C7",color:"#78350F",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t("tasks.boq_count_boq_items", { boq_count: item2.boq_count })}</span>
                     </div>
                     <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>
-                      {(t.tags || []).map(tg => <span key={tg} style={{background:"#F3F4F6",color:"#6B7280",fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:4}}>{tg}</span>)}
+                      {(item2.tags || []).map(tg => <span key={tg} style={{background:"#F3F4F6",color:"#6B7280",fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:4}}>{tg}</span>)}
                     </div>
                   </div>
                   {isSelected && <div style={{color:"#EC4899",fontSize:20}}>✓</div>}

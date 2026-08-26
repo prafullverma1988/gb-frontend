@@ -245,9 +245,9 @@ function DuplicateModal({project,onClose,onConfirm}){
             <div key={role} style={{marginBottom:14}}>
               <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:7}}>{role}</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {TEAM.map(t=><button key={t.id} onClick={()=>setter(t.name)} style={{padding:"6px 11px",borderRadius:7,border:`1.5px solid ${val===t.name?t.color:T.b1}`,background:val===t.name?t.color+"14":T.sltL,fontSize:11.5,color:val===t.name?t.color:T.t2,fontWeight:val===t.name?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-                  <div style={{width:20,height:20,borderRadius:"50%",background:val===t.name?t.color:T.b2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:val===t.name?"white":T.t4}}>{t.initials}</div>
-                  {t.name}{prev===t.name&&<span style={{fontSize:8.5,color:T.t4}}>{t("finance.prev")}</span>}
+                {TEAM.map(item=><button key={item.id} onClick={()=>setter(item.name)} style={{padding:"6px 11px",borderRadius:7,border:`1.5px solid ${val===item.name?item.color:T.b1}`,background:val===item.name?item.color+"14":T.sltL,fontSize:11.5,color:val===item.name?item.color:T.t2,fontWeight:val===item.name?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{width:20,height:20,borderRadius:"50%",background:val===item.name?item.color:T.b2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:val===item.name?"white":T.t4}}>{item.initials}</div>
+                  {item.name}{prev===item.name&&<span style={{fontSize:8.5,color:T.t4}}>{t("finance.prev")}</span>}
                 </button>)}
               </div>
             </div>

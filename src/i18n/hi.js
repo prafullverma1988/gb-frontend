@@ -927,7 +927,7 @@ const dict = {
   "crm.lead_source":                                           "लीड सोर्स",
   "crm.leave_blank_to_use_master":                             "मास्टर यूज़ करने के लिए ब्लैंक छोड़ो",
   "crm.length_deals_conversionrate_rate":                      "{length} डील्स · {conversionRate}% रेट",
-  "crm.length_new_length_followup":                            "{length} न्यू · {length} फॉलोअप",
+  "crm.length_new_length_followup":                            "{length} न्यू · {followup} फॉलोअप",
   "crm.library_client_boq_rate":                               "लाइब्रेरी → क्लाइंट BOQ रेट",
   "crm.live_quotations_built_from_your_rate":                  "आपकी रेट लाइब्रेरी से बनी हुई लाइव कोटेशंस।",
   "crm.loading_crm":                                           "CRM लोड हो रहा है...",

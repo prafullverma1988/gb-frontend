@@ -306,18 +306,18 @@ function TabOverview({proj, onRequestPayment}) {
             <div style={{maxHeight:230, overflowY:"auto"}}>
               {ops.ongoing.length===0
                 ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?t("common.loading_2"):t("overview.no_tasks_in_progress")}</div>
-                : ops.ongoing.slice(0,8).map((t,i)=>{
-                    const pct=num(t.progress??t.progress_pct);
+                : ops.ongoing.slice(0,8).map((item,i)=>{
+                    const pct=num(item.progress??item.progress_pct);
                     return (
-                      <div key={t.id||i} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, borderLeft:`3px solid ${T.blu}44`}}>
+                      <div key={item.id||i} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, borderLeft:`3px solid ${T.blu}44`}}>
                         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5, gap:8}}>
-                          <span style={{fontSize:12.5, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{t.name||t.title||t.task_name||`Task ${t.no||t.id}`}</span>
+                          <span style={{fontSize:12.5, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item.name||item.title||item.task_name||`Task ${item.no||item.id}`}</span>
                           <span style={{fontSize:12, fontWeight:700, color:T.blu, flexShrink:0}}>{pct}%</span>
                         </div>
                         <PBar pct={pct} color={pct>70?T.grn:T.blu} h={4}/>
                         <div style={{display:"flex", justifyContent:"space-between", marginTop:5}}>
-                          <span style={{fontSize:11, color:T.t4}}>{t.assignee||t.assigned_to_name||t.owner||t("overview.unassigned")}</span>
-                          {(t.base_end||t.end_date)&&<span style={{fontSize:11, color:T.t3}}>{t("overview.due_vnew", { vnew: new Date(t.base_end||t.end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) })}</span>}
+                          <span style={{fontSize:11, color:T.t4}}>{item.assignee||item.assigned_to_name||item.owner||t("overview.unassigned")}</span>
+                          {(item.base_end||item.end_date)&&<span style={{fontSize:11, color:T.t3}}>{t("overview.due_vnew", { vnew: new Date(item.base_end||item.end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) })}</span>}
                         </div>
                       </div>
                     );
@@ -530,15 +530,15 @@ function TabOverview({proj, onRequestPayment}) {
             <div>
               {fin.recent.length===0
                 ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?t("common.loading_2"):t("app.no_transactions_yet")}</div>
-                : fin.recent.map((t,i)=>{
-                    const isIn=IN_TYPES.includes(t.type);
+                : fin.recent.map((item2,i)=>{
+                    const isIn=IN_TYPES.includes(item2.type);
                     return (
-                      <div key={t.id||i} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}}>
+                      <div key={item2.id||i} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}}>
                         <div style={{minWidth:0}}>
-                          <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{t.party_name||t.description||t.head_name||t("overview.transaction")}</div>
-                          <div style={{fontSize:10.5, color:T.t4}}>{t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):""}{t.type?` · ${t.type.replace(/_/g," ")}`:""}</div>
+                          <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item2.party_name||item2.description||item2.head_name||t("overview.transaction")}</div>
+                          <div style={{fontSize:10.5, color:T.t4}}>{item2.date?new Date(item2.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):""}{item2.type?` · ${item2.type.replace(/_/g," ")}`:""}</div>
                         </div>
-                        <span style={{fontSize:12.5, fontWeight:700, color:isIn?T.grn:T.red, flexShrink:0, fontVariantNumeric:"tabular-nums"}}>{isIn?"+":"−"}₹{fmt(num(t.amount))}</span>
+                        <span style={{fontSize:12.5, fontWeight:700, color:isIn?T.grn:T.red, flexShrink:0, fontVariantNumeric:"tabular-nums"}}>{isIn?"+":"−"}₹{fmt(num(item2.amount))}</span>
                       </div>
                     );
                   })

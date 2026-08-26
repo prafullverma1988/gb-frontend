@@ -1838,21 +1838,21 @@ function TabSubcon({ projectId, project }) {
               {projectTasksSub.length > 0 && displayRows.length === 0 && (
                 <div style={{padding:"30px 20px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("subcon.no_tasks_match_taskpickersearch", { taskPickerSearch })}</div>
               )}
-              {displayRows.map(({ node: t, depth }) => {
-                const isSel = linkSelTaskId === t.id;
-                const taskName = t.title || t.name;
-                const progress = Number(t.progress) || 0;
-                const stC2 = t.status==="Completed"?T.grn:t.status==="Ongoing"?T.blu:t.status==="Hold"?T.red:T.t4;
-                const hasKids = (t._children||[]).length > 0;
+              {displayRows.map(({ node: item, depth }) => {
+                const isSel = linkSelTaskId === item.id;
+                const taskName = item.title || item.name;
+                const progress = Number(item.progress) || 0;
+                const stC2 = item.status==="Completed"?T.grn:item.status==="Ongoing"?T.blu:item.status==="Hold"?T.red:T.t4;
+                const hasKids = (item._children||[]).length > 0;
                 return (
-                  <div key={t.id} onClick={()=>setLinkSelTaskId(t.id)}
+                  <div key={item.id} onClick={()=>setLinkSelTaskId(item.id)}
                     style={{padding:"10px 18px 10px "+(18+depth*18)+"px",borderBottom:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",gap:8,background:isSel?"#EFF6FF":"white"}}
                     onMouseEnter={e=>{ if(!isSel) e.currentTarget.style.background="#F8FAFC"; }}
                     onMouseLeave={e=>{ if(!isSel) e.currentTarget.style.background="white"; }}>
                     {hasKids ? (
-                      <button onClick={e=>{ e.stopPropagation(); setTaskPickerExpSub(p=>({...p,[t.id]:!p[t.id]})); }}
+                      <button onClick={e=>{ e.stopPropagation(); setTaskPickerExpSub(p=>({...p,[item.id]:!p[item.id]})); }}
                         style={{background:"none",border:"none",cursor:"pointer",color:T.t3,fontSize:10,width:16,flexShrink:0,padding:0}}>
-                        {taskPickerExpSub[t.id]?"▼":"▶"}
+                        {taskPickerExpSub[item.id]?"▼":"▶"}
                       </button>
                     ) : <span style={{width:16,flexShrink:0}}/>}
                     <span style={{width:18,height:18,borderRadius:"50%",border:"2px solid "+(isSel?T.blu:T.b1),background:isSel?T.blu:"white",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -1861,7 +1861,7 @@ function TabSubcon({ projectId, project }) {
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12.5,fontWeight:hasKids?700:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{taskName}</div>
                       <div style={{fontSize:10,color:T.t4,marginTop:2,display:"flex",gap:6}}>
-                        <span style={{padding:"1px 6px",borderRadius:3,background:stC2+"22",color:stC2,fontWeight:600}}>{t.status||t("common.not_started")}</span>
+                        <span style={{padding:"1px 6px",borderRadius:3,background:stC2+"22",color:stC2,fontWeight:600}}>{item.status||t("common.not_started")}</span>
                         <span>· {progress}%</span>
                       </div>
                       <div style={{marginTop:5,height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>

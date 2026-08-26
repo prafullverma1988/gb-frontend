@@ -626,7 +626,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
               <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{t("payroll.leave_type")}</div>
               <select value={form.leave_type_id} onChange={e=>setForm(p=>({...p,leave_type_id:e.target.value}))} style={inp}>
                 <option value="">{t("payroll.select")}</option>
-                {types.map(t=><option key={t.id} value={t.id}>{t.code} — {t.name}{t.is_unpaid?t("payroll.unpaid"):""}</option>)}
+                {types.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}{item.is_unpaid?t("payroll.unpaid"):""}</option>)}
               </select>
             </div>
             <div>
@@ -1227,7 +1227,7 @@ function PunchReviewStrip({onActed}){
       <div style={{fontSize:12.5,fontWeight:800,color:"#0D9488",marginBottom:8}}>{t("payroll.punch_review_rows_geofence_ke_bahar", { rows: rows.length })}</div>
       <div style={{display:"flex",flexDirection:"column",gap:7}}>
         {rows.map(s=>{
-          const t=tl[s.id];
+          const val=tl[s.id];
           return(
           <div key={s.id} style={{background:T.surface,border:"1px solid #99F6E4",borderRadius:8,padding:"8px 11px"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -1251,12 +1251,12 @@ function PunchReviewStrip({onActed}){
             </div>
             {openId===s.id&&(
               <div style={{marginTop:8,paddingTop:8,borderTop:"1px dashed #99F6E4"}}>
-                {t&&t.loading?(
+                {val&&val.loading?(
                   <div style={{fontSize:10.5,color:T.t4}}>{t("payroll.timeline_load_ho_raha")}</div>
-                ):(t&&t.pings&&t.pings.length?(
+                ):(val&&val.pings&&val.pings.length?(
                   <div style={{display:"flex",flexDirection:"column",gap:3,maxHeight:160,overflowY:"auto"}}>
-                    <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:2}}>{t("payroll.us_din_ka_gps_timeline_t", { t: t.pings.length })}</div>
-                    {t.pings.map((p,i)=>(
+                    <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:2}}>{t("payroll.us_din_ka_gps_timeline_t", { t: val.pings.length })}</div>
+                    {val.pings.map((p,i)=>(
                       <div key={i} style={{fontSize:10,color:T.t3,fontFamily:"monospace",display:"flex",gap:8}}>
                         <span style={{color:T.t4}}>{p.ts?new Date(p.ts).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):("#"+(i+1))}</span>
                         <a href={`https://www.google.com/maps?q=${p.lat},${p.lng}`} target="_blank" rel="noreferrer" style={{color:"#0D9488",textDecoration:"none"}}>{Number(p.lat).toFixed(5)}, {Number(p.lng).toFixed(5)} ↗</a>

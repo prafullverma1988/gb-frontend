@@ -825,12 +825,12 @@ function TicketsInbox() {
       {rows === null && <div style={{ padding: 18, fontSize: 12.5, color: T.t4 }}>{t("common.loading")}</div>}
       {rows && !rows.length && <div style={{ padding: 18, fontSize: 12.5, color: T.t4 }}>{L.ticketsEmpty}</div>}
 
-      {rows && rows.map((t) => {
-        const isBug = t.type === "bug";
-        const expanded = openId === t.id;
+      {rows && rows.map((item) => {
+        const isBug = item.type === "bug";
+        const expanded = openId === item.id;
         return (
-          <div key={t.id} style={{ borderBottom: `1px solid ${T.b1}`, background: T.surface }}>
-            <button onClick={() => { setOpenId(expanded ? null : t.id); setNote(""); }}
+          <div key={item.id} style={{ borderBottom: `1px solid ${T.b1}`, background: T.surface }}>
+            <button onClick={() => { setOpenId(expanded ? null : item.id); setNote(""); }}
               style={{ width: "100%", textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: "12px 16px", display: "flex", gap: 10, alignItems: "flex-start", fontFamily: "inherit" }}>
               <span style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform .15s", marginTop: 2, lineHeight: 0 }}>
                 <IcChevron size={13} color={T.t4} />
@@ -838,22 +838,22 @@ function TicketsInbox() {
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3, flexWrap: "wrap" }}>
                   <Badge text={isBug ? t("sahayak.bug") : t("sahayak.sawaal")} color={isBug ? T.red : T.slt} bg={isBug ? T.redL : T.sltL} />
-                  <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{t.ticket_no}</span>
-                  <span style={{ fontSize: 11.5, color: T.t3 }}>{t.user_name || "—"}</span>
-                  <span style={{ fontSize: 11, color: T.t4 }}>{fmtTime(t.created_at)}</span>
-                  <AgeChip days={openAgeDays(t)} />
-                  {t.bundle_meta && <Badge text={t("sahayak.diagnostics")} color={ACCENT} bg={ACCENT_SOFT} />}
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{item.ticket_no}</span>
+                  <span style={{ fontSize: 11.5, color: T.t3 }}>{item.user_name || "—"}</span>
+                  <span style={{ fontSize: 11, color: T.t4 }}>{fmtTime(item.created_at)}</span>
+                  <AgeChip days={openAgeDays(item)} />
+                  {item.bundle_meta && <Badge text={t("sahayak.diagnostics")} color={ACCENT} bg={ACCENT_SOFT} />}
                 </span>
                 <span style={{ display: "block", fontSize: 12.5, color: T.t2, lineHeight: 1.45, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: expanded ? "normal" : "nowrap" }}>
-                  {t.question || "—"}
+                  {item.question || "—"}
                 </span>
               </span>
             </button>
 
             {expanded && (
               <div style={{ padding: "0 16px 14px 39px", display: "flex", flexDirection: "column", gap: 10 }}>
-                {t.reason && <div style={{ fontSize: 11.5, color: T.t3 }}>{t("sahayak.reason_reason", { reason: t.reason })}</div>}
-                <BundleView meta={t.bundle_meta} url={t.bundle_url} />
+                {item.reason && <div style={{ fontSize: 11.5, color: T.t3 }}>{t("sahayak.reason_reason", { reason: item.reason })}</div>}
+                <BundleView meta={item.bundle_meta} url={item.bundle_url} />
 
                 {isBug ? (
                   // Not this admin's ticket to close — say who has it instead
@@ -861,17 +861,17 @@ function TicketsInbox() {
                   <div style={{ fontSize: 11.5, color: T.t3, background: T.sltL, border: `1px solid ${T.b1}`, borderRadius: 7, padding: "8px 10px" }}>
                     {L.bugHandedOff}
                   </div>
-                ) : t.status === "open" ? (
+                ) : item.status === "open" ? (
                   <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
                     <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={L.resolvePlaceholder}
                       style={{ flex: 1, minWidth: 0, padding: "7px 10px", borderRadius: 7, border: `1px solid ${T.b1}`, fontSize: 12, color: T.t1, background: T.surfaceB, outline: "none", fontFamily: "inherit" }} />
-                    <button onClick={() => resolve(t.id)} disabled={busy}
+                    <button onClick={() => resolve(item.id)} disabled={busy}
                       style={{ border: "none", cursor: busy ? "default" : "pointer", borderRadius: 7, padding: "7px 13px", fontSize: 12, fontWeight: 600, fontFamily: "inherit", background: busy ? T.b1 : T.grn, color: busy ? T.t4 : "#fff", flexShrink: 0 }}>
                       {L.resolveBtn}
                     </button>
                   </div>
                 ) : (
-                  t.resolution && <div style={{ fontSize: 11.5, color: T.t3, background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 7, padding: "7px 10px" }}>{t.resolution}</div>
+                  item.resolution && <div style={{ fontSize: 11.5, color: T.t3, background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 7, padding: "7px 10px" }}>{item.resolution}</div>
                 )}
               </div>
             )}

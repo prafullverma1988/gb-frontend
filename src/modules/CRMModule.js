@@ -3256,13 +3256,13 @@ function TemplateBuilderModal({onClose}){
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"8px"}}>
           {loading&&<div style={{color:"rgba(255,255,255,0.4)",fontSize:11,padding:"10px",textAlign:"center"}}>{t("common.loading")}</div>}
-          {templates.map(t=>(
-            <div key={t.id} onClick={()=>selectTemplate(t)}
-              style={{padding:"9px 11px",borderRadius:7,marginBottom:4,cursor:"pointer",background:selTpl?.id===t.id?"rgba(37,99,235,0.2)":"transparent",border:selTpl?.id===t.id?"1px solid rgba(37,99,235,0.4)":"1px solid transparent"}}
-              onMouseEnter={e=>{if(selTpl?.id!==t.id)e.currentTarget.style.background="rgba(255,255,255,0.05)";}}
-              onMouseLeave={e=>{if(selTpl?.id!==t.id)e.currentTarget.style.background="transparent";}}>
-              <div style={{fontSize:12,fontWeight:600,color:"white",marginBottom:2}}>{t.name}</div>
-              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>{t("crm.t_items_fmtn", { t: t.line_items?.length||0, fmtN: fmtN(t.line_items?.reduce((s,it)=>s+(it.amount||0),0)||0) })}</div>
+          {templates.map(item=>(
+            <div key={item.id} onClick={()=>selectTemplate(item)}
+              style={{padding:"9px 11px",borderRadius:7,marginBottom:4,cursor:"pointer",background:selTpl?.id===item.id?"rgba(37,99,235,0.2)":"transparent",border:selTpl?.id===item.id?"1px solid rgba(37,99,235,0.4)":"1px solid transparent"}}
+              onMouseEnter={e=>{if(selTpl?.id!==item.id)e.currentTarget.style.background="rgba(255,255,255,0.05)";}}
+              onMouseLeave={e=>{if(selTpl?.id!==item.id)e.currentTarget.style.background="transparent";}}>
+              <div style={{fontSize:12,fontWeight:600,color:"white",marginBottom:2}}>{item.name}</div>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>{t("crm.t_items_fmtn", { t: item.line_items?.length||0, fmtN: fmtN(item.line_items?.reduce((s,it)=>s+(it.amount||0),0)||0) })}</div>
             </div>
           ))}
         </div>
@@ -4425,7 +4425,7 @@ function CRMModule(){
   const conversionRate=allLeads.length?Math.round((allLeads.filter(l=>l.stage==="converted"||l.stage==="project").length/allLeads.length)*100):0;
 
   const TILES=[
-    {l:t("crm.total_leads"),v:leads.length,sub:t("crm.length_new_length_followup", { length: leads.filter(l=>l.stage==="lead").length, length: leads.filter(l=>l.stage==="followup").length }),c:T.blu,I:IcCRM},
+    {l:t("crm.total_leads"),v:leads.length,sub:t("crm.length_new_length_followup", { length: leads.filter(l=>l.stage==="lead").length, followup: leads.filter(l=>l.stage==="followup").length }),c:T.blu,I:IcCRM},
     {l:t("crm.pipeline_value"),v:`₹${fmt(pipelineValue)}`,sub:t("crm.active_leads_combined"),c:T.pur,I:IcRs},
     {l:t("crm.converted"),v:`₹${fmt(convertedValue)}`,sub:t("crm.length_deals_conversionrate_rate", { length: leads.filter(l=>l.stage==="converted").length, conversionRate }),c:T.grn,I:IcChk},
     {l:t("crm.follow_up_today"),v:todayDueCount,sub:t("crm.contact_date_due"),c:todayDueCount>0?T.red:T.grn,I:IcCal},
