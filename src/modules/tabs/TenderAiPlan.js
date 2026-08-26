@@ -156,6 +156,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
   const [cityId, setCityId] = useState(""); const [ctypeId, setCtypeId] = useState("");
   const [execResult, setExecResult] = useState(null);
   const [job, setJob] = useState(null);        // {status,kind,error} — peechhe chal raha kaam
+  const [dinfo, setDinfo] = useState(null);    // digest ka saar — screen par dikhta hai
   const [err, setErr] = useState("");
   const fileRef = useRef(null); const chatEndRef = useRef(null);
 
@@ -208,6 +209,13 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
     setErr(""); setBusy("analyze");
     try {
       const digest = await buildDigest(f);
+      // Kya-kya nikla — user ko dikhta hai, aur "purana bundle to nahi chal
+      // raha" ye do second me pata chal jaata hai (bina jod wali file par
+      // "0 sheets me jod" aayega).
+      const withTot = digest.sheets.filter((s) => s.tot && s.tot.length).length;
+      const errSheets = digest.sheets.filter((s) => s.err > 0).length;
+      setDinfo({ kb: Math.round(JSON.stringify(digest).length / 1024), sheets: digest.sheet_count,
+        withTot, errSheets, items: digest.boq_master ? digest.boq_master.items.length : 0 });
       const r = await api.post(`/tenders/${tenderId}/ai-plan/analyze`, { digest }, { timeoutMs: 120000 });
       if (r?.success) {
         // Server ne kaam pakad liya; ab plan polling se aayega.
@@ -285,6 +293,12 @@ export default function TenderAiPlan({ tenderId, onOpenProject }) {
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.xlsm" style={{ display: "none" }} onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
       {err && <div style={{ padding: "8px 12px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 8, fontSize: 12, color: T.red }}>{err}</div>}
       {!llmReady && <div style={{ padding: "8px 12px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, fontSize: 12, color: "#92400E" }}>AI abhi uplabdh nahi (server par LLM key nahi lagi) — plan haath se edit/execute phir bhi chalega.</div>}
+      {dinfo && (
+        <div style={{ padding: "7px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, fontSize: 11.5, color: T.t3 }}>
+          File padh li: <b style={{ color: T.t1 }}>{dinfo.sheets} sheets</b> · {dinfo.items} BOQ item · <b style={{ color: T.t1 }}>{dinfo.withTot}</b> sheets me jod (Total/Cost per Meter) mila
+          {dinfo.errSheets > 0 && <> · <span style={{ color: "#B45309" }}>{dinfo.errSheets} sheets me tooti (#REF!) cells</span></>} · saar {dinfo.kb} KB
+        </div>
+      )}
       {job?.status === "running" && (
         <div style={{ padding: "10px 14px", background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 8, fontSize: 12.5, color: T.blu, fontWeight: 600 }}>
           ⏳ AI {job.kind === "discuss" ? "plan sudhaar raha hai" : "workbook padh raha hai"}… bade workbook par 2–5 minute lag sakte hain.
