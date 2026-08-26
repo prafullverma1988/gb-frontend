@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import api from "../config/api";
 import apiCache from "../utils/apiCache";
+import DangerDelete from "./shared/DangerDelete";
 import { Credit } from "../components/Credit";
 import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
@@ -924,9 +925,6 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   };
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmArchive, setConfirmArchive] = useState(false);
-  const [deleteText, setDeleteText] = useState("");
 
   // Form state
   const [form, setForm] = useState({
@@ -974,28 +972,8 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
     finally { setSaving(false); }
   };
 
-  const handleArchive = async () => {
-    setSaving(true);
-    try {
-      const res = await api.patch("/projects/"+project.id+"/archive", { archived: true });
-      if(res.success){ apiCache.invalidate("projects"); onDeleted(project.id,"archived"); onClose(); }
-      else setError(res.message||"Archive failed");
-    } catch(e) { setError(e.message); }
-    finally { setSaving(false); }
-  };
 
-  const deleteMatch = deleteText.trim().toUpperCase() === "DELETE";
 
-  const handleDelete = async () => {
-    if(!deleteMatch) return setError(t("projects.type_delete_to_confirm"));
-    setSaving(true);
-    try {
-      const res = await api.del("/projects/"+project.id);
-      if(res.success){ apiCache.invalidate("projects"); onDeleted(project.id,"deleted"); onClose(); }
-      else setError(res.message||"Delete failed");
-    } catch(e) { setError(e.message); }
-    finally { setSaving(false); }
-  };
 
   const SECTIONS = [
     {id:"basic",  label:t("project_detail.basic_info"),    icon:"M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"},
@@ -1040,7 +1018,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
         {/* Left sidebar nav */}
         <div style={{width:160,background:"#F8F9FB",borderRight:"1px solid "+T.b1,flexShrink:0,padding:"10px 8px",display:"flex",flexDirection:"column",gap:2}}>
           {SECTIONS.map(s=>(
-            <button key={s.id} onClick={()=>{setSection(s.id);setError("");setConfirmDelete(false);setConfirmArchive(false);}}
+            <button key={s.id} onClick={()=>{setSection(s.id);setError("");}}
               style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:7,border:"none",background:section===s.id?T.bluL:"none",color:section===s.id?T.blu:T.t3,fontSize:12,fontWeight:section===s.id?600:400,cursor:"pointer",textAlign:"left",width:"100%",transition:"all 0.12s",borderLeft:section===s.id?"3px solid "+T.blu:"3px solid transparent"}}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={s.icon}/></svg>
               {s.label}
@@ -1215,48 +1193,13 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
             </div>
           )}
 
-          {/* ── DANGER ZONE ── */}
+          {/* ── DANGER ZONE — archive ya permanent delete ── */}
           {section==="danger"&&(
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.red,marginBottom:4}}>{t("common.danger_zone")}</div>
-
-              {/* Archive */}
-              <div style={{background:T.ambL,border:"1px solid "+T.ambM,borderRadius:8,padding:"14px 16px"}}>
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:600,color:T.amb,marginBottom:4}}>{t("projects.archive_project")}</div>
-                    <div style={{fontSize:12,color:T.t3,lineHeight:1.5}}>{t("projects.project_list_se_hat_jaayega_data")}</div>
-                  </div>
-                  {!confirmArchive
-                    ?<button onClick={()=>setConfirmArchive(true)} style={{padding:"7px 14px",borderRadius:7,background:T.surface,border:"1.5px solid "+T.ambM,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>{t("projects.archive")}</button>
-                    :<div style={{display:"flex",gap:6,flexShrink:0}}>
-                      <button onClick={()=>setConfirmArchive(false)} style={{padding:"7px 12px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
-                      <button onClick={handleArchive} disabled={saving} style={{padding:"7px 14px",borderRadius:7,background:T.amb,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:saving?"not-allowed":"pointer"}}>{t("projects.confirm_archive")}</button>
-                    </div>
-                  }
-                </div>
-              </div>
-
-              {/* Delete */}
-              <div style={{background:T.redL,border:"1px solid "+T.redM,borderRadius:8,padding:"14px 16px"}}>
-                <div style={{fontSize:13,fontWeight:600,color:T.red,marginBottom:4}}>{t("projects.delete_project")}</div>
-                <div style={{fontSize:12,color:T.t3,lineHeight:1.5,marginBottom:12}}>{t("projects.permanently_delete_karo_agar_transactions_hain")}</div>
-                {!confirmDelete
-                  ?<button onClick={()=>setConfirmDelete(true)} style={{padding:"7px 14px",borderRadius:7,background:T.surface,border:"1.5px solid "+T.redM,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("projects.delete_project")}</button>
-                  :<div>
-                    <div style={{fontSize:12,color:T.red,marginBottom:8}}>{t("projects.confirm_karne_ke_liye")} <strong>DELETE</strong> {t("projects.type_karo")}</div>
-                    <input value={deleteText} onChange={e=>setDeleteText(e.target.value)} placeholder={t("projects.type_delete_to_confirm")}
-                      style={{width:"100%",padding:"8px 11px",borderRadius:7,border:"1.5px solid "+T.redM,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:10}}/>
-                    <div style={{display:"flex",gap:6}}>
-                      <button onClick={()=>{setConfirmDelete(false);setDeleteText("");}} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>{t("common.cancel")}</button>
-                      <button onClick={handleDelete} disabled={saving||!deleteMatch}
-                        style={{flex:2,padding:"8px",borderRadius:7,background:deleteMatch?T.red:T.b1,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:deleteMatch?"pointer":"not-allowed"}}>
-                        {saving?t("common.deleting"):t("projects.permanently_delete")}
-                      </button>
-                    </div>
-                  </div>
-                }
-              </div>
+              <div style={{fontSize:13,fontWeight:700,color:T.red,marginBottom:4}}>Danger Zone</div>
+              <DangerDelete kind="project" id={project.id} name={project.name}
+                onArchived={()=>{ apiCache.invalidate("projects"); onDeleted(project.id,"archived"); onClose(); }}
+                onDeleted={()=>{ apiCache.invalidate("projects"); onDeleted(project.id,"deleted"); onClose(); }}/>
             </div>
           )}
 

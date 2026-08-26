@@ -15,6 +15,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import PhotoLocateModal from "./tabs/PhotoLocateModal";
 import TenderAiPlan from "./tabs/TenderAiPlan";
+import DangerDelete from "./shared/DangerDelete";
 import * as XLSX from "xlsx";
 import api, { getUser } from "../config/api";
 import { useToast } from "../components/Toast";
@@ -638,10 +639,6 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
   const [err, setErr]   = useState("");
   // Delete sirf admin/super_admin — backend par bhi yahi requireRole hai.
   const isAdmin = ["admin","super_admin"].includes(getUser()?.role);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleteText, setDeleteText] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const deleteMatch = deleteText.trim().toUpperCase() === "DELETE";
   const [parties, setParties] = useState([]);
   const [form, setForm] = useState({
     tender_no: tender.tender_no || "",
@@ -753,19 +750,6 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
     onClose();
   };
 
-  const handleDelete = async () => {
-    if (!deleteMatch) return setErr(t("projects.type_delete_to_confirm"));
-    setErr(""); setDeleting(true);
-    const res = await api.del(`/tenders/${tender.id}`);
-    setDeleting(false);
-    if (!res?.success) { setErr(res?.message || "Tender delete nahi hua"); return; }
-    const freed = Number(res.projects_freed || 0);
-    toast.success(freed
-      ? `Tender hata diya — ${freed} site free ho gayi`
-      : "Tender hata diya gaya");
-    onClose();
-    onDeleted && onDeleted();
-  };
 
   // List ke aakhir me "+ Naya Department" — dropdown me na mile to yahin se jod do.
   const partyOpts = [...parties.map(p=>({v:String(p.id), l:p.name})),
@@ -890,46 +874,14 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
             onFocus={e=>e.target.style.borderColor=T.ind} onBlur={e=>e.target.style.borderColor=T.b1}/>
         </Field>
 
-        {/* ── DANGER ZONE — admin/super_admin only ── */}
+        {/* ── DANGER ZONE — archive ya permanent delete (admin only) ── */}
         {isAdmin && (
           <div style={{gridColumn:"1/3", marginTop:4, paddingTop:14, borderTop:`1px solid ${T.b1}`}}>
-            <div style={{fontSize:13, fontWeight:700, color:T.red, marginBottom:8}}>{t("common.danger_zone")}</div>
-            <div style={{background:T.redL, border:`1px solid ${T.redM}`, borderRadius:8, padding:"14px 16px"}}>
-              <div style={{fontSize:13, fontWeight:600, color:T.red, marginBottom:4}}>{t("tenders.delete_tender")}</div>
-              <div style={{fontSize:12, color:T.t3, lineHeight:1.55, marginBottom:12}}>
-               {t("tenders.tender_ka_record_uske_saare_instruments")} <b>{t("tenders.projects_delete_nahi_hongi")}</b> {t("tenders.wo_sirf_is_tender_se_free")}
-              </div>
-              {!confirmDelete ? (
-                <button onClick={()=>setConfirmDelete(true)}
-                  style={{padding:"7px 14px", borderRadius:7, background:T.surface,
-                    border:`1.5px solid ${T.redM}`, color:T.red, fontSize:12, fontWeight:600, cursor:"pointer"}}>
-                 {t("tenders.delete_tender")}
-                </button>
-              ) : (
-                <div>
-                  <div style={{fontSize:12, color:T.red, marginBottom:8}}>
-                   {t("projects.confirm_karne_ke_liye")} <strong>DELETE</strong> {t("projects.type_karo")}
-                  </div>
-                  <input value={deleteText} onChange={e=>setDeleteText(e.target.value)} placeholder={t("projects.type_delete_to_confirm")}
-                    style={{width:"100%", padding:"8px 11px", borderRadius:7, border:`1.5px solid ${T.redM}`,
-                      fontSize:12.5, color:T.t1, background:T.surface, outline:"none",
-                      boxSizing:"border-box", fontFamily:"inherit", marginBottom:10}}/>
-                  <div style={{display:"flex", gap:6}}>
-                    <button onClick={()=>{setConfirmDelete(false); setDeleteText("");}}
-                      style={{flex:1, padding:"8px", borderRadius:7, background:T.surface,
-                        border:`1px solid ${T.b1}`, color:T.t3, fontSize:12, fontWeight:600, cursor:"pointer"}}>
-                     {t("common.cancel")}
-                    </button>
-                    <button onClick={handleDelete} disabled={deleting||!deleteMatch}
-                      style={{flex:2, padding:"8px", borderRadius:7, background:deleteMatch?T.red:T.b1,
-                        border:"none", color:"white", fontSize:12, fontWeight:700,
-                        cursor:deleteMatch?"pointer":"not-allowed"}}>
-                      {deleting ? t("common.deleting") : t("projects.permanently_delete")}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <div style={{fontSize:13, fontWeight:700, color:T.red, marginBottom:8}}>Danger Zone</div>
+            <DangerDelete kind="tender" id={tender.id}
+              name={[tender.tender_no, tender.title].filter(Boolean).join(" — ")}
+              onArchived={()=>{ onClose(); onDeleted && onDeleted(); }}
+              onDeleted={()=>{ onClose(); onDeleted && onDeleted(); }}/>
           </div>
         )}
       </div>

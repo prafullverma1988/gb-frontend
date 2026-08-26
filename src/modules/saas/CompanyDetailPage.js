@@ -417,6 +417,15 @@ function CompanyDetailPage({ companyId, onBack }) {
   const [resetMobile, setResetMobile] = useState("");
   const [resettingAdmin, setResettingAdmin] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showDelPw, setShowDelPw] = useState(false);
+  const [delPw, setDelPw] = useState("");
+  const [delPwMsg, setDelPwMsg] = useState("");
+  const [delPwSet, setDelPwSet] = useState(null);
+  useEffect(() => {
+    if (!companyId) return;
+    apiFetch("/saas-admin/companies/" + companyId + "/delete-password")
+      .then(r => { if (r?.success) setDelPwSet(!!r.data.has_password); }).catch(() => {});
+  }, [companyId]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -556,7 +565,48 @@ function CompanyDetailPage({ companyId, onBack }) {
         <Btn variant="outline" onClick={doExport} disabled={exporting}>
           <IcDownload size={13}/> {exporting ? "Exporting..." : "Export Data"}
         </Btn>
+        <Btn variant="outline" onClick={() => { setShowDelPw(true); setDelPw(""); setDelPwMsg(""); }}>
+          🔑 Delete Password {delPwSet === null ? "" : delPwSet ? "· set hai" : "· set nahi"}
+        </Btn>
       </div>
+
+      {/* ── DELETE PASSWORD — company ke admin ko permanent delete ka taala ──
+          Bina iske company ka admin apna project/tender permanently mita hi
+          nahi sakta. Hash me jaata hai; yahan bhi kabhi wapas nahi aata —
+          sirf "set hai / nahi hai". */}
+      {showDelPw && (<>
+        <div onClick={() => setShowDelPw(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:400 }}/>
+        <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", background:T.surface,
+          borderRadius:12, width:"min(430px,94vw)", zIndex:401, padding:"18px 20px", boxShadow:"0 24px 64px rgba(0,0,0,0.3)" }}>
+          <div style={{ fontSize:15, fontWeight:700, color:T.t1, marginBottom:4 }}>Delete Password</div>
+          <div style={{ fontSize:12, color:T.t3, lineHeight:1.6, marginBottom:14 }}>
+            Is company ka admin project ya tender <b>permanently</b> tabhi mita sakega jab ye password set ho
+            aur wo ise theek type kare. Password sirf aapke paas rehta hai — company ko batana aapka faisla hai.
+            {delPwSet && <><br/><b style={{color:T.grn}}>Abhi set hai.</b> Naya likhne par purana badal jayega.</>}
+          </div>
+          <input type="password" value={delPw} onChange={e => setDelPw(e.target.value)}
+            placeholder="naya delete password (kam se kam 6 akshar)" autoComplete="new-password"
+            style={{ width:"100%", padding:"9px 11px", borderRadius:7, border:"1.5px solid " + T.b1, fontSize:13,
+              color:T.t1, background:T.surface, outline:"none", boxSizing:"border-box", fontFamily:"inherit", marginBottom:10 }}/>
+          {delPwMsg && <div style={{ fontSize:12, color: /gaya|hata/.test(delPwMsg) ? T.grn : T.red, marginBottom:10 }}>{delPwMsg}</div>}
+          <div style={{ display:"flex", gap:8 }}>
+            <Btn variant="outline" onClick={() => setShowDelPw(false)}>Band karo</Btn>
+            {delPwSet && (
+              <Btn variant="outline" onClick={async () => {
+                const r = await apiFetch("/saas-admin/companies/" + companyId + "/delete-password",
+                  { method:"PUT", body:{ password:"" } });
+                setDelPwMsg(r?.message || "Hata diya"); if (r?.success) setDelPwSet(false);
+              }}>Taala hatao</Btn>
+            )}
+            <Btn onClick={async () => {
+              const r = await apiFetch("/saas-admin/companies/" + companyId + "/delete-password",
+                { method:"PUT", body:{ password: delPw } });
+              setDelPwMsg(r?.message || (r?.success ? "Set ho gaya" : "Nahi hua"));
+              if (r?.success) { setDelPwSet(true); setDelPw(""); }
+            }} disabled={!delPw || delPw.length < 6}>Set karo</Btn>
+          </div>
+        </div>
+      </>)}
 
       {/* Sub-tabs */}
       <div style={{ display:"flex", gap:4, background:T.surface, padding:4, border:`1px solid ${T.b1}`, borderRadius:10, marginBottom:16, overflowX:"auto" }}>
