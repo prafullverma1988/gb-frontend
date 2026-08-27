@@ -4056,8 +4056,38 @@ function MapTab({tenderId, sites}) {
     return Object.keys(out).length ? out : undefined;
   };
 
+  // Draw ho chuki cheez ko badalne ke liye wahi form kholte hain, sirf mode
+  // alag. Geometry yahan nahi chhedi jaati — wo map par dobara kheenchne ka
+  // kaam hai; yahan naam, type, chaudai aur type ke apne field badalte hain.
+  const startEdit = (it) => setPending({
+    edit: true, id: it.id, kind: it.kind, atype: it.atype,
+    coords: it.geometry || [], name: it.name || "",
+    width_m: it.width_m == null ? "" : String(it.width_m),
+    props: it.props ? { ...it.props } : {},
+    notes: it.notes || "",
+    project_id: it.project_id || "",
+    length_m: it.length_m, area_sqm: it.area_sqm,
+  });
+
+  const saveEdit = async () => {
+    setBusy(true);
+    const res = await api.put(`/tenders/${tenderId}/alignments/${pending.id}`, {
+      project_id: pending.project_id ? Number(pending.project_id) : null,
+      name: pending.name || "",
+      atype: pending.atype,
+      width_m: pending.width_m === "" || pending.width_m == null ? null : Number(pending.width_m),
+      props: cleanPropsOut(pending.props) || {},
+      notes: pending.notes || "",
+    });
+    setBusy(false);
+    if (!res?.success) { toast.error(res?.message || t("tenders.badlav_nahi_hua")); return; }
+    toast.success(t("tenders.badlav_save_hua"));
+    setPending(null); load();
+  };
+
   const savePending = async () => {
     if (!pending) return;
+    if (pending.edit) return saveEdit();
     if (!pending.project_id) { toast.error("Site chuno — kis site ki line hai"); return; }
     setBusy(true);
     const res = await api.post(`/tenders/${tenderId}/alignments`, {
@@ -4476,7 +4506,8 @@ function MapTab({tenderId, sites}) {
       const fam = familyOf(pending.atype);
       const P = pending.props || {};
       const setP = (k, v) => setPending(p=>({...p, props:{...(p.props||{}), [k]: v}}));
-      const areaM2 = pending.kind === "area" ? polyAreaM2(pending.coords) : 0;
+      const areaM2 = pending.kind === "area"
+        ? (pending.edit ? Number(pending.area_sqm || 0) : polyAreaM2(pending.coords)) : 0;
       const pick = (val, cur, on, label) => (
         <button key={String(val)} onClick={on}
           style={{fontSize:11.5, padding:"4px 11px", borderRadius:20, cursor:"pointer", fontFamily:"inherit",
@@ -4485,10 +4516,16 @@ function MapTab({tenderId, sites}) {
             color: cur===val ? T.ind : T.t3, fontWeight: cur===val ? 700 : 400}}>{label}</button>
       );
       return (
-      <Modal title={pending.kind==="line" ? t("tenders.nayi_lakeer_type", { type: typeLabel(pending.atype) })
+      <Modal title={pending.edit
+                  ? t("tenders.badlav_type", { type: typeLabel(pending.atype) })
+                  : pending.kind==="line" ? t("tenders.nayi_lakeer_type", { type: typeLabel(pending.atype) })
                   : pending.kind==="area" ? t("tenders.naya_rakba_type", { type: typeLabel(pending.atype) })
-                  : t("tenders.naya_structure")} Icon={IcMapPin} width={560}
-        sub={pending.kind==="point" ? t("tenders.map_par_lagaya_gaya_pin")
+                  : t("tenders.naya_structure")} Icon={pending.edit ? IcEdit : IcMapPin} width={560}
+        sub={pending.edit
+             ? (pending.kind === "area" ? fmtArea(pending.area_sqm)
+                : pending.kind === "line" ? fmtKm(pending.length_m)
+                : t("tenders.map_par_lagaya_gaya_pin"))
+             : pending.kind==="point" ? t("tenders.map_par_lagaya_gaya_pin")
              : pending.kind==="area" ? t("tenders.n_kone_rakba", { n: pending.coords.length, area: fmtArea(areaM2) })
              : t("tenders.n_point_lambai", { n: pending.coords.length, len: fmtKm(pathLenM(pending.coords)) })}
         onClose={()=>setPending(null)}
@@ -4562,7 +4599,7 @@ function MapTab({tenderId, sites}) {
         )}
 
         {/* Sadak ke saath naali — ek hi lakeer se dono ban jaayein */}
-        {pending.kind==="line" && Number(pending.width_m) > 0 && (
+        {!pending.edit && pending.kind==="line" && Number(pending.width_m) > 0 && (
           <div style={{marginTop:12, padding:"10px 12px", borderRadius:9,
             background:T.surfaceB, border:`1px solid ${T.b1}`}}>
             <div style={{fontSize:11.5, color:T.t2, fontWeight:600, marginBottom:7}}>
@@ -4604,9 +4641,22 @@ function MapTab({tenderId, sites}) {
           </div>
         )}
 
-        <div style={{fontSize:11.5, color:T.t4, marginTop:10}}>
-         {t("tenders.naam_me_hissa_likhoge_ch_0")}
-        </div>
+        {pending.edit && (
+          <div style={{marginTop:12}}>
+            <Field label={t("tenders.badlav_ka_note")} full>
+              <TxtIn value={pending.notes} onChange={v=>setPending(p=>({...p, notes:v}))}
+                ph={t("tenders.badlav_note_ph")}/>
+            </Field>
+            <div style={{fontSize:10.5, color:T.t4, marginTop:6, lineHeight:1.5}}>
+              {t("tenders.geometry_map_par_badlegi")}
+            </div>
+          </div>
+        )}
+        {!pending.edit && (
+          <div style={{fontSize:11.5, color:T.t4, marginTop:10}}>
+           {t("tenders.naam_me_hissa_likhoge_ch_0")}
+          </div>
+        )}
       </Modal>
       );
     })()}
@@ -4727,6 +4777,11 @@ function MapTab({tenderId, sites}) {
                   </div>
                 );
               })()}
+              <button onClick={()=>startEdit(it)} title={t("common.edit_2")}
+                style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
+                  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
+                <IcEdit size={12} color={T.t3}/>
+              </button>
               <button onClick={()=>del(it)} title={t("common.delete")}
                 style={{width:26, height:26, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB,
                   cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
