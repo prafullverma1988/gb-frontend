@@ -173,7 +173,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   const [dinfo, setDinfo] = useState(null);    // digest ka saar — screen par dikhta hai
   const [boqCount, setBoqCount] = useState(0); // tender me imported BOQ items
   const [err, setErr] = useState("");
-  const fileRef = useRef(null); const chatEndRef = useRef(null);
+  const fileRef = useRef(null); const chatBoxRef = useRef(null); const prevMsgCount = useRef(0);
   const initialUsed = useRef(null);
 
   // silent=true → polling ke liye; spinner nahi dikhana (warna har 5 second
@@ -229,7 +229,17 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     }, 5000);
     return () => { alive = false; clearInterval(id); };
   }, [job?.status, load]);
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
+  useEffect(() => {
+    // scrollIntoView POORE page ko chat tak kheench deta tha — 5s ka poll msgs
+    // dobara set karta hai to screen har 5 second khud neeche bhaag rahi thi
+    // (live pakda). Ab sirf chat ka DIBBA scroll hota hai, aur sirf tab jab
+    // message sach me naya ho.
+    if (msgs.length !== prevMsgCount.current) {
+      prevMsgCount.current = msgs.length;
+      const el = chatBoxRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+  }, [msgs]);
 
   const onFile = async (f) => {
     if (!f) return;
@@ -481,13 +491,12 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
         {/* CHAT */}
         <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden" }}>
           <div style={{ padding: "8px 14px", borderBottom: `1px solid ${T.b1}`, fontSize: 11.5, fontWeight: 700, color: T.t2 }}>💬 AI se charcha — plan yahi se sudharta hai</div>
-          <div style={{ maxHeight: 260, overflowY: "auto", padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div ref={chatBoxRef} style={{ maxHeight: 260, overflowY: "auto", padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
             {msgs.length === 0 && <div style={{ fontSize: 11.5, color: T.t4 }}>Jaise: "drain ko road ke saath mat jodo, alag kaam rakho" · "Sendh ko do site me baanto" · "har road me WMM stage bhi daalo"</div>}
             {msgs.map((m, i) => (
               <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%", padding: "7px 11px", borderRadius: 10, fontSize: 12, lineHeight: 1.5, whiteSpace: "pre-wrap", background: m.role === "user" ? T.blu : T.surfaceB, color: m.role === "user" ? "white" : T.t1, border: m.role === "user" ? "none" : `1px solid ${T.b1}` }}>{m.text}</div>
             ))}
             {busy === "chat" && <div style={{ alignSelf: "flex-start", fontSize: 11.5, color: T.t4 }}>AI soch raha hai…</div>}
-            <div ref={chatEndRef} />
           </div>
           <div style={{ display: "flex", gap: 8, padding: "9px 12px", borderTop: `1px solid ${T.b1}` }}>
             <input value={chat} onChange={(e) => setChat(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }}
