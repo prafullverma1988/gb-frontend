@@ -1693,7 +1693,7 @@ const numOf = (v) => {
 const isBlank = (v) => v === null || v === undefined || String(v).trim() === "";
 
 const BOQ_TARGETS = [
-  {key:"item_no",     label:"S.No / Item",  re:/^s\.?\s*no|^sr|serial|^#|^item\s*no/i},
+  {key:"item_no",     label:"S.No / Item",  prefer:/^item\s*no/i, re:/^s\.?\s*no|^sr|serial|^#|^item\s*no/i},
   {key:"sor_code",    get label() { return t("boq_import_wizard.sor_code"); },   re:/sor|code|ref/i},
   {key:"description", get label() { return t("boq_import_wizard.description"); },  re:/description|item|particular|work/i, required:true},
   {key:"unit",        get label() { return t("common.unit"); },         re:/^unit|units|uom/i},
@@ -1750,7 +1750,10 @@ const autoMapCols = (headerCells) => {
   const m = {};
   const taken = new Set();
   for (const tg of BOQ_TARGETS) {
-    const idx = (headerCells || []).findIndex((c, i) =>
+    // prefer: dono hon ("S.No" + "Item No.") to asli numbering wala jeete
+    let idx = tg.prefer ? (headerCells || []).findIndex((c, i) =>
+      !taken.has(i) && typeof c === "string" && tg.prefer.test(c.trim())) : -1;
+    if (idx < 0) idx = (headerCells || []).findIndex((c, i) =>
       !taken.has(i) && typeof c === "string" && tg.re.test(c.trim()));
     if (idx >= 0) { m[tg.key] = idx; taken.add(idx); }
   }
