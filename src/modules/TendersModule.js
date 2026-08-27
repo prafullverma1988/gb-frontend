@@ -4039,6 +4039,23 @@ function MapTab({tenderId, sites}) {
     toast.success("Hat gaya"); loadFtypes();
   };
 
+  // Form me har number TYPED STRING ki tarah rehta hai (warna aadha-likha
+  // ".6" us waqt NaN ban jaata hai jab user ne abhi likhna shuru hi kiya ho,
+  // aur input dobara theek nahi hota). Number banane ki ek hi jagah — yahan.
+  const cleanPropsOut = (p) => {
+    if (!p) return undefined;
+    const out = {};
+    for (const [k, v] of Object.entries(p)) {
+      if (v === undefined || v === null) continue;
+      if (typeof v === "string") {
+        const s2 = v.trim();
+        if (!s2) continue;                                  // khaali khaana = bheja hi nahi
+        out[k] = /^-?\d*\.?\d+$/.test(s2) ? Number(s2) : s2;
+      } else out[k] = v;
+    }
+    return Object.keys(out).length ? out : undefined;
+  };
+
   const savePending = async () => {
     if (!pending) return;
     if (!pending.project_id) { toast.error("Site chuno — kis site ki line hai"); return; }
@@ -4052,7 +4069,7 @@ function MapTab({tenderId, sites}) {
         ? Number(pending.drain_offset_m) : undefined,
       // Type ke apne field. Bemani value server chup-chaap gira deta hai —
       // drawing kisi ek galat khaane ki wajah se kabhi nahi khoti.
-      props: pending.props && Object.keys(pending.props).length ? pending.props : undefined,
+      props: cleanPropsOut(pending.props),
     });
     setBusy(false);
     if (!res?.success) { toast.error(res?.message || "Save nahi hua"); return; }
@@ -4518,7 +4535,7 @@ function MapTab({tenderId, sites}) {
               </div>
             </Field>
             <Field label={t("tenders.gehrai_m")}>
-              <TxtIn value={P.depth_m ?? ""} onChange={v=>setP("depth_m", v === "" ? undefined : Number(v))} ph="e.g. 1.2"/>
+              <TxtIn value={P.depth_m ?? ""} onChange={v=>setP("depth_m", v)} ph="e.g. 1.2"/>
             </Field>
           </>)}
           {fam==="pipe" && (<>
@@ -4529,7 +4546,7 @@ function MapTab({tenderId, sites}) {
               </div>
             </Field>
             <Field label={t("tenders.vyas_dia_mm")}>
-              <TxtIn value={P.dia_mm ?? ""} onChange={v=>setP("dia_mm", v === "" ? undefined : Number(v))} ph="e.g. 300"/>
+              <TxtIn value={P.dia_mm ?? ""} onChange={v=>setP("dia_mm", v)} ph="e.g. 300"/>
             </Field>
           </>)}
         </div>
@@ -4573,7 +4590,7 @@ function MapTab({tenderId, sites}) {
                     bhi nahi dikhti thi, jabki site par 600 mm ki hoti hai. */}
                 <span style={{display:"inline-flex", alignItems:"center", gap:6, marginLeft:4}}>
                   <span style={{fontSize:11, color:T.t4}}>{t("tenders.naali_chaudai")}</span>
-                  <input value={P.drain_width_m ?? ""} onChange={e=>setP("drain_width_m", e.target.value === "" ? undefined : Number(e.target.value))}
+                  <input value={P.drain_width_m ?? ""} onChange={e=>setP("drain_width_m", e.target.value)}
                     placeholder="0.6"
                     style={{width:54, padding:"4px 7px", borderRadius:6, border:`1px solid ${T.b1}`,
                       fontSize:11.5, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit"}}/>
