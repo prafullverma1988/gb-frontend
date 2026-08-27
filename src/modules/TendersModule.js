@@ -3370,7 +3370,63 @@ const POINT_TYPES = [
   {v:"culvert",    get l() { return t("tenders.culvert"); }},
   {v:"other",      get l() { return t("common.other"); }},
 ];
-const lineColour = (t) => (LINE_TYPES.find(x=>x.v===t) || LINE_TYPES[LINE_TYPES.length-1]).c;
+// Rakba wale feature — UGR ka tank, pump house ka plinth, plot ki boundary.
+// Inka naap lambai nahi, RAKBA hai; isliye kind alag hai aur map par ye
+// polygon ban kar aate hain.
+const AREA_TYPES  = [
+  {v:"ugr",        l:"UGR"},
+  {v:"pump_house", get l() { return t("tenders.map_pump_house"); }},
+  {v:"chamber",    get l() { return t("tenders.map_chamber"); }},
+  {v:"building",   get l() { return t("tenders.map_building"); }},
+  {v:"plot",       get l() { return t("tenders.map_plot_boundary"); }},
+  {v:"other",      get l() { return t("tenders.map_other"); }},
+];
+// Kaunsa type kis parivaar ka — backend ke FAMILY se HU-BA-HU. Filter yahan
+// se banta hai aur summary ka jod wahan se; dono jagah ek hi sach rehna
+// chahiye, warna chip "3" kahega aur patti "4".
+const FAMILY = {
+  inlet:"pipe", outlet:"pipe", rising:"pipe", gravity:"pipe",
+  drain:"drain", road:"road",
+  ugr:"structure", pump_house:"structure", hdd:"structure",
+  valve:"structure", culvert:"structure", chamber:"structure",
+  plot:"structure", building:"structure",
+};
+const familyOf = (a) => FAMILY[a] || (a === "other" ? "other" : "custom");
+const FAM_META = {
+  pipe:      {get l() { return t("tenders.fam_pipeline");  }, c:"#2563EB"},
+  drain:     {get l() { return t("tenders.fam_naali");     }, c:"#0E7490"},
+  road:      {get l() { return t("tenders.fam_sadak");     }, c:"#92400E"},
+  structure: {get l() { return t("tenders.fam_structure"); }, c:"#4338CA"},
+  custom:    {get l() { return t("tenders.fam_apne_item"); }, c:"#7C3AED"},
+  other:     {get l() { return t("tenders.map_other");     }, c:"#6B7280"},
+};
+// Custom type LINE_TYPES me nahi hota — uska rang parivaar se aata hai,
+// warna har naya item slate-grey "other" jaisa dikhta.
+const lineColour = (t) => (LINE_TYPES.find(x=>x.v===t) || {}).c || FAM_META[familyOf(t)].c;
+
+// Polygon ka rakba — wahi ganit jo backend ke utils/kml.js me hai, taaki
+// draw karte waqt dikhne wala ankda save ke baad badal na jaye. Origin
+// ghatana zaroori hai (absolute lat/lng par shoelace float me ragadta hai)
+// aur reference latitude polygon ka AUSAT (pehla point nahi — warna wahi
+// aakriti ulta ghumane par rakba badal jata hai).
+function polyAreaM2(pts){
+  const n = (pts||[]).length;
+  if (n < 3) return 0;
+  let latSum = 0; for (const p of pts) latSum += Number(p.lat);
+  const latRef = latSum / n, mLat = 111320, mLng = 111320 * Math.cos(latRef*Math.PI/180);
+  const lat0 = Number(pts[0].lat), lng0 = Number(pts[0].lng);
+  let twice = 0;
+  for (let i = 0; i < n; i++){
+    const a = pts[i], b = pts[(i+1) % n];
+    const ax = (Number(a.lng)-lng0)*mLng, ay = (Number(a.lat)-lat0)*mLat;
+    const bx = (Number(b.lng)-lng0)*mLng, by = (Number(b.lat)-lat0)*mLat;
+    twice += ax*by - bx*ay;
+  }
+  return Math.abs(twice/2);
+}
+const fmtArea = (m2) => Number(m2||0) >= 10000
+  ? (Number(m2)/10000).toLocaleString("en-IN",{maximumFractionDigits:2}) + " ha"
+  : Math.round(Number(m2||0)).toLocaleString("en-IN") + " m²";
 
 // Line ko bagal me khiskao — wahi ganit jo backend ke utils/lineOffset me
 // hai (naali server par banti hai; yahan sirf road ka footprint dikhane ke
@@ -3438,7 +3494,10 @@ function splitPathAt(g, coords, metres) {
   }
   return { done, rest: [] };   // whole line laid
 }
-const alignLabel = (kind, t) => ((kind==="point"?POINT_TYPES:LINE_TYPES).find(x=>x.v===t)?.l) || t;
+// Ek hi code teeno shakl me aa sakta hai (culvert pin bhi, lakeer bhi,
+// aayat bhi) — isliye teeno list me dhoondhte hain, kind me kaid nahi.
+const alignLabel = (kind, t) =>
+  ([...LINE_TYPES, ...POINT_TYPES, ...AREA_TYPES].find(x=>x.v===t)?.l) || t;
 const fmtKm = (m) => Number(m||0) >= 1000
   ? (Number(m)/1000).toLocaleString("en-IN",{maximumFractionDigits:2}) + " km"
   : Math.round(Number(m||0)) + " m";
@@ -3456,6 +3515,31 @@ function pathLenM(pts) {
   return m;
 }
 
+// Draw menu ki list — component ke bahar, taaki har render par dobara na
+// bane. Culvert/HDD teeno section me aa sakte hain: culvert ka span ek
+// lakeer hai, uska footprint ek aayat, aur uski jagah ek pin. Backend ab
+// code ko shakl se nahi baandhta, isliye teeno chalte hain.
+const DRAW_MENU = (custom=[]) => [
+  { head: t("tenders.draw_lakeer_se"), rows: [
+      ...LINE_TYPES.map(x=>({ label:x.l, c:x.c, iv:{kind:"line", atype:x.v, shape:"line"} })),
+      { label:t("tenders.draw_culvert_span"), c:FAM_META.structure.c, iv:{kind:"line", atype:"culvert", shape:"line"} },
+      { label:t("tenders.draw_hdd_crossing"), c:FAM_META.structure.c, iv:{kind:"line", atype:"hdd",     shape:"line"} },
+      ...custom.filter(f=>f.kind==="line").map(f=>({ label:f.label, c:f.colour||FAM_META.custom.c,
+        iv:{kind:"line", atype:f.code, shape:"line"} })),
+  ]},
+  { head: t("tenders.draw_rakba"), rows: [
+      { label:t("tenders.draw_aayat_square"), c:FAM_META.structure.c, iv:{kind:"area", atype:"ugr", shape:"rect"} },
+      { label:t("tenders.draw_khud_ke_kone"), c:FAM_META.structure.c, iv:{kind:"area", atype:"ugr", shape:"poly"} },
+      ...custom.filter(f=>f.kind==="area").map(f=>({ label:f.label, c:f.colour||FAM_META.custom.c,
+        iv:{kind:"area", atype:f.code, shape:"poly"} })),
+  ]},
+  { head: t("tenders.draw_pin"), rows: [
+      ...POINT_TYPES.map(x=>({ label:x.l, c:FAM_META[familyOf(x.v)].c, iv:{kind:"point", atype:x.v, shape:"point"} })),
+      ...custom.filter(f=>f.kind==="point").map(f=>({ label:f.label, c:f.colour||FAM_META.custom.c,
+        iv:{kind:"point", atype:f.code, shape:"point"} })),
+  ]},
+];
+
 function MapTab({tenderId, sites}) {
   const toast = useToast();
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_KEY;
@@ -3470,6 +3554,11 @@ function MapTab({tenderId, sites}) {
   // leaves the instance bound to a stale node and the map blank.
   const fSiteRef  = useRef("");
   const sitesRef  = useRef([]);
+  // Kya mark kar rahe hain ye drawing se PEHLE tay hota hai — isliye map ka
+  // click handler ise ref se padhta hai (state hota to handler purana intent
+  // pakde rehta, kyunki map ek hi baar banta hai).
+  const intentRef = useRef(null);
+  const rectRef   = useRef(null);   // aayat ka pehla kona
 
   const [items, setItems]     = useState([]);
   const [summary, setSummary] = useState(null);
@@ -3483,7 +3572,14 @@ function MapTab({tenderId, sites}) {
   const [hidden, setHidden]   = useState(()=>new Set());
   const [pending, setPending] = useState(null);   // {kind, coords} — abhi drawn, save baaki
   const [busy, setBusy]       = useState(false);
-  const [mode, setMode]       = useState(null);   // null | "line" | "point"
+  const [mode, setMode]       = useState(null);   // null | "line" | "poly" | "rect" | "point"
+  const [intent, setIntent]   = useState(null);   // {kind, atype, shape} — draw se pehle
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [ftypes, setFtypes]   = useState([]);     // built-in + company ke apne item
+  const [addItem, setAddItem] = useState(null);   // "Naya item jodo" ka form
+  // Parivaar ka filter (pipe/naali/sadak/structure/apne item) — per-type
+  // chips ke UPAR. 37 line wale tender me "sirf sadak dekhni hai" ek click.
+  const [famHidden, setFamHidden] = useState(()=>new Set());
   const [draftPts, setDraftPts] = useState([]);   // line ke abhi tak ke points
   const [panel, setPanel]     = useState(null);   // stretch dashboard {loading, data}
   const [photosOn, setPhotosOn] = useState(false);
@@ -3682,10 +3778,32 @@ function MapTab({tenderId, sites}) {
         const m = modeRef.current;
         if (!m) return;
         const pt = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+        const iv = intentRef.current || { kind:"line", atype:"rising" };
+        const site = fSiteRef.current || (sitesRef.current.length===1 ? sitesRef.current[0].id : "");
         if (m === "point") {
-          modeRef.current = null; setMode(null);
-          setPending({ kind:"point", coords:[pt], name:"", atype:"ugr",
-            project_id: fSiteRef.current || (sitesRef.current.length===1 ? sitesRef.current[0].id : "") });
+          modeRef.current = null; setMode(null); setIntent(null);
+          setPending({ kind:"point", coords:[pt], name:"", atype: iv.atype || "ugr", props:{}, project_id: site });
+          return;
+        }
+        // Aayat / square — do click me ho jaati hai: pehla ek kona, doosra
+        // saamne wala. Shift dabaye rakho to bhujaayein barabar (square).
+        // Barabari METRE me naapi jaati hai, degree me nahi — warna 21°N par
+        // "square" 7% chaudi nikalti.
+        if (m === "rect") {
+          if (!rectRef.current) { rectRef.current = pt; setDraftPts([pt]); return; }
+          const a = rectRef.current;
+          let dLat = pt.lat - a.lat, dLng = pt.lng - a.lng;
+          if (e.domEvent && e.domEvent.shiftKey) {
+            const kLng = Math.cos(a.lat*Math.PI/180) || 1;
+            const side = Math.max(Math.abs(dLat)*111320, Math.abs(dLng)*111320*kLng);
+            dLat = (dLat < 0 ? -1 : 1) * side/111320;
+            dLng = (dLng < 0 ? -1 : 1) * side/(111320*kLng);
+          }
+          const corners = [a, {lat:a.lat, lng:a.lng+dLng},
+                              {lat:a.lat+dLat, lng:a.lng+dLng}, {lat:a.lat+dLat, lng:a.lng}];
+          rectRef.current = null;
+          modeRef.current = null; setMode(null); setIntent(null); setDraftPts([]);
+          setPending({ kind:"area", coords:corners, name:"", atype: iv.atype || "ugr", props:{}, project_id: site });
           return;
         }
         // Read the CURRENT path off the overlay, not from React state: the
@@ -3697,8 +3815,13 @@ function MapTab({tenderId, sites}) {
           : [];
         const next = [...live, pt];
         if (!draftRef.current) {
-          draftRef.current = new g.maps.Polyline({ path: next, strokeColor:"#DC2626",
-            strokeWeight:4, strokeOpacity:0.95, editable:true, map: mapRef.current });
+          // Polygon aur Polyline dono ka getPath() ek jaisa hai, isliye
+          // aage ka saara code (drag, undo, finish) bina badle chalta hai.
+          const o = { path: next, strokeColor:"#DC2626", strokeWeight:4,
+            strokeOpacity:0.95, editable:true, map: mapRef.current };
+          draftRef.current = m === "poly"
+            ? new g.maps.Polygon({ ...o, fillColor:"#DC2626", fillOpacity:0.16 })
+            : new g.maps.Polyline(o);
           // Keep the point counter honest when the user drags or right-click
           // deletes a vertex — the overlay stays the single source of truth.
           const sync = () => {
@@ -3742,8 +3865,20 @@ function MapTab({tenderId, sites}) {
       if (!coords.length) continue;
       // F1 — chhupa hua type map par bhi nahi aata (aur bounds me bhi nahi,
       // taaki "sirf drain" chunne par map unhi par zoom ho jaye).
-      if (hidden.has(it.kind === "line" ? it.atype : "__pins")) continue;
+      if (famHidden.has(familyOf(it.atype))) continue;
+      if (hidden.has(it.kind === "line" ? it.atype : it.kind === "area" ? "__areas" : "__pins")) continue;
       any = true;
+      // Rakba — apne rang ka polygon. Click par wahi stretch-dashboard jo
+      // line par khulta hai, taaki UGR ka panel bhi ek hi tareeke se khule.
+      if (it.kind === "area") {
+        const c = lineColour(it.atype);
+        const pg = new g.maps.Polygon({ paths: coords, strokeColor: c, strokeWeight: 2,
+          strokeOpacity: 0.9, fillColor: c, fillOpacity: 0.22, map: mapRef.current });
+        pg.addListener("click", ()=>openStretch(it.id));
+        shapesRef.current.push(pg);
+        coords.forEach(x=>bounds.extend(x));
+        continue;
+      }
       if (it.kind === "line") {
         // Whole line in its type colour, then the laid part painted green on
         // top — so "kitna baaki" is the part that still has its own colour.
@@ -3803,20 +3938,29 @@ function MapTab({tenderId, sites}) {
       }
     }
     if (any) mapRef.current.fitBounds(bounds);
-  }, [items, progress, mapReady, toast, openStretch, hidden]);
+  }, [items, progress, mapReady, toast, openStretch, hidden, famHidden]);
 
   // ── Drawing controls ──────────────────────────────────────────
   const clearDraft = useCallback(()=>{
     if (draftRef.current) { draftRef.current.setMap(null); draftRef.current = null; }
+    rectRef.current = null;
     setDraftPts([]);
   }, []);
-  const startMode = (m) => {
+  // Kya mark karna hai ye PEHLE chunte hain, phir kheenchte hain — pehle
+  // ulta tha (lakeer kheencho, phir type poochho). Intent pehle hone se
+  // form me sirf usi type ke field aate hain aur "aayat" jaisi shakl mumkin
+  // hoti hai, jo baad me type poochh kar nahi ho sakti thi.
+  const startDraw = (iv) => {
     clearDraft();
-    modeRef.current = m; setMode(m);
-    if (mapRef.current) mapRef.current.setOptions({ draggableCursor: m ? "crosshair" : null });
+    intentRef.current = iv; setIntent(iv);
+    modeRef.current = iv.shape; setMode(iv.shape);
+    setMenuOpen(false);
+    if (mapRef.current) mapRef.current.setOptions({ draggableCursor: "crosshair" });
   };
   const stopMode = useCallback(()=>{
     modeRef.current = null; setMode(null);
+    intentRef.current = null; setIntent(null);
+    rectRef.current = null;
     if (mapRef.current) mapRef.current.setOptions({ draggableCursor: null });
   }, []);
   const undoPoint = () => {
@@ -3831,19 +3975,60 @@ function MapTab({tenderId, sites}) {
     }
     setDraftPts(next);
   };
-  const finishLine = () => {
+  const finishDraw = () => {
     // The user may have dragged vertices after placing them, so take the
     // path off the overlay itself rather than the click history.
     const live = draftRef.current
       ? draftRef.current.getPath().getArray().map(p=>({lat:p.lat(), lng:p.lng()}))
       : draftPts;
-    if (live.length < 2) { toast.error("Line ke liye kam se kam 2 point chahiye"); return; }
+    const iv = intentRef.current || { kind:"line", atype:"rising" };
+    const need = iv.kind === "area" ? 3 : 2;
+    if (live.length < need) {
+      toast.error(need === 3 ? t("tenders.rakbe_ke_liye_3_kone")
+                             : t("tenders.line_ke_liye_2_point"));
+      return;
+    }
     stopMode();
-    setPending({ kind:"line", coords: live, name:"", atype:"rising",
+    setPending({ kind: iv.kind, coords: live, name:"", atype: iv.atype, props:{},
       project_id: fSite || (sites.length===1 ? sites[0].id : "") });
   };
   // Leaving the tab mid-draw should not leave an overlay stuck on the map.
   useEffect(()=>()=>{ if (draftRef.current) draftRef.current.setMap(null); }, []);
+
+  // Company ke apne item — ek baar banao, har tender me milte hain.
+  const loadFtypes = useCallback(async ()=>{
+    const r = await api.get(`/tenders/alignments/feature-types`);
+    if (r?.success) setFtypes(r.data || []);
+  }, []);
+  useEffect(()=>{ loadFtypes(); }, [loadFtypes]);
+  const customTypes = ftypes.filter(f=>!f.builtin);
+  // Har shakl ke liye type ki list = built-in + company ke apne.
+  const typeOpts = (kind) => [
+    ...(kind==="line" ? LINE_TYPES : kind==="area" ? AREA_TYPES : POINT_TYPES).map(x=>({v:x.v, l:x.l})),
+    ...customTypes.filter(f=>f.kind===kind).map(f=>({v:f.code, l:f.label})),
+  ];
+  const typeLabel = (a) => customTypes.find(f=>f.code===a)?.label || alignLabel(null, a);
+
+  const saveItem = async () => {
+    const label = String(addItem?.label || "").trim();
+    if (!label) { toast.error(t("tenders.item_ka_naam_likho")); return; }
+    setBusy(true);
+    const r = await api.post(`/tenders/alignments/feature-types`,
+      { label, kind: addItem.kind || "line", colour: addItem.colour || undefined });
+    setBusy(false);
+    if (!r?.success) { toast.error(r?.message || t("tenders.item_nahi_bana")); return; }
+    toast.success(t("tenders.item_jud_gaya", { label }));
+    setAddItem(null);
+    await loadFtypes();
+    startDraw({ kind: r.data.kind, atype: r.data.code,
+      shape: r.data.kind === "point" ? "point" : r.data.kind === "area" ? "poly" : "line" });
+  };
+  const delItem = async (f) => {
+    if (!await window.confirmAsync(t("tenders.item_hata_dein", { label: f.label }))) return;
+    const r = await api.del(`/tenders/alignments/feature-types/${f.id}`);
+    if (!r?.success) { toast.error(r?.message || t("tenders.item_hat_nahi_paaya")); return; }
+    toast.success("Hat gaya"); loadFtypes();
+  };
 
   const savePending = async () => {
     if (!pending) return;
@@ -3856,10 +4041,16 @@ function MapTab({tenderId, sites}) {
       drain_side: pending.drain_side || undefined,
       drain_offset_m: pending.drain_side && pending.drain_offset_m !== "" && pending.drain_offset_m != null
         ? Number(pending.drain_offset_m) : undefined,
+      // Type ke apne field. Bemani value server chup-chaap gira deta hai —
+      // drawing kisi ek galat khaane ki wajah se kabhi nahi khoti.
+      props: pending.props && Object.keys(pending.props).length ? pending.props : undefined,
     });
     setBusy(false);
     if (!res?.success) { toast.error(res?.message || "Save nahi hua"); return; }
-    toast.success(res.message || (pending.kind==="line" ? `Line save hui — ${fmtKm(res.data.length_m)}` : "Point save hua"));
+    toast.success(res.message || (
+      pending.kind === "line" ? `Line save hui — ${fmtKm(res.data.length_m)}`
+      : pending.kind === "area" ? t("tenders.rakba_save_hua", { area: fmtArea(res.data.area_sqm) })
+      : "Point save hua"));
     setPending(null); clearDraft(); load();
   };
 
@@ -3913,6 +4104,9 @@ function MapTab({tenderId, sites}) {
             {[["Drawn", fmtKm(summary.total_length_m), T.ind],
               ...(progress ? [["Ho gaya (MB se)", `${fmtKm(progress.total_done_m)} · ${progress.total_pct}%`, T.grn]] : []),
               ["Structures", String(summary.total_points), T.blu],
+              // Rakba tabhi dikhao jab koi polygon ho — warna khaali "0 m²"
+              // patti me jagah khaa jata hai.
+              ...(summary.total_area_sqm > 0 ? [["Rakba", fmtArea(summary.total_area_sqm), "#4338CA"]] : []),
               ["BOQ (RMT)", summary.boq_running_qty ? fmtKm(summary.boq_running_qty) : "—", T.t2],
               ...(drawnVsBoq !== null ? [["Farak", (drawnVsBoq>0?"+":"") + fmtKm(Math.abs(drawnVsBoq)),
                 Math.abs(drawnVsBoq) > Math.max(500, summary.boq_running_qty*0.05) ? T.amb : T.grn]] : []),
@@ -3960,8 +4154,49 @@ function MapTab({tenderId, sites}) {
           <div style={{display:"flex", gap:7, alignItems:"center", flexWrap:"wrap",
             padding:"8px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surface}}>
             {!mode && (<>
-              <SecBtn label={t("tenders.pipeline_line_draw_karo")} Icon={IcMapPin} onClick={()=>startMode("line")}/>
-              <SecBtn label={t("tenders.structure_pin_lagao")} Icon={IcMapPin} onClick={()=>startMode("point")}/>
+              {/* Ek hi jagah se sab kuch — site par sirf pipeline nahi hoti:
+                  sadak PCC ya bitumen, naali kis taraf, UGR ka asli rakba.
+                  Pehle do hi button the aur baaki sab "other" me dab jaata tha. */}
+              <div style={{position:"relative"}}>
+                <PrimBtn label={t("tenders.naya_mark_karo")} Icon={IcMapPin} onClick={()=>setMenuOpen(o=>!o)}/>
+                {menuOpen && (<>
+                  {/* Bahar click karne par band — menu map ke upar hai, aur
+                      map khud click khaata hai, isliye ek dhakkan chahiye. */}
+                  <div onClick={()=>setMenuOpen(false)} style={{position:"fixed", inset:0, zIndex:40}}/>
+                  <div style={{position:"absolute", top:"calc(100% + 5px)", left:0, zIndex:41, minWidth:252,
+                    background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10,
+                    boxShadow:"0 12px 30px rgba(15,23,42,.16)", overflow:"hidden auto", maxHeight:392}}>
+                    {DRAW_MENU(customTypes).map(sec=>(
+                      <div key={sec.head}>
+                        <div style={{padding:"6px 12px 3px", fontSize:10, fontWeight:700, color:T.t4,
+                          textTransform:"uppercase", letterSpacing:.4, background:T.surfaceB}}>{sec.head}</div>
+                        {sec.rows.map((r,i)=>(
+                          <button key={i} onClick={()=>startDraw(r.iv)}
+                            style={{display:"flex", alignItems:"center", gap:8, width:"100%", textAlign:"left",
+                              padding:"7px 12px", fontSize:12, color:T.t1, background:"transparent",
+                              border:"none", cursor:"pointer", fontFamily:"inherit"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            <span style={{width:9, height:9, borderRadius:r.iv.shape==="line"?2:"50%",
+                              background:r.c, flexShrink:0}}/>
+                            {r.label}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                    <div style={{borderTop:`1px solid ${T.b1}`}}>
+                      <button onClick={()=>{ setMenuOpen(false); setAddItem({label:"", kind:"line", colour:""}); }}
+                        style={{display:"flex", alignItems:"center", gap:8, width:"100%", textAlign:"left",
+                          padding:"8px 12px", fontSize:12, fontWeight:600, color:T.ind, background:"transparent",
+                          border:"none", cursor:"pointer", fontFamily:"inherit"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        {t("tenders.naya_item_jodo_dots")}
+                      </button>
+                    </div>
+                  </div>
+                </>)}
+              </div>
               {/* E — photo layer ka switch */}
               <button onClick={()=>setPhotosOn(o=>!o)}
                 style={{fontSize:12, padding:"7px 12px", borderRadius:7, cursor:"pointer", fontFamily:"inherit",
@@ -4011,57 +4246,98 @@ function MapTab({tenderId, sites}) {
               <span style={{fontSize:11, color:T.t4}}>{t("tenders.line_pipeline_pin_ugr_pump_house")}</span>
             </>)}
             {mode === "point" && (<>
-              <span style={{fontSize:12, fontWeight:700, color:T.ind}}>{t("tenders.map_par_jahan_structure_hai_wahan")}</span>
+              <span style={{fontSize:12, fontWeight:700, color:T.ind}}>
+                {typeLabel(intent?.atype)} — {t("tenders.map_par_jahan_hai_click")}
+              </span>
               <SecBtn label={t("common.cancel")} onClick={stopMode}/>
             </>)}
-            {mode === "line" && (<>
-              <span style={{fontSize:12, fontWeight:700, color:T.ind}}>{t("tenders.road_ke_saath_click_karte_jao", { draftPts: draftPts.length })}{draftPts.length >= 2 && (
+            {mode === "rect" && (<>
+              <span style={{fontSize:12, fontWeight:700, color:T.ind}}>
+                {typeLabel(intent?.atype)} — {draftPts.length ? t("tenders.ab_saamne_wala_kona") : t("tenders.ek_kona_click_karo")}
+              </span>
+              <SecBtn label={t("common.cancel")} onClick={()=>{ clearDraft(); stopMode(); }}/>
+              <span style={{fontSize:11, color:T.t4}}>{t("tenders.shift_se_square")}</span>
+            </>)}
+            {(mode === "line" || mode === "poly") && (<>
+              <span style={{fontSize:12, fontWeight:700, color:T.ind}}>
+                {typeLabel(intent?.atype)} · {draftPts.length} point
+                {mode === "line" && draftPts.length >= 2 && (
                   <span style={{marginLeft:7, color:"#059669"}}>· {fmtKm(pathLenM(draftPts))}</span>
+                )}
+                {/* Rakba draw karte waqt bhi chalta hua ankda — BOQ ke plot
+                    se milaana wahin ho jaata hai, save ke baad nahi. */}
+                {mode === "poly" && draftPts.length >= 3 && (
+                  <span style={{marginLeft:7, color:"#059669"}}>· {fmtArea(polyAreaM2(draftPts))}</span>
                 )}
               </span>
               <SecBtn label={t("tenders.ek_point_wapas")} onClick={undoPoint} disabled={!draftPts.length}/>
-              <PrimBtn label={t("tenders.line_poori_hui")} Icon={IcChk} onClick={finishLine} disabled={draftPts.length < 2}/>
+              <PrimBtn label={mode === "poly" ? t("tenders.rakba_poora_hua") : t("tenders.line_poori_hui")} Icon={IcChk}
+                onClick={finishDraw} disabled={draftPts.length < (mode === "poly" ? 3 : 2)}/>
               <SecBtn label={t("common.cancel")} onClick={()=>{ clearDraft(); stopMode(); }}/>
               <span style={{fontSize:11, color:T.t4}}>{t("tenders.point_ko_drag_karke_theek_bhi")}</span>
             </>)}
           </div>
 
-          {/* F1 — type ke chips. Rang wahi jo map par line ka hai, isliye ye
-              legend bhi hai aur filter bhi. Ginti dikhti hai taaki "gravity
-              kitni hai" ke liye list khangalni na pade. */}
+          {/* Filter do satar me. UPAR parivaar — pipe / naali / sadak /
+              structure / apne item: ek click me us parivaar ke saare type
+              saath on-off. NEECHE wahi purane per-type chips, taaki "sirf
+              gravity" jaisa baareek chunav bhi bacha rahe. Ginti dono par
+              hai, isliye ye legend bhi hai. */}
           {!mode && !!items.length && (()=>{
-            const cnt = {}; let pins = 0;
-            items.forEach(it=>{ if (it.kind === "line") cnt[it.atype] = (cnt[it.atype]||0)+1; else pins++; });
-            const chips = LINE_TYPES.filter(t=>cnt[t.v]).map(t=>({key:t.v, label:t.l, n:cnt[t.v], c:t.c}));
-            if (pins) chips.push({key:"__pins", label:t("tenders.structures"), n:pins, c:"#4338CA"});
-            if (chips.length < 2) return null;   // ek hi type hai to filter bekaar
-            const anyHidden = hidden.size > 0;
+            const famCnt = {}, cnt = {};
+            let pins = 0, areas = 0;
+            items.forEach(it=>{
+              const f = familyOf(it.atype);
+              famCnt[f] = (famCnt[f]||0) + 1;
+              if (it.kind === "line") cnt[it.atype] = (cnt[it.atype]||0)+1;
+              else if (it.kind === "area") areas++;
+              else pins++;
+            });
+            const fams = Object.keys(FAM_META).filter(f=>famCnt[f]);
+            const chips = LINE_TYPES.filter(x=>cnt[x.v]).map(x=>({key:x.v, label:x.l, n:cnt[x.v], c:x.c}));
+            // Custom line types LINE_TYPES me nahi hote — inke apne chips.
+            Object.keys(cnt).filter(k=>!LINE_TYPES.some(x=>x.v===k)).forEach(k=>{
+              chips.push({key:k, label:typeLabel(k), n:cnt[k], c:lineColour(k)});
+            });
+            if (areas) chips.push({key:"__areas", label:t("tenders.rakbe"), n:areas, c:FAM_META.structure.c});
+            if (pins)  chips.push({key:"__pins",  label:t("tenders.structures"), n:pins, c:"#4338CA"});
+            const anyHidden = hidden.size > 0 || famHidden.size > 0;
+            const chip = (on, c, label, n, onClick, key) => (
+              <button key={key} onClick={onClick}
+                style={{display:"flex", alignItems:"center", gap:5, fontSize:11, cursor:"pointer",
+                  padding:"3px 9px", borderRadius:20, fontFamily:"inherit",
+                  border:`1px solid ${on ? c : T.b1}`,
+                  background: on ? c + "14" : T.surface,
+                  color: on ? c : T.t4, fontWeight: on ? 700 : 400,
+                  opacity: on ? 1 : .75, textDecoration: on ? "none" : "line-through"}}>
+                <span style={{width:8, height:8, borderRadius:"50%", background:on?c:T.b2, flexShrink:0}}/>
+                {label} <span style={{fontWeight:400, opacity:.75}}>{n}</span>
+              </button>
+            );
+            if (fams.length < 2 && chips.length < 2) return null;
             return (
-              <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center",
-                padding:"7px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
-                <span style={{fontSize:10.5, color:T.t4, marginRight:2}}>{t("tenders.dikhao")}</span>
-                {chips.map(c=>{
-                  const on = !hidden.has(c.key);
-                  return (
-                    <button key={c.key} onClick={()=>setHidden(h=>{
-                      const n = new Set(h); n.has(c.key) ? n.delete(c.key) : n.add(c.key); return n; })}
-                      style={{display:"flex", alignItems:"center", gap:5, fontSize:11, cursor:"pointer",
-                        padding:"3px 9px", borderRadius:20, fontFamily:"inherit",
-                        border:`1px solid ${on ? c.c : T.b1}`,
-                        background: on ? c.c + "14" : T.surface,
-                        color: on ? c.c : T.t4, fontWeight: on ? 700 : 400,
-                        opacity: on ? 1 : .75, textDecoration: on ? "none" : "line-through"}}>
-                      <span style={{width:8, height:8, borderRadius:"50%", background:on?c.c:T.b2, flexShrink:0}}/>
-                      {c.label} <span style={{fontWeight:400, opacity:.75}}>{c.n}</span>
-                    </button>
-                  );
-                })}
-                {anyHidden && (
-                  <button onClick={()=>setHidden(new Set())}
-                    style={{fontSize:10.5, padding:"3px 9px", borderRadius:20, cursor:"pointer",
-                      border:`1px solid ${T.b1}`, background:T.surface, color:T.ind, fontFamily:"inherit"}}>
-                   {t("tenders.sab_dikhao")}
-                  </button>
+              <div style={{padding:"7px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
+                {fams.length > 1 && (
+                  <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center"}}>
+                    <span style={{fontSize:10.5, color:T.t4, marginRight:2, width:44}}>{t("tenders.filter_kya")}</span>
+                    {fams.map(f=>chip(!famHidden.has(f), FAM_META[f].c, FAM_META[f].l, famCnt[f],
+                      ()=>setFamHidden(h=>{ const n=new Set(h); n.has(f)?n.delete(f):n.add(f); return n; }), f))}
+                  </div>
+                )}
+                {chips.length > 1 && (
+                  <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center",
+                    marginTop: fams.length > 1 ? 5 : 0}}>
+                    <span style={{fontSize:10.5, color:T.t4, marginRight:2, width:44}}>{t("tenders.dikhao")}</span>
+                    {chips.map(c=>chip(!hidden.has(c.key), c.c, c.label, c.n,
+                      ()=>setHidden(h=>{ const n=new Set(h); n.has(c.key)?n.delete(c.key):n.add(c.key); return n; }), c.key))}
+                    {anyHidden && (
+                      <button onClick={()=>{ setHidden(new Set()); setFamHidden(new Set()); }}
+                        style={{fontSize:10.5, padding:"3px 9px", borderRadius:20, cursor:"pointer",
+                          border:`1px solid ${T.b1}`, background:T.surface, color:T.ind, fontFamily:"inherit"}}>
+                       {t("tenders.sab_dikhao")}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             );
@@ -4169,10 +4445,26 @@ function MapTab({tenderId, sites}) {
           onDone={(msg)=>{ toast.success(msg || "Photo lag gayi"); load(); }}/>
       )}
 
-    {/* Naya drawn feature — naam + type + site */}
-    {pending && (
-      <Modal title={pending.kind==="line" ? t("tenders.nayi_pipeline_line") : t("tenders.naya_structure")} Icon={IcMapPin} width={560}
-        sub={pending.kind==="line" ? `${pending.coords.length} point draw huye` : t("tenders.map_par_lagaya_gaya_pin")}
+    {/* Naya drawn feature — type ke hisaab se apne field */}
+    {pending && (()=>{
+      const fam = familyOf(pending.atype);
+      const P = pending.props || {};
+      const setP = (k, v) => setPending(p=>({...p, props:{...(p.props||{}), [k]: v}}));
+      const areaM2 = pending.kind === "area" ? polyAreaM2(pending.coords) : 0;
+      const pick = (val, cur, on, label) => (
+        <button key={String(val)} onClick={on}
+          style={{fontSize:11.5, padding:"4px 11px", borderRadius:20, cursor:"pointer", fontFamily:"inherit",
+            border:`1px solid ${cur===val ? T.ind : T.b1}`,
+            background: cur===val ? T.indL : T.surface,
+            color: cur===val ? T.ind : T.t3, fontWeight: cur===val ? 700 : 400}}>{label}</button>
+      );
+      return (
+      <Modal title={pending.kind==="line" ? t("tenders.nayi_lakeer_type", { type: typeLabel(pending.atype) })
+                  : pending.kind==="area" ? t("tenders.naya_rakba_type", { type: typeLabel(pending.atype) })
+                  : t("tenders.naya_structure")} Icon={IcMapPin} width={560}
+        sub={pending.kind==="point" ? t("tenders.map_par_lagaya_gaya_pin")
+             : pending.kind==="area" ? t("tenders.n_kone_rakba", { n: pending.coords.length, area: fmtArea(areaM2) })
+             : t("tenders.n_point_lambai", { n: pending.coords.length, len: fmtKm(pathLenM(pending.coords)) })}
         onClose={()=>setPending(null)}
         footer={<>
           <SecBtn label={t("common.hatao")} onClick={()=>setPending(null)}/>
@@ -4184,12 +4476,13 @@ function MapTab({tenderId, sites}) {
               ph="Site chuno" options={sites.map(s=>({v:s.id, l:s.name}))}/>
           </Field>
           <Field label={t("common.type")}>
-            <SelIn value={pending.atype} onChange={v=>setPending(p=>({...p, atype:v}))}
-              options={(pending.kind==="line"?LINE_TYPES:POINT_TYPES).map(t=>({v:t.v, l:t.l}))}/>
+            <SelIn value={pending.atype} onChange={v=>setPending(p=>({...p, atype:v, props:{}}))}
+              options={typeOpts(pending.kind)}/>
           </Field>
           <Field label={t("common.naam")} full>
             <TxtIn value={pending.name} onChange={v=>setPending(p=>({...p, name:v}))}
-              ph={pending.kind==="line" ? "e.g. Sec-25 | CH 0–500" : "e.g. UGR Sec-25"}/>
+              ph={pending.kind==="line" ? "e.g. Sec-25 | CH 0–500"
+                 : pending.kind==="area" ? "e.g. UGR Sec-25 ka plot" : "e.g. UGR Sec-25"}/>
           </Field>
           {/* Chaudai — sadak ki ROW, ya bade pipe ka daayra. Sadak ki
               chaudai har jagah alag hoti hai, aur naali usi se nikalti hai. */}
@@ -4199,7 +4492,48 @@ function MapTab({tenderId, sites}) {
                 ph={pending.atype==="road" ? "e.g. 10" : "e.g. 1.2"}/>
             </Field>
           )}
+          {/* Sadak: PCC hai ya bitumen — BOQ ka item isi se tay hota hai. */}
+          {fam==="road" && (
+            <Field label={t("tenders.surface")} full>
+              <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+                {[["pcc",t("tenders.surface_pcc")],["bitumen",t("tenders.surface_bitumen")],["wbm",t("tenders.surface_wbm")],["gsb",t("tenders.surface_gsb")],["other",t("tenders.aur_koi")]]
+                  .map(([v,l])=>pick(v, P.surface, ()=>setP("surface", v), l))}
+              </div>
+            </Field>
+          )}
+          {fam==="drain" && (<>
+            <Field label={t("tenders.naali_ki_shakl")}>
+              <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+                {[["open",t("tenders.drain_khuli")],["covered",t("tenders.drain_dhaki")],["pipe",t("tenders.drain_pipe")]]
+                  .map(([v,l])=>pick(v, P.shape, ()=>setP("shape", v), l))}
+              </div>
+            </Field>
+            <Field label={t("tenders.gehrai_m")}>
+              <TxtIn value={P.depth_m ?? ""} onChange={v=>setP("depth_m", v === "" ? undefined : Number(v))} ph="e.g. 1.2"/>
+            </Field>
+          </>)}
+          {fam==="pipe" && (<>
+            <Field label={t("tenders.material")}>
+              <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+                {[["di","DI"],["pvc","PVC"],["hdpe","HDPE"],["rcc","RCC"],["ms","MS"],["other",t("tenders.aur_koi")]]
+                  .map(([v,l])=>pick(v, P.material, ()=>setP("material", v), l))}
+              </div>
+            </Field>
+            <Field label={t("tenders.vyas_dia_mm")}>
+              <TxtIn value={P.dia_mm ?? ""} onChange={v=>setP("dia_mm", v === "" ? undefined : Number(v))} ph="e.g. 300"/>
+            </Field>
+          </>)}
         </div>
+
+        {/* Rakba — naapa hua, likha hua nahi. Wahi ankda server bhi nikalta
+            hai, isliye save ke baad badalta nahi. */}
+        {pending.kind==="area" && (
+          <div style={{marginTop:12, padding:"9px 12px", borderRadius:9, background:T.surfaceB,
+            border:`1px solid ${T.b1}`, display:"flex", alignItems:"baseline", gap:8}}>
+            <span style={{fontSize:16, fontWeight:800, color:T.ind, fontVariantNumeric:"tabular-nums"}}>{fmtArea(areaM2)}</span>
+            <span style={{fontSize:11, color:T.t4}}>{t("tenders.rakba_geometry_se")}</span>
+          </div>
+        )}
 
         {/* Sadak ke saath naali — ek hi lakeer se dono ban jaayein */}
         {pending.kind==="line" && Number(pending.width_m) > 0 && (
@@ -4217,7 +4551,7 @@ function MapTab({tenderId, sites}) {
                     color:(pending.drain_side||"")===v ? T.ind : T.t3,
                     fontWeight:(pending.drain_side||"")===v ? 700 : 400}}>{l}</button>
               ))}
-              {!!pending.drain_side && (
+              {!!pending.drain_side && (<>
                 <span style={{display:"inline-flex", alignItems:"center", gap:6, marginLeft:4}}>
                   <span style={{fontSize:11, color:T.t4}}>{t("tenders.kinare_se")}</span>
                   <input value={pending.drain_offset_m ?? ""} onChange={e=>setPending(p=>({...p, drain_offset_m:e.target.value}))}
@@ -4226,7 +4560,17 @@ function MapTab({tenderId, sites}) {
                       fontSize:11.5, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit"}}/>
                   <span style={{fontSize:11, color:T.t4}}>m</span>
                 </span>
-              )}
+                {/* Naali ki apni chaudai — bina iske wo map par patli lakeer
+                    bhi nahi dikhti thi, jabki site par 600 mm ki hoti hai. */}
+                <span style={{display:"inline-flex", alignItems:"center", gap:6, marginLeft:4}}>
+                  <span style={{fontSize:11, color:T.t4}}>{t("tenders.naali_chaudai")}</span>
+                  <input value={P.drain_width_m ?? ""} onChange={e=>setP("drain_width_m", e.target.value === "" ? undefined : Number(e.target.value))}
+                    placeholder="0.6"
+                    style={{width:54, padding:"4px 7px", borderRadius:6, border:`1px solid ${T.b1}`,
+                      fontSize:11.5, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit"}}/>
+                  <span style={{fontSize:11, color:T.t4}}>m</span>
+                </span>
+              </>)}
             </div>
             {!!pending.drain_side && (
               <div style={{fontSize:10.5, color:T.t4, marginTop:7, lineHeight:1.5}}>{t("tenders.naali_sadak_ki_beech_lakeer_se", { Number: ((Number(pending.width_m)||0)/2 + (Number(pending.drain_offset_m)||0.5)).toFixed(2), pending: pending.drain_side==="both" ? " dono taraf" : pending.drain_side==="left" ? " bayan taraf" : " dayan taraf" })}</div>
@@ -4238,11 +4582,70 @@ function MapTab({tenderId, sites}) {
          {t("tenders.naam_me_hissa_likhoge_ch_0")}
         </div>
       </Modal>
+      );
+    })()}
+
+    {/* "Naya item jodo" — jo type list me hai hi nahi. Ek baar banao, poori
+        company ke har tender me milega (library/master-data wala hi tareeka). */}
+    {addItem && (
+      <Modal title={t("tenders.naya_item_jodo")} Icon={IcMapPin} width={480}
+        sub={t("tenders.item_ek_baar_banega")}
+        onClose={()=>setAddItem(null)}
+        footer={<>
+          <SecBtn label={t("common.hatao")} onClick={()=>setAddItem(null)}/>
+          <PrimBtn label={busy?t("tenders.save_ho_raha_hai"):t("tenders.jodo_aur_mark_karo")} Icon={IcChk} onClick={saveItem} disabled={busy}/>
+        </>}>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
+          <Field label={t("tenders.item_ka_naam")} full>
+            <TxtIn value={addItem.label} onChange={v=>setAddItem(a=>({...a, label:v}))} ph="e.g. OFC duct"/>
+          </Field>
+          <Field label={t("tenders.kaise_mark_hoga")} full>
+            <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+              {[["line",t("tenders.mark_kind_line")],["area",t("tenders.mark_kind_area")],["point",t("tenders.mark_kind_point")]].map(([v,l])=>(
+                <button key={v} onClick={()=>setAddItem(a=>({...a, kind:v}))}
+                  style={{fontSize:11.5, padding:"4px 11px", borderRadius:20, cursor:"pointer", fontFamily:"inherit",
+                    border:`1px solid ${addItem.kind===v ? T.ind : T.b1}`,
+                    background: addItem.kind===v ? T.indL : T.surface,
+                    color: addItem.kind===v ? T.ind : T.t3, fontWeight: addItem.kind===v ? 700 : 400}}>{l}</button>
+              ))}
+            </div>
+          </Field>
+          <Field label={t("tenders.rang_optional")}>
+            <input type="color" value={addItem.colour || FAM_META.custom.c}
+              onChange={e=>setAddItem(a=>({...a, colour:e.target.value}))}
+              style={{width:"100%", height:34, padding:2, borderRadius:7, border:`1px solid ${T.b1}`,
+                background:T.surface, cursor:"pointer"}}/>
+          </Field>
+        </div>
+        {!!customTypes.length && (
+          <div style={{marginTop:14, borderTop:`1px solid ${T.b1}`, paddingTop:10}}>
+            <div style={{fontSize:11, color:T.t4, marginBottom:7}}>{t("tenders.ab_tak_jode_gaye_item")}</div>
+            <div style={{display:"flex", gap:7, flexWrap:"wrap"}}>
+              {customTypes.map(f=>(
+                <span key={f.id} style={{display:"inline-flex", alignItems:"center", gap:6, fontSize:11.5,
+                  padding:"3px 8px 3px 9px", borderRadius:20, border:`1px solid ${T.b1}`, color:T.t2}}>
+                  <span style={{width:8, height:8, borderRadius:"50%", background:f.colour||FAM_META.custom.c}}/>
+                  {f.label}
+                  <button onClick={()=>delItem(f)} title={t("tenders.hatao")}
+                    style={{border:"none", background:"transparent", color:T.t4, cursor:"pointer",
+                      fontSize:13, lineHeight:1, padding:"0 1px", fontFamily:"inherit"}}>×</button>
+                </span>
+              ))}
+            </div>
+            <div style={{fontSize:10.5, color:T.t4, marginTop:7}}>
+              {t("tenders.item_istemal_me_hai")}
+            </div>
+          </div>
+        )}
+      </Modal>
     )}
 
     {/* Alignment list */}
     <Panel>
-      <PHead title={t("tenders.alignments")} sub={summary ? `${fmtKm(summary.total_length_m)} · ${summary.total_points} structure` : undefined}/>
+      <PHead title={t("tenders.alignments")} sub={summary
+        ? [fmtKm(summary.total_length_m), `${summary.total_points} structure`,
+           summary.total_area_sqm > 0 ? fmtArea(summary.total_area_sqm) : null].filter(Boolean).join(" · ")
+        : undefined}/>
       {loading && <Loading text={t("tenders.alignment_load_ho_raha_hai")}/>}
       {!loading && !items.length && (
         <Empty Icon={IcMapPin} text={t("tenders.abhi_koi_alignment_nahi")}
@@ -4253,15 +4656,37 @@ function MapTab({tenderId, sites}) {
           {items.map(it=>(
             <div key={it.id} style={{display:"flex", alignItems:"center", gap:10, padding:"9px 14px",
               borderBottom:`1px solid ${T.b1}`}}>
-              <div style={{width:10, height:10, borderRadius:it.kind==="line"?2:"50%", flexShrink:0,
-                background: it.kind==="line" ? lineColour(it.atype) : T.blu}}/>
+              <div style={{width:10, height:10, flexShrink:0,
+                borderRadius: it.kind==="line" ? 2 : it.kind==="area" ? 3 : "50%",
+                background: it.kind==="point" ? T.blu : lineColour(it.atype),
+                opacity: it.kind==="area" ? .75 : 1}}/>
               <div style={{flex:1, minWidth:0}}>
                 <div style={{fontSize:12.5, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{it.name}</div>
                 <div style={{fontSize:11, color:T.t4}}>
-                  {it.project_name || t("tenders.site_nahi")} · {alignLabel(it.kind, it.atype)}
+                  {it.project_name || t("tenders.site_nahi")} · {typeLabel(it.atype)}
+                  {/* Type ke apne field — jo bhara hai wahi dikhta hai. PCC
+                      hai ya bitumen, DI hai ya HDPE: ye list se hi pata chale. */}
+                  {(()=> {
+                    const p = it.props || {};
+                    const bits = [
+                      p.surface && String(p.surface).toUpperCase(),
+                      p.material && String(p.material).toUpperCase(),
+                      p.dia_mm && `${p.dia_mm} mm`,
+                      p.shape && ({open:"khuli", covered:"dhaki", pipe:"pipe"}[p.shape] || p.shape),
+                      p.depth_m && `gehrai ${p.depth_m} m`,
+                    ].filter(Boolean);
+                    return bits.length ? ` · ${bits.join(" · ")}` : "";
+                  })()}
                   {it.source==="kml" && it.source_file ? ` · ${it.source_file}` : ""}
                 </div>
               </div>
+              {it.kind==="area" && (
+                <div style={{textAlign:"right", whiteSpace:"nowrap", minWidth:96}}>
+                  <div style={{fontSize:12.5, fontWeight:700, color:T.t2, fontVariantNumeric:"tabular-nums"}}>
+                    {fmtArea(it.area_sqm)}
+                  </div>
+                </div>
+              )}
               {it.kind==="line" && (()=>{
                 const p = (progress?.lines || []).find(x=>x.id===it.id);
                 return (
