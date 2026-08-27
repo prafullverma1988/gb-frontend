@@ -327,9 +327,18 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
         </div>
       )}
       {job?.status === "running" && (
-        <div style={{ padding: "10px 14px", background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 8, fontSize: 12.5, color: T.blu, fontWeight: 600 }}>
-          ⏳ AI {job.kind === "discuss" ? "plan sudhaar raha hai" : "workbook padh raha hai"}… bade workbook par 2–5 minute lag sakte hain.
-          <div style={{ fontSize: 11, color: T.t3, fontWeight: 400, marginTop: 3 }}>Ye tab band karke doosra kaam kar sakte ho — kaam server par chalta rahega, wapas aakar dekh lena.</div>
+        <div style={{ padding: "10px 14px", background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 8, fontSize: 12.5, color: T.blu, fontWeight: 600, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            ⏳ AI {job.kind === "discuss" ? "plan sudhaar raha hai" : "workbook padh raha hai"}… bade workbook par 2–5 minute lag sakte hain.
+            <div style={{ fontSize: 11, color: T.t3, fontWeight: 400, marginTop: 3 }}>Ye tab band karke doosra kaam kar sakte ho — kaam server par chalta rahega, wapas aakar dekh lena.</div>
+          </div>
+          <button onClick={async () => {
+            await api.post(`/tenders/${tenderId}/ai-plan/job-cancel`, {}).catch(() => null);
+            setBusy(""); await load(true);
+          }}
+            style={{ padding: "7px 13px", borderRadius: 8, border: "1.5px solid #FCA5A5", background: "#FEF2F2", color: "#B91C1C", fontSize: 11.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+            ⏹ Rok do
+          </button>
         </div>
       )}
 
