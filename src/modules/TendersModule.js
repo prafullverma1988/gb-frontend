@@ -877,7 +877,7 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
         {/* ── DANGER ZONE — archive ya permanent delete (admin only) ── */}
         {isAdmin && (
           <div style={{gridColumn:"1/3", marginTop:4, paddingTop:14, borderTop:`1px solid ${T.b1}`}}>
-            <div style={{fontSize:13, fontWeight:700, color:T.red, marginBottom:8}}>Danger Zone</div>
+            <div style={{fontSize:13, fontWeight:700, color:T.red, marginBottom:8}}>{t("projects.danger_zone")}</div>
             <DangerDelete kind="tender" id={tender.id}
               name={[tender.tender_no, tender.title].filter(Boolean).join(" — ")}
               onArchived={()=>{ onClose(); onDeleted && onDeleted(); }}
