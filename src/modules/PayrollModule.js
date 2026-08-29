@@ -3058,8 +3058,8 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
             <IcChk size={13} color="white"/> {t("payroll.mark_all_paid")}
           </button>}
           <button onClick={()=>{
-            const headers=["Employee","ID","Dept","Pay Type","Basic","Gross","PF","ESI","TDS","Net Pay"];
-            const rows=filtered.map(emp=>{const c=calcNet(emp);return[emp.name,emp.id,emp.dept,c.pType,emp.basicSalary,c.gross,c.pf,c.esi,c.tds||0,c.net];});
+            const headers=["Employee","ID","Designation","Dept","Pay Type","Basic","Gross","PF","ESI","TDS","Net Pay"];
+            const rows=filtered.map(emp=>{const c=calcNet(emp);return[emp.name,emp.id,emp.designation||emp.role||"",emp.dept,c.pType,emp.basicSalary,c.gross,c.pf,c.esi,c.tds||0,c.net];});
             exportCSV(headers,rows,`Monthly_Salary_${MONTHS[month]}_${year}.csv`);
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             <IcDown size={12} color={T.t2}/> {t("common.export")}
@@ -3118,8 +3118,14 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
               {/* Employee */}
               <div style={{display:"flex",alignItems:"center",gap:9}}>
                 <Avatar name={emp.name} size={30} color={deptColor}/>
-                <div>
+                <div style={{minWidth:0}}>
                   <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{emp.name}</div>
+                  {!!(emp.designation||emp.role)&&(
+                    <div style={{fontSize:10,color:T.t3,fontWeight:600,overflow:"hidden",
+                      textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={emp.designation||emp.role}>
+                      {emp.designation||emp.role}
+                    </div>
+                  )}
                   <div style={{fontSize:10,color:T.t4}}>
                     {emp.id}
                     {isAttBased
@@ -6045,6 +6051,10 @@ function PayrollModule(){
   // Map API staff row to frontend format
   const mapStaff=s=>({
     id:s.id,name:s.name,role:s.role||"",dept:s.dept||"",
+    // designation = asli pad (Project Manager, Roller Driver, Cook).
+    // `role` isse ALAG hai — wo login ka adhikar hai (admin/
+    // supervisor/viewer). Salary screen par pad chahiye, adhikar nahi.
+    designation:s.designation||"",
     paymentType:s.payment_type||"fixed",
     basicSalary:Number(s.basic_salary)||0,hra:Number(s.hra)||0,
     conveyance:Number(s.conveyance)||0,medical:Number(s.medical)||0,
