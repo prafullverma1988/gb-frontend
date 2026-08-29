@@ -155,6 +155,37 @@ const boqChip = (ids) => (Array.isArray(ids) && ids.length > 0)
     </span>
   : null;
 
+// Kai files ka EK digest — sarkari BOQ aksar 2-3 alag files me aata hai
+// (civil/electrical/water alag-alag). Sheet-naam ke aage file ka chhota naam
+// lagta hai taaki AI bata sake kaunsi baat kis file se aayi. boq_master
+// items sab files ke jud jaate hain (420 par kat-ta hai — tab server ki
+// digest-wali money-jaanch khud band ho jaati hai, imported BOQ wali chalti
+// rehti hai).
+async function mergeDigests(files) {
+  if (files.length === 1) return buildDigest(files[0]);
+  const short = (nm) => String(nm || "").replace(/\.(xlsx|xls|xlsm)$/i, "").slice(0, 16);
+  const merged = { file_name: files.map((f) => f.name).join(" + "), sheet_count: 0, sheets: [], boq_master: null, key_sheets: [] };
+  const bmItems = []; let bmSheet = null; let extra = 0;
+  for (const f of files) {
+    const d = await buildDigest(f);
+    merged.sheet_count += d.sheet_count || 0;
+    for (const s of d.sheets || []) merged.sheets.push({ ...s, name: short(f.name) + "\u25B8" + s.name });
+    for (const k of d.key_sheets || []) if (merged.key_sheets.length < 8) merged.key_sheets.push({ ...k, name: short(f.name) + "\u25B8" + k.name });
+    if (d.boq_master && d.boq_master.items && d.boq_master.items.length) {
+      if (!bmSheet) bmSheet = short(f.name) + "\u25B8" + d.boq_master.sheet; else extra++;
+      for (const it of d.boq_master.items) bmItems.push(it);
+    }
+  }
+  if (bmItems.length) merged.boq_master = { sheet: bmSheet + (extra ? " +" + extra + " files" : ""), header_row: 0, items: bmItems.slice(0, 420) };
+  let s = JSON.stringify(merged);
+  while (s.length > 650000 && (merged.key_sheets.length || (merged.boq_master && merged.boq_master.items.length > 150))) {
+    if (merged.key_sheets.length) merged.key_sheets.pop();
+    else merged.boq_master.items = merged.boq_master.items.slice(0, merged.boq_master.items.length - 50);
+    s = JSON.stringify(merged);
+  }
+  return merged;
+}
+
 export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState(null);
@@ -242,18 +273,19 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     }
   }, [msgs]);
 
-  const onFile = async (f) => {
-    if (!f) return;
+  const onFile = async (input) => {
+    const files = (Array.isArray(input) ? input : [input]).filter(Boolean);
+    if (!files.length) return;
     setErr(""); setBusy("analyze");
     try {
-      const digest = await buildDigest(f);
+      const digest = await mergeDigests(files);
       // Kya-kya nikla — user ko dikhta hai, aur "purana bundle to nahi chal
       // raha" ye do second me pata chal jaata hai (bina jod wali file par
       // "0 sheets me jod" aayega).
       const withTot = digest.sheets.filter((s) => s.tot && s.tot.length).length;
       const errSheets = digest.sheets.filter((s) => s.err > 0).length;
       setDinfo({ kb: Math.round(JSON.stringify(digest).length / 1024), sheets: digest.sheet_count,
-        withTot, errSheets, items: digest.boq_master ? digest.boq_master.items.length : 0 });
+        withTot, errSheets, items: digest.boq_master ? digest.boq_master.items.length : 0, files: files.length });
       const r = await api.post(`/tenders/${tenderId}/ai-plan/analyze`, { digest }, { timeoutMs: 120000 });
       if (r?.success) {
         // Server ne kaam pakad liya; ab plan polling se aayega.
@@ -328,11 +360,11 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
             style={{ padding: "6px 16px", borderRadius: 7, border: "none", background: canExec ? T.grn : T.b1, color: canExec ? "white" : T.t4, fontSize: 12, fontWeight: 700, cursor: canExec ? "pointer" : "not-allowed" }}>{t("tender_ai_plan.execute")}</button>
         </>}
       </div>
-      <input ref={fileRef} type="file" accept=".xlsx,.xls,.xlsm" style={{ display: "none" }} onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.xlsm" multiple style={{ display: "none" }} onChange={(e) => { onFile([...(e.target.files || [])]); e.target.value = ""; }} />
       {err && <div style={{ padding: "8px 12px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 8, fontSize: 12, color: T.red }}>{err}</div>}
       {!llmReady && <div style={{ padding: "8px 12px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, fontSize: 12, color: "#92400E" }}>{t("tender_ai_plan.ai_abhi_uplabdh_nahi_server_par")}</div>}
       {dinfo && (
-        <div style={{ padding: "7px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, fontSize: 11.5, color: T.t3 }}><Rich k="tender_ai_plan.file_padh_li_sheets_sheets_items" params={{ sheets: dinfo.sheets, items: dinfo.items, withTot: dinfo.withTot }} />{dinfo.errSheets > 0 && <> · <span style={{ color: "#B45309" }}>{t("tender_ai_plan.errsheets_sheets_me_tooti_ref_cells", { errSheets: dinfo.errSheets })}</span></>}{t("tender_ai_plan.saar_kb", { kb: dinfo.kb })}
+        <div style={{ padding: "7px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, fontSize: 11.5, color: T.t3 }}>{dinfo.files > 1 && <b style={{ color: T.t1 }}>{dinfo.files} files · </b>}<Rich k="tender_ai_plan.file_padh_li_sheets_sheets_items" params={{ sheets: dinfo.sheets, items: dinfo.items, withTot: dinfo.withTot }} />{dinfo.errSheets > 0 && <> · <span style={{ color: "#B45309" }}>{t("tender_ai_plan.errsheets_sheets_me_tooti_ref_cells", { errSheets: dinfo.errSheets })}</span></>}{t("tender_ai_plan.saar_kb", { kb: dinfo.kb })}
         </div>
       )}
       {job?.status === "running" && (

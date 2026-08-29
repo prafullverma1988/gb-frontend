@@ -2168,11 +2168,24 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
     setTotalTouched(false);
   }, []);
 
+  // Multi-file: sarkari BOQ aksar 2-3 alag files me aata hai (civil/
+  // electrical/water). Ek saath chuno — wizard ek-ek karke import karta hai;
+  // har file apna import_id le kar JUD-ti hai (backend pehle se additive,
+  // per-import revert bhi hai — kuchh replace nahi hota).
+  const [queue, setQueue] = useState([]);
+  const [fileNo, setFileNo] = useState(1);
+  const [nFiles, setNFiles] = useState(1);
+  const rawDone = useRef([]);
   const onFile = async (e) => {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
+    const list = [...(e.target.files || [])];
+    if (!list.length) return;
+    setQueue(list.slice(1)); setNFiles(list.length); setFileNo(1); rawDone.current = [];
+    await loadFile(list[0]);
+    e.target.value = "";
+  };
+  const loadFile = async (f) => {
     setRawFile(f);
-    setErr("");
+    setErr(""); setReconcile(null); setFileTotal(""); setTotalTouched(false); setExcluded({});
     try {
       const buf = await f.arrayBuffer();
       // cellFormula:false → formula load hi nahi hota, sirf cached value.
@@ -2193,7 +2206,6 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
     } catch (_) {
       setErr(t("tenders.file_padhne_me_dikkat_sahi_xlsx"));
     }
-    e.target.value = "";
   };
 
   const headerCells = aoa[headerRow] || [];
@@ -2245,12 +2257,21 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
       setErr(res?.message || "Import nahi hua");
       return;
     }
-    toast.success(`${res.data.row_count} items import ho gaye`);
+    toast.success(`${res.data.row_count} items import ho gaye` + (nFiles > 1 ? ` (file ${fileNo}/${nFiles})` : ""));
     onDone && onDone();
-    // Prafull ka idea 1: import hote hi wahi file AI Plan me le jao —
-    // items ki ids ab DB me hain, isliye AI plan ko unse jod bhi payega.
-    if (onAiPlan && rawFile && window.confirm(t("boq_import_wizard.import_ho_gaya_ai_plan_banayein"))) {
-      onAiPlan(rawFile);
+    rawDone.current.push(rawFile);
+    if (queue.length) {
+      // agli file — wizard wahi, items pichhli me JUD chuke hain
+      const nxt = queue[0];
+      setQueue(queue.slice(1)); setFileNo(fileNo + 1); setStep(1);
+      await loadFile(nxt);
+      return;
+    }
+    // Prafull ka idea 1: import hote hi wahi file(ein) AI Plan me le jao —
+    // items ki ids ab DB me hain, isliye AI plan unse jod bhi payega.
+    const done = rawDone.current;
+    if (onAiPlan && done.length && window.confirm(t("boq_import_wizard.import_ho_gaya_ai_plan_banayein"))) {
+      onAiPlan(done.length > 1 ? done.slice() : done[0]);
     }
     onClose();
   };
@@ -2295,9 +2316,15 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
         ))}
       </div>
 
+      {nFiles > 1 && (
+        <div style={{margin:"2px 0 10px", padding:"6px 12px", background:T.bg, border:`1px solid ${T.b1}`, borderRadius:8, fontSize:11.5, fontWeight:700, color:T.t2}}>
+          📄 File {fileNo}/{nFiles}: {fileName || "…"} — sab files isi tender ke BOQ me jud rahi hain
+        </div>
+      )}
+
       {/* ── STEP 1: UPLOAD ── */}
       {step===1 && (<>
-        <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={onFile}/>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls" multiple style={{display:"none"}} onChange={onFile}/>
         <div onClick={()=>fileRef.current && fileRef.current.click()}
           style={{border:`1.5px dashed ${aoa.length?T.grn:T.b2}`, borderRadius:8, padding:"26px 16px",
             textAlign:"center", cursor:"pointer", background:aoa.length?T.grnL:T.bg}}>
