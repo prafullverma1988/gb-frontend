@@ -1045,10 +1045,15 @@ function TenderList({onOpen}) {
 
   const KPI_TILES = kpis ? [
     {label:t("tenders.active_tenders"),    value:kpis.active_count,                note:"lost + closed chhod kar", color:T.ind, Icon:IcGavel},
+    // BOQ value = jis par bill banega; contract = BOQ ± above/below.
+    // Dono saath dikhte hain to premium ka farak turant samajh aata hai.
+    {label:t("tenders.boq_value"),         value:money(kpis.boq_value_sum),        note:"active tenders ka BOQ",   color:T.blu, Icon:IcRupee},
     {label:t("tenders.contract_value"),    value:money(kpis.contract_value_sum),   note:"won aur uske aage",       color:T.grn, Icon:IcRupee},
-    {label:t("tenders.emd_locked"),        value:money(kpis.emd_locked),           note:"active EMD",              color:T.blu, Icon:IcLock},
+    // EMD ke do tile ek me — dono baatein EMD ki hi hain.
+    {label:t("tenders.emd_locked"),        value:money(kpis.emd_locked),
+      note:kpis.emd_refund_pending ? `active EMD \u00B7 ${kpis.emd_refund_pending} refund pending` : "active EMD",
+      color:kpis.emd_refund_pending?T.amb:T.blu, Icon:IcLock},
     {label:t("tenders.bg_expiring_30d"),  value:kpis.bg_expiring_30d,             note:"BG / FDR validity",       color:kpis.bg_expiring_30d?T.red:T.slt, Icon:IcBank},
-    {label:t("tenders.emd_refund_pending"),value:kpis.emd_refund_pending,          note:"lost tenders ka EMD",     color:kpis.emd_refund_pending?T.amb:T.slt, Icon:IcClock},
   ] : [];
 
   return (
@@ -1100,9 +1105,9 @@ function TenderList({onOpen}) {
 
       {/* Table */}
       <Panel>
-        <div style={{display:"grid", gridTemplateColumns:"minmax(220px,2.4fr) 1.4fr 1fr 110px 80px 90px",
+        <div style={{display:"grid", gridTemplateColumns:"minmax(200px,2.2fr) 1.2fr 1fr 1fr 105px 70px 80px",
           padding:"8px 15px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, gap:10}}>
-          {["Tender","Department","Value","Status","Sites","Alerts"].map(h=>(
+          {["Tender","Department","BOQ Value","Contract Value","Status","Sites","Alerts"].map(h=>(
             <span key={h} style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px"}}>{h}</span>
           ))}
         </div>
@@ -1119,19 +1124,21 @@ function TenderList({onOpen}) {
           const sm = sMeta(r.status);
           const ta = alertsByTender[r.id] || [];
           const high = ta.some(a=>a.severity==="high");
-          // Value = BOQ value (billing isi par hoti hai; contract = BOQ ±
-          // above/below jo bill ke aakhir me lagta hai). BOQ import na hua
-          // ho to contract value, phir estimated cost — sublabel ke saath.
+          // BOQ value = jis par bill banega (import ke items ka jod; na ho
+          // to NIT se bhara manual, warna estimated cost). Contract value
+          // alag column me — dono ka farak hi above/below premium hai.
           const boqVal = num(r.boq_total);
           const manualVal = num(r.boq_value_manual);
-          const value = boqVal || manualVal || num(r.contract_value) || num(r.estimated_cost);
+          const value = boqVal || manualVal || num(r.estimated_cost);
           const valueNote = boqVal ? null
             : manualVal ? t("tenders.manual")
-            : num(r.contract_value) ? t("tenders.contract")
             : num(r.estimated_cost) > 0 ? t("tenders.estimated") : null;
+          const cVal = num(r.contract_value);
+          // premium sirf tab jab dono asli ho — warna % bhramak hoga
+          const prem = boqVal > 0 && cVal > 0 ? ((cVal / boqVal - 1) * 100) : null;
           return (
             <div key={r.id} onClick={()=>onOpen(r.id)}
-              style={{display:"grid", gridTemplateColumns:"minmax(220px,2.4fr) 1.4fr 1fr 110px 80px 90px",
+              style={{display:"grid", gridTemplateColumns:"minmax(200px,2.2fr) 1.2fr 1fr 1fr 105px 70px 80px",
                 padding:"10px 15px", gap:10, alignItems:"center", cursor:"pointer",
                 borderBottom:i<filtered.length-1?`1px solid ${T.b1}`:"none", transition:"background .12s"}}
               onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
@@ -1148,6 +1155,16 @@ function TenderList({onOpen}) {
                   {value ? money(value) : <span style={{color:T.t4, fontWeight:400}}>--</span>}
                 </div>
                 {valueNote && <div style={{fontSize:9.5, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{valueNote}</div>}
+              </div>
+              <div>
+                <div style={{fontSize:12.5, fontWeight:700, color:cVal?T.grn:T.t4, fontVariantNumeric:"tabular-nums"}}>
+                  {cVal ? money(cVal) : <span style={{fontWeight:400}}>--</span>}
+                </div>
+                {prem !== null && Math.abs(prem) >= 0.01 && (
+                  <div style={{fontSize:9.5, color:T.t4, letterSpacing:".4px"}}>
+                    {prem > 0 ? "+" : "\u2212"}{Math.abs(prem).toFixed(2)}%
+                  </div>
+                )}
               </div>
               <div><Pill label={sm.label} c={sm.c} bg={sm.bg}/></div>
               <div style={{fontSize:12, color:num(r.linked_project_count)?T.t1:T.t4, fontWeight:num(r.linked_project_count)?700:400}}>
