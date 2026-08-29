@@ -441,7 +441,7 @@ function NewTenderModal({onClose, onCreated}) {
   const [parties, setParties] = useState([]);
   const [form, setForm] = useState({
     tender_no:"", title:"", party_id:"", department_name:"",
-    nit_date:"", submission_date:"", estimated_cost:"", emd_amount:"", tender_fee:"",
+    nit_date:"", submission_date:"", estimated_cost:"", boq_value_manual:"", emd_amount:"", tender_fee:"",
     techno_commercial_date:"", reverse_auction_date:"", bid_submission_type:"", nit_clauses:"",
     status:"bidding",
     contract_value:"", loa_date:"", agreement_no:"", agreement_date:"",
@@ -502,6 +502,7 @@ function NewTenderModal({onClose, onCreated}) {
       bid_submission_type: form.bid_submission_type || null,
       nit_clauses: form.nit_clauses.trim() || null,
       estimated_cost: form.estimated_cost || null,
+      boq_value_manual: form.boq_value_manual || null,
       emd_amount: form.emd_amount || null,
       tender_fee: form.tender_fee || null,
       status: form.status,
@@ -592,7 +593,9 @@ function NewTenderModal({onClose, onCreated}) {
               placeholder={t("tenders.e_g_clause_5_2_sd")}/>
           </Field>
 
-          <Field label={`Estimated Cost (₹)${bidReq ? " *" : ""}`}
+          <Field label={t("tenders.boq_value_manual")} hint={t("tenders.nit_se_dekh_kar_bharo")}>
+            <TxtIn type="number" value={form.boq_value_manual} onChange={v=>set("boq_value_manual",v)} ph="0"/></Field>
+          <Field label={`${t("tenders.estimated_cost")}${bidReq ? " *" : ""}`}
             hint={bidReq ? t("tenders.pata_na_ho_to_0_baad") : t("tenders.won_tender_me_optional_baad_me")}>
             <TxtIn type="number" value={form.estimated_cost} onChange={v=>set("estimated_cost",v)} ph="0"/></Field>
           <Field label={`EMD Amount (₹)${bidReq ? " *" : ""}`}><TxtIn type="number" value={form.emd_amount} onChange={v=>set("emd_amount",v)} ph="0"/></Field>
@@ -633,7 +636,7 @@ function NewTenderModal({onClose, onCreated}) {
 // ════════════════════════════════════════════════════════════════════
 // EDIT TENDER MODAL — fields + status change
 // ════════════════════════════════════════════════════════════════════
-function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
+function EditTenderModal({tender, boqBase = 0, onClose, onSaved, onDeleted}) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState("");
@@ -647,6 +650,8 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
     party_id: tender.party_id ? String(tender.party_id) : "",
     status: tender.status || "bidding",
     estimated_cost: tender.estimated_cost ?? "",
+    boq_value_manual: tender.boq_value_manual ?? "",
+    budget_alert_pct: tender.budget_alert_pct ?? "",
     contract_value: tender.contract_value ?? "",
     emd_amount: tender.emd_amount ?? "",
     tender_fee: tender.tender_fee ?? "",
@@ -674,6 +679,46 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
   // DLP end date manual override hai — user ne khud haath lagaya tabhi
   // bheja jata hai, warna backend completion + months se khud nikalta hai.
   const [dlpEndTouched, setDlpEndTouched] = useState(false);
+
+  // Above/Below % ↔ Contract Value — do-taraf sync (base = tendered BOQ ka
+  // jod). Jo aakhri chheda wahi source: % badla to value banti hai, value
+  // badli to % nikalta hai. Base na ho (BOQ import nahi) to % ka khana
+  // hint ban jata hai aur contract manual hi rehta hai.
+  // Base: imported BOQ ka jod pehle; import na hua ho to haath se bhara
+  // manual BOQ (isi form ka khana) — % sync usi par chalta hai.
+  const effBase = boqBase > 0 ? boqBase : num(form.boq_value_manual);
+  const [premStr, setPremStr] = useState(() => {
+    if (tender.premium_pct !== null && tender.premium_pct !== undefined) return String(Number(tender.premium_pct));
+    const cv = num(tender.contract_value);
+    const base0 = boqBase > 0 ? boqBase : num(tender.boq_value_manual);
+    return (base0 > 0 && cv > 0)
+      ? String(Math.round(((cv / base0 - 1) * 100 + Number.EPSILON) * 10000) / 10000)
+      : "";
+  });
+  const syncFromPct = (v) => {
+    setPremStr(v);
+    const p = Number(v);
+    if (effBase > 0 && v !== "" && Number.isFinite(p)) {
+      set("contract_value", String(Math.round((effBase * (1 + p / 100) + Number.EPSILON) * 100) / 100));
+    }
+  };
+  const syncFromContract = (v) => {
+    set("contract_value", v);
+    const cv = Number(v);
+    if (effBase > 0 && v !== "" && Number.isFinite(cv) && cv > 0) {
+      setPremStr(String(Math.round(((cv / effBase - 1) * 100 + Number.EPSILON) * 10000) / 10000));
+    }
+  };
+  // Estimated Budget ka % helper — profit % dalo, budget contract se ban jaye.
+  const [profitStr, setProfitStr] = useState("");
+  const syncFromProfit = (v) => {
+    setProfitStr(v);
+    const p = Number(v);
+    const cv = num(form.contract_value);
+    if (cv > 0 && v !== "" && Number.isFinite(p)) {
+      set("estimated_cost", String(Math.round((cv * (1 - p / 100) + Number.EPSILON) * 100) / 100));
+    }
+  };
 
   const loadParties = useCallback(async (selectId) => {
     const r = await api.get("/finance/parties?type=client");
@@ -713,6 +758,8 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
       party_id: form.party_id || null,
       status: form.status,
       estimated_cost: form.estimated_cost === "" ? null : form.estimated_cost,
+      boq_value_manual: form.boq_value_manual === "" ? null : form.boq_value_manual,
+      budget_alert_pct: form.budget_alert_pct === "" ? null : form.budget_alert_pct,
       contract_value: form.contract_value === "" ? null : form.contract_value,
       emd_amount: form.emd_amount === "" ? null : form.emd_amount,
       tender_fee: form.tender_fee === "" ? null : form.tender_fee,
@@ -806,8 +853,36 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
         </Field>
         <Field label={t("tenders.department_name_free_text")} full><TxtIn value={form.department_name} onChange={v=>set("department_name",v)}/></Field>
 
-        <Field label={t("tenders.estimated_cost")}><TxtIn type="number" value={form.estimated_cost} onChange={v=>set("estimated_cost",v)}/></Field>
-        <Field label={`Contract Value (₹)${needsWonFields?" *":""}`}><TxtIn type="number" value={form.contract_value} onChange={v=>set("contract_value",v)}/></Field>
+        <Field label={t("tenders.boq_value_manual")}
+          hint={boqBase > 0 ? t("tenders.import_ho_chuki_computed_hi_chalega") : t("tenders.nit_se_dekh_kar_bharo")}>
+          <TxtIn type="number" value={form.boq_value_manual} onChange={v=>set("boq_value_manual",v)}/>
+        </Field>
+        <Field label={`Contract Value (₹)${needsWonFields?" *":""}`}>
+          <TxtIn type="number" value={form.contract_value}
+            onChange={form.rate_type === "item_rate" ? (v=>set("contract_value",v)) : syncFromContract}/>
+        </Field>
+        {form.rate_type !== "item_rate" && (<>
+          <Field label={t("tenders.above_below")} hint={t("tenders.minus_below_plus_above")}>
+            {effBase > 0
+              ? <TxtIn type="number" value={premStr} onChange={syncFromPct} ph="e.g. -8.11"/>
+              : <div style={{...inputStyle, display:"flex", alignItems:"center", color:T.t4, fontSize:11.5}}>
+                  {t("tenders.boq_aane_par_pct_se_banega")}
+                </div>}
+          </Field>
+          {effBase > 0 && num(form.contract_value) > 0 && (
+            <Field label={t("tenders.hisaab")}>
+              <div style={{...inputStyle, display:"flex", alignItems:"center", fontSize:11.5, color:T.t2, fontVariantNumeric:"tabular-nums"}}>
+                = {t("tenders.boq_value")} {moneyF(effBase)} {num(form.contract_value) >= effBase ? "+" : "−"} {moneyF(Math.abs(num(form.contract_value) - effBase))}
+              </div>
+            </Field>
+          )}
+        </>)}
+        <Field label={t("tenders.estimated_cost")} hint={t("tenders.apna_andaza_kitne_me_kaam")}>
+          <TxtIn type="number" value={form.estimated_cost} onChange={v=>{ setProfitStr(""); set("estimated_cost",v); }}/>
+        </Field>
+        <Field label={t("tenders.profit_pct_se_bharo")} hint={t("tenders.contract_me_se_itna_profit")}>
+          <TxtIn type="number" value={profitStr} onChange={syncFromProfit} ph="e.g. 12"/>
+        </Field>
         <Field label={t("tenders.emd_amount")}><TxtIn type="number" value={form.emd_amount} onChange={v=>set("emd_amount",v)}/></Field>
         <Field label={t("tenders.tender_fee")}><TxtIn type="number" value={form.tender_fee} onChange={v=>set("tender_fee",v)}/></Field>
 
@@ -821,6 +896,10 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
         <Field label={t("tenders.deviation_limit")}
           hint={t("tenders.boq_qty_se_itne_tak_chhoot")}>
           <TxtIn type="number" value={form.deviation_limit_pct} onChange={v=>set("deviation_limit_pct",v)} ph="e.g. 10"/>
+        </Field>
+        <Field label={t("tenders.budget_alert_pct")}
+          hint={t("tenders.estimated_budget_se_itne_upar_alert")}>
+          <TxtIn type="number" value={form.budget_alert_pct} onChange={v=>set("budget_alert_pct",v)} ph="e.g. 5"/>
         </Field>
         <Field label={t("tenders.nit_date_2")}><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
         <Field label={t("tenders.bid_submission_date")}><TxtIn type="date" value={form.submission_date} onChange={v=>set("submission_date",v)}/></Field>
@@ -1034,8 +1113,10 @@ function TenderList({onOpen}) {
           // above/below jo bill ke aakhir me lagta hai). BOQ import na hua
           // ho to contract value, phir estimated cost — sublabel ke saath.
           const boqVal = num(r.boq_total);
-          const value = boqVal || num(r.contract_value) || num(r.estimated_cost);
+          const manualVal = num(r.boq_value_manual);
+          const value = boqVal || manualVal || num(r.contract_value) || num(r.estimated_cost);
           const valueNote = boqVal ? null
+            : manualVal ? t("tenders.manual")
             : num(r.contract_value) ? t("tenders.contract")
             : num(r.estimated_cost) > 0 ? t("tenders.estimated") : null;
           return (
@@ -2780,7 +2861,172 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
   );
 }
 
-function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, onAiPlan}) {
+// ── PROJECT COST BREAKUP ────────────────────────────────────────────
+// Estimate sheet ka aaina: BOQ base → premium → GST → add-on % lines
+// (contingency, planning...) → un par alag GST → Total Project Cost.
+// Sirf dikhane/record ke liye — billing ise kabhi nahi chhooti.
+const bkRound = (n) => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
+function CostBreakupCard({tenderId, data, base, manualTag, isAdmin, onChanged}) {
+  const toast = useToast();
+  const [nm, setNm] = useState("");
+  const [pc, setPc] = useState("");
+  const [bs, setBs] = useState("boq_premium");
+  const [gA, setGA] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  if (!(base > 0)) return null;
+  const addons = data.addons || [];
+  const gstPct = num(data.gst_pct);
+  const contract = num(data.contract_value);
+  const premPct = data.premium_pct !== null && data.premium_pct !== undefined
+    ? Number(data.premium_pct)
+    : (contract > 0 ? Math.round(((contract / base - 1) * 100 + Number.EPSILON) * 10000) / 10000 : null);
+  const premAmt = premPct === null ? 0 : bkRound(base * premPct / 100);
+  const sub1 = bkRound(base + premAmt);
+  const gstAmt = bkRound(sub1 * gstPct / 100);
+  const lineAmt = (l) => bkRound((l.base === "boq" ? base : sub1) * num(l.pct) / 100);
+  const addonSum = bkRound(addons.reduce((s, l) => s + lineAmt(l), 0));
+  const addonGst = bkRound(addons.filter(l => l.gst_applies).reduce((s, l) => s + lineAmt(l), 0) * gstPct / 100);
+  const total = bkRound(sub1 + gstAmt + addonSum + addonGst);
+
+  const BASE_OPTS = [
+    { v: "boq_premium", l: t("tenders.base_boq_premium") },
+    { v: "boq",         l: t("tenders.base_sirf_boq") },
+  ];
+
+  const add = async () => {
+    if (!nm.trim() || pc === "") return;
+    setBusy(true);
+    const r = await api.post(`/tenders/${tenderId}/addons`, { name: nm.trim(), pct: pc, base: bs, gst_applies: gA });
+    setBusy(false);
+    if (!r?.success) { toast.error(r?.message || "Line nahi judi"); return; }
+    setNm(""); setPc("");
+    onChanged();
+  };
+  const del = async (l) => {
+    if (!await window.confirmAsync(t("tenders.line_name_hataayein", { name: l.name }))) return;
+    const r = await api.del(`/tenders/${tenderId}/addons/${l.id}`);
+    if (!r?.success) { toast.error(r?.message || "Delete nahi hua"); return; }
+    onChanged();
+  };
+
+  const Row = ({label, amt, sign, bold, muted, onDel}) => (
+    <div style={{display:"flex", alignItems:"center", gap:8, padding:"6px 0",
+      borderTop: bold ? `1.5px solid ${T.b2}` : "none"}}>
+      <span style={{flex:1, fontSize:bold?12.5:12, fontWeight:bold?800:muted?400:600,
+        color:muted?T.t4:bold?T.t1:T.t2, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{label}</span>
+      {onDel && <button onClick={onDel} style={{border:"none", background:"none", color:T.red, cursor:"pointer", fontSize:13, lineHeight:1}}>×</button>}
+      <span style={{fontSize:bold?13:12, fontWeight:bold?800:600, color:bold?T.t1:T.t2,
+        fontVariantNumeric:"tabular-nums", flexShrink:0}}>{sign || ""}{moneyF(amt)}</span>
+    </div>
+  );
+
+  return (
+    <Panel style={{marginBottom:11}}>
+      <PHead title={t("tenders.project_cost_breakup")} sub={t("tenders.estimate_sheet_jaisa_hisaab")}/>
+      <div style={{padding:"8px 16px 12px"}}>
+        <Row label={`${t("tenders.boq_value")}${manualTag ? ` (${t("tenders.manual")})` : ""}`} amt={base}/>
+        {premPct !== null && (
+          <Row label={`${t("tenders.premium_2")} ${premPct >= 0 ? "+" : ""}${premPct}% ${premPct >= 0 ? "(above)" : "(below)"}`}
+            amt={Math.abs(premAmt)} sign={premAmt >= 0 ? "+ " : "− "}/>
+        )}
+        <Row label={t("tenders.subtotal")} amt={sub1} bold/>
+        {gstPct > 0 && <Row label={`GST ${gstPct}%`} amt={gstAmt} sign="+ "/>}
+        {addons.map(l => (
+          <Row key={l.id}
+            label={`${l.name} ${num(l.pct)}%${l.base === "boq" ? ` (${t("tenders.base_sirf_boq")})` : ""}${l.gst_applies ? "" : ` (${t("tenders.bina_gst")})`}`}
+            amt={lineAmt(l)} sign="+ " onDel={isAdmin ? () => del(l) : null}/>
+        ))}
+        {gstPct > 0 && addonGst > 0 && <Row label={t("tenders.gst_on_addons", { gst: gstPct })} amt={addonGst} sign="+ "/>}
+        <Row label={t("tenders.total_project_cost")} amt={total} bold/>
+
+        {isAdmin && (
+          <div style={{display:"flex", gap:7, alignItems:"center", flexWrap:"wrap", marginTop:9,
+            paddingTop:9, borderTop:`1px dashed ${T.b2}`}}>
+            <div style={{flex:"2 1 160px"}}><TxtIn value={nm} onChange={setNm} ph={t("tenders.jaise_contingency")}/></div>
+            <div style={{flex:"0 1 70px"}}><TxtIn type="number" value={pc} onChange={setPc} ph="%"/></div>
+            <div style={{flex:"1 1 130px"}}><SelIn value={bs} onChange={setBs} options={BASE_OPTS}/></div>
+            <label style={{display:"flex", alignItems:"center", gap:5, fontSize:11, color:T.t3, cursor:"pointer", whiteSpace:"nowrap"}}>
+              <input type="checkbox" checked={gA} onChange={e=>setGA(e.target.checked)} style={{width:14, height:14, cursor:"pointer"}}/>
+              GST
+            </label>
+            <SecBtn label={busy ? "…" : t("tenders.line_jodo")} Icon={IcAdd} onClick={add} disabled={busy}/>
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+// ── PREMIUM THEEK KARO (admin) ──────────────────────────────────────
+// Award par premium lock hota hai; galat lock ho jaye to yahan se sudhrega.
+// Ban chuke bills nahi badalte — response ka bills_count yahi yaad dilata hai.
+function PremiumFixModal({tenderId, summary, onClose, onDone}) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [pct, setPct] = useState(() => {
+    const cur = summary?.premium_pct_locked ?? summary?.premium_pct;
+    return cur === null || cur === undefined ? "" : String(cur);
+  });
+  const [reason, setReason] = useState("");
+  const [updContract, setUpdContract] = useState(true);
+
+  const base = num(summary?.boq_total);
+  const p = Number(pct);
+  const preview = (base > 0 && pct !== "" && Number.isFinite(p))
+    ? Math.round((base * (1 + p / 100) + Number.EPSILON) * 100) / 100 : null;
+
+  const submit = async () => {
+    setErr("");
+    if (pct === "" || !Number.isFinite(p) || p <= -100 || p >= 100) return setErr(t("tenders.premium_99_ke_beech"));
+    if (reason.trim().length < 10) return setErr(t("tenders.premium_badalne_ki_wajah_likho"));
+    setBusy(true);
+    const res = await api.put(`/tenders/${tenderId}/premium`, {
+      premium_pct: p, reason: reason.trim(), update_contract: updContract,
+    });
+    setBusy(false);
+    if (!res?.success) { setErr(res?.message || "Premium update nahi hua"); return; }
+    toast.success(res.bills_count > 0
+      ? t("tenders.n_bills_purane_premium_par", { n: res.bills_count })
+      : t("tenders.premium_update_ho_gaya"));
+    onDone();
+  };
+
+  return (
+    <Modal title={t("tenders.premium_theek_karo")} Icon={IcGavel} width={480}
+      sub={t("tenders.ban_chuke_bills_nahi_badlenge")} onClose={onClose}
+      footer={<>
+        <SecBtn label={t("common.cancel")} onClick={onClose}/>
+        <PrimBtn label={busy ? t("tenders.ho_raha_hai") : t("common.save")} Icon={IcChk}
+          onClick={submit} disabled={busy}/>
+      </>}>
+      <ErrLine msg={err}/>
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
+        <Field label={t("tenders.above_below")} hint={t("tenders.minus_below_plus_above")}>
+          <TxtIn type="number" value={pct} onChange={setPct} ph="e.g. -8.11"/>
+        </Field>
+        <Field label={t("tenders.hisaab")}>
+          <div style={{...inputStyle, display:"flex", alignItems:"center", fontSize:11.5, color:T.t2, fontVariantNumeric:"tabular-nums"}}>
+            {preview === null ? "--" : `${t("tenders.boq_value")} ${moneyF(base)} → ${moneyF(preview)}`}
+          </div>
+        </Field>
+        <Field label={t("tenders.wajah_kam_se_kam_10_akshar")} full>
+          <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2}
+            style={{...inputStyle, resize:"vertical", lineHeight:1.5}}
+            placeholder={t("tenders.jaise_award_par_galat_pct_lock")}/>
+        </Field>
+        <label style={{gridColumn:"1/3", display:"flex", alignItems:"center", gap:8, fontSize:12, color:T.t2, cursor:"pointer"}}>
+          <input type="checkbox" checked={updContract} onChange={e=>setUpdContract(e.target.checked)}
+            style={{width:15, height:15, cursor:"pointer"}}/>
+          {t("tenders.contract_value_bhi_isi_se_update")}
+        </label>
+      </div>
+    </Modal>
+  );
+}
+
+function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, reloadTender, manualBoq = 0, onAiPlan}) {
   const toast = useToast();
   const [search, setSearch]   = useState("");
   const [showImport, setShowImport] = useState(false);
@@ -2853,6 +3099,11 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, onAiPlan}
     ? "62px 74px minmax(160px,1.9fr) 50px 80px 84px 92px 84px 92px 84px 88px 68px"
     : "70px 84px minmax(200px,2.2fr) 56px 88px 92px 106px 92px 96px 74px";
 
+  // Premium theek karna — sirf admin, aur sirf lock ke baad (lock se pehle
+  // Edit form ka Above/Below % hi kaafi hai).
+  const isAdminUser = ["admin","super_admin"].includes(getUser()?.role);
+  const [fixPrem, setFixPrem] = useState(false);
+
   const TILES = summary ? [
     {label:t("common.items"), value:summary.item_count, note:`${imports.filter(i=>i.status==="committed").length} import se`,
       color:T.ind, Icon:IcTable},
@@ -2898,6 +3149,33 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, onAiPlan}
       <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))", gap:10, marginBottom:11}}>
         {TILES.map(t=><Stat key={t.label} {...t}/>)}
       </div>
+    )}
+    {/* Manual vs imported cross-check — bidding par haath se bhara number
+        import ke jod se hat raha ho to bata do (0.5% ya ₹1000 se zyada). */}
+    {summary && manualBoq > 0 && num(summary.boq_total) > 0
+      && Math.abs(num(summary.boq_total) - manualBoq) > Math.max(num(summary.boq_total) * 0.005, 1000) && (
+      <div style={{padding:"8px 12px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8,
+        fontSize:11.5, color:T.amb, marginBottom:11, fontWeight:600}}>
+        {t("tenders.manual_vs_import_farak", {
+          manual: moneyF(manualBoq),
+          imported: moneyF(num(summary.boq_total)),
+          diff: moneyF(Math.abs(num(summary.boq_total) - manualBoq)),
+        })}
+      </div>
+    )}
+    {summary && !isItemRate && summary.premium_locked_at && isAdminUser && (
+      <div style={{display:"flex", justifyContent:"flex-end", marginTop:-4, marginBottom:11}}>
+        <button onClick={()=>setFixPrem(true)}
+          style={{border:"none", background:"none", cursor:"pointer", fontSize:11.5,
+            color:T.blu, fontWeight:700, padding:0}}>
+          {t("tenders.premium_theek_karo")}
+        </button>
+      </div>
+    )}
+    {fixPrem && (
+      <PremiumFixModal tenderId={tenderId} summary={summary}
+        onClose={()=>setFixPrem(false)}
+        onDone={()=>{ setFixPrem(false); reload(); reloadTender && reloadTender(); }}/>
     )}
 
     {/* Change history — BOQ final hone ke baad ke sab badlaav */}
@@ -6278,10 +6556,14 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
   const estimated = num(data.estimated_cost);
   const contract  = num(data.contract_value);
   const boqTotal  = num(boq?.summary?.boq_total);
-  // Contract vs estimate — government tender me above/below quote matlab rakhta hai.
-  const vsEstimate = (estimated > 0 && contract > 0)
-    ? ((contract - estimated) / estimated) * 100
-    : null;
+  const boqManual = num(data.boq_value_manual);
+  // Header/breakup ka base: imported jod pehle, warna haath se bhara.
+  const boqShown  = boqTotal || boqManual;
+  // Margin — Contract (jitna milega) vs Estimated Budget (jitne me karna
+  // hai). Budget ab APNA andaza hai, department ka estimate nahi (Prafull,
+  // 2026-08-30); isliye ye seedha expected profit hai.
+  const margin = (estimated > 0 && contract > 0) ? contract - estimated : null;
+  const taskBudget = data.task_budget || null;
 
   // Time elapsed — work order se stipulated completion tak.
   let timePct = null, timeNote = "Dates adhoori hain";
@@ -6357,9 +6639,12 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
               (contract = BOQ ± above/below, wo bill ke aakhir me lagta hai). */}
           <div style={{textAlign:"right", flexShrink:0}}>
             <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px"}}>{t("tenders.boq_value")}</div>
-            <div style={{fontSize:20, fontWeight:700, color:boqTotal?T.blu:T.t4, fontVariantNumeric:"tabular-nums", lineHeight:1.2}}>
-              {boqTotal ? moneyF(boqTotal) : "--"}
+            <div style={{fontSize:20, fontWeight:700, color:boqShown?T.blu:T.t4, fontVariantNumeric:"tabular-nums", lineHeight:1.2}}>
+              {boqShown ? moneyF(boqShown) : "--"}
             </div>
+            {!boqTotal && boqManual > 0 && (
+              <div style={{fontSize:9, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("tenders.manual")}</div>
+            )}
           </div>
           <div style={{textAlign:"right", flexShrink:0}}>
             <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px"}}>{t("tenders.contract_value")}</div>
@@ -6461,11 +6746,13 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
         <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))", gap:10, marginBottom:11}}>
           <Stat label={t("tenders.estimated_cost_2")} color={T.slt} Icon={IcRupee}
             value={estimated ? money(estimated) : "--"}
-            note={estimated ? moneyF(estimated) : "Set nahi"}/>
+            note={taskBudget && taskBudget.estimate > 0
+              ? t("tenders.task_budgets_note", { amt: money(taskBudget.estimate), n: taskBudget.projects_count })
+              : (estimated ? moneyF(estimated) : "Set nahi")}/>
           <Stat label={t("tenders.contract_value")} color={T.grn} Icon={IcRupee}
             value={contract ? money(contract) : "--"}
-            note={vsEstimate === null ? (contract ? moneyF(contract) : "Set nahi")
-              : `${vsEstimate>=0?"+":""}${vsEstimate.toFixed(1)}% vs estimate`}/>
+            note={margin === null ? (contract ? moneyF(contract) : "Set nahi")
+              : `${margin>=0?"+":"−"}${money(Math.abs(margin))} ${t("tenders.margin")}`}/>
           <Stat label={t("tenders.security_held")} color={securityHeld?T.blu:T.slt} Icon={IcLock}
             value={money(securityHeld)}
             note={`${activeInst.length} active instrument${activeInst.length===1?"":"s"}`}/>
@@ -6473,6 +6760,11 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
             value={timePct===null ? "--" : `${timePct}%`}
             note={timeNote}/>
         </div>
+
+        {/* Project Cost Breakup — estimate sheet ka aaina (BOQ → premium →
+            GST → contingency/planning add-ons → total). */}
+        <CostBreakupCard tenderId={tenderId} data={data} base={boqShown}
+          manualTag={!boqTotal && boqManual > 0} isAdmin={isAdmin} onChanged={load}/>
 
         {/* Key dates */}
         <Panel style={{marginBottom:11}}>
@@ -6575,7 +6867,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
       {/* ══ BOQ ══ */}
       {tab==="boq" && (
         <BoqTab tenderId={tenderId} boq={boq} loading={boqLoading} reload={loadBoq}
-          rateType={data.rate_type} autoImport={freshBoq}
+          rateType={data.rate_type} autoImport={freshBoq} reloadTender={load} manualBoq={boqManual}
           onAiPlan={(file)=>{ setAiPlanFile(file); setTab("aiplan"); }}/>
       )}
 
@@ -6809,7 +7101,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
 
       {/* ── MODALS ── */}
       {/* onDeleted → list par wapas; TenderList mount hote hi dobara fetch karta hai. */}
-      {showEdit && <EditTenderModal tender={data} onClose={()=>setShowEdit(false)}
+      {showEdit && <EditTenderModal tender={data} boqBase={boqTotal} onClose={()=>setShowEdit(false)}
         onSaved={()=>load()} onDeleted={onBack}/>}
       {showInst && <AddInstrumentModal tenderId={tenderId} tenderStatus={data.status}
         onClose={()=>setShowInst(false)} onSaved={()=>load()}/>}
