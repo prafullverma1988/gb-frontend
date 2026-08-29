@@ -370,6 +370,7 @@ const dict = {
   "boq_import_wizard.existing_task_ke_andar":                  "Existing task ke andar",
   "boq_import_wizard.file_padhne_me_dikkat_sahi_excel":        "File read nahi ho paayi — sahi Excel/CSV file select karo",
   "boq_import_wizard.import_ho_gaya":                          "Import ho gaya",
+  "boq_import_wizard.import_ho_gaya_ai_plan_banayein":         "BOQ import ho gaya ✓\n\nAb isi file se AI ka site/task plan banayein? (AI Plan tab khulega)",
   "boq_import_wizard.import_ho_raha":                          "Import ho raha…",
   "boq_import_wizard.import_revert_ho_gaya":                   "Import revert ho gaya",
   "boq_import_wizard.in_fields_ki_mapping_zaroori_hai":        "In fields ki mapping zaroori hai:",
@@ -5039,6 +5040,24 @@ const dict = {
   "receiving_contacts.team_list_khaali":                       "Team list empty",
   "receiving_contacts.team_load_ho_rahi_hai":                  "Team load ho rahi hai…",
   "receiving_contacts.yeh_number_pehle_hi_list_me":            "Yeh number pehle hi list me hai.",
+
+  // ── recycle_bin ─────────────────────────────────────────────
+  "recycle_bin.abhi_tak_kuch_permanently_hataya_nahi":         "Abhi tak kuch permanently hataya nahi gaya.",
+  "recycle_bin.bin_khali_hai":                                 "Bin khali hai",
+  "recycle_bin.chhupao":                                       "Chhupao",
+  "recycle_bin.din_aur_wapas_laya_ja_sakta":                   "{left} din aur wapas laya ja sakta hai",
+  "recycle_bin.din_poore_ho_chuke":                            "30 din poore ho chuke — ab kabhi bhi mit sakta hai",
+  "recycle_bin.haan_mita_do":                                  "Haan, mita do",
+  "recycle_bin.intro":                                         "Permanently hataye gaye project/tender yahan **30 din** tak rehte hain. \"Wapas laao\" par unka poora data — task, entries, links — apni purani jagah par laut aata hai. 30 din baad ye apne aap bekaar ho jaate hain.",
+  "recycle_bin.ka_poora_backup_nahi":                          " · ⚠ {tables} ka poora backup nahi",
+  "recycle_bin.kisi_ne":                                       "kisi ne",
+  "recycle_bin.kisne_kab_hataya":                              "{who} ne {date} ko hataya · **{rows}** rows",
+  "recycle_bin.kya_kya_tha":                                   "Kya-kya tha",
+  "recycle_bin.mita_do":                                       "Mita do",
+  "recycle_bin.purge_confirm":                                 "Snapshot bhi mit jayega — **uske baad ye kabhi wapas nahi aa sakta**. Pakka?",
+  "recycle_bin.snapshot_bhi_mita_do_title":                    "Snapshot bhi mita do — phir kabhi wapas nahi aayega",
+  "recycle_bin.wapas_laao":                                    "↩ Wapas laao",
+  "recycle_bin.wapas_laya_ja_chuka":                           "✓ {date} ko wapas laya ja chuka hai",
 
   // ── reports ─────────────────────────────────────────────────
   "reports.adjust_date_range_or_clear_filters":                "Adjust date range or clear filters",

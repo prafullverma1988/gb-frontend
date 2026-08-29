@@ -368,6 +368,7 @@ const dict = {
   "boq_import_wizard.existing_task_ke_andar":                  "Inside an existing task",
   "boq_import_wizard.file_padhne_me_dikkat_sahi_excel":        "File could not be read — select a valid Excel/CSV file",
   "boq_import_wizard.import_ho_gaya":                          "Import complete",
+  "boq_import_wizard.import_ho_gaya_ai_plan_banayein":         "BOQ imported ✓\n\nCreate the AI site/task plan from this same file? (AI Plan tab will open)",
   "boq_import_wizard.import_ho_raha":                          "Importing…",
   "boq_import_wizard.import_revert_ho_gaya":                   "Import reverted",
   "boq_import_wizard.in_fields_ki_mapping_zaroori_hai":        "Mapping for these fields is required:",
@@ -5037,6 +5038,24 @@ const dict = {
   "receiving_contacts.team_list_khaali":                       "Team list empty",
   "receiving_contacts.team_load_ho_rahi_hai":                  "Team is loading…",
   "receiving_contacts.yeh_number_pehle_hi_list_me":            "This number is already in the list.",
+
+  // ── recycle_bin ─────────────────────────────────────────────
+  "recycle_bin.abhi_tak_kuch_permanently_hataya_nahi":         "Nothing has been permanently deleted yet.",
+  "recycle_bin.bin_khali_hai":                                 "Bin is empty",
+  "recycle_bin.chhupao":                                       "Hide",
+  "recycle_bin.din_aur_wapas_laya_ja_sakta":                   "Can still be restored for {left} more days",
+  "recycle_bin.din_poore_ho_chuke":                            "30 days are over — it can be purged any time now",
+  "recycle_bin.haan_mita_do":                                  "Yes, delete it",
+  "recycle_bin.intro":                                         "Permanently deleted projects/tenders stay here for **30 days**. \"Restore\" brings their full data — tasks, entries, links — back to its original place. After 30 days they expire on their own.",
+  "recycle_bin.ka_poora_backup_nahi":                          " · ⚠ no full backup of {tables}",
+  "recycle_bin.kisi_ne":                                       "someone",
+  "recycle_bin.kisne_kab_hataya":                              "Deleted by {who} on {date} · **{rows}** rows",
+  "recycle_bin.kya_kya_tha":                                   "What was inside",
+  "recycle_bin.mita_do":                                       "Delete",
+  "recycle_bin.purge_confirm":                                 "The snapshot will also be deleted — **after that it can never be restored**. Are you sure?",
+  "recycle_bin.snapshot_bhi_mita_do_title":                    "Also delete the snapshot — it can never be restored after this",
+  "recycle_bin.wapas_laao":                                    "↩ Restore",
+  "recycle_bin.wapas_laya_ja_chuka":                           "✓ Restored on {date}",
 
   // ── reports ─────────────────────────────────────────────────
   "reports.adjust_date_range_or_clear_filters":                "Adjust date range or clear filters",

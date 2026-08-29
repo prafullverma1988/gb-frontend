@@ -367,6 +367,7 @@ const dict = {
   "boq_import_wizard.existing_task_ke_andar":                  "एग्ज़िस्टिंग टास्क के अंदर",
   "boq_import_wizard.file_padhne_me_dikkat_sahi_excel":        "फाइल रीड नहीं हो पाई — सही एक्सेल/सीएसवी फाइल सेलेक्ट करो",
   "boq_import_wizard.import_ho_gaya":                          "इम्पोर्ट हो गया",
+  "boq_import_wizard.import_ho_gaya_ai_plan_banayein":         "BOQ इम्पोर्ट हो गया ✓\n\nअब इसी फाइल से AI का साइट/टास्क प्लान बनाएं? (AI Plan टैब खुलेगा)",
   "boq_import_wizard.import_ho_raha":                          "इम्पोर्ट हो रहा…",
   "boq_import_wizard.import_revert_ho_gaya":                   "इम्पोर्ट रिवर्ट हो गया",
   "boq_import_wizard.in_fields_ki_mapping_zaroori_hai":        "इन फील्ड्स की मैपिंग ज़रूरी है:",
@@ -5036,6 +5037,24 @@ const dict = {
   "receiving_contacts.team_list_khaali":                       "टीम लिस्ट एम्प्टी",
   "receiving_contacts.team_load_ho_rahi_hai":                  "टीम लोड हो रही है…",
   "receiving_contacts.yeh_number_pehle_hi_list_me":            "यह नंबर पहले ही लिस्ट में है.",
+
+  // ── recycle_bin ─────────────────────────────────────────────
+  "recycle_bin.abhi_tak_kuch_permanently_hataya_nahi":         "अभी तक कुछ परमानेंटली हटाया नहीं गया।",
+  "recycle_bin.bin_khali_hai":                                 "बिन खाली है",
+  "recycle_bin.chhupao":                                       "छुपाओ",
+  "recycle_bin.din_aur_wapas_laya_ja_sakta":                   "{left} दिन और वापस लाया जा सकता है",
+  "recycle_bin.din_poore_ho_chuke":                            "30 दिन पूरे हो चुके — अब कभी भी मिट सकता है",
+  "recycle_bin.haan_mita_do":                                  "हाँ, मिटा दो",
+  "recycle_bin.intro":                                         "परमानेंटली हटाए गए प्रोजेक्ट/टेंडर यहां **30 दिन** तक रहते हैं। \"वापस लाओ\" पर उनका पूरा डेटा — टास्क, एंट्रीज़, लिंक्स — अपनी पुरानी जगह पर लौट आता है। 30 दिन बाद ये अपने आप बेकार हो जाते हैं।",
+  "recycle_bin.ka_poora_backup_nahi":                          " · ⚠ {tables} का पूरा बैकअप नहीं",
+  "recycle_bin.kisi_ne":                                       "किसी ने",
+  "recycle_bin.kisne_kab_hataya":                              "{who} ने {date} को हटाया · **{rows}** रो",
+  "recycle_bin.kya_kya_tha":                                   "क्या-क्या था",
+  "recycle_bin.mita_do":                                       "मिटा दो",
+  "recycle_bin.purge_confirm":                                 "स्नैपशॉट भी मिट जाएगा — **उसके बाद ये कभी वापस नहीं आ सकता**। पक्का?",
+  "recycle_bin.snapshot_bhi_mita_do_title":                    "स्नैपशॉट भी मिटा दो — फिर कभी वापस नहीं आएगा",
+  "recycle_bin.wapas_laao":                                    "↩ वापस लाओ",
+  "recycle_bin.wapas_laya_ja_chuka":                           "✓ {date} को वापस लाया जा चुका है",
 
   // ── reports ─────────────────────────────────────────────────
   "reports.adjust_date_range_or_clear_filters":                "डेट रेंज एडजस्ट करो या फ़िल्टर क्लियर करो",

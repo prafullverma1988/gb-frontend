@@ -2158,7 +2158,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
     onDone && onDone();
     // Prafull ka idea 1: import hote hi wahi file AI Plan me le jao —
     // items ki ids ab DB me hain, isliye AI plan ko unse jod bhi payega.
-    if (onAiPlan && rawFile && window.confirm("BOQ import ho gaya ✓\n\nAb isi file se AI ka site/task plan banayein? (AI Plan tab khulega)")) {
+    if (onAiPlan && rawFile && window.confirm(t("boq_import_wizard.import_ho_gaya_ai_plan_banayein"))) {
       onAiPlan(rawFile);
     }
     onClose();
