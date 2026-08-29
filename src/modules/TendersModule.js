@@ -1030,8 +1030,14 @@ function TenderList({onOpen}) {
           const sm = sMeta(r.status);
           const ta = alertsByTender[r.id] || [];
           const high = ta.some(a=>a.severity==="high");
-          const value = num(r.contract_value) || num(r.estimated_cost);
-          const isEst = !num(r.contract_value) && num(r.estimated_cost) > 0;
+          // Value = BOQ value (billing isi par hoti hai; contract = BOQ ±
+          // above/below jo bill ke aakhir me lagta hai). BOQ import na hua
+          // ho to contract value, phir estimated cost — sublabel ke saath.
+          const boqVal = num(r.boq_total);
+          const value = boqVal || num(r.contract_value) || num(r.estimated_cost);
+          const valueNote = boqVal ? null
+            : num(r.contract_value) ? t("tenders.contract")
+            : num(r.estimated_cost) > 0 ? t("tenders.estimated") : null;
           return (
             <div key={r.id} onClick={()=>onOpen(r.id)}
               style={{display:"grid", gridTemplateColumns:"minmax(220px,2.4fr) 1.4fr 1fr 110px 80px 90px",
@@ -1050,7 +1056,7 @@ function TenderList({onOpen}) {
                 <div style={{fontSize:12.5, fontWeight:700, color:T.t1, fontVariantNumeric:"tabular-nums"}}>
                   {value ? money(value) : <span style={{color:T.t4, fontWeight:400}}>--</span>}
                 </div>
-                {isEst && <div style={{fontSize:9.5, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>estimated</div>}
+                {valueNote && <div style={{fontSize:9.5, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{valueNote}</div>}
               </div>
               <div><Pill label={sm.label} c={sm.c} bg={sm.bg}/></div>
               <div style={{fontSize:12, color:num(r.linked_project_count)?T.t1:T.t4, fontWeight:num(r.linked_project_count)?700:400}}>
@@ -6271,6 +6277,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
 
   const estimated = num(data.estimated_cost);
   const contract  = num(data.contract_value);
+  const boqTotal  = num(boq?.summary?.boq_total);
   // Contract vs estimate — government tender me above/below quote matlab rakhta hai.
   const vsEstimate = (estimated > 0 && contract > 0)
     ? ((contract - estimated) / estimated) * 100
@@ -6344,6 +6351,14 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
             <div style={{fontSize:16, fontWeight:700, color:T.t1, letterSpacing:"-.2px", lineHeight:1.3}}>{data.title}</div>
             <div style={{fontSize:12, color:T.t3, marginTop:3}}>
               {data.party_name || data.department_name || t("tenders.department_set_nahi")}
+            </div>
+          </div>
+          {/* Billing BOQ value par hoti hai, isliye dono upar dikhte hain
+              (contract = BOQ ± above/below, wo bill ke aakhir me lagta hai). */}
+          <div style={{textAlign:"right", flexShrink:0}}>
+            <div style={{fontSize:10, color:T.t4, fontWeight:600, textTransform:"uppercase", letterSpacing:".5px"}}>{t("tenders.boq_value")}</div>
+            <div style={{fontSize:20, fontWeight:700, color:boqTotal?T.blu:T.t4, fontVariantNumeric:"tabular-nums", lineHeight:1.2}}>
+              {boqTotal ? moneyF(boqTotal) : "--"}
             </div>
           </div>
           <div style={{textAlign:"right", flexShrink:0}}>
