@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import api from "../../config/api";
 import { T } from "./tokens";
+import { t, Rich } from "../../i18n";
 
 /* ────────────────────────────────────────────────────────────────────
    RECYCLE BIN — permanently hataye hue project/tender, aur wapasi
@@ -68,14 +69,12 @@ export default function RecycleBin() {
     setMsg(r.message); load();
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: T.t4 || "#9CA3AF", fontSize: 13 }}>Loading…</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: T.t4 || "#9CA3AF", fontSize: 13 }}>{t("common.loading")}</div>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ fontSize: 12.5, color: T.t3 || "#6B7280", lineHeight: 1.6 }}>
-        Permanently hataye gaye project/tender yahan <b>30 din</b> tak rehte hain. "Wapas laao" par
-        unka poora data — task, entries, links — apni purani jagah par laut aata hai.
-        30 din baad ye apne aap bekaar ho jaate hain.
+        <Rich k="recycle_bin.intro" />
       </div>
 
       {err && <div style={{ padding: "9px 12px", background: T.redL || "#FEF2F2", border: `1px solid ${T.redM || "#FECACA"}`, borderRadius: 8, fontSize: 12, color: T.red || "#DC2626" }}>{err}</div>}
@@ -83,8 +82,8 @@ export default function RecycleBin() {
 
       {rows.length === 0 && (
         <div style={{ padding: "44px 20px", textAlign: "center", background: T.surfaceB || "#F8F9FB", border: `1px dashed ${T.b2 || "#D1D5DB"}`, borderRadius: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: T.t2 || "#374151" }}>Bin khali hai</div>
-          <div style={{ fontSize: 12, color: T.t4 || "#9CA3AF", marginTop: 5 }}>Abhi tak kuch permanently hataya nahi gaya.</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.t2 || "#374151" }}>{t("recycle_bin.bin_khali_hai")}</div>
+          <div style={{ fontSize: 12, color: T.t4 || "#9CA3AF", marginTop: 5 }}>{t("recycle_bin.abhi_tak_kuch_permanently_hataya_nahi")}</div>
         </div>
       )}
 
@@ -103,30 +102,30 @@ export default function RecycleBin() {
                   <span style={{ fontSize: 13, fontWeight: 700, color: T.t1 || "#111827" }}>{r.entity_name}</span>
                 </div>
                 <div style={{ fontSize: 11, color: T.t4 || "#9CA3AF", marginTop: 4 }}>
-                  {r.deleted_by_name || "kisi ne"} ne {fmtDate(r.deleted_at)} ko hataya · <b>{(r.total_rows || 0).toLocaleString("en-IN")}</b> rows
-                  {r.truncated?.length > 0 && <span style={{ color: "#B45309" }}> · ⚠ {r.truncated.join(", ")} ka poora backup nahi</span>}
+                  <Rich k="recycle_bin.kisne_kab_hataya" params={{ who: r.deleted_by_name || t("recycle_bin.kisi_ne"), date: fmtDate(r.deleted_at), rows: (r.total_rows || 0).toLocaleString("en-IN") }} />
+                  {r.truncated?.length > 0 && <span style={{ color: "#B45309" }}>{t("recycle_bin.ka_poora_backup_nahi", { tables: r.truncated.join(", ") })}</span>}
                 </div>
                 <div style={{ fontSize: 11, marginTop: 3, color: gone ? (T.grn || "#059669") : expired ? (T.red || "#DC2626") : (T.t3 || "#6B7280") }}>
-                  {gone ? `✓ ${fmtDate(r.restored_at)} ko wapas laya ja chuka hai`
-                    : expired ? "30 din poore ho chuke — ab kabhi bhi mit sakta hai"
-                    : `${left} din aur wapas laya ja sakta hai`}
+                  {gone ? t("recycle_bin.wapas_laya_ja_chuka", { date: fmtDate(r.restored_at) })
+                    : expired ? t("recycle_bin.din_poore_ho_chuke")
+                    : t("recycle_bin.din_aur_wapas_laya_ja_sakta", { left })}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                 <button onClick={() => setOpen(open === r.id ? null : r.id)}
                   style={{ padding: "6px 11px", borderRadius: 7, background: T.surface || "#fff", border: `1px solid ${T.b1 || "#E5E7EB"}`, color: T.t3 || "#6B7280", fontSize: 11.5, cursor: "pointer" }}>
-                  {open === r.id ? "Chhupao" : "Kya-kya tha"}
+                  {open === r.id ? t("recycle_bin.chhupao") : t("recycle_bin.kya_kya_tha")}
                 </button>
                 {!gone && (
                   <button onClick={() => restore(r)} disabled={busy === r.id}
                     style={{ padding: "6px 13px", borderRadius: 7, border: "none", background: T.grn || "#059669", color: "white", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
-                    {busy === r.id ? "…" : "↩ Wapas laao"}
+                    {busy === r.id ? "…" : t("recycle_bin.wapas_laao")}
                   </button>
                 )}
                 <button onClick={() => setConfirmPurge(r.id)} disabled={busy === r.id}
-                  title="Snapshot bhi mita do — phir kabhi wapas nahi aayega"
+                  title={t("recycle_bin.snapshot_bhi_mita_do_title")}
                   style={{ padding: "6px 11px", borderRadius: 7, background: T.surface || "#fff", border: `1px solid ${T.redM || "#FECACA"}`, color: T.red || "#DC2626", fontSize: 11.5, cursor: "pointer" }}>
-                  Mita do
+                  {t("recycle_bin.mita_do")}
                 </button>
               </div>
             </div>
@@ -142,13 +141,13 @@ export default function RecycleBin() {
             {confirmPurge === r.id && (
               <div style={{ marginTop: 10, padding: "10px 12px", background: T.redL || "#FEF2F2", border: `1px solid ${T.redM || "#FECACA"}`, borderRadius: 8 }}>
                 <div style={{ fontSize: 12, color: T.red || "#DC2626", marginBottom: 8, lineHeight: 1.5 }}>
-                  Snapshot bhi mit jayega — <b>uske baad ye kabhi wapas nahi aa sakta</b>. Pakka?
+                  <Rich k="recycle_bin.purge_confirm" />
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button onClick={() => setConfirmPurge(null)}
-                    style={{ padding: "6px 12px", borderRadius: 7, background: T.surface || "#fff", border: `1px solid ${T.b1 || "#E5E7EB"}`, color: T.t3 || "#6B7280", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>Rehne do</button>
+                    style={{ padding: "6px 12px", borderRadius: 7, background: T.surface || "#fff", border: `1px solid ${T.b1 || "#E5E7EB"}`, color: T.t3 || "#6B7280", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>{t("danger_delete.rehne_do")}</button>
                   <button onClick={() => purge(r)}
-                    style={{ padding: "6px 14px", borderRadius: 7, border: "none", background: T.red || "#DC2626", color: "white", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>Haan, mita do</button>
+                    style={{ padding: "6px 14px", borderRadius: 7, border: "none", background: T.red || "#DC2626", color: "white", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{t("recycle_bin.haan_mita_do")}</button>
                 </div>
               </div>
             )}

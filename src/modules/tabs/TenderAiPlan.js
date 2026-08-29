@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
+import { t, Rich } from "../../i18n";
 
 /* ────────────────────────────────────────────────────────────────────
    AI PLAN — tender ki workbook se site/task plan, AI ke saath
@@ -98,7 +99,7 @@ async function buildDigest(file) {
     }
     if (hr >= 0) {
       const items = [];
-      const val = (r, c) => { if (c < 0) return null; const cl = bws[enc({ r, c })]; if (!cl) return null; if (cl.t === "e") return "#ERR"; return cl.v; };
+      const val = (r, c) => { if (c < 0) return null; const cl = bws[enc({ r, c })]; if (!cl) return null; if (cl.t === "e") return t("tender_ai_plan.err"); return cl.v; };
       for (let r = hr + 1; r <= R.e.r && items.length < 420; r++) {
         const desc = val(r, colMap.desc); if (desc == null || String(desc).trim() === "") continue;
         const it = {
@@ -145,7 +146,7 @@ const inp = (extra = {}) => ({ padding: "5px 8px", borderRadius: 6, border: `1.5
 // BOQ se juda hai? — chhota chip. Ek id = pakka link (execute par task
 // boq_item_id se jud jayega, MB/RA ki kadi); kai id = sirf yaad ke liye.
 const boqChip = (ids) => (Array.isArray(ids) && ids.length > 0)
-  ? <span title={"BOQ item id: " + ids.join(", ") + (ids.length === 1 ? " — task isse judega (MB/RA)" : " — kai items, link nahi hoga")}
+  ? <span title={t("tender_ai_plan.boq_item_id", { ids: ids.join(", ") }) + (ids.length === 1 ? t("tender_ai_plan.task_isse_judega_mb_ra") : t("tender_ai_plan.kai_items_link_nahi_hoga"))}
       style={{ fontSize: 9, fontWeight: 700, borderRadius: 9, padding: "1px 7px", whiteSpace: "nowrap",
         color: ids.length === 1 ? "#065F46" : "#92400E",
         background: ids.length === 1 ? "#D1FAE5" : "#FEF3C7",
@@ -308,7 +309,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
 
   const upd = (fn) => { setPlan((p) => { const n = JSON.parse(JSON.stringify(p)); fn(n); return n; }); setDirty(true); };
 
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: T.t4, fontSize: 13 }}>Loading…</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: T.t4, fontSize: 13 }}>{t("tender_ai_plan.loading")}</div>;
 
   const totalWorks = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false).length, 0) : 0;
   const totalAmt = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false).reduce((b, w) => b + (Number(w.amount) || 0), 0), 0) : 0;
@@ -317,37 +318,35 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* header strip */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>✨ AI Plan</div>
-        <div style={{ fontSize: 11, color: T.t4 }}>workbook do → AI se site/task plan par charcha → final hone par execute</div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>{t("tender_ai_plan.ai_plan")}</div>
+        <div style={{ fontSize: 11, color: T.t4 }}>{t("tender_ai_plan.workbook_do_ai_se_site_task")}</div>
         <div style={{ flex: 1 }} />
         {plan && <>
-          {dirty && <button onClick={save} disabled={!!busy} style={{ padding: "6px 14px", borderRadius: 7, border: "none", background: T.amb, color: "white", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{busy === "save" ? "…" : "Save edits"}</button>}
-          <button onClick={() => fileRef.current?.click()} disabled={!!busy} style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, fontSize: 11.5, cursor: "pointer" }}>↻ Nayi file se dobara</button>
-          <button onClick={openExec} disabled={!!busy || !canExec} title={canExec ? "" : "Sites sirf Execution stage ke aage banti hain"}
-            style={{ padding: "6px 16px", borderRadius: 7, border: "none", background: canExec ? T.grn : T.b1, color: canExec ? "white" : T.t4, fontSize: 12, fontWeight: 700, cursor: canExec ? "pointer" : "not-allowed" }}>▶ Execute</button>
+          {dirty && <button onClick={save} disabled={!!busy} style={{ padding: "6px 14px", borderRadius: 7, border: "none", background: T.amb, color: "white", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{busy === "save" ? "…" : t("tender_ai_plan.save_edits")}</button>}
+          <button onClick={() => fileRef.current?.click()} disabled={!!busy} style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, fontSize: 11.5, cursor: "pointer" }}>{t("tender_ai_plan.nayi_file_se_dobara")}</button>
+          <button onClick={openExec} disabled={!!busy || !canExec} title={canExec ? "" : t("tender_ai_plan.sites_sirf_execution_stage_ke_aage")}
+            style={{ padding: "6px 16px", borderRadius: 7, border: "none", background: canExec ? T.grn : T.b1, color: canExec ? "white" : T.t4, fontSize: 12, fontWeight: 700, cursor: canExec ? "pointer" : "not-allowed" }}>{t("tender_ai_plan.execute")}</button>
         </>}
       </div>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.xlsm" style={{ display: "none" }} onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
       {err && <div style={{ padding: "8px 12px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 8, fontSize: 12, color: T.red }}>{err}</div>}
-      {!llmReady && <div style={{ padding: "8px 12px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, fontSize: 12, color: "#92400E" }}>AI abhi uplabdh nahi (server par LLM key nahi lagi) — plan haath se edit/execute phir bhi chalega.</div>}
+      {!llmReady && <div style={{ padding: "8px 12px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, fontSize: 12, color: "#92400E" }}>{t("tender_ai_plan.ai_abhi_uplabdh_nahi_server_par")}</div>}
       {dinfo && (
-        <div style={{ padding: "7px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, fontSize: 11.5, color: T.t3 }}>
-          File padh li: <b style={{ color: T.t1 }}>{dinfo.sheets} sheets</b> · {dinfo.items} BOQ item · <b style={{ color: T.t1 }}>{dinfo.withTot}</b> sheets me jod (Total/Cost per Meter) mila
-          {dinfo.errSheets > 0 && <> · <span style={{ color: "#B45309" }}>{dinfo.errSheets} sheets me tooti (#REF!) cells</span></>} · saar {dinfo.kb} KB
+        <div style={{ padding: "7px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, fontSize: 11.5, color: T.t3 }}><Rich k="tender_ai_plan.file_padh_li_sheets_sheets_items" params={{ sheets: dinfo.sheets, items: dinfo.items, withTot: dinfo.withTot }} />{dinfo.errSheets > 0 && <> · <span style={{ color: "#B45309" }}>{t("tender_ai_plan.errsheets_sheets_me_tooti_ref_cells", { errSheets: dinfo.errSheets })}</span></>}{t("tender_ai_plan.saar_kb", { kb: dinfo.kb })}
         </div>
       )}
       {job?.status === "running" && (
         <div style={{ padding: "10px 14px", background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 8, fontSize: 12.5, color: T.blu, fontWeight: 600, display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ flex: 1 }}>
-            ⏳ AI {job.kind === "discuss" ? "plan sudhaar raha hai" : "workbook padh raha hai"}… bade workbook par 2–5 minute lag sakte hain.
-            <div style={{ fontSize: 11, color: T.t3, fontWeight: 400, marginTop: 3 }}>Ye tab band karke doosra kaam kar sakte ho — kaam server par chalta rahega, wapas aakar dekh lena.</div>
+            {t("tender_ai_plan.ai_job_bade_workbook_par_2", { job: job.kind === "discuss" ? t("tender_ai_plan.plan_sudhaar_raha_hai") : t("tender_ai_plan.workbook_padh_raha_hai") })}
+            <div style={{ fontSize: 11, color: T.t3, fontWeight: 400, marginTop: 3 }}>{t("tender_ai_plan.ye_tab_band_karke_doosra_kaam")}</div>
           </div>
           <button onClick={async () => {
             await api.post(`/tenders/${tenderId}/ai-plan/job-cancel`, {}).catch(() => null);
             setBusy(""); await load(true);
           }}
             style={{ padding: "7px 13px", borderRadius: 8, border: "1.5px solid #FCA5A5", background: "#FEF2F2", color: "#B91C1C", fontSize: 11.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
-            ⏹ Rok do
+            {t("tender_ai_plan.rok_do")}
           </button>
         </div>
       )}
@@ -357,10 +356,10 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
         <div onClick={() => !busy && fileRef.current?.click()}
           style={{ border: `2px dashed ${T.b2}`, borderRadius: 12, padding: "44px 20px", textAlign: "center", cursor: busy ? "default" : "pointer", background: T.surfaceB }}>
           {busy === "analyze" || job?.status === "running"
-            ? <><div style={{ fontSize: 14, fontWeight: 700, color: T.blu }}>AI workbook padh raha hai…</div>
-              <div style={{ fontSize: 11.5, color: T.t4, marginTop: 6 }}>Badi file (100+ sheets) par 2–5 minute lag sakte hain — browser sirf saar bhejta hai, poori file nahi.</div></>
-            : <><div style={{ fontSize: 15, fontWeight: 700, color: T.t2 }}>📄 BOQ / estimate workbook yahan do</div>
-              <div style={{ fontSize: 12, color: T.t4, marginTop: 6 }}>AI saari sheets padh kar propose karega: sites → kaam → hissa → step, qty aur BOQ ke jod ke saath.<br />Phir neeche chat me AI se bahas karke plan final karo — area-wise, stretch-wise ya apne zone, jaise tum kaho.</div></>}
+            ? <><div style={{ fontSize: 14, fontWeight: 700, color: T.blu }}>{t("tender_ai_plan.ai_workbook_padh_raha_hai")}</div>
+              <div style={{ fontSize: 11.5, color: T.t4, marginTop: 6 }}>{t("tender_ai_plan.badi_file_100_sheets_par_2")}</div></>
+            : <><div style={{ fontSize: 15, fontWeight: 700, color: T.t2 }}>{t("tender_ai_plan.boq_estimate_workbook_yahan_do")}</div>
+              <div style={{ fontSize: 12, color: T.t4, marginTop: 6 }}>{t("tender_ai_plan.ai_saari_sheets_padh_kar_propose")}<br />{t("tender_ai_plan.phir_neeche_chat_me_ai_se")}</div></>}
         </div>
         {/* Idea 2 (Prafull): file na ho to imported BOQ se hi — imandaar seema
             ke saath, kyunki BOQ me sirf item/qty/rate hota hai. */}
@@ -373,9 +372,9 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
               setErr(r?.message || "Analyze fail"); setBusy("");
             }}
               style={{ padding: "8px 16px", borderRadius: 8, border: `1.5px solid ${T.bluM}`, background: T.bluL, color: T.blu, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-              📋 Imported BOQ se banao ({boqCount} items — file nahi chahiye)
+              {t("tender_ai_plan.imported_boq_se_banao", { boqCount })}
             </button>
-            <span style={{ fontSize: 11, color: T.t4 }}>Seema: BOQ me sirf item/qty/rate hai — village/lambai ka byora poori file se behtar aata hai.</span>
+            <span style={{ fontSize: 11, color: T.t4 }}>{t("tender_ai_plan.seema_boq_me_sirf_item_qty_rate")}</span>
           </div>
         )}
       </>)}
@@ -386,13 +385,13 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
           <span style={{ background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 20, padding: "3px 12px", fontWeight: 700, color: T.blu }}>{plan.sites.length} sites</span>
           <span style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 20, padding: "3px 12px" }}>{totalWorks} kaam</span>
           <span style={{ background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 20, padding: "3px 12px", color: T.grn, fontWeight: 700 }}>{fmtAmt(totalAmt)}</span>
-          {draftMeta?.status === "executed" && <span style={{ background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 20, padding: "3px 12px", color: T.grn }}>✓ execute ho chuka — dobara chalana surakshit</span>}
+          {draftMeta?.status === "executed" && <span style={{ background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 20, padding: "3px 12px", color: T.grn }}>{t("tender_ai_plan.execute_ho_chuka_dobara_chalana_surakshit")}</span>}
         </div>
 
         {(plan.warnings?.length > 0 || plan.unmapped?.length > 0) && (
           <div style={{ padding: "9px 12px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, fontSize: 11.5, color: "#92400E", lineHeight: 1.5 }}>
             {plan.warnings?.map((w, i) => <div key={"w" + i}>⚠ {w}</div>)}
-            {plan.unmapped?.map((w, i) => <div key={"u" + i}>◌ Kisi site me nahi: {w}</div>)}
+            {plan.unmapped?.map((w, i) => <div key={"u" + i}>{t("tender_ai_plan.kisi_site_me_nahi_w", { w })}</div>)}
           </div>
         )}
 
@@ -415,13 +414,13 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                     <input type="number" value={w.qty || ""} placeholder="qty" onChange={(e) => upd((p) => { p.sites[si].works[wi].qty = Number(e.target.value) || 0; })} style={inp({ width: 88, textAlign: "right", fontWeight: 700 })} />
                     <input value={w.unit || ""} placeholder="unit" onChange={(e) => upd((p) => { p.sites[si].works[wi].unit = e.target.value; })} style={inp({ width: 58 })} />
                     <input type="number" value={w.amount || ""} placeholder="₹" onChange={(e) => upd((p) => { p.sites[si].works[wi].amount = Number(e.target.value) || 0; })} style={inp({ width: 110, textAlign: "right", color: T.grn, fontWeight: 700 })} />
-                    {w.needs_review && <span title="AI ko number pakka nahi mila — jaanch lo" style={{ fontSize: 10, color: "#B45309", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 10, padding: "1px 8px", fontWeight: 700 }}>jaanch lo</span>}
+                    {w.needs_review && <span title={t("tender_ai_plan.ai_ko_number_pakka_nahi_mila")} style={{ fontSize: 10, color: "#B45309", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 10, padding: "1px 8px", fontWeight: 700 }}>{t("tender_ai_plan.jaanch_lo")}</span>}
                     {boqChip(w.boq_item_ids)}
                     <button onClick={() => setOpen((o) => ({ ...o, [key]: !exp }))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, color: T.blu, fontWeight: 700 }}>
-                      {w.stages.length ? `${w.stages.length} stages ${exp ? "▴" : "▾"}` : (exp ? "stages ▴" : "+ stages")}
+                      {w.stages.length ? `${w.stages.length} stages ${exp ? "▴" : "▾"}` : (exp ? t("tender_ai_plan.stages") : t("tender_ai_plan.stages_2"))}
                     </button>
                   </div>
-                  {w.source && <div style={{ padding: "0 12px 6px 35px", fontSize: 10, color: T.t4 }}>src: {w.source}</div>}
+                  {w.source && <div style={{ padding: "0 12px 6px 35px", fontSize: 10, color: T.t4 }}>{t("tender_ai_plan.src_source", { source: w.source })}</div>}
                   {exp && (
                     <div style={{ padding: "4px 12px 10px 35px", display: "flex", flexDirection: "column", gap: 5 }}>
                       {w.stages.map((st, ti) => (
@@ -451,14 +450,12 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                             </div>
                           ))}
                           <button onClick={() => upd((p) => { const stg = p.sites[si].works[wi].stages[ti]; stg.steps = stg.steps || []; stg.steps.push({ name: "", qty: 0, unit: "", amount: 0, boq_item_ids: [] }); })}
-                            style={{ marginLeft: 26, marginTop: 3, border: `1px dashed ${T.b2}`, background: "none", borderRadius: 5, padding: "1px 8px", fontSize: 10, color: T.t4, cursor: "pointer" }}>＋ step</button>
+                            style={{ marginLeft: 26, marginTop: 3, border: `1px dashed ${T.b2}`, background: "none", borderRadius: 5, padding: "1px 8px", fontSize: 10, color: T.t4, cursor: "pointer" }}>{t("tender_ai_plan.step")}</button>
                         </div>
                       ))}
                       <button onClick={() => upd((p) => { p.sites[si].works[wi].stages.push({ name: "", qty: 0, unit: w.unit || "", amount: 0, boq_item_ids: [], steps: [] }); })}
-                        style={{ alignSelf: "flex-start", border: `1px dashed ${T.b2}`, background: "none", borderRadius: 6, padding: "3px 10px", fontSize: 11, color: T.t3, cursor: "pointer" }}>＋ stage</button>
-                      <div style={{ fontSize: 10, color: T.t4, lineHeight: 1.5 }}>
-                        Line-kaam me stage ki qty khali chhodo to poori lambai jayegi ({fmtQty(w.qty)} {w.unit}); structure ke stage % me. Step = asli kaam (GSB, RCC…) apni qty apne unit me — roz ki entry aur BOQ ka jod wahi hai. ₹ na baanto to poora paisa pehle bachche par jayega.
-                      </div>
+                        style={{ alignSelf: "flex-start", border: `1px dashed ${T.b2}`, background: "none", borderRadius: 6, padding: "3px 10px", fontSize: 11, color: T.t3, cursor: "pointer" }}>{t("tender_ai_plan.stage")}</button>
+                      <div style={{ fontSize: 10, color: T.t4, lineHeight: 1.5 }}>{t("tender_ai_plan.line_kaam_road_drain_pipe_me", { fmtQty: fmtQty(w.qty), unit: w.unit })}</div>
                     </div>
                   )}
                 </div>
@@ -470,19 +467,19 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
         {/* EXECUTE RESULT */}
         {execResult && (
           <div style={{ background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 10, padding: "12px 14px", fontSize: 12, color: T.t2 }}>
-            <div style={{ fontWeight: 700, color: T.grn, marginBottom: 6 }}>✓ Execute ho chuka</div>
+            <div style={{ fontWeight: 700, color: T.grn, marginBottom: 6 }}>{t("tender_ai_plan.execute_ho_chuka")}</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
               {execResult.projects?.map((p) => (
                 <button key={p.id} onClick={() => onOpenProject && onOpenProject(p.id)}
                   style={{ border: `1px solid ${T.grnM}`, background: "white", borderRadius: 7, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, color: T.t1, cursor: onOpenProject ? "pointer" : "default" }}>
-                  🏘 {p.name} {p.created ? "(nayi bani)" : "(pehle se thi)"} →
+                  🏘 {p.name} {p.created ? t("tender_ai_plan.nayi_bani") : t("tender_ai_plan.pehle_se_thi")} →
                 </button>
               ))}
             </div>
             <div>
-              {execResult.works_created} kaam + {execResult.stages_created} stages{execResult.steps_created ? ` + ${execResult.steps_created} steps` : ""} bane
-              {execResult.boq_linked ? <> · <b style={{ color: T.grn }}>{execResult.boq_linked} task BOQ se jude</b> (inki qty MB draft tak jayegi)</> : ""}
-              {execResult.skipped?.length ? ` · ${execResult.skipped.length} pehle se the (skip)` : ""}
+              {t("tender_ai_plan.works_created_kaam_stages_created_stages", { works_created: execResult.works_created, stages_created: execResult.stages_created, steps: execResult.steps_created ? ` + ${execResult.steps_created} steps` : "" })}
+              {execResult.boq_linked ? <> · <b style={{ color: T.grn }}>{t("tender_ai_plan.boq_linked_task_boq_se_jude", { boq_linked: execResult.boq_linked })}</b> {t("tender_ai_plan.inki_qty_mb_draft_tak_jayegi")}</> : ""}
+              {execResult.skipped?.length ? t("tender_ai_plan.skipped_pehle_se_the", { skipped: execResult.skipped.length }) : ""}
             </div>
             {execResult.skipped?.length > 0 && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{execResult.skipped.join(" · ")}</div>}
           </div>
@@ -490,20 +487,20 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
 
         {/* CHAT */}
         <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden" }}>
-          <div style={{ padding: "8px 14px", borderBottom: `1px solid ${T.b1}`, fontSize: 11.5, fontWeight: 700, color: T.t2 }}>💬 AI se charcha — plan yahi se sudharta hai</div>
+          <div style={{ padding: "8px 14px", borderBottom: `1px solid ${T.b1}`, fontSize: 11.5, fontWeight: 700, color: T.t2 }}>{t("tender_ai_plan.ai_se_charcha_plan_yahi_se")}</div>
           <div ref={chatBoxRef} style={{ maxHeight: 260, overflowY: "auto", padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-            {msgs.length === 0 && <div style={{ fontSize: 11.5, color: T.t4 }}>Jaise: "drain ko road ke saath mat jodo, alag kaam rakho" · "Sendh ko do site me baanto" · "har road me WMM stage bhi daalo"</div>}
+            {msgs.length === 0 && <div style={{ fontSize: 11.5, color: T.t4 }}>{t("tender_ai_plan.jaise_drain_ko_road_ke_saath")}</div>}
             {msgs.map((m, i) => (
               <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%", padding: "7px 11px", borderRadius: 10, fontSize: 12, lineHeight: 1.5, whiteSpace: "pre-wrap", background: m.role === "user" ? T.blu : T.surfaceB, color: m.role === "user" ? "white" : T.t1, border: m.role === "user" ? "none" : `1px solid ${T.b1}` }}>{m.text}</div>
             ))}
-            {busy === "chat" && <div style={{ alignSelf: "flex-start", fontSize: 11.5, color: T.t4 }}>AI soch raha hai…</div>}
+            {busy === "chat" && <div style={{ alignSelf: "flex-start", fontSize: 11.5, color: T.t4 }}>{t("tender_ai_plan.ai_soch_raha_hai")}</div>}
           </div>
           <div style={{ display: "flex", gap: 8, padding: "9px 12px", borderTop: `1px solid ${T.b1}` }}>
             <input value={chat} onChange={(e) => setChat(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }}
-              placeholder="Plan me kya badlu? likho…" disabled={!!busy || !llmReady}
+              placeholder={t("tender_ai_plan.plan_me_kya_badlu_likho")} disabled={!!busy || !llmReady}
               style={inp({ flex: 1, padding: "8px 11px", fontSize: 12.5 })} />
             <button onClick={send} disabled={!!busy || !chat.trim() || !llmReady}
-              style={{ padding: "8px 18px", borderRadius: 7, border: "none", background: chat.trim() && !busy ? T.blu : T.b1, color: "white", fontSize: 12, fontWeight: 700, cursor: chat.trim() && !busy ? "pointer" : "default" }}>Bhejo</button>
+              style={{ padding: "8px 18px", borderRadius: 7, border: "none", background: chat.trim() && !busy ? T.blu : T.b1, color: "white", fontSize: 12, fontWeight: 700, cursor: chat.trim() && !busy ? "pointer" : "default" }}>{t("tender_ai_plan.bhejo")}</button>
           </div>
         </div>
       </>}
@@ -512,22 +509,21 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
       {execOpen && plan && (<>
         <div onClick={() => setExecOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 400 }} />
         <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", background: T.surface, borderRadius: 12, width: "min(440px,94vw)", zIndex: 401, padding: "18px 20px", boxShadow: "0 24px 64px rgba(0,0,0,0.3)" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: T.t1, marginBottom: 4 }}>Plan execute karein?</div>
-          <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.6, marginBottom: 12 }}>
-            <b>{plan.sites.length} sites</b> ({plan.sites.map((s) => s.name).join(", ")}) — {totalWorks} kaam, budget {fmtAmt(totalAmt)}.<br />
-            Jo site/kaam pehle se hai wo dobara <b>nahi</b> banega. Task banne ke baad edit/delete aam task jaisa hai.
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.t1, marginBottom: 4 }}>{t("tender_ai_plan.plan_execute_karein")}</div>
+          <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.6, marginBottom: 12 }}><Rich k="tender_ai_plan.plan_sites_plan2_totalworks_kaam_budget" params={{ plan: plan.sites.length, plan2: plan.sites.map((s) => s.name).join(", "), totalWorks, fmtAmt: fmtAmt(totalAmt) }} /><br />
+            <Rich k="tender_ai_plan.dobara_nahi_banega" />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <div><label style={{ fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>City (nayi site ke liye)</label>
+            <div><label style={{ fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>{t("tender_ai_plan.city_nayi_site_ke_liye")}</label>
               <select value={cityId} onChange={(e) => setCityId(e.target.value)} style={inp({ width: "100%", marginTop: 3 })}>
-                <option value="">— chuno —</option>{cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-            <div><label style={{ fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>Construction type</label>
+                <option value="">{t("tender_ai_plan.chuno")}</option>{cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+            <div><label style={{ fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>{t("tender_ai_plan.construction_type")}</label>
               <select value={ctypeId} onChange={(e) => setCtypeId(e.target.value)} style={inp({ width: "100%", marginTop: 3 })}>
-                <option value="">— chuno —</option>{ctypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                <option value="">{t("tender_ai_plan.chuno")}</option>{ctypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setExecOpen(false)} style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surfaceB, border: `1px solid ${T.b1}`, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer" }}>Cancel</button>
-            <button onClick={doExecute} disabled={busy === "exec"} style={{ flex: 2, padding: "9px", borderRadius: 7, border: "none", background: T.grn, color: "white", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{busy === "exec" ? "Ban raha hai…" : "▶ Haan, banao"}</button>
+            <button onClick={() => setExecOpen(false)} style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surfaceB, border: `1px solid ${T.b1}`, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer" }}>{t("tender_ai_plan.cancel")}</button>
+            <button onClick={doExecute} disabled={busy === "exec"} style={{ flex: 2, padding: "9px", borderRadius: 7, border: "none", background: T.grn, color: "white", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{busy === "exec" ? t("tender_ai_plan.ban_raha_hai") : t("tender_ai_plan.haan_banao")}</button>
           </div>
         </div>
       </>)}

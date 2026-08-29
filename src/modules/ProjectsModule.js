@@ -1196,7 +1196,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
           {/* ── DANGER ZONE — archive ya permanent delete ── */}
           {section==="danger"&&(
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.red,marginBottom:4}}>Danger Zone</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.red,marginBottom:4}}>{t("projects.danger_zone")}</div>
               <DangerDelete kind="project" id={project.id} name={project.name}
                 onArchived={()=>{ apiCache.invalidate("projects"); onDeleted(project.id,"archived"); onClose(); }}
                 onDeleted={()=>{ apiCache.invalidate("projects"); onDeleted(project.id,"deleted"); onClose(); }}/>

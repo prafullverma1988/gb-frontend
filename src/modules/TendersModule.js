@@ -877,7 +877,7 @@ function EditTenderModal({tender, onClose, onSaved, onDeleted}) {
         {/* ── DANGER ZONE — archive ya permanent delete (admin only) ── */}
         {isAdmin && (
           <div style={{gridColumn:"1/3", marginTop:4, paddingTop:14, borderTop:`1px solid ${T.b1}`}}>
-            <div style={{fontSize:13, fontWeight:700, color:T.red, marginBottom:8}}>Danger Zone</div>
+            <div style={{fontSize:13, fontWeight:700, color:T.red, marginBottom:8}}>{t("projects.danger_zone")}</div>
             <DangerDelete kind="tender" id={tender.id}
               name={[tender.tender_no, tender.title].filter(Boolean).join(" — ")}
               onArchived={()=>{ onClose(); onDeleted && onDeleted(); }}
@@ -2158,7 +2158,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
     onDone && onDone();
     // Prafull ka idea 1: import hote hi wahi file AI Plan me le jao —
     // items ki ids ab DB me hain, isliye AI plan ko unse jod bhi payega.
-    if (onAiPlan && rawFile && window.confirm("BOQ import ho gaya ✓\n\nAb isi file se AI ka site/task plan banayein? (AI Plan tab khulega)")) {
+    if (onAiPlan && rawFile && window.confirm(t("boq_import_wizard.import_ho_gaya_ai_plan_banayein"))) {
       onAiPlan(rawFile);
     }
     onClose();
