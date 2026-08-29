@@ -837,13 +837,13 @@ function EditTenderModal({tender, boqBase = 0, onClose, onSaved, onDeleted}) {
         {needsWonFields && (
           <div style={{gridColumn:"1/3", background:wonMissing?T.ambL:T.indL,
             border:`1px solid ${wonMissing?T.ambM:T.indM}`, borderRadius:7, padding:"9px 12px",
-            fontSize:11.5, color:wonMissing?T.amb:T.ind, lineHeight:1.5}}><Rich k="tenders.label_stage_ke_liye_contract_value" params={{ label: sMeta(form.status).label, wonMissing: wonMissing && " Abhi ek ya dono khali hain — save block ho jayega." }} /></div>
+            fontSize:11.5, color:wonMissing?T.amb:T.ind, lineHeight:1.5}}><Rich k="tenders.label_stage_ke_liye_contract_value" params={{ label: sMeta(form.status).label, wonMissing: wonMissing ? " Abhi ek ya dono khali hain — save block ho jayega." : "" }} /></div>
         )}
 
         {needsCompletion && (
           <div style={{gridColumn:"1/3", background:completionMissing?T.ambL:T.indL,
             border:`1px solid ${completionMissing?T.ambM:T.indM}`, borderRadius:7, padding:"9px 12px",
-            fontSize:11.5, color:completionMissing?T.amb:T.ind, lineHeight:1.5}}><Rich k="tenders.label_stage_ke_liye_actual_completion" params={{ label: sMeta(form.status).label, completionMissing: completionMissing && " Abhi khali hai — save block ho jayega." }} /></div>
+            fontSize:11.5, color:completionMissing?T.amb:T.ind, lineHeight:1.5}}><Rich k="tenders.label_stage_ke_liye_actual_completion" params={{ label: sMeta(form.status).label, completionMissing: completionMissing ? " Abhi khali hai — save block ho jayega." : "" }} /></div>
         )}
 
         <Field label={`Department (Party)${needsWonFields?" *":""}`} full
@@ -853,10 +853,20 @@ function EditTenderModal({tender, boqBase = 0, onClose, onSaved, onDeleted}) {
         </Field>
         <Field label={t("tenders.department_name_free_text")} full><TxtIn value={form.department_name} onChange={v=>set("department_name",v)}/></Field>
 
-        <Field label={t("tenders.boq_value_manual")}
-          hint={boqBase > 0 ? t("tenders.import_ho_chuki_computed_hi_chalega") : t("tenders.nit_se_dekh_kar_bharo")}>
-          <TxtIn type="number" value={form.boq_value_manual} onChange={v=>set("boq_value_manual",v)}/>
-        </Field>
+        {boqBase > 0 ? (
+          /* Import ho chuki — khali manual khana "value gayab" jaisa lagta
+             tha; ab computed jod yahin read-only dikhta hai. */
+          <Field label={t("tenders.boq_value")} hint={t("tenders.import_ho_chuki_computed_hi_chalega")}>
+            <div style={{...inputStyle, display:"flex", alignItems:"center", color:T.t1,
+              fontWeight:700, fontVariantNumeric:"tabular-nums", background:T.surfaceB}}>
+              {moneyF(boqBase)}
+            </div>
+          </Field>
+        ) : (
+          <Field label={t("tenders.boq_value_manual")} hint={t("tenders.nit_se_dekh_kar_bharo")}>
+            <TxtIn type="number" value={form.boq_value_manual} onChange={v=>set("boq_value_manual",v)}/>
+          </Field>
+        )}
         <Field label={`Contract Value (₹)${needsWonFields?" *":""}`}>
           <TxtIn type="number" value={form.contract_value}
             onChange={form.rate_type === "item_rate" ? (v=>set("contract_value",v)) : syncFromContract}/>
