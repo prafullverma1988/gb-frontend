@@ -6203,6 +6203,7 @@ const dict = {
   "tenders.document_type":                                     "Document Type *",
   "tenders.documents":                                         "Documents",
   "tenders.done_qty_ho_chukar":                                "{done_qty} done{r}",
+  "tenders.dono":                                              "Both Area and Pin",
   "tenders.dono_taraf":                                        "both sides",
   "tenders.dono_zaroori_hain_backend_inke_bina":               "both are required — backend does not set status to 'won' without them.",
   "tenders.doosra_status_chip_try_karo":                       "Try another status chip.",
@@ -6591,6 +6592,7 @@ const dict = {
   "tenders.rakba_poora_hua":                                   "Area done",
   "tenders.rakba_save_hua":                                    "Area saved — {area}",
   "tenders.rakbe":                                             "Areas",
+  "tenders.rakbe_ke_beech_me_pin_bhi":                         "Also place a pin within the area",
   "tenders.rakbe_ke_liye_3_kone":                              "An area needs at least 3 corners",
   "tenders.rang_optional":                                     "Colour (optional)",
   "tenders.rate":                                              "Rate (₹) *",
@@ -6744,6 +6746,7 @@ const dict = {
   "tenders.yeh_tender_lost_hai_pipeline_aage":                 "This tender is lost — the pipeline has not progressed.",
   "tenders.zaroori_clause_sd_completion_period_penalty":       "Important clause — SD %, completion period, penalty etc. Attach a copy of the NIT in the Documents tab.",
   "tenders.zero_rupees_only":                                  "Zero Rupees Only",
+  "tenders.zoom_out_par_pin_hi_dikhta":                        "— only the pin is visible on zoom-out",
 
   // ── ticket_bundle ───────────────────────────────────────────
   "ticket_bundle.bundle_padha_nahi_ja_saka":                   "Bundle could not be read.",

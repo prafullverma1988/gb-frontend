@@ -6205,6 +6205,7 @@ const dict = {
   "tenders.document_type":                                     "Document Type *",
   "tenders.documents":                                         "Documents",
   "tenders.done_qty_ho_chukar":                                "{done_qty} ho chuka{r}",
+  "tenders.dono":                                              "▱+📍 Dono",
   "tenders.dono_taraf":                                        "dono taraf",
   "tenders.dono_zaroori_hain_backend_inke_bina":               "dono zaroori hain — backend inke bina status won nahi karta.",
   "tenders.doosra_status_chip_try_karo":                       "Doosra status chip try karo.",
@@ -6593,6 +6594,7 @@ const dict = {
   "tenders.rakba_poora_hua":                                   "Rakba poora hua",
   "tenders.rakba_save_hua":                                    "Rakba save hua — {area}",
   "tenders.rakbe":                                             "Rakbe",
+  "tenders.rakbe_ke_beech_me_pin_bhi":                         "Area ke beech me pin bhi lagao",
   "tenders.rakbe_ke_liye_3_kone":                              "Rakbe ke liye kam se kam 3 kone chahiye",
   "tenders.rang_optional":                                     "Rang (optional)",
   "tenders.rate":                                              "Rate (₹) *",
@@ -6746,6 +6748,7 @@ const dict = {
   "tenders.yeh_tender_lost_hai_pipeline_aage":                 "Yeh tender lost hai — pipeline aage nahi badhi.",
   "tenders.zaroori_clause_sd_completion_period_penalty":       "Important clause — SD %, completion period, penalty etc. NIT ki copy Documents tab me attach karo.",
   "tenders.zero_rupees_only":                                  "Zero Rupees Only",
+  "tenders.zoom_out_par_pin_hi_dikhta":                        "— zoom-out par pin hi dikhta hai",
 
   // ── ticket_bundle ───────────────────────────────────────────
   "ticket_bundle.bundle_padha_nahi_ja_saka":                   "Bundle read nahi ho saka.",

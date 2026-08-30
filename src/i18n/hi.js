@@ -6202,6 +6202,7 @@ const dict = {
   "tenders.document_type":                                     "डॉक्यूमेंट टाइप *",
   "tenders.documents":                                         "डॉक्यूमेंट्स",
   "tenders.done_qty_ho_chukar":                                "{done_qty} हो चुका{r}",
+  "tenders.dono":                                              "▱+📍 दोनों",
   "tenders.dono_taraf":                                        "दोनों तरफ़",
   "tenders.dono_zaroori_hain_backend_inke_bina":               "दोनों ज़रूरी हैं — बैकएंड इनके बिना स्टेटस वॉन नहीं करता।",
   "tenders.doosra_status_chip_try_karo":                       "दूसरा स्टेटस चिप ट्राई करो।",
@@ -6590,6 +6591,7 @@ const dict = {
   "tenders.rakba_poora_hua":                                   "रकबा पूरा हुआ",
   "tenders.rakba_save_hua":                                    "रकबा सेव हुआ — {area}",
   "tenders.rakbe":                                             "रकबे",
+  "tenders.rakbe_ke_beech_me_pin_bhi":                         "एरिया के बीच में पिन भी लगाओ",
   "tenders.rakbe_ke_liye_3_kone":                              "रकबे के लिए कम से कम 3 कोने चाहिए",
   "tenders.rang_optional":                                     "रंग (optional)",
   "tenders.rate":                                              "रेट (₹) *",
@@ -6743,6 +6745,7 @@ const dict = {
   "tenders.yeh_tender_lost_hai_pipeline_aage":                 "यह टेंडर लॉस्ट है — पाइपलाइन आगे नहीं बढ़ी।",
   "tenders.zaroori_clause_sd_completion_period_penalty":       "इंपॉर्टेंट क्लॉज़ — एसडी %, कंप्लीशन पीरियड, पेनल्टी आदि। एनआईटी की कॉपी डॉक्यूमेंट्स टैब में अटैच करो।",
   "tenders.zero_rupees_only":                                  "ज़ीरो रुपये ओनली",
+  "tenders.zoom_out_par_pin_hi_dikhta":                        "— ज़ूम-आउट पर पिन ही दिखता है",
 
   // ── ticket_bundle ───────────────────────────────────────────
   "ticket_bundle.bundle_padha_nahi_ja_saka":                   "बंडल रीड नहीं हो सका।",

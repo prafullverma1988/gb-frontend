@@ -5077,11 +5077,11 @@ function MapTab({tenderId, sites}) {
                     ) : (<>
 
                       <button onClick={()=>armMark(r, "area")} title={t("tenders.chaaro_taraf_line_band_rakba")}
-                        style={{border:`1px solid ${T.ind}`, background:linkTask?.task_id===r.task_id?T.ind:T.surface, color:linkTask?.task_id===r.task_id?"#fff":T.ind, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>▱ Rakba</button>
+                        style={{border:`1px solid ${T.ind}`, background:linkTask?.task_id===r.task_id?T.ind:T.surface, color:linkTask?.task_id===r.task_id?"#fff":T.ind, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>{t("tenders.rakba")}</button>
                       <button onClick={()=>armMark(r, "both")} title={t("tenders.rakba_beech_me_pin")}
                         style={{border:`1px solid ${T.ind}`, background:T.surface, color:T.ind, borderRadius:7, padding:"3px 8px", fontSize:11, fontWeight:700, cursor:"pointer"}}>▱+📍</button>
                       <button onClick={()=>armMark(r, "point")} title={t("tenders.bahut_chhota_sirf_pin")}
-                        style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 8px", fontSize:11, fontWeight:700, cursor:"pointer"}}>📍 Pin</button>
+                        style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 8px", fontSize:11, fontWeight:700, cursor:"pointer"}}>{t("tenders.pin")}</button>
                     </>)}
                     <button onClick={()=>setPickFor({ mode:"line", row:r })} title={t("tenders.bani_hui_line_pin_se_jodo")}
                       style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>{t("tenders.jodo")}</button>
@@ -5151,11 +5151,11 @@ function MapTab({tenderId, sites}) {
                 ) : (<>
 
                   <button onClick={()=>{ setTaskMark(null); armMark(r, "area"); }} title={t("tenders.chaaro_taraf_point_line_band_rakba")}
-                    style={{border:`1px solid ${T.ind}`, background:T.ind, color:"#fff", borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>▱ Rakba</button>
+                    style={{border:`1px solid ${T.ind}`, background:T.ind, color:"#fff", borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>{t("tenders.rakba")}</button>
                   <button onClick={()=>{ setTaskMark(null); armMark(r, "both"); }} title={t("tenders.rakba_aur_beech_me_pin_dono")}
-                    style={{border:`1px solid ${T.ind}`, background:T.surface, color:T.ind, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>▱+📍 Dono</button>
+                    style={{border:`1px solid ${T.ind}`, background:T.surface, color:T.ind, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>{t("tenders.dono")}</button>
                   <button onClick={()=>{ setTaskMark(null); armMark(r, "point"); }} title={t("tenders.bahut_chhota_hai_sirf_pin")}
-                    style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>📍 Pin</button>
+                    style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>{t("tenders.pin")}</button>
                 </>)}
                 <button onClick={()=>{ setTaskMark(null); setPickFor({ mode:"line", row:r }); }}
                   style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>{t("tenders.bani_hui_se_jodo")}</button>
@@ -5360,8 +5360,8 @@ function MapTab({tenderId, sites}) {
             padding:"9px 12px", borderRadius:9, background:T.surfaceB, border:`1px solid ${T.b1}`}}>
             <input type="checkbox" checked={!!pending.center_pin}
               onChange={(e)=>setPending(p=>({...p, center_pin:e.target.checked}))}/>
-            <span style={{fontSize:11.5, color:T.t2, fontWeight:600}}>Rakbe ke beech me pin bhi lagao</span>
-            <span style={{fontSize:10.5, color:T.t4}}>— zoom-out par pin hi dikhta hai</span>
+            <span style={{fontSize:11.5, color:T.t2, fontWeight:600}}>{t("tenders.rakbe_ke_beech_me_pin_bhi")}</span>
+            <span style={{fontSize:10.5, color:T.t4}}>{t("tenders.zoom_out_par_pin_hi_dikhta")}</span>
           </label>
         )}
 
