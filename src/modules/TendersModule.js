@@ -295,7 +295,15 @@ const SelIn = ({value, onChange, options, ph}) => (
     <select value={value ?? ""} onChange={e=>onChange(e.target.value)}
       style={{...inputStyle, appearance:"none", WebkitAppearance:"none", cursor:"pointer", paddingRight:30}}>
       {ph !== undefined && <option value="">{ph}</option>}
-      {options.map(o=><option key={String(o.v)} value={o.v}>{o.l}</option>)}
+      {/* o.group ho to parivaar-wise dabbe (Pipeline ke andar Inlet/Outlet) */}
+      {options.some(o=>o.group)
+        ? [...new Map(options.map(o=>[o.group||"", true])).keys()].map(g=>(
+            g ? <optgroup key={g} label={g}>
+                  {options.filter(o=>(o.group||"")===g).map(o=><option key={String(o.v)} value={o.v}>{o.l}</option>)}
+                </optgroup>
+              : options.filter(o=>!o.group).map(o=><option key={String(o.v)} value={o.v}>{o.l}</option>)
+          ))
+        : options.map(o=><option key={String(o.v)} value={o.v}>{o.l}</option>)}
     </select>
     <div style={{position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", pointerEvents:"none"}}>
       <IcDown size={12} color={T.t4}/>
@@ -4369,10 +4377,21 @@ function MapTab({tenderId, sites}) {
   useEffect(()=>{ loadFtypes(); }, [loadFtypes]);
   const customTypes = ftypes.filter(f=>!f.builtin);
   // Har shakl ke liye type ki list = built-in + company ke apne.
-  const typeOpts = (kind) => [
-    ...(kind==="line" ? LINE_TYPES : kind==="area" ? AREA_TYPES : POINT_TYPES).map(x=>({v:x.v, l:x.l})),
-    ...customTypes.filter(f=>f.kind===kind).map(f=>({v:f.code, l:f.label})),
-  ];
+  // Type ki list parivaar-wise — Sadak / Pipeline (Inlet, Outlet, Rising,
+  // Gravity) / Naali / Structure / apne item. Flat list me inlet-outlet
+  // sadak ke bagal dabe rehte the aur samajh nahi aata tha kya kiska hai.
+  // Aakhir me "+ Naya item jodo…" — wahi custom-type modal jo draw-menu me hai.
+  const NEW_TYPE = "__new__";
+  const typeOpts = (kind) => {
+    const base = (kind==="line" ? LINE_TYPES : kind==="area" ? AREA_TYPES : POINT_TYPES)
+      .filter(x=>x.v!=="other")
+      .map(x=>({v:x.v, l:x.l, group:FAM_META[familyOf(x.v)].l}));
+    const custom = customTypes.filter(f=>f.kind===kind)
+      .map(f=>({v:f.code, l:f.label, group:FAM_META.custom.l}));
+    return [...base, ...custom,
+      {v:"other", l:t("common.other"), group:FAM_META.other.l},
+      {v:NEW_TYPE, l:"+ " + t("tenders.naya_item_jodo_dots"), group:FAM_META.custom.l}];
+  };
   const typeLabel = (a) => customTypes.find(f=>f.code===a)?.label || alignLabel(null, a);
 
   const saveItem = async () => {
@@ -5218,7 +5237,10 @@ function MapTab({tenderId, sites}) {
               ph="Site chuno" options={sites.map(s=>({v:s.id, l:s.name}))}/>
           </Field>
           <Field label={t("common.type")}>
-            <SelIn value={pending.atype} onChange={v=>setPending(p=>({...p, atype:v, props:{}}))}
+            <SelIn value={pending.atype} onChange={v=>{
+                if (v === NEW_TYPE) { setAddItem({label:"", kind:pending.kind, colour:""}); return; }
+                setPending(p=>({...p, atype:v, props:{}}));
+              }}
               options={typeOpts(pending.kind)}/>
           </Field>
           <Field label={t("common.naam")} full>
@@ -5277,8 +5299,11 @@ function MapTab({tenderId, sites}) {
           </div>
         )}
 
-        {/* Sadak ke saath naali — ek hi lakeer se dono ban jaayein */}
-        {!pending.edit && pending.kind==="line" && Number(pending.width_m) > 0 && (
+        {/* Sadak (ya boundary/compound) ke saath naali — ek hi lakeer se
+            dono ban jaayein. Pipeline ke saath naali nahi chalti, isliye
+            wahan ye sawaal aata hi nahi (pehle har chaudi line par aata tha). */}
+        {!pending.edit && pending.kind==="line" && Number(pending.width_m) > 0
+          && /road|sadak|boundary|compound|wall|deewar|drain|naali/i.test(String(pending.atype||"")) && (
           <div style={{marginTop:12, padding:"10px 12px", borderRadius:9,
             background:T.surfaceB, border:`1px solid ${T.b1}`}}>
             <div style={{fontSize:11.5, color:T.t2, fontWeight:600, marginBottom:7}}>
