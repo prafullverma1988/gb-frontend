@@ -3936,6 +3936,7 @@ function MapTab({tenderId, sites}) {
   const [mapTasks, setMapTasks] = useState(null);
   const [mtBucket, setMtBucket] = useState("unmapped_line");
   const [mtSearch, setMtSearch] = useState("");
+  const [mtType, setMtType]     = useState("");   // kaam ka type filter (khali = sab)
   // P2 — jodne ke raaste: draw-karke (linkTask armed), picker se (pickFor),
   // KML ke baad bulk (kmlLink). linkTaskRef savePending ke closure ke liye.
   const [linkTask, setLinkTask] = useState(null);
@@ -4907,7 +4908,16 @@ function MapTab({tenderId, sites}) {
         ["na", "Map par nahi aata"], ["mapped", "✓ Jude hue"],
       ];
       const q = mtSearch.trim().toLowerCase();
-      const list = (mapTasks.tasks || []).filter((r) => r.bucket === mtBucket)
+      const inBucket = (mapTasks.tasks || []).filter((r) => r.bucket === mtBucket);
+      // Kaam ke type ki ginti — isi bucket ke andar, taaki "structure" par
+      // click karte hi sirf structure wale bache kaam dikhein.
+      const tCount = {};
+      inBucket.forEach((r) => { const k = r.wtype || "other"; tCount[k] = (tCount[k] || 0) + 1; });
+      const TYPE_LBL = { pipeline:"Pipeline", water:"Water", sewer:"Sewer", structure:"Structure",
+        road:"Road", drain:"Naali", electrical:"Electrical", other:"Anya" };
+      const types = Object.keys(tCount).sort((a, b) => tCount[b] - tCount[a]);
+      const list = inBucket
+        .filter((r) => !mtType || (r.wtype || "other") === mtType)
         .filter((r) => !q || [r.name, r.task_no, r.item_no, r.work_name].some((v) => String(v||"").toLowerCase().includes(q)));
       return (
         <Panel style={{marginTop:14}}>
@@ -4924,6 +4934,21 @@ function MapTab({tenderId, sites}) {
             <input value={mtSearch} onChange={(e)=>setMtSearch(e.target.value)} placeholder="dhoondo…"
               style={{marginLeft:"auto", border:`1px solid ${T.b1}`, borderRadius:8, padding:"4px 10px", fontSize:11.5, width:170, background:T.surface, color:T.t1}}/>
           </div>
+          {types.length > 1 && (
+            <div style={{display:"flex", flexWrap:"wrap", gap:6, padding:"7px 14px", borderBottom:`1px solid ${T.b1}`, alignItems:"center"}}>
+              <span style={{fontSize:10.5, color:T.t4, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px", marginRight:2}}>Kaam</span>
+              <button onClick={()=>setMtType("")}
+                style={{border:`1px solid ${!mtType?T.ind:T.b1}`, background:T.surface, color:!mtType?T.ind:T.t3,
+                  borderRadius:13, padding:"2px 10px", fontSize:11, fontWeight:700, cursor:"pointer"}}>Sab · {inBucket.length}</button>
+              {types.map((k) => (
+                <button key={k} onClick={()=>setMtType(mtType===k?"":k)}
+                  style={{border:`1px solid ${mtType===k?T.ind:T.b1}`, background:T.surface, color:mtType===k?T.ind:T.t3,
+                    borderRadius:13, padding:"2px 10px", fontSize:11, fontWeight:700, cursor:"pointer"}}>
+                  {TYPE_LBL[k] || k} · {tCount[k]}
+                </button>
+              ))}
+            </div>
+          )}
           <div style={{maxHeight:330, overflowY:"auto"}}>
             {!list.length && (
               <div style={{padding:"18px 14px", fontSize:12, color:T.t4}}>Is bucket me kuchh nahi.</div>
