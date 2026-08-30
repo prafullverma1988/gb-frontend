@@ -4227,7 +4227,7 @@ const dict = {
   "payroll.ot_amount":                                         "ओटी अमाउंट",
   "payroll.ot_hours":                                          "ओटी आवर्स",
   "payroll.ot_hours_per_day_rate_rateot":                      "OT आवर्स हर दिन (रेट: ₹{rateOT}/घंटा)",
-  "payroll.ot_hrs":                                            "ओटी आवर्स",
+  "payroll.ot_hrs":                                            "ओटी घंटे",
   "payroll.ot_hrs_2":                                          "ओटी आवर्स",
   "payroll.ot_ot_hours_hrs":                                   "OT ({ot_hours} घंटे)",
   "payroll.ot_payable":                                        "ओटी पेएबल",

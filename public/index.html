@@ -26,6 +26,41 @@
         -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       line-height: 1.5;
     }
+
+    /* ── Devanagari: chhote font aur tight line-height ka farsh ──────
+       Naap (Noto Sans Devanagari): ink-height font-size ka 1.25–1.47 guna hai,
+       jabki Latin ka ~1.0. Matlab jo Hinglish me theek dikhta hai wo Hindi me
+       toot jaata hai — 9.5px par matra padhi hi nahi jaati, aur lineHeight:1
+       par upar-neeche ki matras takrati hain.
+
+       Code me 713 aisi jagah thi. Har jagah badalne ke bajaye yahan farsh laga
+       diya: React inline style ko `style="font-size: 9.5px;"` likhta hai, aur
+       ye selector use override kar deta hai. Hinglish/English ka layout bilkul
+       nahi badalta — rule sirf html[lang="hi"] par lagti hai.
+
+       Naap ke mutabik farsh: font 11px (wahan ink ratio 1.27 hai), line 1.3.
+       Selector me space+semicolon zaroori hai — "font-size: 9.5px;" likhne se
+       "font-size: 19.5px;" match NAHI hota.
+
+       10px/10.5px jaan-boojh kar chhode hain: wahan ~2,500 jagah hain aur
+       Devanagari us size par padhne layak hai. Badalna ho to neeche do line
+       jod do. */
+    html[lang="hi"] [style*="font-size: 6px;"],
+    html[lang="hi"] [style*="font-size: 7px;"],
+    html[lang="hi"] [style*="font-size: 7.5px;"],
+    html[lang="hi"] [style*="font-size: 8px;"],
+    html[lang="hi"] [style*="font-size: 8.5px;"],
+    html[lang="hi"] [style*="font-size: 9px;"],
+    html[lang="hi"] [style*="font-size: 9.5px;"] {
+      font-size: 11px !important;
+    }
+    html[lang="hi"] [style*="line-height: 1;"],
+    html[lang="hi"] [style*="line-height: 1.05;"],
+    html[lang="hi"] [style*="line-height: 1.1;"],
+    html[lang="hi"] [style*="line-height: 1.15;"] {
+      line-height: 1.3 !important;
+    }
+
     html[lang="hi"] input,
     html[lang="hi"] textarea,
     html[lang="hi"] select,
