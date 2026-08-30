@@ -315,6 +315,39 @@ function CompanySettings() {
   });
   const [loading, setLoading] = useState(true);
   const upd = (k, v) => setCompany(p => ({ ...p, [k]: v }));
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
+
+  // This form had NO save handler at all — <SaveBtn /> was rendered without
+  // an onClick, so every edit here was silently discarded. PUT /settings/company
+  // already accepted these fields; only the call was missing.
+  const saveCompany = async () => {
+    if (!company.name.trim()) { setSaveMsg("Company name required"); return; }
+    setSaving(true); setSaveMsg("");
+    try {
+      const r = await api.put("/settings/company", {
+        name: company.name.trim(), legal_name: company.legalName, gstin: company.gstin,
+        pan: company.pan, address: company.address, city: company.city,
+        state: company.state, pincode: company.pincode, phone: company.phone,
+        email: company.email, website: company.website,
+      });
+      if (r && r.success) {
+        setSaveMsg("✓ Saved");
+        // Sidebar + company switcher cache the name from login; tell App so the
+        // rename shows immediately instead of after the next permissions poll.
+        try {
+          const u = JSON.parse(localStorage.getItem("gb_user") || "{}");
+          u.company_name = company.name.trim();
+          localStorage.setItem("gb_user", JSON.stringify(u));
+          window.dispatchEvent(new CustomEvent("sanchalan:profile-updated", {
+            detail: { company_name: company.name.trim(), company_id: u.company_id },
+          }));
+        } catch (e) { /* */ }
+        setTimeout(() => setSaveMsg(""), 2500);
+      } else setSaveMsg((r && r.message) || "Save failed");
+    } catch (e) { setSaveMsg("Network error"); }
+    setSaving(false);
+  };
 
   useEffect(() => {
     api.get("/settings/company").then(res => {
@@ -332,7 +365,7 @@ function CompanySettings() {
 
   return (
     <div>
-      <SectionCard title="Company Profile" desc="Basic company information visible on invoices and reports" action={<SaveBtn />}>
+      <SectionCard title="Company Profile" desc="Basic company information visible on invoices and reports" action={<>{saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith("✓") ? T.green : T.red, marginRight: 8 }}>{saveMsg}</span>}<SaveBtn onClick={saveCompany} label={saving ? "Saving…" : "Save Changes"} /></>}>
         <div style={{ display: "flex", gap: 20, alignItems: "center", padding: "14px 0 20px", borderBottom: `1px solid ${T.borderLight}`, marginBottom: 16 }}>
           <div style={{ width: 80, height: 80, borderRadius: 14, background: "linear-gradient(135deg, #1565C0, #FF6F00)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(21,101,192,0.3)" }}>
             <span style={{ color: "white", fontSize: 28, fontWeight: 800 }}>{(company.name || "CO").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}</span>

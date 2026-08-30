@@ -1836,14 +1836,25 @@ function App(){
   useEffect(()=>{
     const onProfileUpdated=(e)=>{
       const d=(e&&e.detail)||{};
-      if(!d.name) return;
+      if(!d.name && !d.company_name) return;
       setUser(u=>{
-        const updated={...u, name:d.name,
+        const updated={...u,
+          ...(d.name?{name:d.name}:{}),
           ...(d.phone!==undefined?{phone:d.phone}:{}),
-          ...(d.designation!==undefined?{designation:d.designation}:{})};
+          ...(d.designation!==undefined?{designation:d.designation}:{}),
+          ...(d.company_name?{company_name:d.company_name}:{})};
         try{ localStorage.setItem("gb_user", JSON.stringify(updated)); }catch(_){}
         return updated;
       });
+      // The company switcher renders its own list, so rename the active entry
+      // there too or the dropdown keeps showing the old name.
+      if(d.company_name){
+        setCompanies(list=>{
+          const next=(list||[]).map(c=>String(c.id)===String(d.company_id)?{...c,name:d.company_name}:c);
+          try{ localStorage.setItem("gb_companies", JSON.stringify(next)); }catch(_){}
+          return next;
+        });
+      }
     };
     window.addEventListener("sanchalan:profile-updated", onProfileUpdated);
     return ()=>window.removeEventListener("sanchalan:profile-updated", onProfileUpdated);
@@ -1909,12 +1920,17 @@ function App(){
         // or on another device) otherwise stayed stale in the sidebar until a
         // full page reload, because the cached user is only read at boot.
         const nameChanged = res.name && res.name !== user?.name;
-        if(res.success && (roleChanged || projectsChanged || permsChanged || nameChanged)){
+        // Live company identity — a company rename (Settings > Company Profile
+        // or the SaaS panel) otherwise left the old name in the sidebar for the
+        // whole session, since companies are cached at login too.
+        const companyNameChanged = res.company_name && res.company_name !== user?.company_name;
+        if(res.success && (roleChanged || projectsChanged || permsChanged || nameChanged || companyNameChanged)){
           const updated={...user,
             ...(roleChanged ? { role: liveRole } : {}),
             ...(projectsChanged ? { projects: liveProjects } : {}),
             ...(permsChanged ? { module_permissions: res.module_permissions } : {}),
             ...(nameChanged ? { name: res.name, phone: res.phone, designation: res.designation } : {}),
+            ...(companyNameChanged ? { company_name: res.company_name } : {}),
           };
           setUser(updated);
           try{ localStorage.setItem("gb_user", JSON.stringify(updated)); }catch(_){}
