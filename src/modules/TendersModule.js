@@ -3929,6 +3929,9 @@ function MapTab({tenderId, sites}) {
   // tender me 37 line + 10 pin hain; bina filter ke sab ek dher lagta hai.
   const [hidden, setHidden]   = useState(()=>new Set());
   const [pending, setPending] = useState(null);   // {kind, coords} — abhi drawn, save baaki
+  // Box bahar click se chhup sakta hai, par kaam nahi udta — draft map par
+  // rehta hai aur toolbar se wapas khulta hai.
+  const [pendingHidden, setPendingHidden] = useState(false);
   const [busy, setBusy]       = useState(false);
   const [mode, setMode]       = useState(null);   // null | "line" | "poly" | "rect" | "point"
   const [intent, setIntent]   = useState(null);   // {kind, atype, shape} — draw se pehle
@@ -4155,6 +4158,7 @@ function MapTab({tenderId, sites}) {
         const site = fSiteRef.current || (sitesRef.current.length===1 ? sitesRef.current[0].id : "");
         if (m === "point") {
           modeRef.current = null; setMode(null); setIntent(null);
+          setPendingHidden(false);
           setPending({ kind:"point", coords:[pt], name:"", atype: iv.atype || "ugr", props:{}, project_id: site });
           return;
         }
@@ -4176,6 +4180,7 @@ function MapTab({tenderId, sites}) {
                               {lat:a.lat+dLat, lng:a.lng+dLng}, {lat:a.lat+dLat, lng:a.lng}];
           rectRef.current = null;
           modeRef.current = null; setMode(null); setIntent(null); setDraftPts([]);
+          setPendingHidden(false);
           setPending({ kind:"area", coords:corners, name:"", atype: iv.atype || "ugr", props:{}, project_id: site });
           return;
         }
@@ -4314,6 +4319,14 @@ function MapTab({tenderId, sites}) {
   }, [items, progress, mapReady, toast, openStretch, hidden, famHidden]);
 
   // ── Drawing controls ──────────────────────────────────────────
+  // Pending ko poora hataana = box band + map se lakeer bhi gayab. Pehle
+  // sirf box band hota tha aur laal lakeer atki reh jaati thi.
+  const dropPending = useCallback(()=>{
+    setPending(null); setPendingHidden(false);
+    if (draftRef.current) { draftRef.current.setMap(null); draftRef.current = null; }
+    rectRef.current = null;
+    setDraftPts([]);
+  }, []);
   const clearDraft = useCallback(()=>{
     if (draftRef.current) { draftRef.current.setMap(null); draftRef.current = null; }
     rectRef.current = null;
@@ -4363,6 +4376,7 @@ function MapTab({tenderId, sites}) {
       return;
     }
     stopMode();
+    setPendingHidden(false);
     setPending({ kind: iv.kind, coords: live, name:"", atype: iv.atype, props:{},
       project_id: fSite || (sites.length===1 ? sites[0].id : "") });
   };
@@ -4435,7 +4449,7 @@ function MapTab({tenderId, sites}) {
   // Draw ho chuki cheez ko badalne ke liye wahi form kholte hain, sirf mode
   // alag. Geometry yahan nahi chhedi jaati — wo map par dobara kheenchne ka
   // kaam hai; yahan naam, type, chaudai aur type ke apne field badalte hain.
-  const startEdit = (it) => setPending({
+  const startEdit = (it) => { setPendingHidden(false); return setPending({
     edit: true, id: it.id, kind: it.kind, atype: it.atype,
     coords: it.geometry || [], name: it.name || "",
     width_m: it.width_m == null ? "" : String(it.width_m),
@@ -4443,7 +4457,7 @@ function MapTab({tenderId, sites}) {
     notes: it.notes || "",
     project_id: it.project_id || "",
     length_m: it.length_m, area_sqm: it.area_sqm,
-  });
+  }); };
 
   const saveEdit = async () => {
     setBusy(true);
@@ -4640,6 +4654,19 @@ function MapTab({tenderId, sites}) {
           {/* Draw toolbar — our own, because Maps removed DrawingManager */}
           <div style={{display:"flex", gap:7, alignItems:"center", flexWrap:"wrap",
             padding:"8px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surface}}>
+            {pending && pendingHidden && (
+              <div style={{display:"flex", alignItems:"center", gap:8, padding:"4px 10px", borderRadius:8,
+                background:"#FEF3C7", border:"1px solid #FDE68A", fontSize:11.5, color:"#92400E", fontWeight:700}}>
+                ⚠ {pending.edit ? pending.name : (pending.kind==="line" ? "Khinchi hui line"
+                    : pending.kind==="area" ? "Bana hua rakba" : "Laga hua pin")} abhi save nahi hui
+                <button onClick={()=>setPendingHidden(false)}
+                  style={{border:"none", background:T.ind, color:"#fff", borderRadius:6, padding:"3px 10px",
+                    fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit"}}>Save box kholo</button>
+                <button onClick={dropPending}
+                  style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t3, borderRadius:6,
+                    padding:"3px 9px", fontSize:11, cursor:"pointer", fontFamily:"inherit"}}>Hatao</button>
+              </div>
+            )}
             {mode && linkTask && (
               <div style={{display:"flex", alignItems:"center", gap:8, padding:"3px 10px", borderRadius:8,
                 background:T.indL||T.surfaceB, border:`1px solid ${T.ind}`, fontSize:11.5, color:T.ind, fontWeight:700}}>
@@ -5200,7 +5227,7 @@ function MapTab({tenderId, sites}) {
       )}
 
     {/* Naya drawn feature — type ke hisaab se apne field */}
-    {pending && (()=>{
+    {pending && !pendingHidden && (()=>{
       const fam = familyOf(pending.atype);
       const P = pending.props || {};
       const setP = (k, v) => setPending(p=>({...p, props:{...(p.props||{}), [k]: v}}));
@@ -5226,9 +5253,9 @@ function MapTab({tenderId, sites}) {
              : pending.kind==="point" ? t("tenders.map_par_lagaya_gaya_pin")
              : pending.kind==="area" ? t("tenders.n_kone_rakba", { n: pending.coords.length, area: fmtArea(areaM2) })
              : t("tenders.n_point_lambai", { n: pending.coords.length, len: fmtKm(pathLenM(pending.coords)) })}
-        onClose={()=>setPending(null)}
+        onClose={()=>setPendingHidden(true)}
         footer={<>
-          <SecBtn label={t("common.hatao")} onClick={()=>setPending(null)}/>
+          <SecBtn label={t("common.hatao")} onClick={dropPending}/>
           <PrimBtn label={busy?t("tenders.save_ho_raha_hai"):t("common.save")} Icon={IcChk} onClick={savePending} disabled={busy}/>
         </>}>
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
