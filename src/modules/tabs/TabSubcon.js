@@ -1890,7 +1890,6 @@ function TabSubcon({ projectId, project }) {
 
 function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, lblStyle, saving, setSaving, onClose, onSaved }) {
   const CATS       = ["Civil","Electrical","Plumbing","Finishing","Structural","MEP","Waterproofing","Painting","Tiling","Other"];
-  const TRADE_CATS = ["Civil","Electrical","Plumbing","Finishing","Tile","MEP","Waterproofing","Painting","Other"];
   const blankSection = () => ({ title:"", items:[{ description:"", unit:"", qty:"", rate:"", isLibrary:false }] });
 
   // ── WO Type ────────────────────────────────────────────────────────────
@@ -1901,6 +1900,9 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
 
   // ── Package mode state ─────────────────────────────────────────────────
   // Reads project.city_id + project.construction_type_id for auto-detect
+  // Package/item-wise mode ki category ab Work Category master se aati hai
+  // (pehle hardcoded TRADE_CATS thi) — Library -> Work Category wali list.
+  const [pkgWorkCats,  setPkgWorkCats]  = useState([]);
   const [pkgConTypes,  setPkgConTypes]  = useState([]);
   const [pkgCities,    setPkgCities]    = useState([]);
   const [pkgSelType,   setPkgSelType]   = useState(null);
@@ -1964,6 +1966,9 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
   // Load base data for package/item-wise mode when modal opens
   useEffect(() => {
     if (woType === "manual") return;
+    api.get("/library/work-categories").then(r => {
+      if (r.success) setPkgWorkCats((r.data||[]).map(c => c.name));
+    });
     api.get("/library/construction-types").then(r => {
       if (!r.success) return;
       setPkgConTypes(r.data||[]);
@@ -2372,7 +2377,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                           )}
                         </div>
                         <div>
-                          <label style={lblC}>{t("master_library.trade_category")}</label>
+                          <label style={lblC}>{t("master_library.work_category")}</label>
                           <div style={{fontSize:12,color:T.t3,fontWeight:600,padding:"5px 0"}}>{pkgTrade} — {pkgSelPkg?.name}</div>
                         </div>
                       </div>
@@ -2748,9 +2753,9 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
               {/* ── Package mode: Trade + Package picker ── */}
               {woType==="package" && pkgSelType && pkgSelCity && (<>
                 <div style={{marginBottom:10}}>
-                  <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>{t("master_library.trade_category")}</div>
+                  <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>{t("master_library.work_category")}</div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {TRADE_CATS.map(t=>(
+                    {pkgWorkCats.map(t=>(
                       <button key={t} onClick={()=>setPkgTrade(t)} style={{
                         padding:"4px 11px",borderRadius:16,fontSize:11.5,fontWeight:600,cursor:"pointer",
                         border:`1.5px solid ${pkgTrade===t?"#7C3AED":T.b1}`,
@@ -2758,6 +2763,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                         color:pkgTrade===t?"white":T.t3,
                       }}>{t}</button>
                     ))}
+                    {!pkgWorkCats.length && <span style={{fontSize:11,color:T.t4}}>{t("subcon.no_work_cats_add_in_library")}</span>}
                   </div>
                 </div>
                 {pkgTrade && (
@@ -3101,7 +3107,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                           onChange={e=>setIwSearch(e.target.value)}
                           style={{width:"100%",padding:"8px 11px",borderRadius:6,border:"none",fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                         <div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>
-                          {["All",...TRADE_CATS].map(t=>(
+                          {["All",...pkgWorkCats].map(t=>(
                             <button key={t} onClick={()=>setIwTradeFilter(t)} style={{
                               padding:"3px 9px",borderRadius:12,fontSize:10.5,fontWeight:600,cursor:"pointer",border:"none",
                               background:iwTradeFilter===t?"rgba(255,255,255,0.25)":"rgba(255,255,255,0.08)",
@@ -3416,13 +3422,16 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
 //   2. Auto-select the new entry in the WO form
 // ─────────────────────────────────────────────────────────────────────
 function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
-  const TRADES = [
-    "RCC & Civil","Electrical Work","Plumbing","Painting","Tiles & Flooring",
-    "Fabrication","Carpentry","Waterproofing","False Ceiling","HVAC",
-    "Landscaping","Demolition","Other",
-  ];
+  // Trade / Specialty ki hardcoded list hata di gayi — thekedar kaun sa kaam
+  // karta hai, wo Work Category master se aata hai (Library -> Work Category).
+  const [trades, setTrades] = useState([]);
+  useEffect(() => {
+    api.get("/library/work-categories").then(r => {
+      if (r.success) setTrades((r.data||[]).map(c => c.name));
+    });
+  }, []);
   const [form, setForm] = useState({
-    name: "", owner: "", trade: "RCC & Civil", phone: "", city: "",
+    name: "", owner: "", trade: "", phone: "", city: "",
     labour_strength: 0, gstin: "", status: "Active",
   });
   const [saving, setSaving] = useState(false);
@@ -3477,7 +3486,8 @@ function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
             <div>
               <label style={lblStyle}>{t("subcon.trade_specialty")}</label>
               <select value={form.trade} onChange={e=>upd("trade", e.target.value)} style={inpStyle}>
-                {TRADES.map(t=><option key={t} value={t}>{t}</option>)}
+                <option value="">{t("common.select_category")}</option>
+                {trades.map(tc=><option key={tc} value={tc}>{tc}</option>)}
               </select>
             </div>
             <div>

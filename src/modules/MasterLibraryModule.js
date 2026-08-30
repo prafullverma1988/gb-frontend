@@ -1525,10 +1525,14 @@ function WorkCategorySection() {
 // ═══════════════════════════════════════════════════════════════════════
 function SubcontractorSection() {
   const { items: subcons, loading, save: apiSave, del: apiDel, reload } = useSection("subcontractors");
+  // Trade / Specialty ki hardcoded list hata di gayi — thekedar kaun sa kaam
+  // karta hai, wo Work Category master se hi aata hai (Library -> Work Category).
+  const { items: workCats } = useSection("work-categories");
+  const workCatNames = (workCats || []).map(c => c.name);
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const emptyForm = { name: "", owner: "", trade: "RCC & Civil", phone: "", city: "Raipur", gstin: "", pan: "", address: "", labour_strength: 0, status: "Active" };
+  const emptyForm = { name: "", owner: "", trade: "", phone: "", city: "Raipur", gstin: "", pan: "", address: "", labour_strength: 0, status: "Active" };
   const [form, setForm] = useState(emptyForm);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
   const filtered = subcons.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || (s.trade||"").toLowerCase().includes(search.toLowerCase()) || (s.owner||"").toLowerCase().includes(search.toLowerCase()));
@@ -1560,7 +1564,7 @@ function SubcontractorSection() {
           ],
           filename: "gb_subcontractors_export.csv",
           templateFilename: "gb_template_subcontractors.csv",
-          instructions: "Instructions: Firm Name and Trade required. Trade: RCC & Civil, Electrical, Plumbing, Painting, Tiles, Fabrication, Carpentry",
+          instructions: t("master_library.subcon_csv_trade_from_work_category"),
           mapRow: (s) => [s.name, s.owner, s.trade, s.phone, s.city, s.gstin, s.labourStrength, s.rateType, s.rate],
         }}
         currentData={subcons}
@@ -1568,7 +1572,7 @@ function SubcontractorSection() {
           const mapped = rows.map(r => ({
             name:             (r["Firm Name"] || "").trim(),
             owner:            (r["Owner/Contact"] || "").trim(),
-            trade:            (r["Trade"] || "RCC & Civil").trim(),
+            trade:            (r["Trade"] || "").trim(),
             phone:            (r["Phone"] || "").trim(),
             city:             (r["City"] || "").trim(),
             gstin:            (r["GSTIN"] || "").trim(),
@@ -1589,7 +1593,8 @@ function SubcontractorSection() {
           <FormField label={t("master_library.owner_contact_person")} value={form.owner} onChange={v => upd("owner", v)} placeholder={t("common.owner_name")} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label={t("master_library.trade_specialty")} value={form.trade} onChange={v => upd("trade", v)} options={["RCC & Civil","Electrical Work","Plumbing","Painting","Tiles & Flooring","Fabrication","Carpentry","Waterproofing","False Ceiling","HVAC","Landscaping","Demolition","Other"]} half required />
+          <FormSelect label={t("master_library.trade_specialty")} value={form.trade} onChange={v => upd("trade", v)} options={workCatNames} half required
+            placeholder={workCatNames.length ? undefined : t("master_library.no_work_cats_add_in_library")} />
           <FormField label={t("common.phone")} value={form.phone} onChange={v => upd("phone", v)} placeholder={t("common.91_xxxxx_xxxxx")} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
@@ -1617,7 +1622,6 @@ function SubcontractorSection() {
 // Work Items:    Construction Type → City → flat items with unit rates
 // ═══════════════════════════════════════════════════════════════════════
 function SubconRateCardSection() {
-  const TRADE_CATS = ["Civil","Electrical","Plumbing","Finishing","Tile","MEP","Waterproofing","Painting","Other"];
 
   // ── Mode ──────────────────────────────────────────────────────────────
   const [mode, setMode] = useState("package"); // "package" | "item_wise"
@@ -1627,6 +1631,11 @@ function SubconRateCardSection() {
   const [cities,   setCities]   = useState([]);
   const [selType,  setSelType]  = useState(null);
   const [selCity,  setSelCity]  = useState(null);
+
+  // Add Construction Type / City inline — same masters as Client BOQ Rate
+  const [chipModal,  setChipModal]  = useState(null);              // "type" | "city" | null
+  const [chipForm,   setChipForm]   = useState({ name:"", state:"" });
+  const [chipSaving, setChipSaving] = useState(false);
 
   // ── Package mode ───────────────────────────────────────────────────────
   const [selTrade,      setSelTrade]      = useState(null);
@@ -1668,6 +1677,10 @@ function SubconRateCardSection() {
   // BOQ items master list (same as Client BOQ — subcon packages share boq_items)
   const [boqItems, setBoqItems] = useState([]);
   const { items: workCats, reload: reloadWorkCats } = useSection("work-categories");
+  // Trade category ki hardcoded list hata di gayi — ab yahi Work Category
+  // master chalta hai (Library -> Work Category). trade_category column me
+  // wahi naam string ki tarah jaata hai, isliye koi migration nahi.
+  const workCatNames = (workCats || []).map(c => c.name);
 
   // Package CRUD modals
   const [addPkgModal, setAddPkgModal] = useState(false);
@@ -1681,18 +1694,39 @@ function SubconRateCardSection() {
   const [tradeFilter,   setTradeFilter]   = useState("All");
   const [showItemModal, setShowItemModal] = useState(false);
   const [editingItem,   setEditingItem]   = useState(null);
-  const [itemForm,      setItemForm]      = useState({ name:"", unit:"Sqft", trade_category:"Civil", description:"", rate:"" });
+  const [itemForm,      setItemForm]      = useState({ name:"", unit:"Sqft", trade_category:"", description:"", rate:"" });
   const [itemSaving,    setItemSaving]    = useState(false);
 
   const { items: uomList } = useSection("uom");
   const uomOpts = uomList.length ? uomList.map(u => u.name) : ["Sqft","Cft","Running Ft","Kg","Point","Unit","Lump Sum","Piece","Nos"];
 
   // ── Initial load ───────────────────────────────────────────────────────
+  const loadConTypes = () => api.get("/library/construction-types").then(r => { if (r.success) setConTypes(r.data||[]); });
+  const loadCities   = () => api.get("/library/cities").then(r => { if (r.success) setCities(r.data||[]); });
+
   useEffect(() => {
-    api.get("/library/construction-types").then(r => r.success && setConTypes(r.data||[]));
-    api.get("/library/cities").then(r => r.success && setCities(r.data||[]));
+    loadConTypes();
+    loadCities();
     api.get("/library/boq-items").then(r => r.success && setBoqItems(r.data||[]));
+    // eslint-disable-next-line
   }, []);
+
+  // ── Add Construction Type / City ───────────────────────────────────────
+  const openChipAdd = (kind) => { setChipForm({ name:"", state:"" }); setChipModal(kind); };
+  const saveChip = async () => {
+    const name = (chipForm.name||"").trim();
+    if (!name) return alert(t("master_library.name_required"));
+    setChipSaving(true);
+    const r = chipModal === "type"    ? await api.post("/library/construction-types", { name, color: "#2563EB" })
+            : chipModal === "workcat" ? await api.post("/library/work-categories",    { name })
+            :                           await api.post("/library/cities",             { name, state: (chipForm.state||"").trim() });
+    setChipSaving(false);
+    if (!r?.success) return alert(r?.message || t("master_library.save_error"));
+    if      (chipModal === "type")    { await loadConTypes(); setSelType(r.data); setSelPkg(null); setSelTrade(null); }
+    else if (chipModal === "workcat") { await reloadWorkCats(); setSelTrade(r.data?.name || name); setSelPkg(null); }
+    else                              { await loadCities();   setSelCity(r.data); }
+    setChipModal(null);
+  };
 
   // ── Load packages when type + trade changes ────────────────────────────
   useEffect(() => {
@@ -1943,7 +1977,7 @@ function SubconRateCardSection() {
   // ── Package CRUD ───────────────────────────────────────────────────────
   const savePkg = async () => {
     if (!pkgForm.name.trim()) return alert(t("master_library.package_name_required"));
-    if (!selTrade || !selType) return alert(t("master_library.select_trade_category_and_construction_type"));
+    if (!selTrade || !selType) return alert(t("master_library.select_work_category_and_construction"));
     setPkgSaving(true);
     const payload = {
       name: pkgForm.name.trim(), sqft_rate: parseFloat(pkgForm.sqft_rate)||0,
@@ -1963,12 +1997,12 @@ function SubconRateCardSection() {
   // ── Work item CRUD ─────────────────────────────────────────────────────
   const openAddItem = () => {
     setEditingItem(null);
-    setItemForm({ name:"", unit:"Sqft", trade_category:tradeFilter!=="All"?tradeFilter:"Civil", description:"", rate:"" });
+    setItemForm({ name:"", unit:"Sqft", trade_category:tradeFilter!=="All"?tradeFilter:(workCatNames[0]||""), description:"", rate:"" });
     setShowItemModal(true);
   };
   const openEditItem = (item) => {
     setEditingItem(item);
-    setItemForm({ name:item.name, unit:item.unit||"Sqft", trade_category:item.trade_category||"Civil", description:item.description||"", rate:String(item.rate||"") });
+    setItemForm({ name:item.name, unit:item.unit||"Sqft", trade_category:item.trade_category||(workCatNames[0]||""), description:item.description||"", rate:String(item.rate||"") });
     setShowItemModal(true);
   };
   const saveItem = async () => {
@@ -2103,7 +2137,8 @@ function SubconRateCardSection() {
   };
 
   // ── Computed ───────────────────────────────────────────────────────────
-  const tradeGroupsWithItems = TRADE_CATS.filter(t => workItems.some(i => i.trade_category === t));
+  const tradeGroupsWithItems = [...new Set([...workCatNames, ...workItems.map(i => i.trade_category).filter(Boolean)])]
+    .filter(tc => workItems.some(i => i.trade_category === tc));
   const hasPendingEdits = Object.keys(sectionEdits).length>0 || Object.keys(itemEdits).length>0
     || Object.values(pendingNewItems).some(a=>a.length>0)
     || Object.values(pendingDelItems).some(o=>Object.keys(o).length>0);
@@ -2112,6 +2147,14 @@ function SubconRateCardSection() {
     <button key={label} onClick={onClick} style={{
       padding:"7px 16px", borderRadius:20, border:`1.5px solid ${active?(color||T.blue):T.border}`,
       background:active?(color||T.blue):"white", color:active?"white":T.textMid,
+      fontSize:13, fontWeight:600, cursor:"pointer", transition:"all .15s",
+    }}>{label}</button>
+  );
+
+  const addChipBtn = (label, onClick) => (
+    <button onClick={onClick} style={{
+      padding:"7px 16px", borderRadius:20, border:`1.5px dashed ${T.border}`,
+      background:"transparent", color:T.textMid,
       fontSize:13, fontWeight:600, cursor:"pointer", transition:"all .15s",
     }}>{label}</button>
   );
@@ -2149,7 +2192,8 @@ function SubconRateCardSection() {
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           {conTypes.map(ct => chipBtn(ct.name, selType?.id===ct.id, ()=>{setSelType(ct);setSelPkg(null);setSelTrade(null);}, T.blue))}
-          {!conTypes.length && <span style={{color:T.textLight,fontSize:12}}>{t("master_library.no_types_yet_add_from_client")}</span>}
+          {addChipBtn(t("master_library.new_type"), ()=>openChipAdd("type"))}
+          {!conTypes.length && <span style={{color:T.textLight,fontSize:12,alignSelf:"center"}}>{t("master_library.no_types_yet_click_new_type")}</span>}
         </div>
       </div>
 
@@ -2160,6 +2204,8 @@ function SubconRateCardSection() {
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {cities.map(c => chipBtn(c.name, selCity?.id===c.id, ()=>setSelCity(c), T.teal))}
+            {addChipBtn(t("master_library.new_city"), ()=>openChipAdd("city"))}
+            {!cities.length && <span style={{color:T.textLight,fontSize:12,alignSelf:"center"}}>{t("master_library.no_cities_yet_click_new_city")}</span>}
           </div>
         </div>
       )}
@@ -2170,10 +2216,12 @@ function SubconRateCardSection() {
         {/* Step 3: Trade Category */}
         <div style={{background:"white",borderRadius:10,border:`1px solid ${T.border}`,padding:"14px 18px",marginBottom:12}}>
           <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"1px",marginBottom:10}}>
-           {t("master_library.3_trade_category")}
+           {t("master_library.3_work_category")}
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {TRADE_CATS.map(t => chipBtn(t, selTrade===t, ()=>setSelTrade(t), T.purple))}
+            {workCatNames.map(wc => chipBtn(wc, selTrade===wc, ()=>setSelTrade(wc), T.purple))}
+            {addChipBtn(t("master_library.new_category_2"), ()=>openChipAdd("workcat"))}
+            {!workCatNames.length && <span style={{color:T.textLight,fontSize:12,alignSelf:"center"}}>{t("master_library.no_work_cats_yet_click_new_category")}</span>}
           </div>
         </div>
 
@@ -2544,12 +2592,13 @@ function SubconRateCardSection() {
         <div>
           <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
             <span style={{fontSize:11,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:".5px",alignSelf:"center"}}>{t("master_library.category")}</span>
-            {["All",...TRADE_CATS].map(t=>(
+            {["All",...workCatNames].map(t=>(
               <button key={t} onClick={()=>setTradeFilter(t)}
                 style={{padding:"5px 14px",borderRadius:20,border:`1.5px solid ${tradeFilter===t?T.blue:T.border}`,background:tradeFilter===t?T.blue:"white",color:tradeFilter===t?"white":T.textMid,fontSize:12,fontWeight:600,cursor:"pointer"}}>
                 {t}
               </button>
             ))}
+            {addChipBtn(t("master_library.new_category_2"), ()=>openChipAdd("workcat"))}
             <button onClick={openAddItem}
               style={{marginLeft:"auto",padding:"8px 18px",borderRadius:8,background:`linear-gradient(135deg,${T.blue},${T.blueMid})`,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,boxShadow:`0 3px 10px ${T.blue}33`}}>
               <IcPlus size={14} color="white"/> {t("finance.add_work_item")}
@@ -2601,6 +2650,27 @@ function SubconRateCardSection() {
         </div>
       )}
 
+      {/* ── Add Construction Type / City Modal ─────────────────────────── */}
+      <Modal open={!!chipModal} onClose={()=>setChipModal(null)}
+        title={chipModal==="city"    ? t("master_library.new_city_2")
+             : chipModal==="workcat" ? t("master_library.new_work_category")
+             :                         t("master_library.new_construction_type")}
+        desc={chipModal==="workcat" ? t("master_library.same_as_library_work_category")
+                                    : t("master_library.shared_with_client_boq_rate")} width={440}>
+        <FormField label={t("common.name_2")} value={chipForm.name} onChange={v=>setChipForm(p=>({...p,name:v}))}
+          placeholder={chipModal==="city"    ? t("master_library.e_g_raipur")
+                     : chipModal==="workcat" ? t("master_library.e_g_civil_structure")
+                     :                         t("master_library.e_g_residential_commercial_road")} required/>
+        {chipModal==="city" && (
+          <div style={{marginTop:14}}>
+            <FormField label={t("master_library.state")} value={chipForm.state} onChange={v=>setChipForm(p=>({...p,state:v}))}
+              placeholder={t("common.optional")}/>
+          </div>
+        )}
+        <ModalFooter onClose={()=>setChipModal(null)} onSave={saveChip}
+          saveLabel={chipSaving ? t("common.saving_2") : t("common.save")}/>
+      </Modal>
+
       {/* ── Add/Edit Rate Card (Package) Modal ────────────────────────── */}
       <Modal open={addPkgModal} onClose={()=>{setAddPkgModal(false);setEditingPkg(null);}}
         title={editingPkg?t("master_library.edit_rate_card"):t("master_library.new_rate_card")}
@@ -2622,7 +2692,7 @@ function SubconRateCardSection() {
         <FormField label={t("master_library.item_name")} value={itemForm.name} onChange={v=>setItemForm(p=>({...p,name:v}))}
           placeholder={t("master_library.e_g_brick_masonry_rcc_slab")} required/>
         <div style={{display:"flex",gap:14,margin:"14px 0"}}>
-          <FormSelect label={t("master_library.trade_category")} value={itemForm.trade_category} onChange={v=>setItemForm(p=>({...p,trade_category:v}))} options={TRADE_CATS} half/>
+          <FormSelect label={t("master_library.work_category")} value={itemForm.trade_category} onChange={v=>setItemForm(p=>({...p,trade_category:v}))} options={workCatNames} half/>
           <FormSelect label={t("common.unit")} value={itemForm.unit} onChange={v=>setItemForm(p=>({...p,unit:v}))} options={uomOpts} half/>
         </div>
         <div style={{display:"flex",gap:14,marginBottom:14}}>
