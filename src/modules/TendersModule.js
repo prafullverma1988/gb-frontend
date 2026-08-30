@@ -4495,13 +4495,19 @@ function MapTab({tenderId, sites}) {
     load();
     return true;
   };
-  const armMark = (row) => {
-    const iv = /rmt|^m$|^rm$|mtr|meter|metre|rft|^ft$/i.test(String(row.unit || ""))
-      ? { kind: "line", atype: "other", shape: "line" }
+  // shape: "line" | "area" | "point" — structure/anya par user chunta hai
+  // (chhota rakba ho to chaaro taraf line, bahut chhota ho to sirf pin).
+  const armMark = (row, shape) => {
+    const isLine = /rmt|^m$|^rm$|mtr|meter|metre|rft|^ft$/i.test(String(row.unit || ""));
+    const sh = shape || (isLine ? "line" : "point");
+    const iv = sh === "line" ? { kind: "line", atype: "other", shape: "line" }
+      : sh === "area" ? { kind: "area", atype: "other", shape: "poly" }
       : { kind: "point", atype: "other", shape: "point" };
     linkTaskRef.current = row; setLinkTask(row);
     startDraw(iv);
-    toast.success(`Ab map par "${row.name}" ki jagah banao — save par khud jud jayegi`);
+    toast.success(sh === "area"
+      ? `"${row.name}" ke chaaro taraf point-by-point line banao — band karte hi jud jayega`
+      : `Ab map par "${row.name}" ki jagah banao — save par khud jud jayegi`);
   };
   const unNa = async (row, na) => {
     const r = await api.put(`/tasks/${row.task_id}`, { map_na: na ? 1 : 0 });
@@ -4618,7 +4624,7 @@ function MapTab({tenderId, sites}) {
             {mode && linkTask && (
               <div style={{display:"flex", alignItems:"center", gap:8, padding:"3px 10px", borderRadius:8,
                 background:T.indL||T.surfaceB, border:`1px solid ${T.ind}`, fontSize:11.5, color:T.ind, fontWeight:700}}>
-                📍 {linkTask.name} ke liye — kheench kar save karo
+                📍 {linkTask.name} ke liye — {intent?.kind === "area" ? "chaaro taraf point-by-point line, phir band karo" : "kheench kar save karo"}
               </div>
             )}
             {!mode && (<>
@@ -4999,8 +5005,15 @@ function MapTab({tenderId, sites}) {
                 </div>
                 <div style={{display:"flex", gap:6, flexShrink:0}}>
                   {r.bucket.startsWith("unmapped") && (<>
-                    <button onClick={()=>armMark(r)} title="Map par kheench kar jodo"
-                      style={{border:`1px solid ${T.ind}`, background:linkTask?.task_id===r.task_id?T.ind:T.surface, color:linkTask?.task_id===r.task_id?"#fff":T.ind, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>📍 Mark</button>
+                    {/rmt|^m$|^rm$|mtr|meter|metre|rft|^ft$/i.test(String(r.unit || "")) ? (
+                      <button onClick={()=>armMark(r, "line")} title="Map par line kheench kar jodo"
+                        style={{border:`1px solid ${T.ind}`, background:linkTask?.task_id===r.task_id?T.ind:T.surface, color:linkTask?.task_id===r.task_id?"#fff":T.ind, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>📍 Line</button>
+                    ) : (<>
+                      <button onClick={()=>armMark(r, "area")} title="Chaaro taraf line — band rakba"
+                        style={{border:`1px solid ${T.ind}`, background:linkTask?.task_id===r.task_id?T.ind:T.surface, color:linkTask?.task_id===r.task_id?"#fff":T.ind, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>▱ Rakba</button>
+                      <button onClick={()=>armMark(r, "point")} title="Bahut chhota — sirf pin"
+                        style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 8px", fontSize:11, fontWeight:700, cursor:"pointer"}}>📍 Pin</button>
+                    </>)}
                     <button onClick={()=>setPickFor({ mode:"line", row:r })} title="Bani hui line/pin se jodo"
                       style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>🔗 Jodo</button>
                     <button onClick={()=>unNa(r, true)} title="Ye kaam map par nahi aata"
@@ -5063,8 +5076,15 @@ function MapTab({tenderId, sites}) {
                     {r.work_name} · {r.scope_qty != null ? `${r.scope_qty} ${r.unit || ""}` : "qty nahi"}{r.item_no ? ` · BOQ ${r.item_no}` : ""}
                   </div>
                 </div>
-                <button onClick={()=>{ setTaskMark(null); armMark(r); }}
-                  style={{border:`1px solid ${T.ind}`, background:T.ind, color:"#fff", borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>📍 Map par kheencho</button>
+                {/rmt|^m$|^rm$|mtr|meter|metre|rft|^ft$/i.test(String(r.unit || "")) ? (
+                  <button onClick={()=>{ setTaskMark(null); armMark(r, "line"); }}
+                    style={{border:`1px solid ${T.ind}`, background:T.ind, color:"#fff", borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>📍 Line kheencho</button>
+                ) : (<>
+                  <button onClick={()=>{ setTaskMark(null); armMark(r, "area"); }} title="Chaaro taraf point-by-point line — band rakba"
+                    style={{border:`1px solid ${T.ind}`, background:T.ind, color:"#fff", borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>▱ Rakba</button>
+                  <button onClick={()=>{ setTaskMark(null); armMark(r, "point"); }} title="Bahut chhota hai — sirf pin"
+                    style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>📍 Pin</button>
+                </>)}
                 <button onClick={()=>{ setTaskMark(null); setPickFor({ mode:"line", row:r }); }}
                   style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>🔗 Bani hui se jodo</button>
               </div>
