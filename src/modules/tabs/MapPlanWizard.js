@@ -125,6 +125,14 @@ export default function MapPlanWizard({ projectId, onClose, onDone }) {
           <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>
            {t("map_plan_wizard.naam_aur_lambai_map_se_aati")}
           </div>
+          {data?.boq_task_count > 0 && (
+            <div style={{ marginTop: 8, background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8,
+              padding: "8px 11px", fontSize: 11.5, color: "#92400E", lineHeight: 1.5 }}>
+              Is site par <b>{data.boq_task_count} kaam pehle se BOQ se jude</b> hain (AI Plan / BOQ import se).
+              Yahan naya tree banaoge to do adhoore tree ban jayenge — ek me BOQ ka jod, doosre me map ki jagah.
+              Behtar: <b>Tenders → Map → “Kaam ↔ Jagah”</b> se unhi kaam ko line/pin se jod do.
+            </div>
+          )}
           {groups.some((g) => g.kind === "line") && (
             <label style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 8, cursor: "pointer" }}>
               <input type="checkbox" checked={lineStagesOn} onChange={toggleLineStages} />
