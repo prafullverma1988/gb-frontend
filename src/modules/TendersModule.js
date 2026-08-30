@@ -429,10 +429,10 @@ function AddPartyInlineModal({onClose, onAdded}) {
       <ErrLine msg={err}/>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
         <Field label={t("tenders.department_party_ka_naam")} full>
-          <TxtIn value={name} onChange={setName} ph="e.g. PWD Division Dhamtari"/>
+          <TxtIn value={name} onChange={setName} ph={t("tenders.e_g_pwd_division_dhamtari")}/>
         </Field>
-        <Field label="GSTIN"><TxtIn value={gstin} onChange={setGstin} ph="Optional"/></Field>
-        <Field label={t("common.phone")}><TxtIn value={phone} onChange={setPhone} ph="Optional"/></Field>
+        <Field label="GSTIN"><TxtIn value={gstin} onChange={setGstin} ph={t("tenders.optional")}/></Field>
+        <Field label={t("common.phone")}><TxtIn value={phone} onChange={setPhone} ph={t("tenders.optional")}/></Field>
       </div>
       <div style={{marginTop:12, fontSize:11, color:T.t4, lineHeight:1.5}}>
        {t("tenders.ye_finance_parties_me_client_type")}
@@ -569,18 +569,18 @@ function NewTenderModal({onClose, onCreated}) {
 
       {step===1 && (
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
-          <Field label={t("tenders.tender_number")}><TxtIn value={form.tender_no} onChange={v=>set("tender_no",v)} ph="e.g. NIT/PWD/2026/114"/></Field>
+          <Field label={t("tenders.tender_number")}><TxtIn value={form.tender_no} onChange={v=>set("tender_no",v)} ph={t("tenders.e_g_nit_pwd_2026_114")}/></Field>
           <Field label={t("common.status")}><SelIn value={form.status} onChange={v=>set("status",v)}
             options={[{v:"bidding",l:t("tenders.bidding")},{v:"won",l:t("tenders.won")}]}/></Field>
-          <Field label={t("common.title")} full><TxtIn value={form.title} onChange={v=>set("title",v)} ph="Kaam ka naam — e.g. Durg–Bhilai road strengthening"/></Field>
+          <Field label={t("common.title")} full><TxtIn value={form.title} onChange={v=>set("title",v)} ph={t("tenders.kaam_ka_naam_e_g_durg")}/></Field>
 
           <Field label={t("tenders.department_party")} full
             hint={t("tenders.yeh_list_finance_ki_client_type")}>
-            <SelIn value={form.party_id} options={partyOpts} ph="Department chuno..."
+            <SelIn value={form.party_id} options={partyOpts} ph={t("tenders.department_chuno")}
               onChange={v=>{ if (v === NEW_PARTY) { setAddParty(true); return; } set("party_id", v); }}/>
           </Field>
           <Field label={t("tenders.department_name_free_text")} full>
-            <TxtIn value={form.department_name} onChange={v=>set("department_name",v)} ph="e.g. PWD Durg Division"/>
+            <TxtIn value={form.department_name} onChange={v=>set("department_name",v)} ph={t("tenders.e_g_pwd_durg_division")}/>
           </Field>
 
           <Field label={t("tenders.nit_date")}><TxtIn type="date" value={form.nit_date} onChange={v=>set("nit_date",v)}/></Field>
@@ -588,7 +588,7 @@ function NewTenderModal({onClose, onCreated}) {
           <Field label={t("tenders.techno_commercial_date")}><TxtIn type="date" value={form.techno_commercial_date} onChange={v=>set("techno_commercial_date",v)}/></Field>
           <Field label={`Bid Submission Type${bidReq ? " *" : ""}`}>
             <SelIn value={form.bid_submission_type} onChange={v=>set("bid_submission_type",v)}
-              options={BID_SUBMISSION_TYPES} ph="Chuno..."/>
+              options={BID_SUBMISSION_TYPES} ph={t("tenders.chuno")}/>
           </Field>
           <Field label={t("tenders.reverse_auction_date")} full
             hint={t("tenders.bid_ke_baad_reverse_auction_ho")}>
@@ -619,7 +619,7 @@ function NewTenderModal({onClose, onCreated}) {
           </div>
           <Field label={t("tenders.contract_value_2")}><TxtIn type="number" value={form.contract_value} onChange={v=>set("contract_value",v)} ph="0"/></Field>
           <Field label={t("tenders.loa_date")}><TxtIn type="date" value={form.loa_date} onChange={v=>set("loa_date",v)}/></Field>
-          <Field label={t("tenders.agreement_no")}><TxtIn value={form.agreement_no} onChange={v=>set("agreement_no",v)} ph="e.g. AGR/2026/41"/></Field>
+          <Field label={t("tenders.agreement_no")}><TxtIn value={form.agreement_no} onChange={v=>set("agreement_no",v)} ph={t("tenders.e_g_agr_2026_41")}/></Field>
           <Field label={t("tenders.agreement_date")}><TxtIn type="date" value={form.agreement_date} onChange={v=>set("agreement_date",v)}/></Field>
           <Field label={t("tenders.work_order_date")}><TxtIn type="date" value={form.work_order_date} onChange={v=>set("work_order_date",v)}/></Field>
           <Field label={t("tenders.stipulated_completion")}><TxtIn type="date" value={form.stipulated_completion} onChange={v=>set("stipulated_completion",v)}/></Field>
@@ -856,7 +856,7 @@ function EditTenderModal({tender, boqBase = 0, onClose, onSaved, onDeleted}) {
 
         <Field label={`Department (Party)${needsWonFields?" *":""}`} full
           hint={t("tenders.finance_ki_client_type_parties_naya")}>
-          <SelIn value={form.party_id} options={partyOpts} ph="Department chuno..."
+          <SelIn value={form.party_id} options={partyOpts} ph={t("tenders.department_chuno")}
             onChange={v=>{ if (v === NEW_PARTY) { setAddParty(true); return; } set("party_id", v); }}/>
         </Field>
         <Field label={t("tenders.department_name_free_text")} full><TxtIn value={form.department_name} onChange={v=>set("department_name",v)}/></Field>
@@ -924,7 +924,7 @@ function EditTenderModal({tender, boqBase = 0, onClose, onSaved, onDeleted}) {
         <Field label={t("tenders.techno_commercial_date")}><TxtIn type="date" value={form.techno_commercial_date} onChange={v=>set("techno_commercial_date",v)}/></Field>
         <Field label={t("tenders.bid_submission_type")}>
           <SelIn value={form.bid_submission_type} onChange={v=>set("bid_submission_type",v)}
-            options={BID_SUBMISSION_TYPES} ph="Chuno..."/>
+            options={BID_SUBMISSION_TYPES} ph={t("tenders.chuno")}/>
         </Field>
         <Field label={t("tenders.reverse_auction_date")} full hint={t("tenders.bid_ke_baad_reverse_auction_ho")}>
           <TxtIn type="date" value={form.reverse_auction_date} onChange={v=>set("reverse_auction_date",v)}/>
@@ -1316,17 +1316,17 @@ function InstrumentActionModal({tenderId, inst, action, onClose, onDone}) {
           <TxtIn type="number" value={form.amount} onChange={v=>set("amount",v)} ph="0"/>
         </Field>
         <Field label={meta.refLabel} full>
-          <TxtIn value={form.ref} onChange={v=>set("ref",v)} ph="e.g. UTR 1234567890 / EE/2026/442"/>
+          <TxtIn value={form.ref} onChange={v=>set("ref",v)} ph={t("tenders.e_g_utr_1234567890_ee_2026")}/>
         </Field>
         {action === "refund" && (
           <Field label={t("tenders.kaise_wapas_aaya")} full>
-            <SelIn value={form.mode} onChange={v=>set("mode",v)} options={INSTRUMENT_MODES} ph="Chuno..."/>
+            <SelIn value={form.mode} onChange={v=>set("mode",v)} options={INSTRUMENT_MODES} ph={t("tenders.chuno")}/>
           </Field>
         )}
         {isForfeit && (
           <Field label={t("tenders.kis_account_se_gaya")} full
             hint={t("tenders.finance_me_is_amount_ki_expense")}>
-            <SelIn value={form.account_id} onChange={v=>set("account_id",v)} ph="Account chuno (optional)..."
+            <SelIn value={form.account_id} onChange={v=>set("account_id",v)} ph={t("tenders.account_chuno_optional")}
               options={accounts.map(a=>({v:String(a.id), l:a.name}))}/>
           </Field>
         )}
@@ -1527,8 +1527,8 @@ function AddInstrumentModal({tenderId, tenderStatus, onClose, onSaved}) {
         </Field>
         <Field label={t("common.mode")}><SelIn value={form.mode} onChange={v=>set("mode",v)} options={INSTRUMENT_MODES}/></Field>
         <Field label={t("common.amount")}><TxtIn type="number" value={form.amount} onChange={v=>set("amount",v)} ph="0"/></Field>
-        <Field label={t("common.reference_no")}><TxtIn value={form.ref_no} onChange={v=>set("ref_no",v)} ph="DD / BG number"/></Field>
-        <Field label={t("common.bank_name")} full><TxtIn value={form.bank_name} onChange={v=>set("bank_name",v)} ph="e.g. SBI Durg"/></Field>
+        <Field label={t("common.reference_no")}><TxtIn value={form.ref_no} onChange={v=>set("ref_no",v)} ph={t("tenders.dd_bg_number")}/></Field>
+        <Field label={t("common.bank_name")} full><TxtIn value={form.bank_name} onChange={v=>set("bank_name",v)} ph={t("tenders.e_g_sbi_durg")}/></Field>
         <Field label={t("tenders.issue_date")}><TxtIn type="date" value={form.issue_date} onChange={v=>set("issue_date",v)}/></Field>
         <Field label={`Validity Date${needsValidity?" (alert isi par)":""}`}
           hint={needsValidity ? t("tenders.bg_fdr_ki_validity_30_din") : undefined}>
@@ -1591,7 +1591,7 @@ function LinkProjectModal({tenderId, onClose, onSaved}) {
       )}
       {!loading && !!projects.length && (
         <Field label={t("common.project_2")}>
-          <SelIn value={pick} onChange={setPick} ph="Project chuno..."
+          <SelIn value={pick} onChange={setPick} ph={t("tenders.project_chuno")}
             options={projects.map(p=>({v:String(p.id), l:`${p.name}${p.city_name?` — ${p.city_name}`:""}`}))}/>
         </Field>
       )}
@@ -1672,14 +1672,14 @@ function NewSiteModal({tender, onClose, onSaved}) {
       <ErrLine msg={err}/>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
         <Field label={t("tenders.site_project_name")} full>
-          <TxtIn value={form.name} onChange={v=>set("name",v)} ph="e.g. Package-2 Durg Bypass"/>
+          <TxtIn value={form.name} onChange={v=>set("name",v)} ph={t("tenders.e_g_package_2_durg_bypass")}/>
         </Field>
         <Field label={t("common.city_2")}>
-          <SelIn value={form.cityId} onChange={v=>set("cityId",v)} ph="City chuno..."
+          <SelIn value={form.cityId} onChange={v=>set("cityId",v)} ph={t("tenders.city_chuno")}
             options={cities.map(c=>({v:String(c.id), l:c.name}))}/>
         </Field>
         <Field label={t("crm.construction_type")}>
-          <SelIn value={form.constructionTypeId} onChange={v=>set("constructionTypeId",v)} ph="Type chuno..."
+          <SelIn value={form.constructionTypeId} onChange={v=>set("constructionTypeId",v)} ph={t("tenders.type_chuno")}
             options={ctypes.map(c=>({v:String(c.id), l:c.name}))}/>
         </Field>
         <Field label={t("common.start_date")}><TxtIn type="date" value={form.start_date} onChange={v=>set("start_date",v)}/></Field>
@@ -1755,7 +1755,7 @@ function AddDocumentModal({tenderId, onClose, onSaved}) {
       <ErrLine msg={err}/>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
         <Field label={t("tenders.document_type")}><SelIn value={docType} onChange={setDocType} options={DOC_TYPES}/></Field>
-        <Field label={t("common.name")}><TxtIn value={name} onChange={setName} ph="e.g. NIT copy"/></Field>
+        <Field label={t("common.name")}><TxtIn value={name} onChange={setName} ph={t("tenders.e_g_nit_copy")}/></Field>
 
         <Field label={t("common.file")} full>
           <input ref={fileRef} type="file" style={{display:"none"}}
@@ -2111,13 +2111,13 @@ function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems, b
         )}
         {form.item_type !== "boq" && (<>
           <Field label={t("tenders.manzoori_ref")} hint={t("tenders.department_ka_letter_jisme_is_rate")}>
-            <TxtIn value={form.approval_ref} onChange={v=>set("approval_ref",v)} ph="e.g. EE/2026/442"/>
+            <TxtIn value={form.approval_ref} onChange={v=>set("approval_ref",v)} ph={t("tenders.e_g_ee_2026_442")}/>
           </Field>
           <Field label={t("tenders.manzoori_date")}>
             <TxtIn type="date" value={form.approval_date} onChange={v=>set("approval_date",v)}/>
           </Field>
         </>)}
-        <Field label={t("common.unit")}><TxtIn value={form.unit} onChange={v=>set("unit",v)} ph="cum / sqm / MT"/></Field>
+        <Field label={t("common.unit")}><TxtIn value={form.unit} onChange={v=>set("unit",v)} ph={t("tenders.cum_sqm_mt")}/></Field>
         <Field label={t("tenders.qty")}><TxtIn type="number" value={form.qty} onChange={v=>set("qty",v)} ph="0"/></Field>
         <Field label={isItemRate ? t("tenders.sor_rate") : t("tenders.rate")}
           hint={isItemRate ? t("tenders.department_ka_rate") : undefined}>
@@ -2342,9 +2342,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
       </div>
 
       {nFiles > 1 && (
-        <div style={{margin:"2px 0 10px", padding:"6px 12px", background:T.bg, border:`1px solid ${T.b1}`, borderRadius:8, fontSize:11.5, fontWeight:700, color:T.t2}}>
-          📄 File {fileNo}/{nFiles}: {fileName || "…"} — sab files isi tender ke BOQ me jud rahi hain
-        </div>
+        <div style={{margin:"2px 0 10px", padding:"6px 12px", background:T.bg, border:`1px solid ${T.b1}`, borderRadius:8, fontSize:11.5, fontWeight:700, color:T.t2}}>{t("tenders.file_fileno_nfiles_filename_sab_files", { fileNo, nFiles, fileName: fileName || "…" })}</div>
       )}
 
       {/* ── STEP 1: UPLOAD ── */}
@@ -2416,7 +2414,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
                     padding:"1px 6px", borderRadius:10}}>auto</span>}
                 </div>
                 <SelIn value={mapping[tg.key] == null ? "" : String(mapping[tg.key])}
-                  ph="— koi nahi —"
+                  ph={t("tenders.koi_nahi")}
                   onChange={v=>setMapping(m=>({...m, [tg.key]: v === "" ? null : Number(v)}))}
                   options={headerCells.map((c,i)=>({
                     v:String(i),
@@ -3651,7 +3649,7 @@ function MeasurementModal({tenderId, sites, boqItems, edit, onClose, onDone}) {
       </>}>
       <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
         <Field label={t("tenders.site")} hint={!sites.length ? t("tenders.pehle_sites_tab_me_project_link") : undefined}>
-          <SelIn value={f.project_id} onChange={v=>set("project_id",v)} ph="Site chuno..."
+          <SelIn value={f.project_id} onChange={v=>set("project_id",v)} ph={t("tenders.site_chuno")}
             options={sites.map(s=>({v:s.id, l:s.name}))}/>
         </Field>
         <Field label={t("tenders.date")}>
@@ -3664,10 +3662,10 @@ function MeasurementModal({tenderId, sites, boqItems, edit, onClose, onDone}) {
           <TxtIn type="number" value={f.qty} onChange={v=>set("qty",v)} ph="0"/>
         </Field>
         <Field label={t("tenders.mb_ref")}>
-          <TxtIn value={f.mb_ref} onChange={v=>set("mb_ref",v)} ph="e.g. MB-12 / Page 44"/>
+          <TxtIn value={f.mb_ref} onChange={v=>set("mb_ref",v)} ph={t("tenders.e_g_mb_12_page_44")}/>
         </Field>
         <Field label={t("common.remarks")} full>
-          <TxtIn value={f.remarks} onChange={v=>set("remarks",v)} ph="Optional"/>
+          <TxtIn value={f.remarks} onChange={v=>set("remarks",v)} ph={t("tenders.optional")}/>
         </Field>
       </div>
       {item && (
@@ -4585,7 +4583,7 @@ function MapTab({tenderId, sites}) {
       <PHead title={t("tenders.pipeline_map")} sub={items.length ? `${items.length} alignment` : t("tenders.line_draw_karo_ya_kml_import")}
         action={<div style={{display:"flex", gap:8, alignItems:"center"}}>
           <div style={{minWidth:170}}>
-            <SelIn value={fSite} onChange={setFSite} ph="Saari sites" options={sites.map(s=>({v:s.id, l:s.name}))}/>
+            <SelIn value={fSite} onChange={setFSite} ph={t("tenders.saari_sites")} options={sites.map(s=>({v:s.id, l:s.name}))}/>
           </div>
           <label style={{display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:7,
             border:`1px solid ${T.b1}`, background:T.surface, fontSize:12, color:T.t2, cursor:"pointer", whiteSpace:"nowrap"}}>
@@ -4913,9 +4911,9 @@ function MapTab({tenderId, sites}) {
                       {d.project_name} · {alignLabel(d.kind, d.atype)} · {fmtKm(d.length_m)}
                     </div>
                   </div>
-                  <button onClick={()=>setPickFor({ mode:"task", aid: d.__aid })} title="Is jagah par koi kaam jodo"
+                  <button onClick={()=>setPickFor({ mode:"task", aid: d.__aid })} title={t("tenders.is_jagah_par_koi_kaam_jodo")}
                     style={{border:`1px solid ${T.ind}`, background:T.surface, color:T.ind, borderRadius:7,
-                      padding:"2px 8px", fontSize:10.5, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap"}}>+ kaam</button>
+                      padding:"2px 8px", fontSize:10.5, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap"}}>{t("tenders.kaam")}</button>
                   <button onClick={()=>setPanel(null)} style={{border:"none", background:"none", cursor:"pointer",
                     fontSize:15, color:T.t4, lineHeight:1, padding:2}}>✕</button>
                 </div>
@@ -5017,7 +5015,7 @@ function MapTab({tenderId, sites}) {
         .filter((r) => !q || [r.name, r.task_no, r.item_no, r.work_name].some((v) => String(v||"").toLowerCase().includes(q)));
       return (
         <Panel style={{marginTop:14}}>
-          <PHead title="Kaam ↔ Jagah"
+          <PHead title={t("tenders.kaam_jagah")}
             sub={unCount ? `${unCount} kaam (${money(unAmt)}) abhi map par nahi — ${mapTasks.project?.name || ""}` : `sab kaam ki jagah tay hai ✓ — ${mapTasks.project?.name || ""}`}/>
           <div style={{display:"flex", flexWrap:"wrap", gap:7, padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, alignItems:"center"}}>
             {CHIPS.map(([k, lbl]) => (
@@ -5027,15 +5025,15 @@ function MapTab({tenderId, sites}) {
                 {lbl} · {B[k]?.count ?? 0}
               </button>
             ))}
-            <input value={mtSearch} onChange={(e)=>setMtSearch(e.target.value)} placeholder="dhoondo…"
+            <input value={mtSearch} onChange={(e)=>setMtSearch(e.target.value)} placeholder={t("tenders.dhoondo")}
               style={{marginLeft:"auto", border:`1px solid ${T.b1}`, borderRadius:8, padding:"4px 10px", fontSize:11.5, width:170, background:T.surface, color:T.t1}}/>
           </div>
           {types.length > 1 && (
             <div style={{display:"flex", flexWrap:"wrap", gap:6, padding:"7px 14px", borderBottom:`1px solid ${T.b1}`, alignItems:"center"}}>
-              <span style={{fontSize:10.5, color:T.t4, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px", marginRight:2}}>Kaam</span>
+              <span style={{fontSize:10.5, color:T.t4, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px", marginRight:2}}>{t("tenders.kaam_2")}</span>
               <button onClick={()=>setMtType("")}
                 style={{border:`1px solid ${!mtType?T.ind:T.b1}`, background:T.surface, color:!mtType?T.ind:T.t3,
-                  borderRadius:13, padding:"2px 10px", fontSize:11, fontWeight:700, cursor:"pointer"}}>Sab · {inBucket.length}</button>
+                  borderRadius:13, padding:"2px 10px", fontSize:11, fontWeight:700, cursor:"pointer"}}>{t("tenders.sab_inbucket", { inBucket: inBucket.length })}</button>
               {types.map((k) => (
                 <button key={k} onClick={()=>setMtType(mtType===k?"":k)}
                   style={{border:`1px solid ${mtType===k?T.ind:T.b1}`, background:T.surface, color:mtType===k?T.ind:T.t3,
@@ -5047,7 +5045,7 @@ function MapTab({tenderId, sites}) {
           )}
           <div style={{maxHeight:330, overflowY:"auto"}}>
             {!list.length && (
-              <div style={{padding:"18px 14px", fontSize:12, color:T.t4}}>Is bucket me kuchh nahi.</div>
+              <div style={{padding:"18px 14px", fontSize:12, color:T.t4}}>{t("tenders.is_bucket_me_kuchh_nahi")}</div>
             )}
             {list.map((r) => (
               <div key={r.task_id} style={{display:"flex", alignItems:"center", gap:10, padding:"8px 14px", borderBottom:`1px solid ${T.b1}`}}>
@@ -5057,7 +5055,7 @@ function MapTab({tenderId, sites}) {
                     {r.layers > 0 && <span style={{color:T.blu, fontWeight:600}}> · {r.layers} layer</span>}
                   </div>
                   <div style={{fontSize:10.5, color:T.t4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
-                    {r.work_name}{r.item_no ? ` · BOQ ${r.item_no}` : ""}{r.effective_alignment_id && !r.alignment_id ? " · jagah stretch se" : ""}
+                    {r.work_name}{r.item_no ? ` · BOQ ${r.item_no}` : ""}{r.effective_alignment_id && !r.alignment_id ? t("tenders.jagah_stretch_se") : ""}
                   </div>
                 </div>
                 <div style={{textAlign:"right", flexShrink:0}}>
@@ -5066,33 +5064,34 @@ function MapTab({tenderId, sites}) {
                   </div>
                   <div style={{fontSize:10.5, color:T.t4}}>
                     {r.done_qty > 0
-                      ? <span style={{color:T.grn, fontWeight:700}}>{r.done_qty} ho chuka{r.progress ? ` · ${r.progress}%` : ""}</span>
+                      ? <span style={{color:T.grn, fontWeight:700}}>{t("tenders.done_qty_ho_chukar", { done_qty: r.done_qty, r: r.progress ? ` · ${r.progress}%` : "" })}</span>
                       : (r.scope_amt ? money(r.scope_amt) : "")}
                   </div>
                 </div>
                 <div style={{display:"flex", gap:6, flexShrink:0}}>
                   {r.bucket.startsWith("unmapped") && (<>
+
                     {/rmt|^m$|^rm$|mtr|meter|metre|rft|^ft$/i.test(String(r.unit || "")) ? (
-                      <button onClick={()=>armMark(r, "line")} title="Map par line kheench kar jodo"
+                      <button onClick={()=>armMark(r, "line")} title={t("tenders.map_par_line_kheench_kar_jodo")}
                         style={{border:`1px solid ${T.ind}`, background:linkTask?.task_id===r.task_id?T.ind:T.surface, color:linkTask?.task_id===r.task_id?"#fff":T.ind, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>📍 Line</button>
                     ) : (<>
-                      <button onClick={()=>armMark(r, "area")} title="Chaaro taraf line — band rakba"
+                      <button onClick={()=>armMark(r, "area")} title={t("tenders.chaaro_taraf_line_band_rakba")}
                         style={{border:`1px solid ${T.ind}`, background:linkTask?.task_id===r.task_id?T.ind:T.surface, color:linkTask?.task_id===r.task_id?"#fff":T.ind, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>▱ Rakba</button>
-                      <button onClick={()=>armMark(r, "point")} title="Bahut chhota — sirf pin"
+                      <button onClick={()=>armMark(r, "point")} title={t("tenders.bahut_chhota_sirf_pin")}
                         style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 8px", fontSize:11, fontWeight:700, cursor:"pointer"}}>📍 Pin</button>
                     </>)}
-                    <button onClick={()=>setPickFor({ mode:"line", row:r })} title="Bani hui line/pin se jodo"
+                    <button onClick={()=>setPickFor({ mode:"line", row:r })} title={t("tenders.bani_hui_line_pin_se_jodo")}
                       style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>🔗 Jodo</button>
-                    <button onClick={()=>unNa(r, true)} title="Ye kaam map par nahi aata"
+                    <button onClick={()=>unNa(r, true)} title={t("tenders.ye_kaam_map_par_nahi_aata")}
                       style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t4, borderRadius:7, padding:"3px 7px", fontSize:11, cursor:"pointer"}}>✕</button>
                   </>)}
                   {r.bucket === "na" && (
                     <button onClick={()=>unNa(r, false)}
-                      style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>Wapas lao</button>
+                      style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>{t("tenders.wapas_lao")}</button>
                   )}
                   {r.bucket === "mapped" && r.alignment_id && (
                     <button onClick={async()=>{ const rr = await api.post(`/tasks/${r.task_id}/map-link`, { alignment_id: null }); if (rr?.success) { toast.success("Link hata"); load(); } else toast.error(rr?.message || "Nahi hata"); }}
-                      style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t4, borderRadius:7, padding:"3px 9px", fontSize:11, cursor:"pointer"}}>Link hatao</button>
+                      style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t4, borderRadius:7, padding:"3px 9px", fontSize:11, cursor:"pointer"}}>{t("tenders.link_hatao")}</button>
                   )}
                 </div>
               </div>
@@ -5170,11 +5169,11 @@ function MapTab({tenderId, sites}) {
             .slice().sort((a, b) => a.linked_tasks - b.linked_tasks)
         : (mapTasks?.tasks || []).filter((x) => x.bucket.startsWith("unmapped"));
       return (
-        <Modal title={isLinePick ? `"${pickFor.row.name}" kis par hai?` : "Is jagah par kaunsa kaam?"} width={520}
-          sub={isLinePick ? "Bani hui jagah chuno — ya band karke 📍 Mark se nayi kheencho" : "Bina-jagah wale kaam"}
+        <Modal title={isLinePick ? `"${pickFor.row.name}" kis par hai?` : t("tenders.is_jagah_par_kaunsa_kaam")} width={520}
+          sub={isLinePick ? t("tenders.bani_hui_jagah_chuno_ya_band") : t("tenders.bina_jagah_wale_kaam")}
           onClose={()=>setPickFor(null)}>
           <div style={{maxHeight:340, overflowY:"auto", display:"flex", flexDirection:"column", gap:6}}>
-            {!opts.length && <div style={{fontSize:12, color:T.t4, padding:"14px 4px"}}>Kuchh nahi mila.</div>}
+            {!opts.length && <div style={{fontSize:12, color:T.t4, padding:"14px 4px"}}>{t("tenders.kuchh_nahi_mila")}</div>}
             {opts.map((o) => (
               <button key={isLinePick ? o.id : o.task_id}
                 onClick={async()=>{ const okd = isLinePick ? await doLink(pickFor.row, o.id) : await doLink(o, pickFor.aid); if (okd) setPickFor(null); }}
@@ -5202,11 +5201,11 @@ function MapTab({tenderId, sites}) {
       const sel = kmlLink.features.filter((f) => f.take);
       const siteId = fSite || (sitesRef.current.length === 1 ? sitesRef.current[0].id : "");
       return (
-        <Modal title="Nayi lines ko kaam se jodo" width={620}
+        <Modal title={t("tenders.nayi_lines_ko_kaam_se_jodo")} width={620}
           sub={`Har line, chune kaam ke HAR lambai-wale layer ke neeche judegi — MB isi granularity par banta hai`}
           onClose={()=>setKmlLink(null)}
           footer={<>
-            <SecBtn label="Baad me" onClick={()=>setKmlLink(null)}/>
+            <SecBtn label={t("tenders.baad_me")} onClick={()=>setKmlLink(null)}/>
             <PrimBtn label={`Jodo (${sel.length} × ${w ? w.linear_steps : 0} = ${sel.length * (w ? w.linear_steps : 0)} task)`}
               disabled={!sel.length || !w}
               onClick={async()=>{
@@ -5221,9 +5220,9 @@ function MapTab({tenderId, sites}) {
                 setKmlLink(null); load();
               }}/>
           </>}>
-          <Field label="Kaunsa kaam (work)">
+          <Field label={t("tenders.kaunsa_kaam_work")}>
             <SelIn value={String(kmlLink.work_id)} onChange={(v)=>setKmlLink({ ...kmlLink, work_id: Number(v) })}
-              options={works.map((x) => ({ v: String(x.task_id), l: `${x.name} · ${x.linear_steps} layer` }))}/>
+              options={works.map((x) => ({ v: String(x.task_id), l: t("tenders.name_linear_steps_layer", { name: x.name, linear_steps: x.linear_steps }) }))}/>
           </Field>
           <div style={{maxHeight:280, overflowY:"auto", marginTop:10, display:"flex", flexDirection:"column", gap:6}}>
             {kmlLink.features.map((f, i) => (
@@ -5282,7 +5281,7 @@ function MapTab({tenderId, sites}) {
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
           <Field label={t("tenders.site")}>
             <SelIn value={pending.project_id} onChange={v=>setPending(p=>({...p, project_id:v}))}
-              ph="Site chuno" options={sites.map(s=>({v:s.id, l:s.name}))}/>
+              ph={t("tenders.site_chuno_2")} options={sites.map(s=>({v:s.id, l:s.name}))}/>
           </Field>
           <Field label={t("common.type")}>
             <SelIn value={pending.atype} onChange={v=>{
@@ -5293,8 +5292,8 @@ function MapTab({tenderId, sites}) {
           </Field>
           <Field label={t("common.naam")} full>
             <TxtIn value={pending.name} onChange={v=>setPending(p=>({...p, name:v}))}
-              ph={pending.kind==="line" ? "e.g. Sec-25 | CH 0–500"
-                 : pending.kind==="area" ? "e.g. UGR Sec-25 ka plot" : "e.g. UGR Sec-25"}/>
+              ph={pending.kind==="line" ? t("tenders.e_g_sec_25_ch_0")
+                 : pending.kind==="area" ? t("tenders.e_g_ugr_sec_25_ka") : t("tenders.e_g_ugr_sec_25")}/>
           </Field>
           {/* Chaudai — sadak ki ROW, ya bade pipe ka daayra. Sadak ki
               chaudai har jagah alag hoti hai, aur naali usi se nikalti hai. */}
@@ -5425,7 +5424,7 @@ function MapTab({tenderId, sites}) {
         </>}>
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13}}>
           <Field label={t("tenders.item_ka_naam")} full>
-            <TxtIn value={addItem.label} onChange={v=>setAddItem(a=>({...a, label:v}))} ph="e.g. OFC duct"/>
+            <TxtIn value={addItem.label} onChange={v=>setAddItem(a=>({...a, label:v}))} ph={t("tenders.e_g_ofc_duct")}/>
           </Field>
           <Field label={t("tenders.kaise_mark_hoga")} full>
             <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
@@ -5770,7 +5769,7 @@ function MBDraftModal({tenderId, onClose, onDone}) {
         <Field label={t("tenders.period_se")}><TxtIn type="date" value={from} onChange={setFrom}/></Field>
         <Field label={t("tenders.period_tak")}><TxtIn type="date" value={to} onChange={setTo}/></Field>
         <Field label={t("tenders.mb_date")}><TxtIn type="date" value={mdate} onChange={setMdate}/></Field>
-        <Field label={t("tenders.mb_ref_page_no")}><TxtIn value={mbRef} onChange={setMbRef} ph="MB-01 / Pg-12"/></Field>
+        <Field label={t("tenders.mb_ref_page_no")}><TxtIn value={mbRef} onChange={setMbRef} ph={t("tenders.mb_01_pg_12")}/></Field>
         <SecBtn label={busy?"...":t("tenders.draft_banao")} onClick={fetchDraft} disabled={busy}/>
       </div>
 
@@ -5926,11 +5925,11 @@ function MeasurementsTab({tenderId, sites, boqItems, bills}) {
       <div style={{padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB,
         display:"flex", gap:9, flexWrap:"wrap", alignItems:"center"}}>
         <div style={{minWidth:180}}>
-          <SelIn value={fSite} onChange={setFSite} ph="Saari sites"
+          <SelIn value={fSite} onChange={setFSite} ph={t("tenders.saari_sites")}
             options={sites.map(s=>({v:s.id, l:s.name}))}/>
         </div>
         <div style={{minWidth:240}}>
-          <SelIn value={fItem} onChange={setFItem} ph="Saare BOQ items"
+          <SelIn value={fItem} onChange={setFItem} ph={t("tenders.saare_boq_items")}
             options={boqItems.map(i=>({v:i.id, l:`${i.item_no||"--"} · ${String(i.description||"").slice(0,44)}`}))}/>
         </div>
         {(fSite||fItem) && <SecBtn label={t("tenders.filter_hatao")} Icon={IcX} onClick={()=>{setFSite("");setFItem("");}}/>}
@@ -6165,7 +6164,7 @@ function DeductionSetupModal({tenderId, onClose, onDone}) {
           <div style={{fontSize:11, fontWeight:700, color:T.t3, marginBottom:8, textTransform:"uppercase",
             letterSpacing:".5px"}}>{t("tenders.naya_head")}</div>
           <div style={{display:"grid", gridTemplateColumns:COLS, gap:9, alignItems:"center"}}>
-            <TxtIn value={add.head_name} onChange={v=>setAdd(p=>({...p,head_name:v}))} ph="e.g. Withheld"/>
+            <TxtIn value={add.head_name} onChange={v=>setAdd(p=>({...p,head_name:v}))} ph={t("tenders.e_g_withheld")}/>
             <SelIn value={add.calc_type} options={CALC_OPTS}
               onChange={v=>setAdd(p=>({...p,calc_type:v, rate: v==="manual" ? "" : p.rate}))}/>
             <input type="number" value={add.rate} disabled={add.calc_type==="manual"}

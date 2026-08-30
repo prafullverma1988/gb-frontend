@@ -364,7 +364,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
       {err && <div style={{ padding: "8px 12px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 8, fontSize: 12, color: T.red }}>{err}</div>}
       {!llmReady && <div style={{ padding: "8px 12px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, fontSize: 12, color: "#92400E" }}>{t("tender_ai_plan.ai_abhi_uplabdh_nahi_server_par")}</div>}
       {dinfo && (
-        <div style={{ padding: "7px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, fontSize: 11.5, color: T.t3 }}>{dinfo.files > 1 && <b style={{ color: T.t1 }}>{dinfo.files} files · </b>}<Rich k="tender_ai_plan.file_padh_li_sheets_sheets_items" params={{ sheets: dinfo.sheets, items: dinfo.items, withTot: dinfo.withTot }} />{dinfo.errSheets > 0 && <> · <span style={{ color: "#B45309" }}>{t("tender_ai_plan.errsheets_sheets_me_tooti_ref_cells", { errSheets: dinfo.errSheets })}</span></>}{t("tender_ai_plan.saar_kb", { kb: dinfo.kb })}
+        <div style={{ padding: "7px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, fontSize: 11.5, color: T.t3 }}>{dinfo.files > 1 && <b style={{ color: T.t1 }}>{t("tender_ai_plan.files_files", { files: dinfo.files })}</b>}<Rich k="tender_ai_plan.file_padh_li_sheets_sheets_items" params={{ sheets: dinfo.sheets, items: dinfo.items, withTot: dinfo.withTot }} />{dinfo.errSheets > 0 && <> · <span style={{ color: "#B45309" }}>{t("tender_ai_plan.errsheets_sheets_me_tooti_ref_cells", { errSheets: dinfo.errSheets })}</span></>}{t("tender_ai_plan.saar_kb", { kb: dinfo.kb })}
         </div>
       )}
       {job?.status === "running" && (
