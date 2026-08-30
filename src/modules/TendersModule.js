@@ -3943,6 +3943,7 @@ function MapTab({tenderId, sites}) {
   const linkTaskRef = useRef(null);
   const [pickFor, setPickFor] = useState(null);   // {mode:"line"|"task", row?|aid?}
   const [kmlLink, setKmlLink] = useState(null);   // {features:[{take,qty,...}], work_id}
+  const [taskMark, setTaskMark] = useState(null);  // {q, wtype} — "task se mark karo" ka chunav
   const [photosOn, setPhotosOn] = useState(false);
   const [locatePhoto, setLocatePhoto] = useState(false);   // purani photo se jagah
   const [sugg, setSugg]       = useState([]);     // search ke suggestions
@@ -4614,6 +4615,12 @@ function MapTab({tenderId, sites}) {
           {/* Draw toolbar — our own, because Maps removed DrawingManager */}
           <div style={{display:"flex", gap:7, alignItems:"center", flexWrap:"wrap",
             padding:"8px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surface}}>
+            {mode && linkTask && (
+              <div style={{display:"flex", alignItems:"center", gap:8, padding:"3px 10px", borderRadius:8,
+                background:T.indL||T.surfaceB, border:`1px solid ${T.ind}`, fontSize:11.5, color:T.ind, fontWeight:700}}>
+                📍 {linkTask.name} ke liye — kheench kar save karo
+              </div>
+            )}
             {!mode && (<>
               {/* Ek hi jagah se sab kuch — site par sirf pipeline nahi hoti:
                   sadak PCC ya bitumen, naali kis taraf, UGR ka asli rakba.
@@ -4658,6 +4665,14 @@ function MapTab({tenderId, sites}) {
                   </div>
                 </>)}
               </div>
+              {/* Doosra raasta: pehle KAAM chuno, phir uski jagah banao ya
+                  bani hui se jodo. Task-tree me stretch aur qty pehle se
+                  hote hain, isliye wahan se shuru karna zyada seedha hai. */}
+              <SecBtn label="Task se mark karo" Icon={IcMapPin}
+                onClick={()=>{
+                  if (!mapTasks) { toast.error("Pehle upar se site chuno — kaam usi site ke dikhte hain"); return; }
+                  setTaskMark({ q: "", wtype: "" });
+                }}/>
               {/* E — photo layer ka switch */}
               <button onClick={()=>setPhotosOn(o=>!o)}
                 style={{fontSize:12, padding:"7px 12px", borderRadius:7, cursor:"pointer", fontFamily:"inherit",
@@ -5004,6 +5019,58 @@ function MapTab({tenderId, sites}) {
             ))}
           </div>
         </Panel>
+      );
+    })()}
+
+    {/* "Task se mark karo" — kaam chuno, phir kheencho ya jodo */}
+    {taskMark && (() => {
+      const rows = (mapTasks?.tasks || []).filter((r) => r.bucket.startsWith("unmapped"));
+      const tc = {};
+      rows.forEach((r) => { const k = r.wtype || "other"; tc[k] = (tc[k] || 0) + 1; });
+      const TL = { pipeline:"Pipeline", water:"Water", sewer:"Sewer", structure:"Structure",
+        road:"Road", drain:"Naali", electrical:"Electrical", other:"Anya" };
+      const q = taskMark.q.trim().toLowerCase();
+      const list = rows
+        .filter((r) => !taskMark.wtype || (r.wtype || "other") === taskMark.wtype)
+        .filter((r) => !q || [r.name, r.task_no, r.work_name, r.item_no].some((v) => String(v||"").toLowerCase().includes(q)))
+        .slice(0, 300);
+      return (
+        <Modal title="Kis kaam ki jagah tay karni hai?" width={620}
+          sub={`${mapTasks?.project?.name || ""} — jin kaam ki jagah abhi tay nahi hai`}
+          onClose={()=>setTaskMark(null)}>
+          <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:10, alignItems:"center"}}>
+            <button onClick={()=>setTaskMark({ ...taskMark, wtype: "" })}
+              style={{border:`1px solid ${!taskMark.wtype?T.ind:T.b1}`, background:T.surface, color:!taskMark.wtype?T.ind:T.t3,
+                borderRadius:13, padding:"2px 10px", fontSize:11, fontWeight:700, cursor:"pointer"}}>Sab · {rows.length}</button>
+            {Object.keys(tc).sort((a,b)=>tc[b]-tc[a]).map((k) => (
+              <button key={k} onClick={()=>setTaskMark({ ...taskMark, wtype: taskMark.wtype===k?"":k })}
+                style={{border:`1px solid ${taskMark.wtype===k?T.ind:T.b1}`, background:T.surface, color:taskMark.wtype===k?T.ind:T.t3,
+                  borderRadius:13, padding:"2px 10px", fontSize:11, fontWeight:700, cursor:"pointer"}}>{TL[k]||k} · {tc[k]}</button>
+            ))}
+            <input value={taskMark.q} onChange={(e)=>setTaskMark({ ...taskMark, q: e.target.value })} placeholder="dhoondo…"
+              style={{marginLeft:"auto", border:`1px solid ${T.b1}`, borderRadius:8, padding:"4px 10px", fontSize:11.5, width:170, background:T.surface, color:T.t1}}/>
+          </div>
+          <div style={{maxHeight:360, overflowY:"auto", display:"flex", flexDirection:"column", gap:6}}>
+            {!list.length && <div style={{fontSize:12, color:T.t4, padding:"16px 4px"}}>Sab kaam ki jagah tay hai ✓</div>}
+            {list.map((r) => (
+              <div key={r.task_id} style={{display:"flex", alignItems:"center", gap:9, border:`1px solid ${T.b1}`, borderRadius:9, padding:"8px 11px"}}>
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{fontSize:12.5, fontWeight:700, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                    <span style={{color:T.t4, fontWeight:600}}>{r.task_no}</span> {r.name}
+                    {r.layers > 0 && <span style={{color:T.blu, fontWeight:600}}> · {r.layers} layer</span>}
+                  </div>
+                  <div style={{fontSize:10.5, color:T.t4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                    {r.work_name} · {r.scope_qty != null ? `${r.scope_qty} ${r.unit || ""}` : "qty nahi"}{r.item_no ? ` · BOQ ${r.item_no}` : ""}
+                  </div>
+                </div>
+                <button onClick={()=>{ setTaskMark(null); armMark(r); }}
+                  style={{border:`1px solid ${T.ind}`, background:T.ind, color:"#fff", borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>📍 Map par kheencho</button>
+                <button onClick={()=>{ setTaskMark(null); setPickFor({ mode:"line", row:r }); }}
+                  style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>🔗 Bani hui se jodo</button>
+              </div>
+            ))}
+          </div>
+        </Modal>
       );
     })()}
 
