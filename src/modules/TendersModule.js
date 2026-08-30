@@ -4519,7 +4519,15 @@ function MapTab({tenderId, sites}) {
     });
     setBusy(false);
     if (!res?.success) { toast.error(res?.message || "Import nahi hua"); return; }
-    toast.success(`${res.data.lines} line + ${res.data.points} point import huye · ${fmtKm(res.data.total_length_m)}`);
+    // Server wahi jagah dobara nahi banata — kitni chhooti, wo saaf batao,
+    // warna "import ho gaya" padh kar user samajhta hai sab chadh gaya.
+    const dup = Number(res.data.skipped_duplicates) || 0;
+    if (!res.data.lines && !res.data.points && dup) {
+      toast.success(`Ye ${dup} jagah pehle se map par hai — dobara nahi banayi`);
+    } else {
+      toast.success(`${res.data.lines} line + ${res.data.points} point import huye · ${fmtKm(res.data.total_length_m)}`
+        + (dup ? ` · ${dup} pehle se thi` : ""));
+    }
     // Nayi lines ko seedha kaam se jodne ka raasta — Prafull ka KML flow.
     const newLines = (res.data.features || []).filter((f) => f.kind === "line");
     if (newLines.length && (mapTasks?.works || []).length) {
