@@ -3932,6 +3932,10 @@ function MapTab({tenderId, sites}) {
   const [famHidden, setFamHidden] = useState(()=>new Set());
   const [draftPts, setDraftPts] = useState([]);   // line ke abhi tak ke points
   const [panel, setPanel]     = useState(null);   // stretch dashboard {loading, data}
+  // "Kaam ↔ Jagah" — AI-plan ke qty-task map par kahan hain (P0: sirf sach)
+  const [mapTasks, setMapTasks] = useState(null);
+  const [mtBucket, setMtBucket] = useState("unmapped_line");
+  const [mtSearch, setMtSearch] = useState("");
   const [photosOn, setPhotosOn] = useState(false);
   const [locatePhoto, setLocatePhoto] = useState(false);   // purani photo se jagah
   const [sugg, setSugg]       = useState([]);     // search ke suggestions
@@ -4097,16 +4101,19 @@ function MapTab({tenderId, sites}) {
   useEffect(()=>{ sitesRef.current = sites; }, [sites]);
 
   const load = useCallback(async () => {
-    const [a, s, pr] = await Promise.all([
+    const siteId = fSite || (sitesRef.current.length === 1 ? sitesRef.current[0].id : "");
+    const [a, s, pr, mt] = await Promise.all([
       api.get(`/tenders/${tenderId}/alignments${fSite?`?project_id=${fSite}`:""}`),
       api.get(`/tenders/${tenderId}/alignments-summary`),
       api.get(`/tenders/${tenderId}/alignments-progress`),
+      siteId ? api.get(`/tenders/by-project/${siteId}/map-tasks`) : Promise.resolve(null),
     ]);
     setLoading(false);
     if (a?.success) setItems(Array.isArray(a.data)?a.data:[]);
     else toast.error(a?.message || "Alignment load nahi hua");
     if (s?.success) setSummary(s.data);
     if (pr?.success) setProgress(pr.data);
+    setMapTasks(mt?.success ? mt.data : null);
   }, [tenderId, fSite, toast]);
   useEffect(()=>{ load(); }, [load]);
 
@@ -4836,6 +4843,63 @@ function MapTab({tenderId, sites}) {
         </div>
       )}
     </Panel>
+
+    {/* ── "Kaam ↔ Jagah" — har qty-task map par kahan hai (P0: sach-list) ──
+        Stretch-stage EK row me aata hai (layers ginti ke saath) — Prafull ke
+        flow me line STRETCH se judti hai, layer se nahi. Actions P2 me. */}
+    {mapTasks && (() => {
+      const B = mapTasks.buckets || {};
+      const unCount = (B.unmapped_line?.count||0) + (B.unmapped_point?.count||0) + (B.unmapped_other?.count||0);
+      const unAmt = (B.unmapped_line?.amt||0) + (B.unmapped_point?.amt||0) + (B.unmapped_other?.amt||0);
+      const CHIPS = [
+        ["unmapped_line", "Line-wale"], ["unmapped_point", "Pin-wale"], ["unmapped_other", "Baaki"],
+        ["na", "Map par nahi aata"], ["mapped", "✓ Jude hue"],
+      ];
+      const q = mtSearch.trim().toLowerCase();
+      const list = (mapTasks.tasks || []).filter((r) => r.bucket === mtBucket)
+        .filter((r) => !q || [r.name, r.task_no, r.item_no, r.work_name].some((v) => String(v||"").toLowerCase().includes(q)));
+      return (
+        <Panel style={{marginTop:14}}>
+          <PHead title="Kaam ↔ Jagah"
+            sub={unCount ? `${unCount} kaam (${money(unAmt)}) abhi map par nahi — ${mapTasks.project?.name || ""}` : `sab kaam ki jagah tay hai ✓ — ${mapTasks.project?.name || ""}`}/>
+          <div style={{display:"flex", flexWrap:"wrap", gap:7, padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, alignItems:"center"}}>
+            {CHIPS.map(([k, lbl]) => (
+              <button key={k} onClick={()=>setMtBucket(k)}
+                style={{border:`1px solid ${mtBucket===k?T.ind:T.b1}`, background:mtBucket===k?T.indL||T.bg:T.surface,
+                  color:mtBucket===k?T.ind:T.t3, borderRadius:15, padding:"3px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer"}}>
+                {lbl} · {B[k]?.count ?? 0}
+              </button>
+            ))}
+            <input value={mtSearch} onChange={(e)=>setMtSearch(e.target.value)} placeholder="dhoondo…"
+              style={{marginLeft:"auto", border:`1px solid ${T.b1}`, borderRadius:8, padding:"4px 10px", fontSize:11.5, width:170, background:T.surface, color:T.t1}}/>
+          </div>
+          <div style={{maxHeight:330, overflowY:"auto"}}>
+            {!list.length && (
+              <div style={{padding:"18px 14px", fontSize:12, color:T.t4}}>Is bucket me kuchh nahi.</div>
+            )}
+            {list.map((r) => (
+              <div key={r.task_id} style={{display:"flex", alignItems:"center", gap:10, padding:"8px 14px", borderBottom:`1px solid ${T.b1}`}}>
+                <div style={{minWidth:0, flex:1}}>
+                  <div style={{fontSize:12.5, fontWeight:700, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                    <span style={{color:T.t4, fontWeight:600, fontVariantNumeric:"tabular-nums"}}>{r.task_no}</span> {r.name}
+                    {r.layers > 0 && <span style={{color:T.blu, fontWeight:600}}> · {r.layers} layer</span>}
+                  </div>
+                  <div style={{fontSize:10.5, color:T.t4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                    {r.work_name}{r.item_no ? ` · BOQ ${r.item_no}` : ""}{r.effective_alignment_id && !r.alignment_id ? " · jagah stretch se" : ""}
+                  </div>
+                </div>
+                <div style={{textAlign:"right", flexShrink:0}}>
+                  <div style={{fontSize:12, fontWeight:700, color:T.t1, fontVariantNumeric:"tabular-nums"}}>
+                    {r.scope_qty != null ? `${r.scope_qty} ${r.unit || ""}` : "—"}
+                  </div>
+                  <div style={{fontSize:10.5, color:T.t4}}>{r.scope_amt ? money(r.scope_amt) : ""}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      );
+    })()}
 
       {locatePhoto && (
         <PhotoLocateModal tenderId={tenderId} onClose={()=>setLocatePhoto(false)}
