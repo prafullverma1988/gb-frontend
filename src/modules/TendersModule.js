@@ -4968,7 +4968,11 @@ function MapTab({tenderId, sites}) {
                   <div style={{fontSize:12, fontWeight:700, color:T.t1, fontVariantNumeric:"tabular-nums"}}>
                     {r.scope_qty != null ? `${r.scope_qty} ${r.unit || ""}` : "—"}
                   </div>
-                  <div style={{fontSize:10.5, color:T.t4}}>{r.scope_amt ? money(r.scope_amt) : ""}</div>
+                  <div style={{fontSize:10.5, color:T.t4}}>
+                    {r.done_qty > 0
+                      ? <span style={{color:T.grn, fontWeight:700}}>{r.done_qty} ho chuka{r.progress ? ` · ${r.progress}%` : ""}</span>
+                      : (r.scope_amt ? money(r.scope_amt) : "")}
+                  </div>
                 </div>
                 <div style={{display:"flex", gap:6, flexShrink:0}}>
                   {r.bucket.startsWith("unmapped") && (<>
