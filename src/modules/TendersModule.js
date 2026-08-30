@@ -3936,6 +3936,12 @@ function MapTab({tenderId, sites}) {
   const [mapTasks, setMapTasks] = useState(null);
   const [mtBucket, setMtBucket] = useState("unmapped_line");
   const [mtSearch, setMtSearch] = useState("");
+  // P2 — jodne ke raaste: draw-karke (linkTask armed), picker se (pickFor),
+  // KML ke baad bulk (kmlLink). linkTaskRef savePending ke closure ke liye.
+  const [linkTask, setLinkTask] = useState(null);
+  const linkTaskRef = useRef(null);
+  const [pickFor, setPickFor] = useState(null);   // {mode:"line"|"task", row?|aid?}
+  const [kmlLink, setKmlLink] = useState(null);   // {features:[{take,qty,...}], work_id}
   const [photosOn, setPhotosOn] = useState(false);
   const [locatePhoto, setLocatePhoto] = useState(false);   // purani photo se jagah
   const [sugg, setSugg]       = useState([]);     // search ke suggestions
@@ -3951,7 +3957,7 @@ function MapTab({tenderId, sites}) {
     setPanel({ loading: true });
     const r = await api.get(`/tenders/${tenderId}/alignments/${aid}/summary`);
     if (!r?.success) { setPanel(null); toast.error(r?.message || "Stretch load nahi hua"); return; }
-    setPanel({ loading: false, data: r.data });
+    setPanel({ loading: false, data: { ...r.data, __aid: aid } });
   }, [tenderId, toast]);
 
   // F — jagah ka search. Google Geocoder pehle; wo na chale (Geocoding API
@@ -4317,6 +4323,7 @@ function MapTab({tenderId, sites}) {
   const stopMode = useCallback(()=>{
     modeRef.current = null; setMode(null);
     intentRef.current = null; setIntent(null);
+    linkTaskRef.current = null; setLinkTask(null);
     rectRef.current = null;
     if (mapRef.current) mapRef.current.setOptions({ draggableCursor: null });
   }, []);
@@ -4455,6 +4462,12 @@ function MapTab({tenderId, sites}) {
       pending.kind === "line" ? `Line save hui — ${fmtKm(res.data.length_m)}`
       : pending.kind === "area" ? t("tenders.rakba_save_hua", { area: fmtArea(res.data.area_sqm) })
       : "Point save hua"));
+    // "Map par mark karo" se aaye the? — nayi jagah ko usi task se jod do.
+    const armed = linkTaskRef.current;
+    if (armed && res.data && res.data.id) {
+      linkTaskRef.current = null; setLinkTask(null);
+      await doLink(armed, res.data.id);
+    }
     setPending(null); clearDraft(); load();
   };
 
@@ -4463,6 +4476,35 @@ function MapTab({tenderId, sites}) {
     const res = await api.del(`/tenders/${tenderId}/alignments/${it.id}`);
     if (!res?.success) { toast.error(res?.message || "Delete nahi hua"); return; }
     toast.success("Hat gaya"); load();
+  };
+
+  // Task ↔ line jodna — farak dikhe to poochh kar map wali lambai likh do
+  // (Prafull ka niyam: qty alag ho to map se sudhar).
+  const doLink = async (row, alignmentId) => {
+    const r = await api.post(`/tasks/${row.task_id}/map-link`, { alignment_id: alignmentId });
+    if (!r?.success) { toast.error(r?.message || "Jud nahi paya"); return false; }
+    const d = r.data;
+    if (d.farak != null && Math.abs(d.farak) > 0.5) {
+      const okSync = await window.confirmAsync(
+        `Map ki lambai ${d.line_len} m hai, plan me ${d.plan_qty} ${row.unit || ""} likha hai (farak ${d.farak > 0 ? "+" : ""}${d.farak}).\n\nMap wali lambai task me likh du?`);
+      if (okSync) await api.post(`/tasks/${row.task_id}/map-link`, { alignment_id: alignmentId, sync_qty: true });
+    }
+    toast.success(`"${row.name}" jud gaya`);
+    load();
+    return true;
+  };
+  const armMark = (row) => {
+    const iv = /rmt|^m$|^rm$|mtr|meter|metre|rft|^ft$/i.test(String(row.unit || ""))
+      ? { kind: "line", atype: "other", shape: "line" }
+      : { kind: "point", atype: "other", shape: "point" };
+    linkTaskRef.current = row; setLinkTask(row);
+    startDraw(iv);
+    toast.success(`Ab map par "${row.name}" ki jagah banao — save par khud jud jayegi`);
+  };
+  const unNa = async (row, na) => {
+    const r = await api.put(`/tasks/${row.task_id}`, { map_na: na ? 1 : 0 });
+    if (r?.success) { toast.success(na ? "Map se alag rakha" : "Wapas list me"); load(); }
+    else toast.error(r?.message || "Nahi hua");
   };
 
   const importKml = async (file) => {
@@ -4477,6 +4519,12 @@ function MapTab({tenderId, sites}) {
     setBusy(false);
     if (!res?.success) { toast.error(res?.message || "Import nahi hua"); return; }
     toast.success(`${res.data.lines} line + ${res.data.points} point import huye · ${fmtKm(res.data.total_length_m)}`);
+    // Nayi lines ko seedha kaam se jodne ka raasta — Prafull ka KML flow.
+    const newLines = (res.data.features || []).filter((f) => f.kind === "line");
+    if (newLines.length && (mapTasks?.works || []).length) {
+      setKmlLink({ features: newLines.map((f) => ({ ...f, take: true, qty: f.length_m })),
+        work_id: mapTasks.works[0].task_id });
+    }
     load();
   };
 
@@ -4768,6 +4816,9 @@ function MapTab({tenderId, sites}) {
                       {d.project_name} · {alignLabel(d.kind, d.atype)} · {fmtKm(d.length_m)}
                     </div>
                   </div>
+                  <button onClick={()=>setPickFor({ mode:"task", aid: d.__aid })} title="Is jagah par koi kaam jodo"
+                    style={{border:`1px solid ${T.ind}`, background:T.surface, color:T.ind, borderRadius:7,
+                      padding:"2px 8px", fontSize:10.5, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap"}}>+ kaam</button>
                   <button onClick={()=>setPanel(null)} style={{border:"none", background:"none", cursor:"pointer",
                     fontSize:15, color:T.t4, lineHeight:1, padding:2}}>✕</button>
                 </div>
@@ -4894,10 +4945,109 @@ function MapTab({tenderId, sites}) {
                   </div>
                   <div style={{fontSize:10.5, color:T.t4}}>{r.scope_amt ? money(r.scope_amt) : ""}</div>
                 </div>
+                <div style={{display:"flex", gap:6, flexShrink:0}}>
+                  {r.bucket.startsWith("unmapped") && (<>
+                    <button onClick={()=>armMark(r)} title="Map par kheench kar jodo"
+                      style={{border:`1px solid ${T.ind}`, background:linkTask?.task_id===r.task_id?T.ind:T.surface, color:linkTask?.task_id===r.task_id?"#fff":T.ind, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>📍 Mark</button>
+                    <button onClick={()=>setPickFor({ mode:"line", row:r })} title="Bani hui line/pin se jodo"
+                      style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>🔗 Jodo</button>
+                    <button onClick={()=>unNa(r, true)} title="Ye kaam map par nahi aata"
+                      style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t4, borderRadius:7, padding:"3px 7px", fontSize:11, cursor:"pointer"}}>✕</button>
+                  </>)}
+                  {r.bucket === "na" && (
+                    <button onClick={()=>unNa(r, false)}
+                      style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>Wapas lao</button>
+                  )}
+                  {r.bucket === "mapped" && r.alignment_id && (
+                    <button onClick={async()=>{ const rr = await api.post(`/tasks/${r.task_id}/map-link`, { alignment_id: null }); if (rr?.success) { toast.success("Link hata"); load(); } else toast.error(rr?.message || "Nahi hata"); }}
+                      style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t4, borderRadius:7, padding:"3px 9px", fontSize:11, cursor:"pointer"}}>Link hatao</button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         </Panel>
+      );
+    })()}
+
+    {/* Picker: task ke liye line chuno (mode line) YA line ke liye task (mode task) */}
+    {pickFor && (() => {
+      const isLinePick = pickFor.mode === "line";
+      const wantLine = isLinePick && /rmt|^m$|^rm$|mtr|meter|metre|rft|^ft$/i.test(String(pickFor.row?.unit || ""));
+      const opts = isLinePick
+        ? (mapTasks?.features || []).filter((f) => wantLine ? f.kind === "line" : f.kind !== "line")
+            .slice().sort((a, b) => a.linked_tasks - b.linked_tasks)
+        : (mapTasks?.tasks || []).filter((x) => x.bucket.startsWith("unmapped"));
+      return (
+        <Modal title={isLinePick ? `"${pickFor.row.name}" kis par hai?` : "Is jagah par kaunsa kaam?"} width={520}
+          sub={isLinePick ? "Bani hui jagah chuno — ya band karke 📍 Mark se nayi kheencho" : "Bina-jagah wale kaam"}
+          onClose={()=>setPickFor(null)}>
+          <div style={{maxHeight:340, overflowY:"auto", display:"flex", flexDirection:"column", gap:6}}>
+            {!opts.length && <div style={{fontSize:12, color:T.t4, padding:"14px 4px"}}>Kuchh nahi mila.</div>}
+            {opts.map((o) => (
+              <button key={isLinePick ? o.id : o.task_id}
+                onClick={async()=>{ const okd = isLinePick ? await doLink(pickFor.row, o.id) : await doLink(o, pickFor.aid); if (okd) setPickFor(null); }}
+                style={{display:"flex", alignItems:"center", gap:9, textAlign:"left", border:`1px solid ${T.b1}`,
+                  background:T.surface, borderRadius:9, padding:"8px 11px", cursor:"pointer"}}>
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{fontSize:12.5, fontWeight:700, color:T.t1}}>{isLinePick ? o.name : o.name}</div>
+                  <div style={{fontSize:10.5, color:T.t4}}>
+                    {isLinePick
+                      ? `${alignLabel(o.kind, o.atype)}${o.length_m ? ` · ${fmtKm(o.length_m)}` : ""}${o.linked_tasks ? ` · ${o.linked_tasks} task jude` : " · khali"}`
+                      : `${o.work_name} · ${o.scope_qty ?? "—"} ${o.unit || ""}${o.layers ? ` · ${o.layers} layer` : ""}`}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </Modal>
+      );
+    })()}
+
+    {/* KML ke baad: nayi lines ko kaam se jodo — line × layer preview ke saath */}
+    {kmlLink && (() => {
+      const works = mapTasks?.works || [];
+      const w = works.find((x) => x.task_id === Number(kmlLink.work_id)) || works[0];
+      const sel = kmlLink.features.filter((f) => f.take);
+      const siteId = fSite || (sitesRef.current.length === 1 ? sitesRef.current[0].id : "");
+      return (
+        <Modal title="Nayi lines ko kaam se jodo" width={620}
+          sub={`Har line, chune kaam ke HAR lambai-wale layer ke neeche judegi — MB isi granularity par banta hai`}
+          onClose={()=>setKmlLink(null)}
+          footer={<>
+            <SecBtn label="Baad me" onClick={()=>setKmlLink(null)}/>
+            <PrimBtn label={`Jodo (${sel.length} × ${w ? w.linear_steps : 0} = ${sel.length * (w ? w.linear_steps : 0)} task)`}
+              disabled={!sel.length || !w}
+              onClick={async()=>{
+                const qty_by_alignment = {};
+                sel.forEach((f) => { const q = Number(f.qty); if (Number.isFinite(q) && q > 0) qty_by_alignment[f.id] = q; });
+                const r = await api.post("/tasks/map-bulk-link", {
+                  project_id: Number(siteId), work_task_id: w.task_id,
+                  alignment_ids: sel.map((f) => f.id), qty_by_alignment });
+                if (!r?.success) { toast.error(r?.message || "Jud nahi paya"); return; }
+                const d = r.data;
+                toast.success(`${d.created} task bane${d.pairs_skipped ? ` · ${d.pairs_skipped} pehle se the` : ""}${d.skipped.length ? ` · ${d.skipped.length} step chhode (entries thi)` : ""}`);
+                setKmlLink(null); load();
+              }}/>
+          </>}>
+          <Field label="Kaunsa kaam (work)">
+            <SelIn value={String(kmlLink.work_id)} onChange={(v)=>setKmlLink({ ...kmlLink, work_id: Number(v) })}
+              options={works.map((x) => ({ v: String(x.task_id), l: `${x.name} · ${x.linear_steps} layer` }))}/>
+          </Field>
+          <div style={{maxHeight:280, overflowY:"auto", marginTop:10, display:"flex", flexDirection:"column", gap:6}}>
+            {kmlLink.features.map((f, i) => (
+              <div key={f.id} style={{display:"flex", alignItems:"center", gap:9, border:`1px solid ${T.b1}`, borderRadius:9, padding:"7px 10px"}}>
+                <input type="checkbox" checked={f.take}
+                  onChange={(e)=>{ const c = [...kmlLink.features]; c[i] = { ...f, take: e.target.checked }; setKmlLink({ ...kmlLink, features: c }); }}/>
+                <div style={{flex:1, minWidth:0, fontSize:12.5, fontWeight:700, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{f.name}</div>
+                <input type="number" value={f.qty}
+                  onChange={(e)=>{ const c = [...kmlLink.features]; c[i] = { ...f, qty: e.target.value }; setKmlLink({ ...kmlLink, features: c }); }}
+                  style={{width:90, border:`1px solid ${T.b1}`, borderRadius:7, padding:"4px 8px", fontSize:12, textAlign:"right", background:T.surface, color:T.t1}}/>
+                <span style={{fontSize:10.5, color:T.t4, width:56}}>m ({fmtKm(f.length_m)})</span>
+              </div>
+            ))}
+          </div>
+        </Modal>
       );
     })()}
 
