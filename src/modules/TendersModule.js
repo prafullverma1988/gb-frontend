@@ -17,7 +17,7 @@ import PhotoLocateModal from "./tabs/PhotoLocateModal";
 import TenderAiPlan from "./tabs/TenderAiPlan";
 import DangerDelete from "./shared/DangerDelete";
 import * as XLSX from "xlsx";
-import api, { getUser } from "../config/api";
+import api, { getUser, API_BASE, getToken } from "../config/api";
 import { useToast } from "../components/Toast";
 // Receipt lene ke liye Finance ka hi form dobara use hota hai — TabParty aur
 // TabTransaction bhi yahi karte hain, taaki receipt banane ke rules ek jagah rahein.
@@ -4593,6 +4593,27 @@ function MapTab({tenderId, sites}) {
             <input type="file" accept=".kml,application/vnd.google-earth.kml+xml" style={{display:"none"}}
               onChange={e=>{ importKml(e.target.files?.[0]); e.target.value=""; }}/>
           </label>
+          {items.length > 0 && (
+            <button onClick={async ()=>{
+              // Authed download — export me wahi site-filter jo screen par hai
+              // (wahi niyam jo reports ke exports par hai: jo dikh raha wahi jaata hai).
+              try {
+                const res = await fetch(`${API_BASE}/tenders/${tenderId}/alignments/export-kml${fSite ? `?project_id=${fSite}` : ""}`,
+                  { headers: { Authorization: `Bearer ${getToken()}` } });
+                if (!res.ok) throw new Error(`KML nahi bana (${res.status})`);
+                const blob = await res.blob();
+                const cd = res.headers.get("Content-Disposition") || "";
+                const fn = (cd.match(/filename="([^"]+)"/) || [])[1] || "map.kml";
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = fn; document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(()=>URL.revokeObjectURL(url), 4000);
+              } catch (e) { toast.error(e.message || t("tenders.kml_download_nahi_hua")); }
+            }} style={{display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:7,
+              border:`1px solid ${T.b1}`, background:T.surface, fontSize:12, color:T.t2, cursor:"pointer", whiteSpace:"nowrap", fontFamily:"inherit"}}>
+              ⬇ {t("tenders.kml_download")}
+            </button>
+          )}
         </div>}/>
 
       {/* Sanity strip — drawn vs what the BOQ tendered */}
@@ -5485,6 +5506,7 @@ function MapTab({tenderId, sites}) {
                     return bits.length ? ` · ${bits.join(" · ")}` : "";
                   })()}
                   {it.source==="kml" && it.source_file ? ` · ${it.source_file}` : ""}
+                  {it.source==="walk" ? ` · ${t("tenders.site_se_chalkar")}${it.capture_meta?.avg_acc_m ? ` (GPS ±${it.capture_meta.avg_acc_m} m)` : ""}` : ""}
                 </div>
               </div>
               {it.kind==="area" && (

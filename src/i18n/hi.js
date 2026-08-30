@@ -6313,6 +6313,12 @@ const dict = {
   "tenders.kis_item_ki_jagah":                                 "किस आइटम की जगह *",
   "tenders.km_me_nahi_ginta":                                  "किमी में नहीं गिनता",
   "tenders.kml_import":                                        "केएमएल इम्पोर्ट",
+
+  "tenders.kml_download": "KML डाउनलोड",
+
+  "tenders.kml_download_nahi_hua": "KML डाउनलोड नहीं हुआ",
+
+  "tenders.site_se_chalkar": "साइट से चलकर",
   "tenders.kml_import_phir_bhi_chalega_list":                  "केएमएल इम्पोर्ट फिर भी चलेगा — लिस्ट नीचे दिखेगी।",
   "tenders.koi_asar_nahi":                                     "कोई असर नहीं",
   "tenders.koi_deduction_head_configured_nahi":                "कोई डिडक्शन हेड कॉन्फिगर नहीं।",

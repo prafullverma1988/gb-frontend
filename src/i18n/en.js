@@ -6314,6 +6314,12 @@ const dict = {
   "tenders.kis_item_ki_jagah":                                 "In place of which item *",
   "tenders.km_me_nahi_ginta":                                  "Does not count in km",
   "tenders.kml_import":                                        "KML import",
+
+  "tenders.kml_download": "Download KML",
+
+  "tenders.kml_download_nahi_hua": "KML download failed",
+
+  "tenders.site_se_chalkar": "walked on site",
   "tenders.kml_import_phir_bhi_chalega_list":                  "KML import will still work — list will be visible below.",
   "tenders.koi_asar_nahi":                                     "No effect",
   "tenders.koi_deduction_head_configured_nahi":                "No deduction head configured.",
