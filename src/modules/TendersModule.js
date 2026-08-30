@@ -4378,6 +4378,7 @@ function MapTab({tenderId, sites}) {
     stopMode();
     setPendingHidden(false);
     setPending({ kind: iv.kind, coords: live, name:"", atype: iv.atype, props:{},
+      center_pin: !!iv.centerPin,
       project_id: fSite || (sites.length===1 ? sites[0].id : "") });
   };
   // Leaving the tab mid-draw should not leave an overlay stuck on the map.
@@ -4487,6 +4488,7 @@ function MapTab({tenderId, sites}) {
       drain_side: pending.drain_side || undefined,
       drain_offset_m: pending.drain_side && pending.drain_offset_m !== "" && pending.drain_offset_m != null
         ? Number(pending.drain_offset_m) : undefined,
+      center_pin: pending.kind === "area" && pending.center_pin ? true : undefined,
       // Type ke apne field. Bemani value server chup-chaap gira deta hai —
       // drawing kisi ek galat khaane ki wajah se kabhi nahi khoti.
       props: cleanPropsOut(pending.props),
@@ -4534,11 +4536,13 @@ function MapTab({tenderId, sites}) {
     const isLine = /rmt|^m$|^rm$|mtr|meter|metre|rft|^ft$/i.test(String(row.unit || ""));
     const sh = shape || (isLine ? "line" : "point");
     const iv = sh === "line" ? { kind: "line", atype: "other", shape: "line" }
-      : sh === "area" ? { kind: "area", atype: "other", shape: "poly" }
+      : (sh === "area" || sh === "both") ? { kind: "area", atype: "other", shape: "poly", centerPin: sh === "both" }
       : { kind: "point", atype: "other", shape: "point" };
     linkTaskRef.current = row; setLinkTask(row);
     startDraw(iv);
-    toast.success(sh === "area"
+    toast.success(sh === "both"
+      ? `"${row.name}" ke chaaro taraf ghumao — rakba banega aur beech me pin bhi`
+      : sh === "area"
       ? `"${row.name}" ke chaaro taraf point-by-point line banao — band karte hi jud jayega`
       : `Ab map par "${row.name}" ki jagah banao — save par khud jud jayegi`);
   };
@@ -5078,6 +5082,8 @@ function MapTab({tenderId, sites}) {
                     ) : (<>
                       <button onClick={()=>armMark(r, "area")} title="Chaaro taraf line — band rakba"
                         style={{border:`1px solid ${T.ind}`, background:linkTask?.task_id===r.task_id?T.ind:T.surface, color:linkTask?.task_id===r.task_id?"#fff":T.ind, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>▱ Rakba</button>
+                      <button onClick={()=>armMark(r, "both")} title="Rakba + beech me pin"
+                        style={{border:`1px solid ${T.ind}`, background:T.surface, color:T.ind, borderRadius:7, padding:"3px 8px", fontSize:11, fontWeight:700, cursor:"pointer"}}>▱+📍</button>
                       <button onClick={()=>armMark(r, "point")} title="Bahut chhota — sirf pin"
                         style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"3px 8px", fontSize:11, fontWeight:700, cursor:"pointer"}}>📍 Pin</button>
                     </>)}
@@ -5149,6 +5155,8 @@ function MapTab({tenderId, sites}) {
                 ) : (<>
                   <button onClick={()=>{ setTaskMark(null); armMark(r, "area"); }} title="Chaaro taraf point-by-point line — band rakba"
                     style={{border:`1px solid ${T.ind}`, background:T.ind, color:"#fff", borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>▱ Rakba</button>
+                  <button onClick={()=>{ setTaskMark(null); armMark(r, "both"); }} title="Rakba aur uske beech me pin — dono"
+                    style={{border:`1px solid ${T.ind}`, background:T.surface, color:T.ind, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>▱+📍 Dono</button>
                   <button onClick={()=>{ setTaskMark(null); armMark(r, "point"); }} title="Bahut chhota hai — sirf pin"
                     style={{border:`1px solid ${T.b1}`, background:T.surface, color:T.t2, borderRadius:7, padding:"5px 11px", fontSize:11.5, fontWeight:700, cursor:"pointer", flexShrink:0}}>📍 Pin</button>
                 </>)}
@@ -5345,6 +5353,19 @@ function MapTab({tenderId, sites}) {
             <span style={{fontSize:16, fontWeight:800, color:T.ind, fontVariantNumeric:"tabular-nums"}}>{fmtArea(areaM2)}</span>
             <span style={{fontSize:11, color:T.t4}}>{t("tenders.rakba_geometry_se")}</span>
           </div>
+        )}
+
+        {/* Bada rakba zoom-out par dikhta nahi — beech me pin door se bhi
+            dikhta hai. Dono ek saath ban jaate hain, dono alag-alag khiskaye
+            ya mitaye ja sakte hain. */}
+        {!pending.edit && pending.kind === "area" && (
+          <label style={{marginTop:12, display:"flex", alignItems:"center", gap:8, cursor:"pointer",
+            padding:"9px 12px", borderRadius:9, background:T.surfaceB, border:`1px solid ${T.b1}`}}>
+            <input type="checkbox" checked={!!pending.center_pin}
+              onChange={(e)=>setPending(p=>({...p, center_pin:e.target.checked}))}/>
+            <span style={{fontSize:11.5, color:T.t2, fontWeight:600}}>Rakbe ke beech me pin bhi lagao</span>
+            <span style={{fontSize:10.5, color:T.t4}}>— zoom-out par pin hi dikhta hai</span>
+          </label>
         )}
 
         {/* Sadak (ya boundary/compound) ke saath naali — ek hi lakeer se
