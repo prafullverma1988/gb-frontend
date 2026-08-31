@@ -20,17 +20,32 @@ const TXN_TYPE_MAP={
 };
 const BACK_DEBIT=["payment","material_purchase","site_expense","party_payment",
   "subcon_expense","wallet_payment","wallet_topup","bank_transfer","settle_out"];
+// Line items ko chhota sa summary bana deta hai — "Panii" / "PVC PIPE 5\" +3".
+// Wallet ke site-expense me user note nahi likhta, isliye Note column khaali
+// reh jata tha; ab kam se kam kya khareeda gaya wo dikh jata hai.
+const itemSummary=t=>{
+  const its=t.line_items||t.items;
+  if(!Array.isArray(its)||its.length===0) return "";
+  const first=(its[0].item_name||its[0].name||"").trim();
+  if(!first) return "";
+  return its.length>1?`${first} +${its.length-1}`:first;
+};
 const mapTxn=t=>{
   const d=t.date?new Date(t.date):new Date();
+  // Wallet se hua kharcha: company account hai hi nahi, paisa staff ke wallet
+  // se gaya. Backend account_display me "<Staff> (Wallet)" bhejta hai.
+  const wallet=!!t.paid_via_staff_name&&!t.account_id;
   return {
     id:t.id,
     date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
     party:t.party_name||t.party||"—",
     // ONLY the user's actual note. The auto-generated description is
     // "Type — Party — Project", all of which already have their own columns.
-    note:(t.note&&t.note.trim())?t.note.trim():"",
+    note:(t.note&&t.note.trim())?t.note.trim():itemSummary(t),
     type:TXN_TYPE_MAP[t.type]||(t.dr?"Payment Out":"Payment In"),
-    account:t.account_name||t.account||"",
+    account:t.account_display||t.account_name||t.account||"",
+    wallet,
+    paidBy:t.paid_via_staff_name||t.created_by_name||"",
     amount:parseFloat(t.amount)||0,
     dr:BACK_DEBIT.includes(t.type)||t.dr===true,
     status:t.status||"paid",
@@ -87,7 +102,7 @@ function TabTransaction({projectId, projectName}) {
 
   const TYPES   = ["All","Payment In","Payment Out","Material Purchase","Site Expense","Sub-Con","Sales Invoice","Advance","Settlement"];
   const PARTIES = ["All",...[...new Set(transactions.map(t=>t.party).filter(Boolean))]];
-  const ACCOUNTS= ["All","HDFC","SBI","Petty Cash","ICICI OD"];
+  const ACCOUNTS= ["All",...[...new Set(transactions.map(t=>t.account).filter(Boolean))]];
   const STATUSES= ["All","paid","unpaid","unbilled"];
   const INVOICES= ["All",...D.invoices.map(i=>i.no)];
   const PAYOUTS  = ["All","Inflow (Money In)","Outflow (Money Out)"];
@@ -283,9 +298,10 @@ function TabTransaction({projectId, projectName}) {
               <span style={{fontSize:12.5,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:10}}>{txn.party}</span>
               <span style={{fontSize:12,color:txn.note?T.t2:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:10}}>{txn.note||"—"}</span>
               <div style={{minWidth:0}}><Pill label={txn.type} c={ts.c} bg={ts.bg}/></div>
-              <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
-                <div style={{width:7,height:7,borderRadius:"50%",background:ac,flexShrink:0}}/>
-                <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txn.account||"—"}</span>
+              <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}
+                title={txn.wallet?`${txn.paidBy} ke wallet se diya gaya`:(txn.account||"")}>
+                <div style={{width:7,height:7,borderRadius:"50%",background:txn.wallet?T.pur:ac,flexShrink:0}}/>
+                <span style={{fontSize:11.5,color:txn.wallet?T.pur:T.t2,fontWeight:txn.wallet?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txn.account||"—"}</span>
               </div>
               <span style={{fontSize:13,fontWeight:700,color:txn.dr?T.red:T.grn,fontVariantNumeric:"tabular-nums",textAlign:"right",whiteSpace:"nowrap"}}>{txn.dr?"−":"+"} ₹{fmtN(txn.amount)}</span>
               <div style={{display:"flex",justifyContent:"flex-end"}}>

@@ -216,7 +216,9 @@ function CashBookModule(){
               date,
               party: t.party_name || "",
               desc: t.description || t.note || t.type,
-              account: t.account_name || "",
+              // Wallet-origin rows ka koi company account nahi hota —
+              // account_display "<Staff> (Wallet)" bhejta hai.
+              account: t.account_display || t.account_name || "",
               head: t.head_name || TYPE_TO_HEAD[t.type] || "Other",
               mop: (t.mop || "cash").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
               site: t.project_name || "",

@@ -293,7 +293,8 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               <Tile label={t("common.project")}  value={txn.project_name || txn.project || "—"}/>
               {hasDueDate && txn.due_date && <Tile label={t("transaction_detail.payment_due")} value={fmtDate(txn.due_date)} c={T.amb}/>}
               {txn.reference_no && <Tile label={t("transaction_detail.reference")} value={txn.reference_no}/>}
-              {txn.account_name && <Tile label={t("transaction_detail.account")} value={txn.account_name}/>}
+              {(txn.account_display || txn.account_name) && <Tile label={t("transaction_detail.account")} value={txn.account_display || txn.account_name}/>}
+              {txn.paid_via_staff_name && <Tile label="Paid By" value={txn.paid_via_staff_name + " (Wallet)"} c={T.pur}/>}
               {txn.to_account_name && <Tile label={t("transaction_detail.to_account")} value={txn.to_account_name}/>}
             </div>
           )}
