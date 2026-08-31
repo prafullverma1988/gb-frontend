@@ -8,6 +8,7 @@ import { ConfirmProvider } from "./components/ConfirmDialog";
 import { PromptProvider } from "./components/PromptDialog";
 import NotificationBell from "./components/NotificationBell";
 import AppErrorBoundary from "./components/AppErrorBoundary";
+import SahayakFab from "./components/SahayakFab";
 import { t } from "./i18n";
 
 // ── LAZY + PRELOAD: shared promise so prefetch & React.lazy use same cache ──
@@ -2145,22 +2146,10 @@ function App(){
           a half-finished question in that module's context. Hidden while
           already inside Sahayak. */}
       {nav!=="sahayak"&&(
-        <button onClick={()=>{setSahayakFrom(nav);setNav("sahayak");}}
+        <SahayakFab onOpen={()=>{setSahayakFrom(nav);setNav("sahayak");}}
           title={t("app.sahayak_ai_kuch_bhi_poochein")}
-          style={{position:"fixed",right:isMobile?16:22,bottom:isMobile&&!hideAppShell?84:22,zIndex:120,
-            width:52,height:52,borderRadius:"50%",border:"none",cursor:"pointer",
-            background:T.blu,color:"#fff",boxShadow:`0 4px 16px ${T.blu}61`,
-            display:"flex",alignItems:"center",justifyContent:"center",transition:"transform .13s, box-shadow .13s"}}
-          onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.06)";e.currentTarget.style.boxShadow=`0 6px 20px ${T.blu}75`;}}
-          onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=`0 4px 16px ${T.blu}61`;}}>
-          <svg width={23} height={23} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 8V4H8M4 8h16v12H4zM2 14h2M20 14h2M9 13v2M15 13v2"/>
-          </svg>
-          <span style={{position:"absolute",right:-1,top:-1,width:15,height:15,borderRadius:"50%",background:T.amb,
-            display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 0 0 2px ${T.surface}`}}>
-            <svg width={9} height={9} viewBox="0 0 24 24" fill="#fff"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/></svg>
-          </span>
-        </button>
+          colour={T.blu} badge={T.amb} surface={T.surface}
+          defaultRight={isMobile?16:22} defaultBottom={isMobile&&!hideAppShell?84:22}/>
       )}
       {/* Mobile bottom navigation bar */}
       {isMobile&&!hideAppShell&&<MobileBottomNav active={nav} setActive={setNav} enabledModules={enabledModules} user={user}/>}
