@@ -943,7 +943,19 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
   );
 }
 
-function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,projectIdByName,onSaved,prefillGRN,settlesRef,lockParty,lockProject,preProject,projectId,preRaBillId}){
+// "party nahi mili?" escape hatch on the payment pickers — same wording and
+// weight as the library-select add link so it reads as one pattern.
+function AddPartyLink({onClick}){
+  return (
+    <button type="button" onClick={onClick}
+      style={{marginTop:4,background:"none",border:"none",padding:0,cursor:"pointer",
+        fontSize:11,fontWeight:600,color:T.blu,fontFamily:"inherit"}}>
+      + Add New Party to Library
+    </button>
+  );
+}
+
+function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,projectIdByName,onSaved,onPartyAdded,prefillGRN,settlesRef,lockParty,lockProject,preProject,projectId,preRaBillId}){
   // Reference the module-scope constants (renamed to keep call sites
   // unchanged — saves dozens of touch-ups below).
   const MAT_HEADS = MAT_HEADS_CONST;
@@ -1020,8 +1032,30 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // or go to ANY party (client, vendor, subcon, staff), not just the "expected"
   // type. Restricting these hid valid counterparties (e.g. a company with no
   // clients saw only staff under "Received From"). Show all parties + staff.
-  const PAYABLE_LIST=[...new Set([...ALL_PARTIES,...STAFF_MERGED])];
-  const RECEIVABLE_LIST=[...new Set([...ALL_PARTIES,...STAFF_MERGED])];
+  // Party added from inside this modal — money can arrive from someone who
+  // isn't in the library yet, and making the user abandon a half-typed entry
+  // to go create them is where receipts get skipped. Saved to the library like
+  // any other party; also held locally so the dropdown shows it at once.
+  const [showNewParty,setShowNewParty]=useState(false);
+  const [extraParties,setExtraParties]=useState([]);
+  const saveNewParty=async(p)=>{
+    const payload={name:p.name,type:p.type,phone:p.phone||null,
+      opening_balance:p.balance||0,balance_type:p.balType||null};
+    try{
+      let r=await api.post("/finance/parties",payload);
+      if(r?.code==="duplicate_party"){
+        const ok=await window.confirmAsync(r.message+" — kya yeh ALAG insaan/firm hai jiska naam same hai?");
+        if(!ok) return;
+        r=await api.post("/finance/parties",{...payload,force:true});
+      }
+      if(r?.success===false){ window.alert(r.message||"Party save nahi hui"); return; }
+      setExtraParties(prev=>[...new Set([...prev,p.name])]);
+      setParty(p.name);
+      onPartyAdded&&onPartyAdded();
+    }catch(e){ window.alert(e?.message||"Party save nahi hui"); }
+  };
+  const PAYABLE_LIST=[...new Set([...ALL_PARTIES,...STAFF_MERGED,...extraParties])];
+  const RECEIVABLE_LIST=[...new Set([...ALL_PARTIES,...STAFF_MERGED,...extraParties])];
   const partyOptions=type==="Payment Received"?RECEIVABLE_LIST
     :isInvoice?CLIENT_LIST
     :isMaterial?SUPPLIER_LIST
@@ -2033,15 +2067,21 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       placeholder={t("finance.e_g_site_supervisor_transport_tea")}
                       style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                   ) : (type==="Payment Made"||type==="Advance Payment") ? (
-                    <SearchSelect options={PAYABLE_LIST} value={party} onChange={setParty}
-                      placeholder={t("finance.vendor_subcon_staff")}/>
+                    <>
+                      <SearchSelect options={PAYABLE_LIST} value={party} onChange={setParty}
+                          placeholder={t("finance.vendor_subcon_staff")}/>
+                      <AddPartyLink onClick={()=>setShowNewParty(true)}/>
+                    </>
                   ) : type==="Payment Received" ? (
                     // Inflow can come from a client OR a staff wallet (e.g.
                     // staff reimbursing the company / returning unused cash).
                     // SearchSelect on the merged list — LibrarySelect would
                     // restrict to type="client" and exclude staff.
-                    <SearchSelect options={RECEIVABLE_LIST} value={party} onChange={setParty}
-                      placeholder={t("finance.client_staff")}/>
+                    <>
+                      <SearchSelect options={RECEIVABLE_LIST} value={party} onChange={setParty}
+                          placeholder={t("finance.client_staff")}/>
+                      <AddPartyLink onClick={()=>setShowNewParty(true)}/>
+                    </>
                   ) : (
                     <LibrarySelect
                       type={isInvoice?"client":isMaterial?"supplier":isSubcon?"subcon":"any-party"}
@@ -2708,6 +2748,9 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           )}
         </div>
       </div>
+      {showNewParty&&(
+        <AddPartyModal onClose={()=>setShowNewParty(false)} onAdd={saveNewParty}/>
+      )}
     </>
   );
 }
@@ -6202,6 +6245,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
           dbProjects={[...new Set([...apiProjects,...activeTxns.map(t=>t.project)].filter(Boolean))]}
           projectIdByName={projectIdByName}
           onSaved={handleTxnSaved}
+          onPartyAdded={refreshParties}
           prefillGRN={prefillGRNData}
           settlesRef={settlesRef}
         />
