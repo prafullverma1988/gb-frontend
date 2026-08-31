@@ -3706,7 +3706,7 @@ function FinanceModule(){
       id:t.id,
       date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
       ds,
-      party:t.party_name||t.party||"",
+      party:t.party_display||t.party_name||t.party||"",
       sub:stripProjectSeg(t.description||t.note||t.narration||"", t.project_name||t.project||""),
       project:t.project_name||t.project||"",
       type:frontType,

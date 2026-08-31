@@ -38,7 +38,9 @@ const mapTxn=t=>{
   return {
     id:t.id,
     date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
-    party:t.party_name||t.party||"—",
+    // party_display = library party ka naam, warna mobile par type kiya
+    // gaya free-text dukaan ka naam.
+    party:t.party_display||t.party_name||t.party||"—",
     // ONLY the user's actual note. The auto-generated description is
     // "Type — Party — Project", all of which already have their own columns.
     note:(t.note&&t.note.trim())?t.note.trim():itemSummary(t),

@@ -289,7 +289,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
               <Tile label={t("common.date")}     value={fmtDate(txn.date)}/>
               <Tile label={t("common.status")}   value={txn.status || "—"} c={txn.status === "paid" ? T.grn : T.amb}/>
-              <Tile label={t("common.party")}    value={txn.party_name || txn.party || "—"}/>
+              <Tile label={t("common.party")}    value={txn.party_display || txn.party_name || txn.party || "—"}/>
               <Tile label={t("common.project")}  value={txn.project_name || txn.project || "—"}/>
               {hasDueDate && txn.due_date && <Tile label={t("transaction_detail.payment_due")} value={fmtDate(txn.due_date)} c={T.amb}/>}
               {txn.reference_no && <Tile label={t("transaction_detail.reference")} value={txn.reference_no}/>}

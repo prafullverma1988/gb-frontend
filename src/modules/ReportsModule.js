@@ -214,7 +214,7 @@ function CashBookModule(){
             return {
               id: t.id,
               date,
-              party: t.party_name || "",
+              party: t.party_display || t.party_name || "",
               desc: t.description || t.note || t.type,
               // Wallet-origin rows ka koi company account nahi hota —
               // account_display "<Staff> (Wallet)" bhejta hai.
