@@ -402,7 +402,7 @@ function UploadModal({ state, setState, projectId, cats, onDone }) {
 
           <Lbl>{t("common.naam")} <span style={{ color: T.t4, fontWeight: 400 }}>{t("project_files.chhod_do_to_file_ka_naam")}</span></Lbl>
           <input value={state.title} onChange={(e) => set("title", e.target.value)}
-            placeholder={t("project_files.जैसे_ra_2_bill_gfc_drawing")} style={inp} />
+            placeholder={t("project_files.jaise_ra_2_bill_gfc_drawing")} style={inp} />
 
           <label style={{ display: "block", marginTop: 12, padding: 14, borderRadius: 9, cursor: "pointer",
             border: `1.5px dashed ${state.file ? T.grn : T.b2}`, background: state.file ? T.grnL : T.surfaceB,

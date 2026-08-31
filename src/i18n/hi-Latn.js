@@ -4816,7 +4816,7 @@ const dict = {
   "project_files.wapas":                                       "Wapas",
   "project_files.yahan_abhi_koi_document_nahi_upar":           "Yahan abhi koi document nahi. Upar ＋ File daalo se upload kar do — mobile se daale hue documents bhi yahin dikhte hain.",
   "project_files.ye_archive_hai_hatai_gayi_cheezein":          "🗄 Ye archive hai — removed items yahan padi rehti hain, mitti nahi. Kabhi bhi restore kar sakte ho.",
-  "project_files.जैसे_ra_2_bill_gfc_drawing":                  "जैसे: RA-2 bill, GFC drawing rev-3",
+  "project_files.jaise_ra_2_bill_gfc_drawing":                  "Jaise: RA-2 bill, GFC drawing rev-3",
 
   // ── projects ────────────────────────────────────────────────
   "projects.aapke_action_ka_intezaar":                         "Aapke action ka intezaar",

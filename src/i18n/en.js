@@ -4814,7 +4814,7 @@ const dict = {
   "project_files.wapas":                                       "Back",
   "project_files.yahan_abhi_koi_document_nahi_upar":           "No documents here yet. Upload using ＋ Add file above — documents uploaded from mobile also appear here.",
   "project_files.ye_archive_hai_hatai_gayi_cheezein":          "🗄 This is the archive — removed items remain here, they are not deleted. You can restore them anytime.",
-  "project_files.जैसे_ra_2_bill_gfc_drawing":                  "e.g.: RA-2 bill, GFC drawing rev-3",
+  "project_files.jaise_ra_2_bill_gfc_drawing":                  "e.g.: RA-2 bill, GFC drawing rev-3",
 
   // ── projects ────────────────────────────────────────────────
   "projects.aapke_action_ka_intezaar":                         "Awaiting your action",

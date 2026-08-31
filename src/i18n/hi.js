@@ -4813,7 +4813,7 @@ const dict = {
   "project_files.wapas":                                       "वापस",
   "project_files.yahan_abhi_koi_document_nahi_upar":           "यहां अभी कोई डॉक्यूमेंट नहीं। ऊपर ＋ फाइल डालो से अपलोड कर दो — मोबाइल से डाले हुए डॉक्यूमेंट्स भी यहीं दिखते हैं।",
   "project_files.ye_archive_hai_hatai_gayi_cheezein":          "🗄 यह आर्काइव है — रिमूव्ड आइटम्स यहां पड़े रहते हैं, मिटते नहीं। कभी भी रीस्टोर कर सकते हो।",
-  "project_files.जैसे_ra_2_bill_gfc_drawing":                  "जैसे: RA-2 बिल, GFC ड्रॉइंग रेव-3",
+  "project_files.jaise_ra_2_bill_gfc_drawing":                  "जैसे: RA-2 बिल, GFC ड्रॉइंग रेव-3",
 
   // ── projects ────────────────────────────────────────────────
   "projects.aapke_action_ka_intezaar":                         "आपके एक्शन का इंतजार",
