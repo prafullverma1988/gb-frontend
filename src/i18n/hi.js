@@ -6162,6 +6162,8 @@ const dict = {
   "tenders.change_history":                                    "चेंज हिस्ट्री",
   "tenders.chaudai_daayra_m":                                  "विड्थ / दायरा (m)",
   "tenders.chaudai_row_m":                                     "विड्थ / ROW (m)",
+
+  "tenders.shuruaati_chainage": "शुरुआती चेनेज (m)",
   "tenders.chuno":                                             "सिलेक्ट करो...",
   "tenders.city_chuno":                                        "सिटी सिलेक्ट करो...",
   "tenders.city_zaroori_hai":                                  "सिटी ज़रूरी है",

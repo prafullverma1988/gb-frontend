@@ -3857,6 +3857,32 @@ const alignLabel = (kind, t) =>
 const fmtKm = (m) => Number(m||0) >= 1000
   ? (Number(m)/1000).toLocaleString("en-IN",{maximumFractionDigits:2}) + " km"
   : Math.round(Number(m||0)) + " m";
+// Chainage — 1,250 m ko site par "1+250" bolte hain, metre me koi baat
+// nahi karta. Mobile ke geo.js me bhi thik yahi hai.
+const chFmt = (m) => {
+  const v = Math.max(0, Math.round(Number(m)||0));
+  return Math.floor(v/1000) + "+" + String(v%1000).padStart(3,"0");
+};
+// Line par chainage ke nishaan kahan-kahan padenge. startM = line ka apna
+// shuruaati chainage, isliye pehla nishaan agle POORE step par aata hai
+// (1+180 se shuru = pehla label 1+200).
+const chainageMarks = (coords, stepM, startM, distFn) => {
+  const out = [];
+  if (!(stepM > 0) || !coords || coords.length < 2) return out;
+  const off = Math.max(0, Number(startM)||0);
+  let acc = 0, next = off > 0 ? ((Math.ceil(off/stepM)*stepM - off) || stepM) : stepM;
+  for (let i=1; i<coords.length && out.length<60; i++){
+    const a = coords[i-1], b = coords[i];
+    const d = distFn(a, b);
+    while (next <= acc + d && out.length < 60) {
+      const f = d > 0 ? (next - acc) / d : 0;
+      out.push({ lat: a.lat + (b.lat-a.lat)*f, lng: a.lng + (b.lng-a.lng)*f, label: chFmt(off + next) });
+      next += stepM;
+    }
+    acc += d;
+  }
+  return out;
+};
 // Draw karte waqt har click par lambai — server wali haversine hi, client par.
 // Google ka spherical bhi hai, par ye draftPts (plain objects) par seedha
 // chalta hai, LatLng banane ka chakkar nahi.
@@ -4279,6 +4305,21 @@ function MapTab({tenderId, sites}) {
         // Click = stretch ka dashboard. (Pehle sirf ek toast tha.)
         pl.addListener("click", ()=>openStretch(it.id));
         shapesRef.current.push(pl);
+        // Chainage ke nishaan — sirf un lines par jinka shuruaati chainage
+        // pata hai. Step lambai ke hisaab se, warna 20 km ki line par
+        // hazaar label ban kar naksha dhak jaata.
+        if (it.start_chainage_m != null) {
+          const L = Number(it.length_m || 0);
+          const step = L >= 5000 ? 1000 : L >= 2000 ? 500 : L >= 400 ? 100 : L >= 100 ? 50 : 0;
+          chainageMarks(coords, step, Number(it.start_chainage_m), (a,b)=>pathLenM([a,b])).forEach((c)=>{
+            shapesRef.current.push(new g.maps.Marker({
+              map: mapRef.current, position: { lat:c.lat, lng:c.lng }, clickable:false, zIndex:6,
+              label: { text: c.label, color:"#0369A1", fontSize:"10px", fontWeight:"700" },
+              icon: { path: g.maps.SymbolPath.CIRCLE, scale:2.5, fillColor:"#7DD3FC", fillOpacity:0.95,
+                strokeColor:"#0369A1", strokeWeight:1 },
+            }));
+          });
+        }
         if (g.maps.geometry?.spherical) {
           // Pakka (MB) — solid green.
           if (doneM > 0) {
@@ -4452,6 +4493,7 @@ function MapTab({tenderId, sites}) {
     edit: true, id: it.id, kind: it.kind, atype: it.atype,
     coords: it.geometry || [], name: it.name || "",
     width_m: it.width_m == null ? "" : String(it.width_m),
+    start_chainage_m: it.start_chainage_m == null ? "" : String(it.start_chainage_m),
     props: it.props ? { ...it.props } : {},
     notes: it.notes || "",
     project_id: it.project_id || "",
@@ -4465,6 +4507,8 @@ function MapTab({tenderId, sites}) {
       name: pending.name || "",
       atype: pending.atype,
       width_m: pending.width_m === "" || pending.width_m == null ? null : Number(pending.width_m),
+      start_chainage_m: pending.start_chainage_m === "" || pending.start_chainage_m == null
+        ? null : Number(pending.start_chainage_m),
       props: cleanPropsOut(pending.props) || {},
       notes: pending.notes || "",
     });
@@ -4483,6 +4527,8 @@ function MapTab({tenderId, sites}) {
       project_id: Number(pending.project_id), name: pending.name || undefined,
       kind: pending.kind, atype: pending.atype, geometry: pending.coords,
       width_m: Number(pending.width_m) > 0 ? Number(pending.width_m) : undefined,
+      start_chainage_m: pending.kind === "line" && Number(pending.start_chainage_m) > 0
+        ? Number(pending.start_chainage_m) : undefined,
       drain_side: pending.drain_side || undefined,
       drain_offset_m: pending.drain_side && pending.drain_offset_m !== "" && pending.drain_offset_m != null
         ? Number(pending.drain_offset_m) : undefined,
@@ -5307,6 +5353,20 @@ function MapTab({tenderId, sites}) {
             <Field label={pending.atype==="road" ? t("tenders.chaudai_row_m") : t("tenders.chaudai_daayra_m")}>
               <TxtIn value={pending.width_m} onChange={v=>setPending(p=>({...p, width_m:v}))}
                 ph={pending.atype==="road" ? "e.g. 10" : "e.g. 1.2"}/>
+            </Field>
+          )}
+          {/* Shuruaati chainage — stretch 0 se shuru nahi hota. Pichhla
+              hissa 1+200 par khatam hua to yahi number aata hai, aur map ke
+              saare label wahin se ginte hain. Khaali = 0+000 se. */}
+          {pending.kind==="line" && (
+            <Field label={t("tenders.shuruaati_chainage")}>
+              <TxtIn value={pending.start_chainage_m ?? ""} onChange={v=>setPending(p=>({...p, start_chainage_m:v}))}
+                ph="e.g. 1200"/>
+              {Number(pending.start_chainage_m) > 0 && Number(pending.length_m) > 0 && (
+                <div style={{fontSize:11, color:T.t4, marginTop:4, fontVariantNumeric:"tabular-nums"}}>
+                  {chFmt(Number(pending.start_chainage_m))} → {chFmt(Number(pending.start_chainage_m) + Number(pending.length_m))}
+                </div>
+              )}
             </Field>
           )}
           {/* Sadak: PCC hai ya bitumen — BOQ ka item isi se tay hota hai. */}

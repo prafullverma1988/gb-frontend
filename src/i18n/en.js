@@ -6163,6 +6163,8 @@ const dict = {
   "tenders.change_history":                                    "Change History",
   "tenders.chaudai_daayra_m":                                  "Width / Diameter (m)",
   "tenders.chaudai_row_m":                                     "Width / ROW (m)",
+
+  "tenders.shuruaati_chainage": "Start chainage (m)",
   "tenders.chuno":                                             "Select...",
   "tenders.city_chuno":                                        "Select city...",
   "tenders.city_zaroori_hai":                                  "City is required",
