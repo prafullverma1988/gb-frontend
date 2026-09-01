@@ -842,7 +842,11 @@ function RolesAccess() {
   // Fuel aur Machinery backend ki list me pehle se the par yahan chhoot gaye
   // the, isliye unki row DB me hoti thi par admin kabhi badal hi nahi paata tha.
   const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Procurement","Warehouse","Fuel","Machinery","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings"];
-  const PROJECT_TAB_ITEMS = ["Overview","Estimate","Transaction","Material","Subcon","Attendance","Equipment"];
+  // Project ke ANDAR ke saare tabs. Budget/Party/To Do/Tasks/Files/Site-DPR
+  // pehle yahan the hi nahi, isliye unhe kabhi rok hi nahi sakte the — wo har
+  // role ko hamesha dikhte the. (Design aur MOM upar "Modules" me hain, isliye
+  // yahan dobara nahi.)
+  const PROJECT_TAB_ITEMS = ["Overview","Estimate","Budget","Party","Transaction","To Do","Tasks","Material","Subcon","Attendance","Equipment","Files","Site / DPR"];
   const MODULE_GROUPS = [
     { title: "Modules", items: ALL_MODULE_ITEMS.filter(moduleOn) },
     { title: "Project Tabs", items: PROJECT_TAB_ITEMS },
@@ -870,19 +874,19 @@ function RolesAccess() {
     admin: Object.fromEntries(modules.map(m => [m.name, allPerms])),
     project_manager: {
       Projects:["view","create","edit"], Design:["view","create","edit"], Finance:["view","create"], Procurement:["view","create","edit"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:["view","create","edit"], MOM:["view","create","edit"], "Township CRM":["view","create","edit"], Tenders:["view","create","edit"], Reports:["view"], Library:["view"], Settings:[],
-      Overview:["view"], Estimate:["view","create","edit"], Transaction:["view","create"], Material:["view","create","edit"], Subcon:["view","create","edit"], Attendance:["view","create","edit"], Equipment:["view","create","edit"],
+      Overview:["view"], Estimate:["view","create","edit"], Budget:["view"], Party:["view","create","edit"], Transaction:["view","create"], "To Do":["view","create","edit"], Tasks:["view","create","edit"], Material:["view","create","edit"], Subcon:["view","create","edit"], Attendance:["view","create","edit"], Equipment:["view","create","edit"], Files:["view","create","edit"], "Site / DPR":["view","create","edit"],
     },
     supervisor: {
       Projects:["view"], Design:["view"], Finance:["view"], Procurement:["view","create"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:[], MOM:["view"], "Township CRM":["view"], Tenders:["view"], Reports:["view"], Library:["view"], Settings:[],
-      Overview:["view"], Estimate:[], Transaction:[], Material:["view","create"], Subcon:["view"], Attendance:["view","create","edit"], Equipment:["view"],
+      Overview:["view"], Estimate:[], Budget:[], Party:["view"], Transaction:[], "To Do":["view","create","edit"], Tasks:["view","create","edit"], Material:["view","create"], Subcon:["view"], Attendance:["view","create","edit"], Equipment:["view"], Files:["view","create"], "Site / DPR":["view","create","edit"],
     },
     accountant: {
       Projects:["view"], Design:[], Finance:["view","create","edit","approve"], Procurement:["view"], Warehouse:["view"], "Team & HR":["view","create","edit"], CRM:["view"], MOM:["view"], "Township CRM":["view"], Tenders:["view","create","edit"], Reports:["view"], Library:["view"], Settings:[],
-      Overview:["view"], Estimate:["view"], Transaction:["view","create","edit"], Material:["view"], Subcon:[], Attendance:["view"], Equipment:[],
+      Overview:["view"], Estimate:["view"], Budget:["view"], Party:["view","create","edit"], Transaction:["view","create","edit"], "To Do":["view"], Tasks:["view"], Material:["view"], Subcon:[], Attendance:["view"], Equipment:[], Files:["view"], "Site / DPR":["view"],
     },
     viewer: {
       Projects:["view"], Design:["view"], Finance:["view"], Procurement:["view"], Warehouse:["view"], "Team & HR":[], CRM:["view"], MOM:["view"], "Township CRM":["view"], Tenders:["view"], Reports:["view"], Library:["view"], Settings:[],
-      Overview:["view"], Estimate:["view"], Transaction:["view"], Material:["view"], Subcon:["view"], Attendance:["view"], Equipment:["view"],
+      Overview:["view"], Estimate:["view"], Budget:["view"], Party:["view"], Transaction:["view"], "To Do":["view"], Tasks:["view"], Material:["view"], Subcon:["view"], Attendance:["view"], Equipment:["view"], Files:["view"], "Site / DPR":["view"],
     },
   });
 

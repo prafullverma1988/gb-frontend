@@ -715,19 +715,30 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
   const _allTabs = isSolar ? SOLAR_TABS : TABS;
 
   // ── Role-based tab gating (Settings → Roles & Access → Project Tabs) ──
-  // Tabs without a permission key (party/todo/task/files/site/solar_*) stay always-on.
+  // Har project tab ka permission key. Budget / Party / To Do / Tasks / Files /
+  // Site-DPR pehle is list me the hi nahi, isliye Roles & Access se unhe rok
+  // paana mumkin hi nahi tha — wo har role ko hamesha dikhte the. (solar_* abhi
+  // bhi always-on hain.)
   const TAB_PERM = {
     overview:"Overview", design:"Design", estimate:"Estimate",
-    transaction:"Transaction", material:"Material", subcon:"Subcon",
-    attendance:"Attendance", equipment:"Equipment", mom:"MOM",
+    budget:"Budget", party:"Party", transaction:"Transaction",
+    todo:"To Do", task:"Tasks", material:"Material", subcon:"Subcon",
+    attendance:"Attendance", equipment:"Equipment", files:"Files",
+    site:"Site / DPR", mom:"MOM",
   };
   const _perms = currentUser?.module_permissions;
   const _isAdminRole = ["admin","super_admin"].includes(currentUser?.role);
   const canSeeTab = (id) => {
     if(_isAdminRole) return true;          // admins bypass
     const mod = TAB_PERM[id];
-    if(_perms && mod) return !!(_perms[mod]?.view);  // explicit grant required
-    return true;                            // no perm key, or no perms loaded → show
+    if(!mod || !_perms) return true;       // koi perm key nahi, ya perms load nahi hue
+    // Sirf tab chhupao jab is module ki row MAUJOOD ho aur view band ho. Purane
+    // tenants ki saved permissions me in naye tabs ki row hai hi nahi — undefined
+    // ko "mana" maan lete to ye tabs sabke liye achanak gayab ho jaate. Admin ke
+    // ek save ke baad row ban jaati hai, tab se rok asar karti hai.
+    const row = _perms[mod];
+    if(row === undefined) return true;
+    return !!row.view;
   };
   const activeTabs = _allTabs.filter(t => canSeeTab(t.id));
   // If current tab got hidden by permissions, fall back to the first visible tab.
