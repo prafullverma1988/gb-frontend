@@ -385,14 +385,22 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     </label>
   );
 
-  // Roz ka kaam qty me likha jaye ya % me. Sadak/pipe/naali me qty seedhi
-  // hai; par structure ki qty aksar 1 hoti hai — wahan 1 likhte hi kaam
-  // "poora" ho jaata, jabki UGR dheere-dheere banta hai. "—" = company ki
-  // purani setting hi chale.
-  const pmSel = (val, onPick) => (
-    <select value={val || ""} onChange={onPick} title={t("tender_ai_plan.pm_hint")}
-      style={inp({ width: 62, fontSize: 10, padding: "2px 3px" })}>
-      <option value="">{t("tender_ai_plan.pm_auto")}</option>
+  // Roz ka kaam qty me likha jaye ya % me — ye hum data se hi nikal lete
+  // hain, PM ko har row par chunna nahi padta. Wo sirf wahan haath lagayega
+  // jahan use lage ki galat hai.
+  //   lambai wali unit (m/rm/km)  → qty   (aaj 120 m pada)
+  //   ginti 1 se zyada            → qty   (15 traffic light — 3 aaj, 7 kal)
+  //   baaki (qty 1, LS, khali)    → %     (ek UGR mahino me banta hai;
+  //                                        1 likhte hi "poora" ho jaata)
+  const RUN_U = /^(m|rm|rmt|mtr|metre|meter|km)$/i;
+  const autoPM = (row) => {
+    if (RUN_U.test(String(row.unit || "").trim())) return "qty";
+    return Number(row.qty) > 1 ? "qty" : "percent";
+  };
+  const pmSel = (row, onPick) => (
+    <select value={row.progress_mode || autoPM(row)} onChange={onPick} title={t("tender_ai_plan.pm_hint")}
+      style={inp({ width: 62, fontSize: 10, padding: "2px 3px",
+        color: row.progress_mode ? T.t1 : T.t3 })}>
       <option value="qty">{t("tender_ai_plan.pm_qty")}</option>
       <option value="percent">%</option>
     </select>
@@ -535,8 +543,8 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                         <option value="area+pin">{t("tender_ai_plan.mk_area_pin")}</option>
                       </select>
                     )}
-                    {!w.stages.length && pmSel(w.progress_mode,
-                      (e) => upd((p) => { p.sites[si].works[wi].progress_mode = e.target.value || null; }))}
+                    {!w.stages.length && pmSel(w,
+                      (e) => upd((p) => { p.sites[si].works[wi].progress_mode = e.target.value; }))}
                     <button onClick={() => setOpen((o) => ({ ...o, [key]: !exp }))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, color: T.blu, fontWeight: 700 }}>
                       {w.stages.length ? `${w.stages.length} stages ${exp ? "▴" : "▾"}` : (exp ? t("tender_ai_plan.stages") : t("tender_ai_plan.stages_2"))}
                     </button>
@@ -568,8 +576,9 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                               p.sites[si].works[wi].stages[ti].map = nx;
                               p.sites[si].works[wi].stages[ti].map_kind = nx ? markKind(w) : null;
                             }), t("tender_ai_plan.stage_tick_hint"))}
-                            {!(st.steps || []).length && pmSel(st.progress_mode,
-                              (e) => upd((p) => { p.sites[si].works[wi].stages[ti].progress_mode = e.target.value || null; }))}
+                            {!(st.steps || []).length && pmSel(
+                              { unit: st.unit || w.unit, qty: st.qty || w.qty, progress_mode: st.progress_mode },
+                              (e) => upd((p) => { p.sites[si].works[wi].stages[ti].progress_mode = e.target.value; }))}
                             <button onClick={() => upd((p) => { p.sites[si].works[wi].stages.splice(ti, 1); })} style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 13 }}>×</button>
                           </div>
                           {/* ── TEESRA LEVEL (steps) — Prafull ka case-3: stretch →
@@ -593,8 +602,9 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                                   ? (/^(nos?|no|each|pcs)$/i.test(String(x.unit || "").trim()) ? "point" : markKind(w))
                                   : null;
                               }), t("tender_ai_plan.step_tick_hint"))}
-                              {pmSel(x.progress_mode,
-                                (e) => upd((p) => { p.sites[si].works[wi].stages[ti].steps[xi].progress_mode = e.target.value || null; }))}
+                              {pmSel(
+                                { unit: x.unit || st.unit, qty: x.qty, progress_mode: x.progress_mode },
+                                (e) => upd((p) => { p.sites[si].works[wi].stages[ti].steps[xi].progress_mode = e.target.value; }))}
                               <button onClick={() => upd((p) => { p.sites[si].works[wi].stages[ti].steps.splice(xi, 1); })} style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 12 }}>×</button>
                             </div>
                           ))}
