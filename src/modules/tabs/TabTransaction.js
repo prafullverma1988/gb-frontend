@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import api from "../../config/api";
 import { CreateTransactionModal } from "../FinanceModule";
+import TransactionDetailDrawer from "../../components/TransactionDetailDrawer";
 import { T, fmtN } from "../shared/tokens";
 import { Pill, Panel, AddBtn } from "../shared/ui";
 import { t } from "../../i18n";
@@ -51,6 +52,9 @@ const mapTxn=t=>{
     amount:parseFloat(t.amount)||0,
     dr:BACK_DEBIT.includes(t.type)||t.dr===true,
     status:t.status||"paid",
+    // Poori raw txn — isi se wahi detail drawer khulta hai jo Finance
+    // module me khulta hai (line items, edit, delete, PDF download).
+    raw:t,
   };
 };
 
@@ -74,8 +78,10 @@ function TabTransaction({projectId, projectName}) {
   const [txnParties,    setTxnParties]    = useState([]);
   const [txnAccounts,   setTxnAccounts]   = useState([]);
   const [txnProjects,   setTxnProjects]   = useState([]);
+  // Row par click — Finance module wala detail drawer.
+  const [selTxn, setSelTxn] = useState(null);
 
-  useEffect(()=>{
+  const reload = useCallback(()=>{
     if(!projectId) return;
     Promise.all([
       api.get("/finance/parties"),
@@ -101,6 +107,8 @@ function TabTransaction({projectId, projectName}) {
       if(prRes?.success&&Array.isArray(prRes.data)) setTxnProjects(prRes.data.map(p=>p.name));
     }).catch(()=>{});
   },[projectId]);
+
+  useEffect(()=>{ reload(); },[reload]);
 
   const TYPES   = ["All","Payment In","Payment Out","Material Purchase","Site Expense","Sub-Con","Sales Invoice","Advance","Settlement"];
   const PARTIES = ["All",...[...new Set(transactions.map(t=>t.party).filter(Boolean))]];
@@ -293,7 +301,8 @@ function TabTransaction({projectId, projectName}) {
           const ac=acctColor[txn.account||""]||T.slt;
           const stCol=st==="paid"?{c:T.grn,bg:T.grnL,b:T.grnM}:st==="unbilled"?{c:T.pur,bg:T.purL,b:T.purM}:{c:T.red,bg:T.redL,b:T.redM};
           return(
-            <div key={txn.id} style={{display:"grid",gridTemplateColumns:TXN_GRID,padding:"10px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${txn.dr?T.red:T.grn}44`,transition:"background .1s"}}
+            <div key={txn.id} onClick={()=>txn.raw&&setSelTxn(txn.raw)}
+              style={{display:"grid",gridTemplateColumns:TXN_GRID,padding:"10px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${txn.dr?T.red:T.grn}44`,transition:"background .1s",cursor:txn.raw?"pointer":"default"}}
               onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <span style={{fontSize:11.5,color:T.t4,whiteSpace:"nowrap"}}>{txn.date}</span>
@@ -313,6 +322,12 @@ function TabTransaction({projectId, projectName}) {
           );
         })}
       </Panel>
+
+      <TransactionDetailDrawer
+        txn={selTxn}
+        onClose={()=>setSelTxn(null)}
+        onChanged={()=>reload()}
+      />
 
       {/* Create Transaction Modal — project pre-filled & locked */}
       {projTxnType&&(
