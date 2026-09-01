@@ -3578,6 +3578,9 @@ function FinanceModule(){
   };
   // Filter chips (one per tab)
   const [chipParty,setChipParty]=useState("All");
+  // Party list ki tarteeb — project ke Party tab jaisi hi. "az" default hai
+  // (list pehle se naam-wise aati thi), "bal" par sabse zyada bakaya upar.
+  const [partySort,setPartySort]=useState("az");   // "az" | "bal"
   const [chipTxn,setChipTxn]=useState("All");
   const [chipPR,setChipPR]=useState("All");
   const [chipPend,setChipPend]=useState("All");
@@ -3959,6 +3962,16 @@ function FinanceModule(){
   // already carries balance (abs) + balType (from the signed live_balance).
   const partiesWithBalance=masterParties;
   const filteredParties=partiesWithBalance.filter(p=>chipParty==="All"||p.type===chipParty);
+  // Jo list sach me screen par dikhti hai — type filter ke baad khoj aur
+  // tarteeb. Header ka count filteredParties par hi rehta hai (pehle jaisa).
+  const visibleParties=useMemo(()=>{
+    const q=partySearch.trim().toLowerCase();
+    const out=q?filteredParties.filter(p=>String(p.name||"").toLowerCase().includes(q)):[...filteredParties];
+    const sorted=[...out];
+    if(partySort==="az") sorted.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"en",{sensitivity:"base"}));
+    else                 sorted.sort((a,b)=>(Number(b.balance)||0)-(Number(a.balance)||0));
+    return sorted;
+  },[filteredParties,partySearch,partySort]);
 
   const projects = useMemo(() => ["All", ...new Set(activeTxns.map(t => t.project))], [activeTxns]);
   // ── P4 #66: Memoize the filter chain ───────────────────────────
@@ -4683,10 +4696,21 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     style={{height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${chipParty!=="All"?T.blu:T.b1}`,fontSize:11.5,color:chipParty!=="All"?T.blu:T.t2,background:chipParty!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
                     {["All","Client","Vendor","Labour","Sub-Con","Material Supplier"].map(o=><option key={o} value={o}>{o==="All"?t("finance.all_types"):o}</option>)}
                   </select>
+                  {[["az",t("party.sort_a_z")],["bal","₹"]].map(([mode,label])=>(
+                    <button key={mode} onClick={()=>setPartySort(mode)}
+                      title={mode==="az"?t("party.sort_a_z"):t("common.balance")}
+                      style={{height:30,padding:"0 8px",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:700,flexShrink:0,fontFamily:"inherit",
+                              border:`1.5px solid ${partySort===mode?T.blu:T.b1}`,
+                              background:partySort===mode?T.blu:T.surface,
+                              color:partySort===mode?"white":T.t2}}>{label}</button>
+                  ))}
                 </div>
               </div>
               <div style={{flex:1,overflowY:"auto"}}>
-                {filteredParties.filter(p=>!partySearch||p.name.toLowerCase().includes(partySearch.toLowerCase())).map(p=>{
+                {filteredParties.length>0&&visibleParties.length===0&&(
+                  <div style={{padding:"26px 16px",textAlign:"center",color:T.t4,fontSize:12}}>{t("party.no_party_matched")}</div>
+                )}
+                {visibleParties.map(p=>{
                   const isS=selParty?.id===p.id;
                   const tc=p.type==="Client"?T.grn:p.type==="Material Supplier"?T.blu:p.type==="Sub-Con"?T.slt:T.amb;
                   const initials=(p.name||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase()||"?";
