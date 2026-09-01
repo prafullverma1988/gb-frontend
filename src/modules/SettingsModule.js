@@ -100,6 +100,162 @@ function ToggleRow({ icon, label, desc, value, onChange }) {
   );
 }
 
+
+// ─── PERMISSION KA MATLAB (hover par dikhta hai) ─────────────────────
+// Har box ka matlab admin ko saaf hona chahiye — warna wo tick hata kar
+// samajhta hai ki rok lag gayi, aur asal me lagi hi nahi hoti.
+//
+// PERM_LIVE batati hai ki kaunsi rok kahan tak SACH ME lagti hai:
+//   "server" — API bhi rokti hai (asli rok)
+//   "app"    — sirf screen par button chhupta hai, API khuli hai
+//   (nadaarad) — abhi kuch nahi rokta, sirf record hai
+// Jaise-jaise module enforce hote jayenge, yahan naam jodte jao —
+// tooltip apne aap sach bolne lagega.
+const PERM_LIVE = {
+  view:    { "*": "server" },
+  create:  { Finance: "server", Material: "app", Procurement: "app" },
+  edit:    { Finance: "server" },
+  delete:  { Finance: "server" },
+  approve: { Finance: "server" },
+  export:  {},
+};
+const permLive = (mod, act) => (PERM_LIVE[act] || {})["*"] || (PERM_LIVE[act] || {})[mod] || null;
+
+const PERM_HELP = {
+  "Projects": {
+    view: "Sidebar se Projects gayab. Koi bhi project khul hi nahi payega — uske andar ke saare tabs bhi band.",
+    create: "Naya project banana", edit: "Project ki detail badalna (naam, city, date, budget)",
+    delete: "Project archive ya delete karna", approve: "Project par aayi approval par faisla dena",
+    export: "Project list CSV/PDF me nikalna",
+  },
+  "Design": {
+    view: "Sidebar se Design gayab — drawing (naksha) upload, revision aur sharing sab band.",
+    create: "Nayi drawing upload karna", edit: "Drawing ki detail ya nayi revision chadhana",
+    delete: "Drawing hatana", approve: "Drawing approve karna", export: "Drawing list nikalna",
+  },
+  "Finance": {
+    view: "Sidebar se Finance gayab — Party Ledger, Fin Activity, Cash Book, Day Book, Payment Requests, Pending Payments, Unbilled GRN, Billed Material sab band.",
+    create: "Nayi transaction (bill, payment, receipt), nayi party, nayi payment request banana",
+    edit: "Transaction ya party ki detail badalna, pending payment close/extend karna",
+    delete: "Party ya payment request delete karna",
+    approve: "Payment request approve karna",
+    export: "Ledger aur transaction CSV/PDF me nikalna",
+  },
+  "Financial Reports": {
+    view: "Paisa ka vishleshan band — Finance ka \"P&L (Project-wise)\" tab, upar wali KPI patti (kitna aaya/gaya/lena/dena), project Overview ka paisa hissa, aur Reports ka \"Progress & Financial\". Rozana ka Finance kaam isse alag hai.",
+    create: "—", edit: "—", delete: "—", approve: "—",
+    export: "P&L ko CSV/PDF me nikalna",
+  },
+  "Procurement": {
+    view: "Sidebar se Procurement gayab — Material Request (MR), RFQ, quotation compare aur Purchase Order sab band.",
+    create: "Nayi MR banana, RFQ nikalna, PO banana", edit: "MR/PO ki detail badalna",
+    delete: "MR ya PO delete karna", approve: "MR aur PO approve karna", export: "MR/PO list nikalna",
+  },
+  "Warehouse": {
+    view: "Sidebar se Warehouse gayab — central godown ka Material In (GRN), Material Out (issue) aur stock sab band.",
+    create: "Maal andar lena (GRN) ya site ko dena (issue)", edit: "GRN/issue ki entry badalna",
+    delete: "Entry delete karna", approve: "Stock transfer approve karna", export: "Stock register nikalna",
+  },
+  "Fuel": {
+    view: "Sidebar se Fuel gayab — pump se diesel aana, barrel ka stock, kis machine ne kitna piya, pump ka baaki paisa.",
+    create: "Diesel entry karna (pump se aaya / machine me dala)", edit: "Diesel entry badalna",
+    delete: "Diesel entry delete karna", approve: "Fuel entry approve karna", export: "Fuel register nikalna",
+  },
+  "Machinery": {
+    view: "Sidebar se Machinery gayab — machine ka meter, diesel, usage aur kaagaz (insurance/fitness) ki tareekhein.",
+    create: "Nayi machine jodna, usage/meter entry karna", edit: "Machine ki detail ya kaagaz badalna",
+    delete: "Machine hatana", approve: "Machinery entry approve karna", export: "Machine register nikalna",
+  },
+  "Team & HR": {
+    view: "Sidebar se Team & HR gayab — staff, worker, salary aur payroll sab band.",
+    create: "Naya staff/worker jodna, payroll run banana", edit: "Salary, detail ya attendance badalna",
+    delete: "Staff/worker hatana", approve: "Payroll aur salary approve karna", export: "Payroll/salary sheet nikalna",
+  },
+  "CRM": {
+    view: "Sidebar se CRM gayab — lead ka record aur uska follow-up band.",
+    create: "Naya lead banana, follow-up jodna", edit: "Lead ki detail ya stage badalna",
+    delete: "Lead delete karna", approve: "Quotation approve karna", export: "Lead list nikalna",
+  },
+  "MOM": {
+    view: "Sidebar se MOM gayab — meeting ke minutes aur unse nikle kaam band.",
+    create: "Nayi meeting/MOM banana", edit: "MOM ya usme diye gaye kaam badalna",
+    delete: "MOM delete karna", approve: "MOM approve karna", export: "MOM PDF nikalna",
+  },
+  "Township CRM": {
+    view: "Sidebar se Township CRM gayab — plot/flat (unit) ki booking, customer aur uski kist sab band.",
+    create: "Nayi booking ya customer banana", edit: "Booking, kist ya customer detail badalna",
+    delete: "Booking delete karna", approve: "Booking/discount approve karna", export: "Booking list nikalna",
+  },
+  "Tenders": {
+    view: "Sidebar se Tenders gayab — NIT se lekar work order tak ka poora tender record band.",
+    create: "Naya tender jodna, BOQ chadhana", edit: "Tender ki detail, BOQ ya date badalna",
+    delete: "Tender delete karna", approve: "Tender par faisla dena", export: "Tender/BOQ nikalna",
+  },
+  "Reports": {
+    view: "Sidebar se Reports gayab — cash, party, material aur labour ki saari report band.",
+    create: "—", edit: "—", delete: "—", approve: "—",
+    export: "Report CSV/PDF me nikalna",
+  },
+  "Library": {
+    view: "Sidebar se Library gayab — material, worker, party, subcontractor, rate card aur BOQ item ka master data band.",
+    create: "Naya master item jodna (material, party, worker, rate)", edit: "Master item badalna",
+    delete: "Master item hatana", approve: "—", export: "Master list CSV me nikalna",
+  },
+  "Settings": {
+    view: "Sidebar se Settings gayab — company profile, roles & access, approval chain, photo settings sab band.",
+    create: "Naya role ya user banana", edit: "Company/role/user setting badalna",
+    delete: "Role ya user hatana", approve: "—", export: "—",
+  },
+  "Overview": {
+    view: "Project ke andar Overview tab nahi dikhega — progress, paisa ka summary aur kaam ki halat.",
+    create: "—", edit: "Overview ke number/target badalna", delete: "—", approve: "—", export: "Overview nikalna",
+  },
+  "Estimate": {
+    view: "Project ke andar Estimate tab nahi dikhega — client ka BOQ aur quotation.",
+    create: "Naya estimate/quotation banana", edit: "Estimate ki line ya rate badalna",
+    delete: "Estimate delete karna", approve: "Estimate approve karna", export: "Estimate PDF nikalna",
+  },
+  "Transaction": {
+    view: "Project ke andar Transaction tab nahi dikhega — us project ki saari len-den.",
+    create: "Us project me nayi transaction banana", edit: "Transaction badalna",
+    delete: "Transaction delete karna", approve: "Transaction approve karna", export: "Transaction list nikalna",
+  },
+  "Material": {
+    view: "Project ke andar Material tab nahi dikhega — site par maal aana (GRN), issue aur stock.",
+    create: "Site par GRN banana, mobile app me nayi MR banana",
+    edit: "GRN/issue ki entry badalna", delete: "Entry delete karna",
+    approve: "Material entry approve karna", export: "Site stock register nikalna",
+  },
+  "Subcon": {
+    view: "Project ke andar Subcon tab nahi dikhega — thekedar ke work order, RA bill aur unka hisaab.",
+    create: "Naya work order banana, RA bill banana", edit: "WO ya RA bill badalna",
+    delete: "WO/RA bill delete karna", approve: "RA bill approve karna", export: "WO/RA bill nikalna",
+  },
+  "Attendance": {
+    view: "Project ke andar Attendance tab nahi dikhega — mazdoor aur staff ki hazri.",
+    create: "Hazri lagana", edit: "Lagi hui hazri badalna", delete: "Hazri hatana",
+    approve: "Attendance review approve karna", export: "Attendance sheet nikalna",
+  },
+  "Equipment": {
+    view: "Project ke andar Equipment tab nahi dikhega — project par lagi machine aur uska hisaab.",
+    create: "Project par machine lagana, usage darj karna", edit: "Usage/entry badalna",
+    delete: "Entry hatana", approve: "Equipment bill approve karna", export: "Equipment register nikalna",
+  },
+};
+
+// Ek box ka poora hover text — matlab + wo saaf chetavni ki rok abhi sach me
+// lagti hai ya nahi.
+function permTip(moduleName, action) {
+  const h = PERM_HELP[moduleName] || {};
+  const base = h[action];
+  if (base === "—") return `${action.toUpperCase()} — is row par lagoo nahi hota.`;
+  const head = base || `${moduleName} me ${action}`;
+  const live = permLive(moduleName, action);
+  if (live === "server") return `${action.toUpperCase()}: ${head}`;
+  if (live === "app")    return `${action.toUpperCase()}: ${head}\n\nAbhi sirf mobile app ka button chhupta hai — server par rok nahi lagti.`;
+  return `${action.toUpperCase()}: ${head}\n\nAbhi sirf record hota hai — ye tick hataane se kaam nahi rukta. (Module-by-module lagaya ja raha hai.)`;
+}
+
 function SectionCard({ title, desc, children, action }) {
   return (
     <div style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, boxShadow: T.shadow, marginBottom: 20 }}>
@@ -700,7 +856,10 @@ function RolesAccess() {
   const allPerms = ["view", "create", "edit", "delete", "approve", "export"];
   // In rows par sirf dekhna aur nikalna hota hai — create/edit/delete/approve
   // ka koi matlab nahi.
-  const ONLY_VIEW_EXPORT = ["Financial Reports"];
+  // Kaunsa box is row par lagoo hi nahi hota — yahi PERM_HELP me "—" se
+  // likha hai, to wahi ek jagah se dono cheezein chalti hain: bujha box
+  // aur uska hover text.
+  const permNA = (name, p) => (PERM_HELP[name] || {})[p] === "—";
   const permColors = {
     view: { bg: T.blueSoft, text: T.blue }, create: { bg: T.greenSoft, text: T.green },
     edit: { bg: T.amberSoft, text: T.amber }, delete: { bg: T.redSoft, text: T.red },
@@ -982,17 +1141,18 @@ function RolesAccess() {
                     const perms = permMatrix[selectedRole]?.[name] || [];
                     return (
                       <tr key={name} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
-                        <td style={{ padding: "12px", fontWeight: 600, color: T.text }}>{name}</td>
+                        <td style={{ padding: "12px", fontWeight: 600, color: T.text }}
+                            title={(PERM_HELP[name] || {}).view || name}>{name}</td>
                         {allPerms.map(p => {
                           const has = perms.includes(p);
                           // Report "banayi" ya "delete" nahi jaati — us row par
                           // sirf view/export ka matlab hai. Baaki bujhe rakho,
                           // warna wahi purani bimari: tick hai par kuch nahi karta.
-                          const na = ONLY_VIEW_EXPORT.includes(name) && !["view", "export"].includes(p);
+                          const na = permNA(name, p);
                           return (
                             <td key={p} style={{ textAlign: "center", padding: "8px 6px" }}>
                               <button onClick={() => { if (!na) togglePerm(name, p); }}
-                                title={na ? "Is row par lagoo nahi hota" : undefined}
+                                title={na ? "Is row par lagoo nahi hota" : permTip(name, p)}
                                 style={{ width: 28, height: 28, borderRadius: 6, background: na ? "transparent" : (has ? permColors[p].bg : T.borderLight), border: `1.5px solid ${na ? T.borderLight : (has ? permColors[p].text + "44" : "transparent")}`, cursor: (na || selectedRole === "admin") ? "not-allowed" : "pointer", opacity: na ? 0.4 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
                                 {na ? <span style={{ fontSize: 12, color: T.textLight }}>–</span> : (has && <IcCheck size={14} color={permColors[p].text} strokeWidth={2.5} />)}
                               </button>
