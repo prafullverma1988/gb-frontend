@@ -693,6 +693,7 @@ function RolesAccess() {
             if (p.can_edit)    perms.push("edit");
             if (p.can_delete)  perms.push("delete");
             if (p.can_approve) perms.push("approve");
+            if (p.can_export)  perms.push("export");
             modMap[p.module] = perms;
           }
           if (Object.keys(modMap).length) next[key] = modMap;
@@ -718,6 +719,8 @@ function RolesAccess() {
       can_edit:    (perms[m.name]||[]).includes("edit")    ? 1 : 0,
       can_delete:  (perms[m.name]||[]).includes("delete")  ? 1 : 0,
       can_approve: (perms[m.name]||[]).includes("approve") ? 1 : 0,
+      // EXPORT ka tick pehle chupchaap gir jaata tha — column hi nahi tha.
+      can_export:  (perms[m.name]||[]).includes("export")  ? 1 : 0,
     }));
     setPermSaving(true);
     const res = await api.put(`/settings/roles/${dbRole.id}/permissions`, { permissions });
