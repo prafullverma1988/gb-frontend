@@ -111,12 +111,15 @@ function ToggleRow({ icon, label, desc, value, onChange }) {
 //   (nadaarad) — abhi kuch nahi rokta, sirf record hai
 // Jaise-jaise module enforce hote jayenge, yahan naam jodte jao —
 // tooltip apne aap sach bolne lagega.
+// Kaunsi rok kahan tak SACH ME lagti hai. Ye list asli code se banayi
+// gayi hai (scripts/gen-perm-reference.js wahi routes padhta hai).
+//   "server" — API bhi rokti hai   "app" — sirf mobile ka button chhupta hai
 const PERM_LIVE = {
   view:    { "*": "server" },
-  create:  { Finance: "server", Material: "app", Procurement: "app" },
-  edit:    { Finance: "server" },
-  delete:  { Finance: "server" },
-  approve: { Finance: "server" },
+  create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "app" },
+  edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server" },
+  delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server" },
+  approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server" },
   export:  {},
 };
 const permLive = (mod, act) => (PERM_LIVE[act] || {})["*"] || (PERM_LIVE[act] || {})[mod] || null;
@@ -205,6 +208,13 @@ const PERM_HELP = {
     view: "Sidebar se Settings gayab — company profile, roles & access, approval chain, photo settings sab band.",
     create: "Naya role ya user banana", edit: "Company/role/user setting badalna",
     delete: "Role ya user hatana", approve: "—", export: "—",
+  },
+  "Users & Roles": {
+    view: "Settings → Roles & Access me user aur role ki list dikhna. Iske bina Users aur Project Access tab khali dikhte hain. (Settings row alag hai — My Profile aur password uske andar aate hain.)",
+    create: "Naya user ya naya custom role banana",
+    edit: "User ki detail/role badalna, password reset karna, role ki permissions save karna",
+    delete: "User ya role hatana",
+    approve: "—", export: "—",
   },
   "Overview": {
     view: "Project ke andar Overview tab nahi dikhega — progress, paisa ka summary aur kaam ki halat.",
@@ -607,12 +617,16 @@ function RolesAccess() {
   const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
 
+  // 403 aane par pehle users [] hi reh jaata tha aur har role card "0 users"
+  // dikhata tha — admin ko lagta tha users gayab ho gaye. Ab saaf bataate hain.
+  const [usersDenied, setUsersDenied] = useState(false);
   const loadUsers = async () => {
     setUsersLoading(true);
     try {
       const res = await api.get("/settings/users");
-      if (res.success) setUsers(res.data || []);
-    } catch(e) {}
+      if (res.success) { setUsers(res.data || []); setUsersDenied(false); }
+      else setUsersDenied(true);
+    } catch(e) { setUsersDenied(true); }
     setUsersLoading(false);
   };
 
@@ -841,7 +855,10 @@ function RolesAccess() {
   // "Financial Reports" — paisa ka vishleshan, rozana ke Finance kaam se alag.
   // Fuel aur Machinery backend ki list me pehle se the par yahan chhoot gaye
   // the, isliye unki row DB me hoti thi par admin kabhi badal hi nahi paata tha.
-  const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Procurement","Warehouse","Fuel","Machinery","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings"];
+  // "Users & Roles" — user aur role ka prashasan. "Settings" row apni jagah
+  // rehti hai (My Profile, password), warna Settings.view hataate hi wo apna
+  // password bhi nahi badal paata.
+  const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Procurement","Warehouse","Fuel","Machinery","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings","Users & Roles"];
   // Project ke ANDAR ke saare tabs. Budget/Party/To Do/Tasks/Files/Site-DPR
   // pehle yahan the hi nahi, isliye unhe kabhi rok hi nahi sakte the — wo har
   // role ko hamesha dikhte the. (Design aur MOM upar "Modules" me hain, isliye
@@ -1199,6 +1216,12 @@ function RolesAccess() {
                        background: uActiveOnly ? T.greenSoft : T.card,
                        color: uActiveOnly ? T.green : T.textMid }}>Active only</button>
           </div>
+          {usersDenied && (
+            <div style={{ padding: "14px 16px", margin: "12px 0", borderRadius: 8, background: T.amberSoft, border: `1.5px solid ${T.amber}55`, fontSize: 13, color: T.text }}>
+              Aapke role ko user list dekhne ki ijazat nahi hai. Ye <strong>Users & Roles</strong> permission se milti hai —
+              admin us role ki us row me tick laga de. (Users yahan se gaye nahi hain, sirf dikh nahi rahe.)
+            </div>
+          )}
           {usersLoading && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>Loading...</div>}
           {!usersLoading && roleUsers.length === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>No users in this role yet</div>}
           {!usersLoading && roleUsers.length > 0 && visibleUsers.length === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>Koi user nahi mila</div>}
