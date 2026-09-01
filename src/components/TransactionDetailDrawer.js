@@ -32,6 +32,92 @@ const T = {
   pur: "#7C3AED", purL: "#F5F3FF",
 };
 
+// ── Bill / voucher ka print-friendly PDF ─────────────────────────────
+// Zero-dependency: ek naye window me saaf-suthra bill likhte hain aur
+// window.print() chala dete hain — user "Save as PDF" chun leta hai.
+// Wahi tareeka jo Reports aur party ledger export me pehle se chal raha hai.
+function escP(v) {
+  return String(v == null ? "" : v)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function downloadTxnPDF(txn, meta) {
+  const win = window.open("", "_blank", "width=900,height=700");
+  if (!win) { window.alert("PDF ke liye pop-up allow karein"); return; }
+  let company = "";
+  try { company = (JSON.parse(localStorage.getItem("gb_user") || "{}") || {}).company_name || ""; } catch (_) {}
+
+  const rs = (n) => "₹" + (Math.round((parseFloat(n) || 0) * 100) / 100).toLocaleString("en-IN");
+  const dd = (d) => d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+  const items = Array.isArray(txn.items) ? txn.items
+              : (Array.isArray(txn.line_items) ? txn.line_items : []);
+
+  const rows = items.map((it) => {
+    const qty = parseFloat(it.qty) || 0;
+    const rate = parseFloat(it.rate) || 0;
+    const amt = it.amount != null ? (parseFloat(it.amount) || 0) : qty * rate;
+    return "<tr><td>" + escP(it.item_name || it.item || it.name || "") + "</td>"
+      + "<td class='r'>" + (qty || "") + "</td>"
+      + "<td>" + escP(it.unit || "") + "</td>"
+      + "<td class='r'>" + rs(rate) + "</td>"
+      + "<td class='r'>" + rs(amt) + "</td></tr>";
+  }).join("");
+
+  const itemBlock = items.length
+    ? "<table><thead><tr><th>Material</th><th class='r'>Qty</th><th>Unit</th>"
+      + "<th class='r'>Rate</th><th class='r'>Amount</th></tr></thead><tbody>" + rows
+      + "</tbody><tfoot><tr><td colspan='4' class='r'>Total</td><td class='r'>"
+      + rs(txn.amount) + "</td></tr></tfoot></table>"
+    : "";
+
+  const field = (l, v) => "<div class='f'><span>" + escP(l) + "</span><b>" + escP(v) + "</b></div>";
+
+  const css = "*{box-sizing:border-box}"
+    + "body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;color:#111827;margin:0;padding:28px}"
+    + ".co{font-size:16px;font-weight:800;letter-spacing:-.3px}"
+    + "h1{font-size:15px;margin:14px 0 2px;letter-spacing:-.2px}"
+    + ".sub{font-size:11px;color:#6B7280;margin-bottom:16px}"
+    + ".amt{font-size:26px;font-weight:800;letter-spacing:-.6px;margin:10px 0 18px}"
+    + ".grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;margin-bottom:18px}"
+    + ".f{border-bottom:1px solid #F3F4F6;padding-bottom:5px}"
+    + ".f span{display:block;font-size:9.5px;color:#9CA3AF;text-transform:uppercase;letter-spacing:.4px;font-weight:700}"
+    + ".f b{font-size:12.5px;font-weight:600}"
+    + "table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:6px}"
+    + "th{background:#F8F9FB;text-align:left;padding:7px 9px;border-bottom:2px solid #E5E7EB;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;color:#374151}"
+    + "td{padding:7px 9px;border-bottom:1px solid #F3F4F6}"
+    + "tfoot td{font-weight:800;border-top:2px solid #E5E7EB;border-bottom:none;background:#F8F9FB}"
+    + ".r{text-align:right}"
+    + ".note{margin-top:16px;font-size:11.5px;color:#374151}"
+    + ".foot{margin-top:26px;font-size:10px;color:#9CA3AF;text-align:center}"
+    + "@media print{body{padding:14px}@page{margin:14mm}}";
+
+  const html = "<!DOCTYPE html><html><head><meta charset='utf-8'/><title>"
+    + escP((meta.label || "Transaction") + " TXN-" + txn.id) + "</title><style>" + css + "</style></head><body>"
+    + (company ? "<div class='co'>" + escP(company) + "</div>" : "")
+    + "<h1>" + escP(meta.label || "Transaction") + "</h1>"
+    + "<div class='sub'>TXN-" + escP(txn.id) + " &middot; " + escP(dd(txn.date)) + "</div>"
+    + "<div class='amt'>" + rs(txn.amount) + "</div>"
+    + "<div class='grid'>"
+      + field("Party", txn.party_display || txn.party_name || txn.party || "—")
+      + field("Project", txn.project_name || txn.project || "—")
+      + field("Account", txn.account_display || txn.account_name || "—")
+      + field("Status", txn.status || "—")
+      + (txn.reference_no ? field("Reference", txn.reference_no) : "")
+      + (txn.due_date ? field("Payment due", dd(txn.due_date)) : "")
+    + "</div>"
+    + itemBlock
+    + ((txn.note || "").trim() ? "<div class='note'><b>Note:</b> " + escP(txn.note.trim()) + "</div>" : "")
+    + "<div class='foot'>Generated on " + escP(dd(new Date())) + "</div>"
+    + "</body></html>";
+
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { try { win.print(); } catch (_) {} }, 300);
+}
+
 const TYPE_META = {
   receipt:           { get label() { return t("transaction_detail.payment_in"); },     c: T.grn, bg: T.grnL, in: true  },
   payment:           { get label() { return t("transaction_detail.payment_out"); },    c: T.red, bg: T.redL, in: false },
@@ -318,9 +404,18 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                 {fmtDate(rawDate)} · {txn.status || "—"}
               </div>
             </div>
-            <button onClick={onClose}
-              style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)",
-                background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 16, cursor: "pointer", lineHeight: 1 }}>×</button>
+            <div style={{ display: "flex", gap: 7, flexShrink: 0 }}>
+              {/* Bill / voucher PDF me save karo — print dialog me "Save as PDF" */}
+              <button onClick={() => downloadTxnPDF(txn, meta)} title={t("transaction_detail.download_pdf")}
+                style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(255,255,255,0.07)", color: "#fff", cursor: "pointer", lineHeight: 1,
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              </button>
+              <button onClick={onClose}
+                style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 16, cursor: "pointer", lineHeight: 1 }}>×</button>
+            </div>
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import api from "../../config/api";
 import { CreateTransactionModal } from "../FinanceModule";
+import TransactionDetailDrawer from "../../components/TransactionDetailDrawer";
 import { T, fmt, fmtN } from "../shared/tokens";
 import { Pill, Panel, PHead, THead, AddBtn, SecBtn } from "../shared/ui";
 import { t } from "../../i18n";
@@ -179,6 +180,8 @@ function TabParty({ projectId, projectName }) {
   //                                  party + project locked
   //  - showAddParty (bool)         → inline AddPartyModal
   const [txnModal, setTxnModal] = useState(null);
+  // Ledger row par click — wahi detail drawer jo Finance module me hai.
+  const [selTxn, setSelTxn] = useState(null);
   const [showAddParty, setShowAddParty] = useState(false);
   // Party list ki khoj aur tarteeb. Default A-Z — list dhoondhne ke liye
   // hai, isliye naam se lagana sabse aasan hai; "₹" par balance-wali
@@ -289,6 +292,9 @@ function TabParty({ projectId, projectName }) {
         else          running += isCR ? -amt : amt;
         txnRows.push({
           id: t.id,
+          // Poori raw txn — isi se wahi detail drawer khulta hai jo Finance
+          // module me khulta hai (line items, edit, delete, download).
+          raw: t,
           date: t.date ? new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "",
           project: t.project_name || "",         // project tag for ledger column
           // Only show the USER-typed note. `description` is auto-generated
@@ -587,7 +593,8 @@ function TabParty({ projectId, projectName }) {
                         const proj = txn.project || projectName || "";
                         const hasNote = !!txn.note;
                         return (
-                          <div key={i} style={{display:"grid", gridTemplateColumns:COLS, padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", borderLeft:`3px solid ${txn.cr?T.grn:T.red}33`, transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          <div key={i} onClick={()=>txn.raw&&setSelTxn(txn.raw)}
+                            style={{display:"grid", gridTemplateColumns:COLS, padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", borderLeft:`3px solid ${txn.cr?T.grn:T.red}33`, transition:"background .1s", cursor:txn.raw?"pointer":"default"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                             <span style={{fontSize:11.5, color:T.t4}}>{txn.date}</span>
                             <span style={{fontSize:11.5, color:T.t3, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}} title={proj}>{proj || "—"}</span>
                             <span style={{fontSize:12.5, color:hasNote?T.t1:T.t4, fontWeight:hasNote?500:400, fontStyle:hasNote?"normal":"italic", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}} title={txn.note}>
@@ -652,6 +659,12 @@ function TabParty({ projectId, projectName }) {
           )}
         </Panel>
       </div>
+
+      <TransactionDetailDrawer
+        txn={selTxn}
+        onClose={()=>setSelTxn(null)}
+        onChanged={()=>reload()}
+      />
     </div>
   );
 }
