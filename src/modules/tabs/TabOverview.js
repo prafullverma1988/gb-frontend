@@ -317,7 +317,7 @@ function TabOverview({proj, onRequestPayment}) {
                         <PBar pct={pct} color={pct>70?T.grn:T.blu} h={4}/>
                         <div style={{display:"flex", justifyContent:"space-between", marginTop:5}}>
                           <span style={{fontSize:11, color:T.t4}}>{item.assignee||item.assigned_to_name||item.owner||t("overview.unassigned")}</span>
-                          {(item.base_end||item.end_date)&&<span style={{fontSize:11, color:T.t3}}>{t("overview.due_vnew", { vnew: new Date(item.base_end||item.end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) })}</span>}
+                          {(item.base_end||item.end_date)&&<span style={{fontSize:11, color:T.t3}}>{t("overview.due_vnew", { vnew: new Date(item.base_end||item.end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) })}</span>}
                         </div>
                       </div>
                     );
@@ -536,7 +536,7 @@ function TabOverview({proj, onRequestPayment}) {
                       <div key={item2.id||i} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}}>
                         <div style={{minWidth:0}}>
                           <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{item2.party_name||item2.description||item2.head_name||t("overview.transaction")}</div>
-                          <div style={{fontSize:10.5, color:T.t4}}>{item2.date?new Date(item2.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):""}{item2.type?` · ${item2.type.replace(/_/g," ")}`:""}</div>
+                          <div style={{fontSize:10.5, color:T.t4}}>{item2.date?new Date(item2.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):""}{item2.type?` · ${item2.type.replace(/_/g," ")}`:""}</div>
                         </div>
                         <span style={{fontSize:12.5, fontWeight:700, color:isIn?T.grn:T.red, flexShrink:0, fontVariantNumeric:"tabular-nums"}}>{isIn?"+":"−"}₹{fmt(num(item2.amount))}</span>
                       </div>
@@ -560,7 +560,7 @@ function TabOverview({proj, onRequestPayment}) {
                       <div key={p.id||i} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}}>
                         <div style={{minWidth:0}}>
                           <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{p.purpose||p.description||p.party_name||t("overview.payment_request")}</div>
-                          <div style={{fontSize:10.5, color:T.t4}}>{p.priority?`${p.priority} · `:""}{p.needed_by_date?`by ${new Date(p.needed_by_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}`:(p.requested_by||"")}</div>
+                          <div style={{fontSize:10.5, color:T.t4}}>{p.priority?`${p.priority} · `:""}{p.needed_by_date?`by ${new Date(p.needed_by_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}`:(p.requested_by||"")}</div>
                         </div>
                         <div style={{display:"flex", alignItems:"center", gap:8, flexShrink:0}}>
                           <span style={{fontSize:12.5, fontWeight:700, color:T.t1}}>₹{fmt(num(p.amount))}</span>

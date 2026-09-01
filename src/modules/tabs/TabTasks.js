@@ -3133,7 +3133,7 @@ function TaskIssueChat({issueId}){
   const [sending,setSending]=useState(false);
   const [loaded,setLoaded]=useState(false);
   const fmtT=d=>d?new Date(d).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}):"";
-  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"";
   useEffect(()=>{
     api.get("/tasks/issues/"+issueId+"/comments").then(r=>{
       if(r.success)setComments(r.data||[]);
@@ -3233,7 +3233,7 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId}){
   };
   const del=async(e)=>{
     const ask=window.confirmAsync||(async(m)=>window.confirm(m));
-    if(!await ask(`${e.done_qty} ${unit} ki entry (${new Date(e.report_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}) hatayein? % apne aap peeche jayega.`))return;
+    if(!await ask(`${e.done_qty} ${unit} ki entry (${new Date(e.report_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}) hatayein? % apne aap peeche jayega.`))return;
     const r=await api.del("/budget/progress/"+e.id);
     if(!r?.success){window.alert(r?.message||"Hata nahi saki");return;}
     push(done-Number(e.done_qty||0));
@@ -3347,7 +3347,7 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId}){
         <div key={e.id} style={{border:"1px solid #E2E8F0",borderRadius:9,padding:"8px 11px",marginBottom:6,background:"#FAFBFC"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <span style={{fontSize:11,color:"#64748B",fontWeight:600}}>
-              {new Date(e.report_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}
+              {new Date(e.report_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}
             </span>
             <span style={{fontSize:12.5,fontWeight:800,color:"#1E293B"}}>+{Number(e.done_qty)} {unit}</span>
             {g&&<span style={{fontSize:9.5,fontWeight:700,color:g.c,background:g.bg,padding:"1px 7px",borderRadius:12}}>{g.t}{e.geo_flag==="verified"&&e.geo_m!=null?" · "+e.geo_m+" m":""}</span>}
@@ -4115,7 +4115,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   if(added.length>0){setLabours(p=>[...added,...p.filter(l=>l.work_date!==labDate||l.labour_type!=="Direct")]);setDayWorkers([]);}
                   setLabSaving(false);
                 }} style={{width:"100%",padding:"11px",borderRadius:8,background:"#2563EB",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",marginBottom:10}}>
-                  {labSaving?t("common.saving"):"✓ Save Attendance — "+new Date(labDate+"T00:00").toLocaleDateString("en-IN",{day:"numeric",month:"short"})}
+                  {labSaving?t("common.saving"):"✓ Save Attendance — "+new Date(labDate+"T00:00").toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"})}
                 </button>
               )}
             </div>
@@ -4271,7 +4271,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 {Object.entries(byDate).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,entries])=>(
                   <div key={date} style={{marginBottom:10}}>
                     <div style={{fontSize:10,fontWeight:700,color:"#64748B",marginBottom:5,display:"flex",alignItems:"center",gap:6}}>
-                      <span>{new Date(date+"T00:00").toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"})}</span>
+                      <span>{new Date(date+"T00:00").toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short",year:"2-digit"})}</span>
                       <span style={{background:"#F1F5F9",borderRadius:10,padding:"1px 7px",color:"#94A3B8"}}>{entries.reduce((s,l)=>s+Number(l.count||1),0)} workers</span>
                     </div>
                     {entries.map(l=>(

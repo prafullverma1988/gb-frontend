@@ -12,7 +12,7 @@ import { TransfersTab, NewTransferModal, TransferDetailDrawer } from "../modules
 
 const fmtDate = (d) => {
   if (!d) return "—";
-  try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }); }
+  try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }); }
   catch { return d; }
 };
 

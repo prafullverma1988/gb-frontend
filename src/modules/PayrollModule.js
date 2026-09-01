@@ -429,7 +429,7 @@ function PendingReviewQueue({onChanged}){
         <div key={s.id} style={{padding:"11px 14px",borderTop:`1px solid ${T.b1}`,display:"grid",gridTemplateColumns:"1fr auto",gap:10,alignItems:"center"}}>
           <div>
             <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{s.user_name} <span style={{fontSize:10,color:T.t4,fontWeight:500}}>· {s.user_phone||""}</span></div>
-            <div style={{fontSize:11,color:T.t3,marginTop:3}}><Rich k="payroll.punched_in_at_vnew" params={{ vnew: new Date(s.punch_in_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) }} />{s.project_name && <> · {s.project_name}</>}
+            <div style={{fontSize:11,color:T.t3,marginTop:3}}><Rich k="payroll.punched_in_at_vnew" params={{ vnew: new Date(s.punch_in_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit",year:"2-digit"}) }} />{s.project_name && <> · {s.project_name}</>}
             </div>
             <div style={{fontSize:10,color:T.t4,marginTop:2,fontFamily:"monospace"}}>{t("payroll.gps_s_s2", { s: s.punch_in_lat?Number(s.punch_in_lat).toFixed(5):"—", s2: s.punch_in_lng?Number(s.punch_in_lng).toFixed(5):"—" })}</div>
           </div>
@@ -1234,7 +1234,7 @@ function PunchReviewStrip({onActed}){
               <div style={{flex:1,minWidth:180}}>
                 <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{s.user_name||t("master_library.staff")} {s.project_name&&<span style={{fontWeight:400,color:T.t3}}>· {s.project_name}</span>}</div>
                 <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>
-                  🕐 {s.punch_in_at?new Date(s.punch_in_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}
+                  🕐 {s.punch_in_at?new Date(s.punch_in_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit",year:"2-digit"}):"—"}
                   {s.punch_in_lat!=null&&<>
                     {" · "}
                     <a href={`https://www.google.com/maps?q=${s.punch_in_lat},${s.punch_in_lng}`} target="_blank" rel="noreferrer" style={{color:"#0D9488",fontWeight:600,textDecoration:"none"}}>{t("payroll.map")}</a>
@@ -3927,7 +3927,7 @@ function MobilePunchTab(){
           const t=p.punch_time?new Date(p.punch_time):new Date();
           return{id:p.id,name:p.name,action:p.action,project:p.project||"",
             time:t.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}),
-            date:t.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+            date:t.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
             lat:p.lat,lng:p.lng,location:p.location||""};
         }));
       }catch(err){console.error(err);}
@@ -3955,7 +3955,7 @@ function MobilePunchTab(){
     const timeStr=now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true});
     const entry={
       id:Date.now(),name:workerName,action,project:selProject||"Unknown",
-      time:timeStr,date:now.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+      time:timeStr,date:now.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
       lat:location?.lat||0,lng:location?.lng||0,
       location:location?.address||"Location not captured",
     };

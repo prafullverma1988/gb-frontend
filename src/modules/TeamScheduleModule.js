@@ -86,7 +86,7 @@ const TYPES={
 };
 
 const TODAY=new Date().toISOString().split("T")[0];
-const fmtDate=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"-";
+const fmtDate=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"-";
 const daysDiff=(a,b)=>Math.round((new Date(b)-new Date(a))/(1000*86400));
 const isOverdue=item=>item.dueDate&&item.status!=="Done"&&item.dueDate<TODAY;
 const isDueSoon=item=>item.dueDate&&item.status!=="Done"&&item.dueDate>=TODAY&&daysDiff(TODAY,item.dueDate)<=3;

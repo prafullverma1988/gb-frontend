@@ -39,7 +39,7 @@ const STATUS_META = {
 
 const fmtDate = (d) => {
   if (!d) return "—";
-  try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }); } catch { return d; }
+  try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }); } catch { return d; }
 };
 
 export default function MaterialTransferTab({ projectId, projectName, isAdmin = false }) {

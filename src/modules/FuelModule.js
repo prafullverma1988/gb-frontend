@@ -72,7 +72,7 @@ const fmtDT = (d) => {
   if (!d) return "—";
   const dt = new Date(d);
   if (isNaN(dt)) return "—";
-  return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) + " " +
+  return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }) + " " +
          dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 };
 

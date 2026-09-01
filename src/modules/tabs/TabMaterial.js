@@ -284,7 +284,7 @@ function TabMaterial({ project }) {
             qty: (parseFloat(m.quantity)||0) + " " + (m.unit||""),
             stage: m.stage || "Requested",
             by: m.requested_by || "Site Team",
-            date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
+            date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
             vendor: m.linked_vendor || null,
             amt: parseFloat(m.approx_amount) || 0,
           }))
@@ -316,7 +316,7 @@ function TabMaterial({ project }) {
                 qty: (Number.isInteger(Number(item.received_qty)) ? Number(item.received_qty) : parseFloat(item.received_qty||0)) + " " + (item.unit || ""),
                 stage: "Received",
                 by: g.received_by || (isAutoBill ? "Finance" : "Site"),
-                date: g.received_date ? new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
+                date: g.received_date ? new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
                 vendor: g.vendor_name || null,
                 // Value of what was received. GRN lines carry rate/amount for
                 // priced receipts (site-expense purchase, direct warehouse receipt);
@@ -515,7 +515,7 @@ function TabMaterial({ project }) {
               qty: (parseFloat(m.quantity)||0) + " " + (m.unit||""),
               stage: m.stage || "Requested",
               by: m.requested_by || "Site Team",
-              date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
+              date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
               vendor: m.linked_vendor || null, amt: parseFloat(m.approx_amount) || 0,
             })));
           }
@@ -578,7 +578,7 @@ function TabMaterial({ project }) {
           qty: (parseFloat(m.quantity)||0) + " " + (m.unit||""),
           stage: m.stage || "Requested",
           by: m.requested_by || "Site Team",
-          date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
+          date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
           vendor: m.linked_vendor || null, amt: parseFloat(m.approx_amount) || 0,
         })));
       }
@@ -698,7 +698,7 @@ function TabMaterial({ project }) {
           newMaterialRows.push({
             id:m.id, name:m.item_name, qty:m.quantity+" "+m.unit,
             stage:"Requested", by: m.requested_by || "—",
-            date:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+            date:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
             vendor:null, amt:parseFloat(m.approx_amount)||0,
           });
         }

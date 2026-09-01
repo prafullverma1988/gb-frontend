@@ -57,6 +57,10 @@ const fmtN = (n) => {
 
 const fmtDate = (d) => {
   if (!d) return "—";
+  // JS ka parser bina saal wali string par 2001 maan leta hai
+  // (new Date("12 May") -> 12 May 2001). Aisi string ko chhed-chhad ke
+  // bajaye jaisi hai waisi hi dikhao — galat saal dikhane se behtar hai.
+  if (typeof d === "string" && !/\d{4}/.test(d)) return d;
   try {
     return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   } catch { return d; }
@@ -77,6 +81,11 @@ const isoDate = (d) => {
 // scroll to that row so the user knows which one they clicked.
 export default function TransactionDetailDrawer({ txn, onClose, onChanged, highlightItem = null, onDownloadInvoice = null, onShareInvoice = null }) {
   const open = !!txn;
+  // List se aane wale row me `date` sirf dikhane wali string hoti hai
+  // ("12 May"). Asli ISO date dateRaw/date_iso me hai — tareekh hamesha
+  // wahi se lo, warna saal galat ban jaata hai.
+  const rawDate = txn ? (txn.date_iso || txn.dateRaw || txn.date) : null;
+  const rawDue  = txn ? (txn.due_date || txn.dueDateRaw) : null;
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
@@ -278,7 +287,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                 {amtSign}₹{Math.round(txn.amount).toLocaleString("en-IN")}
               </div>
               <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.55)", marginTop: 3 }}>
-                {fmtDate(txn.date)} · {txn.status || "—"}
+                {fmtDate(rawDate)} · {txn.status || "—"}
               </div>
             </div>
             <button onClick={onClose}
@@ -318,11 +327,11 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
           {/* Top tile: amount status, dates */}
           {!editing && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-              <Tile label={t("common.date")}     value={fmtDate(txn.date)}/>
+              <Tile label={t("common.date")}     value={fmtDate(rawDate)}/>
               <Tile label={t("common.status")}   value={txn.status || "—"} c={txn.status === "paid" ? T.grn : T.amb}/>
               <Tile label={t("common.party")}    value={txn.party_display || txn.party_name || txn.party || "—"}/>
               <Tile label={t("common.project")}  value={txn.project_name || txn.project || "—"}/>
-              {hasDueDate && txn.due_date && <Tile label={t("transaction_detail.payment_due")} value={fmtDate(txn.due_date)} c={T.amb}/>}
+              {hasDueDate && rawDue && <Tile label={t("transaction_detail.payment_due")} value={fmtDate(rawDue)} c={T.amb}/>}
               {txn.reference_no && <Tile label={t("transaction_detail.reference")} value={txn.reference_no}/>}
               {(txn.account_display || txn.account_name) && <Tile label={t("transaction_detail.account")} value={txn.account_display || txn.account_name}/>}
               {txn.paid_via_staff_name && <Tile label={t("transaction_detail.paid_by")} value={t("transaction_detail.name_wallet", { name: txn.paid_via_staff_name })} c={T.pur}/>}

@@ -1792,9 +1792,9 @@ function ProcurementModule(){
     }));
     return {
       id:r.id, rfqNum:r.rfq_number,
-      date:r.created_at?new Date(r.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
+      date:r.created_at?new Date(r.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—",
       project:r.project_name||"—", project_id:r.project_id||null, status:r.status,
-      bidEnd:r.bid_end_date?new Date(r.bid_end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
+      bidEnd:r.bid_end_date?new Date(r.bid_end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—",
       locked:r.locked_vendor||null,
       items,
       vendors:(r.vendors||[]).map(v=>({
@@ -2616,7 +2616,7 @@ function ProcurementModule(){
                       </div>
                       <div style={{textAlign:"right"}}>
                         {m.closed_at && <div style={{fontSize:10,color:T.t4}}>{t("common.closed")}</div>}
-                        {m.closed_at && <div style={{fontSize:11,color:T.t3,fontWeight:500}}>{new Date(m.closed_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</div>}
+                        {m.closed_at && <div style={{fontSize:11,color:T.t3,fontWeight:500}}>{new Date(m.closed_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}</div>}
                       </div>
                     </div>
                   ))}

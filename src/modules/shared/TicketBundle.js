@@ -18,7 +18,7 @@ export function TicketBadge({ text, color, bg }) {
 
 export function fmtTicketTime(v) {
   if (!v) return "";
-  try { return new Date(v).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }); }
+  try { return new Date(v).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", year: "2-digit" }); }
   catch (_) { return String(v); }
 }
 

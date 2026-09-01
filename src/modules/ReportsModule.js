@@ -109,7 +109,7 @@ const fmtRs=n=>"₹"+fmtN(Math.abs(n));
 // Signed money — negative balances show a leading "-" (pair with red colour).
 const fmtBal=n=>(n<0?"-₹":"₹")+fmtN(Math.abs(n));
 const fmtDate=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"-";
-const fmtShort=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"-";
+const fmtShort=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"-";
 const TODAY=new Date().toISOString().split("T")[0];
 
 // ── MASTER DATA ───────────────────────────────────────────────

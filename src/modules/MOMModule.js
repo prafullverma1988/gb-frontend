@@ -49,7 +49,7 @@ const T={
   pur:"#7C3AED",purL:"#F5F3FF",purM:"#DDD6FE",
 };
 const fmtDate=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"-";
-const fmtShort=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"-";
+const fmtShort=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"-";
 const TODAY=new Date().toISOString().split("T")[0];
 
 // ── CONSTANTS ──────────────────────────────────────────────────

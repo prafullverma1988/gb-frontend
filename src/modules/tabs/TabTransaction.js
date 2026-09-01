@@ -37,7 +37,7 @@ const mapTxn=t=>{
   const wallet=!!t.paid_via_staff_name&&!t.account_id;
   return {
     id:t.id,
-    date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+    date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
     // party_display = library party ka naam, warna mobile par type kiya
     // gaya free-text dukaan ka naam.
     party:t.party_display||t.party_name||t.party||"—",

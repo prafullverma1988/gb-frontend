@@ -60,7 +60,7 @@ const PLANS = ["Free Trial", "Starter", "Professional", "Enterprise"];
 // ── HELPERS ─────────────────────────────────────────────────────
 const fmtMoney = n => { const v = parseFloat(n)||0; if(!v) return "—"; return "₹" + (v>=10000000?(v/10000000).toFixed(2)+" Cr":v>=100000?(v/100000).toFixed(2)+" L":v>=1000?(v/1000).toFixed(0)+"K":v.toFixed(0)); };
 const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN",{ day:"2-digit", month:"short", year:"2-digit" }) : "—";
-const fmtDateTime = d => d ? new Date(d).toLocaleString("en-IN",{ day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "—";
+const fmtDateTime = d => d ? new Date(d).toLocaleString("en-IN",{ day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit",year:"2-digit" }) : "—";
 const timeAgo = d => {
   if(!d) return "";
   const s = Math.floor((Date.now() - new Date(d).getTime())/1000);

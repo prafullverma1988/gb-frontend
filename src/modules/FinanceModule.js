@@ -2227,7 +2227,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 {outstanding.map(it=>{
                   const alloc=allocPreview.map[it.target_id]||0;
                   const on=alloc>0.005;
-                  const dt=it.date?new Date(it.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+                  const dt=it.date?new Date(it.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"";
                   const isReimb=it.target_type==="reimbursement";
                   return(
                     <div key={it.target_id} style={{display:"grid",gridTemplateColumns:"22px 1fr 96px 104px",gap:8,alignItems:"center",padding:"8px 12px",borderBottom:`1px solid ${T.b1}`,background:on?T.grnL+"55":"transparent"}}>
@@ -2289,7 +2289,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     style={{height:32,padding:"0 9px",borderRadius:6,border:`1.5px solid ${selectedGRNId?T.grn:T.amb}`,background:selectedGRNId?T.grnL:T.surface,fontSize:12,fontWeight:600,color:selectedGRNId?T.grn:T.amb,outline:"none",cursor:"pointer",fontFamily:"inherit",minWidth:200}}>
                     <option value="">{t("finance.direct_purchase_no_grn")}</option>
                     {availableGRNs.map(g=>{
-                      const dt=g.received_date?new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+                      const dt=g.received_date?new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"";
                       const itemCount=(g.items||[]).length;
                       return <option key={g.id} value={g.id}>{g.grn_number} · {dt} · {itemCount} item{itemCount!==1?"s":""}</option>;
                     })}
@@ -3707,7 +3707,7 @@ function FinanceModule(){
     const isDebit=BACK_DEBIT.includes(t.type)||t.type==="settle_out"||t.dr===true||(!t.type&&t.dr);
     return {
       id:t.id,
-      date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+      date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
       ds,
       party:t.party_display||t.party_name||t.party||"",
       sub:stripProjectSeg(t.description||t.note||t.narration||"", t.project_name||t.project||""),
@@ -3749,7 +3749,7 @@ function FinanceModule(){
     return {
       id:r.id,
       no:r.pr_number||`PR-${r.id}`,
-      date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+      date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
       ds:parseInt(rawDate.replace(/\D/g,"").slice(0,8))||
         (d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate()),
       party:r.party_name||r.party||"",
@@ -3768,7 +3768,7 @@ function FinanceModule(){
       // free-text worker not in party master, so DON'T guess type from there.
       prType:(()=>{const m=String(r.purpose||r.description||"").match(/^\[([^\]]+)\]/);return m?m[1].trim():"";})(),
       approvedBy:r.approved_by_name||r.approved_by||"",
-      approvedDate:r.approved_at?new Date(r.approved_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
+      approvedDate:r.approved_at?new Date(r.approved_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"",
       originalAmt:r.original_amount?parseFloat(r.original_amount):undefined,
       modified:!!r.original_amount,
     };
@@ -3790,7 +3790,7 @@ function FinanceModule(){
       party:p.party_name||p.party||"",
       project:p.project_name||p.project||"",
       amount:parseFloat(p.amount||p.balance)||0,
-      date:dueDateRaw?new Date(dueDateRaw).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
+      date:dueDateRaw?new Date(dueDateRaw).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"",
       dueDateRaw,
       daysToDue: daysToDue ?? null,
       overdue:p.overdue===true||(dueDateRaw&&new Date(dueDateRaw)<new Date(new Date().setHours(0,0,0,0))),
@@ -3898,7 +3898,7 @@ function FinanceModule(){
         setApiLedger(prev=>({...prev,[partyId]:res.data.map(t=>({
           id:t.id,
           dateRaw:t.date||null,
-          date:t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
+          date:t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"",
           note:t.note||t.narration||"",
           sub:t.description||"",
           project:t.project_name||t.project||"",
@@ -4363,7 +4363,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
   const approveReq=async(id)=>{
     const req=payReqs.find(r=>r.id===id);
     // Optimistic update — pendPmts derives from payReqs automatically
-    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Approved",approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}:r));
+    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Approved",approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}:r));
     try{
       await api.put(`/finance/payment-requests/${id}/approve`,{
         approved_amount:req?.amount||0,
@@ -4741,7 +4741,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
             </div>
             {selParty&&(()=>{
               const ledgerRows=getLedgerRows(selParty);
-              const LG_COLS="70px 90px 1fr 116px 122px 80px 80px 104px"; // Date Project Note Type PaidBy CR DR Balance
+              const LG_COLS="82px 90px 1fr 116px 122px 80px 80px 104px"; // Date Project Note Type PaidBy CR DR Balance  (date me ab saal bhi aata hai)
               // ── Ledger filters: type / project options + search/date/type/project ──
               // Each row keeps its TRUE running balance (computed on the full,
               // chronological ledger) — filtering only hides rows, so the
@@ -5374,7 +5374,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           <button onClick={()=>{
                             const newAmt=Number(editAmt);if(!newAmt||newAmt<=0) return;const orig=req.amount;
                             // pendPmts derives from payReqs automatically — no separate push needed
-                            setPayReqs(prev=>prev.map(r=>r.id===req.id?{...r,status:"Approved",amount:newAmt,originalAmt:newAmt!==orig?orig:undefined,modified:newAmt!==orig,approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}:r));
+                            setPayReqs(prev=>prev.map(r=>r.id===req.id?{...r,status:"Approved",amount:newAmt,originalAmt:newAmt!==orig?orig:undefined,modified:newAmt!==orig,approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}:r));
                             setEditReqId(null);
                           }} style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
                             <IcThumbUp size={13} color="white"/>{t("finance.approve_number", { Number: Number(editAmt)?"₹"+fmtN(Number(editAmt)):"..." })}</button>

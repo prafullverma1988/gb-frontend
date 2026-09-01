@@ -291,7 +291,7 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
                       </div>
                     )}
                     {s.first_viewed_at && (
-                      <div style={{ marginTop: 4, fontSize: 10.5, color: T.grn }}>{t("share_drawing.first_viewed_vnew", { vnew: new Date(s.first_viewed_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) })}</div>
+                      <div style={{ marginTop: 4, fontSize: 10.5, color: T.grn }}>{t("share_drawing.first_viewed_vnew", { vnew: new Date(s.first_viewed_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", year: "2-digit" }) })}</div>
                     )}
                   </div>
                 );

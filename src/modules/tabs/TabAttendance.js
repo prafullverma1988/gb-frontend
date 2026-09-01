@@ -1184,7 +1184,7 @@ function TabAttendance({ project, onRequestPayment }) {
                         const d = new Date(datePart + "T00:00:00");
                         if (isNaN(d.getTime())) return <div style={{fontSize:12,color:T.t4}}>—</div>;
                         return <>
-                          <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</div>
+                          <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}</div>
                           <div style={{fontSize:10.5,color:T.t4}}>{d.toLocaleDateString("en-IN",{weekday:"short",year:"2-digit"})}</div>
                         </>;
                       })()}

@@ -71,7 +71,7 @@ function TabTodo({projectId}) {
     if(!s) return "";
     try{
       const d=new Date(s);
-      const date=d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"});
+      const date=d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"});
       const time=d.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true});
       return date+" · "+time;
     }catch(_){ return ""; }
@@ -313,7 +313,7 @@ function TabTodo({projectId}) {
                     <Pill label={todo.cat} c={cc} bg={cc+"18"}/>
                     <Pill label={todo.priority} c={ps.c} bg={ps.bg}/>
                     <span style={{fontSize:11,color:T.t4}}>@{(todo.assignee||"").split(" ")[0]||"--"}</span>
-                    {todo.due&&<span style={{fontSize:11,color:T.t4}}>{t("todo.due_vnew", { vnew: new Date(todo.due).toLocaleDateString("en-IN",{day:"numeric",month:"short"}) })}</span>}
+                    {todo.due&&<span style={{fontSize:11,color:T.t4}}>{t("todo.due_vnew", { vnew: new Date(todo.due).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"}) })}</span>}
                     {todo.checklist.length>0&&(
                       <span style={{fontSize:10.5,color:checkDone===todo.checklist.length?T.grn:T.t4,fontWeight:600}}>
                         ☑ {checkDone}/{todo.checklist.length}

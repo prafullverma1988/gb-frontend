@@ -232,7 +232,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
     if(hrs<24) return hrs+"h ago";
     const days=Math.floor(hrs/24);
     if(days<7) return days+"d ago";
-    return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+    return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"});
   };
 
   const filtered=feed.filter(f=>(site==="All"||f.project_name===site)&&selTypes.includes(f.feed_type));
@@ -1362,7 +1362,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
   const sc=MR_STAGE_COLORS[stage]||MR_STAGE_COLORS.Requested;
   const act=acting[mr.id];
   const isReject=rejectId===mr.id;
-  const fmtDate=d=>{if(!d)return"—";const dt=new Date(d);return dt.toLocaleDateString("en-IN",{day:"numeric",month:"short"});};
+  const fmtDate=d=>{if(!d)return"—";const dt=new Date(d);return dt.toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"});};
   // WhatsApp order = wahi manual order, bas bhejne ka zariya WhatsApp hai.
   // Pehle ye button seedha wa.me khol deta tha — vendor ko na receiving
   // person ka number jaata tha aur na MR "Ordered" hoti thi. Ab dono ek hi
@@ -1666,7 +1666,7 @@ function GRNCard({grn}){
 
 // ── Warehouse MR Card (site→warehouse request, needs approval) ─────────
 function WHMRCard({mr, acting, onApprove, onReject, rejectId, setRejectId, rejectNote, setRejectNote}){
-  const fmtDate=d=>{if(!d)return"—";return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short"});};
+  const fmtDate=d=>{if(!d)return"—";return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"});};
   const PRIORITY_C={High:T.red,Medium:T.amb,Low:T.grn};
   const pc=PRIORITY_C[mr.priority]||T.amb;
   const act=acting["whmr"+mr.id];
@@ -2392,7 +2392,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             </>)}
             {src==="attendance_review"&&(
               <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,padding:"6px 10px",background:"#F0FDFA",borderRadius:6,border:"1px solid #99F6E4",flexWrap:"wrap"}}>
-                <span style={{fontSize:11,color:T.t2}}>🕐 {item.punch_at?new Date(item.punch_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}</span>
+                <span style={{fontSize:11,color:T.t2}}>🕐 {item.punch_at?new Date(item.punch_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit",year:"2-digit"}):"—"}</span>
                 {item.punch_lat!=null&&(
                   <a href={`https://www.google.com/maps?q=${item.punch_lat},${item.punch_lng}`} target="_blank" rel="noreferrer"
                     style={{fontSize:11,color:"#0D9488",fontWeight:700,textDecoration:"none"}}>{t("projects.number_number2_map_pe_dekho", { Number: Number(item.punch_lat).toFixed(5), Number2: Number(item.punch_lng).toFixed(5) })}</a>
@@ -3853,7 +3853,7 @@ function IssueChat({issueId}){
   const [sending,setSending]=useState(false);
   const [loaded,setLoaded]=useState(false);
   const fmtT=d=>d?new Date(d).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}):"";
-  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"";
   useEffect(()=>{
     api.get("/tasks/issues/"+issueId+"/comments").then(r=>{
       if(r.success)setComments(r.data||[]);
@@ -3912,7 +3912,7 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
   const priC={"Low":{c:"#64748B",bg:"#F1F5F9"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"High":{c:"#DC2626",bg:"#FEE2E2"},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
   const issC={"Open":{c:"#DC2626",bg:"#FEE2E2"},"In Progress":{c:"#2563EB",bg:"#DBEAFE"},"Resolved":{c:"#16A34A",bg:"#DCFCE7"},"Closed":{c:"#64748B",bg:"#F1F5F9"}};
   const FILTERS=["All","Open","In Progress","Resolved","Closed"];
-  const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"-";
+  const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"-";
 
   const filtered = (filter==="All"?issues:issues.filter(i=>i.status===filter)).slice().sort((a,b)=>{
     if(sortBy==="project")  return (a.project_name||"").localeCompare(b.project_name||"");
@@ -4075,7 +4075,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
     }).catch(()=>{});
   },[]);
   const priC={"High":{c:"#DC2626",bg:"#FEE2E2"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"Low":{c:"#64748B",bg:"#F1F5F9"}};
-  const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+  const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"";
 
   const parsed=localTodos.map(t=>{
     let cl=[];
@@ -4276,7 +4276,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                       if (!item.created_at) return "";
                       try {
                         const d = new Date(item.created_at);
-                        const date = d.toLocaleDateString("en-IN", { day:"2-digit", month:"short" });
+                        const date = d.toLocaleDateString("en-IN", { day:"2-digit", month:"short",year:"2-digit" });
                         const time = d.toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", hour12: true });
                         return date + " · " + time;
                       } catch (_) { return ""; }

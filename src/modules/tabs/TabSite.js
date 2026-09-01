@@ -37,7 +37,7 @@ function TabSite({ project, isAdmin }) {
   const fmtDate = (d) => {
     if (!d) return "";
     const dt = new Date(d);
-    return dt.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short" });
+    return dt.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "2-digit" });
   };
 
   const approveDPR = async () => {
