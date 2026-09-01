@@ -132,7 +132,7 @@ function AddPartyModal({ open, onClose, onSaved }) {
               <div>
                 {lbl("Opening Balance (₹)")}
                 <input type="number" value={form.opening_balance} onChange={set("opening_balance")} placeholder="0" style={ip}/>
-                <div style={{fontSize:10, color:T.t4, marginTop:3}}>Pichla owed amount — backend ise live_balance me jod deta hai</div>
+                <div style={{fontSize:10, color:T.t4, marginTop:3}}>{t("party.pichla_owed_amount_live_balance")}</div>
               </div>
               <div>
                 {lbl("Credit Days")}
@@ -180,6 +180,11 @@ function TabParty({ projectId, projectName }) {
   //  - showAddParty (bool)         → inline AddPartyModal
   const [txnModal, setTxnModal] = useState(null);
   const [showAddParty, setShowAddParty] = useState(false);
+  // Party list ki khoj aur tarteeb. Default A-Z — list dhoondhne ke liye
+  // hai, isliye naam se lagana sabse aasan hai; "₹" par balance-wali
+  // purani tarteeb (sabse zyada bakaya pehle) ek click door hai.
+  const [pSearch, setPSearch] = useState("");
+  const [pSort,   setPSort]   = useState("az");   // "az" | "bal"
   const typeS = {
     "Client":{c:T.grn,bg:T.grnL},
     "client":{c:T.grn,bg:T.grnL},
@@ -312,6 +317,19 @@ function TabParty({ projectId, projectName }) {
       };
     }).filter(Boolean).sort((a,b)=>b.balance-a.balance);
   }, [allParties, projTxns]);
+
+  // Khoj + tarteeb ke baad jo list screen par dikhti hai.
+  const visibleParties = useMemo(() => {
+    const q = pSearch.trim().toLowerCase();
+    const list = q
+      ? partyRows.filter(p => String(p.name||"").toLowerCase().includes(q)
+                           || String(p.type||"").toLowerCase().includes(q))
+      : partyRows;
+    const out = [...list];
+    if (pSort === "az") out.sort((a,b) => String(a.name||"").localeCompare(String(b.name||""), "en", { sensitivity:"base" }));
+    else                out.sort((a,b) => b.balance - a.balance);
+    return out;
+  }, [partyRows, pSearch, pSort]);
 
   // Keep selection in sync when partyRows recompute. Dep on partyRows
   // (not just .length) so the ledger refreshes after a new txn is added
@@ -474,6 +492,20 @@ function TabParty({ projectId, projectName }) {
       <div style={{width:290, flexShrink:0}}>
         <Panel style={{overflow:"hidden"}}>
           <PHead title={`Parties (${partyRows.length})`} action={<AddBtn label={t("master_library.add_party")} onClick={()=>setShowAddParty(true)}/>}/>
+          {!loading && partyRows.length > 0 && (
+            <div style={{display:"flex", gap:6, alignItems:"center", padding:"8px 12px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
+              <input value={pSearch} onChange={e=>setPSearch(e.target.value)} placeholder={t("party.search_party")}
+                style={{flex:1, minWidth:0, padding:"6px 9px", borderRadius:6, border:`1.5px solid ${T.b1}`, fontSize:11.5, color:T.t1, background:T.surface, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}/>
+              {[["az", t("party.sort_a_z")], ["bal", "₹"]].map(([mode, label])=>(
+                <button key={mode} onClick={()=>setPSort(mode)}
+                  title={mode==="az" ? t("party.sort_a_z") : t("common.balance")}
+                  style={{padding:"6px 8px", borderRadius:6, cursor:"pointer", fontSize:10.5, fontWeight:700, flexShrink:0,
+                          border:`1.5px solid ${pSort===mode?T.blu:T.b1}`,
+                          background:pSort===mode?T.blu:T.surface,
+                          color:pSort===mode?"white":T.t3}}>{label}</button>
+              ))}
+            </div>
+          )}
           {loading && (
             <div style={{padding:"30px 16px", textAlign:"center", color:T.t4, fontSize:12}}>{t("party.loading_parties")}</div>
           )}
@@ -483,7 +515,10 @@ function TabParty({ projectId, projectName }) {
               <div style={{fontSize:10.5, marginTop:4}}>{t("party.create_a_transaction_tagged_to_this")}</div>
             </div>
           )}
-          {partyRows.map(p=>{
+          {!loading && partyRows.length > 0 && visibleParties.length === 0 && (
+            <div style={{padding:"26px 16px", textAlign:"center", color:T.t4, fontSize:12}}>{t("party.no_party_matched")}</div>
+          )}
+          {visibleParties.map(p=>{
             const ts = typeS[p.type]||{c:T.slt,bg:T.sltL};
             const isS = selP?.id===p.id;
             return (

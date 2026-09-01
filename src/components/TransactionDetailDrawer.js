@@ -83,6 +83,33 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState("");
   const [editItems, setEditItems] = useState([]);
+  // Project ab free-text nahi, dropdown hai. Pehle sirf project_name jaata
+  // tha aur backend use exact naam se dhoondhta tha — naam zara bhi alag
+  // hua to Save chupchaap kuch nahi badalta tha (COALESCE purana id rakh
+  // leta hai). Ab asli project_id bhejte hain.
+  const [projects, setProjects] = useState([]);
+
+  // Project list — drawer pehli baar khulne par ek hi baar.
+  useEffect(() => {
+    if (!open || projects.length) return;
+    api.get("/projects").then(r => {
+      if (r?.success && Array.isArray(r.data)) {
+        setProjects(r.data.map(p => ({ id: p.id, name: p.name })).filter(p => p.id && p.name));
+      }
+    }).catch(() => {});
+    // eslint-disable-next-line
+  }, [open]);
+
+  // Kuch caller mapped row bhejte hain jisme project_id hota hi nahi (sirf
+  // naam). Aisi haalat me list aane par naam se ek baar mila kar id bhar do,
+  // warna dropdown "koi project nahi" dikhata rahega jabki project laga hai.
+  useEffect(() => {
+    if (!open || form.project_id || !form.project_name || !projects.length) return;
+    const want = String(form.project_name).trim().toLowerCase();
+    const hit = projects.find(p => String(p.name).trim().toLowerCase() === want);
+    if (hit) setForm(f => ({ ...f, project_id: hit.id }));
+    // eslint-disable-next-line
+  }, [projects, form.project_name, form.project_id, open]);
 
   // Reset state whenever a different txn is opened
   useEffect(() => {
@@ -95,6 +122,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         status:       txn.status || "paid",
         note:         txn.note || "",
         party_name:   txn.party_name || txn.party || "",
+        project_id:   txn.project_id ?? "",
         project_name: txn.project_name || txn.project || "",
         reference_no: txn.reference_no || "",
       });
@@ -154,6 +182,9 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         status: form.status,
         note: form.note,
         party_name: form.party_name,
+        // project_id pehle bhejo — backend isi ko pehle dekhta hai. Khali ho
+        // to undefined, taaki backend ka COALESCE purana project chhod na de.
+        project_id: form.project_id ? Number(form.project_id) : undefined,
         project_name: form.project_name,
         reference_no: form.reference_no,
       };
@@ -294,7 +325,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               {hasDueDate && txn.due_date && <Tile label={t("transaction_detail.payment_due")} value={fmtDate(txn.due_date)} c={T.amb}/>}
               {txn.reference_no && <Tile label={t("transaction_detail.reference")} value={txn.reference_no}/>}
               {(txn.account_display || txn.account_name) && <Tile label={t("transaction_detail.account")} value={txn.account_display || txn.account_name}/>}
-              {txn.paid_via_staff_name && <Tile label="Paid By" value={txn.paid_via_staff_name + " (Wallet)"} c={T.pur}/>}
+              {txn.paid_via_staff_name && <Tile label={t("transaction_detail.paid_by")} value={t("transaction_detail.name_wallet", { name: txn.paid_via_staff_name })} c={T.pur}/>}
               {txn.to_account_name && <Tile label={t("transaction_detail.to_account")} value={txn.to_account_name}/>}
             </div>
           )}
@@ -356,7 +387,24 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                 <Field label={t("transaction_detail.transaction_date")} type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))}/>
               )}
               <Field label={t("common.party")} value={form.party_name} onChange={v => setForm(p => ({ ...p, party_name: v }))}/>
-              <Field label={t("common.project")} value={form.project_name} onChange={v => setForm(p => ({ ...p, project_name: v }))}/>
+              <div>
+                <label style={lblStyle}>{t("common.project")}</label>
+                <select value={String(form.project_id ?? "")}
+                  onChange={e => {
+                    const id = e.target.value;
+                    const hit = projects.find(x => String(x.id) === id);
+                    setForm(p => ({ ...p, project_id: id, project_name: hit ? hit.name : "" }));
+                  }}
+                  style={inpStyle}>
+                  <option value="">{t("transaction_detail.koi_project_nahi")}</option>
+                  {/* Agar is txn ka project list me nahi hai (archive/delete ho gaya)
+                      to use bhi dikhao, warna Save par wo chupchaap badal jaata. */}
+                  {(form.project_id && !projects.some(x => String(x.id) === String(form.project_id))
+                      ? [{ id: form.project_id, name: form.project_name || `#${form.project_id}` }, ...projects]
+                      : projects
+                  ).map(p => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
+                </select>
+              </div>
               <Field label={t("common.reference_no")} value={form.reference_no} onChange={v => setForm(p => ({ ...p, reference_no: v }))}/>
               <div>
                 <label style={lblStyle}>{t("common.status")}</label>

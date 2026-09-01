@@ -3709,6 +3709,9 @@ function FinanceModule(){
       party:t.party_display||t.party_name||t.party||"",
       sub:stripProjectSeg(t.description||t.note||t.narration||"", t.project_name||t.project||""),
       project:t.project_name||t.project||"",
+      // Detail drawer ka project dropdown asli id par chalta hai — sirf naam
+      // se kaam nahi banta (do project ka naam ek jaisa ho sakta hai).
+      project_id:t.project_id??null,
       type:frontType,
       account:t.account_name||t.account||"",
       // Wallet-origin spends (party_pay / site_exp via a staff wallet) have no
@@ -3896,6 +3899,7 @@ function FinanceModule(){
           note:t.note||t.narration||"",
           sub:t.description||"",
           project:t.project_name||t.project||"",
+          project_id:t.project_id??null,
           amount:parseFloat(t.amount)||0,
           dr:BACK_DEBIT_L.includes(t.type)||t.dr===true,
           status:t.status||"approved",
