@@ -97,15 +97,30 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   // hua to Save chupchaap kuch nahi badalta tha (COALESCE purana id rakh
   // leta hai). Ab asli project_id bhejte hain.
   const [projects, setProjects] = useState([]);
+  // Party bhi dropdown hai — wahi wajah jo project ki thi: pehle sirf
+  // party_name (text) jaata tha aur backend exact naam dhoondhta tha.
+  const [parties, setParties] = useState([]);
 
-  // Project list — drawer pehli baar khulne par ek hi baar.
+  // Project aur party ki list — drawer pehli baar khulne par ek hi baar.
   useEffect(() => {
-    if (!open || projects.length) return;
-    api.get("/projects").then(r => {
-      if (r?.success && Array.isArray(r.data)) {
-        setProjects(r.data.map(p => ({ id: p.id, name: p.name })).filter(p => p.id && p.name));
-      }
-    }).catch(() => {});
+    if (!open) return;
+    if (!projects.length) {
+      api.get("/projects").then(r => {
+        if (r?.success && Array.isArray(r.data)) {
+          setProjects(r.data.map(p => ({ id: p.id, name: p.name })).filter(p => p.id && p.name));
+        }
+      }).catch(() => {});
+    }
+    if (!parties.length) {
+      // Poori list — type se filter nahi karte. Edit ka kaam hi galti sudharna
+      // hai, aur galat type par bani entry filter ke peeche chhup jaati.
+      api.get("/finance/parties").then(r => {
+        if (r?.success && Array.isArray(r.data)) {
+          setParties(r.data.map(p => ({ id: p.id, name: p.name })).filter(p => p.id && p.name)
+            .sort((a, b) => String(a.name).localeCompare(String(b.name), "en", { sensitivity: "base" })));
+        }
+      }).catch(() => {});
+    }
     // eslint-disable-next-line
   }, [open]);
 
@@ -120,6 +135,14 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
     // eslint-disable-next-line
   }, [projects, form.project_name, form.project_id, open]);
 
+  useEffect(() => {
+    if (!open || form.party_id || !form.party_name || !parties.length) return;
+    const want = String(form.party_name).trim().toLowerCase();
+    const hit = parties.find(p => String(p.name).trim().toLowerCase() === want);
+    if (hit) setForm(f => ({ ...f, party_id: hit.id }));
+    // eslint-disable-next-line
+  }, [parties, form.party_name, form.party_id, open]);
+
   // Reset state whenever a different txn is opened
   useEffect(() => {
     if (txn) {
@@ -130,6 +153,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         due_date:     isoDate(txn.due_date || txn.dueDateRaw),
         status:       txn.status || "paid",
         note:         txn.note || "",
+        party_id:     txn.party_id ?? "",
         party_name:   txn.party_name || txn.party || "",
         project_id:   txn.project_id ?? "",
         project_name: txn.project_name || txn.project || "",
@@ -190,6 +214,10 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         due_date: hasDueDate ? (form.due_date || null) : null,
         status: form.status,
         note: form.note,
+        // party_id pehle — backend isi ko pehle dekhta hai. Isse "ek se zyada
+        // party hai" wala error bhi nahi aata, kyunki naam se guess karne ki
+        // naubat hi nahi aati.
+        party_id: form.party_id ? Number(form.party_id) : undefined,
         party_name: form.party_name,
         // project_id pehle bhejo — backend isi ko pehle dekhta hai. Khali ho
         // to undefined, taaki backend ka COALESCE purana project chhod na de.
@@ -395,7 +423,25 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               ) : (
                 <Field label={t("transaction_detail.transaction_date")} type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))}/>
               )}
-              <Field label={t("common.party")} value={form.party_name} onChange={v => setForm(p => ({ ...p, party_name: v }))}/>
+              <div>
+                <label style={lblStyle}>{t("common.party")}</label>
+                <select value={String(form.party_id ?? "")}
+                  onChange={e => {
+                    const id = e.target.value;
+                    const hit = parties.find(x => String(x.id) === id);
+                    setForm(p => ({ ...p, party_id: id, party_name: hit ? hit.name : "" }));
+                  }}
+                  style={inpStyle}>
+                  {/* Wallet ke kharche me party library se nahi, dukaan ka naam
+                      free text me hota hai (koi party_id nahi). Aise me wahi naam
+                      dikhao — "koi party nahi" likhna jhooth hoga. */}
+                  <option value="">{(!form.party_id && form.party_name) ? form.party_name : t("transaction_detail.koi_party_nahi")}</option>
+                  {(form.party_id && !parties.some(x => String(x.id) === String(form.party_id))
+                      ? [{ id: form.party_id, name: form.party_name || `#${form.party_id}` }, ...parties]
+                      : parties
+                  ).map(p => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
+                </select>
+              </div>
               <div>
                 <label style={lblStyle}>{t("common.project")}</label>
                 <select value={String(form.project_id ?? "")}

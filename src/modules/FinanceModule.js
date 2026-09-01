@@ -3710,6 +3710,8 @@ function FinanceModule(){
       date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
       ds,
       party:t.party_display||t.party_name||t.party||"",
+      // Drawer ka party dropdown asli id par chalta hai — project jaisa hi.
+      party_id:t.party_id??null,
       sub:stripProjectSeg(t.description||t.note||t.narration||"", t.project_name||t.project||""),
       project:t.project_name||t.project||"",
       // Detail drawer ka project dropdown asli id par chalta hai — sirf naam
@@ -3903,6 +3905,7 @@ function FinanceModule(){
           sub:t.description||"",
           project:t.project_name||t.project||"",
           project_id:t.project_id??null,
+          party_id:t.party_id??null,
           amount:parseFloat(t.amount)||0,
           dr:BACK_DEBIT_L.includes(t.type)||t.dr===true,
           status:t.status||"approved",

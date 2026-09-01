@@ -7042,6 +7042,7 @@ const dict = {
   "transaction_detail.grn_rows_locked_rate_editable":          "· 🔒 GRN rows locked (rate editable)",
   "transaction_detail.grn_se_locked":                          "GRN se locked",
   "transaction_detail.hai_items_badalne_se_amount_change":     "hai. Items change karne se amount change hoga aur linked payment se mismatch ho sakta hai — zaroori ho tabhi change karo.",
+  "transaction_detail.koi_party_nahi":                        "— Koi party nahi —",
   "transaction_detail.koi_project_nahi":                      "— Koi project nahi —",
   "transaction_detail.label_txn_id":                           "{label} · TXN-{id}",
   "transaction_detail.line_items":                             "Line Items",

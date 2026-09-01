@@ -7040,6 +7040,7 @@ const dict = {
   "transaction_detail.grn_rows_locked_rate_editable":          "· 🔒 GRN rows locked (rate editable)",
   "transaction_detail.grn_se_locked":                          "Locked by GRN",
   "transaction_detail.hai_items_badalne_se_amount_change":     "Items changing will alter the amount and may mismatch with the linked payment — only change if necessary.",
+  "transaction_detail.koi_party_nahi":                        "— No party —",
   "transaction_detail.koi_project_nahi":                      "— No project —",
   "transaction_detail.label_txn_id":                           "{label} \n\n· TXN-{id}",
   "transaction_detail.line_items":                             "Line Items",

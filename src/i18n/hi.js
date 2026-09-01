@@ -7039,6 +7039,7 @@ const dict = {
   "transaction_detail.grn_rows_locked_rate_editable":          "· 🔒 जीआरएन रोज़ लॉक्ड (रेट एडिटेबल)",
   "transaction_detail.grn_se_locked":                          "जीआरएन से लॉक्ड",
   "transaction_detail.hai_items_badalne_se_amount_change":     "है. आइटम्स चेंज करने से अमाउंट चेंज होगा और लिंक्ड पेमेंट से मिसमैच हो सकता है — ज़रूरी हो तभी चेंज करो.",
+  "transaction_detail.koi_party_nahi":                        "— कोई पार्टी नहीं —",
   "transaction_detail.koi_project_nahi":                      "— कोई प्रोजेक्ट नहीं —",
   "transaction_detail.label_txn_id":                           "{label} · टीएक्सएन-{id}",
   "transaction_detail.line_items":                             "लाइन आइटम्स",
