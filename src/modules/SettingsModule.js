@@ -619,11 +619,17 @@ function RolesAccess() {
 
   // Permission matrix — grouped: top-level Modules + per-project Tabs.
   const MODULE_GROUPS = [
-    { title: "Modules", items: ["Projects","Design","Finance","Procurement","Warehouse","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings"] },
+    // "Financial Reports" — paisa ka vishleshan, rozana ke Finance kaam se alag.
+    // Fuel aur Machinery backend ki list me pehle se the par yahan chhoot gaye
+    // the, isliye unki row DB me hoti thi par admin kabhi badal hi nahi paata tha.
+    { title: "Modules", items: ["Projects","Design","Finance","Financial Reports","Procurement","Warehouse","Fuel","Machinery","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings"] },
     { title: "Project Tabs", items: ["Overview","Estimate","Transaction","Material","Subcon","Attendance","Equipment"] },
   ];
   const modules = MODULE_GROUPS.flatMap(g => g.items.map(name => ({ name })));
   const allPerms = ["view", "create", "edit", "delete", "approve", "export"];
+  // In rows par sirf dekhna aur nikalna hota hai — create/edit/delete/approve
+  // ka koi matlab nahi.
+  const ONLY_VIEW_EXPORT = ["Financial Reports"];
   const permColors = {
     view: { bg: T.blueSoft, text: T.blue }, create: { bg: T.greenSoft, text: T.green },
     edit: { bg: T.amberSoft, text: T.amber }, delete: { bg: T.redSoft, text: T.red },
@@ -865,11 +871,16 @@ function RolesAccess() {
                         <td style={{ padding: "12px", fontWeight: 600, color: T.text }}>{name}</td>
                         {allPerms.map(p => {
                           const has = perms.includes(p);
+                          // Report "banayi" ya "delete" nahi jaati — us row par
+                          // sirf view/export ka matlab hai. Baaki bujhe rakho,
+                          // warna wahi purani bimari: tick hai par kuch nahi karta.
+                          const na = ONLY_VIEW_EXPORT.includes(name) && !["view", "export"].includes(p);
                           return (
                             <td key={p} style={{ textAlign: "center", padding: "8px 6px" }}>
-                              <button onClick={() => togglePerm(name, p)}
-                                style={{ width: 28, height: 28, borderRadius: 6, background: has ? permColors[p].bg : T.borderLight, border: `1.5px solid ${has ? permColors[p].text + "44" : "transparent"}`, cursor: selectedRole === "admin" ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
-                                {has && <IcCheck size={14} color={permColors[p].text} strokeWidth={2.5} />}
+                              <button onClick={() => { if (!na) togglePerm(name, p); }}
+                                title={na ? "Is row par lagoo nahi hota" : undefined}
+                                style={{ width: 28, height: 28, borderRadius: 6, background: na ? "transparent" : (has ? permColors[p].bg : T.borderLight), border: `1.5px solid ${na ? T.borderLight : (has ? permColors[p].text + "44" : "transparent")}`, cursor: (na || selectedRole === "admin") ? "not-allowed" : "pointer", opacity: na ? 0.4 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                                {na ? <span style={{ fontSize: 12, color: T.textLight }}>–</span> : (has && <IcCheck size={14} color={permColors[p].text} strokeWidth={2.5} />)}
                               </button>
                             </td>
                           );

@@ -6,6 +6,7 @@ import api from "../config/api";
 import apiCache from "../utils/apiCache";
 import useDebounce from "../utils/useDebounce";
 import { t, Rich } from "../i18n";
+import { canSeeFinancials } from "../utils/perms";
 
 // A party holds multiple roles: `roles` is the canonical comma list and
 // `type` is only the primary one. Matching on `type` alone dropped equipment
@@ -4112,7 +4113,10 @@ function FinanceModule(){
       {l:t("finance.total_pending"),v:`₹${fmt(pendTotal)}`,sub:t("finance.length_items", { length: pendPmts.length }),Icon:IcClock7,c:T.slt,bg:T.sltL,brd:"#CBD5E0"},
     ],
   };
-  const curTiles=TILE_SETS[tab==="daybook"?"cashbook":tab]||TILE_SETS.party;
+  // Upar wali KPI patti company bhar ka paisa dikhati hai (kitna aaya, kitna
+  // gaya, kitna lena, kitna dena) — ye vishleshan hai, rozana ka kaam nahi.
+  // "Financial Reports" ke bina patti dikhti hi nahi.
+  const curTiles=canSeeFinancials() ? (TILE_SETS[tab==="daybook"?"cashbook":tab]||TILE_SETS.party) : [];
 
   // ── Ledger helpers ──────────────────────────────────────────
   const getLedgerRows=(party)=>{
@@ -4419,9 +4423,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
     {key:"equipment",label:t("common.equipment"),tabs:[
       {id:"equipment_review",l:`Equipment Review${equipReviewCount>0?` (${equipReviewCount})`:""}`},
     ]},
-    {key:"reports",label:t("common.reports"),tabs:[
+    // P&L "Financial Reports" permission ke peeche hai — rozana ka Finance kaam
+    // (ledger, payment, material) accountant ke paas rehta hai, par "kisme kitna
+    // paisa laga" wala vishleshan alag se dena padta hai.
+    ...(canSeeFinancials() ? [{key:"reports",label:t("common.reports"),tabs:[
       {id:"pnl",l:t("finance.p_l_project_wise")},
-    ]},
+    ]}] : []),
   ];
   const TABS=TAB_GROUPS.flatMap(g=>g.tabs);
   // Which group is currently open (derived from the active tab)

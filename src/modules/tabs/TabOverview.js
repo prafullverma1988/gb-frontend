@@ -3,6 +3,7 @@ import api from "../../config/api";
 import { T, fmt, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead } from "../shared/ui";
 import { t } from "../../i18n";
+import { canSeeFinancials } from "../../utils/perms";
 
 /* ────────────────────────────────────────────────────────────────────
    Project Overview — mirrors the company dashboard's depth at the
@@ -125,7 +126,8 @@ function TabOverview({proj, onRequestPayment}) {
       api.get(`/procurement/mrs?project_id=${pid}`).catch(()=>null),
       api.get(`/projects/${pid}/workforce`).catch(()=>null),
       api.get(`/finance/payment-requests?project_id=${pid}`).catch(()=>null),
-      api.get(`/finance/project-pnl?project_id=${pid}`).catch(()=>null),
+      // "Financial Reports" ke bina ye 403 dega — maangte hi nahi.
+      canSeeFinancials() ? api.get(`/finance/project-pnl?project_id=${pid}`).catch(()=>null) : Promise.resolve(null),
     ]).then(([t,tk,m,wf,pr,pl])=>{
       if(!alive) return;
       if(t?.success)  setTxns(t.data||[]);

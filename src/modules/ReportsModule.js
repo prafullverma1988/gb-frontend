@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
+import { canSeeFinancials } from "../utils/perms";
 
 const COMPANY_NAME = "Company";
 
@@ -1296,7 +1297,8 @@ export default function ReportsModule(){
   const TABS=[
     {id:"cash",    l:t("reports.cash_book_day_book"),  desc:t("reports.date_wise_receipts_payments"),icon:IcCalc},
     {id:"challan", l:t("reports.material_register"),      desc:t("reports.grn_level_material_movement_vendor_project"), icon:IcSheet},
-    {id:"progress",l:t("reports.progress_financial"),  desc:t("reports.site_progress_finance_report"),icon:IcBar},
+    // Progress & Financial me paisa hota hai — "Financial Reports" ke peeche.
+    ...(canSeeFinancials() ? [{id:"progress",l:t("reports.progress_financial"),  desc:t("reports.site_progress_finance_report"),icon:IcBar}] : []),
   ];
 
   return(
