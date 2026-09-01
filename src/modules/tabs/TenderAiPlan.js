@@ -343,6 +343,40 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
 
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: T.t4, fontSize: 13 }}>{t("tender_ai_plan.loading")}</div>;
 
+  // ── Map par kya markna hai — faisla YAHIN, planning me ──────────
+  // Site par khada supervisor andaza na lagaye; admin/PM yahan BOQ saamne
+  // rakh kar tay karta hai. AI pehle se tick laga deta hai (line-kaam aur
+  // ginti wale structure par), PM hata/badal sakta hai.
+  //
+  // Tick KAAM par lagti hai, uski parat (stage) par nahi — ek 1,941 m ki
+  // sadak ke neeche khudai/GSB/PCC teen parat hain par SADAK EK hai. Teen
+  // tick hoti to site wala usi sadak par teen lakeerein kheench deta.
+  // Phir bhi stage par tick ka raasta khula hai: kisi dhandhe me ek kaam
+  // ke andar sach me do alag cheezein hoti hain.
+  const LINE_W = ["road", "drain", "pipeline", "water", "sewer"];
+  const autoMark = (w) => {
+    if (LINE_W.includes(w.wtype)) return "line";
+    if (w.wtype === "structure" && /^(nos?|no|each|pcs|ls)$/i.test(String(w.unit || "").trim())) return "point";
+    return null;
+  };
+  const markOn = (w) => (w.map === undefined ? !!autoMark(w) : !!w.map);
+  const markKind = (w) => w.map_kind || autoMark(w) || "line";
+
+  // Do bhai-bhai par ek hi lambai ki tick = aksar galti (ek hi jagah ki do
+  // parat). Rokte nahi — sirf poochh lete hain, kyunki kabhi-kabhi wo sach
+  // me do alag cheezein hoti hain.
+  const sameLenWarn = (w) => {
+    const on = (w.stages || []).filter((st) => st.map);
+    if (on.length < 2) return null;
+    const qs = on.map((st) => Number(st.qty) || Number(w.qty) || 0).filter((q) => q > 0);
+    if (qs.length < 2) return null;
+    const mx = Math.max.apply(null, qs), mn = Math.min.apply(null, qs);
+    return (mx - mn <= mx * 0.005) ? Math.round(mx) : null;
+  };
+
+  const totalMarks = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false)
+    .reduce((b, w) => b + (markOn(w) ? 1 : 0) + (w.stages || []).filter((st) => st.map).length, 0), 0) : 0;
+
   const totalWorks = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false).length, 0) : 0;
   const totalAmt = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false).reduce((b, w) => b + (Number(w.amount) || 0), 0), 0) : 0;
 
@@ -448,11 +482,43 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                     <input type="number" value={w.amount || ""} placeholder="₹" onChange={(e) => upd((p) => { p.sites[si].works[wi].amount = Number(e.target.value) || 0; })} style={inp({ width: 110, textAlign: "right", color: T.grn, fontWeight: 700 })} />
                     {w.needs_review && <span title={t("tender_ai_plan.ai_ko_number_pakka_nahi_mila")} style={{ fontSize: 10, color: "#B45309", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 10, padding: "1px 8px", fontWeight: 700 }}>{t("tender_ai_plan.jaanch_lo")}</span>}
                     {boqChip(w.boq_item_ids)}
+                    {/* Map ki tick — kaam ke star par. Site wale ko yahi
+                        list milegi, isliye jo yahan nahi lagi wo wahan
+                        dikhegi hi nahi. */}
+                    <label title={t("tender_ai_plan.map_tick_hint")}
+                      style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 700,
+                        color: markOn(w) ? T.blu : T.t4, cursor: "pointer", userSelect: "none",
+                        background: markOn(w) ? T.bluL : "transparent", border: "1px solid " + (markOn(w) ? T.bluM : T.b1),
+                        borderRadius: 9, padding: "2px 8px" }}>
+                      <input type="checkbox" checked={markOn(w)}
+                        onChange={() => upd((p) => {
+                          const nx = !markOn(w);
+                          p.sites[si].works[wi].map = nx;
+                          p.sites[si].works[wi].map_kind = nx ? markKind(w) : null;
+                        })}
+                        style={{ width: 13, height: 13, cursor: "pointer" }} />
+                      📍 {t("tender_ai_plan.map_par")}
+                    </label>
+                    {markOn(w) && (
+                      <select value={markKind(w)}
+                        onChange={(e) => upd((p) => { p.sites[si].works[wi].map_kind = e.target.value; })}
+                        style={inp({ width: 92, fontSize: 10.5, padding: "2px 4px" })}>
+                        <option value="line">{t("tender_ai_plan.mk_line")}</option>
+                        <option value="point">{t("tender_ai_plan.mk_point")}</option>
+                        <option value="area">{t("tender_ai_plan.mk_area")}</option>
+                      </select>
+                    )}
                     <button onClick={() => setOpen((o) => ({ ...o, [key]: !exp }))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, color: T.blu, fontWeight: 700 }}>
                       {w.stages.length ? `${w.stages.length} stages ${exp ? "▴" : "▾"}` : (exp ? t("tender_ai_plan.stages") : t("tender_ai_plan.stages_2"))}
                     </button>
                   </div>
                   {w.source && <div style={{ padding: "0 12px 6px 35px", fontSize: 10, color: T.t4 }}>{t("tender_ai_plan.src_source", { source: w.source })}</div>}
+                  {sameLenWarn(w) && (
+                    <div style={{ margin: "0 12px 8px 35px", padding: "6px 10px", background: T.ambL,
+                      border: "1px solid " + T.ambM, borderRadius: 8, fontSize: 11, color: "#92400E" }}>
+                      {t("tender_ai_plan.same_len_warn", { n: sameLenWarn(w) })}
+                    </div>
+                  )}
                   {exp && (
                     <div style={{ padding: "4px 12px 10px 35px", display: "flex", flexDirection: "column", gap: 5 }}>
                       {w.stages.map((st, ti) => (
@@ -464,6 +530,22 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                             <input value={st.unit || ""} placeholder={w.unit || "unit"} onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].unit = e.target.value; })} style={inp({ width: 52 })} />
                             <input type="number" value={st.amount || ""} placeholder="₹" onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].amount = Number(e.target.value) || 0; })} style={inp({ width: 100, textAlign: "right", color: T.grn })} />
                             {boqChip(st.boq_item_ids)}
+                            {/* Stage par tick — aam taur par ZAROORAT NAHI
+                                (parat hai, jagah nahi). Par kabhi ek kaam ke
+                                andar sach me do alag cheezein hoti hain,
+                                isliye raasta khula hai. */}
+                            <label title={t("tender_ai_plan.stage_tick_hint")}
+                              style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 700,
+                                color: st.map ? T.blu : T.t4, cursor: "pointer", userSelect: "none" }}>
+                              <input type="checkbox" checked={!!st.map}
+                                onChange={() => upd((p) => {
+                                  const nx = !st.map;
+                                  p.sites[si].works[wi].stages[ti].map = nx;
+                                  p.sites[si].works[wi].stages[ti].map_kind = nx ? markKind(w) : null;
+                                })}
+                                style={{ width: 12, height: 12, cursor: "pointer" }} />
+                              📍
+                            </label>
                             <button onClick={() => upd((p) => { p.sites[si].works[wi].stages.splice(ti, 1); })} style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 13 }}>×</button>
                           </div>
                           {/* ── TEESRA LEVEL (steps) — Prafull ka case-3: stretch →

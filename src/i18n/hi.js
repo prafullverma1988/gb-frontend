@@ -6021,6 +6021,20 @@ const dict = {
   "tender_ai_plan.src_source":                                 "सॉर्स: {source}",
   "tender_ai_plan.stage":                                      "＋ स्टेज",
   "tender_ai_plan.stages":                                     "स्टेजेस ▴",
+
+  "tender_ai_plan.map_par": "मैप पर",
+
+  "tender_ai_plan.mk_line": "लाइन",
+
+  "tender_ai_plan.mk_point": "पिन",
+
+  "tender_ai_plan.mk_area": "रकबा",
+
+  "tender_ai_plan.map_tick_hint": "साइट पर इसी काम की लिस्ट मिलेगी — जो यहाँ टिक नहीं, वो वहाँ दिखेगा ही नहीं",
+
+  "tender_ai_plan.stage_tick_hint": "आम तौर पर ज़रूरत नहीं — स्टेज काम की परत है, अलग जगह नहीं। सिर्फ़ तब लगाओ जब ये सच में अलग चीज़ हो।",
+
+  "tender_ai_plan.same_len_warn": "दो स्टेज पर टिक लगी है और दोनों की लंबाई एक ही है ({n} m) — क्या सच में ये दो अलग जगह हैं? अगर एक ही जगह की परत हैं तो सिर्फ़ ऊपर वाले काम पर टिक रहने दो।",
   "tender_ai_plan.stages_2":                                   "+ स्टेजेस",
   "tender_ai_plan.step":                                       "＋ स्टेप",
   "tender_ai_plan.task_isse_judega_mb_ra":                     " — टास्क इससे जुड़ेगा (MB/RA)",

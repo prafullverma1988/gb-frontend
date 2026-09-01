@@ -6022,6 +6022,20 @@ const dict = {
   "tender_ai_plan.src_source":                                 "src: {source}",
   "tender_ai_plan.stage":                                      "＋ stage",
   "tender_ai_plan.stages":                                     "stages ▴",
+
+  "tender_ai_plan.map_par": "On map",
+
+  "tender_ai_plan.mk_line": "Line",
+
+  "tender_ai_plan.mk_point": "Pin",
+
+  "tender_ai_plan.mk_area": "Area",
+
+  "tender_ai_plan.map_tick_hint": "The site app shows exactly these — anything unticked here never appears there",
+
+  "tender_ai_plan.stage_tick_hint": "Usually not needed — a stage is a LAYER of the same work, not a separate place. Tick only if it really is a different thing.",
+
+  "tender_ai_plan.same_len_warn": "Two stages are ticked and both are the same length ({n} m) — are these really two different places? If they are layers of one place, keep the tick only on the work above.",
   "tender_ai_plan.stages_2":                                   "+ stages",
   "tender_ai_plan.step":                                       "＋ step",
   "tender_ai_plan.task_isse_judega_mb_ra":                     " — task will link to this (MB/RA)",

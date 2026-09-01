@@ -6024,6 +6024,20 @@ const dict = {
   "tender_ai_plan.src_source":                                 "src: {source}",
   "tender_ai_plan.stage":                                      "＋ stage",
   "tender_ai_plan.stages":                                     "stages ▴",
+
+  "tender_ai_plan.map_par": "Map par",
+
+  "tender_ai_plan.mk_line": "Line",
+
+  "tender_ai_plan.mk_point": "Pin",
+
+  "tender_ai_plan.mk_area": "Rakba",
+
+  "tender_ai_plan.map_tick_hint": "Site par isi kaam ki list milegi — jo yahan tick nahi, wo wahan dikhega hi nahi",
+
+  "tender_ai_plan.stage_tick_hint": "Aam taur par zaroorat nahi — stage kaam ki PARAT hai, alag jagah nahi. Sirf tab lagao jab ye sach me alag cheez ho.",
+
+  "tender_ai_plan.same_len_warn": "Do stage par tick lagi hai aur dono ki lambai ek hi hai ({n} m) — kya sach me ye do alag jagah hain? Agar ek hi jagah ki parat hain to sirf upar wale kaam par tick rehne do.",
   "tender_ai_plan.stages_2":                                   "+ stages",
   "tender_ai_plan.step":                                       "＋ step",
   "tender_ai_plan.task_isse_judega_mb_ra":                     " — task isse judega (MB/RA)",
