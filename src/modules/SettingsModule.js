@@ -617,15 +617,51 @@ function RolesAccess() {
     setAccessSaving(false);
   };
 
+  // Har matrix row ka nav module-key. Sidebar jis key se module chhupata hai,
+  // wahi key yahan bhi — warna admin us module ki permissions set karta rehta
+  // hai jo uski company me hai hi nahi (ratna me CRM aur Township CRM aise hi
+  // dikh rahe the). "Financial Reports" ka koi nav module nahi, wo hamesha dikhta hai.
+  const MODULE_NAV_KEY = {
+    "Projects": "projects", "Design": "design", "Finance": "finance",
+    "Procurement": "procurement", "Warehouse": "warehouse", "Fuel": "fuel",
+    "Machinery": "machinery", "Team & HR": "payroll", "CRM": "crm",
+    "MOM": "mom", "Township CRM": "township", "Tenders": "tenders",
+    "Reports": "reports", "Library": "library", "Settings": "settings",
+  };
+  // null = abhi load ho raha; tab tak sab dikhao taaki rows blink na karein.
+  const [coModules, setCoModules] = useState(null);
+  useEffect(() => {
+    api.get("/settings/modules").then(r => {
+      if (r && r.success && Array.isArray(r.data)) {
+        const m = {};
+        r.data.forEach(x => { if (x && x.key != null) m[x.key] = !!Number(x.is_enabled); });
+        setCoModules(m);
+      } else setCoModules({});
+    }).catch(() => setCoModules({}));
+  }, []);
+  // App.js wala hi niyam: sirf explicit false par chhupao.
+  const moduleOn = (label) => {
+    const k = MODULE_NAV_KEY[label];
+    if (!k || !coModules) return true;
+    return coModules[k] !== false;
+  };
+
   // Permission matrix — grouped: top-level Modules + per-project Tabs.
+  // "Financial Reports" — paisa ka vishleshan, rozana ke Finance kaam se alag.
+  // Fuel aur Machinery backend ki list me pehle se the par yahan chhoot gaye
+  // the, isliye unki row DB me hoti thi par admin kabhi badal hi nahi paata tha.
+  const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Procurement","Warehouse","Fuel","Machinery","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings"];
+  const PROJECT_TAB_ITEMS = ["Overview","Estimate","Transaction","Material","Subcon","Attendance","Equipment"];
   const MODULE_GROUPS = [
-    // "Financial Reports" — paisa ka vishleshan, rozana ke Finance kaam se alag.
-    // Fuel aur Machinery backend ki list me pehle se the par yahan chhoot gaye
-    // the, isliye unki row DB me hoti thi par admin kabhi badal hi nahi paata tha.
-    { title: "Modules", items: ["Projects","Design","Finance","Financial Reports","Procurement","Warehouse","Fuel","Machinery","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings"] },
-    { title: "Project Tabs", items: ["Overview","Estimate","Transaction","Material","Subcon","Attendance","Equipment"] },
+    { title: "Modules", items: ALL_MODULE_ITEMS.filter(moduleOn) },
+    { title: "Project Tabs", items: PROJECT_TAB_ITEMS },
   ];
-  const modules = MODULE_GROUPS.flatMap(g => g.items.map(name => ({ name })));
+  // Save par HAR module jaana chahiye — chhupe hue bhi. Backend poori list
+  // DELETE karke dobara INSERT karta hai, to sirf dikhne wale bhejne se
+  // disabled module ki permissions chup-chaap mit jaatin, aur module wapas
+  // ON karne par sab zero milta.
+  const modules = [...ALL_MODULE_ITEMS, ...PROJECT_TAB_ITEMS].map(name => ({ name }));
+
   const allPerms = ["view", "create", "edit", "delete", "approve", "export"];
   // In rows par sirf dekhna aur nikalna hota hai — create/edit/delete/approve
   // ka koi matlab nahi.
