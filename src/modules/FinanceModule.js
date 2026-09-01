@@ -943,14 +943,18 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
   );
 }
 
-// "party nahi mili?" escape hatch on the payment pickers — same wording and
-// weight as the library-select add link so it reads as one pattern.
-function AddPartyLink({onClick}){
+// "party nahi mili?" escape hatch on the payment pickers. Dropdown ke
+// theek pehle ek chhota square "+" — text link neeche latakne se form ki
+// line toot jati thi.
+function AddPartyBtn({onClick}){
   return (
-    <button type="button" onClick={onClick}
-      style={{marginTop:4,background:"none",border:"none",padding:0,cursor:"pointer",
-        fontSize:11,fontWeight:600,color:T.blu,fontFamily:"inherit"}}>
-      + Add New Party to Library
+    <button type="button" onClick={onClick} title="Nayi party library me add karein"
+      style={{width:32,height:32,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+        borderRadius:6,border:`1.5px solid ${T.bluM}`,background:T.bluL,color:T.blu,
+        fontSize:17,fontWeight:700,lineHeight:1,cursor:"pointer",fontFamily:"inherit",padding:0}}
+      onMouseEnter={e=>e.currentTarget.style.background=T.blu+"22"}
+      onMouseLeave={e=>e.currentTarget.style.background=T.bluL}>
+      +
     </button>
   );
 }
@@ -2067,21 +2071,25 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       placeholder={t("finance.e_g_site_supervisor_transport_tea")}
                       style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                   ) : (type==="Payment Made"||type==="Advance Payment") ? (
-                    <>
-                      <SearchSelect options={PAYABLE_LIST} value={party} onChange={setParty}
-                          placeholder={t("finance.vendor_subcon_staff")}/>
-                      <AddPartyLink onClick={()=>setShowNewParty(true)}/>
-                    </>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <AddPartyBtn onClick={()=>setShowNewParty(true)}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <SearchSelect options={PAYABLE_LIST} value={party} onChange={setParty}
+                            placeholder={t("finance.vendor_subcon_staff")}/>
+                      </div>
+                    </div>
                   ) : type==="Payment Received" ? (
                     // Inflow can come from a client OR a staff wallet (e.g.
                     // staff reimbursing the company / returning unused cash).
                     // SearchSelect on the merged list — LibrarySelect would
                     // restrict to type="client" and exclude staff.
-                    <>
-                      <SearchSelect options={RECEIVABLE_LIST} value={party} onChange={setParty}
-                          placeholder={t("finance.client_staff")}/>
-                      <AddPartyLink onClick={()=>setShowNewParty(true)}/>
-                    </>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <AddPartyBtn onClick={()=>setShowNewParty(true)}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <SearchSelect options={RECEIVABLE_LIST} value={party} onChange={setParty}
+                            placeholder={t("finance.client_staff")}/>
+                      </div>
+                    </div>
                   ) : (
                     <LibrarySelect
                       type={isInvoice?"client":isMaterial?"supplier":isSubcon?"subcon":"any-party"}
