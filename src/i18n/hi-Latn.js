@@ -6033,6 +6033,9 @@ const dict = {
 
   "tender_ai_plan.mk_area": "Rakba",
 
+
+  "tender_ai_plan.mk_area_pin": "Rakba + beech me pin",
+
   "tender_ai_plan.map_tick_hint": "Site par isi kaam ki list milegi — jo yahan tick nahi, wo wahan dikhega hi nahi",
 
   "tender_ai_plan.stage_tick_hint": "Aam taur par zaroorat nahi — stage kaam ki PARAT hai, alag jagah nahi. Sirf tab lagao jab ye sach me alag cheez ho.",

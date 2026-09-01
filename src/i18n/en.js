@@ -6031,6 +6031,9 @@ const dict = {
 
   "tender_ai_plan.mk_area": "Area",
 
+
+  "tender_ai_plan.mk_area_pin": "Area + centre pin",
+
   "tender_ai_plan.map_tick_hint": "The site app shows exactly these — anything unticked here never appears there",
 
   "tender_ai_plan.stage_tick_hint": "Usually not needed — a stage is a LAYER of the same work, not a separate place. Tick only if it really is a different thing.",

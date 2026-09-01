@@ -486,26 +486,29 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                         list milegi, isliye jo yahan nahi lagi wo wahan
                         dikhegi hi nahi. */}
                     <label title={t("tender_ai_plan.map_tick_hint")}
-                      style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 700,
-                        color: markOn(w) ? T.blu : T.t4, cursor: "pointer", userSelect: "none",
-                        background: markOn(w) ? T.bluL : "transparent", border: "1px solid " + (markOn(w) ? T.bluM : T.b1),
-                        borderRadius: 9, padding: "2px 8px" }}>
+                      style={{ display: "flex", alignItems: "center", gap: 3, cursor: "pointer", userSelect: "none",
+                        opacity: markOn(w) ? 1 : 0.4 }}>
                       <input type="checkbox" checked={markOn(w)}
                         onChange={() => upd((p) => {
                           const nx = !markOn(w);
                           p.sites[si].works[wi].map = nx;
                           p.sites[si].works[wi].map_kind = nx ? markKind(w) : null;
                         })}
-                        style={{ width: 13, height: 13, cursor: "pointer" }} />
-                      📍 {t("tender_ai_plan.map_par")}
+                        style={{ width: 14, height: 14, cursor: "pointer" }} />
+                      <span style={{ fontSize: 13 }}>📍</span>
                     </label>
                     {markOn(w) && (
                       <select value={markKind(w)}
                         onChange={(e) => upd((p) => { p.sites[si].works[wi].map_kind = e.target.value; })}
-                        style={inp({ width: 92, fontSize: 10.5, padding: "2px 4px" })}>
+                        style={inp({ width: 104, fontSize: 10.5, padding: "2px 4px" })}>
                         <option value="line">{t("tender_ai_plan.mk_line")}</option>
                         <option value="point">{t("tender_ai_plan.mk_point")}</option>
                         <option value="area">{t("tender_ai_plan.mk_area")}</option>
+                        {/* Chhota rakba naksha zoom-out par gum ho jaata hai —
+                            beech me ek pin rehne se wo dhoondhne par mil
+                            jaata hai. Pin apne aap banta hai, alag se
+                            markna nahi padta. */}
+                        <option value="area+pin">{t("tender_ai_plan.mk_area_pin")}</option>
                       </select>
                     )}
                     <button onClick={() => setOpen((o) => ({ ...o, [key]: !exp }))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, color: T.blu, fontWeight: 700 }}>

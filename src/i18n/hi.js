@@ -6030,6 +6030,9 @@ const dict = {
 
   "tender_ai_plan.mk_area": "रकबा",
 
+
+  "tender_ai_plan.mk_area_pin": "रकबा + बीच में पिन",
+
   "tender_ai_plan.map_tick_hint": "साइट पर इसी काम की लिस्ट मिलेगी — जो यहाँ टिक नहीं, वो वहाँ दिखेगा ही नहीं",
 
   "tender_ai_plan.stage_tick_hint": "आम तौर पर ज़रूरत नहीं — स्टेज काम की परत है, अलग जगह नहीं। सिर्फ़ तब लगाओ जब ये सच में अलग चीज़ हो।",
