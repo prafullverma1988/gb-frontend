@@ -6031,6 +6031,18 @@ const dict = {
   "tender_ai_plan.mk_area": "रकबा",
 
 
+  "tender_ai_plan.step_tick_hint": "इस काम को अलग से मैप पर मार्क करना है (जैसे 15 ट्रैफ़िक लाइट)",
+
+
+  "tender_ai_plan.pm_auto": "—",
+
+
+  "tender_ai_plan.pm_qty": "qty",
+
+
+  "tender_ai_plan.pm_hint": "रोज़ का काम qty में लिखा जाए या % में। सड़क/पाइप/नाली में qty सीधी है; स्ट्रक्चर की qty अक्सर 1 होती है — वहाँ 1 लिखते ही काम पूरा दिख जाता, इसलिए % बेहतर। \"—\" = कंपनी की पुरानी सेटिंग।",
+
+
   "tender_ai_plan.mk_area_pin": "रकबा + बीच में पिन",
 
   "tender_ai_plan.map_tick_hint": "साइट पर इसी काम की लिस्ट मिलेगी — जो यहाँ टिक नहीं, वो वहाँ दिखेगा ही नहीं",

@@ -374,6 +374,30 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     return (mx - mn <= mx * 0.005) ? Math.round(mx) : null;
   };
 
+  // Har row par ek chhoti 📍 tick — kaam, stage aur step teeno par. Kaun
+  // sa star markna hai ye kaam par nirbhar karta hai: aam taur par upar
+  // wala kaam, par kabhi 15 traffic light bhi alag-alag markne hote hain.
+  const pinTick = (on, onToggle, hint) => (
+    <label title={hint} style={{ display: "flex", alignItems: "center", gap: 2, cursor: "pointer",
+      userSelect: "none", opacity: on ? 1 : 0.35 }}>
+      <input type="checkbox" checked={!!on} onChange={onToggle} style={{ width: 12, height: 12, cursor: "pointer" }} />
+      <span style={{ fontSize: 11 }}>📍</span>
+    </label>
+  );
+
+  // Roz ka kaam qty me likha jaye ya % me. Sadak/pipe/naali me qty seedhi
+  // hai; par structure ki qty aksar 1 hoti hai — wahan 1 likhte hi kaam
+  // "poora" ho jaata, jabki UGR dheere-dheere banta hai. "—" = company ki
+  // purani setting hi chale.
+  const pmSel = (val, onPick) => (
+    <select value={val || ""} onChange={onPick} title={t("tender_ai_plan.pm_hint")}
+      style={inp({ width: 62, fontSize: 10, padding: "2px 3px" })}>
+      <option value="">{t("tender_ai_plan.pm_auto")}</option>
+      <option value="qty">{t("tender_ai_plan.pm_qty")}</option>
+      <option value="percent">%</option>
+    </select>
+  );
+
   const totalMarks = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false)
     .reduce((b, w) => b + (markOn(w) ? 1 : 0) + (w.stages || []).filter((st) => st.map).length, 0), 0) : 0;
 
@@ -511,6 +535,8 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                         <option value="area+pin">{t("tender_ai_plan.mk_area_pin")}</option>
                       </select>
                     )}
+                    {!w.stages.length && pmSel(w.progress_mode,
+                      (e) => upd((p) => { p.sites[si].works[wi].progress_mode = e.target.value || null; }))}
                     <button onClick={() => setOpen((o) => ({ ...o, [key]: !exp }))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, color: T.blu, fontWeight: 700 }}>
                       {w.stages.length ? `${w.stages.length} stages ${exp ? "▴" : "▾"}` : (exp ? t("tender_ai_plan.stages") : t("tender_ai_plan.stages_2"))}
                     </button>
@@ -537,18 +563,13 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                                 (parat hai, jagah nahi). Par kabhi ek kaam ke
                                 andar sach me do alag cheezein hoti hain,
                                 isliye raasta khula hai. */}
-                            <label title={t("tender_ai_plan.stage_tick_hint")}
-                              style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 700,
-                                color: st.map ? T.blu : T.t4, cursor: "pointer", userSelect: "none" }}>
-                              <input type="checkbox" checked={!!st.map}
-                                onChange={() => upd((p) => {
-                                  const nx = !st.map;
-                                  p.sites[si].works[wi].stages[ti].map = nx;
-                                  p.sites[si].works[wi].stages[ti].map_kind = nx ? markKind(w) : null;
-                                })}
-                                style={{ width: 12, height: 12, cursor: "pointer" }} />
-                              📍
-                            </label>
+                            {pinTick(st.map, () => upd((p) => {
+                              const nx = !st.map;
+                              p.sites[si].works[wi].stages[ti].map = nx;
+                              p.sites[si].works[wi].stages[ti].map_kind = nx ? markKind(w) : null;
+                            }), t("tender_ai_plan.stage_tick_hint"))}
+                            {!(st.steps || []).length && pmSel(st.progress_mode,
+                              (e) => upd((p) => { p.sites[si].works[wi].stages[ti].progress_mode = e.target.value || null; }))}
                             <button onClick={() => upd((p) => { p.sites[si].works[wi].stages.splice(ti, 1); })} style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 13 }}>×</button>
                           </div>
                           {/* ── TEESRA LEVEL (steps) — Prafull ka case-3: stretch →
@@ -563,6 +584,17 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                               <input value={x.unit || ""} placeholder="unit" onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].steps[xi].unit = e.target.value; })} style={inp({ width: 48, fontSize: 11.5 })} />
                               <input type="number" value={x.amount || ""} placeholder="₹" onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].steps[xi].amount = Number(e.target.value) || 0; })} style={inp({ width: 94, textAlign: "right", color: T.grn, fontSize: 11.5 })} />
                               {boqChip(x.boq_item_ids)}
+                              {/* Step par bhi tick — 15 traffic light jaise
+                                  kaam alag-alag markne ho sakte hain. */}
+                              {pinTick(x.map, () => upd((p) => {
+                                const nx = !x.map;
+                                p.sites[si].works[wi].stages[ti].steps[xi].map = nx;
+                                p.sites[si].works[wi].stages[ti].steps[xi].map_kind = nx
+                                  ? (/^(nos?|no|each|pcs)$/i.test(String(x.unit || "").trim()) ? "point" : markKind(w))
+                                  : null;
+                              }), t("tender_ai_plan.step_tick_hint"))}
+                              {pmSel(x.progress_mode,
+                                (e) => upd((p) => { p.sites[si].works[wi].stages[ti].steps[xi].progress_mode = e.target.value || null; }))}
                               <button onClick={() => upd((p) => { p.sites[si].works[wi].stages[ti].steps.splice(xi, 1); })} style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 12 }}>×</button>
                             </div>
                           ))}

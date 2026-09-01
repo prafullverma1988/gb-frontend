@@ -6034,6 +6034,18 @@ const dict = {
   "tender_ai_plan.mk_area": "Rakba",
 
 
+  "tender_ai_plan.step_tick_hint": "Is kaam ko alag se map par markna hai (jaise 15 traffic light)",
+
+
+  "tender_ai_plan.pm_auto": "—",
+
+
+  "tender_ai_plan.pm_qty": "qty",
+
+
+  "tender_ai_plan.pm_hint": "Roz ka kaam qty me likha jaye ya % me. Sadak/pipe/naali me qty seedhi hai; structure ki qty aksar 1 hoti hai — wahan 1 likhte hi kaam poora dikh jaata, isliye % behtar. \"—\" = company ki purani setting.",
+
+
   "tender_ai_plan.mk_area_pin": "Rakba + beech me pin",
 
   "tender_ai_plan.map_tick_hint": "Site par isi kaam ki list milegi — jo yahan tick nahi, wo wahan dikhega hi nahi",

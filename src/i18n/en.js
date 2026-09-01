@@ -6032,6 +6032,18 @@ const dict = {
   "tender_ai_plan.mk_area": "Area",
 
 
+  "tender_ai_plan.step_tick_hint": "Mark this one separately on the map (e.g. 15 traffic lights)",
+
+
+  "tender_ai_plan.pm_auto": "—",
+
+
+  "tender_ai_plan.pm_qty": "qty",
+
+
+  "tender_ai_plan.pm_hint": "Record daily work as qty or as %. Roads/pipes/drains take qty naturally; a structure is usually qty 1, so entering 1 marks it complete — % suits it better. \"—\" keeps the company default.",
+
+
   "tender_ai_plan.mk_area_pin": "Area + centre pin",
 
   "tender_ai_plan.map_tick_hint": "The site app shows exactly these — anything unticked here never appears there",
