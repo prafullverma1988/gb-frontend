@@ -949,7 +949,7 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
 // line toot jati thi.
 function AddPartyBtn({onClick}){
   return (
-    <button type="button" onClick={onClick} title="Nayi party library me add karein"
+    <button type="button" onClick={onClick} title={t("finance.nayi_party_library_me_add")}
       style={{width:32,height:32,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
         borderRadius:6,border:`1.5px solid ${T.bluM}`,background:T.bluL,color:T.blu,
         fontSize:17,fontWeight:700,lineHeight:1,cursor:"pointer",fontFamily:"inherit",padding:0}}

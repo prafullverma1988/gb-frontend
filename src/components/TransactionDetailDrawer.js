@@ -44,7 +44,7 @@ function escP(v) {
 
 function downloadTxnPDF(txn, meta) {
   const win = window.open("", "_blank", "width=900,height=700");
-  if (!win) { window.alert("PDF ke liye pop-up allow karein"); return; }
+  if (!win) { window.alert(t("transaction_detail.pdf_ke_liye_pop_up_allow")); return; }
   let company = "";
   try { company = (JSON.parse(localStorage.getItem("gb_user") || "{}") || {}).company_name || ""; } catch (_) {}
 
