@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import api from "../config/api";
 import { clearPhotoPolicyCache } from "../utils/photoPolicy";
 import MapPicker from "../components/MapPicker";
@@ -429,7 +429,12 @@ function RolesAccess() {
       if (r.success) setAllProjects(r.data.map(p => ({
         id: p.id,
         name: p.project_name || p.name,
-        city: p.city || "",
+        // city_name cities table se join hoke aata hai; p.city purana text
+        // column hai. Dono dekhne padte hain warna aadhe project "bina city"
+        // wale dabbe me chale jaate hain.
+        city: p.city_name || p.city || "",
+        tender: p.tender_no || "",
+        tenderTitle: p.tender_title || "",
         status: p.status || ""
       })));
     }).catch(() => {});
@@ -600,17 +605,47 @@ function RolesAccess() {
     setUserForm(p => ({ ...p, projects: (p.projects||[]).includes(pid) ? (p.projects||[]).filter(x => x !== pid) : [...(p.projects||[]), pid] }));
   };
 
-  // Project Access matrix — saves whichever users are currently shown
-  // (all users when the "All Users" card is selected, else just the role).
+  // ── Users tab: khoj + tarteeb ────────────────────────────────────────
+  const [uSearch, setUSearch]         = useState("");
+  const [uSort, setUSort]             = useState("az");   // "az" | "proj"
+  const [uActiveOnly, setUActiveOnly] = useState(false);
+  const [openProjUser, setOpenProjUser] = useState(null); // kis user ka project list khula hai
+
+  // ── Project Access: filter + grouping + per-project panel ────────────
+  const [pSearch, setPSearch]   = useState("");
+  const [pCity, setPCity]       = useState("All");
+  const [pTender, setPTender]   = useState("All");
+  const [groupBy, setGroupBy]   = useState("city");       // "city" | "tender" | "none"
+  const [openGroup, setOpenGroup] = useState(null);       // null = pehla khula, "" = sab band
+  const [projPanel, setProjPanel] = useState(null);
+  const [panelSearch, setPanelSearch] = useState("");
+
+  // Project Access matrix. Pehle Save sirf us waqt dikh rahe role ke users
+  // ko bhejta tha — ab project panel se doosre role ke user bhi badal sakte
+  // hain, isliye jo-jo chhua gaya (dirty) unhi ko bhejte hain.
   const [accessSaving, setAccessSaving] = useState(false);
+  const [dirtyUsers, setDirtyUsers] = useState(() => new Set());
+
+  const toggleAccess = (userId, projectId) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id !== userId) return u;
+      const has = (u.projects || []).includes(projectId);
+      return { ...u, projects: has ? (u.projects || []).filter(x => x !== projectId) : [...(u.projects || []), projectId] };
+    }));
+    setDirtyUsers(prev => { const n = new Set(prev); n.add(userId); return n; });
+  };
+
   const saveProjectAccess = async () => {
+    const targets = users.filter(u => dirtyUsers.has(u.id));
+    if (!targets.length) { alert("Koi badlav nahi hai"); return; }
     setAccessSaving(true);
     try {
-      for (const u of roleUsers) {
+      for (const u of targets) {
         await api.put("/settings/users/" + u.id, { projects: u.projects || [] });
       }
       await loadUsers();
-      alert("Project access save ho gaya");
+      setDirtyUsers(new Set());
+      alert(`Project access save ho gaya — ${targets.length} user`);
     } catch (e) {
       alert("Save failed — dobara try karein");
     }
@@ -797,6 +832,49 @@ function RolesAccess() {
   const userInRole = (u, roleId) => u.role === roleId || (roleId === "admin" && u.role === "super_admin");
   const roleUsers = isAllUsers ? users : users.filter(u => userInRole(u, selectedRole));
 
+  const projName = (id) => (allProjects.find(p => p.id === id) || {}).name || `#${id}`;
+
+  // Users tab me jo list sach me dikhti hai
+  const visibleUsers = useMemo(() => {
+    const q = uSearch.trim().toLowerCase();
+    let list = roleUsers;
+    if (q) list = list.filter(u => [u.name, u.email, u.phone, u.designation]
+      .some(v => String(v || "").toLowerCase().includes(q)));
+    if (uActiveOnly) list = list.filter(u => u.is_active !== 0);
+    const out = [...list];
+    if (uSort === "az") out.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "en", { sensitivity: "base" }));
+    else out.sort((a, b) => (b.projects || []).length - (a.projects || []).length);
+    return out;
+  }, [roleUsers, uSearch, uSort, uActiveOnly]);
+
+  // Project Access ke columns — filter ke baad
+  const filteredProjects = useMemo(() => {
+    const q = pSearch.trim().toLowerCase();
+    return allProjects.filter(p =>
+      (!q || String(p.name || "").toLowerCase().includes(q)) &&
+      (pCity === "All" || (p.city || "") === pCity) &&
+      (pTender === "All" || (p.tender || "") === pTender));
+  }, [allProjects, pSearch, pCity, pTender]);
+
+  const cityOpts   = useMemo(() => [...new Set(allProjects.map(p => p.city).filter(Boolean))].sort(), [allProjects]);
+  const tenderOpts = useMemo(() => [...new Set(allProjects.map(p => p.tender).filter(Boolean))].sort(), [allProjects]);
+
+  // City/tender ke hisaab se tukde — ek bade table ki jagah chhote table,
+  // taaki 28 user x saare project wala grid dono taraf na phaile.
+  const projectGroups = useMemo(() => {
+    if (groupBy === "none") return [{ key: "__all__", label: "", list: filteredProjects }];
+    const keyOf = p => ((groupBy === "city" ? p.city : p.tender) || "").trim() || "— koi nahi —";
+    const map = new Map();
+    for (const p of filteredProjects) {
+      const k = keyOf(p);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(p);
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, list]) => ({ key, label: key, list }));
+  }, [filteredProjects, groupBy]);
+
   const tabs = [
     { id: "permissions", label: "Permissions" },
     { id: "users", label: `Users (${roleUsers.length})` },
@@ -940,10 +1018,32 @@ function RolesAccess() {
               <IcPlus size={15} color="white" /> Add User
             </button>
           }>
+          {/* Khoj + tarteeb — 28 users me se kisi ek ko dhoondhna. */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "10px 0 12px", borderBottom: `1px solid ${T.borderLight}` }}>
+            <input value={uSearch} onChange={e => setUSearch(e.target.value)} placeholder="Search name, phone or email..."
+              style={{ flex: 1, minWidth: 180, padding: "8px 11px", borderRadius: 7, border: `1.5px solid ${uSearch ? T.blue : T.border}`, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit", background: uSearch ? T.blueSoft : T.card }} />
+            {[["az", "A–Z"], ["proj", "Projects"]].map(([mode, label]) => (
+              <button key={mode} onClick={() => setUSort(mode)}
+                style={{ padding: "8px 12px", borderRadius: 7, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+                         border: `1.5px solid ${uSort === mode ? T.blue : T.border}`,
+                         background: uSort === mode ? T.blue : T.card,
+                         color: uSort === mode ? "white" : T.textMid }}>{label}</button>
+            ))}
+            <button onClick={() => setUActiveOnly(v => !v)}
+              style={{ padding: "8px 12px", borderRadius: 7, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+                       border: `1.5px solid ${uActiveOnly ? T.green : T.border}`,
+                       background: uActiveOnly ? T.greenSoft : T.card,
+                       color: uActiveOnly ? T.green : T.textMid }}>Active only</button>
+          </div>
           {usersLoading && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>Loading...</div>}
           {!usersLoading && roleUsers.length === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>No users in this role yet</div>}
-          {roleUsers.map((u, i) => (
-            <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: i < roleUsers.length - 1 ? `1px solid ${T.borderLight}` : "none" }}>
+          {!usersLoading && roleUsers.length > 0 && visibleUsers.length === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>Koi user nahi mila</div>}
+          {visibleUsers.map((u, i) => {
+            const projIds = u.projects || [];
+            const isOpen = openProjUser === u.id;
+            return (
+            <Fragment key={u.id}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: (isOpen || i < visibleUsers.length - 1) ? `1px solid ${T.borderLight}` : "none" }}>
               <div style={{ width: 38, height: 38, borderRadius: "50%", background: `linear-gradient(135deg, ${activeRole?.color || T.blue}, ${activeRole?.color || T.blue}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "white", flexShrink: 0 }}>
                 {u.name.charAt(0)}
               </div>
@@ -955,23 +1055,46 @@ function RolesAccess() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <Badge text={`${(u.projects||[]).length} projects`} color={T.textMid} bg={T.borderLight} />
+                {/* Chip par click — kaunse project hain, wahi khul jaate hain */}
+                <button onClick={() => setOpenProjUser(isOpen ? null : u.id)} disabled={!projIds.length}
+                  style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 600, fontFamily: "inherit",
+                           border: `1px solid ${isOpen ? T.blue : "transparent"}`,
+                           background: isOpen ? T.blueSoft : T.borderLight,
+                           color: isOpen ? T.blue : T.textMid,
+                           cursor: projIds.length ? "pointer" : "default" }}>
+                  {projIds.length} projects{projIds.length ? (isOpen ? " ▴" : " ▾") : ""}
+                </button>
                 <Badge text={u.is_active===0?"Inactive":"Active"} color={u.is_active===0?T.amber:T.green} bg={u.is_active===0?T.amberSoft:T.greenSoft} />
                 <button onClick={() => openEditUser(u)} style={{ background: T.borderLight, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
                   <IcEdit size={14} color={T.textMid} />
                 </button>
               </div>
             </div>
-          ))}
+            {isOpen && (
+              <div style={{ padding: "10px 0 12px 50px", borderBottom: i < visibleUsers.length - 1 ? `1px solid ${T.borderLight}` : "none" }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {projIds.map(pid => (
+                    <span key={pid} style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6, background: T.card, border: `1px solid ${T.border}`, color: T.textMid }}>{projName(pid)}</span>
+                  ))}
+                </div>
+                <button onClick={() => openEditUser(u)}
+                  style={{ marginTop: 8, background: "none", border: "none", padding: 0, color: T.blue, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                  Project access badlo →
+                </button>
+              </div>
+            )}
+            </Fragment>
+            );
+          })}
         </SectionCard>
       )}
 
       {/* ── TAB: Project Access ── */}
       {tab === "projects" && (() => {
-        // Toggle ke hisaab se rows banao. "all" => sabhi roles ek hi
-        // window me, role-category header ke saath grouped.
-        const colSpan = 1 + allProjects.length;
-        const renderUserRow = (u, roleColor) => (
+        // Ek hi bade grid ki jagah city/tender ke tukde. Har tukde me sirf
+        // usi group ke project columns — isse chaudai aur lambai dono kam.
+        const curOpen = openGroup !== null ? openGroup : (projectGroups[0]?.key ?? "");
+        const renderUserRow = (u, roleColor, cols) => (
           <tr key={u.id} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
             <td style={{ padding: "10px 8px", fontWeight: 600, color: T.text, position: "sticky", left: 0, background: T.card, zIndex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -979,13 +1102,11 @@ function RolesAccess() {
                 <span style={{ fontSize: 12 }}>{u.name}</span>
               </div>
             </td>
-            {allProjects.map(p => {
+            {cols.map(p => {
               const has = (u.projects||[]).includes(p.id);
               return (
                 <td key={p.id} style={{ textAlign: "center", padding: "8px 6px" }}>
-                  <button onClick={() => {
-                    setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, projects: has ? (usr.projects||[]).filter(x => x !== p.id) : [...(usr.projects||[]), p.id] } : usr));
-                  }}
+                  <button onClick={() => toggleAccess(u.id, p.id)}
                     style={{ width: 26, height: 26, borderRadius: 6, background: has ? T.greenSoft : T.borderLight, border: `1.5px solid ${has ? T.green + "55" : "transparent"}`, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
                     {has && <IcCheck size={13} color={T.green} strokeWidth={2.5} />}
                   </button>
@@ -999,46 +1120,161 @@ function RolesAccess() {
           ? roles.map(r => ({ role: r, list: users.filter(u => userInRole(u, r.id)) })).filter(g => g.list.length > 0)
           : [{ role: activeRole, list: roleUsers }];
         const totalShown = groups.reduce((n, g) => n + g.list.length, 0);
+        const selStyle = (on) => ({ height: 34, padding: "0 9px", borderRadius: 7, border: `1.5px solid ${on ? T.blue : T.border}`, fontSize: 12, color: on ? T.blue : T.textMid, background: on ? T.blueSoft : T.card, outline: "none", cursor: "pointer", fontFamily: "inherit" });
         return (
         <SectionCard title="Project Access Matrix"
           desc={isAllUsers ? "Which user can access which project — saare roles ek hi window me" : ("Which user can access which project — " + (activeRole?.name || "role"))}
-          action={<SaveBtn label={accessSaving ? "Saving..." : "Save Access"} onClick={saveProjectAccess} />}>
-          <div style={{ overflowX: "auto", marginTop: 8 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", padding: "10px 8px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, minWidth: 160, position: "sticky", left: 0, background: T.card, zIndex: 1 }}>User / Project</th>
-                  {allProjects.map(p => (
-                    <th key={p.id} style={{ textAlign: "center", padding: "10px 6px", fontSize: 10.5, fontWeight: 600, color: T.textMid, borderBottom: `2px solid ${T.border}`, minWidth: 90, writingMode: "vertical-rl", transform: "rotate(180deg)", height: 100 }}>
-                      {p.name.length > 22 ? p.name.substring(0, 22) + ".." : p.name}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {groups.map(g => {
-                  const rc = g.role?.color || T.blue;
-                  return (
-                    <Fragment key={g.role?.id || "grp"}>
-                      <tr>
-                        <td colSpan={colSpan} style={{ padding: "8px 10px", background: (g.role?.colorBg || T.blueSoft), borderBottom: `1.5px solid ${T.border}`, position: "sticky", left: 0 }}>
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11, fontWeight: 700, color: rc, textTransform: "uppercase", letterSpacing: 0.4 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: rc }} />
-                            {g.role?.name || "Role"} — {g.list.length} {g.list.length === 1 ? "user" : "users"}
-                          </span>
-                        </td>
-                      </tr>
-                      {g.list.map(u => renderUserRow(u, rc))}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+          action={<SaveBtn label={accessSaving ? "Saving..." : (dirtyUsers.size ? `Save Access (${dirtyUsers.size})` : "Save Access")} onClick={saveProjectAccess} />}>
+
+          {/* Filter patti — column kam karne ke liye */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "10px 0 12px", borderBottom: `1px solid ${T.borderLight}` }}>
+            <input value={pSearch} onChange={e => setPSearch(e.target.value)} placeholder="Search project..."
+              style={{ flex: 1, minWidth: 160, padding: "8px 11px", borderRadius: 7, border: `1.5px solid ${pSearch ? T.blue : T.border}`, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit", background: pSearch ? T.blueSoft : T.card }} />
+            <select value={pCity} onChange={e => setPCity(e.target.value)} style={selStyle(pCity !== "All")}>
+              <option value="All">All cities</option>
+              {cityOpts.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={pTender} onChange={e => setPTender(e.target.value)} style={selStyle(pTender !== "All")}>
+              <option value="All">All tenders</option>
+              {tenderOpts.map(tn => <option key={tn} value={tn}>{tn}</option>)}
+            </select>
           </div>
+
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", padding: "10px 0" }}>
+            <span style={{ fontSize: 11.5, color: T.textLight, fontWeight: 600 }}>Group by</span>
+            {[["city", "City"], ["tender", "Tender"], ["none", "Koi nahi"]].map(([mode, label]) => (
+              <button key={mode} onClick={() => { setGroupBy(mode); setOpenGroup(null); }}
+                style={{ padding: "5px 11px", borderRadius: 7, cursor: "pointer", fontSize: 11.5, fontWeight: 600, fontFamily: "inherit",
+                         border: `1.5px solid ${groupBy === mode ? T.blue : T.border}`,
+                         background: groupBy === mode ? T.blue : T.card,
+                         color: groupBy === mode ? "white" : T.textMid }}>{label}</button>
+            ))}
+            <span style={{ marginLeft: "auto", fontSize: 11.5, color: T.textLight }}>
+              {filteredProjects.length} of {allProjects.length} projects
+            </span>
+          </div>
+
+          {filteredProjects.length === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>Koi project nahi mila</div>}
+
+          {projectGroups.map(g => {
+            const isOpen = groupBy === "none" ? true : curOpen === g.key;
+            return (
+              <div key={g.key} style={{ marginTop: 10 }}>
+                {groupBy !== "none" && (
+                  <button onClick={() => setOpenGroup(isOpen ? "" : g.key)}
+                    style={{ width: "100%", textAlign: "left", padding: "9px 12px", borderRadius: isOpen ? "8px 8px 0 0" : 8, cursor: "pointer", fontFamily: "inherit",
+                             border: `1.5px solid ${isOpen ? T.blue : T.border}`,
+                             background: isOpen ? T.blueSoft : T.card,
+                             color: isOpen ? T.blue : T.text, fontSize: 12, fontWeight: 700, letterSpacing: 0.3 }}>
+                    {isOpen ? "▾" : "▸"} {g.label} <span style={{ fontWeight: 500, color: T.textLight }}>· {g.list.length} project</span>
+                  </button>
+                )}
+                {isOpen && (
+                  <div style={{ overflowX: "auto", border: groupBy !== "none" ? `1.5px solid ${T.blue}` : "none", borderTop: "none", borderRadius: "0 0 8px 8px", padding: groupBy !== "none" ? "0 8px 8px" : 0 }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: "left", padding: "10px 8px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, minWidth: 160, position: "sticky", left: 0, background: T.card, zIndex: 1 }}>User / Project</th>
+                          {g.list.map(p => (
+                            <th key={p.id} style={{ textAlign: "center", padding: "10px 6px", borderBottom: `2px solid ${T.border}`, minWidth: 90 }}>
+                              {/* Project ke naam par click — us project ka apna panel */}
+                              <button onClick={() => { setProjPanel(p); setPanelSearch(""); }} title={`${p.name} — kaun-kaun hai`}
+                                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 10.5, fontWeight: 600, color: T.blue, writingMode: "vertical-rl", transform: "rotate(180deg)", height: 100, fontFamily: "inherit" }}>
+                                {p.name.length > 22 ? p.name.substring(0, 22) + ".." : p.name}
+                              </button>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {groups.map(gr => {
+                          const rc = gr.role?.color || T.blue;
+                          return (
+                            <Fragment key={gr.role?.id || "grp"}>
+                              <tr>
+                                <td colSpan={1 + g.list.length} style={{ padding: "8px 10px", background: (gr.role?.colorBg || T.blueSoft), borderBottom: `1.5px solid ${T.border}`, position: "sticky", left: 0 }}>
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11, fontWeight: 700, color: rc, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: rc }} />
+                                    {gr.role?.name || "Role"} — {gr.list.length} {gr.list.length === 1 ? "user" : "users"}
+                                  </span>
+                                </td>
+                              </tr>
+                              {gr.list.map(u => renderUserRow(u, rc, g.list))}
+                            </Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
           {totalShown === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>No users found</div>}
         </SectionCard>
         );
       })()}
+
+      {/* ── Panel: ek project ke log ── */}
+      {/* Poore matrix me ghoomne ke bajaye ek project ka pura list ek jagah:
+          role ke hisaab se, khoj ke saath, aur har role par "sab chuno". */}
+      <Modal open={!!projPanel} onClose={() => { setProjPanel(null); setPanelSearch(""); }}
+        title={projPanel?.name || ""}
+        desc={[projPanel?.city, projPanel?.tender && `Tender ${projPanel.tender}`].filter(Boolean).join(" · ") || "Is project ke log"}
+        width={520}>
+        {projPanel && (() => {
+          const q = panelSearch.trim().toLowerCase();
+          const hasAccess = u => (u.projects || []).includes(projPanel.id);
+          const total = users.filter(hasAccess).length;
+          const roleGroups = roles
+            .map(r => ({ role: r, list: users.filter(u => userInRole(u, r.id) && (!q || String(u.name || "").toLowerCase().includes(q))) }))
+            .filter(g => g.list.length > 0);
+          return (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <Badge text={`${total} users have access`} color={T.blue} bg={T.blueSoft} />
+                {dirtyUsers.size > 0 && <Badge text={`${dirtyUsers.size} unsaved`} color={T.amber} bg={T.amberSoft} />}
+              </div>
+              <input value={panelSearch} onChange={e => setPanelSearch(e.target.value)} placeholder="Search user..."
+                style={{ width: "100%", padding: "8px 11px", borderRadius: 7, border: `1.5px solid ${panelSearch ? T.blue : T.border}`, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit", marginBottom: 12, background: panelSearch ? T.blueSoft : T.card }} />
+              {roleGroups.length === 0 && <div style={{ padding: "24px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>Koi user nahi mila</div>}
+              {roleGroups.map(g => {
+                const allOn = g.list.every(hasAccess);
+                return (
+                  <div key={g.role.id} style={{ marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${T.borderLight}` }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: g.role.color }} />
+                      <span style={{ fontSize: 11, fontWeight: 700, color: g.role.color, textTransform: "uppercase", letterSpacing: 0.4, flex: 1 }}>{g.role.name}</span>
+                      <button onClick={() => g.list.forEach(u => { if (hasAccess(u) === allOn) toggleAccess(u.id, projPanel.id); })}
+                        style={{ background: "none", border: "none", padding: 0, color: T.blue, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                        {allOn ? "sab hatao" : "sab chuno"}
+                      </button>
+                    </div>
+                    {g.list.map(u => {
+                      const on = hasAccess(u);
+                      return (
+                        <button key={u.id} onClick={() => toggleAccess(u.id, projPanel.id)}
+                          style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "8px 0", background: "none", border: "none", borderBottom: `1px solid ${T.borderLight}`, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+                          <span style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: on ? T.greenSoft : T.borderLight, border: `1.5px solid ${on ? T.green + "55" : "transparent"}`, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                            {on && <IcCheck size={12} color={T.green} strokeWidth={2.5} />}
+                          </span>
+                          <span style={{ fontSize: 13, color: on ? T.text : T.textMid, flex: 1 }}>{u.name}</span>
+                          <span style={{ fontSize: 11, color: T.textLight }}>{(u.projects || []).length} projects</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 6, paddingTop: 14, paddingBottom: 4, borderTop: `1px solid ${T.borderLight}`, position: "sticky", bottom: -20, background: T.card }}>
+                <button onClick={() => { setProjPanel(null); setPanelSearch(""); }}
+                  style={{ padding: "9px 18px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: T.card, fontSize: 13, fontWeight: 600, color: T.textMid, cursor: "pointer", fontFamily: "inherit" }}>Band karo</button>
+                <SaveBtn label={accessSaving ? "Saving..." : (dirtyUsers.size ? `Save Access (${dirtyUsers.size})` : "Save Access")} onClick={saveProjectAccess} />
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
 
       {/* ── Modal: Create / Edit Role ── */}
       <Modal open={showRoleModal} onClose={() => setShowRoleModal(false)} title={editingRole ? "Edit Role" : "Create Custom Role"} desc="Define role name, description, and color" width={480}>
