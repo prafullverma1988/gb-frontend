@@ -116,7 +116,7 @@ function ToggleRow({ icon, label, desc, value, onChange }) {
 //   "server" — API bhi rokti hai   "app" — sirf mobile ka button chhupta hai
 const PERM_LIVE = {
   view:    { "*": "server" },
-  create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "app" },
+  create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "server" },
   edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server" },
   delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server" },
   approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server" },
@@ -232,7 +232,7 @@ const PERM_HELP = {
   },
   "Material": {
     view: "Project ke andar Material tab nahi dikhega — site par maal aana (GRN), issue aur stock.",
-    create: "Site par GRN banana, mobile app me nayi MR banana",
+    create: "Site par \"maal aa gaya\" (receive/GRN) mark karna, aur mobile app me nayi MR banana. Receive ke liye Procurement ka create bhi chalta hai — do me se koi ek kaafi hai.",
     edit: "GRN/issue ki entry badalna", delete: "Entry delete karna",
     approve: "Material entry approve karna", export: "Site stock register nikalna",
   },
