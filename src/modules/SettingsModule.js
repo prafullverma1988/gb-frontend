@@ -2620,6 +2620,61 @@ const detailBits = (d) => {
       : typeof v === "object" ? JSON.stringify(v) : String(v)]);
 };
 
+// Log kis JAGAH ka hai — "role #73" se kisi ko pata nahi chalta, par
+// "Settings > Roles" se turant. entity_type ka pehla milta-julta tukda
+// dekhte hain; na mile to entity_type hi (jhooth nahi bolna).
+const AUDIT_WHERE = [
+  [/^tender_alignment|^alignment/, "Tenders > Map"],
+  [/^tender_boq|^boq/, "Tenders > BOQ"],
+  [/^tender_measurement|^ra_bill|^measurement/, "Tenders > MB / RA Bill"],
+  [/^tender/, "Tenders"],
+  [/^project_task|^task/, "Projects > Task"],
+  [/^dpr/, "Projects > DPR"],
+  [/^project/, "Projects"],
+  [/^transaction|^payment|^wallet|^settlement/, "Finance"],
+  [/^party|^client|^vendor/, "Finance > Party"],
+  [/^customer_invoice|^invoice|^estimate/, "Billing"],
+  [/^mr\b|^material_request|^po\b|^purchase|^rfq|^quotation/, "Procurement"],
+  [/^grn|^wh_|^warehouse|^stock|^material/, "Warehouse"],
+  [/^attendance|^punch|^geofence/, "Attendance"],
+  [/^payroll|^salary|^advance/, "Payroll"],
+  [/^staff|^user|^role|^permission/, "Team & HR"],
+  [/^equipment|^machinery|^fuel/, "Machinery & Fuel"],
+  [/^subcon|^wo_/, "Sub-Con"],
+  [/^design|^drawing/, "Design"],
+  [/^lead|^crm/, "CRM"],
+  [/^trip/, "Trips"],
+  [/^mom|^meeting/, "MOM"],
+  [/^structure/, "Tenders > Map"],
+  [/^item$|^pending_pr/, "Warehouse"],
+  [/^ra-bill|^mb-commit/, "Tenders > MB / RA Bill"],
+  [/^change-route/, "Trips"],
+  [/^practice/, "Settings"],
+  [/^chat|^bot_|^kb_gap/, "Sahayak AI"],
+  [/^expense|^p2p|^topup|^account|^pending_bill|^mark-deposited|^receive-payment/, "Finance"],
+  [/^ping|^presence/, "Live Location"],
+  [/^fleet|^truck|^route|^load|^unload/, "Trips"],
+  [/^service|^meter/, "Machinery & Fuel"],
+  [/^store|^bundle|^batche|^add-stock|^reservation|^uom|^item/, "Warehouse"],
+  [/^worker|^labour_vendor/, "Sub-Con"],
+  [/^categorie|^work-categorie|^master|^construction-type|^citie|^template/, "Master / Library"],
+  [/^document/, "Documents"],
+  [/^photo/, "Photos"],
+  [/^customer-estimate/, "Billing"],
+  [/^saas|^subscription|^client_subscription/, "SaaS Admin"],
+  [/^rate|^labour-rate|^quoted-rate/, "Rates"],
+  [/^company|^switch-company|^setting/, "Settings"],
+];
+// Bahut jagah logAudit me entity ki jagah URL ka tukda chala gaya hai —
+// "submit", "approve", "read" koi JAGAH nahi, kaam ka naam hai. Aise par
+// chip dikhana jhooth hoga, isliye khali lautate hain (UI chip chhod deta).
+const AUDIT_ACTIONISH = /^(submit|approve|approve-rate|reject|reject-rate|confirm|confirm-receivable|reject-receivable|read|read-all|apply|apply-template|apply-library-stage|cancel|cancel-booking|execute|resolve|snooze|transfer|revert|revert-paid|edit|rename|new|duplicate|sync|sync-task|run|commit|preview|ignore|accept|activate|load-photo|unload-photo|pay|mark-paid|review|request|request-change|receive|issue|link|link-project|import|import-kml|extract|analyze|transcribe|ai-suggest|ai-apply|ai-plan|auto|auto-bill|auto-bill-sweep|seed|seed-demo|test|snapshot|percent|progres|statu|action|bulk|usage|discus|feedback|profile|pref|preference|language|user_language|change-password|assign-company|create-company|check-merger-eligibility|complete-sale|log-visit|job-cancel|factory-reset|recycle-bin|permanent-delete|relink-bill|send-to-procurement|pass-to-procurement|issue-from-procurement|ask-clarification|reply-clarification|billing-method|photo-policy|feature-type|line|stage|order|customer|prospect|premium|customization|amendment|addon|package|workflow|return|instrument)$/;
+const auditWhere = (et) => {
+  const s = String(et || "").toLowerCase();
+  for (const [re, label] of AUDIT_WHERE) if (re.test(s)) return label;
+  if (AUDIT_ACTIONISH.test(s)) return "";        // ye jagah hai hi nahi
+  return s.replace(/[_-]/g, " ") || "";
+};
 function AuditSettings() {
   const [rows, setRows] = useState([]);
   const [facets, setFacets] = useState({ actions: [], entities: [], users: [] });
@@ -2700,6 +2755,7 @@ function AuditSettings() {
               <span style={{ fontSize: 10.5, fontWeight: 700, color: c, background: bg, padding: "3px 8px", borderRadius: 5, minWidth: 62, textAlign: "center", flexShrink: 0 }}>{r.action}</span>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {!!auditWhere(r.entity_type) && <span style={{ fontSize: 10.5, fontWeight: 700, color: T.blue, background: T.blueSoft, padding: "2px 7px", borderRadius: 5, marginRight: 7 }}>{auditWhere(r.entity_type)}</span>}
                   {r.entity_type}{r.entity_id ? " #" + r.entity_id : ""}
                 </div>
                 <div style={{ fontSize: 11.5, color: T.textLight, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -2730,7 +2786,8 @@ function AuditSettings() {
         desc={open ? (open.log.user_name || ("User #" + open.log.user_id)) + " · " + auditTime(open.log.created_at) : ""}>
         {open && (<div style={{ padding: "4px 2px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            {[["Kisne", open.log.user_name || ("User #" + open.log.user_id)],
+            {[["Kis jagah", auditWhere(open.log.entity_type) || "--"],
+              ["Kisne", open.log.user_name || ("User #" + open.log.user_id)],
               ["Kab", auditTime(open.log.created_at)],
               ["Kahan se (IP)", open.log.ip_address || "--"],
               ["Us din isi aadmi ke kaam", String(open.same_day_by_user || 0)]].map(([k, v]) => (
