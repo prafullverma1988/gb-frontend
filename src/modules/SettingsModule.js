@@ -2589,22 +2589,194 @@ function NumberSequences() {
 // ═══════════════════════════════════════════════════════════════════════
 // AUDIT SETTINGS (unchanged)
 // ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// AUDIT TRAIL — company ka apna log (admin ke liye)
+//
+// Pehle yahan sirf DIKHAWE ke 4 toggle the (onChange khali, value hardcoded
+// true) aur ek retention dropdown — koi asli log kahin nahi. Log to hamesha
+// se ban raha tha (audit_logs), par dikhta sirf SaaS-admin panel me tha,
+// jahan company ka admin ja hi nahi sakta. Ab wahi log yahan hai — apni hi
+// company ka, filter/khoj ke saath, aur click par poora byora.
+// ═══════════════════════════════════════════════════════════════════════
+const ACTION_COLOUR = {
+  CREATE: [T.green, T.greenSoft], UPDATE: [T.blue, T.blueSoft],
+  DELETE: [T.red, T.redSoft], LOGIN: [T.purple, T.purpleSoft],
+  IMPORT: [T.teal, T.blueSoft], EXPORT: [T.teal, T.blueSoft],
+};
+const actionStyle = (a) => ACTION_COLOUR[String(a || "").toUpperCase()] || [T.amber, T.amberSoft];
+const auditTime = (v) => {
+  if (!v) return "--";
+  const d = new Date(v);
+  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: true });
+};
+// details JSON ko padhne layak banao — "type: material_purchase, amount: 22800"
+const detailBits = (d) => {
+  let o = d;
+  if (typeof o === "string") { try { o = JSON.parse(o); } catch (e) { return [["", o]]; } }
+  if (!o || typeof o !== "object") return [];
+  return Object.entries(o).map(([k, v]) => [k,
+    v === null || v === undefined ? "--"
+      : typeof v === "object" ? JSON.stringify(v) : String(v)]);
+};
+
 function AuditSettings() {
+  const [rows, setRows] = useState([]);
+  const [facets, setFacets] = useState({ actions: [], entities: [], users: [] });
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [f, setF] = useState({ action: "", entity_type: "", user_id: "", q: "", from_date: "", to_date: "" });
+  const [open, setOpen] = useState(null);   // { log, timeline, same_day_by_user }
+  const [openBusy, setOpenBusy] = useState(false);
+
+  const load = (p = page) => {
+    setLoading(true); setErr("");
+    const qs = new URLSearchParams({ page: String(p), limit: "50" });
+    Object.entries(f).forEach(([k, v]) => { if (v) qs.set(k, v); });
+    api("/saas-admin/my-audit-logs?" + qs.toString()).then(res => {
+      setLoading(false);
+      if (!res?.success) { setErr(res?.message || "Log nahi mila"); return; }
+      setRows(res.data || []); setTotal(res.total || 0); setPages(res.pages || 1);
+      if (res.facets) setFacets(res.facets);
+    }).catch(() => { setLoading(false); setErr("Log nahi mila"); });
+  };
+  useEffect(() => { setPage(1); load(1); /* eslint-disable-next-line */ }, [f.action, f.entity_type, f.user_id, f.from_date, f.to_date]);
+  useEffect(() => { load(page); /* eslint-disable-next-line */ }, [page]);
+
+  const openLog = async (id) => {
+    setOpenBusy(true);
+    const res = await api("/saas-admin/my-audit-logs/" + id).catch(() => null);
+    setOpenBusy(false);
+    if (res?.success) setOpen(res.data);
+  };
+
+  const sel = (label, key, options, ph) => (
+    <select value={f[key]} onChange={e => setF(x => ({ ...x, [key]: e.target.value }))}
+      style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid " + T.border, fontSize: 12.5,
+        fontFamily: "inherit", background: T.card, color: T.text, minWidth: 130 }}>
+      <option value="">{ph}</option>
+      {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+    </select>
+  );
+
   return (
     <div>
-      <SectionCard title="Audit Trail Configuration" desc="Track who did what and when" action={<SaveBtn />}>
-        <ToggleRow icon={<IcClipboard size={17} color={T.blue} />} label="Enable Audit Logging" desc="Record all create, update, delete actions" value={true} onChange={() => {}} />
-        <ToggleRow icon={<IcLock size={17} color={T.blue} />} label="Log Login/Logout Events" desc="Track sessions, IP, device info" value={true} onChange={() => {}} />
-        <ToggleRow icon={<IcEdit size={17} color={T.blue} />} label="Track Field-Level Changes" desc="Record old→new value for every field" value={true} onChange={() => {}} />
-        <ToggleRow icon={<IcTrash size={17} color={T.blue} />} label="Soft Delete Only" desc="Never permanently delete; mark deleted" value={true} onChange={() => {}} />
+      <SectionCard title="Audit Trail" desc={total ? (total.toLocaleString("en-IN") + " kaam darj hain — kisne, kab, kya kiya") : "Kisne, kab, kya kiya"}
+        action={<button onClick={() => load(page)} style={{ padding: "7px 13px", borderRadius: 8, border: "1px solid " + T.border, background: T.card, fontSize: 12.5, fontWeight: 600, color: T.text, cursor: "pointer", fontFamily: "inherit" }}>Refresh</button>}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", paddingBottom: 12 }}>
+          {sel("Kaam", "action", facets.actions.map(a => ({ v: a, l: a })), "Sab kaam")}
+          {sel("Cheez", "entity_type", facets.entities.map(e => ({ v: e, l: e })), "Sab cheezein")}
+          {sel("Kisne", "user_id", facets.users.map(u => ({ v: String(u.id), l: u.name + " (" + u.n + ")" })), "Sab log")}
+          <input type="date" value={f.from_date} onChange={e => setF(x => ({ ...x, from_date: e.target.value }))}
+            style={{ padding: "6px 9px", borderRadius: 8, border: "1px solid " + T.border, fontSize: 12.5, fontFamily: "inherit", background: T.card, color: T.text }} />
+          <span style={{ fontSize: 12, color: T.textLight }}>se</span>
+          <input type="date" value={f.to_date} onChange={e => setF(x => ({ ...x, to_date: e.target.value }))}
+            style={{ padding: "6px 9px", borderRadius: 8, border: "1px solid " + T.border, fontSize: 12.5, fontFamily: "inherit", background: T.card, color: T.text }} />
+          <input value={f.q} onChange={e => setF(x => ({ ...x, q: e.target.value }))}
+            onKeyDown={e => { if (e.key === "Enter") { setPage(1); load(1); } }}
+            placeholder="dhoondo — naam, cheez, id, byora…"
+            style={{ flex: 1, minWidth: 190, padding: "7px 11px", borderRadius: 8, border: "1px solid " + T.border, fontSize: 12.5, fontFamily: "inherit", background: T.card, color: T.text }} />
+          {(f.action || f.entity_type || f.user_id || f.q || f.from_date || f.to_date) && (
+            <button onClick={() => { setF({ action: "", entity_type: "", user_id: "", q: "", from_date: "", to_date: "" }); }}
+              style={{ padding: "7px 11px", borderRadius: 8, border: "1px solid " + T.border, background: T.card, fontSize: 12.5, color: T.textLight, cursor: "pointer", fontFamily: "inherit" }}>Saaf karo</button>
+          )}
+        </div>
+
+        {err && <div style={{ padding: "10px 12px", background: T.redSoft, color: T.red, borderRadius: 8, fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+        {loading && <div style={{ padding: "26px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>Load ho raha hai…</div>}
+        {!loading && !rows.length && <div style={{ padding: "26px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>Is chhaan-been par kuchh nahi mila.</div>}
+
+        {!loading && rows.map(r => {
+          const [c, bg] = actionStyle(r.action);
+          const bits = detailBits(r.details);
+          return (
+            <div key={r.id} onClick={() => openLog(r.id)}
+              style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 4px", borderBottom: "1px solid " + T.border, cursor: "pointer" }}
+              onMouseEnter={e => e.currentTarget.style.background = T.cardHover}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: c, background: bg, padding: "3px 8px", borderRadius: 5, minWidth: 62, textAlign: "center", flexShrink: 0 }}>{r.action}</span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {r.entity_type}{r.entity_id ? " #" + r.entity_id : ""}
+                </div>
+                <div style={{ fontSize: 11.5, color: T.textLight, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {bits.slice(0, 3).map(([k, v]) => (k ? k + ": " + v : v)).join(" · ") || "--"}
+                </div>
+              </div>
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontSize: 12.5, color: T.text, fontWeight: 600 }}>{r.user_name || ("User #" + r.user_id)}</div>
+                <div style={{ fontSize: 11, color: T.textLight }}>{auditTime(r.created_at)}</div>
+              </div>
+            </div>
+          );
+        })}
+
+        {!loading && pages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, paddingTop: 14 }}>
+            <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
+              style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid " + T.border, background: T.card, fontSize: 12.5, cursor: page <= 1 ? "not-allowed" : "pointer", opacity: page <= 1 ? 0.5 : 1, fontFamily: "inherit", color: T.text }}>Pichhla</button>
+            <span style={{ fontSize: 12.5, color: T.textLight }}>{page} / {pages}</span>
+            <button disabled={page >= pages} onClick={() => setPage(p => Math.min(pages, p + 1))}
+              style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid " + T.border, background: T.card, fontSize: 12.5, cursor: page >= pages ? "not-allowed" : "pointer", opacity: page >= pages ? 0.5 : 1, fontFamily: "inherit", color: T.text }}>Agla</button>
+          </div>
+        )}
       </SectionCard>
-      <SectionCard title="Data Retention" desc="How long to keep audit logs">
-        <div style={{ paddingTop: 8 }}><FormSelect label="Retain Audit Logs For" value="365" onChange={() => {}} options={[{value:"90",label:"90 days"},{value:"180",label:"6 months"},{value:"365",label:"1 year"},{value:"730",label:"2 years"},{value:"0",label:"Forever"}]} half /></div>
-      </SectionCard>
+
+      <Modal open={!!open} onClose={() => setOpen(null)} width={640}
+        title={open ? (open.log.action + " — " + open.log.entity_type + (open.log.entity_id ? " #" + open.log.entity_id : "")) : ""}
+        desc={open ? (open.log.user_name || ("User #" + open.log.user_id)) + " · " + auditTime(open.log.created_at) : ""}>
+        {open && (<div style={{ padding: "4px 2px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            {[["Kisne", open.log.user_name || ("User #" + open.log.user_id)],
+              ["Kab", auditTime(open.log.created_at)],
+              ["Kahan se (IP)", open.log.ip_address || "--"],
+              ["Us din isi aadmi ke kaam", String(open.same_day_by_user || 0)]].map(([k, v]) => (
+              <div key={k} style={{ background: T.bg, borderRadius: 8, padding: "8px 11px" }}>
+                <div style={{ fontSize: 10.5, color: T.textLight, textTransform: "uppercase", letterSpacing: ".4px", fontWeight: 700 }}>{k}</div>
+                <div style={{ fontSize: 13, color: T.text, fontWeight: 600, wordBreak: "break-all" }}>{v}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 7 }}>Byora</div>
+          {detailBits(open.log.details).length ? (
+            <div style={{ border: "1px solid " + T.border, borderRadius: 9, overflow: "hidden", marginBottom: 16 }}>
+              {detailBits(open.log.details).map(([k, v], i) => (
+                <div key={k + i} style={{ display: "flex", gap: 10, padding: "7px 11px", borderTop: i ? "1px solid " + T.border : "none" }}>
+                  <span style={{ fontSize: 12, color: T.textLight, minWidth: 130, flexShrink: 0 }}>{k || "value"}</span>
+                  <span style={{ fontSize: 12.5, color: T.text, fontWeight: 600, wordBreak: "break-word" }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          ) : <div style={{ fontSize: 12.5, color: T.textLight, marginBottom: 16 }}>Is kaam ka koi alag byora darj nahi hua.</div>}
+
+          {open.timeline && open.timeline.length > 1 && (<>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 7 }}>
+              Isi cheez par aur kya hua ({open.timeline.length})
+            </div>
+            <div style={{ border: "1px solid " + T.border, borderRadius: 9, overflow: "hidden", maxHeight: 260, overflowY: "auto" }}>
+              {open.timeline.map((tl, i) => {
+                const [c2, bg2] = actionStyle(tl.action);
+                return (
+                  <div key={tl.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 11px",
+                    borderTop: i ? "1px solid " + T.border : "none", background: tl.id === open.log.id ? T.blueSoft : "transparent" }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: c2, background: bg2, padding: "2px 7px", borderRadius: 5, minWidth: 58, textAlign: "center" }}>{tl.action}</span>
+                    <span style={{ fontSize: 12.5, color: T.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tl.user_name || "--"}</span>
+                    <span style={{ fontSize: 11.5, color: T.textLight, flexShrink: 0 }}>{auditTime(tl.created_at)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </>)}
+        </div>)}
+      </Modal>
+      {openBusy && <div style={{ position: "fixed", inset: 0, zIndex: 9998 }} />}
     </div>
   );
 }
-
 // ═══════════════════════════════════════════════════════════════════════
 // FEATURE REQUESTS (Phase 3 — customer side)
 // ═══════════════════════════════════════════════════════════════════════
