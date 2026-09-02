@@ -1116,7 +1116,7 @@ function RolesAccess() {
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             style={{
-              flex: 1, padding: "12px 16px", fontSize: 13, fontWeight: tab === t.id ? 700 : 500,
+              flex: 1, padding: "9px 16px", fontSize: 12.5, fontWeight: tab === t.id ? 700 : 500,
               color: tab === t.id ? T.blue : T.textMid,
               background: tab === t.id ? T.blueSoft : "transparent",
               border: "none", cursor: "pointer", borderBottom: tab === t.id ? `2.5px solid ${T.blue}` : "2.5px solid transparent",
@@ -1312,13 +1312,15 @@ function RolesAccess() {
         const totalShown = groups.reduce((n, g) => n + g.list.length, 0);
         const selStyle = (on) => ({ height: 34, padding: "0 9px", borderRadius: 7, border: `1.5px solid ${on ? T.blue : T.border}`, fontSize: 12, color: on ? T.blue : T.textMid, background: on ? T.blueSoft : T.card, outline: "none", cursor: "pointer", fontFamily: "inherit" });
         return (
-        <SectionCard title="Project Access Matrix"
-          desc={isAllUsers ? "Which user can access which project — saare roles ek hi window me" : ("Which user can access which project — " + (activeRole?.name || "role"))}
-          action={<SaveBtn label={accessSaving ? "Saving..." : (dirtyUsers.size ? `Save Access (${dirtyUsers.size})` : "Save Access")} onClick={saveProjectAccess} />}>
+        // SectionCard yahan se hata diya. Uska "Project Access Matrix" title
+        // aur "Which user can access which project — <role>" wali line dono
+        // pehle se upar likhi hain (tab ka naam + chuna hua role chip), aur
+        // wo header akela ~70px kha raha tha. Save ka button filter patti ke
+        // daayin kinare aa gaya — utna hi saamne, bina alag line ke.
+        <div style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, boxShadow: T.shadow, marginBottom: 20, padding: "4px 16px 16px" }}>
 
-          {/* Filter + grouping ek hi patti me. Pehle ye do alag line thi aur
-              matrix screen se neeche khisak jaata tha. */}
-          <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap", padding: "8px 0 10px", borderBottom: `1px solid ${T.borderLight}` }}>
+          {/* Filter + grouping + Save — sab ek hi patti me. */}
+          <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap", padding: "10px 0", borderBottom: `1px solid ${T.borderLight}` }}>
             <input value={pSearch} onChange={e => setPSearch(e.target.value)} placeholder="Search project..."
               style={{ flex: "1 1 150px", minWidth: 130, height: 34, padding: "0 11px", borderRadius: 7, border: `1.5px solid ${pSearch ? T.blue : T.border}`, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit", background: pSearch ? T.blueSoft : T.card }} />
             <select value={pCity} onChange={e => setPCity(e.target.value)} style={selStyle(pCity !== "All")}>
@@ -1331,7 +1333,10 @@ function RolesAccess() {
             </select>
             <span style={{ width: 1, height: 20, background: T.borderLight, flexShrink: 0 }} />
             <span style={{ fontSize: 11.5, color: T.textLight, fontWeight: 600 }}>Group by</span>
-            {[["city", "City"], ["tender", "Tender"], ["none", "Koi nahi"]].map(([mode, label]) => (
+            {/* "Koi nahi" ka matlab tha "grouping mat karo" — par padhne wale ko
+                ye nahi dikhta ki isse SAARE project ek saath aa jaate hain.
+                Isliye ab wahi option "All" hai. */}
+            {[["city", "City"], ["tender", "Tender"], ["none", "All"]].map(([mode, label]) => (
               <button key={mode} onClick={() => { setGroupBy(mode); setOpenGroup(null); }}
                 style={{ height: 34, padding: "0 11px", borderRadius: 7, cursor: "pointer", fontSize: 11.5, fontWeight: 600, fontFamily: "inherit",
                          border: `1.5px solid ${groupBy === mode ? T.blue : T.border}`,
@@ -1341,15 +1346,20 @@ function RolesAccess() {
             <span style={{ marginLeft: "auto", fontSize: 11.5, color: T.textLight, whiteSpace: "nowrap" }}>
               {filteredProjects.length} of {allProjects.length} projects
             </span>
+            <SaveBtn label={accessSaving ? "Saving..." : (dirtyUsers.size ? `Save Access (${dirtyUsers.size})` : "Save Access")} onClick={saveProjectAccess} />
           </div>
 
           {filteredProjects.length === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>Koi project nahi mila</div>}
 
           {projectGroups.map(g => {
-            const isOpen = groupBy === "none" ? true : curOpen === g.key;
+            // Ek hi group bacha ho (sab project ek hi city ke, ya filter ne ek
+            // hi chhoda) to uska header sirf jagah khata hai — ginti to upar
+            // "N of M projects" me likhi hi hai. Aisi soorat me seedha khol do.
+            const oneGroup = groupBy === "none" || projectGroups.length === 1;
+            const isOpen = oneGroup ? true : curOpen === g.key;
             return (
-              <div key={g.key} style={{ marginTop: 10 }}>
-                {groupBy !== "none" && (
+              <div key={g.key} style={{ marginTop: oneGroup ? 4 : 8 }}>
+                {!oneGroup && (
                   <button onClick={() => setOpenGroup(isOpen ? "" : g.key)}
                     style={{ width: "100%", textAlign: "left", padding: "9px 12px", borderRadius: isOpen ? "8px 8px 0 0" : 8, cursor: "pointer", fontFamily: "inherit",
                              border: `1.5px solid ${isOpen ? T.blue : T.border}`,
@@ -1358,19 +1368,25 @@ function RolesAccess() {
                     {isOpen ? "▾" : "▸"} {g.label} <span style={{ fontWeight: 500, color: T.textLight }}>· {g.list.length} project</span>
                   </button>
                 )}
-                {isOpen && (
-                  <div style={{ overflowX: "auto", border: groupBy !== "none" ? `1.5px solid ${T.blue}` : "none", borderTop: "none", borderRadius: "0 0 8px 8px", padding: groupBy !== "none" ? "0 8px 8px" : 0 }}>
+                {isOpen && (() => {
+                  const tallHead = g.list.length > 6;   // khada naam sirf bhare hue matrix me
+                  return (
+                  <div style={{ overflowX: "auto", border: oneGroup ? "none" : `1.5px solid ${T.blue}`, borderTop: "none", borderRadius: "0 0 8px 8px", padding: oneGroup ? 0 : "0 8px 8px" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                       <thead>
                         <tr>
                           <th style={{ textAlign: "left", padding: "8px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, minWidth: 140, position: "sticky", left: 0, background: T.card, zIndex: 1 }}>User / Project</th>
-                          {/* Column tick ke naap ka — 90px me sirf 26px ka tick tha,
-                              isliye aadhe se kam project hi ek screen me aate the. */}
+                          {/* Naam khada (vertical) sirf tab jab project zyada hon.
+                              Khada naam 86px lamba header banata hai; 6 ya usse kam
+                              project me utni jagah lene ka koi matlab nahi, aur
+                              sidha naam padhna bhi aasan hai. */}
                           {g.list.map(p => (
-                            <th key={p.id} style={{ textAlign: "center", padding: "8px 2px", borderBottom: `2px solid ${T.border}`, minWidth: 48 }}>
+                            <th key={p.id} style={{ textAlign: "center", padding: "8px 2px", borderBottom: `2px solid ${T.border}`, minWidth: tallHead ? 48 : 96 }}>
                               {/* Project ke naam par click — us project ka apna panel */}
                               <button onClick={() => { setProjPanel(p); setPanelSearch(""); }} title={`${p.name} — kaun-kaun hai`}
-                                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 10, fontWeight: 600, color: T.blue, writingMode: "vertical-rl", transform: "rotate(180deg)", height: 86, fontFamily: "inherit" }}>
+                                style={tallHead
+                                  ? { background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 10, fontWeight: 600, color: T.blue, writingMode: "vertical-rl", transform: "rotate(180deg)", height: 86, fontFamily: "inherit" }
+                                  : { background: "none", border: "none", padding: "0 4px", cursor: "pointer", fontSize: 11, fontWeight: 600, color: T.blue, fontFamily: "inherit", lineHeight: "14px", maxWidth: 110, whiteSpace: "normal" }}>
                                 {p.name.length > 20 ? p.name.substring(0, 20) + ".." : p.name}
                               </button>
                             </th>
@@ -1397,12 +1413,13 @@ function RolesAccess() {
                       </tbody>
                     </table>
                   </div>
-                )}
+                  );
+                })()}
               </div>
             );
           })}
           {totalShown === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>No users found</div>}
-        </SectionCard>
+        </div>
         );
       })()}
 
