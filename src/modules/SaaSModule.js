@@ -515,6 +515,9 @@ function TabAuditLogs({ companies }) {
   const [page, setPage]         = useState(1);
   const [loading, setLoading]   = useState(true);
   const [filters, setFilters]   = useState({ company_id:"", entity_type:"", action:"" });
+  // Row par click = poora byora. List me DETAILS kat jaata hai aur "is cheez
+  // par aur kya hua" wahan se kabhi pata nahi chalta.
+  const [detail, setDetail]     = useState(null);   // {loading} | {log, timeline, same_day_by_user}
 
   const load = useCallback((p = 1) => {
     setLoading(true);
@@ -579,8 +582,16 @@ function TabAuditLogs({ companies }) {
             let details = "";
             try { const d = typeof l.details === "string" ? JSON.parse(l.details) : l.details; details = d ? Object.entries(d).map(([k,v])=>`${k}: ${v}`).join(", ") : ""; } catch(_) {}
             return (
-              <div key={l.id} style={{ display:"grid", gridTemplateColumns:"130px 1.2fr 90px 1fr 1.5fr 1fr 100px", padding:"9px 16px",
-                borderBottom: i < logs.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center" }}>
+              <div key={l.id} title="Poora byora dekhne ke liye click karo"
+                onClick={()=>{
+                  setDetail({ loading:true });
+                  apiFetch("/saas-admin/audit-logs/" + l.id)
+                    .then(r=>setDetail(r && r.success ? r.data : null)).catch(()=>setDetail(null));
+                }}
+                onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                style={{ display:"grid", gridTemplateColumns:"130px 1.2fr 90px 1fr 1.5fr 1fr 100px", padding:"9px 16px",
+                borderBottom: i < logs.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center", cursor:"pointer" }}>
                 <div style={{ fontSize:11, color:T.t3 }}>{fmtDateTime(l.created_at)}</div>
                 <div style={{ fontSize:12, fontWeight:600, color:T.t1 }}>{l.user_name || "--"}</div>
                 <div><Badge text={l.action} color={actionColor(l.action)}/></div>
@@ -597,6 +608,95 @@ function TabAuditLogs({ companies }) {
           })}
         </div>
       )}
+
+      {detail && (() => {
+        const d = detail.log;
+        const when = (v) => { try { return fmtDateTime(v); } catch (e) { return String(v || ""); } };
+        // details JSON ko padhne layak jodiyon me
+        let pairs = null;
+        try {
+          let o = d && d.details;
+          if (typeof o === "string") o = JSON.parse(o);
+          if (o && typeof o === "object" && !Array.isArray(o)) {
+            pairs = Object.entries(o).map(([k, v]) => [k, (v && typeof v === "object") ? JSON.stringify(v) : String(v)]);
+          }
+        } catch (_) {}
+        return (
+          <>
+            <div onClick={()=>setDetail(null)} style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.45)", zIndex:998 }}/>
+            <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", zIndex:999,
+              width:"min(94vw,680px)", maxHeight:"86vh", overflowY:"auto", background:T.surface,
+              border:`1px solid ${T.b1}`, borderRadius:12, boxShadow:"0 20px 60px rgba(0,0,0,.25)", padding:"16px 18px" }}>
+              {detail.loading ? (
+                <div style={{ padding:24, fontSize:13, color:T.t3 }}>Load ho raha hai…</div>
+              ) : !d ? (
+                <div style={{ padding:24, fontSize:13, color:T.t3 }}>Byora nahi mila.</div>
+              ) : (<>
+                <div style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:14 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:15, fontWeight:700, color:T.t1 }}>
+                      {d.action} — {String(d.entity_type||"").replace("_"," ")}{d.entity_id ? " #" + d.entity_id : ""}
+                    </div>
+                    <div style={{ fontSize:11.5, color:T.t3, marginTop:2 }}>
+                      {(d.user_name || ("User #" + d.user_id))} · {when(d.created_at)}
+                    </div>
+                  </div>
+                  <button onClick={()=>setDetail(null)} style={{ border:"none", background:"none", cursor:"pointer",
+                    fontSize:16, color:T.t4, lineHeight:1, padding:2 }}>✕</button>
+                </div>
+
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, marginBottom:14 }}>
+                  {[["Company", d.company_name || "--"],
+                    ["Kahan se (IP)", String(d.ip_address || "--").replace("::ffff:", "")],
+                    ["Log id", "#" + d.id],
+                    ["Us din isi aadmi ke kaam", String(detail.same_day_by_user || 0)]].map(([k,v])=>(
+                    <div key={k} style={{ background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:9, padding:"8px 11px" }}>
+                      <div style={{ fontSize:10, color:T.t4, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px" }}>{k}</div>
+                      <div style={{ fontSize:12.5, color:T.t1, fontWeight:600, marginTop:2, wordBreak:"break-all" }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {pairs && pairs.length ? (
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:10.5, color:T.t4, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px", marginBottom:6 }}>Kya hua</div>
+                    <div style={{ border:`1px solid ${T.b1}`, borderRadius:9, overflow:"hidden" }}>
+                      {pairs.map(([k,v],i)=>(
+                        <div key={k} style={{ display:"grid", gridTemplateColumns:"190px 1fr", gap:10, padding:"7px 11px",
+                          borderBottom: i < pairs.length-1 ? `1px solid ${T.b1}` : "none" }}>
+                          <span style={{ fontSize:11.5, color:T.t3 }}>{k}</span>
+                          <span style={{ fontSize:12, color:T.t1, wordBreak:"break-word" }}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize:12, color:T.t3, marginBottom:14 }}>Iske saath koi aur byora darj nahi hua.</div>
+                )}
+
+                {detail.timeline && detail.timeline.length > 1 && (
+                  <div>
+                    <div style={{ fontSize:10.5, color:T.t4, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px", marginBottom:6 }}>
+                      Isi cheez par aur kya hua ({detail.timeline.length})
+                    </div>
+                    <div style={{ border:`1px solid ${T.b1}`, borderRadius:9, maxHeight:220, overflowY:"auto" }}>
+                      {detail.timeline.map((tl,i)=>(
+                        <div key={tl.id} style={{ display:"flex", gap:9, alignItems:"center", padding:"7px 11px",
+                          borderBottom: i < detail.timeline.length-1 ? `1px solid ${T.b1}` : "none",
+                          background: tl.id === d.id ? T.surfaceB : "transparent" }}>
+                          <span style={{ fontSize:11, color:T.t3, width:130, flexShrink:0 }}>{when(tl.created_at)}</span>
+                          <Badge text={tl.action} color={actionColor(tl.action)}/>
+                          <span style={{ fontSize:11.5, color:T.t2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{tl.user_name || "--"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>)}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Pagination */}
       {totalPages > 1 && (
