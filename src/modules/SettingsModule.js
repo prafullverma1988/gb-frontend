@@ -232,7 +232,7 @@ const PERM_HELP = {
   },
   "Material": {
     view: "Project ke andar Material tab nahi dikhega — site par maal aana (GRN), issue aur stock.",
-    create: "Site par \"maal aa gaya\" (receive/GRN) mark karna, aur mobile app me nayi MR banana. Receive ke liye Procurement ka create bhi chalta hai — do me se koi ek kaafi hai.",
+    create: "Site par maal receive karna — teenon tarah se: order kiye MR ka maal aana, bina MR ka seedha GRN, aur godown se bheja hua maal utarna. Har ek par is tick ki jagah us raaste ka apna module (Procurement / Warehouse) bhi chalta hai — do me se koi ek kaafi hai. Mobile app me nayi MR banana bhi isi se.",
     edit: "GRN/issue ki entry badalna", delete: "Entry delete karna",
     approve: "Material entry approve karna", export: "Site stock register nikalna",
   },
