@@ -2055,7 +2055,7 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
   // hai (aage koi tenant apna banaye) uska DB wala label hi dikhta hai —
   // angrezi sahi, khaali jagah galat.
   const groupLabel = (k) => {
-    const key = "tasks.optgroup_" + k;
+    const key = "tasks.optgroup_" + String(k).toLowerCase();   // keys lowercase hi rehti hain
     const s = t(key);
     return s === key ? (groupMap[k] || k) : s;
   };
