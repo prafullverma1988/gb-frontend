@@ -20,6 +20,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import api from "../../config/api";
 import { T, fmtN } from "../shared/tokens";
 import { Panel, PHead, Pill } from "../shared/ui";
+import StatementImportWizard from "./StatementImportWizard";
 import { t } from "../../i18n";
 
 const PAGE = 150;
@@ -348,6 +349,7 @@ export default function TabAccounts() {
   // ho jaate hain (warna "16 duplicate" par click karke 0 row dikhti, kyunki
   // pehle se koi type filter laga tha).
   const [pick, setPick] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
   const ledgerRef = useRef(null);
   const qTimer = useRef(null);
 
@@ -492,23 +494,34 @@ export default function TabAccounts() {
     border: `1px solid ${on ? T.blu : T.b1}`, background: on ? T.blu : T.surface, color: on ? "#fff" : T.t2,
   });
 
+  // Neeche wala div block hai, flex-column NAHI. Parent flex column hai; agar
+  // ye bhi flex column hota to upar ke chaar panel flex item ban jaate aur
+  // chhoti screen par apni content-height se neeche sikud jaate — cards, sehat
+  // aur graph teeno ek-ek line me dab gaye the. `flex:1` phir bhi lagta hai
+  // (wo parent ke liye hai), to scroll isi ke andar rehta hai.
   return (
-    // Block, flex-column NAHI. Parent flex column hai; agar ye bhi flex column
-    // hota to upar ke chaar panel flex item ban jaate aur chhoti screen par
-    // apni content-height se neeche sikud jaate — cards, sehat aur graph teeno
-    // ek-ek line me dab gaye the. `flex:1` phir bhi lagta hai (wo parent ke
-    // liye hai), to scroll isi ke andar rehta hai.
+    <>
+    {importOpen && (
+      <StatementImportWizard
+        accounts={allAcc}
+        defaultAccountId={selected.length === 1 ? selected[0] : (allAcc[0] && allAcc[0].id)}
+        onClose={() => { setImportOpen(false); load(); }} />
+    )}
     <div style={{ flex: 1, overflow: "auto", paddingBottom: 20 }}>
       {/* Khaate chuno — ek se zyada chuno to wo ek hi timeline par chalte hain */}
       <Panel style={{ marginBottom: 10 }}>
         <PHead title={t("finance.accounts")} action={
-          <span style={{ fontSize: 11.5, color: T.t3 }}>
-            {t("acctledger.chosen_n", { n: selected.length, total: allAcc.length })}
+          <span style={{ fontSize: 11.5, color: T.t3, display: "flex", alignItems: "center", gap: 9 }}>
+            <span>{t("acctledger.chosen_n", { n: selected.length, total: allAcc.length })}</span>
             {allAcc.length > 1 && (
-              <button onClick={() => setSel(null)} style={{ marginLeft: 9, border: "none", background: "none", color: T.blu, fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
+              <button onClick={() => setSel(null)} style={{ border: "none", background: "none", color: T.blu, fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
                 {t("acctledger.select_all")}
               </button>
             )}
+            <button onClick={() => setImportOpen(true)} disabled={!allAcc.length}
+              style={{ border: `1px solid ${T.b2}`, background: T.surface, color: allAcc.length ? T.t2 : T.t4, fontSize: 11.5, fontWeight: 600, padding: "4px 11px", borderRadius: 6, cursor: allAcc.length ? "pointer" : "default" }}>
+              {t("stmt.button")}
+            </button>
           </span>} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(212px,1fr))", gap: 8, padding: 12 }}>
           {allAcc.map((a) => {
@@ -687,5 +700,6 @@ export default function TabAccounts() {
         )}
       </Panel>
     </div>
+    </>
   );
 }
