@@ -509,12 +509,70 @@ function TabUsers() {
 // ════════════════════════════════════════════════════════════════════════
 // TAB 5: AUDIT LOGS (NEW)
 // ════════════════════════════════════════════════════════════════════════
+// Log kis JAGAH ka hai — "role #73" se kisi ko pata nahi chalta, par
+// "Settings > Roles" se turant. entity_type ka pehla milta-julta tukda
+// dekhte hain; na mile to entity_type hi (jhooth nahi bolna).
+const AUDIT_WHERE = [
+  [/^tender_alignment|^alignment/, "Tenders > Map"],
+  [/^tender_boq|^boq/, "Tenders > BOQ"],
+  [/^tender_measurement|^ra_bill|^measurement/, "Tenders > MB / RA Bill"],
+  [/^tender/, "Tenders"],
+  [/^project_task|^task/, "Projects > Task"],
+  [/^dpr/, "Projects > DPR"],
+  [/^project/, "Projects"],
+  [/^transaction|^payment|^wallet|^settlement/, "Finance"],
+  [/^party|^client|^vendor/, "Finance > Party"],
+  [/^customer_invoice|^invoice|^estimate/, "Billing"],
+  [/^mr\b|^material_request|^po\b|^purchase|^rfq|^quotation/, "Procurement"],
+  [/^grn|^wh_|^warehouse|^stock|^material/, "Warehouse"],
+  [/^attendance|^punch|^geofence/, "Attendance"],
+  [/^payroll|^salary|^advance/, "Payroll"],
+  [/^staff|^user|^role|^permission/, "Team & HR"],
+  [/^equipment|^machinery|^fuel/, "Machinery & Fuel"],
+  [/^subcon|^wo_/, "Sub-Con"],
+  [/^design|^drawing/, "Design"],
+  [/^lead|^crm/, "CRM"],
+  [/^trip/, "Trips"],
+  [/^mom|^meeting/, "MOM"],
+  [/^structure/, "Tenders > Map"],
+  [/^item$|^pending_pr/, "Warehouse"],
+  [/^ra-bill|^mb-commit/, "Tenders > MB / RA Bill"],
+  [/^change-route/, "Trips"],
+  [/^practice/, "Settings"],
+  [/^chat|^bot_|^kb_gap/, "Sahayak AI"],
+  [/^expense|^p2p|^topup|^account|^pending_bill|^mark-deposited|^receive-payment/, "Finance"],
+  [/^ping|^presence/, "Live Location"],
+  [/^fleet|^truck|^route|^load|^unload/, "Trips"],
+  [/^service|^meter/, "Machinery & Fuel"],
+  [/^store|^bundle|^batche|^add-stock|^reservation|^uom|^item/, "Warehouse"],
+  [/^worker|^labour_vendor/, "Sub-Con"],
+  [/^categorie|^work-categorie|^master|^construction-type|^citie|^template/, "Master / Library"],
+  [/^document/, "Documents"],
+  [/^photo/, "Photos"],
+  [/^customer-estimate/, "Billing"],
+  [/^saas|^subscription|^client_subscription/, "SaaS Admin"],
+  [/^rate|^labour-rate|^quoted-rate/, "Rates"],
+  [/^company|^switch-company|^setting/, "Settings"],
+];
+// Bahut jagah logAudit me entity ki jagah URL ka tukda chala gaya hai —
+// "submit", "approve", "read" koi JAGAH nahi, kaam ka naam hai. Aise par
+// chip dikhana jhooth hoga, isliye khali lautate hain (UI chip chhod deta).
+const AUDIT_ACTIONISH = /^(submit|approve|approve-rate|reject|reject-rate|confirm|confirm-receivable|reject-receivable|read|read-all|apply|apply-template|apply-library-stage|cancel|cancel-booking|execute|resolve|snooze|transfer|revert|revert-paid|edit|rename|new|duplicate|sync|sync-task|run|commit|preview|ignore|accept|activate|load-photo|unload-photo|pay|mark-paid|review|request|request-change|receive|issue|link|link-project|import|import-kml|extract|analyze|transcribe|ai-suggest|ai-apply|ai-plan|auto|auto-bill|auto-bill-sweep|seed|seed-demo|test|snapshot|percent|progres|statu|action|bulk|usage|discus|feedback|profile|pref|preference|language|user_language|change-password|assign-company|create-company|check-merger-eligibility|complete-sale|log-visit|job-cancel|factory-reset|recycle-bin|permanent-delete|relink-bill|send-to-procurement|pass-to-procurement|issue-from-procurement|ask-clarification|reply-clarification|billing-method|photo-policy|feature-type|line|stage|order|customer|prospect|premium|customization|amendment|addon|package|workflow|return|instrument)$/;
+const auditWhere = (et) => {
+  const s = String(et || "").toLowerCase();
+  for (const [re, label] of AUDIT_WHERE) if (re.test(s)) return label;
+  if (AUDIT_ACTIONISH.test(s)) return "";        // ye jagah hai hi nahi
+  return s.replace(/[_-]/g, " ") || "";
+};
 function TabAuditLogs({ companies }) {
   const [logs, setLogs]         = useState([]);
   const [total, setTotal]       = useState(0);
   const [page, setPage]         = useState(1);
   const [loading, setLoading]   = useState(true);
   const [filters, setFilters]   = useState({ company_id:"", entity_type:"", action:"" });
+  // Row par click = poora byora. List me DETAILS kat jaata hai aur "is cheez
+  // par aur kya hua" wahan se kabhi pata nahi chalta.
+  const [detail, setDetail]     = useState(null);   // {loading} | {log, timeline, same_day_by_user}
 
   const load = useCallback((p = 1) => {
     setLoading(true);
@@ -579,13 +637,24 @@ function TabAuditLogs({ companies }) {
             let details = "";
             try { const d = typeof l.details === "string" ? JSON.parse(l.details) : l.details; details = d ? Object.entries(d).map(([k,v])=>`${k}: ${v}`).join(", ") : ""; } catch(_) {}
             return (
-              <div key={l.id} style={{ display:"grid", gridTemplateColumns:"130px 1.2fr 90px 1fr 1.5fr 1fr 100px", padding:"9px 16px",
-                borderBottom: i < logs.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center" }}>
+              <div key={l.id} title="Poora byora dekhne ke liye click karo"
+                onClick={()=>{
+                  setDetail({ loading:true });
+                  apiFetch("/saas-admin/audit-logs/" + l.id)
+                    .then(r=>setDetail(r && r.success ? r.data : null)).catch(()=>setDetail(null));
+                }}
+                onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                style={{ display:"grid", gridTemplateColumns:"130px 1.2fr 90px 1fr 1.5fr 1fr 100px", padding:"9px 16px",
+                borderBottom: i < logs.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center", cursor:"pointer" }}>
                 <div style={{ fontSize:11, color:T.t3 }}>{fmtDateTime(l.created_at)}</div>
                 <div style={{ fontSize:12, fontWeight:600, color:T.t1 }}>{l.user_name || "--"}</div>
                 <div><Badge text={l.action} color={actionColor(l.action)}/></div>
-                <div style={{ fontSize:12, color:T.t2 }}>
-                  {l.entity_type.replace("_"," ")}{l.entity_id ? ` #${l.entity_id}` : ""}
+                <div style={{ fontSize:12, color:T.t2, minWidth:0 }}>
+                  {!!auditWhere(l.entity_type) && <div style={{ fontSize:10.5, fontWeight:700, color:T.ind || "#4B45C4" }}>{auditWhere(l.entity_type)}</div>}
+                  <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {l.entity_type.replace("_"," ")}{l.entity_id ? ` #${l.entity_id}` : ""}
+                  </div>
                 </div>
                 <div style={{ fontSize:11, color:T.t3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={details}>
                   {details || "--"}
@@ -597,6 +666,96 @@ function TabAuditLogs({ companies }) {
           })}
         </div>
       )}
+
+      {detail && (() => {
+        const d = detail.log;
+        const when = (v) => { try { return fmtDateTime(v); } catch (e) { return String(v || ""); } };
+        // details JSON ko padhne layak jodiyon me
+        let pairs = null;
+        try {
+          let o = d && d.details;
+          if (typeof o === "string") o = JSON.parse(o);
+          if (o && typeof o === "object" && !Array.isArray(o)) {
+            pairs = Object.entries(o).map(([k, v]) => [k, (v && typeof v === "object") ? JSON.stringify(v) : String(v)]);
+          }
+        } catch (_) {}
+        return (
+          <>
+            <div onClick={()=>setDetail(null)} style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.45)", zIndex:998 }}/>
+            <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", zIndex:999,
+              width:"min(94vw,680px)", maxHeight:"86vh", overflowY:"auto", background:T.surface,
+              border:`1px solid ${T.b1}`, borderRadius:12, boxShadow:"0 20px 60px rgba(0,0,0,.25)", padding:"16px 18px" }}>
+              {detail.loading ? (
+                <div style={{ padding:24, fontSize:13, color:T.t3 }}>Load ho raha hai…</div>
+              ) : !d ? (
+                <div style={{ padding:24, fontSize:13, color:T.t3 }}>Byora nahi mila.</div>
+              ) : (<>
+                <div style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:14 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:15, fontWeight:700, color:T.t1 }}>
+                      {d.action} — {String(d.entity_type||"").replace("_"," ")}{d.entity_id ? " #" + d.entity_id : ""}
+                    </div>
+                    <div style={{ fontSize:11.5, color:T.t3, marginTop:2 }}>
+                      {(d.user_name || ("User #" + d.user_id))} · {when(d.created_at)}
+                    </div>
+                  </div>
+                  <button onClick={()=>setDetail(null)} style={{ border:"none", background:"none", cursor:"pointer",
+                    fontSize:16, color:T.t4, lineHeight:1, padding:2 }}>✕</button>
+                </div>
+
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, marginBottom:14 }}>
+                  {[["Kis jagah", auditWhere(d.entity_type) || "--"],
+                    ["Company", d.company_name || "--"],
+                    ["Kahan se (IP)", String(d.ip_address || "--").replace("::ffff:", "")],
+                    ["Log id", "#" + d.id],
+                    ["Us din isi aadmi ke kaam", String(detail.same_day_by_user || 0)]].map(([k,v])=>(
+                    <div key={k} style={{ background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:9, padding:"8px 11px" }}>
+                      <div style={{ fontSize:10, color:T.t4, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px" }}>{k}</div>
+                      <div style={{ fontSize:12.5, color:T.t1, fontWeight:600, marginTop:2, wordBreak:"break-all" }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {pairs && pairs.length ? (
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:10.5, color:T.t4, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px", marginBottom:6 }}>Kya hua</div>
+                    <div style={{ border:`1px solid ${T.b1}`, borderRadius:9, overflow:"hidden" }}>
+                      {pairs.map(([k,v],i)=>(
+                        <div key={k} style={{ display:"grid", gridTemplateColumns:"190px 1fr", gap:10, padding:"7px 11px",
+                          borderBottom: i < pairs.length-1 ? `1px solid ${T.b1}` : "none" }}>
+                          <span style={{ fontSize:11.5, color:T.t3 }}>{k}</span>
+                          <span style={{ fontSize:12, color:T.t1, wordBreak:"break-word" }}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize:12, color:T.t3, marginBottom:14 }}>Iske saath koi aur byora darj nahi hua.</div>
+                )}
+
+                {detail.timeline && detail.timeline.length > 1 && (
+                  <div>
+                    <div style={{ fontSize:10.5, color:T.t4, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px", marginBottom:6 }}>
+                      Isi cheez par aur kya hua ({detail.timeline.length})
+                    </div>
+                    <div style={{ border:`1px solid ${T.b1}`, borderRadius:9, maxHeight:220, overflowY:"auto" }}>
+                      {detail.timeline.map((tl,i)=>(
+                        <div key={tl.id} style={{ display:"flex", gap:9, alignItems:"center", padding:"7px 11px",
+                          borderBottom: i < detail.timeline.length-1 ? `1px solid ${T.b1}` : "none",
+                          background: tl.id === d.id ? T.surfaceB : "transparent" }}>
+                          <span style={{ fontSize:11, color:T.t3, width:130, flexShrink:0 }}>{when(tl.created_at)}</span>
+                          <Badge text={tl.action} color={actionColor(tl.action)}/>
+                          <span style={{ fontSize:11.5, color:T.t2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{tl.user_name || "--"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>)}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Pagination */}
       {totalPages > 1 && (
