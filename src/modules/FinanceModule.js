@@ -7,6 +7,7 @@ import apiCache from "../utils/apiCache";
 import useDebounce from "../utils/useDebounce";
 import { t, Rich } from "../i18n";
 import { canSeeFinancials } from "../utils/perms";
+import TabAccounts from "./tabs/TabAccounts";
 
 // A party holds multiple roles: `roles` is the canonical comma list and
 // `type` is only the primary one. Matching on `type` alone dropped equipment
@@ -4409,6 +4410,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
     {key:"ledgers",label:t("finance.ledgers_cash"),tabs:[
       {id:"party",l:t("finance.party_ledger")},
       {id:"transaction",l:t("finance.fin_activity")},
+      {id:"accounts",l:t("acctledger.tab")},
       {id:"cashbook",l:t("finance.cash_book")},
       {id:"daybook",l:t("finance.day_book")},
     ]},
@@ -5219,6 +5221,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
             </div>
           </div>
         )}
+
+        {/* ACCOUNTS TAB — har khaate ka ledger, alag aur milakar */}
+        {tab==="accounts"&&<TabAccounts/>}
 
         {/* CASH BOOK + DAY BOOK TAB */}
         {(tab==="cashbook"||tab==="daybook")&&(
