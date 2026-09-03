@@ -208,12 +208,18 @@ function TabTasks({ projectId, isAdmin }) {
   };
 
   // ── COLUMN RESIZE (Option A: drag-handle, per-user localStorage) ──
-  const BASE_COL_KEYS     = ["toggle","no","name","status","progress","start","end","days","assigned"];
+  // "deps" column sirf tab dikhta hai jab project me kaam aapas me jude hon
+  // (template se laga schedule ya haath se jodi jodein) — baaki projects
+  // par ek khaali column jagah hi khaata.
+  const hasDeps = ptFlatten(tasks).some(t => Array.isArray(t.deps) && t.deps.length > 0);
+  const BASE_COL_KEYS     = hasDeps
+    ? ["toggle","no","name","status","progress","start","end","days","deps","assigned"]
+    : ["toggle","no","name","status","progress","start","end","days","assigned"];
   const BASELINE_COL_KEYS = ["blStart","blEnd","slip"];
   const COL_KEYS     = showBaseline ? [...BASE_COL_KEYS, ...BASELINE_COL_KEYS] : BASE_COL_KEYS;
-  const COL_LABELS   = {toggle:"", no:"Phase / Code", name:"Task Name", status:"Status", progress:"Progress", start:"Start", end:"End", days:"Days", assigned:"Assigned", blStart:"BL Start", blEnd:"BL End", slip:"Slip"};
-  const COL_DEFAULTS = {toggle:26, no:52, name:320, status:85, progress:100, start:82, end:82, days:44, assigned:80, blStart:82, blEnd:82, slip:64};
-  const COL_RESIZABLE= {toggle:false, no:false, name:true, status:true, progress:true, start:true, end:true, days:false, assigned:true, blStart:true, blEnd:true, slip:false};
+  const COL_LABELS   = {toggle:"", no:"Phase / Code", name:"Task Name", status:"Status", progress:"Progress", start:"Start", end:"End", days:"Days", deps:t("tasks.deps_col"), assigned:"Assigned", blStart:"BL Start", blEnd:"BL End", slip:"Slip"};
+  const COL_DEFAULTS = {toggle:26, no:52, name:320, status:85, progress:100, start:82, end:82, days:44, deps:150, assigned:80, blStart:82, blEnd:82, slip:64};
+  const COL_RESIZABLE= {toggle:false, no:false, name:true, status:true, progress:true, start:true, end:true, days:false, deps:true, assigned:true, blStart:true, blEnd:true, slip:false};
   const COL_MIN = 60, COL_MAX = 600, COL_STORE = "gb_task_col_widths_v1";
 
   const [colWidths, setColWidths] = useState(()=>{
@@ -707,6 +713,21 @@ function TabTasks({ projectId, isAdmin }) {
           <div style={{padding:"0 4px",...SEP,display:"flex",alignItems:"center",justifyContent:"center",height:"100%"}}>
             {(()=>{const d=item.duration>0?item.duration:(item.baseStart&&item.baseEnd?Math.round((new Date(item.baseEnd)-new Date(item.baseStart))/86400000)+1:0);return <span style={{fontSize:10,color:"#94A3B8",fontWeight:d>0?500:400}}>{d>0?d+"d":"—"}</span>;})()}
           </div>
+
+          {/* Depends on — "PRE-03 baad +1d; GRO-12 saath". Pin = tareekh aadmi ne khud lagayi. */}
+          {hasDeps && (
+            <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",gap:4,height:"100%",overflow:"hidden"}}
+              title={(item.deps||[]).map(d=>{const c=phaseCodeMap[d.id]?.code||d.task_no||"?";return c+" "+(d.dep_type==="SS"?t("tasks.dep_ss_short"):t("tasks.dep_fs_short"))+(d.lag_days>0?" +"+d.lag_days+"d":"")+" — "+(d.name||"");}).join("\n")}>
+              {Number(item.date_manual)===1&&<span title={t("tasks.date_manual_title")} style={{flexShrink:0,display:"inline-flex",alignItems:"center",color:T.ind}}>
+                <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 17v5M5 9l7-7 7 7-3 1-1 7H9l-1-7-3-1z"/></svg></span>}
+              {(item.deps||[]).length===0
+                ? <span style={{fontSize:10,color:"#CBD5E1"}}>—</span>
+                : <span style={{fontSize:10,color:"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontFamily:"monospace"}}>
+                    {(item.deps||[]).map((d,i)=>{const c=phaseCodeMap[d.id]?.code||d.task_no||"?";
+                      return <span key={d.id+"_"+i}>{i>0&&<span style={{color:"#CBD5E1"}}>; </span>}{c}<span style={{color:d.dep_type==="SS"?T.ind:"#94A3B8",fontFamily:"'Segoe UI',sans-serif"}}> {d.dep_type==="SS"?t("tasks.dep_ss_short"):t("tasks.dep_fs_short")}</span>{d.lag_days>0&&<span style={{color:"#94A3B8"}}> +{d.lag_days}d</span>}</span>;})}
+                  </span>}
+            </div>
+          )}
 
           {/* Assigned */}
           <div style={{padding:"0 6px",display:"flex",alignItems:"center",height:"100%",...(showBaseline?SEP:{})}}>
@@ -1495,7 +1516,9 @@ function TabTasks({ projectId, isAdmin }) {
           if (msg) window.toast?.success?.(msg); }}/>}
 
       {/* Edit Task drawer */}
-      {editTask&&<PTEditTask task={editTask} allTasks={allFlat} projectId={projectId} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
+      {editTask&&<PTEditTask task={editTask} allTasks={allFlat} projectId={projectId}
+        depsMode={hasDeps} phaseCodeMap={phaseCodeMap} onDepsChanged={refetchTasks}
+        onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
         const orig = editTask;
         const r = await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress, base_start:u.baseStart, base_end:u.baseEnd, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen,
           // "" clears the link; undefined would leave it untouched.
@@ -1512,14 +1535,24 @@ function TabTasks({ projectId, isAdmin }) {
         setEditTask(null);
         // Progress or duration moved → every ancestor's rolled-up number moved
         // with it, so patching this one node in the tree isn't enough.
-        if (u.progress !== undefined || u.duration !== orig.duration || scopeChanged) await refetchTasks();
+        // Dependency wale project par server ne khud hi aage wale kaam khiska
+        // diye (PUT ka jawab me `replan` aata hai) — isliye poori list dobara
+        // laani padti hai, aur "cascade karein?" wala purana sawaal yahan
+        // nahi poochha jaata (wo kaam ho chuka).
+        const rp = r && r.success !== false ? r.data?.replan : null;
+        if (rp) {
+          await refetchTasks();
+          if (rp.affected_count > 0) window.toast?.success?.(t("tasks.replan_toast", { n: rp.affected_count }));
+          if (rp.pinned_count > 0)  window.toast?.info?.(t("tasks.replan_pinned_toast", { n: rp.pinned_count }));
+        }
+        else if (u.progress !== undefined || u.duration !== orig.duration || scopeChanged) await refetchTasks();
         else setTasks(updateInTree(tasks,id,{...u, delay_reason:u.delayReason||null, delay_note:u.delayNote||null}));
         // P2e: if the dates moved AND other tasks depend on this one, offer to
         // cascade the shift. The task itself is already saved above; the
         // cascade (dependents) is an explicit, previewed, opt-in follow-up.
         const datesChanged = (u.baseStart||"") !== (orig.baseStart||"") || (u.baseEnd||"") !== (orig.baseEnd||"");
         const hasDependents = allFlat.some(t => (t.dependencies||[]).map(Number).includes(Number(id)));
-        if (datesChanged && hasDependents) {
+        if (!rp && datesChanged && hasDependents) {
           try {
             const pv = await api.post(`/tasks/${id}/reschedule`, { base_start:u.baseStart||null, base_end:u.baseEnd||null, mode:"preview" });
             if (pv.success && pv.data?.affected?.length) {
@@ -2001,6 +2034,13 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  // Optional groups: template chunte hi uske saare groups tick hote hain —
+  // "sab kuchh hai" default, user jo nahi hai use hataata hai.
+  const [groups, setGroups] = useState([]);
+  const [preview, setPreview] = useState(null);     // dry_run ka jawab
+  const [previewing, setPreviewing] = useState(false);
+  const [showItems, setShowItems] = useState(false);
+  const [items, setItems] = useState(null);         // read-only kaam ki list
 
   useEffect(() => {
     api.taskTemplates.list().then(r => {
@@ -2009,15 +2049,56 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
     }).catch(e => setError(e.message));
   }, []);
 
+  const tpl = list ? list.find(x => x.id === selected) : null;
+  const groupMap = (tpl && tpl.optional_groups) || {};
+  const groupKeys = Object.keys(groupMap);
+  const isDbTpl = !!tpl && !String(tpl.id).startsWith("villa-");   // VILLA ka apna purana raasta hai
+
+  const pickTemplate = (id) => {
+    if (applying) return;
+    setSelected(id);
+    const nt = list.find(x => x.id === id);
+    setGroups(Object.keys((nt && nt.optional_groups) || {}));
+    setPreview(null); setItems(null); setShowItems(false);
+  };
+  const toggleGroup = (k) => setGroups(g => g.includes(k) ? g.filter(x => x !== k) : [...g, k]);
+
+  // Preview — jab bhi template / start date / groups badle, dry_run se
+  // ginti aur end date. Thoda ruk kar (350ms) taaki har tick par call na jaaye.
+  useEffect(() => {
+    if (!selected || !isDbTpl || result) return;
+    let dead = false;
+    setPreviewing(true);
+    const h = setTimeout(async () => {
+      try {
+        const body = { template_id: selected, dry_run: true, selected_groups: groups };
+        if (startDate) body.start_date = startDate;
+        const r = await api.taskTemplates.apply(projectId, body);
+        if (!dead) setPreview(r.success ? r.data : null);
+      } catch (_) { if (!dead) setPreview(null); }
+      if (!dead) setPreviewing(false);
+    }, 350);
+    return () => { dead = true; clearTimeout(h); };
+  }, [selected, startDate, groups, isDbTpl, projectId, result]);
+
+  const loadItems = async () => {
+    if (items) { setShowItems(s => !s); return; }
+    setShowItems(true);
+    try {
+      const r = await api.taskTemplates.items(selected);
+      setItems(r.success ? (r.data || []) : []);
+    } catch (_) { setItems([]); }
+  };
+
   const apply = async () => {
     setError("");
     if (!selected) { setError(t("tasks.pick_a_template_first")); return; }
-    const tpl = list.find(t => t.id === selected);
     if (!await window.confirmAsync(`"${tpl?.name}" load karein?\n\nProject ke maujooda Gantt tasks REPLACE ho jaayenge — sirf yeh template rahega. (To-Do tab affect nahi hota.)\n\nContinue?`)) return;
     setApplying(true);
     try {
       const body = { template_id: selected, wipe_existing: true, include_boq: includeBOQ };
       if (startDate) body.start_date = startDate;
+      if (isDbTpl) body.selected_groups = groups;
       const r = await api.taskTemplates.apply(projectId, body);
       if (!r.success) throw new Error(r.message || "Apply failed");
       setResult(r.data);
@@ -2025,79 +2106,158 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
     } catch (e) { setError(e.message); }
     setApplying(false);
   };
+  const IND = T.ind, INDL = T.indL;
+  const fmtD = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}>
-      <div style={{background:"white",borderRadius:14,width:640,maxWidth:"94%",maxHeight:"88vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.4)",fontFamily:"'Segoe UI',sans-serif"}}>
-        {/* Header */}
-        <div style={{background:"linear-gradient(135deg,#EC4899,#BE185D)",padding:"16px 22px",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(17,24,39,0.45)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"white",borderRadius:10,width:680,maxWidth:"94%",maxHeight:"88vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 16px 48px rgba(0,0,0,0.22)",border:`1px solid ${T.b1}`,fontFamily:"'Segoe UI',sans-serif"}}>
+        {/* Header — sober: hairline + indigo title, koi gradient nahi */}
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
-            <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.85,marginBottom:3}}>{t("tasks.project_task_templates")}</div>
-            <div style={{fontSize:16,fontWeight:800}}>{t("tasks.load_task_template")}</div>
-            <div style={{fontSize:11,opacity:0.9,marginTop:3}}>{t("tasks.pre_built_wbs_with_dependencies_durations")}</div>
+            <div style={{fontSize:9.5,fontWeight:700,letterSpacing:"1.2px",color:T.t4,textTransform:"uppercase",marginBottom:2}}>{t("tasks.project_task_templates")}</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{t("tasks.load_task_template")}</div>
+            <div style={{fontSize:11,color:T.t3,marginTop:2}}>{t("tasks.pre_built_wbs_with_dependencies_durations")}</div>
           </div>
-          <button onClick={onClose} disabled={applying} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"white",width:30,height:30,borderRadius:6,cursor:applying?"not-allowed":"pointer",fontSize:14,fontWeight:700}}>✕</button>
+          <button onClick={onClose} disabled={applying} style={{background:"none",border:`1px solid ${T.b1}`,color:T.t3,width:28,height:28,borderRadius:6,cursor:applying?"not-allowed":"pointer",fontSize:13}}>✕</button>
         </div>
 
         {/* Body */}
-        <div style={{padding:"16px 22px",overflowY:"auto",flex:1}}>
-          {error && <div style={{background:"#FEE2E2",color:"#991B1B",padding:"9px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:"1px solid #FCA5A5"}}>{error}</div>}
-          {result && <div style={{background:"#D1FAE5",color:"#065F46",padding:"11px 14px",borderRadius:7,fontSize:12.5,marginBottom:12,border:"1px solid #6EE7B7",fontWeight:600}}>{t("tasks.template_applied_tasks_inserted_tasks_result", { tasks_inserted: result.tasks_inserted, result: result.boq_inserted || 0, total_duration_days: result.total_duration_days })}</div>}
+        <div style={{padding:"14px 20px",overflowY:"auto",flex:1}}>
+          {error && <div style={{background:T.redL,color:"#991B1B",padding:"8px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:`1px solid ${T.redM}`}}>{error}</div>}
+          {result && <div style={{background:T.grnL,color:"#065F46",padding:"10px 14px",borderRadius:7,fontSize:12.5,marginBottom:12,border:`1px solid ${T.grnM}`,fontWeight:600}}>{t("tasks.template_applied_tasks_inserted_tasks_result", { tasks_inserted: result.task_count || result.tasks_inserted, result: result.boq_inserted || 0, total_duration_days: result.total_duration_days })}</div>}
 
-          {!list && !error && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>{t("tasks.loading_templates")}</div>}
-
-          {list && list.length === 0 && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>{t("tasks.no_templates_available_yet")}</div>}
+          {!list && !error && <div style={{padding:24,textAlign:"center",color:T.t4,fontSize:12}}>{t("tasks.loading_templates")}</div>}
+          {list && list.length === 0 && <div style={{padding:24,textAlign:"center",color:T.t4,fontSize:12}}>{t("tasks.no_templates_available_yet")}</div>}
 
           {list && list.map(item2 => {
             const isSelected = selected === item2.id;
+            const isDb = !String(item2.id).startsWith("villa-");
             return (
-              <div key={item2.id} onClick={() => !applying && setSelected(item2.id)}
-                style={{padding:"12px 14px",marginBottom:9,borderRadius:8,border:`2px solid ${isSelected?"#EC4899":"#E5E7EB"}`,background:isSelected?"#FDF2F8":"white",cursor:applying?"wait":"pointer",transition:"all .15s"}}>
+              <div key={item2.id} onClick={() => pickTemplate(item2.id)}
+                style={{padding:"10px 12px",marginBottom:6,borderRadius:7,border:`1px solid ${isSelected?IND:T.b1}`,boxShadow:isSelected?`inset 3px 0 0 ${IND}`:"none",background:isSelected?INDL:"white",cursor:applying?"wait":"pointer",transition:"all .12s"}}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13.5,fontWeight:700,color:isSelected?"#BE185D":"#111827",marginBottom:3}}>{item2.name}</div>
-                    <div style={{fontSize:11.5,color:"#6B7280",lineHeight:1.45,marginBottom:6}}>{item2.description}</div>
-                    <div style={{display:"flex",gap:8,flexWrap:"wrap",fontSize:10.5}}>
-                      <span style={{background:"#FCE7F3",color:"#9D174D",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{item2.phase_count} phases</span>
-                      <span style={{background:"#E0F2FE",color:"#075985",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{item2.package_count} packages</span>
-                      <span style={{background:"#DCFCE7",color:"#14532D",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{item2.activity_count} activities</span>
-                      <span style={{background:"#FEF3C7",color:"#78350F",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t("tasks.boq_count_boq_items", { boq_count: item2.boq_count })}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+                      <span style={{fontSize:13,fontWeight:700,color:isSelected?IND:T.t1}}>{item2.name}</span>
+                      {item2.is_system && <span style={{fontSize:9,fontWeight:700,color:T.t3,border:`1px solid ${T.b2}`,padding:"0 6px",borderRadius:9,letterSpacing:".3px"}}>{t("tasks.tpl_system_badge")}</span>}
                     </div>
-                    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>
-                      {(item2.tags || []).map(tg => <span key={tg} style={{background:"#F3F4F6",color:"#6B7280",fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:4}}>{tg}</span>)}
+                    <div style={{fontSize:11.5,color:T.t3,lineHeight:1.45,marginBottom:5}}>{item2.description}</div>
+                    <div style={{display:"flex",gap:10,flexWrap:"wrap",fontSize:10.5,color:T.t3}}>
+                      <span><b style={{color:T.t2}}>{item2.activity_count}</b> {t("tasks.tpl_tasks_badge", { n: "" }).trim()}</span>
+                      <span>{item2.phase_count} phases · {item2.package_count} packages</span>
+                      {isDb && item2.total_duration_days != null && <span style={{color:IND,fontWeight:700}}>{t("tasks.tpl_days_badge", { days: item2.total_duration_days })}</span>}
+                      {!isDb && <span>{t("tasks.boq_count_boq_items", { boq_count: item2.boq_count })}</span>}
                     </div>
                   </div>
-                  {isSelected && <div style={{color:"#EC4899",fontSize:20}}>✓</div>}
+                  <div style={{width:16,height:16,borderRadius:"50%",border:`1.5px solid ${isSelected?IND:T.b2}`,background:isSelected?IND:"white",flexShrink:0,marginTop:2,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {isSelected && <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3}><path d="M20 6L9 17l-5-5"/></svg>}
+                  </div>
                 </div>
               </div>
             );
           })}
 
-          {/* Options */}
+          {/* Options — start date, optional groups, preview */}
           {selected && !result && (
-            <div style={{marginTop:16,padding:"12px 14px",background:"#F9FAFB",borderRadius:8,border:"1px solid #E5E7EB"}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",marginBottom:9}}>{t("tasks.apply_options")}</div>
-              <div style={{marginBottom:10}}>
-                <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:4}}>{t("tasks.start_date_optional")}</label>
-                <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}
-                  style={{width:"100%",padding:"7px 10px",border:"1.5px solid #D1D5DB",borderRadius:6,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-                <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>{t("tasks.leave_blank_to_use_the_project")}</div>
+            <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${T.b1}`}}>
+              <div style={{display:"grid",gridTemplateColumns:"200px 1fr",gap:14,alignItems:"start"}}>
+                <div>
+                  <label style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.tpl_start_date")}</label>
+                  <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}
+                    style={{width:"100%",padding:"7px 9px",border:`1.5px solid ${T.b2}`,borderRadius:6,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",color:T.t1}}
+                    onFocus={e=>e.target.style.borderColor=IND} onBlur={e=>e.target.style.borderColor=T.b2}/>
+                  <div style={{fontSize:10,color:T.t4,marginTop:4,lineHeight:1.4}}>{t("tasks.tpl_start_date_hint")}</div>
+                </div>
+                {isDbTpl && groupKeys.length > 0 && (
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{t("tasks.tpl_optional_groups")}</label>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 12px"}}>
+                      {groupKeys.map(k => {
+                        const on = groups.includes(k);
+                        return (
+                          <label key={k} style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:on?T.t1:T.t3,cursor:"pointer",padding:"3px 0"}}>
+                            <input type="checkbox" checked={on} onChange={()=>toggleGroup(k)} style={{accentColor:IND,margin:0}}/>
+                            <span>{groupMap[k]}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div style={{fontSize:10,color:T.t4,marginTop:4}}>{t("tasks.tpl_optional_hint")}</div>
+                  </div>
+                )}
               </div>
-              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#374151",marginBottom:8,cursor:"pointer"}}>
-                <input type="checkbox" checked={includeBOQ} onChange={e=>setIncludeBOQ(e.target.checked)}/>
-                <span>{t("tasks.include_boq_items_recommended")}</span>
-              </label>
-              <div style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,color:"#92400E",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:6,padding:"7px 10px"}}>
-                <span>🔄</span><span>{t("tasks.template_load_karne_par_project_ke")} <b>{t("tasks.maujooda_gantt_tasks_replace")}</b> {t("tasks.ho_jaayenge_sirf_yeh_template_rahega")}</span>
+
+              {/* Preview line — dry_run se, DB ko chhue bina */}
+              {isDbTpl && (
+                <div style={{marginTop:12,padding:"9px 12px",background:INDL,border:`1px solid ${T.b1}`,borderLeft:`3px solid ${IND}`,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                  {previewing
+                    ? <span style={{fontSize:12,color:T.t3}}>{t("tasks.tpl_preview_loading")}</span>
+                    : !preview
+                    ? <span style={{fontSize:12,color:T.t4}}>—</span>
+                    : <>
+                        <span style={{fontSize:12.5,fontWeight:700,color:IND}}>{t("tasks.tpl_preview_line", { count: preview.task_count, days: preview.total_duration_days, end: fmtD(preview.end_date) })}</span>
+                        {preview.skipped_count > 0 && <span style={{fontSize:10.5,color:T.t3}}>{t("tasks.tpl_preview_skipped", { n: preview.skipped_count })}</span>}
+                      </>}
+                </div>
+              )}
+
+              {/* Read-only: template ke kaam */}
+              {isDbTpl && (
+                <div style={{marginTop:10}}>
+                  <button onClick={loadItems} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11.5,fontWeight:600,color:IND,fontFamily:"inherit"}}>
+                    {showItems ? t("tasks.tpl_hide_tasks") : t("tasks.tpl_view_tasks")} {showItems ? "▴" : "▾"}
+                  </button>
+                  {showItems && (
+                    <div style={{marginTop:6,border:`1px solid ${T.b1}`,borderRadius:6,maxHeight:260,overflowY:"auto"}}>
+                      {!items ? <div style={{padding:12,fontSize:11.5,color:T.t4,textAlign:"center"}}>{t("tasks.tpl_loading_tasks")}</div> : (
+                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                          <thead><tr style={{background:T.surfaceB,position:"sticky",top:0}}>
+                            <th style={{textAlign:"left",padding:"5px 8px",fontWeight:700,color:T.t3,fontSize:9.5,textTransform:"uppercase",letterSpacing:".3px",borderBottom:`1px solid ${T.b1}`}}>#</th>
+                            <th style={{textAlign:"left",padding:"5px 8px",fontWeight:700,color:T.t3,fontSize:9.5,textTransform:"uppercase",letterSpacing:".3px",borderBottom:`1px solid ${T.b1}`}}>{t("tasks.tpl_col_task")}</th>
+                            <th style={{textAlign:"right",padding:"5px 8px",fontWeight:700,color:T.t3,fontSize:9.5,textTransform:"uppercase",letterSpacing:".3px",borderBottom:`1px solid ${T.b1}`}}>{t("tasks.tpl_col_days")}</th>
+                            <th style={{textAlign:"left",padding:"5px 8px",fontWeight:700,color:T.t3,fontSize:9.5,textTransform:"uppercase",letterSpacing:".3px",borderBottom:`1px solid ${T.b1}`}}>{t("tasks.tpl_col_after")}</th>
+                            <th style={{textAlign:"left",padding:"5px 8px",fontWeight:700,color:T.t3,fontSize:9.5,textTransform:"uppercase",letterSpacing:".3px",borderBottom:`1px solid ${T.b1}`}}>{t("tasks.tpl_col_role")}</th>
+                          </tr></thead>
+                          <tbody>
+                            {items.map(it => {
+                              const skipped = it.optional_group && !groups.includes(it.optional_group);
+                              const parent = it.depth < 2;
+                              return (
+                                <tr key={it.no} style={{background:parent?(it.depth===0?INDL:T.surfaceB):"white",opacity:skipped?0.45:1}}>
+                                  <td style={{padding:"3px 8px",fontFamily:"monospace",color:T.t3,whiteSpace:"nowrap",borderBottom:`1px solid ${T.sltL}`}}>{it.no}</td>
+                                  <td style={{padding:"3px 8px",fontWeight:parent?700:400,color:T.t1,paddingLeft:8+it.depth*12,borderBottom:`1px solid ${T.sltL}`,textDecoration:skipped?"line-through":"none"}}>{it.name}{it.floor&&it.floor!=="ALL"&&<span style={{marginLeft:6,fontSize:9,color:T.t4,border:`1px solid ${T.b1}`,padding:"0 4px",borderRadius:3}}>{it.floor}</span>}</td>
+                                  <td style={{padding:"3px 8px",textAlign:"right",color:T.t2,borderBottom:`1px solid ${T.sltL}`}}>{parent?"":it.duration_days}</td>
+                                  <td style={{padding:"3px 8px",fontFamily:"monospace",color:T.t3,whiteSpace:"nowrap",borderBottom:`1px solid ${T.sltL}`}}>{(it.deps||[]).map(d=>d.predecessor_no+" "+d.dep_type+(d.lag_days>0?" +"+d.lag_days+"d":"")).join("; ")}</td>
+                                  <td style={{padding:"3px 8px",color:T.t3,whiteSpace:"nowrap",borderBottom:`1px solid ${T.sltL}`}}>{parent?"":(it.role||"")}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!isDbTpl && (
+                <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.t2,marginTop:10,cursor:"pointer"}}>
+                  <input type="checkbox" checked={includeBOQ} onChange={e=>setIncludeBOQ(e.target.checked)} style={{accentColor:IND}}/>
+                  <span>{t("tasks.include_boq_items_recommended")}</span>
+                </label>
+              )}
+              <div style={{marginTop:10,fontSize:11,color:T.t3,borderLeft:`2px solid ${T.amb}`,paddingLeft:9}}>
+                {t("tasks.template_load_karne_par_project_ke")} <b style={{color:T.t2}}>{t("tasks.maujooda_gantt_tasks_replace")}</b> {t("tasks.ho_jaayenge_sirf_yeh_template_rahega")}
               </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div style={{padding:"14px 22px",borderTop:"1px solid #E5E7EB",background:"#F9FAFB",display:"flex",justifyContent:"flex-end",gap:8}}>
-          <button onClick={onClose} disabled={applying} style={{padding:"8px 14px",borderRadius:6,background:"white",border:"1px solid #D1D5DB",fontSize:12.5,fontWeight:600,color:"#374151",cursor:applying?"not-allowed":"pointer"}}>{t("common.cancel")}</button>
-          <button onClick={apply} disabled={!selected || applying || result} style={{padding:"8px 16px",borderRadius:6,background:(!selected||applying||result)?"#F9A8D4":"linear-gradient(135deg,#EC4899,#BE185D)",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:(!selected||applying||result)?"not-allowed":"pointer"}}>
+        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:8}}>
+          <button onClick={onClose} disabled={applying} style={{padding:"7px 14px",borderRadius:6,background:"white",border:`1px solid ${T.b2}`,fontSize:12.5,fontWeight:600,color:T.t2,cursor:applying?"not-allowed":"pointer",fontFamily:"inherit"}}>{t("common.cancel")}</button>
+          <button onClick={apply} disabled={!selected || applying || result} style={{padding:"7px 16px",borderRadius:6,background:(!selected||applying||result)?T.b2:IND,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:(!selected||applying||result)?"not-allowed":"pointer",fontFamily:"inherit"}}>
             {applying ? t("estimate.applying") : result ? t("tasks.done") : t("tasks.apply_template")}
           </button>
         </div>
@@ -4780,8 +4940,118 @@ function PTOverrideModal({task,onClose,onSaved}){
   </>);
 }
 
-function PTEditTask({task,allTasks,projectId,onClose,onSave}){
-  const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignee:task.assignee,status:task.status,progress:task.progress,unit:task.unit||"",scopeQty:task.scope_qty??"",baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+1:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
+// ── Predecessors editor (dependency wale project par) ────────────────
+// Har jod turant server par jaati hai, form ke Save ka intezaar nahi karti:
+// chakkar ("dono ek doosre ka intezaar") ka faisla server hi kar sakta hai,
+// aur galat jod ko wahin rok dena behtar hai — Save ke baad batane se nahi.
+function PTDepEditor({task,allTasks,phaseCodeMap,onChanged}){
+  const [deps,setDeps]   = useState(null);
+  const [srch,setSrch]   = useState("");
+  const [busy,setBusy]   = useState(false);
+  const [errMsg,setErr]  = useState("");
+  const [depType,setDepType] = useState("FS");
+  const [lag,setLag]     = useState(0);
+
+  const load = async () => {
+    try { const r = await api.get(`/tasks/${task.id}/deps`); setDeps(r?.success ? (r.data||[]) : []); }
+    catch(_) { setDeps([]); }
+  };
+  useEffect(()=>{ load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ },[task.id]);
+
+  const codeOf = (id, fallback) => phaseCodeMap?.[id]?.code || fallback || String(id);
+
+  const add = async (predId) => {
+    setBusy(true); setErr("");
+    try {
+      const r = await api.post(`/tasks/${task.id}/deps`, { predecessor_task_id: predId, dep_type: depType, lag_days: Number(lag)||0 });
+      if (!r?.success) { setErr(r?.message || "Add failed"); }
+      else { setSrch(""); await load(); window.toast?.success?.(t("tasks.dep_added")); onChanged?.(); }
+    } catch(e) { setErr(e?.message || "Add failed"); }
+    setBusy(false);
+  };
+  const remove = async (predId) => {
+    setBusy(true); setErr("");
+    try {
+      const r = await api.del(`/tasks/${task.id}/deps/${predId}`);
+      if (r && r.success === false) setErr(r.message || "Remove failed");
+      else { await load(); window.toast?.success?.(t("tasks.dep_removed")); onChanged?.(); }
+    } catch(e) { setErr(e?.message || "Remove failed"); }
+    setBusy(false);
+  };
+
+  const chosen = new Set((deps||[]).map(d=>d.id));
+  const matches = !srch ? [] : allTasks
+    .filter(x => x.id !== task.id && !chosen.has(x.id))
+    .filter(x => x.name.toLowerCase().includes(srch.toLowerCase()) || String(codeOf(x.id,x.no)).toLowerCase().includes(srch.toLowerCase()))
+    .slice(0, 8);
+
+  return (
+    <div style={{marginBottom:10,padding:"9px 11px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderLeft:`3px solid ${T.ind}`,borderRadius:7}}>
+      <label style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:6}}>
+        {t("tasks.dep_predecessors")}{deps&&deps.length>0&&<span style={{marginLeft:6,background:T.ind,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{deps.length}</span>}
+      </label>
+
+      {errMsg && <div style={{background:T.redL,border:`1px solid ${T.redM}`,color:"#991B1B",fontSize:11,padding:"6px 9px",borderRadius:5,marginBottom:6,lineHeight:1.4}}>{errMsg}</div>}
+
+      {/* maujooda jodein */}
+      {deps === null ? <div style={{fontSize:11,color:T.t4}}>…</div>
+        : deps.length === 0 ? <div style={{fontSize:11,color:T.t4,marginBottom:7}}>{t("tasks.dep_none_yet")}</div>
+        : <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:7}}>
+            {deps.map(d=>(
+              <div key={d.id} style={{display:"flex",alignItems:"center",gap:7,background:"white",border:`1px solid ${T.b1}`,borderRadius:5,padding:"4px 7px"}}>
+                <span style={{fontSize:10,fontFamily:"monospace",fontWeight:700,color:T.ind,flexShrink:0}}>{codeOf(d.id,d.task_no)}</span>
+                <span style={{fontSize:11.5,color:T.t2,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.name}</span>
+                <span style={{fontSize:10,color:d.dep_type==="SS"?T.ind:T.t3,whiteSpace:"nowrap",flexShrink:0}}>
+                  {d.dep_type==="SS"?t("tasks.dep_ss_short"):t("tasks.dep_fs_short")}{d.lag_days>0?` +${d.lag_days}d`:""}
+                </span>
+                <button onClick={()=>remove(d.id)} disabled={busy} title={t("common.delete")}
+                  style={{background:"none",border:"none",cursor:busy?"wait":"pointer",padding:0,display:"flex",flexShrink:0,color:T.t4}}>
+                  <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+            ))}
+          </div>}
+
+      {/* nayi jod — type + gap pehle chuno, phir kaam dhoondho */}
+      <div style={{display:"flex",gap:6,marginBottom:5}}>
+        <select value={depType} onChange={e=>setDepType(e.target.value)}
+          style={{height:28,borderRadius:5,border:`1.5px solid ${T.b2}`,fontSize:11.5,color:T.t2,background:"white",outline:"none",fontFamily:"inherit",flex:1,padding:"0 6px"}}>
+          <option value="FS">{t("tasks.dep_type_fs")}</option>
+          <option value="SS">{t("tasks.dep_type_ss")}</option>
+        </select>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <span style={{fontSize:10.5,color:T.t4}}>{t("tasks.dep_lag")}</span>
+          <input type="number" min={0} value={lag} onChange={e=>setLag(Math.max(0,parseInt(e.target.value,10)||0))}
+            style={{width:52,height:28,borderRadius:5,border:`1.5px solid ${T.b2}`,fontSize:11.5,color:T.t2,textAlign:"center",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+          <span style={{fontSize:10.5,color:T.t4}}>d</span>
+        </div>
+      </div>
+      <input value={srch} onChange={e=>{setSrch(e.target.value);setErr("");}} placeholder={t("tasks.dep_add_placeholder")} disabled={busy}
+        style={{width:"100%",height:29,padding:"0 9px",borderRadius:5,border:`1.5px solid ${T.b2}`,fontSize:11.5,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+        onFocus={e=>e.target.style.borderColor=T.ind} onBlur={e=>e.target.style.borderColor=T.b2}/>
+      {matches.length>0 && (
+        <div style={{marginTop:4,border:`1px solid ${T.b1}`,borderRadius:5,background:"white",maxHeight:150,overflowY:"auto"}}>
+          {matches.map(m=>(
+            <button key={m.id} onClick={()=>add(m.id)} disabled={busy}
+              style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"5px 8px",background:"none",border:"none",borderBottom:`1px solid ${T.sltL}`,cursor:busy?"wait":"pointer",textAlign:"left",fontFamily:"inherit"}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.indL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+              <span style={{fontSize:10,fontFamily:"monospace",color:T.t4,flexShrink:0}}>{codeOf(m.id,m.no)}</span>
+              <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div style={{fontSize:10,color:T.t4,marginTop:6,lineHeight:1.45}}>{t("tasks.dep_mode_hint")}</div>
+    </div>
+  );
+}
+
+function PTEditTask({task,allTasks,projectId,depsMode,phaseCodeMap,onDepsChanged,onClose,onSave}){
+  // Dependency wale schedule me duration EXCLUSIVE hai (end = start + din) —
+  // wahi ganit jo template apply karte waqt chala tha. Purane, haath se bane
+  // schedule me duration inclusive hai (2 tarikh ke beech ke din + 1).
+  const DSPAN = depsMode ? 0 : 1;
+  const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignee:task.assignee,status:task.status,progress:task.progress,unit:task.unit||"",scopeQty:task.scope_qty??"",baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+DSPAN:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
   // Tender links. A task made by hand ("Pipe line laying") carries no BOQ item,
   // so its daily quantity has nowhere to go. Linking it once here is what puts
   // that work into the measurement book and on the map — after which the
@@ -4803,12 +5073,12 @@ function PTEditTask({task,allTasks,projectId,onClose,onSave}){
   const [showDhyan,setShowDhyan]=useState(!!task.dhyanRakhen);
   const [depSrch,setDepSrch]=useState("");
   const upd=(k)=>(e)=>setForm(p=>({...p,[k]:e.target.type==="range"?Number(e.target.value):e.target.value}));
-  // Duration ↔ dates bidirectional sync (duration = inclusive days)
+  // Duration ↔ dates bidirectional sync (DSPAN: 0 = exclusive, 1 = inclusive)
   const _addD=(d,n)=>{if(!d)return"";const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt.toISOString().slice(0,10);};
-  const _span=(s,e)=>{if(!s||!e)return 0;return Math.round((new Date(e)-new Date(s))/86400000)+1;};
-  const setStart=(v)=>setForm(p=>(p.duration>0&&v)?{...p,baseStart:v,baseEnd:_addD(v,p.duration-1)}:{...p,baseStart:v,duration:_span(v,p.baseEnd)});
+  const _span=(s,e)=>{if(!s||!e)return 0;return Math.round((new Date(e)-new Date(s))/86400000)+DSPAN;};
+  const setStart=(v)=>setForm(p=>(p.duration>0&&v)?{...p,baseStart:v,baseEnd:_addD(v,p.duration-DSPAN)}:{...p,baseStart:v,duration:_span(v,p.baseEnd)});
   const setEnd=(v)=>setForm(p=>({...p,baseEnd:v,duration:_span(p.baseStart,v)}));
-  const setDur=(v)=>{const n=Math.max(0,parseInt(v,10)||0);setForm(p=>({...p,duration:n,baseEnd:(p.baseStart&&n>0)?_addD(p.baseStart,n-1):p.baseEnd}));};
+  const setDur=(v)=>{const n=Math.max(0,parseInt(v,10)||0);setForm(p=>({...p,duration:n,baseEnd:(p.baseStart&&n>0)?_addD(p.baseStart,n-DSPAN):p.baseEnd}));};
   const toggleDep=(id)=>setForm(p=>({...p,dependencies:p.dependencies.includes(id)?p.dependencies.filter(x=>x!==id):[...p.dependencies,id]}));
   const filteredForDep=allTasks.filter(t=>t.id!==task.id&&(!depSrch||t.name.toLowerCase().includes(depSrch.toLowerCase())||t.no.includes(depSrch)));
   // A row with children is a summary row: its progress/status are derived, so
@@ -4930,8 +5200,14 @@ function PTEditTask({task,allTasks,projectId,onClose,onSave}){
           </select>
           {form.delayReason&&<input value={form.delayNote} onChange={upd("delayNote")} placeholder={t("tasks.detail_note_optional_e_g_cement")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid #FDBA74",fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
         </div>
-        {/* Dependencies with search */}
-        <div style={{marginBottom:10}}>
+        {/* Predecessors — dependency wale project par (template se laga schedule).
+            Yahan har jod apne type (baad / saath) aur gap ke saath rehti hai,
+            aur turant save hoti hai — form ke Save ka intezaar nahi karti,
+            kyunki chakkar ka check server par hi ho sakta hai. */}
+        {depsMode && <PTDepEditor task={task} allTasks={allTasks} phaseCodeMap={phaseCodeMap} onChanged={onDepsChanged}/>}
+
+        {/* Dependencies with search — purane (bina dependency wale) projects ke liye */}
+        {!depsMode && <div style={{marginBottom:10}}>
           <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>
             {t("tasks.dependencies")} {form.dependencies.length>0&&<span style={{marginLeft:5,background:T.blu,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{form.dependencies.length}</span>}
           </label>
@@ -4964,7 +5240,7 @@ function PTEditTask({task,allTasks,projectId,onClose,onSave}){
               </div>);
             })}
           </div>}
-        </div>
+        </div>}
         {/* DHYAN RAKHEN */}
         <div style={{padding:"9px 11px",background:showDhyan?"#FEF3C7":T.surfaceB,border:`1px solid ${showDhyan?"#FDE68A":T.b1}`,borderRadius:7}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:showDhyan?8:0}}>

@@ -204,6 +204,9 @@ api.recordPhotoPresence = async ({ project_id, photo_url, source }) => {
 // ── Project task templates ───────────────────────────────────
 api.taskTemplates = {
   list:  ()                  => api.get("/project-task-templates"),
+  // read-only: template ke kaam (WBS, duration, predecessors, role) — picker me "Kaam dekho"
+  items: (slug)              => api.get(`/project-task-templates/${encodeURIComponent(slug)}/items`),
+  // body: { template_id, start_date?, selected_groups?, dry_run?, include_boq? }
   apply: (projectId, body)   => api.post(`/project-task-templates/apply/${projectId}`, body),
 };
 
