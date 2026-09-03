@@ -52,7 +52,13 @@ const api = async (endpoint, options={}) => {
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  // `...options` PEHLE, `headers` baad me. Ulta hone par caller ke apne
+  // headers dete hi poora merge dhak jaata tha — Authorization aur X-Lang
+  // dono gir jaate, yaani request bina login ke chali jaati. Abhi tak koi
+  // caller headers deta hi nahi tha isliye ye kabhi dikha nahi; api.postRaw
+  // (statement PDF) pehla aisa caller hai.
   const config = {
+    ...options,
     headers: {
       "Content-Type": "application/json",
       // Backend apne messages isi header se chunta hai. Iske bina user ne
@@ -64,7 +70,6 @@ const api = async (endpoint, options={}) => {
       ...options.headers,
     },
     signal: ctrl.signal,
-    ...options,
   };
   let res;
   try {
@@ -126,6 +131,15 @@ api.post  = (endpoint, body, opts)  => api(endpoint, { method:"POST",  body:JSON
 api.put   = (endpoint, body, opts)  => api(endpoint, { method:"PUT",   body:JSON.stringify(body), ...(opts||{}) });
 api.patch = (endpoint, body, opts)  => api(endpoint, { method:"PATCH", body:JSON.stringify(body), ...(opts||{}) });
 api.del   = (endpoint, body, opts)  => api(endpoint, body !== undefined ? { method:"DELETE", body:JSON.stringify(body), ...(opts||{}) } : { method:"DELETE", ...(opts||{}) });
+// Raw bytes POST — file ka body jaisa ka waisa bhejna ho (bank statement PDF).
+// Yahan JSON.stringify nahi lag sakta, aur Content-Type caller tay karta hai
+// kyunki server usi se pehchanta hai ki body kis roop me aayi. Timeout bhi
+// khula — 5 page ka PDF parse hone me default se zyada lag sakta hai.
+api.postRaw = (endpoint, buffer, headers, opts) => api(endpoint, {
+  method: "POST", body: buffer, timeoutMs: 120000,
+  headers: { "Content-Type": "application/octet-stream", ...(headers || {}) },
+  ...(opts || {}),
+});
 
 // ── Mobile + Password ────────────────────────────────────────
 api.loginPassword = async (mobile, password) => {

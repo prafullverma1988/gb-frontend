@@ -127,6 +127,33 @@ function buildRows(grid, hdr) {
 
 const STEPS = ["file", "map", "result"];
 
+// Dono raaste (CSV/Excel aur PDF) ki preview ek jaisi dikhni chahiye — jo
+// screen par aata hai wahi server par jaayega, chahe file kis roop me aayi ho.
+function PreviewTable({ rows }) {
+  return (
+    <div style={{ overflowX: "auto", border: `1px solid ${T.b1}`, borderRadius: 7 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 560 }}>
+        <thead><tr>
+          {[t("stmt.c_date"), t("stmt.c_desc"), t("stmt.money_in"), t("stmt.money_out"), t("stmt.c_balance")].map((h, i) => (
+            <th key={h} style={{ fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".5px", textAlign: i >= 2 ? "right" : "left", padding: "7px 10px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB }}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {rows.slice(0, 6).map((r, i) => (
+            <tr key={i} style={{ borderBottom: `1px solid ${T.b1}` }}>
+              <td style={{ fontSize: 12, padding: "6px 10px", whiteSpace: "nowrap" }}>{dmy(r.date)}</td>
+              <td style={{ fontSize: 12, padding: "6px 10px", color: T.t3, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.description || "—"}</td>
+              <td style={{ fontSize: 12, padding: "6px 10px", textAlign: "right", color: T.grn }}>{r.dir === "in" ? inr(r.amount) : ""}</td>
+              <td style={{ fontSize: 12, padding: "6px 10px", textAlign: "right", color: T.red }}>{r.dir === "out" ? inr(r.amount) : ""}</td>
+              <td style={{ fontSize: 12, padding: "6px 10px", textAlign: "right", color: T.t3 }}>{r.balance == null ? "—" : inr(r.balance)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function StatementImportWizard({ accounts, defaultAccountId, onClose }) {
   const [step, setStep] = useState(1);
   const [acctId, setAcctId] = useState(defaultAccountId || (accounts[0] && accounts[0].id) || "");
@@ -138,11 +165,47 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
   const [err, setErr] = useState("");
   const [result, setResult] = useState(null);
   const [tab, setTab] = useState("stmt");
+  // PDF ka raasta alag hai: usme column mapping nahi hoti (server pehle hi
+  // saaf rows bhej deta hai), balki parse ki quality dikhti hai.
+  const [pdf, setPdf] = useState(null);        // { rows, num_pages, … }
+  const [pdfFile, setPdfFile] = useState(null);
+  const [pw, setPw] = useState("");
+  const [needsPw, setNeedsPw] = useState(false);
+  const isPdf = !!pdf;
+
+  // PDF ko server bhejo. Yahi ek jagah hai jahan statement server par jaata
+  // hai — aur wo sirf memory me parse hokar chhoot jaata hai, kahin likha
+  // nahi jaata. Wajah utils/pdfStatement aur route ke comment me hai.
+  const sendPdf = useCallback(async (file, password) => {
+    setBusy(true); setErr(""); setResult(null);
+    try {
+      const r = await api.postRaw(
+        `/finance/accounts/${acctId}/statement/parse-pdf`,
+        await file.arrayBuffer(),
+        { "Content-Type": "application/pdf", ...(password ? { "X-Statement-Password": password } : {}) });
+      if (!r || !r.success) {
+        if (r && r.needs_password) { setNeedsPw(true); setErr(r.message || t("stmt.pdf_password")); return; }
+        throw new Error((r && r.message) || t("stmt.failed"));
+      }
+      setPdf(r.data); setNeedsPw(false); setHdr(null); setGrid(null);
+      setFileName(file.name); setStep(2);
+    } catch (e2) {
+      setErr(e2.message || t("stmt.failed"));
+    } finally { setBusy(false); }
+  }, [acctId]);
 
   const onFile = useCallback(async (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
-    setErr(""); setResult(null); setBusy(true);
+    setErr(""); setResult(null); setPdf(null); setNeedsPw(false); setPw("");
+    if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
+      setPdfFile(f);
+      e.target.value = "";
+      await sendPdf(f, "");
+      return;
+    }
+    setPdfFile(null);
+    setBusy(true);
     try {
       const XLSX = await import("xlsx");
       // CSV ko TEXT ki tarah padho, bytes ki tarah nahi. Bytes wale raaste par
@@ -167,9 +230,11 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
       setBusy(false);
       e.target.value = "";   // wahi file dobara chun sakein
     }
-  }, []);
+  }, [sendPdf]);
 
-  const parsed = grid && hdr ? buildRows(grid, hdr) : { rows: [], skipped: 0 };
+  const parsed = isPdf
+    ? { rows: pdf.rows, skipped: pdf.unparsed_count || 0 }
+    : (grid && hdr ? buildRows(grid, hdr) : { rows: [], skipped: 0 });
 
   const run = useCallback(async () => {
     if (!parsed.rows.length || !acctId) return;
@@ -234,16 +299,77 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
                 {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.account_number ? ` · ${a.account_number}` : ""}</option>)}
               </select>
               <label style={{ display: "block", border: `2px dashed ${T.b2}`, borderRadius: 10, padding: "34px 18px", textAlign: "center", cursor: "pointer", background: T.surfaceB }}>
-                <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={onFile} />
+                <input type="file" accept=".xlsx,.xls,.csv,.pdf" style={{ display: "none" }} onChange={onFile} />
                 <div style={{ fontSize: 14, fontWeight: 600, color: T.blu }}>{busy ? t("stmt.reading") : t("stmt.pick_file")}</div>
                 <div style={{ fontSize: 12, color: T.t3, marginTop: 5 }}>{t("stmt.pick_file_note")}</div>
               </label>
+
+              {/* Password wali PDF — bank aksar aise hi bhejta hai */}
+              {needsPw && pdfFile && (
+                <div style={{ marginTop: 14, padding: "12px 14px", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 8 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1, marginBottom: 7 }}>{t("stmt.pdf_password")}</div>
+                  <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                    <input type="password" value={pw} onChange={(e) => setPw(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && pw) sendPdf(pdfFile, pw); }}
+                      placeholder={t("stmt.pdf_password_ph")} aria-label={t("stmt.pdf_password")}
+                      style={{ ...box, flex: "1 1 200px", minWidth: 160 }} />
+                    <button onClick={() => sendPdf(pdfFile, pw)} disabled={busy || !pw}
+                      style={{ ...btn("primary"), opacity: busy || !pw ? 0.5 : 1, padding: "7px 15px" }}>
+                      {busy ? t("stmt.reading") : t("stmt.pdf_open")}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: T.t3, marginTop: 7 }}>{t("stmt.pdf_password_note")}</div>
+                </div>
+              )}
+
               <div style={{ marginTop: 14, fontSize: 12, color: T.t3, lineHeight: 1.6 }}>{t("stmt.privacy_note")}</div>
+              <div style={{ marginTop: 7, fontSize: 12, color: T.t3, lineHeight: 1.6 }}>{t("stmt.pdf_server_note")}</div>
             </div>
           )}
 
-          {/* 2 — column mapping */}
-          {step === 2 && hdr && (
+          {/* 2 — PDF ka nateeja (column mapping nahi — server saaf rows deta hai) */}
+          {step === 2 && isPdf && (
+            <div>
+              <div style={{ fontSize: 12.5, color: T.t2, marginBottom: 10 }}>
+                {t("stmt.pdf_read", { file: fileName, pages: pdf.num_pages, n: pdf.rows.length })}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginBottom: 14 }}>
+                {[
+                  [t("stmt.pdf_rows"), pdf.rows.length, T.blu],
+                  [t("stmt.pdf_cols"), pdf.columns_found ? t("stmt.yes") : t("stmt.no"), pdf.columns_found ? T.grn : T.amb],
+                  [t("stmt.pdf_weak_n"), pdf.weak_count, pdf.weak_count ? T.amb : T.grn],
+                  [t("stmt.pdf_unparsed_n"), pdf.unparsed_count, pdf.unparsed_count ? T.amb : T.grn],
+                ].map(([l, v, c]) => (
+                  <div key={l} style={{ padding: "10px 13px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, borderTop: `3px solid ${c}` }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".6px" }}>{l}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: T.t1, marginTop: 3 }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              {(pdf.weak_count > 0 || pdf.unparsed_count > 0) && (
+                <div style={{ padding: "10px 13px", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 8, fontSize: 12, color: T.t2, marginBottom: 14, lineHeight: 1.6 }}>
+                  {t("stmt.pdf_warn")}
+                  {pdf.unparsed_lines && pdf.unparsed_lines.length > 0 && (
+                    <div style={{ marginTop: 7, fontFamily: "ui-monospace,monospace", fontSize: 11, color: T.t3, maxHeight: 90, overflowY: "auto" }}>
+                      {pdf.unparsed_lines.slice(0, 6).map((u, i) => <div key={i}>p{u.page}: {u.text}</div>)}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
+                <label style={{ fontSize: 12, color: T.t2 }}>{t("stmt.tolerance")}</label>
+                <select value={tol} onChange={(e) => setTol(Number(e.target.value))} style={box}>
+                  {[0, 1, 2, 3, 5, 7].map((n) => <option key={n} value={n}>{n === 0 ? t("stmt.tol_exact") : t("stmt.tol_days", { n })}</option>)}
+                </select>
+                <span style={{ fontSize: 11.5, color: T.t4 }}>{t("stmt.tolerance_why")}</span>
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".6px", marginBottom: 6 }}>{t("stmt.preview")}</div>
+              <PreviewTable rows={parsed.rows} />
+            </div>
+          )}
+
+          {/* 2 — column mapping (CSV / Excel) */}
+          {step === 2 && !isPdf && hdr && (
             <div>
               <div style={{ fontSize: 12.5, color: T.t2, marginBottom: 12 }}>
                 {t("stmt.detected", { file: fileName, row: hdr.row + 1, n: parsed.rows.length })}
@@ -272,26 +398,7 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
               </div>
 
               <div style={{ fontSize: 11, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".6px", marginBottom: 6 }}>{t("stmt.preview")}</div>
-              <div style={{ overflowX: "auto", border: `1px solid ${T.b1}`, borderRadius: 7 }}>
-                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 560 }}>
-                  <thead><tr>
-                    {[t("stmt.c_date"), t("stmt.c_desc"), t("stmt.money_in"), t("stmt.money_out"), t("stmt.c_balance")].map((h, i) => (
-                      <th key={h} style={{ fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".5px", textAlign: i >= 2 ? "right" : "left", padding: "7px 10px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB }}>{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>
-                    {parsed.rows.slice(0, 6).map((r, i) => (
-                      <tr key={i} style={{ borderBottom: `1px solid ${T.b1}` }}>
-                        <td style={{ fontSize: 12, padding: "6px 10px", whiteSpace: "nowrap" }}>{dmy(r.date)}</td>
-                        <td style={{ fontSize: 12, padding: "6px 10px", color: T.t3, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.description || "—"}</td>
-                        <td style={{ fontSize: 12, padding: "6px 10px", textAlign: "right", color: T.grn }}>{r.dir === "in" ? inr(r.amount) : ""}</td>
-                        <td style={{ fontSize: 12, padding: "6px 10px", textAlign: "right", color: T.red }}>{r.dir === "out" ? inr(r.amount) : ""}</td>
-                        <td style={{ fontSize: 12, padding: "6px 10px", textAlign: "right", color: T.t3 }}>{r.balance == null ? "—" : inr(r.balance)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <PreviewTable rows={parsed.rows} />
               {!parsed.rows.length && <div style={{ marginTop: 10, fontSize: 12.5, color: T.red }}>{t("stmt.no_rows")}</div>}
             </div>
           )}
