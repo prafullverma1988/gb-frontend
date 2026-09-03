@@ -2655,7 +2655,7 @@ const AUDIT_WHERE = [
   [/^ping|^presence/, "Live Location"],
   [/^fleet|^truck|^route|^load|^unload/, "Trips"],
   [/^service|^meter/, "Machinery & Fuel"],
-  [/^store|^bundle|^batche|^add-stock|^reservation|^uom|^item/, "Warehouse"],
+  [/^store|^bundle|^batche|^add-stock|^reservation|^uom|^item/, "Warehouse"],
   [/^worker|^labour_vendor/, "Sub-Con"],
   [/^categorie|^work-categorie|^master|^construction-type|^citie|^template/, "Master / Library"],
   [/^document/, "Documents"],
