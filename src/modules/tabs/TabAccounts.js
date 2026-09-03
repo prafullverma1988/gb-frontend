@@ -130,7 +130,11 @@ function BalanceChart({ months, accounts, selected }) {
 }
 
 // ── Khaate ki sehat — wo gadbad jo balance dekhkar pata nahi chalti ────
-function HealthPanel({ health }) {
+// Har finding ke saath uski transaction id list aati hai, isliye har line ek
+// button hai: dabaao aur wahi rows neeche ledger me khul jaati hain. "16
+// duplicate hain" padh kar unhe khud dhoondhna hi wo kaam tha jo kabhi nahi
+// hota — number bata dena kaafi nahi, rows saamne aani chahiye.
+function HealthPanel({ health, onShow, onPickAccount }) {
   const [open, setOpen] = useState(true);
   if (!health) return null;
   const { transfer_legs: legs, unbacked_spend: un, duplicates: dup, zero_opening: zo, went_negative: neg } = health;
@@ -138,25 +142,33 @@ function HealthPanel({ health }) {
   if (legs && legs.in_legs > 0 && legs.out_legs === 0) items.push({
     sev: "high", title: t("acctledger.h_one_sided"),
     detail: t("acctledger.h_one_sided_d", { legs: legs.in_legs }),
+    ids: legs.txn_ids || [],
   });
   if (neg && neg.length) items.push({
     sev: "high", title: t("acctledger.h_negative"),
     detail: neg.map((a) => `${a.name} ${inr(a.min_balance)} (${dmy(a.at)})`).join(" · "),
+    // Minus wale khaate ki koi ek row nahi hoti — girawat poore ledger me
+    // failti hai. Isliye click us khaate ko akela chun deta hai, taaki uska
+    // apna balance saaf dikhe.
+    account: neg[0].id, accountLabel: neg[0].name,
   });
   if (un && un.count) items.push({
     sev: "med", title: t("acctledger.h_unbacked"),
     detail: t("acctledger.h_unbacked_d", { n: un.count, amt: inr(un.amount) }),
+    ids: un.txn_ids || [],
   });
   if (dup && dup.groups && dup.groups.length) items.push({
     sev: "med", title: t("acctledger.h_dups"),
     detail: t("acctledger.h_dups_d", { n: dup.groups.length, amt: inr(dup.extra_in + dup.extra_out) }),
+    ids: dup.groups.reduce((a, g) => a.concat(g.ids || []), []),
   });
   if (zo && zo.length) items.push({
     sev: "low", title: t("acctledger.h_zero_opening"),
+    // Iski koi row nahi hoti — ye Settings ka kaam hai, isliye click bhi nahi.
     detail: `${zo.map((a) => a.name).join(", ")} — ${t("acctledger.h_zero_opening_d")}`,
   });
 
-  const C = { high: { c: T.red, bg: T.redL }, med: { c: T.amb, bg: T.ambL }, low: { c: T.slt, bg: T.sltL } };
+  const C = { high: T.red, med: T.amb, low: T.slt };
   return (
     <Panel style={{ marginBottom: 10 }}>
       <PHead title={`${t("acctledger.health_title")}${items.length ? ` (${items.length})` : ""}`}
@@ -172,17 +184,98 @@ function HealthPanel({ health }) {
         </div>
       ) : open && (
         <div>
-          {items.map((it, i) => (
-            <div key={it.title} style={{ display: "flex", gap: 11, padding: "11px 16px", borderTop: i ? `1px solid ${T.b1}` : "none" }}>
-              <span style={{ width: 3, borderRadius: 2, background: C[it.sev].c, flexShrink: 0 }} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 2 }}>{it.title}</div>
-                <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.5 }}>{it.detail}</div>
+          {items.map((it, i) => {
+            const can = (it.ids && it.ids.length) || it.account;
+            return (
+              <div key={it.title} style={{ display: "flex", gap: 11, padding: "11px 16px", borderTop: i ? `1px solid ${T.b1}` : "none", alignItems: "flex-start" }}>
+                <span style={{ width: 3, alignSelf: "stretch", borderRadius: 2, background: C[it.sev], flexShrink: 0 }} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 2 }}>{it.title}</div>
+                  <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.5 }}>{it.detail}</div>
+                </div>
+                {can ? (
+                  <button
+                    onClick={() => (it.account ? onPickAccount(it.account, it.accountLabel) : onShow(it.title, it.ids))}
+                    style={{
+                      flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer",
+                      border: `1px solid ${T.blu}`, background: T.bluL, color: T.blu,
+                      fontSize: 11.5, fontWeight: 600, padding: "5px 11px", borderRadius: 6,
+                    }}>
+                    {it.account
+                      ? t("acctledger.open_account", { name: it.accountLabel })
+                      : t("acctledger.show_these", { n: it.ids.length })}
+                  </button>
+                ) : null}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
+    </Panel>
+  );
+}
+
+// ── Samajh na aaye to poochho — Sahayak se ──────────────────────────────
+// Ledger ka data yahan se bot ko NAHI bheja jaata. /support-bot/chat ka
+// context jaan-boojh kar chhota aur whitelisted hai (sirf screen ka naam),
+// aur bot khud `account_health` tool se apne numbers nikaal leta hai. Isse
+// jawab hamesha wahi rehta hai jo screen dikha rahi hai, aur ledger kabhi
+// prompt me nahi jaata.
+function AskBox() {
+  const [q2, setQ2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [reply, setReply] = useState("");
+  const [err, setErr] = useState("");
+
+  const ask = useCallback(async (text) => {
+    const msg = (text || "").trim();
+    if (!msg || busy) return;
+    setBusy(true); setErr(""); setReply("");
+    try {
+      const r = await api.post("/support-bot/chat", {
+        text: msg,
+        context: { screen: "Finance → Khaata Ledger" },
+      });
+      if (r && r.success && r.reply) setReply(r.reply);
+      else setErr((r && r.message) || t("acctledger.ask_failed"));
+    } catch (e) {
+      setErr(e.message || t("acctledger.ask_failed"));
+    } finally {
+      setBusy(false);
+    }
+  }, [busy]);
+
+  const chips = [t("acctledger.ask_q1"), t("acctledger.ask_q2"), t("acctledger.ask_q3")];
+  return (
+    <Panel style={{ marginBottom: 10 }}>
+      <PHead title={t("acctledger.ask_title")} />
+      <div style={{ padding: 12 }}>
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 9 }}>
+          {chips.map((c) => (
+            <button key={c} onClick={() => { setQ2(c); ask(c); }} disabled={busy}
+              style={{ fontSize: 11.5, fontWeight: 500, padding: "5px 11px", borderRadius: 20, cursor: busy ? "default" : "pointer", border: `1px solid ${T.b1}`, background: T.surfaceB, color: T.t2 }}>
+              {c}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 7 }}>
+          <input value={q2} onChange={(e) => setQ2(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") ask(q2); }}
+            placeholder={t("acctledger.ask_ph")} aria-label={t("acctledger.ask_title")}
+            style={{ flex: 1, minWidth: 0, fontSize: 13, padding: "8px 11px", border: `1px solid ${T.b1}`, borderRadius: 6, background: T.surface, color: T.t1 }} />
+          <button onClick={() => ask(q2)} disabled={busy || !q2.trim()}
+            style={{ border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: busy || !q2.trim() ? "default" : "pointer", background: busy || !q2.trim() ? T.b2 : T.blu, color: "#fff" }}>
+            {busy ? t("acctledger.ask_thinking") : t("acctledger.ask_send")}
+          </button>
+        </div>
+        {err && <div style={{ marginTop: 9, fontSize: 12.5, color: T.red }}>{err}</div>}
+        {reply && (
+          <div style={{ marginTop: 10, padding: "11px 13px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 7, fontSize: 12.8, color: T.t1, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+            {reply}
+            <div style={{ marginTop: 8, fontSize: 11, color: T.t4 }}>{t("acctledger.ask_note")}</div>
+          </div>
+        )}
+      </div>
     </Panel>
   );
 }
@@ -210,15 +303,24 @@ function RowDetail({ row, showCombined }) {
             <div style={{ fontSize: 12.5, color: T.t1, wordBreak: "break-word", marginTop: 1 }}>{String(row[k])}</div>
           </div>
         ))}
-        <div>
-          <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".6px" }}>{t("acctledger.f_bal_after")}</div>
-          <div style={{ fontSize: 12.5, color: T.t1, marginTop: 1 }}>{inr(row.balance, true)}</div>
-        </div>
-        {showCombined && (
+        {row.balance == null ? (
           <div>
-            <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".6px" }}>{t("acctledger.f_combined_after")}</div>
-            <div style={{ fontSize: 12.5, color: T.t1, marginTop: 1 }}>{inr(row.combined_balance, true)}</div>
+            <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".6px" }}>{t("acctledger.f_bal_after")}</div>
+            <div style={{ fontSize: 12.5, color: T.amb, marginTop: 1 }}>{t("acctledger.no_account_row")}</div>
           </div>
+        ) : (
+          <>
+            <div>
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".6px" }}>{t("acctledger.f_bal_after")}</div>
+              <div style={{ fontSize: 12.5, color: T.t1, marginTop: 1 }}>{inr(row.balance, true)}</div>
+            </div>
+            {showCombined && (
+              <div>
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".6px" }}>{t("acctledger.f_combined_after")}</div>
+                <div style={{ fontSize: 12.5, color: T.t1, marginTop: 1 }}>{inr(row.combined_balance, true)}</div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -241,6 +343,12 @@ export default function TabAccounts() {
   const [big, setBig] = useState(false);
   const [shown, setShown] = useState(PAGE);
   const [openId, setOpenId] = useState(null);
+  // Sehat panel ka "ye rows dikhao" — {label, ids}. Ye chhanni nahi, jawab hai:
+  // user ne exactly wahi rows maangi hain, isliye baaki filter saath me saaf
+  // ho jaate hain (warna "16 duplicate" par click karke 0 row dikhti, kyunki
+  // pehle se koi type filter laga tha).
+  const [pick, setPick] = useState(null);
+  const ledgerRef = useRef(null);
   const qTimer = useRef(null);
 
   useEffect(() => {
@@ -249,12 +357,14 @@ export default function TabAccounts() {
   }, [q]);
 
   const idsKey = sel ? sel.slice().sort((a, b) => a - b).join(",") : "";
+  const pickKey = pick ? pick.ids.join(",") : "";
 
   const load = useCallback(async () => {
     setBusy(true); setErr("");
     try {
       const p = new URLSearchParams();
       if (idsKey) p.set("ids", idsKey);
+      if (pickKey) p.set("txn", pickKey);
       if (from) p.set("from", from);
       if (to) p.set("to", to);
       if (dq) p.set("q", dq);
@@ -272,9 +382,29 @@ export default function TabAccounts() {
     } finally {
       setBusy(false);
     }
-  }, [idsKey, from, to, dq, type, dir, big]);
+  }, [idsKey, pickKey, from, to, dq, type, dir, big]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Sehat wali line se ledger par — rows chunkar, baaki chhanni hata kar, aur
+  // ledger tak scroll karke. Warna user ko khud neeche dhoondhna padta.
+  const showThese = useCallback((label, ids) => {
+    setPick({ label, ids });
+    setQ(""); setDq(""); setType(""); setDir(""); setBig(false);
+    setFrom(""); setTo(""); setShown(PAGE); setOpenId(null);
+    setTimeout(() => {
+      if (ledgerRef.current) ledgerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  }, []);
+  const pickAccount = useCallback((id, label) => {
+    setSel([id]); setPick(null);
+    setQ(""); setDq(""); setType(""); setDir(""); setBig(false);
+    setFrom(""); setTo(""); setShown(PAGE); setOpenId(null);
+    setTimeout(() => {
+      if (ledgerRef.current) ledgerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+    return label;
+  }, []);
 
   useEffect(() => {
     let dead = false;
@@ -414,7 +544,9 @@ export default function TabAccounts() {
         </div>
       </Panel>
 
-      <HealthPanel health={health} />
+      <HealthPanel health={health} onShow={showThese} onPickAccount={pickAccount} />
+
+      <AskBox />
 
       {/* Graph */}
       <Panel style={{ marginBottom: 10 }}>
@@ -439,7 +571,8 @@ export default function TabAccounts() {
       )}
 
       {/* Ledger */}
-      <Panel>
+      <Panel style={{ scrollMarginTop: 8 }}>
+        <div ref={ledgerRef} />
         <PHead title={t("acctledger.full_ledger")} action={
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
             <span style={{ fontSize: 11.5, color: T.t3 }}>
@@ -453,6 +586,19 @@ export default function TabAccounts() {
               {t("common.refresh")}
             </button>
           </div>} />
+
+        {/* Sehat panel se aayi hui chunaav-patti */}
+        {pick && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 16px", background: T.bluL, borderBottom: `1px solid ${T.bluM}` }}>
+            <span style={{ fontSize: 12.5, color: T.blu, fontWeight: 600, minWidth: 0 }}>
+              {t("acctledger.pick_active", { label: pick.label, n: meta ? meta.filtered.count : pick.ids.length })}
+            </span>
+            <button onClick={() => setPick(null)}
+              style={{ marginLeft: "auto", flexShrink: 0, border: `1px solid ${T.blu}`, background: T.surface, color: T.blu, fontSize: 11.5, fontWeight: 600, padding: "4px 11px", borderRadius: 6, cursor: "pointer" }}>
+              {t("acctledger.pick_clear")}
+            </button>
+          </div>
+        )}
 
         {/* Chhanni */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 7, alignItems: "center", padding: "10px 16px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB }}>
@@ -510,8 +656,16 @@ export default function TabAccounts() {
                     </span>
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: T.grn, textAlign: "right", whiteSpace: "nowrap" }}>{r.movement > 0 ? inr(r.movement) : ""}</span>
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: T.red, textAlign: "right", whiteSpace: "nowrap" }}>{r.movement < 0 ? inr(-r.movement) : ""}</span>
-                    <span style={{ fontSize: 12, color: r.balance < 0 ? T.red : T.t2, fontWeight: r.balance < 0 ? 700 : 500, textAlign: "right", whiteSpace: "nowrap" }}>{inr(r.balance)}</span>
-                    {multi && <span style={{ fontSize: 12.5, color: r.combined_balance < 0 ? T.red : T.t1, fontWeight: 600, textAlign: "right", whiteSpace: "nowrap" }}>{inr(r.combined_balance)}</span>}
+                    {/* balance null = ye row kisi khaate se judi hi nahi, isliye
+                        uska running balance hota hi nahi. "₹0" likhna jhooth
+                        hoga — wahi to iski shikayat hai ki paisa kahin se
+                        ghata hi nahi. */}
+                    <span style={{ fontSize: 12, color: r.balance == null ? T.t4 : (r.balance < 0 ? T.red : T.t2), fontWeight: r.balance < 0 ? 700 : 500, textAlign: "right", whiteSpace: "nowrap" }}>
+                      {r.balance == null ? "—" : inr(r.balance)}
+                    </span>
+                    {multi && <span style={{ fontSize: 12.5, color: r.combined_balance == null ? T.t4 : (r.combined_balance < 0 ? T.red : T.t1), fontWeight: 600, textAlign: "right", whiteSpace: "nowrap" }}>
+                      {r.combined_balance == null ? "—" : inr(r.combined_balance)}
+                    </span>}
                   </div>
                   {isOpen && <RowDetail row={r} showCombined={multi} />}
                 </div>
