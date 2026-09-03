@@ -2051,7 +2051,17 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
 
   const tpl = list ? list.find(x => x.id === selected) : null;
   const groupMap = (tpl && tpl.optional_groups) || {};
-  const groupKeys = Object.keys(groupMap);
+  // Ready templates ke group teeno bhasha me hain. Jo group pack me nahi
+  // hai (aage koi tenant apna banaye) uska DB wala label hi dikhta hai —
+  // angrezi sahi, khaali jagah galat.
+  const groupLabel = (k) => {
+    const key = "tasks.optgroup_" + k;
+    const s = t(key);
+    return s === key ? (groupMap[k] || k) : s;
+  };
+  // MySQL JSON keys ka apna kram deta hai (jo dekhne me bemaani lagta hai),
+  // isliye jo naam screen par dikh raha hai usi se sort karte hain.
+  const groupKeys = Object.keys(groupMap).sort((a, b) => groupLabel(a).localeCompare(groupLabel(b)));
   const isDbTpl = !!tpl && !String(tpl.id).startsWith("villa-");   // VILLA ka apna purana raasta hai
 
   const pickTemplate = (id) => {
@@ -2178,7 +2188,7 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
                         return (
                           <label key={k} style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:on?T.t1:T.t3,cursor:"pointer",padding:"3px 0"}}>
                             <input type="checkbox" checked={on} onChange={()=>toggleGroup(k)} style={{accentColor:IND,margin:0}}/>
-                            <span>{groupMap[k]}</span>
+                            <span>{groupLabel(k)}</span>
                           </label>
                         );
                       })}
