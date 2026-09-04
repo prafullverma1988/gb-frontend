@@ -50,6 +50,7 @@ const IcX      = (p) => <Ic {...p} d="M18 6L6 18M6 6l12 12" />;
 const IcChk    = (p) => <Ic {...p} d="M20 6L9 17l-5-5" />;
 const IcTrash  = (p) => <Ic {...p} d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6" />;
 const IcDown   = (p) => <Ic {...p} d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />;
+const IcSheet  = (p) => <Ic {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M8 13h8M8 17h8" />;
 const IcTag    = (p) => <Ic {...p} d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L2 12V2h10l8.6 8.6a2 2 0 010 2.8zM7 7h.01" />;
 const IcChart  = (p) => <Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />;
 const IcRefresh = (p) => <Ic {...p} d="M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15" />;
@@ -636,7 +637,7 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
 // ══════════════════════════════════════════════════════════════════
 // REGISTER
 // ══════════════════════════════════════════════════════════════════
-function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIncharge, onImport }) {
+function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIncharge, onImport, onExport, exportErr }) {
   const [q, setQ] = useState("");
   const [tracking, setTracking] = useState("");
   const [cat, setCat] = useState("");
@@ -657,6 +658,7 @@ function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIn
           {canEdit && <Btn size="sm" ghost icon={IcTag} onClick={onCats}>{t("assets.btn_categories")}</Btn>}
           {canEdit && <Btn size="sm" ghost icon={IcUser} onClick={onIncharge}>{t("assets.btn_incharge")}</Btn>}
           {canCreate && <Btn size="sm" ghost icon={IcDown} onClick={onImport}>{t("assets.btn_import")}</Btn>}
+          <Btn size="sm" ghost icon={IcSheet} onClick={onExport}>{t("assets.btn_export")}</Btn>
         </div>}>
       <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("assets.search_ph")} style={{ ...inp, width: 240 }} />
@@ -666,6 +668,7 @@ function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIn
           {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
+      {exportErr && <div style={{ padding: "8px 14px" }}><Notice tone="warn">{exportErr}</Notice></div>}
       {rows.length === 0 && (
         <Empty>
           {(items || []).length === 0 ? t("assets.register_empty") : t("assets.no_match")}<br />
@@ -2627,6 +2630,16 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
   const [catsOpen, setCatsOpen] = useState(false);
   const [inchOpen, setInchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  // Export "abhi kya kahan pada hai" ki Excel deta hai. Ise wapas import nahi
+  // karna — server bhi rok deta hai; qty sudhaarne ka rasta Ginti hai.
+  const [exportErr, setExportErr] = useState("");
+  const doExport = async () => {
+    setExportErr("");
+    try {
+      saveBlob(await fetchBlob("/assets/export/opening", t("assets.export_failed")),
+        `asset-stock-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (e) { setExportErr(e.message || t("assets.export_failed")); }
+  };
 
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
@@ -2713,7 +2726,8 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
         {tab === "dashboard" && <DashboardTab dash={dash} onOpenVoucher={setVoucherId} onGo={setTab} />}
         {tab === "register" && (
           <RegisterTab items={items} cats={cats} canEdit={canEdit} canCreate={canCreate} onOpenItem={setOpenItem}
-            onCats={() => setCatsOpen(true)} onIncharge={() => setInchOpen(true)} onImport={() => setImportOpen(true)} />
+            onCats={() => setCatsOpen(true)} onIncharge={() => setInchOpen(true)} onImport={() => setImportOpen(true)}
+            onExport={doExport} exportErr={exportErr} />
         )}
         {tab === "grn" && <GrnTab refreshKey={refreshKey} canCreate={canCreate} onNew={() => setGrnOpen(true)} onOpenVoucher={setVoucherId} />}
         {tab === "movements" && (
