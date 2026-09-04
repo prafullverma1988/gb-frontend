@@ -45,6 +45,7 @@ const MasterLibraryModule= lazyWithPreload("library",     () => import("./module
 const WarehouseModule    = lazyWithPreload("warehouse",    () => import("./modules/WarehouseModule"));
 const FuelModule         = lazyWithPreload("fuel",         () => import("./modules/FuelModule"));
 const MachineryModule    = lazyWithPreload("machinery",    () => import("./modules/MachineryModule"));
+const AssetsModule       = lazyWithPreload("assets",       () => import("./modules/AssetsModule"));
 const TownshipCRMModule  = lazyWithPreload("township",     () => import("./modules/TownshipCRMModule"));
 const ReportsModule      = lazyWithPreload("reports",      () => import("./modules/ReportsModule"));
 const TendersModule      = lazyWithPreload("tenders",      () => import("./modules/TendersModule"));
@@ -95,6 +96,7 @@ function prefetchAllModules(){
     safePreload("WarehouseModule",     WarehouseModule);
     safePreload("FuelModule",          FuelModule);
     safePreload("MachineryModule",     MachineryModule);
+    safePreload("AssetsModule",        AssetsModule);
     safePreload("TownshipCRMModule",   TownshipCRMModule);
     safePreload("ReportsModule",       ReportsModule);
     safePreload("SaaSModule",          SaaSModule);
@@ -115,6 +117,7 @@ const IcSet   =(p)=><Ic {...p} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.
 const IcWH    =(p)=><Ic {...p} d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/>;
 const IcFuel  =(p)=><Ic {...p} d="M12 2.7s6 6.3 6 10.3a6 6 0 01-12 0c0-4 6-10.3 6-10.3z"/>;
 const IcMach  =(p)=><Ic {...p} d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z"/>;
+const IcAsset =(p)=><Ic {...p} d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>;
 const IcTown  =(p)=><Ic {...p} d="M3 21h18M5 21V7l6-4v18M19 21V11l-6-4M9 9v.01M9 13v.01M9 17v.01"/>;
 const IcGavel =(p)=><Ic {...p} d="M3 21h9M6 15l6-6M4 11l6 6M14.5 3.5l6 6M17.5 6.5L11 13"/>;
 const IcProc  =(p)=><Ic {...p} d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/>;
@@ -201,6 +204,7 @@ const NAV_GROUPS=[
     {id:"warehouse",   get label() { return t("common.warehouse"); },   Icon:IcWH,   sc:"W"},
     {id:"fuel",        get label() { return t("app.fuel"); },        Icon:IcFuel},
     {id:"machinery",   get label() { return t("app.machinery"); },   Icon:IcMach},
+    {id:"assets",      get label() { return t("app.assets"); },      Icon:IcAsset},
     {id:"township",    get label() { return t("app.township_crm"); },Icon:IcTown, sc:"G"},
     {id:"payroll",     get label() { return t("app.team_hr"); },   Icon:IcPay,  sc:"Y"},
     {id:"tenders",     get label() { return t("app.tenders"); },     Icon:IcGavel},
@@ -586,6 +590,7 @@ const SEARCH_ITEMS=[
   {id:"warehouse", get label() { return t("common.warehouse"); },     icon:"M3 21V8l9-5 9 5v13M9 21v-6h6v6",                          sc:"Alt+W", section:"Finance & Ops"},
   {id:"fuel",      get label() { return t("app.fuel"); },          icon:"M12 2.7s6 6.3 6 10.3a6 6 0 01-12 0c0-4 6-10.3 6-10.3z",   section:"Finance & Ops"},
   {id:"machinery", get label() { return t("app.machinery"); },     icon:"M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z", section:"Finance & Ops"},
+  {id:"assets",    get label() { return t("app.assets"); },        icon:"M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.27 6.96L12 12.01l8.73-5.05M12 22.08V12", section:"Finance & Ops"},
   {id:"township",  get label() { return t("app.township_crm"); },  icon:"M3 21h18M5 21V7l6-4v18M19 21V11l-6-4",                    sc:"Alt+G", section:"Finance & Ops"},
   {id:"payroll",   get label() { return t("app.team_hr"); },     icon:"M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2",    sc:"Alt+Y", section:"Finance & Ops"},
   {id:"crm",       label:"CRM",           icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+C", section:"Navigation"},
@@ -785,7 +790,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     // Iske bina machinery kisi bhi non-admin ko dikh hi nahi sakti (isVisible
     // ALWAYS_ON par gir jaata hai) — jabki kaagaz-expiry ki bell accountant ko
     // jaati hai aur uska link /machinery hai. Yahan hone se ye grantable ho jata hai.
-    fuel:"Fuel",machinery:"Machinery"
+    fuel:"Fuel",machinery:"Machinery",assets:"Assets"
   };
   const isVisible=(id)=>{
     if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
@@ -1030,7 +1035,7 @@ function MobileBottomNav({active,setActive,enabledModules,user}){
     finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
     reports:"Reports",library:"Library",settings:"Settings",
     crm:"CRM",mom:"MOM",payroll:"Payroll",
-    fuel:"Fuel",machinery:"Machinery"
+    fuel:"Fuel",machinery:"Machinery",assets:"Assets"
   };
   const isVisible=(id)=>{
     if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
@@ -1710,12 +1715,15 @@ function parseNotifLink(link){
   const [path,query]=raw.split("?");
   const parts=path.split("/").filter(Boolean);
   const module=parts[0]; if(!module) return null;
-  let projectId=null,tab=null;
+  let projectId=null,tab=null,refId=null;
+  // "?id=<n>" on any other module ("/assets?id=12") → refId, the module
+  // decides what to open with it (Assets: that voucher's drawer).
+  if(query){ const m=/(?:^|&)id=(\d+)/.exec(query); if(m) refId=parseInt(m[1],10); }
   if(module==="projects"){
     if(parts[1]&&/^\d+$/.test(parts[1])){ projectId=parseInt(parts[1],10); tab=parts[2]||null; }
-    else if(query){ const m=/(?:^|&)id=(\d+)/.exec(query); if(m) projectId=parseInt(m[1],10); }
+    else if(refId){ projectId=refId; }
   }
-  return {module,projectId,tab};
+  return {module,projectId,tab,refId};
 }
 
 function ProjectsWrapper({deepLink,onDeepLinkDone}){
@@ -1781,6 +1789,10 @@ function App(){
   const [sahayakFrom,setSahayakFrom]=useState(null);
   // Stable identity — ProjectsWrapper's deep-link effect depends on it.
   const clearProjDeepLink=useCallback(()=>setProjDeepLink(null),[]);
+  // Asset voucher id from a notification link — AssetsModule opens its drawer
+  // and clears it (same shape as projDeepLink).
+  const [assetDeepLink,setAssetDeepLink]=useState(null);
+  const clearAssetDeepLink=useCallback(()=>setAssetDeepLink(null),[]);
   const [collapsed,setCollapsed]=useState(()=>window.innerWidth<768);
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const [showSearch,setShowSearch]=useState(false);
@@ -2014,6 +2026,8 @@ function App(){
       setNav("projects");
       return;
     }
+    // Asset voucher notification ("/assets?id=12") → module opens that voucher.
+    if(parsed&&parsed.module==="assets"&&parsed.refId) setAssetDeepLink(parsed.refId);
     if(mod) setNav(mod);
   };
 
@@ -2051,6 +2065,7 @@ function App(){
     warehouse:{title:t("common.warehouse"),sub:t("app.central_stock")},
     fuel:{title:t("app.fuel"),sub:t("app.diesel_barrel_stock_machine_consumption")},
     machinery:{title:t("app.machinery"),sub:t("app.fleet_health_service_documents_reminders")},
+    assets:{title:t("app.assets"),sub:t("app.assets_sub")},
     township:{title:t("app.township_crm"),sub:t("app.real_estate_projects_sales")},
     payroll:{title:t("common.payroll"),sub:t("app.staff_payments")},
     tenders:{title:t("app.tenders"),sub:t("app.bid_emd_bg_agreement_dlp")},
@@ -2087,6 +2102,7 @@ function App(){
     warehouse: guard("warehouse","Warehouse",      <WarehouseModule/>),
     fuel:      guard("fuel","Fuel",                <FuelModule/>),
     machinery: guard("machinery","Machinery",      <MachineryModule/>),
+    assets:    guard("assets",   "Assets",         <AssetsModule deepLink={assetDeepLink} onDeepLinkDone={clearAssetDeepLink}/>),
     township:  guard("township", "Township CRM",   <TownshipCRMModule/>),
     reports:   guard("reports",  "Reports",        <ReportsModule/>),
     tenders:   guard("tenders",  "Tenders",        <TendersModule onOpenProject={(pid)=>handleNotifNav("projects","/projects/"+pid+"/overview")}/>),
