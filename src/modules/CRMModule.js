@@ -60,6 +60,7 @@ const T={
   em:"#059669",  // emerald for converted
   wa:"#25D366",  // WhatsApp green
 };
+const budTxt=(l)=>l&&l.budgetLabel ? l.budgetLabel : null;
 const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:n>=1000?`${(n/1000).toFixed(0)}K`:String(n||0);
 const fmtN=(n)=>n==null?"—":Number(n).toLocaleString("en-IN");
 
@@ -136,7 +137,7 @@ function ContactReminderPopup({lead,onDismiss,onWhatsApp,onCall}){
               {isOverdue?t("crm.overdue_contact_now"):isToday?t("crm.today_s_follow_up"):t("crm.upcoming_contact")}
             </div>
             <div style={{fontSize:16,fontWeight:700,color:"white"}}>{lead.name}</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:1}}>{lead.projType} · ₹{fmt(lead.budget)} · {lead.city}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:1}}>{lead.projType} · {budTxt(lead)||"₹"+fmt(lead.budget)} · {lead.city}</div>
           </div>
           <button onClick={onDismiss} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={14}/></button>
         </div>
@@ -307,7 +308,7 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
       {/* Project + Budget */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
         <span style={{fontSize:11.5,color:T.t3}}>{lead.projType}</span>
-        <span style={{fontSize:13,fontWeight:700,color:T.blu}}>₹{fmt(lead.budget)}</span>
+        <span style={{fontSize:13,fontWeight:700,color:T.blu}}>{budTxt(lead)||"₹"+fmt(lead.budget)}</span>
       </div>
 
       {/* Source + Assigned */}
@@ -748,7 +749,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
             <div style={{fontSize:11.5,color:"rgba(255,255,255,0.7)",display:"flex",gap:12,flexWrap:"wrap"}}>
               <span>📍 {lead.city}</span>
               <span>🏗️ {lead.projType}</span>
-              <span>💰 ₹{fmt(lead.budget)}</span>
+              <span>💰 {budTxt(lead)||"₹"+fmt(lead.budget)}</span>
               <span>👤 {lead.assignedTo}</span>
             </div>
           </div>
@@ -795,7 +796,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
         {tab==="overview"&&(
           <div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
-              {[{l:t("common.source"),v:lead.source},{l:t("crm.project_type"),v:lead.projType},{l:t("common.budget"),v:`₹${fmtN(lead.budget)}`},{l:t("common.city"),v:lead.city},{l:t("common.email"),v:lead.email||"—"},{l:t("common.assigned_to"),v:lead.assignedTo},{l:t("common.created"),v:lead.createdAt},{l:t("crm.last_contact"),v:lead.followupHistory?.[lead.followupHistory.length-1]?.date||"—"}].map(({l,v})=>(
+              {[{l:t("common.source"),v:lead.source},{l:t("crm.project_type"),v:lead.projType},{l:t("common.budget"),v:budTxt(lead)||`₹${fmtN(lead.budget)}`},{l:t("common.city"),v:lead.city},{l:t("common.email"),v:lead.email||"—"},{l:t("common.assigned_to"),v:lead.assignedTo},{l:t("common.created"),v:lead.createdAt},{l:t("crm.last_contact"),v:lead.followupHistory?.[lead.followupHistory.length-1]?.date||"—"}].map(({l,v})=>(
                 <div key={l} style={{padding:"8px 11px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`}}>
                   <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{l}</div>
                   <div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{v}</div>
@@ -4309,6 +4310,10 @@ function CRMModule(){
           projType:l.proj_type||l.projType||"Residential",
           assignedTo:l.assigned_to_name||l.assignedTo||"—",
           budget:Number(l.budget)||0,
+          // Mobile par lead "20-30L" jaisi range se banti hai. Number
+          // (25 L) jod ke liye theek hai, par dikhana wahi hai jo chuna
+          // gaya tha — warna aadmi ko lagta hai app ne badal diya.
+          budgetLabel:l.budget_label||null,
           contactDate:l.contact_date?new Date(l.contact_date).toISOString().split("T")[0]:null,
           createdAt:l.created_at?new Date(l.created_at).toISOString().split("T")[0]:null,
           followupHistory:l.followupHistory||[],
