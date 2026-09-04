@@ -7922,7 +7922,7 @@ const dict = {
   "warehouse.low_stock":                                       "Low Stock",
   "warehouse.low_stock_2":                                     "Low Stock:",
   "warehouse.lowcount_low_stock":                              "⚠ {lowCount} Low Stock",
-  "warehouse.main_godown":                                     "Main Godown",
+  "warehouse.main_godown":                                     "Main Warehouse",
   "warehouse.manual_order":                                    "MANUAL ORDER",
   "warehouse.manual_override_of_fifo_tick_in":                 "Manual override of FIFO. Tick in the order you want consumed.",
   "warehouse.manual_stock_batch_selection_override_fifo":      "Manual stock-batch selection (override FIFO)",
