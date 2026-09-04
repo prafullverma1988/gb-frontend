@@ -12,8 +12,17 @@
 // pending. Reject/cancel par sab wapas source me. GRN aur "khud ko" wale
 // voucher turant accepted. Ye module wahi dikhata hai — apna koi ganit nahi.
 //
+// Phase 2 me teen cheezein aur judi hain:
+//   • Ginti (physical verification) — ek jagah ki asli ginti kholo, bharo,
+//     band karo. Band karte hi antar ek 'adjust' voucher me chala jaata hai;
+//     jo line gini hi nahi gayi wo chhu bhi nahi jaati.
+//   • Repair — vendor ek alag tarah ki jagah hai (holder_type "repair"),
+//     na godown na site. Vendor app par hai hi nahi, isliye repair_out
+//     banate hi accepted hota hai.
+//   • Rent report — sirf report hai, kisi ledger me nahi jaati.
+//
 // Self-contained (own theme/icons/helpers), same as MachineryModule.
-// API contract: gb-backend/docs/plans/asset-api-phase1.md
+// API contract: gb-backend/docs/plans/asset-api-phase1.md + asset-api-phase2.md
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { API_BASE, getToken, getUser } from "../config/api";
@@ -44,6 +53,10 @@ const IcDown   = (p) => <Ic {...p} d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 
 const IcTag    = (p) => <Ic {...p} d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L2 12V2h10l8.6 8.6a2 2 0 010 2.8zM7 7h.01" />;
 const IcChart  = (p) => <Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />;
 const IcRefresh = (p) => <Ic {...p} d="M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15" />;
+const IcCount  = (p) => <Ic {...p} d="M9 4H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2h-2M9 4a2 2 0 002 2h2a2 2 0 002-2M9 4a2 2 0 012-2h2a2 2 0 012 2M9 14l2 2 4-4" />;
+const IcTool   = (p) => <Ic {...p} d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />;
+const IcRupee  = (p) => <Ic {...p} d="M6 4h11M6 9h11M15.5 4c0 4.2-2.8 5-5.5 5H6l8 10" />;
+const IcDoc    = (p) => <Ic {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M15 13H9M15 17H9M10 9H9" />;
 
 // ── THEME ─────────────────────────────────────────────────────────
 const T = {
@@ -78,7 +91,9 @@ const qs = (params) => Object.entries(params || {})
 
 const typeLabel   = (ty) => (ty ? t("assets.type_" + ty) : "—");
 const condLabel   = (c) => (c ? t("assets.cond_" + c) : "—");
-const holderLabel = (h) => (h ? t("assets.holder_" + h) : "—");
+// "repair" holder ki apni koi assets.holder_* key nahi hai — wo jagah vendor
+// hai, holder nahi. Yahan na pakden to item drawer par raw key dikh jaati hai.
+const holderLabel = (h) => (h === "repair" ? t("assets.repair_vendor") : h ? t("assets.holder_" + h) : "—");
 const trackLabel  = (m) => t(m === "serialized" ? "assets.tracking_serialized" : "assets.tracking_bulk");
 const itemStatusLabel = (s) => (s ? t("assets.istatus_" + s) : "—");
 
@@ -96,10 +111,18 @@ const condTone = (c) =>
   : c === "damaged" ? { c: T.amb, bg: T.ambL }
   : c === "lost" ? { c: T.red, bg: T.redL }
   : { c: T.slt, bg: T.sltL };
+// Ginti ka status voucher wale se alag hai (draft/closed/cancelled) — apna tone.
+const verifTone = (s) =>
+  s === "draft" ? { c: T.amb, bg: T.ambL }
+  : s === "closed" ? { c: T.grn, bg: T.grnL }
+  : { c: T.slt, bg: T.sltL };
+const verifStatusLabel = (s) => t(s === "closed" ? "assets.verify_closed" : s === "cancelled" ? "assets.status_cancelled" : "assets.verify_draft");
 
 // Voucher ka ek sira (from / to) — jahan bhi voucher dikhta hai wahi shakl.
 const sideText = (v, side) => {
   if (!v) return { main: "—", sub: "" };
+  // Vendor ki jagah ka na godown hota hai na project — sirf holder_type "repair".
+  if (v[side + "_holder_type"] === "repair") return { main: v[side + "_holder_name"] || t("assets.vendor"), sub: t("assets.repair_vendor") };
   if (v[side + "_warehouse_id"]) return { main: v[side + "_warehouse_name"] || t("assets.warehouse"), sub: t("assets.warehouse") };
   if (v[side + "_project_id"]) {
     return {
@@ -109,10 +132,18 @@ const sideText = (v, side) => {
   }
   if (side === "from" && v.type === "grn") return { main: v.vendor_name || t("assets.vendor"), sub: t("assets.vendor") };
   if (side === "from" && v.type === "opening") return { main: t("assets.type_opening"), sub: "" };
+  // Adjust voucher ka koi "kahan se" nahi hota — wo ginti se paida hota hai.
+  if (side === "from" && v.type === "adjust") return { main: t("assets.type_adjust"), sub: "" };
   return { main: "—", sub: "" };
 };
+// Ginti ki jagah — list aur drawer dono me ek hi shakl.
+const verifWhere = (v) => (v && v.warehouse_id
+  ? { main: v.warehouse_name || t("assets.warehouse"), sub: t("assets.warehouse") }
+  : { main: (v && (v.holder_name || v.custodian_name)) || "—", sub: [v && v.project_name, holderLabel(v && v.holder_type)].filter(Boolean).join(" · ") });
 // Holding ki jagah — Custody table aur item drawer me.
-const holdingWhere = (h) => (h.warehouse_id ? h.warehouse_name || t("assets.warehouse") : h.project_name || "—");
+const holdingWhere = (h) => (h.warehouse_id ? h.warehouse_name || t("assets.warehouse")
+  : h.holder_type === "repair" ? (h.repair_party || h.holder_name || t("assets.repair_vendor"))
+  : h.project_name || "—");
 const rentText = (h) => (h.charge_mode === "rent" && h.rent_rate
   ? `${rupee(h.rent_rate)}/${t(h.rent_basis === "month" ? "assets.basis_month" : "assets.basis_day")}`
   : t("assets.charge_free"));
@@ -146,6 +177,13 @@ const saveBlob = (blob, filename) => {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 };
+// File laane wale endpoints (xlsx template, challan PDF) fetch se aate hain —
+// seedha <a href> par token nahi jaata, isliye Authorization header khud lagta hai.
+const fetchBlob = async (path, failMsg) => {
+  const res = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+  if (!res.ok) throw new Error(failMsg);
+  return await res.blob();
+};
 
 // ── SHARED BITS ───────────────────────────────────────────────────
 const StatCard = ({ label, value, sub, color, icon: Icon, onClick }) => (
@@ -168,8 +206,8 @@ const StatusPill = ({ s }) => { const k = statusTone(s); return <Pill label={t("
 const CondPill = ({ c }) => { const k = condTone(c); return <Pill label={condLabel(c || "good")} c={k.c} bg={k.bg} />; };
 const TypePill = ({ ty }) => (
   <Pill label={typeLabel(ty)}
-    c={ty === "issue" ? T.ind : ty === "return" ? T.blu : ty === "grn" ? T.grn : T.t3}
-    bg={ty === "issue" ? T.indL : ty === "return" ? T.bluL : ty === "grn" ? T.grnL : T.sltL} />
+    c={ty === "issue" ? T.ind : ty === "return" || ty === "repair_in" ? T.blu : ty === "grn" ? T.grn : ty === "repair_out" ? T.amb : T.t3}
+    bg={ty === "issue" ? T.indL : ty === "return" || ty === "repair_in" ? T.bluL : ty === "grn" ? T.grnL : ty === "repair_out" ? T.ambL : T.sltL} />
 );
 
 const Btn = ({ children, onClick, c = T.ind, disabled, icon: Icon, size = "md", ghost, style = {}, title }) => (
@@ -433,6 +471,9 @@ function RentCell({ ln, onChange, enabled }) {
 }
 
 const lineLabel = (h) => [h.code, [h.name, h.spec].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+const isRepairType = (ty) => ty === "repair_out" || ty === "repair_in";
+// Vendor ki jagah — na warehouse_id, na project_id; sirf party ki id.
+const repairLoc = (partyId) => ({ holder_type: "repair", holder_id: Number(partyId) });
 
 // ══════════════════════════════════════════════════════════════════
 // DASHBOARD
@@ -449,7 +490,10 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
     { l: t("assets.tile_pending"), v: fmtN(k.awaiting_accept), sub: t("assets.tile_pending_sub"), c: N(k.awaiting_accept) ? T.amb : T.grn, I: IcClock, go: "movements" },
     { l: t("assets.tile_overdue"), v: fmtN(k.overdue), sub: t("assets.tile_overdue_sub"), c: N(k.overdue) ? T.red : T.grn, I: IcAlert },
     { l: t("assets.tile_damaged"), v: fmtN(k.damaged_qty), sub: t("assets.tile_damaged_sub", { n: fmtN(k.under_repair) }), c: N(k.damaged_qty) ? T.amb : T.grn, I: IcAlert },
+    // under_repair ab ginti nahi, qty hai (Phase 2) — vendor ke paas pada kul.
+    { l: t("assets.tile_repair"), v: fmtN(k.under_repair), sub: t("assets.tile_repair_sub"), c: N(k.under_repair) ? T.amb : T.grn, I: IcTool, go: "movements" },
     { l: t("assets.tile_lost"), v: fmtN(k.lost_qty_fy), sub: t("assets.tile_lost_sub"), c: N(k.lost_qty_fy) ? T.red : T.grn, I: IcTag },
+    { l: t("assets.tile_verify"), v: fmtN(k.open_verifications), sub: t("assets.tile_verify_sub"), c: N(k.open_verifications) ? T.ind : T.grn, I: IcCount, go: "verify" },
   ];
   const two = { display: "grid", gridTemplateColumns: isMobileWidth() ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 };
 
@@ -785,8 +829,8 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
               <Row head cols="1.3fr 1.1fr 1.1fr 60px 70px 80px 90px"><span>{t("assets.where")}</span><span>{t("assets.holder")}</span><span>{t("assets.custodian")}</span><span>{t("assets.good")}</span><span>{t("assets.damaged")}</span><span>{t("assets.since")}</span><span>{t("assets.rent")}</span></Row>
               {holdings.map((h) => (
                 <Row key={h.id} cols="1.3fr 1.1fr 1.1fr 60px 70px 80px 90px">
-                  <div><div style={{ fontWeight: 600, color: T.t1 }}>{holdingWhere(h)}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{h.warehouse_id ? t("assets.warehouse") : t("assets.site")}</div></div>
-                  <span>{h.warehouse_id ? t("assets.holder_store") : `${h.holder_name || "—"} · ${holderLabel(h.holder_type)}`}</span>
+                  <div><div style={{ fontWeight: 600, color: T.t1 }}>{holdingWhere(h)}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{h.warehouse_id ? t("assets.warehouse") : h.holder_type === "repair" ? t("assets.repair_vendor") : t("assets.site")}</div></div>
+                  <span>{h.warehouse_id ? t("assets.holder_store") : h.holder_type === "repair" ? holderLabel(h.holder_type) : `${h.holder_name || "—"} · ${holderLabel(h.holder_type)}`}</span>
                   <span>{h.custodian_name || "—"}</span>
                   <span style={{ fontWeight: 600 }}>{fmtN(h.qty_good)}</span>
                   <span style={{ color: N(h.qty_damaged) ? T.amb : T.t4 }}>{fmtN(h.qty_damaged)}</span>
@@ -986,9 +1030,7 @@ function ImportModal({ open, onClose, onDone }) {
   const template = async () => {
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/assets/import/template`, { headers: { Authorization: `Bearer ${getToken()}` } });
-      if (!res.ok) throw new Error(t("assets.template_failed"));
-      saveBlob(await res.blob(), "asset-opening-stock-template.xlsx");
+      saveBlob(await fetchBlob("/assets/import/template", t("assets.template_failed")), "asset-opening-stock-template.xlsx");
     } catch (e) { setError(e.message || t("assets.template_failed")); }
   };
 
@@ -1328,6 +1370,12 @@ function VoucherDrawer({ id, onClose, onChanged }) {
     if (r && r.success) { toast.success(r.message || t("assets.cancelled_ok")); setV(r.data); onChanged(); }
     else toast.error((r && r.message) || t("assets.action_failed"));
   };
+  // Gate par yahi kaagaz dikhta hai. Token header me chahiye, isliye blob la kar
+  // download — seedha link par Authorization nahi jaata.
+  const doChallan = async () => {
+    try { saveBlob(await fetchBlob(`/assets/vouchers/${v.id}/challan`, t("assets.challan_failed")), `${v.voucher_no}.pdf`); }
+    catch (e) { toast.error(e.message || t("assets.challan_failed")); }
+  };
 
   const f = sideText(v, "from"), to = sideText(v, "to");
   const showAccepted = v && v.status === "accepted";
@@ -1338,6 +1386,7 @@ function VoucherDrawer({ id, onClose, onChanged }) {
     : mode === "reject" ? <><Btn ghost onClick={() => setMode(null)}>{t("assets.back")}</Btn><Btn c={T.red} onClick={doReject} disabled={busy}>{busy ? t("assets.working") : t("assets.reject_confirm")}</Btn></>
     : <>
         <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
+        <Btn ghost icon={IcDoc} onClick={doChallan}>{t("assets.challan")}</Btn>
         {v.can_cancel && <Btn ghost onClick={doCancel} disabled={busy} style={{ color: T.red }}>{t("assets.cancel_voucher")}</Btn>}
         {v.can_accept && <Btn c={T.red} ghost onClick={() => { setMode("reject"); setError(""); }} style={{ color: T.red, borderColor: "#F1C2C6" }}>{t("assets.reject")}</Btn>}
         {v.can_accept && <Btn c={T.grn} icon={IcChk} onClick={startAccept}>{t("assets.accept")}</Btn>}
@@ -1376,6 +1425,8 @@ function VoucherDrawer({ id, onClose, onChanged }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
             {v.type === "grn" && <KV k={t("assets.vendor")} v={v.vendor_name} />}
             {v.type === "grn" && <KV k={t("assets.invoice")} v={[v.invoice_no, v.invoice_date ? fmtD(v.invoice_date) : null].filter(Boolean).join(" · ")} />}
+            {isRepairType(v.type) && <KV k={t("assets.repair_cost")} v={v.repair_cost == null ? null : rupee(v.repair_cost)} />}
+            {isRepairType(v.type) && <KV k={t("assets.invoice")} v={v.invoice_no} />}
             {v.expected_return_date && <KV k={t("assets.expected_return")} v={fmtD(v.expected_return_date)} />}
             {v.accepted_at && <KV k={t("assets.accepted_at")} v={fmtD(v.accepted_at)} />}
             <KV k={t("assets.remarks")} v={v.remarks} />
@@ -1771,9 +1822,217 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// REPAIR — vendor ke paas bhejna, aur wahan se wapas laana
+// ══════════════════════════════════════════════════════════════════
+// Vendor apni tarah ki jagah hai: na godown, na site — sirf
+// { holder_type:"repair", holder_id:<party id> }. Vendor app par hai hi nahi,
+// isliye repair_out banate hi accepted ho jaata hai (koi accept nahi karega).
+// Wapas laane ka haq us godown ka hai jisme cheez aa rahi hai, isliye "kahan"
+// wali list bhi wahi warehouses jinka main incharge hoon.
+function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
+  const toast = useToast();
+  const isOut = kind === "out";
+  const [party, setParty] = useState("");
+  const [from, setFrom] = useState("");
+  const [toWh, setToWh] = useState("");
+  const [date, setDate] = useState(todayStr());
+  const [hold, setHold] = useState(null);
+  const [lines, setLines] = useState([newMoveLine()]);
+  const [cost, setCost] = useState("");
+  const [invoice, setInvoice] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const all = (meta && meta.warehouses) || [];
+  const myIds = (meta && meta.my_warehouse_ids) || [];
+  const myWh = canAll ? all : all.filter((w) => myIds.includes(w.id));
+
+  useEffect(() => {
+    if (!open) return;
+    const def = myWh.find((w) => w.is_default) || myWh[0];
+    setParty(""); setFrom(""); setToWh(def ? String(def.id) : ""); setDate(todayStr());
+    setLines([newMoveLine()]); setCost(""); setInvoice(""); setRemarks(""); setError("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, kind]);
+
+  // Bhejte waqt: mere godown + meri custody. Laate waqt: jo vendor ke paas pada hai.
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setHold(null);
+    const calls = isOut
+      ? [api.get(`/assets/holdings?custodian_user_id=${me.id}`).catch(() => null),
+         ...myWh.map((w) => api.get(`/assets/holdings?warehouse_id=${w.id}`).catch(() => null))]
+      : [api.get("/assets/holdings?holder_type=repair").catch(() => null)];
+    Promise.all(calls).then((rs) => {
+      if (!alive) return;
+      const rows = [];
+      rs.forEach((r) => { if (r && r.success) rows.push(...(r.data || [])); });
+      setHold(rows);
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, kind]);
+
+  // Bhejte waqt source ke groups (godown / kisi ki custody) — Transfer jaisa hi.
+  const groups = useMemo(() => {
+    if (!isOut) return [];
+    const m = new Map();
+    for (const h of hold || []) {
+      const k = groupKey(h);
+      if (!m.has(k)) m.set(k, {
+        key: k, warehouse_id: h.warehouse_id, project_id: h.project_id, holder_type: h.holder_type,
+        holder_id: h.holder_id, custodian_user_id: h.custodian_user_id,
+        label: h.warehouse_id ? `${t("assets.warehouse")} · ${h.warehouse_name || ""}` : `${h.project_name || ""} · ${h.holder_name || ""} (${holderLabel(h.holder_type)})`,
+        rows: [],
+      });
+      m.get(k).rows.push(h);
+    }
+    return [...m.values()];
+  }, [hold, isOut]);
+
+  // Laate waqt sirf wahi vendor dikhte hain jinke paas sach me kuch pada hai.
+  const vendors = useMemo(() => {
+    if (isOut) return [];
+    const m = new Map();
+    for (const h of hold || []) {
+      if (h.holder_type !== "repair") continue;
+      if (!m.has(String(h.holder_id))) m.set(String(h.holder_id), { id: h.holder_id, name: h.repair_party || h.holder_name || "—" });
+    }
+    return [...m.values()];
+  }, [hold, isOut]);
+
+  const g = groups.find((x) => x.key === from);
+  const atVendor = useMemo(() => (hold || []).filter((h) => h.holder_type === "repair" && String(h.holder_id) === String(party)), [hold, party]);
+  const srcRows = isOut ? (g ? g.rows : []) : atVendor;
+  const srcReady = isOut ? !!g : !!party;
+  const stockOf = (key) => srcRows.find((h) => String(h.id) === String(key));
+  const updLine = (i, v) => setLines((p) => p.map((l, j) => (j === i ? v : l)));
+
+  const save = async () => {
+    setError("");
+    if (!party) { setError(t("assets.select_repair_vendor")); return; }
+    if (isOut && !g) { setError(t("assets.err_from_required")); return; }
+    if (!isOut && !toWh) { setError(t("assets.err_warehouse_required")); return; }
+    const items = [];
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i], h = stockOf(l.key);
+      if (!h) { setError(t("assets.err_line_item", { n: i + 1 })); return; }
+      const qty = h.tracking_mode === "serialized" ? 1 : Number(l.qty);
+      if (!(qty > 0)) { setError(t("assets.err_line_qty", { n: i + 1 })); return; }
+      const have = N(h.qty_good) + N(h.qty_damaged);
+      if (qty > have) { setError(t("assets.err_line_stock", { n: i + 1, have: fmtN(have) })); return; }
+      items.push({ asset_item_id: h.asset_item_id, qty, condition: l.condition || "good", remarks: l.remarks || null });
+    }
+    const fromLoc = isOut
+      ? (g.warehouse_id ? { warehouse_id: g.warehouse_id }
+        : { project_id: g.project_id, holder_type: g.holder_type, holder_id: g.holder_id, custodian_user_id: g.custodian_user_id })
+      : repairLoc(party);
+    setBusy(true);
+    const r = await api.post("/assets/vouchers", {
+      type: isOut ? "repair_out" : "repair_in", date, from: fromLoc,
+      to: isOut ? repairLoc(party) : { warehouse_id: Number(toWh) }, items,
+      repair_cost: cost === "" ? null : Number(cost), invoice_no: invoice || null, remarks: remarks || null,
+    });
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.voucher_done", { no: (r.data && r.data.voucher_no) || "" })); onSaved(r.data); onClose(); }
+    else setError((r && r.message) || t("assets.save_failed"));
+  };
+
+  const lineCols = "1.8fr 80px 100px 1fr auto";
+  return (
+    <Modal open={open} onClose={onClose} width={920}
+      title={isOut ? t("assets.repair_out_title") : t("assets.repair_in_title")}
+      sub={isOut ? t("assets.repair_out_sub") : t("assets.repair_in_sub")}
+      footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn>
+        <Btn onClick={save} disabled={busy} icon={IcTool}>{busy ? t("assets.saving") : isOut ? t("assets.btn_repair_out") : t("assets.repair_in_save")}</Btn></>}>
+      {isOut && hold && hold.length === 0 && <Notice tone="warn">{t("assets.from_empty_hint")}</Notice>}
+      {!isOut && hold && vendors.length === 0 && <Notice tone="warn">{t("assets.repair_none_at_vendor")}</Notice>}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+        {isOut ? (
+          <Field label={t("assets.from")} hint={hold && hold.length === 0 ? t("assets.from_empty_hint") : undefined}>
+            <select value={from} onChange={(e) => { setFrom(e.target.value); setLines([newMoveLine()]); }} style={inp} disabled={hold == null}>
+              <option value="">{hold == null ? t("assets.loading") : t("assets.select")}</option>
+              {groups.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+            </select>
+          </Field>
+        ) : (
+          <Field label={t("assets.repair_vendor")}>
+            <SearchSelect value={party} accent={T.ind} onChange={(k) => { setParty(k); setLines([newMoveLine()]); }}
+              options={vendors.map((v) => ({ id: v.id, name: v.name }))} placeholder={t("assets.select_repair_vendor")} />
+          </Field>
+        )}
+        <Field label={t("assets.date")}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inp} /></Field>
+        {isOut ? (
+          <Field label={t("assets.repair_vendor")} span={2}>
+            <SearchSelect value={party} onChange={(k) => setParty(k)} accent={T.ind}
+              options={(pickers.parties || []).map((p) => ({ id: p.id, name: p.name + (p.type ? ` · ${p.type}` : "") }))} placeholder={t("assets.select_repair_vendor")} />
+          </Field>
+        ) : (
+          <Field label={t("assets.to_warehouse")} span={2} hint={myWh.length ? undefined : t("assets.issue_no_warehouse")}>
+            <select value={toWh} onChange={(e) => setToWh(e.target.value)} style={inp}>
+              <option value="">{t("assets.select")}</option>
+              {myWh.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </Field>
+        )}
+      </div>
+
+      <Panel title={t("assets.items")} action={<Btn size="sm" ghost icon={IcAdd} onClick={() => setLines((p) => [...p, newMoveLine()])} disabled={!srcReady}>{t("assets.add_line")}</Btn>}>
+        {hold == null && <Spinner />}
+        {hold != null && !srcReady && <Empty>{isOut ? t("assets.move_pick_from") : t("assets.repair_in_pick_vendor")}</Empty>}
+        {hold != null && srcReady && srcRows.length === 0 && <Empty>{isOut ? t("assets.from_empty_hint") : t("assets.repair_in_empty")}</Empty>}
+        {hold != null && srcReady && srcRows.length > 0 && (
+          <>
+            <Row head cols={lineCols}><span>{t("assets.item")}</span><span>{t("assets.qty")}</span><span>{t("assets.condition")}</span><span>{t("assets.remarks")}</span><span></span></Row>
+            {lines.map((l, i) => {
+              const h = stockOf(l.key);
+              return (
+                <Row key={i} cols={lineCols}>
+                  <div>
+                    <SearchSelect value={l.key} accent={T.ind} compact
+                      onChange={(k) => { const hh = stockOf(k); updLine(i, { ...l, key: k, qty: hh && hh.tracking_mode === "serialized" ? "1" : l.qty }); }}
+                      options={srcRows.map((s) => ({ id: s.id, name: `${lineLabel(s)} — ${fmtN(s.qty_good)} ${t("assets.good").toLowerCase()}${N(s.qty_damaged) ? `, ${fmtN(s.qty_damaged)} ${t("assets.damaged").toLowerCase()}` : ""}` }))}
+                      placeholder={t("assets.select_item")} />
+                    {h && <div style={{ fontSize: 10, color: T.t4, marginTop: 3 }}>
+                      {t(isOut ? "assets.with_you_n" : "assets.repair_at_n", { n: fmtN(N(h.qty_good) + N(h.qty_damaged)), unit: h.unit || "" })}
+                    </div>}
+                  </div>
+                  <input value={h && h.tracking_mode === "serialized" ? "1" : l.qty} inputMode="decimal" style={inpSm} disabled={!!(h && h.tracking_mode === "serialized")}
+                    onChange={(e) => updLine(i, { ...l, qty: e.target.value.replace(/[^0-9.]/g, "") })} />
+                  <select value={l.condition} onChange={(e) => updLine(i, { ...l, condition: e.target.value })} style={inpSm}>
+                    <option value="good">{t("assets.cond_good")}</option>
+                    <option value="damaged">{t("assets.cond_damaged")}</option>
+                    {!isOut && <option value="lost">{t("assets.cond_lost")}</option>}
+                  </select>
+                  <input value={l.remarks} onChange={(e) => updLine(i, { ...l, remarks: e.target.value })} style={inpSm} />
+                  <Btn size="sm" ghost onClick={() => setLines((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : [newMoveLine()]))}><IcTrash size={12} color={T.red} /></Btn>
+                </Row>
+              );
+            })}
+          </>
+        )}
+      </Panel>
+      <div style={{ fontSize: 11, color: T.t4, marginTop: 8 }}>{isOut ? t("assets.repair_out_hint") : t("assets.repair_in_hint")}</div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 14 }}>
+        <Field label={t("assets.repair_cost")} hint={t("assets.repair_cost_hint")}>
+          <input value={cost} inputMode="decimal" placeholder="₹" onChange={(e) => setCost(e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
+        </Field>
+        <Field label={t("assets.invoice_no")}><input value={invoice} onChange={(e) => setInvoice(e.target.value)} style={inp} /></Field>
+        <Field label={t("assets.remarks")}><input value={remarks} onChange={(e) => setRemarks(e.target.value)} style={inp} /></Field>
+      </div>
+      <ErrBox>{error}</ErrBox>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
 // MOVEMENTS — voucher log
 // ══════════════════════════════════════════════════════════════════
-function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfer, onReturn, onOpenVoucher }) {
+function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfer, onReturn, onRepairOut, onRepairIn, onOpenVoucher }) {
   const [fl, setFl] = useState({ type: "", status: "", project_id: "", warehouse_id: "", from: "", to: "" });
   const [rows, setRows] = useState(null);
   const upd = (k, v) => setFl((p) => ({ ...p, [k]: v }));
@@ -1797,6 +2056,8 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
           <Btn size="sm" icon={IcOut} onClick={onIssue}>{t("assets.btn_issue")}</Btn>
           <Btn size="sm" ghost icon={IcTrns} onClick={onTransfer}>{t("assets.btn_transfer")}</Btn>
           <Btn size="sm" ghost icon={IcIn} onClick={onReturn}>{t("assets.btn_return")}</Btn>
+          <Btn size="sm" ghost icon={IcTool} onClick={onRepairOut}>{t("assets.btn_repair_out")}</Btn>
+          <Btn size="sm" ghost icon={IcTool} onClick={onRepairIn}>{t("assets.btn_repair_in")}</Btn>
         </div>)}>
       <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
         <select value={fl.type} onChange={(e) => upd("type", e.target.value)} style={{ ...inp, width: 130 }}>
@@ -1804,6 +2065,9 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
           <option value="issue">{t("assets.type_issue")}</option>
           <option value="return">{t("assets.type_return")}</option>
           <option value="transfer">{t("assets.type_transfer")}</option>
+          <option value="repair_out">{t("assets.type_repair_out")}</option>
+          <option value="repair_in">{t("assets.type_repair_in")}</option>
+          <option value="adjust">{t("assets.type_adjust")}</option>
           <option value="opening">{t("assets.type_opening")}</option>
         </select>
         <select value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 130 }}>
@@ -1851,6 +2115,391 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
         </Scroll>
       )}
     </Panel>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GINTI — physical verification
+// ══════════════════════════════════════════════════════════════════
+// Ledger sirf wahi jaanta hai jo kisi ne likha. Plate toot kar, dab kar ya
+// bina voucher ke idhar-udhar ho jaate hain — isliye samay-samay par asli
+// ginti karke ledger se milaya jaata hai.
+//
+// Ek jagah par ek hi khuli ginti reh sakti hai. Kholte hi system ka snapshot
+// bandh jaata hai. Band karte waqt sirf gini hui line ka antar adjust voucher
+// me jaata hai — bina gini line ko haath nahi lagta.
+
+function NewVerificationModal({ open, meta, pickers, me, onClose, onCreated, onOpenExisting }) {
+  const toast = useToast();
+  const [where, setWhere] = useState("warehouse");
+  const [wh, setWh] = useState("");
+  const [site, setSite] = useState({ holder_type: "user" });
+  const [date, setDate] = useState(todayStr());
+  const [remarks, setRemarks] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [existing, setExisting] = useState(null);
+
+  const all = (meta && meta.warehouses) || [];
+  useEffect(() => {
+    if (!open) return;
+    const def = all.find((w) => w.is_default) || all[0];
+    setWhere("warehouse"); setWh(def ? String(def.id) : ""); setSite({ holder_type: "user" });
+    setDate(todayStr()); setRemarks(""); setError(""); setExisting(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, meta]);
+
+  const save = async () => {
+    setError(""); setExisting(null);
+    let loc;
+    if (where === "warehouse") {
+      if (!wh) { setError(t("assets.err_warehouse_required")); return; }
+      loc = { warehouse_id: Number(wh) };
+    } else {
+      if (!siteLocValid(site)) { setError(t("assets.err_to_required")); return; }
+      loc = siteLocBody(site);
+    }
+    setBusy(true);
+    const r = await api.post("/assets/verifications", { ...loc, date, remarks: remarks || null });
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.saved")); onCreated(r.data); onClose(); return; }
+    setError((r && r.message) || t("assets.save_failed"));
+    // 409 — is jagah ki ek ginti pehle se khuli hai; server uska id bhejta hai.
+    if (r && r.data && r.data.id) setExisting(r.data.id);
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} width={640} title={t("assets.verify_new")} sub={t("assets.verify_new_sub")}
+      footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn>
+        {existing && <Btn ghost onClick={() => { onOpenExisting(existing); onClose(); }}>{t("assets.verify_open_existing")}</Btn>}
+        <Btn onClick={save} disabled={busy} icon={IcCount}>{busy ? t("assets.saving") : t("assets.verify_start")}</Btn></>}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label={t("assets.verify_pick_place")} span={2}>
+          <Seg value={where} onChange={(k) => { setWhere(k); setError(""); setExisting(null); }}
+            options={[{ k: "warehouse", l: t("assets.warehouse") }, { k: "site", l: t("assets.site") }]} />
+        </Field>
+        {where === "warehouse" ? (
+          <Field label={t("assets.warehouse")} span={2}>
+            <select value={wh} onChange={(e) => setWh(e.target.value)} style={inp}>
+              <option value="">{t("assets.select")}</option>
+              {all.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </Field>
+        ) : <ToSiteFields v={site} onChange={setSite} pickers={pickers} me={me} />}
+        <Field label={t("assets.date")}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inp} /></Field>
+        <Field label={t("assets.remarks")}><input value={remarks} onChange={(e) => setRemarks(e.target.value)} style={inp} /></Field>
+      </div>
+      <div style={{ marginTop: 14 }}><Notice>{t("assets.verify_snapshot_hint")}</Notice></div>
+      <ErrBox>{error}</ErrBox>
+    </Modal>
+  );
+}
+
+function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, onOpenVoucher }) {
+  const toast = useToast();
+  const [v, setV] = useState(null);
+  const [failed, setFailed] = useState("");
+  const [edit, setEdit] = useState({});          // line id → { g, d, r } — sirf jo haath se badla
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setFailed("");
+    const r = await api.get(`/assets/verifications/${id}`).catch(() => null);
+    if (r && r.success) setV(r.data);
+    else { setV(null); setFailed((r && r.message) || t("assets.verify_load_failed")); }
+  }, [id]);
+  useEffect(() => { setV(null); setEdit({}); setError(""); load(); }, [load]);
+
+  const draft = v && v.status === "draft";
+  const canCount = !!(v && v.can_count);
+  const canCancel = !!(draft && v && (isAdmin || v.created_by === me.id));
+
+  // Line ki abhi ki value: pehle jo haath se bhara, warna server se aayi.
+  const cellOf = (ln) => {
+    const e = edit[ln.id] || {};
+    return {
+      g: e.g !== undefined ? e.g : (ln.counted_good == null ? "" : String(Number(ln.counted_good))),
+      d: e.d !== undefined ? e.d : (ln.counted_damaged == null ? "" : String(Number(ln.counted_damaged))),
+      r: e.r !== undefined ? e.r : (ln.remarks || ""),
+    };
+  };
+  const setCell = (ln, k, val) => setEdit((p) => ({ ...p, [ln.id]: { ...cellOf(ln), ...(p[ln.id] || {}), [k]: val } }));
+
+  const saveCount = async () => {
+    setError("");
+    const ids = Object.keys(edit);
+    if (!ids.length) { setError(t("assets.verify_nothing_changed")); return; }
+    const items = ids.map((lid) => {
+      const e = edit[lid];
+      const g = e.g === undefined ? undefined : (e.g === "" ? null : Number(e.g));
+      return { id: Number(lid), counted_good: g, counted_damaged: g == null ? null : (e.d === "" || e.d === undefined ? 0 : Number(e.d)), remarks: e.r };
+    });
+    setBusy(true);
+    const r = await api.put(`/assets/verifications/${v.id}/count`, { items });
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.saved")); setEdit({}); setV(r.data); onChanged(); }
+    else setError((r && r.message) || t("assets.save_failed"));
+  };
+
+  const doClose = async () => {
+    if (!window.confirm(t("assets.verify_close_confirm"))) return;
+    setBusy(true);
+    const r = await api.post(`/assets/verifications/${v.id}/close`, {});
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.saved")); setEdit({}); setV(r.data); onChanged(); }
+    else toast.error((r && r.message) || t("assets.action_failed"));
+  };
+  const doCancel = async () => {
+    if (!window.confirm(t("assets.verify_cancel_confirm"))) return;
+    setBusy(true);
+    const r = await api.post(`/assets/verifications/${v.id}/cancel`, {});
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.saved")); onChanged(); onClose(); }
+    else toast.error((r && r.message) || t("assets.action_failed"));
+  };
+
+  const w = verifWhere(v);
+  const cols = "90px 1.5fr 1fr 80px 140px 84px 1fr";
+  const footer = !v ? <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
+    : <>
+        <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
+        {canCancel && <Btn ghost onClick={doCancel} disabled={busy} style={{ color: T.red }}>{t("assets.verify_cancel_btn")}</Btn>}
+        {draft && canCount && <Btn onClick={saveCount} disabled={busy}>{busy ? t("assets.saving") : t("assets.verify_save_count")}</Btn>}
+        {draft && canApprove && <Btn c={T.grn} icon={IcChk} onClick={doClose} disabled={busy}>{t("assets.verify_close_btn")}</Btn>}
+      </>;
+
+  return (
+    <Drawer open onClose={onClose} width={860}
+      title={v ? v.verification_no : t("assets.tab_verify")}
+      head={v ? <Pill label={verifStatusLabel(v.status)} {...verifTone(v.status)} /> : null}
+      sub={v ? `${fmtD(v.date)} · ${t("assets.created_by")}: ${v.created_by_name || "—"}${v.closed_by_name ? ` · ${t("assets.closed_by")}: ${v.closed_by_name}` : ""}` : ""}
+      footer={footer}>
+      {!v && !failed && <Spinner />}
+      {failed && <Empty>{failed}</Empty>}
+      {v && (
+        <>
+          {draft && canCount && <Notice>{t("assets.verify_null_hint")}</Notice>}
+          {draft && !canCount && <Notice tone="warn">{t("assets.verify_readonly")}</Notice>}
+          {v.status === "closed" && (
+            <Notice>{v.adjust_voucher_no ? t("assets.verify_closed_diff_note", { no: v.adjust_voucher_no }) : t("assets.verify_closed_ok_note")}</Notice>
+          )}
+          {v.status === "cancelled" && <Notice tone="warn">{t("assets.verify_cancelled_note")}</Notice>}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, padding: "12px 14px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, marginBottom: 14 }}>
+            <KV k={t("assets.verify_place")} v={<span>{w.main}{w.sub ? <span style={{ display: "block", fontSize: 11, color: T.t3, fontWeight: 400 }}>{w.sub}</span> : null}</span>} />
+            <KV k={t("assets.custodian")} v={v.custodian_name} />
+            <KV k={t("assets.lines")} v={fmtN(v.line_count)} />
+            <KV k={t("assets.verify_pending")} v={<span style={{ color: N(v.pending_count) ? T.amb : T.t1 }}>{fmtN(v.pending_count)}</span>} />
+            <KV k={t("assets.verify_diff")} v={<span style={{ color: N(v.diff_count) ? T.red : T.t1 }}>{fmtN(v.diff_count)}</span>} />
+            <KV k={t("assets.verify_adjust_voucher")} v={v.adjust_voucher_no
+              ? <span onClick={() => onOpenVoucher(v.adjust_voucher_id)} style={{ color: T.ind, cursor: "pointer" }}>{v.adjust_voucher_no}</span>
+              : null} />
+          </div>
+
+          <Panel title={t("assets.lines")}>
+            <Scroll minWidth={860}>
+              <Row head cols={cols}>
+                <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.spec")}</span>
+                <span>{t("assets.verify_system")}</span><span>{t("assets.verify_counted")}</span><span>{t("assets.verify_gap")}</span><span>{t("assets.remarks")}</span>
+              </Row>
+              {(v.items || []).map((ln) => {
+                const c = cellOf(ln);
+                const sg = N(ln.system_good), sd = N(ln.system_damaged);
+                const counted = c.g !== "";
+                const cg = counted ? Number(c.g) : 0, cd = counted ? (c.d === "" ? 0 : Number(c.d)) : 0;
+                const net = counted ? (cg + cd) - (sg + sd) : null;
+                const condChanged = counted && net === 0 && cg !== sg;
+                return (
+                  <Row key={ln.id} cols={cols}>
+                    <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>{ln.code || "—"}</span>
+                    <div>
+                      <div style={{ fontWeight: 600, color: T.t1 }}>{ln.name}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4 }}>{[ln.unit, trackLabel(ln.tracking_mode)].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    <span style={{ color: T.t3 }}>{ln.spec || "—"}</span>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{fmtN(sg)}</div>
+                      {sd > 0 && <div style={{ fontSize: 10.5, color: T.amb }}>{fmtN(sd)} {t("assets.damaged").toLowerCase()}</div>}
+                    </div>
+                    <div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <input value={c.g} inputMode="decimal" placeholder="—" title={t("assets.good")} readOnly={!canCount}
+                          onChange={(e) => setCell(ln, "g", e.target.value.replace(/[^0-9.]/g, ""))}
+                          style={{ ...inpSm, width: 60, background: canCount ? T.surface : T.surfaceB }} />
+                        <input value={c.d} inputMode="decimal" placeholder="—" title={t("assets.damaged")} readOnly={!canCount}
+                          onChange={(e) => setCell(ln, "d", e.target.value.replace(/[^0-9.]/g, ""))}
+                          style={{ ...inpSm, width: 60, background: canCount ? T.surface : T.surfaceB }} />
+                      </div>
+                      {/* Sirf damaged bhar dena kaafi nahi — good khali rahe to line "gini nahi" hi rehti hai. */}
+                      {!counted && <div style={{ fontSize: 10, color: c.d === "" ? T.t4 : T.amb, marginTop: 3 }}>{t("assets.verify_not_counted")}</div>}
+                    </div>
+                    <div>
+                      <span style={{ fontWeight: 700, color: net == null ? T.t4 : net < 0 ? T.red : net > 0 ? T.grn : T.t4 }}>
+                        {net == null ? "—" : net > 0 ? `+${fmtN(net)}` : fmtN(net)}
+                      </span>
+                      {condChanged && <div style={{ fontSize: 10, color: T.amb }}>{t("assets.verify_cond_changed")}</div>}
+                    </div>
+                    <input value={c.r} style={inpSm} readOnly={!canCount} onChange={(e) => setCell(ln, "r", e.target.value)} />
+                  </Row>
+                );
+              })}
+            </Scroll>
+          </Panel>
+          {v.remarks && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 10 }}>{t("assets.remarks")}: {v.remarks}</div>}
+          <ErrBox>{error}</ErrBox>
+        </>
+      )}
+    </Drawer>
+  );
+}
+
+function VerificationsTab({ refreshKey, meta, pickers, canCreate, onNew, onOpen, onOpenVoucher }) {
+  const [fl, setFl] = useState({ status: "", warehouse_id: "", project_id: "", mine: "" });
+  const [rows, setRows] = useState(null);
+  const upd = (k, v) => setFl((p) => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    let alive = true;
+    setRows(null);
+    api.get(`/assets/verifications?${qs(fl)}`).then((r) => { if (alive) setRows(r && r.success ? r.data || [] : []); })
+      .catch(() => { if (alive) setRows([]); });
+    return () => { alive = false; };
+  }, [fl, refreshKey]);
+
+  const cols = "118px 78px 1.4fr 1.2fr 84px 56px 56px 70px 112px";
+  return (
+    <Panel title={t("assets.verify_title")} action={canCreate && <Btn size="sm" icon={IcAdd} onClick={onNew}>{t("assets.verify_new")}</Btn>}>
+      <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
+        <Seg value={fl.mine} onChange={(k) => upd("mine", k)} options={[{ k: "", l: t("assets.all") }, { k: "1", l: t("assets.verify_mine") }]} />
+        <select value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 140 }}>
+          <option value="">{t("assets.all_status")}</option>
+          <option value="draft">{t("assets.verify_draft")}</option>
+          <option value="closed">{t("assets.verify_closed")}</option>
+          <option value="cancelled">{t("assets.status_cancelled")}</option>
+        </select>
+        <select value={fl.warehouse_id} onChange={(e) => upd("warehouse_id", e.target.value)} style={{ ...inp, width: 160 }}>
+          <option value="">{t("assets.all_warehouses")}</option>
+          {((meta && meta.warehouses) || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+        <div style={{ width: 200 }}>
+          <SearchSelect value={fl.project_id} onChange={(k) => upd("project_id", k)} accent={T.ind}
+            options={[{ id: "", name: t("assets.all_projects") }, ...(pickers.projects || []).map((p) => ({ id: p.id, name: p.name }))]} placeholder={t("assets.all_projects")} />
+        </div>
+        {(fl.status || fl.warehouse_id || fl.project_id || fl.mine) && (
+          <Btn size="sm" ghost onClick={() => setFl({ status: "", warehouse_id: "", project_id: "", mine: "" })}>{t("assets.clear")}</Btn>
+        )}
+      </div>
+      {rows == null && <Spinner />}
+      {rows && rows.length === 0 && (
+        <Empty>{t("assets.verify_empty")}<br /><span style={{ fontSize: 11.5 }}>{t("assets.verify_empty_hint")}</span></Empty>
+      )}
+      {rows && rows.length > 0 && (
+        <Scroll minWidth={1000}>
+          <Row head cols={cols}>
+            <span>{t("assets.verify_no")}</span><span>{t("assets.date")}</span><span>{t("assets.verify_place")}</span><span>{t("assets.verify_owner")}</span>
+            <span>{t("assets.status")}</span><span>{t("assets.lines")}</span><span>{t("assets.verify_pending")}</span><span>{t("assets.verify_diff")}</span><span>{t("assets.verify_adjust_voucher")}</span>
+          </Row>
+          {rows.map((v) => {
+            const w = verifWhere(v);
+            return (
+              <Row key={v.id} cols={cols} onClick={() => onOpen(v.id)}>
+                <span style={{ fontWeight: 600, color: T.t1 }}>{v.verification_no}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(v.date)}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.main}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4 }}>{w.sub}</div>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.custodian_name || v.created_by_name || "—"}</div>
+                  {v.custodian_name && v.created_by_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{t("assets.created_by")}: {v.created_by_name}</div>}
+                </div>
+                <span><Pill label={verifStatusLabel(v.status)} {...verifTone(v.status)} /></span>
+                <span>{fmtN(v.line_count)}</span>
+                <span style={{ color: N(v.pending_count) ? T.amb : T.t4 }}>{fmtN(v.pending_count)}</span>
+                <span style={{ color: N(v.diff_count) ? T.red : T.t4 }}>{fmtN(v.diff_count)}</span>
+                {v.adjust_voucher_no
+                  ? <span style={{ color: T.ind, fontWeight: 600 }} onClick={(e) => { e.stopPropagation(); onOpenVoucher(v.adjust_voucher_id); }}>{v.adjust_voucher_no}</span>
+                  : <span style={{ color: T.t4 }}>—</span>}
+              </Row>
+            );
+          })}
+        </Scroll>
+      )}
+    </Panel>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENT — worker/subcon ke paas jo rent par pada hai
+// ══════════════════════════════════════════════════════════════════
+// SIRF REPORT. Yahan se koi entry kisi ledger me nahi jaati aur kisi ke
+// paise apne aap nahi kate — kaatna hai to Finance se haath se karna hoga.
+const monthStart = () => todayStr().slice(0, 8) + "01";
+
+function RentTab({ refreshKey }) {
+  const [range, setRange] = useState({ from: monthStart(), to: todayStr() });
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    setData(null);
+    api.get(`/assets/rent-report?${qs(range)}`).then((r) => { if (alive) setData(r && r.success ? r.data || {} : {}); })
+      .catch(() => { if (alive) setData({}); });
+    return () => { alive = false; };
+  }, [range, refreshKey]);
+
+  const cols = "1.5fr 1fr 60px 110px 56px 100px 1.2fr 1fr 80px";
+  const holders = (data && data.by_holder) || [];
+  return (
+    <>
+      <Panel title={t("assets.rent_title")} style={{ marginBottom: 14 }}
+        action={
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <input type="date" value={range.from} title={t("assets.from_date")} style={{ ...inp, width: 148 }}
+              onChange={(e) => setRange((p) => ({ ...p, from: e.target.value }))} />
+            <input type="date" value={range.to} title={t("assets.to_date")} style={{ ...inp, width: 148 }}
+              onChange={(e) => setRange((p) => ({ ...p, to: e.target.value }))} />
+          </div>}>
+        <div style={{ padding: "13px 15px", display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10, color: T.t4, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px" }}>{t("assets.rent_total")}</span>
+          <b style={{ fontSize: 22, color: T.t1, lineHeight: 1 }}>{data ? rupee(N(data.total)) : "—"}</b>
+          {data && data.from && <span style={{ fontSize: 11.5, color: T.t3 }}>{t("assets.rent_period", { from: fmtD(data.from), to: fmtD(data.to) })}</span>}
+        </div>
+      </Panel>
+      <Notice>{t("assets.rent_note")}</Notice>
+
+      {data == null && <Spinner />}
+      {data && holders.length === 0 && <Panel><Empty>{t("assets.rent_empty")}</Empty></Panel>}
+      {holders.map((g) => (
+        <Panel key={`${g.holder_type}:${g.holder_id}`} style={{ marginBottom: 12 }}
+          title={<span>{g.holder_name || "—"} <span style={{ fontSize: 10.5, color: T.t3, fontWeight: 600 }}>· {holderLabel(g.holder_type)}</span></span>}
+          action={<b style={{ fontSize: 13.5, color: T.t1 }}>{rupee(N(g.amount))}</b>}>
+          <Scroll minWidth={980}>
+            <Row head cols={cols}>
+              <span>{t("assets.item")}</span><span>{t("assets.spec")}</span><span>{t("assets.qty")}</span><span>{t("assets.rate")}</span>
+              <span>{t("assets.rent_days")}</span><span>{t("assets.amount")}</span><span>{t("assets.project")}</span><span>{t("assets.custodian")}</span><span>{t("assets.since")}</span>
+            </Row>
+            {(g.lines || []).map((l, i) => (
+              <Row key={`${l.asset_item_id}-${i}`} cols={cols}>
+                <div>
+                  <div style={{ fontWeight: 600, color: T.t1 }}>{l.name}</div>
+                  {l.code && <div style={{ fontSize: 10.5, color: T.t4, fontFamily: "monospace" }}>{l.code}</div>}
+                </div>
+                <span style={{ color: T.t3 }}>{l.spec || "—"}</span>
+                <span>{fmtN(l.qty)} <span style={{ fontSize: 10.5, color: T.t4 }}>{l.unit || ""}</span></span>
+                <span style={{ fontSize: 11.5 }}>{rupee(l.rate)}/{t(l.rent_basis === "month" ? "assets.basis_month" : "assets.basis_day")}</span>
+                <span>{fmtN(l.days)}</span>
+                <span style={{ fontWeight: 700, color: T.t1 }}>{rupee(l.amount)}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{l.project_name || "—"}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{l.custodian_name || "—"}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(l.since_date)}</span>
+              </Row>
+            ))}
+          </Scroll>
+        </Panel>
+      ))}
+    </>
   );
 }
 
@@ -1972,6 +2621,9 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
   const [grnOpen, setGrnOpen] = useState(false);
   const [issueOpen, setIssueOpen] = useState(false);
   const [moveKind, setMoveKind] = useState(null);      // transfer | return
+  const [repairKind, setRepairKind] = useState(null);  // out | in
+  const [verifyId, setVerifyId] = useState(null);
+  const [newVerify, setNewVerify] = useState(false);
   const [catsOpen, setCatsOpen] = useState(false);
   const [inchOpen, setInchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -2014,14 +2666,22 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
     return items.find((i) => i.id === openItem.id) || openItem;
   }, [openItem, items]);
 
+  // Ginti list se "sudhaar voucher" par click — voucher Movements ka hai,
+  // isliye tab bhi wahi khul jaata hai, warna aadmi Ginti par khada rehta
+  // hai aur drawer band karte hi wo voucher dobara nahi milta.
+  const openVoucherInMovements = useCallback((id) => { setTab("movements"); setVoucherId(id); }, []);
+
   const cats = (meta && meta.categories) || [];
   const pendingCount = dash && dash.tiles ? N(dash.tiles.awaiting_accept) : 0;
+  const openVerifCount = dash && dash.tiles ? N(dash.tiles.open_verifications) : 0;
   const TABS = [
     { id: "dashboard", l: t("assets.tab_dashboard"), I: IcChart },
     { id: "register", l: t("assets.tab_register"), I: IcList },
     { id: "grn", l: t("assets.tab_grn"), I: IcIn },
     { id: "movements", l: t("assets.tab_movements"), I: IcTrns, badge: pendingCount || null },
+    { id: "verify", l: t("assets.tab_verify"), I: IcCount, badge: openVerifCount || null },
     { id: "custody", l: t("assets.tab_custody"), I: IcUser },
+    { id: "rent", l: t("assets.tab_rent"), I: IcRupee },
   ];
 
   if (loading) return (
@@ -2058,17 +2718,31 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
         {tab === "grn" && <GrnTab refreshKey={refreshKey} canCreate={canCreate} onNew={() => setGrnOpen(true)} onOpenVoucher={setVoucherId} />}
         {tab === "movements" && (
           <MovementsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canCreate}
-            onIssue={() => setIssueOpen(true)} onTransfer={() => setMoveKind("transfer")} onReturn={() => setMoveKind("return")} onOpenVoucher={setVoucherId} />
+            onIssue={() => setIssueOpen(true)} onTransfer={() => setMoveKind("transfer")} onReturn={() => setMoveKind("return")}
+            onRepairOut={() => setRepairKind("out")} onRepairIn={() => setRepairKind("in")} onOpenVoucher={setVoucherId} />
+        )}
+        {tab === "verify" && (
+          <VerificationsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canCreate}
+            onNew={() => setNewVerify(true)} onOpen={setVerifyId} onOpenVoucher={openVoucherInMovements} />
         )}
         {tab === "custody" && <CustodyTab refreshKey={refreshKey} meta={meta} pickers={pickers} onOpenItem={setOpenItem} />}
+        {tab === "rent" && <RentTab refreshKey={refreshKey} />}
       </div>
 
       {voucherId && <VoucherDrawer id={voucherId} onClose={() => setVoucherId(null)} onChanged={refresh} />}
+      {verifyId && (
+        <VerificationDrawer id={verifyId} me={me} isAdmin={isAdmin} canApprove={canApprove}
+          onClose={() => setVerifyId(null)} onChanged={refresh}
+          onOpenVoucher={(vid) => { setVerifyId(null); openVoucherInMovements(vid); }} />
+      )}
       {itemFull && <ItemDrawer item={itemFull} cats={cats} canEdit={canEdit} onClose={() => setOpenItem(null)} onChanged={refresh} onOpenVoucher={setVoucherId} />}
 
       <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} onClose={() => setGrnOpen(false)} onSaved={refresh} />
       <IssueForm open={issueOpen} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setIssueOpen(false)} onSaved={refresh} />
       <MoveForm open={!!moveKind} kind={moveKind || "transfer"} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setMoveKind(null)} onSaved={refresh} />
+      <RepairForm open={!!repairKind} kind={repairKind || "out"} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setRepairKind(null)} onSaved={refresh} />
+      <NewVerificationModal open={newVerify} meta={meta} pickers={pickers} me={me}
+        onClose={() => setNewVerify(false)} onCreated={(d) => { refresh(); if (d && d.id) setVerifyId(d.id); }} onOpenExisting={setVerifyId} />
       <CategoriesModal open={catsOpen} cats={cats} onClose={() => setCatsOpen(false)} onChanged={() => load(true)} />
       <InchargesModal open={inchOpen} meta={meta} users={pickers.users || []} onClose={() => setInchOpen(false)} onChanged={() => load(true)} />
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onDone={refresh} />
