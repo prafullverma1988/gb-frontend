@@ -1574,41 +1574,81 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
 }
 
 // ── NEW TRANSFER MODAL ────────────────────────────────────────────
-export function NewTransferModal({stock,projects,onClose,onSaved}){
-  const [f,setF]=useState({date:today(),from_project_id:null,to_project_id:null});
+// ── NEW TRANSFER MODAL ────────────────────────────────────────────
+// Pehle sirf project→project chalta tha. Multi-warehouse ke baad godown
+// bhi transfer ka ek sira ban gaya, isliye dono taraf ek choti si toggle
+// hai — Godown ya Project. Chaaron jodiyaan chalti hain:
+//   godown → godown   (naya; ek godown se doosre godown maal)
+//   godown → project
+//   project → godown
+//   project → project (purana behaviour, waise ka waisa)
+//
+// Source ka available stock kahan se aata hai wo sire par nirbhar hai:
+// godown ka apna stock wh_materials se, project ka material-ledger se.
+//
+// `defaultFromWarehouseId` Warehouse module deta hai (jo godown khula hai
+// wahi source ban jata hai). Company-level Transfers tab nahi deta, to
+// wahan dono taraf pehle jaisa Project hi rehta hai.
+export function NewTransferModal({stock,projects,onClose,onSaved,defaultFromWarehouseId=null}){
+  const [f,setF]=useState({
+    date:today(),
+    from_type: defaultFromWarehouseId?"warehouse":"project",
+    from_id:   defaultFromWarehouseId||null,
+    to_type:"project", to_id:null,
+  });
   const [items,setItems]=useState([{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
   const [saving,setSaving]=useState(false);
-  const [srcInv,setSrcInv]=useState([]);   // Source project's inventory (from material-ledger)
+  const [srcInv,setSrcInv]=useState([]);   // Source ka available stock
   const [srcLoading,setSrcLoading]=useState(false);
+  const [warehouses,setWarehouses]=useState([]);
 
-  // Load source project's inventory when from_project_id changes
   useEffect(()=>{
-    if(!f.from_project_id){ setSrcInv([]); return; }
+    api.get("/warehouse/warehouses").then(r=>{
+      if(r?.success) setWarehouses((r.data||[]).filter(w=>w.is_active));
+    }).catch(()=>{});
+  },[]);
+
+  // Source badla to uska stock dobara lao. Godown ka stock seedha
+  // wh_materials se, project ka uske material-ledger se.
+  useEffect(()=>{
+    if(!f.from_id){ setSrcInv([]); return; }
     setSrcLoading(true);
     setItems([{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]); // reset items
-    api.get(`/tasks/project/${f.from_project_id}/material-ledger`).then(r=>{
-      if(r.success){
-        const inv=(r.data||[])
-          .filter(m=>Number(m.balance||0)>0) // only items with available qty
-          .map(m=>{
-            const whMat=stock.find(s=>s.name?.toLowerCase().trim()===m.material_name?.toLowerCase().trim());
-            return {
-              id: whMat?.id ?? `name:${(m.material_name||"").toLowerCase().trim()}`,
-              name: m.material_name,
-              qty: Number(m.balance)||0,
-              unit: m.unit||"Nos",
-              rate: whMat ? Number(whMat.rate)||0 : 0,
-              material_id: whMat?.id || null,
-              category: whMat?.category || "Other",
-            };
-          });
-        setSrcInv(inv);
-      } else setSrcInv([]);
+    const url = f.from_type==="warehouse"
+      ? `/warehouse/materials?warehouse_id=${f.from_id}`
+      : `/tasks/project/${f.from_id}/material-ledger`;
+    api.get(url).then(r=>{
+      if(!r.success){ setSrcInv([]); setSrcLoading(false); return; }
+      const inv = f.from_type==="warehouse"
+        ? (r.data||[])
+            .filter(m=>Number(m.qty||0)>0)
+            .map(m=>({
+              id:m.id, name:m.name, qty:Number(m.qty)||0, unit:m.unit||"Nos",
+              rate:Number(m.rate)||0, material_id:m.id, category:m.category||"Other",
+            }))
+        : (r.data||[])
+            .filter(m=>Number(m.balance||0)>0)
+            .map(m=>{
+              const whMat=stock.find(s=>s.name?.toLowerCase().trim()===m.material_name?.toLowerCase().trim());
+              return {
+                id: whMat?.id ?? `name:${(m.material_name||"").toLowerCase().trim()}`,
+                name: m.material_name,
+                qty: Number(m.balance)||0,
+                unit: m.unit||"Nos",
+                rate: whMat ? Number(whMat.rate)||0 : 0,
+                material_id: whMat?.id || null,
+                category: whMat?.category || "Other",
+              };
+            });
+      setSrcInv(inv);
       setSrcLoading(false);
     }).catch(()=>{ setSrcInv([]); setSrcLoading(false); });
-  },[f.from_project_id,stock]);
+  },[f.from_type,f.from_id,stock]);
 
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
+  // Side ka type badalte hi us side ka chuna hua id hata do — warna
+  // project ka id godown ke id ki tarah chala jayega.
+  const setSide=(side,type)=>setF(p=>({...p,[side+"_type"]:type,[side+"_id"]:null}));
   const updItem=(i,patch)=>{
     setItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
     // After material pick, fetch last-rate by name (works for procurement-only
@@ -1626,18 +1666,24 @@ export function NewTransferModal({stock,projects,onClose,onSaved}){
   const remItem=(i)=>setItems(p=>p.filter((_,j)=>j!==i));
   const addItem=()=>setItems(p=>[...p,{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
 
-  const sameProj=f.from_project_id&&f.to_project_id&&Number(f.from_project_id)===Number(f.to_project_id);
+  const whOpts = warehouses.map(w=>({id:w.id,name:w.name}));
+  const sideOpts = (type)=> type==="warehouse" ? whOpts : projects;
+  const nameOf = (type,id)=> (type==="warehouse"?warehouses:projects).find(x=>String(x.id)===String(id))?.name;
+
+  // Ek hi jagah se ek hi jagah par transfer ka matlab nahi.
+  const sameSide=f.from_id&&f.to_id&&f.from_type===f.to_type&&Number(f.from_id)===Number(f.to_id);
   // Over-stock warning: any item qty > source's available qty for that material
   const overStockRow=items.find(it=>{
     if(!it.qty)return false;
     const inv=srcInv.find(s=>String(s.id)===String(it.material_id)||s.name===it.name);
     return inv && Number(it.qty)>Number(inv.qty);
   });
-  const valid=f.from_project_id&&f.to_project_id&&!sameProj&&!overStockRow&&items.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
+  const valid=f.from_id&&f.to_id&&!sameSide&&!overStockRow&&items.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
 
   const totalValue=items.reduce((s,it)=>s+Number(it.qty||0)*Number(it.rate||0),0);
-  const fromName=projects.find(p=>p.id===f.from_project_id)?.name;
-  const toName=projects.find(p=>p.id===f.to_project_id)?.name;
+  const fromName=nameOf(f.from_type,f.from_id);
+  const toName=nameOf(f.to_type,f.to_id);
+  const wh2wh = f.from_type==="warehouse" && f.to_type==="warehouse";
 
   const submit=async()=>{
     setSaving(true);
@@ -1651,8 +1697,10 @@ export function NewTransferModal({stock,projects,onClose,onSaved}){
       }));
       const res=await api.post("/warehouse/transfers",{
         date:f.date,
-        from_project_id:f.from_project_id,
-        to_project_id:f.to_project_id,
+        from_project_id:   f.from_type==="project"   ? f.from_id : null,
+        from_warehouse_id: f.from_type==="warehouse" ? f.from_id : null,
+        to_project_id:     f.to_type==="project"     ? f.to_id   : null,
+        to_warehouse_id:   f.to_type==="warehouse"   ? f.to_id   : null,
         items:cleanItems,
       });
       if(res.success){onSaved&&onSaved(res.data);onClose();}
@@ -1661,57 +1709,87 @@ export function NewTransferModal({stock,projects,onClose,onSaved}){
     setSaving(false);
   };
 
+  // Godown / Project chunne ki chhoti toggle — dono taraf ek jaisi.
+  const SideToggle=({side})=>(
+    <div style={{display:"flex",gap:3,background:T.surfaceB,borderRadius:6,padding:2,marginBottom:5,width:"fit-content"}}>
+      {[["warehouse",t("warehouse.godown_label")],["project",t("common.project")]].map(([v,label])=>{
+        const on=f[side+"_type"]===v;
+        return (
+          <button key={v} type="button" onClick={()=>setSide(side,v)}
+            style={{padding:"3px 11px",borderRadius:4,border:"none",background:on?T.cyn:"transparent",
+                    color:on?"white":T.t3,fontSize:10.5,fontWeight:on?700:600,cursor:"pointer",fontFamily:"inherit"}}>
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
-    <ModalShell title={t("warehouse.new_project_to_project_transfer")} sub={t("warehouse.source_me_debit_dest_pending_receive")}
+    <ModalShell title={t("warehouse.new_transfer")} sub={t("warehouse.source_me_debit_dest_pending_receive")}
       onClose={onClose} width={780}
       footer={<>
         <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>{t("warehouse.total_value")} <b style={{color:T.cyn}}>₹{fmtN(totalValue)}</b></span>
         <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
         <Btn onClick={submit} disabled={!valid||saving} c={T.cyn} icon={IcTrns}>{saving?t("common.saving"):t("warehouse.save_transfer_pending")}</Btn>
       </>}>
-      <div style={{display:"grid",gridTemplateColumns:"120px 1fr 1fr",gap:11,marginBottom:11}}>
+      <div style={{display:"grid",gridTemplateColumns:"120px 1fr 1fr",gap:11,marginBottom:11,alignItems:"end"}}>
         <Field label={t("common.date")}><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
-        <Field label={t("warehouse.from_project")}>
-          <SearchSelect compact value={f.from_project_id} options={projects}
-            onChange={v=>upd("from_project_id",v)} placeholder={t("warehouse.source_project_select_karo")}/>
-        </Field>
-        <Field label={t("warehouse.to_project")}>
-          <SearchSelect compact value={f.to_project_id} options={projects}
-            onChange={v=>upd("to_project_id",v)} placeholder={t("material_transfer.destination_project_select_karo")}/>
-        </Field>
+        <div>
+          <SideToggle side="from"/>
+          <Field label={t("warehouse.from_where")}>
+            <SearchSelect compact value={f.from_id} options={sideOpts(f.from_type)}
+              onChange={v=>upd("from_id",v)}
+              placeholder={f.from_type==="warehouse"?t("warehouse.source_godown_select_karo"):t("warehouse.source_project_select_karo")}/>
+          </Field>
+        </div>
+        <div>
+          <SideToggle side="to"/>
+          <Field label={t("warehouse.to_where")}>
+            <SearchSelect compact value={f.to_id} options={sideOpts(f.to_type)}
+              onChange={v=>upd("to_id",v)}
+              placeholder={f.to_type==="warehouse"?t("warehouse.destination_godown_select_karo"):t("material_transfer.destination_project_select_karo")}/>
+          </Field>
+        </div>
       </div>
-      {sameProj&&(
+      {sameSide&&(
         <div style={{padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600,marginBottom:11}}>
-         {t("warehouse.from_aur_to_project_alag_hone")}
+         {f.from_type==="warehouse"?t("warehouse.from_aur_to_godown_alag_hone"):t("warehouse.from_aur_to_project_alag_hone")}
         </div>
       )}
-      {projects.length===0&&(
+      {f.from_type==="warehouse"&&warehouses.length<2&&f.to_type==="warehouse"&&(
+        <div style={{padding:"7px 11px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:11.5,color:T.amb,fontWeight:600,marginBottom:11}}>
+         {t("warehouse.godown_se_godown_ke_liye_do")}
+        </div>
+      )}
+      {(f.from_type==="project"||f.to_type==="project")&&projects.length===0&&(
         <div style={{padding:"7px 11px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:11.5,color:T.amb,fontWeight:600,marginBottom:11}}>
          {t("warehouse.koi_project_nahi_mila_pehle_projects")}
         </div>
       )}
-      {fromName&&toName&&!sameProj&&(
+      {fromName&&toName&&!sameSide&&(
         <div style={{padding:"8px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,fontSize:11.5,color:T.blu,marginBottom:11,lineHeight:1.5}}>
-          <b>{fromName}</b> {t("warehouse.ka_stock_expense_turant_minus_hoga")} <b>{toName}</b> {t("warehouse.me_material_physically_pohonchne_par_site")}
+          <b>{fromName}</b> {t("warehouse.ka_stock_expense_turant_minus_hoga")} <b>{toName}</b>{" "}
+          {wh2wh?t("warehouse.godown_receive_karega_tab_stock_badhega"):t("warehouse.me_material_physically_pohonchne_par_site")}
         </div>
       )}
 
       <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span>{t("common.items")} {f.from_project_id?<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.from")} <b style={{color:T.cyn}}>{fromName}</b> inventory</span>:""}</span>
+        <span>{t("common.items")} {f.from_id?<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.from")} <b style={{color:T.cyn}}>{fromName}</b> inventory</span>:""}</span>
         {srcLoading&&<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontSize:10.5}}>{t("common.loading_inventory")}</span>}
       </div>
 
-      {!f.from_project_id&&(
+      {!f.from_id&&(
         <div style={{padding:"24px 14px",textAlign:"center",background:T.surfaceB,borderRadius:8,border:`1.5px dashed ${T.b1}`,color:T.t4,fontSize:12,marginBottom:8}}>
-         {t("warehouse.source_project_select_karo_uske_available")}
+         {f.from_type==="warehouse"?t("warehouse.source_godown_select_karo_uska_available"):t("warehouse.source_project_select_karo_uske_available")}
         </div>
       )}
 
-      {f.from_project_id&&!srcLoading&&srcInv.length===0&&(
+      {f.from_id&&!srcLoading&&srcInv.length===0&&(
         <div style={{padding:"24px 14px",textAlign:"center",background:T.ambL,borderRadius:8,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:12,marginBottom:8,fontWeight:600}}>{t("warehouse.fromname_me_koi_available_material_nahi", { fromName })}</div>
       )}
 
-      {f.from_project_id&&srcInv.length>0&&(
+      {f.from_id&&srcInv.length>0&&(
         <>
           <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
             <span>{t("warehouse.material_avail_in_fromname", { fromName })}</span><span>{t("common.unit")}</span><span>{t("common.qty")}</span><span>{t("warehouse.rate_u")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span><span/>
@@ -3223,7 +3301,7 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
     setLoading(true);
     api.get(`/warehouse/transfers/${transfer.dbId}`).then(r=>{
       if(r.success){
-        const d={...r.data,id:r.data.transfer_no,dbId:r.data.id,date:fmtDate(r.data.date),from:r.data.from_project_name||r.data.from_location,to:r.data.to_project_name||r.data.to_location,by:r.data.transferred_by_name};
+        const d={...r.data,id:r.data.transfer_no,dbId:r.data.id,date:fmtDate(r.data.date),from:r.data.from_warehouse_name||r.data.from_project_name||r.data.from_location,to:r.data.to_warehouse_name||r.data.to_project_name||r.data.to_location,by:r.data.transferred_by_name};
         setDetail(d);
         setReceiveItems((r.data.items||[]).map(it=>({id:it.id,material_name:it.material_name,unit:it.unit,qty:Number(it.qty),received_qty:Number(it.qty)})));
       }
@@ -3250,7 +3328,7 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
       // refresh detail
       api.get(`/warehouse/transfers/${detail.dbId}`).then(rr=>{
         if(rr.success){
-          const d={...rr.data,id:rr.data.transfer_no,dbId:rr.data.id,date:fmtDate(rr.data.date),from:rr.data.from_project_name||rr.data.from_location,to:rr.data.to_project_name||rr.data.to_location,by:rr.data.transferred_by_name};
+          const d={...rr.data,id:rr.data.transfer_no,dbId:rr.data.id,date:fmtDate(rr.data.date),from:rr.data.from_warehouse_name||rr.data.from_project_name||rr.data.from_location,to:rr.data.to_warehouse_name||rr.data.to_project_name||rr.data.to_location,by:rr.data.transferred_by_name};
           setDetail(d);
           setReceiveOpen(false);
         }
@@ -3600,7 +3678,7 @@ function WarehouseModule(){
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
       if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
       if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":"Warehouse (internal)"),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
-      if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_project_name||t.from_location||"—",to:t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));
+      if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_warehouse_name||t.from_project_name||t.from_location||"—",to:t.to_warehouse_name||t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));
       if(pRes.success) setProjects((pRes.data||[]).map(p=>({id:p.id,name:p.name})));
       if(uRes.success) setUsers((uRes.data||[]).map(u=>({id:u.id,name:u.name})));
       if(libRes.success) setLibrary((libRes.data||[]).map(m=>({id:m.id,name:m.name,unit:m.unit||"Nos",category:m.category_name||"",rate:Number(m.last_rate||m.base_rate||0)})));
@@ -3833,7 +3911,7 @@ function WarehouseModule(){
           onClose={()=>{setMrNewOpen(false);setMrPrefill(null);}} onSaved={()=>loadAll()}/>
       )}
       {transferNewOpen&&(
-        <NewTransferModal stock={stock} projects={projects}
+        <NewTransferModal stock={stock} projects={projects} defaultFromWarehouseId={whId}
           onClose={()=>setTransferNewOpen(false)} onSaved={()=>loadAll()}/>
       )}
       {transferDetail&&(
