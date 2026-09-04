@@ -361,8 +361,13 @@ function LocationsSettings() {
     { v: "office",    label: "🏢 Office",    c: T.blue },
     { v: "warehouse", label: "📦 Warehouse", c: T.amber },
   ];
-  const blank = { id: null, kind: "office", label: "", address: "", lat: "", lng: "", radius: 100 };
+  const blank = { id: null, kind: "office", label: "", address: "", lat: "", lng: "", radius: 100, incharge: "" };
   const [rows, setRows] = useState([]);
+  // Warehouse ka stock-side jodidar (wh_warehouses) — yahin se uska
+  // incharge tay hota hai. Geofence attendance ke liye hai, incharge
+  // stock ke liye; add dono ka ek hi jagah se hota hai.
+  const [whs, setWhs] = useState([]);
+  const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(blank);
   const [busy, setBusy] = useState(false);
@@ -376,8 +381,13 @@ function LocationsSettings() {
       const list = (r.success ? r.data : []).filter(g => !g.project_id && (g.kind === "office" || g.kind === "warehouse"));
       setRows(list);
     }).catch(()=>{}).finally(()=>setLoading(false));
+    api.get("/warehouse/warehouses").then(r => { if (r.success) setWhs(r.data || []); }).catch(()=>{});
+    api.get("/projects/team-members").then(r => { if (r.success) setStaff(r.data || []); }).catch(()=>{});
   };
   useEffect(load, []);
+
+  // Geofence row ka warehouse jodidar (backend boot par khud jod deta hai).
+  const whFor = (g) => whs.find(w => String(w.geofence_id) === String(g.id)) || null;
 
   const useCurrentLoc = () => {
     if (!navigator.geolocation) { setMsg("GPS not available"); return; }
@@ -398,6 +408,22 @@ function LocationsSettings() {
       const body = { project_id: null, kind: form.kind, label: form.label.trim(),
                      address: form.address || null, center_lat: lat, center_lng: lng, radius_m: Number(form.radius) || 100 };
       const r = form.id ? await api.put("/geofences/" + form.id, body) : await api.post("/geofences", body);
+      // Warehouse hai to uska incharge bhi save karo. Naya warehouse abhi
+      // bana ho to backend ne wh_warehouses row abhi tak nahi jodi —
+      // isliye pehle naam se bana/dhoondh kar incharge lagate hain.
+      if (r.success && form.kind === "warehouse") {
+        const existing = form.id ? whFor({ id: form.id }) : null;
+        const inch = form.incharge ? Number(form.incharge) : null;
+        if (existing) {
+          await api.patch("/warehouse/warehouses/" + existing.id,
+            { name: form.label.trim(), address: form.address || null, incharge_user_id: inch }).catch(()=>{});
+        } else {
+          await api.post("/warehouse/warehouses", {
+            name: form.label.trim(), address: form.address || null,
+            geofence_id: r.data?.id || form.id || null, incharge_user_id: inch,
+          }).catch(()=>{});
+        }
+      }
       if (r.success) { setMsg("✓ Saved"); setForm(blank); load(); setTimeout(()=>setMsg(""), 2500); }
       else setMsg(r.message || "Save failed");
     } catch (e) { setMsg(e.message || "Network error"); }
@@ -405,7 +431,8 @@ function LocationsSettings() {
   };
 
   const edit = (g) => setForm({ id: g.id, kind: g.kind || "office", label: g.label || "", address: g.address || "",
-                                lat: String(g.center_lat), lng: String(g.center_lng), radius: g.radius_m || 100 });
+                                lat: String(g.center_lat), lng: String(g.center_lng), radius: g.radius_m || 100,
+                                incharge: whFor(g)?.incharge_user_id ? String(whFor(g).incharge_user_id) : "" });
   const del = async (g) => {
     if (!await window.confirmAsync(`Delete "${g.label}"?`)) return;
     const r = await api.del("/geofences/" + g.id + "?hard=1").catch(()=>({success:false}));
@@ -430,6 +457,11 @@ function LocationsSettings() {
                   <div style={{ fontSize:13, fontWeight:700, color:T.text }}>{g.label}</div>
                   <div style={{ fontSize:11, color:T.textMid, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.address || "—"}</div>
                   <div style={{ fontSize:10.5, color:T.textLight, marginTop:1 }}>📍 {Number(g.center_lat).toFixed(5)}, {Number(g.center_lng).toFixed(5)} · {g.radius_m}m</div>
+                  {g.kind === "warehouse" && (
+                    <div style={{ fontSize:10.5, marginTop:2, color: whFor(g)?.incharge_name ? T.textMid : T.amber, fontWeight:600 }}>
+                      👤 {whFor(g)?.incharge_name || "Incharge nahi laga — Edit karke lagao"}
+                    </div>
+                  )}
                 </div>
                 <button onClick={()=>edit(g)} style={{ padding:"5px 11px", borderRadius:6, background:T.blueSoft, color:T.blue, border:`1px solid ${T.blue}33`, fontSize:11, fontWeight:700, cursor:"pointer" }}>Edit</button>
                 <button onClick={()=>del(g)} style={{ padding:"5px 9px", borderRadius:6, background:T.redSoft, color:T.red, border:`1px solid ${T.red}33`, fontSize:11, fontWeight:700, cursor:"pointer" }}>✕</button>
@@ -452,6 +484,18 @@ function LocationsSettings() {
         </div>
         <div style={{ marginBottom:10 }}><label style={L}>Name *</label><input value={form.label} onChange={e=>setForm(f=>({...f,label:e.target.value}))} placeholder={form.kind==="office"?"e.g. Head Office":"e.g. Main Warehouse"} style={I}/></div>
         <div style={{ marginBottom:10 }}><label style={L}>Address</label><input value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))} placeholder="Full address" style={I}/></div>
+        {form.kind === "warehouse" && (
+          <div style={{ marginBottom:10 }}>
+            <label style={L}>Warehouse Incharge</label>
+            <select value={form.incharge} onChange={e=>setForm(f=>({...f,incharge:e.target.value}))} style={{...I, cursor:"pointer"}}>
+              <option value="">— koi nahi —</option>
+              {staff.map(u => <option key={u.id} value={u.id}>{u.name}{u.role ? ` · ${u.role}` : ""}</option>)}
+            </select>
+            <div style={{ fontSize:10.5, color:T.textLight, marginTop:4 }}>
+              Incharge ko Warehouse module me yahi godown by default khulta hai. Baaki godown bhi dikhte hain, switch kar sakta hai.
+            </div>
+          </div>
+        )}
         <div style={{ display:"flex", gap:8, marginBottom:10 }}>
           <button onClick={useCurrentLoc} style={{ flex:1, padding:"9px", borderRadius:7, background:"white", border:`1.5px solid ${T.blue}`, color:T.blue, fontSize:12.5, fontWeight:700, cursor:"pointer" }}>📍 Current Location</button>
           <button onClick={()=>setShowMap(true)} style={{ flex:1, padding:"9px", borderRadius:7, background:"white", border:`1.5px solid ${T.green}`, color:T.green, fontSize:12.5, fontWeight:700, cursor:"pointer" }}>🗺️ Pick from Map</button>

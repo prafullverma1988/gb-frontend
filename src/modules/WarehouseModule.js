@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import api from "../config/api";
+import api, { getWarehouseId, setWarehouseId } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
 import GrnIssueBlock from "../components/GrnIssueBlock";
@@ -1926,6 +1926,67 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
 }
 
 // ── STOCK TAB ─────────────────────────────────────────────────────
+// ── SAB GODOWN EK NAZAR ME ─────────────────────────────────────
+// Ek company ke kai godown alag jagah hote hain aur har ek ka apna
+// incharge. Ye tab wahi ek sawaal ka jawab deta hai jo pehle kahin
+// nahi milta tha: "kis godown me kitna maal pada hai, aur kahan
+// dikkat hai" — bina har godown me ghus kar dekhe.
+function WarehousesTab({data,activeId,onOpen}){
+  if(!data) return <div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("warehouse.loading_godown")}</div>;
+  const list=data.warehouses||[];
+  const tot=data.totals||{};
+  if(list.length===0) return <div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:12.5}}>{t("warehouse.koi_godown_nahi")}</div>;
+  return(
+    <div style={{padding:"4px 0"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
+        {list.map(w=>{
+          const on=String(w.id)===String(activeId);
+          const hot=Number(w.low_stock_count)>0;
+          return(
+            <div key={w.id} onClick={()=>onOpen(w.id)}
+              style={{background:"white",border:`1.5px solid ${on?T.blu:T.b1}`,borderLeft:`3px solid ${on?T.blu:hot?T.amb:T.grn}`,borderRadius:10,padding:"13px 15px",cursor:"pointer",boxShadow:on?"0 2px 8px rgba(37,99,235,.10)":"0 1px 3px rgba(0,0,0,.04)"}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:9}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13.5,fontWeight:700,color:T.t1,display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                    {w.name}
+                    {w.is_default?<span style={{fontSize:9,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:10,padding:"1px 7px"}}>{t("warehouse.default_tag")}</span>:null}
+                    {on?<span style={{fontSize:9,fontWeight:700,color:"white",background:T.blu,borderRadius:10,padding:"1px 7px"}}>{t("warehouse.khula_hua")}</span>:null}
+                  </div>
+                  <div style={{fontSize:10.5,color:T.t4,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.address||"—"}</div>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:9}}>
+                <div><div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{t("common.total_value")}</div>
+                  <div style={{fontSize:15,fontWeight:800,color:T.grn}}>₹{fmtN(w.total_value)}</div></div>
+                <div><div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{t("team_schedule.total_items")}</div>
+                  <div style={{fontSize:15,fontWeight:800,color:T.t1}}>{w.total_items}</div></div>
+              </div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+                {Number(w.low_stock_count)>0&&<span style={{fontSize:10,fontWeight:700,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:10,padding:"2px 8px"}}>{t("warehouse.low_stock")}: {w.low_stock_count}</span>}
+                {Number(w.out_of_stock_count)>0&&<span style={{fontSize:10,fontWeight:700,color:T.red,background:T.redL,borderRadius:10,padding:"2px 8px"}}>{t("warehouse.khatam")}: {w.out_of_stock_count}</span>}
+                {Number(w.pending_mrs)>0&&<span style={{fontSize:10,fontWeight:700,color:T.pur,background:T.purL,borderRadius:10,padding:"2px 8px"}}>{t("warehouse.pending_mrs")}: {w.pending_mrs}</span>}
+              </div>
+              <div style={{borderTop:`1px dashed ${T.b1}`,paddingTop:7,display:"flex",alignItems:"center",gap:6,fontSize:11,color:T.t3}}>
+                <span style={{fontWeight:600}}>{t("warehouse.incharge")}:</span>
+                {w.incharge_name
+                  ? <span style={{color:T.t1,fontWeight:600}}>{w.incharge_name}{w.incharge_phone?<span style={{color:T.t4,fontWeight:400}}> · {w.incharge_phone}</span>:null}</span>
+                  : <span style={{color:T.amb,fontWeight:600}}>{t("warehouse.incharge_nahi_laga")}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{marginTop:14,padding:"10px 14px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9,display:"flex",gap:20,flexWrap:"wrap",fontSize:12,color:T.t3}}>
+        <span>{t("warehouse.warehouses_tab")}: <b style={{color:T.t1}}>{tot.warehouses}</b></span>
+        <span>{t("team_schedule.total_items")}: <b style={{color:T.t1}}>{tot.total_items}</b></span>
+        <span>{t("common.total_value")}: <b style={{color:T.grn}}>₹{fmtN(tot.total_value)}</b></span>
+        <span>{t("warehouse.low_stock")}: <b style={{color:Number(tot.low_stock_count)>0?T.amb:T.grn}}>{tot.low_stock_count}</b></span>
+        <span>{t("warehouse.pending_mrs")}: <b style={{color:Number(tot.pending_mrs)>0?T.pur:T.grn}}>{tot.pending_mrs}</b></span>
+      </div>
+    </div>
+  );
+}
+
 function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,onQuickRequest}){
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("All");
@@ -3492,8 +3553,37 @@ function WarehouseModule(){
     } catch (e) { alert(e.message); }
   };
 
+  // ── Kaun sa godown khula hai ────────────────────────────────
+  // Company ke kai godown ho sakte hain. Sab dikhte hain, khulta
+  // wahi hai jiska user incharge hai (backend batata hai), warna
+  // company ka default. Chunav api.js me chipak jata hai, isliye
+  // niche ki har call apne aap usi godown ki ban jati hai.
+  const [warehouses,setWarehouses]=useState([]);
+  const [whId,setWhId]=useState(()=>getWarehouseId());
+  const [whOverview,setWhOverview]=useState(null);
+  const activeWh = warehouses.find(w=>String(w.id)===String(whId)) || null;
+
+  const loadWarehouses=useCallback(async()=>{
+    const r=await api.get("/warehouse/warehouses").catch(()=>({success:false}));
+    if(!r.success) return null;
+    const list=r.data||[];
+    setWarehouses(list);
+    const current=getWarehouseId();
+    const valid=current&&list.some(w=>String(w.id)===String(current));
+    const pick=valid?current:(r.my_warehouse_id||list[0]?.id||null);
+    if(pick&&String(pick)!==String(current)) setWarehouseId(pick);
+    setWhId(pick?String(pick):null);
+    return pick;
+  },[]);
+
+  const loadOverview=useCallback(async()=>{
+    const r=await api.get("/warehouse/warehouses/overview").catch(()=>({success:false}));
+    if(r.success) setWhOverview(r.data||null);
+  },[]);
+
   const loadAll=useCallback(async()=>{
     try{
+      await loadWarehouses();
       const [sRes,gRes,iRes,mRes,tRes,pRes,uRes,libRes,settRes]=await Promise.all([
         api.get("/warehouse/materials"),
         api.get("/warehouse/grn"),
@@ -3516,9 +3606,9 @@ function WarehouseModule(){
       if(libRes.success) setLibrary((libRes.data||[]).map(m=>({id:m.id,name:m.name,unit:m.unit||"Nos",category:m.category_name||"",rate:Number(m.last_rate||m.base_rate||0)})));
     }catch(e){console.error("Warehouse load error:",e);}
     setLoading(false);
-  },[]);
+  },[loadWarehouses]);
 
-  useEffect(()=>{loadAll();},[loadAll]);
+  useEffect(()=>{loadAll();loadOverview();},[loadAll,loadOverview]);
 
   const handleVerifyGRN=async(dbId)=>{
     const res=await api.patch(`/warehouse/grn/${dbId}`,{status:"Verified"});
@@ -3552,7 +3642,17 @@ function WarehouseModule(){
   const pendingInMRs = mrs.filter(m=>!m.project_id && ["Pending","Approved","Ordered"].includes(m.status)).length;
   const pendingOutMRs= mrs.filter(m=>!!m.project_id && ["Pending","Approved"].includes(m.status)).length;
 
+  // Godown badalne par poora module dobara load hota hai — stock, GRN,
+  // issue, MR sab us godown ke hain. Chunav localStorage me jata hai
+  // taki refresh ke baad bhi wahi godown khule.
+  const switchWarehouse=useCallback((id)=>{
+    if(String(id)===String(whId)) return;
+    setWarehouseId(id); setWhId(String(id)); setLoading(true);
+    loadAll(); loadOverview();
+  },[whId,loadAll,loadOverview]);
+
   const TABS=[
+    ...(warehouses.length>1?[{id:"godown", l:t("warehouse.warehouses_tab"), I:IcIn, badge:null, bc:T.blu}]:[]),
     {id:"stock",  l:t("common.stock"),         I:IcBox,  badge:lowStock.length>0?lowStock.length:null, bc:T.red},
     {id:"grn",    l:t("material.material_in"),   I:IcIn,   badge:pendingInMRs>0?pendingInMRs:null, bc:T.pur},
     {id:"issue",  l:t("warehouse.material_out"),  I:IcOut,  badge:pendingOutMRs>0?pendingOutMRs:null, bc:T.cyn},
@@ -3577,6 +3677,29 @@ function WarehouseModule(){
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+
+      {/* Kaun sa godown khula hai — ek se zyada hone par hi dikhta hai,
+          taki single-warehouse walon ki screen waisi hi rahe. */}
+      {warehouses.length>1&&(
+        <div style={{padding:"10px 18px 0",flexShrink:0,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:10.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>
+            {t("warehouse.godown_label")}
+          </span>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {warehouses.filter(w=>w.is_active).map(w=>{
+              const on=String(w.id)===String(whId);
+              return(
+                <button key={w.id} onClick={()=>switchWarehouse(w.id)}
+                  title={[w.address,w.incharge_name?`Incharge: ${w.incharge_name}`:null].filter(Boolean).join(" · ")}
+                  style={{padding:"6px 14px",borderRadius:20,border:`1.5px solid ${on?T.blu:T.b1}`,background:on?T.bluL:"white",color:on?T.blu:T.t3,fontSize:12,fontWeight:on?700:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>
+                  {w.name}
+                  {w.incharge_name&&<span style={{fontSize:10,fontWeight:500,color:on?T.blu:T.t4}}>· {w.incharge_name}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div style={{padding:"12px 18px 8px",flexShrink:0}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
@@ -3613,6 +3736,7 @@ function WarehouseModule(){
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
+        {tab==="godown"&&<WarehousesTab data={whOverview} activeId={whId} onOpen={switchWarehouse}/>}
         {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})} onAddStock={m=>setAddStockTarget(m)} onIssue={m=>setIssueTarget(m)} onQuickRequest={m=>{setMrPrefill({name:m.name,unit:m.unit});setMrNewOpen(true);}}/>}
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}

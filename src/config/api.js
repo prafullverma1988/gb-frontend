@@ -29,11 +29,24 @@ const saveAuth  = (token,user,companies) => {
   // Always refresh company module so stale localStorage values don't bleed through
   localStorage.setItem("gb_company_module", domainToModule(user?.company_domain));
 };
+// ── Chuna hua warehouse ────────────────────────────────────────
+// Company ke ek se zyada godown ho sakte hain. Har warehouse API call
+// me warehouse_id haath se jodna 50 jagah badalna hota, aur ek jagah
+// chhoot jaati to us screen par doosre godown ka maal dikhne lagta.
+// Isliye yahan ek hi jagah lag jata hai. Backend bina iske bhi chalta
+// hai — tab wo user ke apne (ya default) godown par gir jata hai.
+export const getWarehouseId = () => localStorage.getItem("gb_warehouse_id") || null;
+export const setWarehouseId = (id) => {
+  if (id) localStorage.setItem("gb_warehouse_id", String(id));
+  else localStorage.removeItem("gb_warehouse_id");
+};
+
 const clearAuth = () => {
   localStorage.removeItem("gb_token");
   localStorage.removeItem("gb_user");
   localStorage.removeItem("gb_companies");
   localStorage.removeItem("gb_company_module");
+  localStorage.removeItem("gb_warehouse_id");
 };
 
 // ── Hardening (P1) ────────────────────────────────────────────
@@ -46,6 +59,31 @@ const DEFAULT_TIMEOUT_MS = 15000;
 // boot — if the token expired, EACH would call window.location.reload()
 // causing a stuck reload loop. Gate behind a one-shot flag.
 let _isReloading = false;
+
+// /warehouse/* calls par chuna hua godown chipka do. Jo call khud
+// warehouse_id ya all_warehouses bhej rahi ho, use haath nahi lagate —
+// aur warehouse master (godown ki apni list) hamesha company-level hai.
+function withWarehouse(endpoint, config) {
+  try {
+    if (!endpoint.startsWith("/warehouse/")) return endpoint;
+    if (endpoint.startsWith("/warehouse/warehouses")) return endpoint;
+    const whId = getWarehouseId();
+    if (!whId) return endpoint;
+    if (/[?&](warehouse_id|all_warehouses)=/.test(endpoint)) return endpoint;
+    const method = (config.method || "GET").toUpperCase();
+    if (method === "POST" || method === "PATCH" || method === "PUT") {
+      if (typeof config.body === "string") {
+        const b = JSON.parse(config.body);
+        if (b && typeof b === "object" && !Array.isArray(b) && b.warehouse_id == null) {
+          b.warehouse_id = Number(whId);
+          config.body = JSON.stringify(b);
+        }
+      }
+      return endpoint;
+    }
+    return endpoint + (endpoint.includes("?") ? "&" : "?") + "warehouse_id=" + encodeURIComponent(whId);
+  } catch (_) { return endpoint; }
+}
 
 const api = async (endpoint, options={}) => {
   const token = getToken();
@@ -71,6 +109,7 @@ const api = async (endpoint, options={}) => {
     },
     signal: ctrl.signal,
   };
+  endpoint = withWarehouse(endpoint, config);
   let res;
   try {
     res = await fetch(`${API_BASE}${endpoint}`, config);
