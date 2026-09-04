@@ -972,9 +972,21 @@ function PartyMasterSection() {
 
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("All");
+  const [filterDesig, setFilterDesig] = useState("All");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  // Designation ab Library ka master hai (Library → Staff Designation).
+  // Yahan wo do kaam karta hai: form me free text ki jagah list, aur upar
+  // filter jisse pata chale kaunse designation par kitne log hain.
+  const [desigList, setDesigList] = useState([]);
+  const [addingDesig, setAddingDesig] = useState(false);
+  const [newDesig, setNewDesig] = useState("");
+  const loadDesig = useCallback(async () => {
+    try { const r = await api.get("/library/designations"); if (r.success) setDesigList(r.data || []); } catch (e) {}
+  }, []);
+  useEffect(() => { loadDesig(); }, [loadDesig]);
   const emptyForm = { name: "", type: "Material Vendor", roles: ["material_vendor"], gstin: "", pan: "", phone: "", email: "", address: "", city: "Raipur", opening_balance: 0, staff_subtype: "", designation: "", wallet_limit: "", negative_limit: "" };
   const [form, setForm] = useState(emptyForm);
   const [saveErr, setSaveErr] = useState("");
@@ -1037,7 +1049,30 @@ function PartyMasterSection() {
   const typeColors = { "Material Vendor": { c: T.blue, bg: T.blueSoft }, "Equipment Vendor": { c: T.rose, bg: T.roseSoft }, Supplier: { c: T.blue, bg: T.blueSoft }, "Material Supplier": { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, "Labour Vendor": { c: T.amber, bg: T.amberSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft }, Staff: { c: T.teal, bg: T.tealSoft }, staff: { c: T.teal, bg: T.tealSoft } };
   const isStaffForm = Array.isArray(form.roles) ? form.roles.includes("staff") : form.type === "Staff";
 
+  // Ginti parties se hi nikalti hai — library ka naam ho ya legacy free text,
+  // dikhega wahi jo sach me kisi par laga hua hai.
+  const desigCounts = useMemo(() => {
+    const m = new Map();
+    for (const p of parties) {
+      if (!p.is_staff) continue;
+      const d = String(p.designation || "").trim();
+      if (!d) continue;
+      m.set(d, (m.get(d) || 0) + 1);
+    }
+    return m;
+  }, [parties]);
+  const desigNames = useMemo(() => {
+    const set = new Set(desigList.map(d => d.name));
+    for (const k of desigCounts.keys()) set.add(k);   // legacy naam bhi
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [desigList, desigCounts]);
+  const desigOptions = useMemo(() => ([
+    { key: "All", label: t("master_library.all_designations") },
+    ...desigNames.map(n => ({ key: n, label: desigCounts.get(n) ? `${n} (${desigCounts.get(n)})` : n })),
+  ]), [desigNames, desigCounts]);
+
   const filtered = parties.filter(p => {
+    if (filterDesig !== "All" && String(p.designation || "").trim() !== filterDesig) return false;
     // Role-aware filter: a multi-role party shows under EACH of its roles.
     if (filterType === "Staff") {
       if (!p.is_staff) return false;
@@ -1050,6 +1085,18 @@ function PartyMasterSection() {
     if (s && !p.name?.toLowerCase().includes(s) && !(p.phone||"").includes(s) && !(p.city||"").toLowerCase().includes(s)) return false;
     return true;
   });
+
+  // "+ New" — designation wahin Library me jud jaata hai aur turant chun
+  // liya jaata hai, taaki form chhod kar Library jaana na pade.
+  const saveNewDesig = async () => {
+    const nm = newDesig.trim();
+    if (!nm) return;
+    try {
+      const r = await api.post("/library/designations", { name: nm });
+      if (r.success) { await loadDesig(); upd("designation", r.data?.name || nm); setAddingDesig(false); }
+      else { upd("designation", nm); setAddingDesig(false); }   // pehle se hai — bas chun lo
+    } catch (e) { setAddingDesig(false); }
+  };
 
   const openCreate = () => { setEditing(null); setSaveErr(""); setForm({ ...emptyForm }); setShowModal(true); };
   const openEdit = (p) => {
@@ -1203,7 +1250,10 @@ function PartyMasterSection() {
     <div>
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="parties" onAdd={openCreate} addLabel="Add Party"
         templateConfig={partyTemplateConfig} currentData={parties} onImportData={handlePartyImport}
-        filterEl={<div style={{minWidth:180}}><SearchSelect value={filterType} options={types} onChange={setFilterType} placeholder={t("master_library.filter_type")}/></div>}
+        filterEl={<>
+          <div style={{minWidth:180}}><SearchSelect value={filterType} options={types} onChange={setFilterType} placeholder={t("master_library.filter_type")}/></div>
+          <div style={{minWidth:190}}><SearchSelect value={filterDesig} options={desigOptions} onChange={setFilterDesig} placeholder={t("master_library.filter_designation")}/></div>
+        </>}
       />
       {/* Row click opens the detail drawer; Actions column hidden
           (edit/delete now live inside the drawer). */}
@@ -1372,7 +1422,30 @@ function PartyMasterSection() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-              <FormField label={t("master_library.designation")} value={form.designation} onChange={v => upd("designation", v)} placeholder={t("master_library.e_g_site_supervisor_mason_helper")} half />
+              {/* Designation pehle free text tha — isi wajah se "ENGINEER" aur
+                  "Engineer" do alag cheez ban jaate the. Ab Library ki list se
+                  chunte hain; list me na ho to "+ New" se wahin jud jaata hai. */}
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, letterSpacing: "0.3px", display: "block", marginBottom: 6 }}>{t("master_library.designation")}</label>
+                {addingDesig ? (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input autoFocus value={newDesig} onChange={e => setNewDesig(e.target.value)}
+                      placeholder={t("master_library.e_g_site_engineer")}
+                      onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); saveNewDesig(); } if (e.key === "Escape") setAddingDesig(false); }}
+                      style={{ flex: 1, padding: "10px 14px", borderRadius: T.radiusSm, border: `1.5px solid ${T.blue}`, fontSize: 13.5, color: T.text, outline: "none", boxSizing: "border-box", fontFamily: T.font }} />
+                    <button type="button" onClick={saveNewDesig} style={{ padding: "0 12px", borderRadius: T.radiusSm, border: "none", background: T.blue, color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{t("common.add")}</button>
+                    <button type="button" onClick={() => setAddingDesig(false)} style={{ padding: "0 10px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, background: T.card, color: T.textMid, fontSize: 13, cursor: "pointer" }}>{t("common.cancel")}</button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <div style={{ flex: 1 }}>
+                      <SearchSelect value={form.designation || ""} options={desigNames} onChange={v => upd("designation", v)} placeholder={t("master_library.select_designation")} />
+                    </div>
+                    <button type="button" onClick={() => { setNewDesig(""); setAddingDesig(true); }}
+                      style={{ padding: "0 12px", borderRadius: T.radiusSm, border: `1.5px dashed ${T.border}`, background: T.card, color: T.textMid, fontSize: 12.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>+ {t("common.new")}</button>
+                  </div>
+                )}
+              </div>
               <FormField label={t("common.phone")} value={form.phone} onChange={v => upd("phone", v)} placeholder={t("common.91_xxxxx_xxxxx")} half disabled={editingLinkedStaff} />
             </div>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
@@ -6445,6 +6518,102 @@ function WorkersSection() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// STAFF DESIGNATION
+// ═══════════════════════════════════════════════════════════════════════
+// Designation pehle free text tha, aur do jagah alag-alag likha jaata tha
+// (payroll_staff aur parties). Live data me iska nateeja saaf tha — ek hi
+// company me "ENGINEER" aur "Engineer", "supervisor" aur "Supervisor".
+// Isliye "hamare paas kaunse designation ke kitne log hain" ka jawab kabhi
+// sahi nahi aata tha. Ab ye ek list hai; naam badlo to staff ki dono jagah
+// apne aap badal jaata hai, aur ek hi naam do baar ho to dono jud jaate hain.
+function DesignationSection() {
+  const [items, setItems]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [name, setName]     = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { const r = await api.get("/library/designations"); if (r.success) setItems(r.data || []); } catch (e) {}
+    setLoading(false);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const q = search.trim().toLowerCase();
+  const filtered = q ? items.filter(d => String(d.name).toLowerCase().includes(q)) : items;
+  const totalPeople = items.reduce((n, d) => n + Number(d.staff_count || 0), 0);
+
+  const openCreate = () => { setEditing(null); setName(""); setFormErr(""); setShowModal(true); };
+  const openEdit   = (d) => { setEditing(d); setName(d.name); setFormErr(""); setShowModal(true); };
+
+  const save = async () => {
+    const nm = name.trim();
+    if (!nm || saving) return;
+    setSaving(true); setFormErr("");
+    try {
+      let res;
+      if (editing) {
+        res = await api.put("/library/designations/" + editing.id, { name: nm });
+        // Naya naam pehle se list me hai — server pehle poochta hai, jodta
+        // baad me. Ye "ENGINEER" ko "Engineer" me milane ka raasta hai.
+        if (!res.success && res.code === "DESIGNATION_MERGE_CONFIRM") {
+          const into = res.data?.into || nm;
+          if (!await window.confirmAsync(t("master_library.designation_merge_ask", { name: into }))) { setSaving(false); return; }
+          res = await api.put("/library/designations/" + editing.id, { name: nm, merge: true });
+        }
+      } else {
+        res = await api.post("/library/designations", { name: nm });
+      }
+      if (res.success) { setShowModal(false); await load(); }
+      else setFormErr(res.message || t("common.something_went_wrong"));
+    } catch (e) { setFormErr(t("common.something_went_wrong")); }
+    finally { setSaving(false); }
+  };
+
+  const del = async (id) => {
+    const res = await api.del("/library/designations/" + id);
+    if (res.success) await load();
+    else if (res.message) await window.confirmAsync(res.message);
+  };
+
+  const columns = [
+    { key: "name", label: t("master_library.designation"), minW: 220, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "staff_count", label: t("master_library.employees"), minW: 110,
+      render: r => Number(r.staff_count) > 0
+        ? <Badge text={String(r.staff_count)} color={T.blue} bg={T.blueSoft} />
+        : <span style={{ fontSize: 12, color: T.textLight }}>—</span> },
+    { key: "party_count", label: t("master_library.party_library"), minW: 120,
+      render: r => Number(r.party_count) > 0
+        ? <Badge text={String(r.party_count)} color={T.green} bg={T.green + "18"} />
+        : <span style={{ fontSize: 12, color: T.textLight }}>—</span> },
+  ];
+
+  return (
+    <div>
+      <Toolbar search={search} setSearch={setSearch} count={filtered.length}
+        label={t("master_library.staff_designation")} onAdd={openCreate} addLabel={t("master_library.add_designation")}
+        filterEl={<span style={{ fontSize: 12, color: T.textLight, whiteSpace: "nowrap" }}>
+          {t("master_library.total_employees_n", { n: totalPeople })}</span>} />
+      <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del}
+        emptyMsg={loading ? t("common.loading") : t("master_library.no_designations_yet")} />
+      <Modal open={showModal} onClose={() => setShowModal(false)}
+        title={editing ? t("master_library.edit_designation") : t("master_library.add_designation")}
+        desc={editing ? t("master_library.designation_rename_note") : t("master_library.designation_add_note")}
+        width={440}>
+        <FormField label={t("master_library.designation")} value={name} onChange={setName}
+          placeholder={t("master_library.e_g_site_engineer")} required />
+        {!!formErr && <div style={{ marginTop: 10, fontSize: 12.5, color: T.red, background: T.redSoft, borderRadius: 7, padding: "8px 11px" }}>{formErr}</div>}
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? t("common.saving") : (editing ? t("common.update") : t("common.create"))} />
+      </Modal>
+    </div>
+  );
+}
+
 const masterSections = [
   // ── ITEM LIBRARY ──────────────────────────────────────────────────
   { id: "work_cat",      get label() { return t("master_library.work_category"); },       Icon: IcTool,      Comp: WorkCategorySection,      section: "ITEM LIBRARY", countKey: "work_categories", color: T.purple },
@@ -6455,6 +6624,7 @@ const masterSections = [
   { id: "party",         get label() { return t("master_library.party_supplier"); },    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green },
   { id: "subcon",        get label() { return t("master_library.subcontractors"); },      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber },
   { id: "workers",       get label() { return t("master_library.workers"); },             Icon: IcHardHat,   Comp: WorkersSection,           section: null, countKey: "workers", color: T.blue },
+  { id: "designation",   get label() { return t("master_library.staff_designation"); },   Icon: IcUsers,     Comp: DesignationSection,       section: null, countKey: null, color: T.indigo },
   // ── RATES & BOQ ───────────────────────────────────────────────────
   { id: "subcon_rate",   get label() { return t("master_library.subcon_rate_card"); },    Icon: IcDollar,    Comp: SubconRateCardSection,    section: "RATES & BOQ", countKey: null, color: T.teal },
   { id: "labour",        get label() { return t("master_library.labour_rate_card"); },    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },

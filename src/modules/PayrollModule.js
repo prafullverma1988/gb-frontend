@@ -2648,6 +2648,24 @@ function AddStaffModal({onClose,onSaved}){
   const [staffSearch,setStaffSearch]=useState("");
   const [results,setResults]=useState([]);
   const [picked,setPicked]=useState(null);   // {party_id,name,designation,...} or null
+  // Library → Staff Designation ki list. Yahin se chunte hain taaki naam
+  // har jagah ek jaisa rahe.
+  const [desigList,setDesigList]=useState([]);
+  const [addingDesig,setAddingDesig]=useState(false);
+  const [newDesig,setNewDesig]=useState("");
+  const loadDesig=useCallback(async()=>{
+    try{ const r=await api.get("/library/designations"); if(r.success) setDesigList(r.data||[]); }catch(e){}
+  },[]);
+  useEffect(()=>{ loadDesig(); },[loadDesig]);
+  const saveNewDesig=async()=>{
+    const nm=newDesig.trim(); if(!nm) return;
+    try{
+      const r=await api.post("/library/designations",{name:nm});
+      if(r.success) await loadDesig();
+      set("designation", r.success ? (r.data?.name||nm) : nm);   // pehle se ho to bas chun lo
+    }catch(e){}
+    setAddingDesig(false);
+  };
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
   const [form,setForm]=useState({
@@ -2776,7 +2794,31 @@ function AddStaffModal({onClose,onSaved}){
           <Sect title={t("payroll.personal")}>
             <F label={t("common.name_2")}><input style={{...inp,...(picked?{background:T.surfaceB}:{})}} value={form.name} onChange={e=>set("name",e.target.value)} disabled={!!picked}/></F>
             <F label={t("payroll.mobile")}><input style={inp} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder={t("payroll.10_digit")}/></F>
-            <F label={t("master_library.designation")}><input style={inp} value={form.designation} onChange={e=>set("designation",e.target.value)} placeholder={t("payroll.e_g_site_supervisor")}/></F>
+            {/* Designation pehle free text tha — isi wajah se ek hi company me
+                "ENGINEER" aur "Engineer" alag-alag gine jaate the. Ab Library
+                ki list; usme na ho to "+ New" se wahin jud jaata hai. */}
+            <F label={t("master_library.designation")}>
+              {addingDesig ? (
+                <div style={{display:"flex",gap:6}}>
+                  <input autoFocus style={{...inp,flex:1}} value={newDesig} onChange={e=>setNewDesig(e.target.value)}
+                    placeholder={t("master_library.e_g_site_engineer")}
+                    onKeyDown={e=>{ if(e.key==="Enter"){e.preventDefault();saveNewDesig();} if(e.key==="Escape") setAddingDesig(false); }}/>
+                  <button type="button" onClick={saveNewDesig} style={{padding:"0 12px",borderRadius:7,border:"none",background:T.blu,color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t("common.add")}</button>
+                  <button type="button" onClick={()=>setAddingDesig(false)} style={{padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,color:T.t3,fontSize:12,cursor:"pointer"}}>{t("common.cancel")}</button>
+                </div>
+              ) : (
+                <div style={{display:"flex",gap:6}}>
+                  <select style={{...inp,flex:1}} value={form.designation} onChange={e=>set("designation",e.target.value)}>
+                    <option value="">{t("master_library.select_designation")}</option>
+                    {desigList.map(d=><option key={d.id||d.name} value={d.name}>{d.name}</option>)}
+                    {/* Purana naam jo list me nahi hai — warna edit karte hi gayab ho jaata */}
+                    {!!form.designation && !desigList.some(d=>d.name===form.designation) && <option value={form.designation}>{form.designation}</option>}
+                  </select>
+                  <button type="button" onClick={()=>{setNewDesig("");setAddingDesig(true);}}
+                    style={{padding:"0 12px",borderRadius:7,border:`1.5px dashed ${T.b1}`,background:T.surface,color:T.t3,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>+ {t("common.new")}</button>
+                </div>
+              )}
+            </F>
             <F label={t("master_library.subtype")}>
               <select style={inp} value={form.staff_subtype} onChange={e=>set("staff_subtype",e.target.value)} disabled={!!picked}>
                 <option value="office">{t("payroll.office_staff")}</option>
@@ -2964,10 +3006,30 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
     setPaymentTypes(p=>({...p,[empId]:p[empId]==="fixed"?"attendance":"fixed"}));
   };
 
+  const [filterDesig,setFilterDesig]=useState("All");
+
   // Salary list shows only salary-enabled staff. App-users with salary OFF
   // appear in Attendance but not here (until admin enables salary).
   const salaryOffCount = staff.filter(e=>e.salaryEnabled===false).length;
-  const filtered=staff.filter(e=>e.salaryEnabled!==false).filter(e=>!search||e.name.toLowerCase().includes(search.toLowerCase())||(e.role||"").toLowerCase().includes(search.toLowerCase()));
+
+  // Designation ka filter — ginti yahin staff se banti hai, isliye jo naam
+  // sach me kisi par laga hai wahi dikhta hai (Library ka ho ya purana
+  // free text). Isse ek nazar me pata chalta hai kis designation par kitne.
+  const desigCounts=useMemo(()=>{
+    const m=new Map();
+    for(const e of staff){
+      if(e.salaryEnabled===false) continue;
+      const d=String(e.designation||e.role||"").trim();
+      if(!d) continue;
+      m.set(d,(m.get(d)||0)+1);
+    }
+    return m;
+  },[staff]);
+  const desigOpts=useMemo(()=>[...desigCounts.keys()].sort((a,b)=>a.localeCompare(b)),[desigCounts]);
+
+  const filtered=staff.filter(e=>e.salaryEnabled!==false)
+    .filter(e=>filterDesig==="All"||String(e.designation||e.role||"").trim()===filterDesig)
+    .filter(e=>!search||e.name.toLowerCase().includes(search.toLowerCase())||(e.role||"").toLowerCase().includes(search.toLowerCase()));
 
   const WD=workingDays||26;
   // Holidays payable (mirrors backend computeRun): non-optional, non-Sunday
@@ -3041,6 +3103,12 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("payroll.search_employee")}
             style={{height:32,padding:"0 8px 0 26px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",width:"100%"}}/>
         </div>
+        <select value={filterDesig} onChange={e=>setFilterDesig(e.target.value)}
+          style={{height:32,padding:"0 8px",borderRadius:7,border:`1.5px solid ${filterDesig==="All"?T.b1:T.blu}`,fontSize:12,
+                  color:filterDesig==="All"?T.t1:T.blu,background:filterDesig==="All"?T.surface:T.bluL,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
+          <option value="All">{t("master_library.all_designations")}</option>
+          {desigOpts.map(d=><option key={d} value={d}>{d} ({desigCounts.get(d)})</option>)}
+        </select>
         <div style={{marginLeft:"auto",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           <div style={{padding:"6px 13px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7}}>
             <span style={{fontSize:11,color:T.blu}}>{t("payroll.total_net_payroll")} </span>
