@@ -2502,6 +2502,7 @@ function EditStaffModal({emp,onClose,onSaved}){
     email:       emp.email||"",
     aadhaar:     emp.aadhaar||"",
     role:        emp.role||"",
+    designation: emp.designation||"",
     dept:        emp.dept||"",
     project:     emp.project||"",
     salary_enabled: emp.salaryEnabled===false?0:1,
@@ -2557,7 +2558,13 @@ function EditStaffModal({emp,onClose,onSaved}){
             <F label={t("payroll.mobile")}><input style={inp} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder={t("payroll.10_digit")}/></F>
             <F label={t("common.email")}><input style={inp} value={form.email} onChange={e=>set("email",e.target.value)}/></F>
             <F label={t("payroll.aadhaar")}><input style={inp} value={form.aadhaar} onChange={e=>set("aadhaar",e.target.value)} placeholder={t("payroll.12_digit")}/></F>
-            <F label={t("payroll.role_designation")}><input style={inp} value={form.role} onChange={e=>set("role",e.target.value)}/></F>
+            {/* Pehle yahan "Role / Designation" naam ka free-text tha jo
+                payroll_staff.role likhta tha — yaani Team & HR se kisi ka
+                designation badla hi nahi ja sakta tha, aur wo naam kahin aur
+                se milta bhi nahi tha. Ab wahi list jo har jagah hai. */}
+            <F label={t("master_library.designation")}>
+              <DesigPicker value={form.designation} onChange={v=>set("designation",v)} inp={inp}/>
+            </F>
             <F label={t("payroll.department")}><input style={inp} value={form.dept} onChange={e=>set("dept",e.target.value)}/></F>
             {/* Dropdown (not free text) — Overview ki project-wise coverage typo se na toote */}
             <F label={t("payroll.posting_project")} full><SearchSelect value={form.project} options={PROJECTS||[]} onChange={v=>set("project",v)} placeholder={t("payroll.office_koi_project_nahi")}/></F>
@@ -2644,28 +2651,54 @@ function EditStaffModal({emp,onClose,onSaved}){
 // library party is picked, name/designation come from it and the row
 // links via party_id. If a new name is typed (not in library), a
 // staff-party is created first, then the payroll row links to it.
+// Designation ka picker — Library ki list, aur "+ New" se wahin jud jaata
+// hai. Add Staff aur Edit Staff dono yahi use karte hain: designation ek hi
+// cheez hai, isliye uska code bhi ek hi jagah rahe. Do jagah do copy rakhne
+// se hi ye poori gadbad shuru hui thi.
+function DesigPicker({value,onChange,inp}){
+  const [list,setList]=useState([]);
+  const [adding,setAdding]=useState(false);
+  const [fresh,setFresh]=useState("");
+  const load=useCallback(async()=>{
+    try{ const r=await api.get("/library/designations"); if(r.success) setList(r.data||[]); }catch(e){}
+  },[]);
+  useEffect(()=>{ load(); },[load]);
+  const saveNew=async()=>{
+    const nm=fresh.trim(); if(!nm) return;
+    try{
+      const r=await api.post("/library/designations",{name:nm});
+      if(r.success) await load();
+      onChange(r.success ? (r.data?.name||nm) : nm);   // pehle se ho to bas chun lo
+    }catch(e){ onChange(nm); }
+    setAdding(false);
+  };
+  if(adding) return (
+    <div style={{display:"flex",gap:6}}>
+      <input autoFocus style={{...inp,flex:1}} value={fresh} onChange={e=>setFresh(e.target.value)}
+        placeholder={t("master_library.e_g_site_engineer")}
+        onKeyDown={e=>{ if(e.key==="Enter"){e.preventDefault();saveNew();} if(e.key==="Escape") setAdding(false); }}/>
+      <button type="button" onClick={saveNew} style={{padding:"0 12px",borderRadius:7,border:"none",background:T.blu,color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t("common.add")}</button>
+      <button type="button" onClick={()=>setAdding(false)} style={{padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,color:T.t3,fontSize:12,cursor:"pointer"}}>{t("common.cancel")}</button>
+    </div>
+  );
+  return (
+    <div style={{display:"flex",gap:6}}>
+      <select style={{...inp,flex:1}} value={value||""} onChange={e=>onChange(e.target.value)}>
+        <option value="">{t("master_library.select_designation")}</option>
+        {list.map(d=><option key={d.id||d.name} value={d.name}>{d.name}</option>)}
+        {/* Purana naam jo list me nahi hai — warna edit karte hi gayab ho jaata */}
+        {!!value && !list.some(d=>d.name===value) && <option value={value}>{value}</option>}
+      </select>
+      <button type="button" onClick={()=>{setFresh("");setAdding(true);}}
+        style={{padding:"0 12px",borderRadius:7,border:`1.5px dashed ${T.b1}`,background:T.surface,color:T.t3,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>+ {t("common.new")}</button>
+    </div>
+  );
+}
+
 function AddStaffModal({onClose,onSaved}){
   const [staffSearch,setStaffSearch]=useState("");
   const [results,setResults]=useState([]);
   const [picked,setPicked]=useState(null);   // {party_id,name,designation,...} or null
-  // Library → Staff Designation ki list. Yahin se chunte hain taaki naam
-  // har jagah ek jaisa rahe.
-  const [desigList,setDesigList]=useState([]);
-  const [addingDesig,setAddingDesig]=useState(false);
-  const [newDesig,setNewDesig]=useState("");
-  const loadDesig=useCallback(async()=>{
-    try{ const r=await api.get("/library/designations"); if(r.success) setDesigList(r.data||[]); }catch(e){}
-  },[]);
-  useEffect(()=>{ loadDesig(); },[loadDesig]);
-  const saveNewDesig=async()=>{
-    const nm=newDesig.trim(); if(!nm) return;
-    try{
-      const r=await api.post("/library/designations",{name:nm});
-      if(r.success) await loadDesig();
-      set("designation", r.success ? (r.data?.name||nm) : nm);   // pehle se ho to bas chun lo
-    }catch(e){}
-    setAddingDesig(false);
-  };
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
   const [form,setForm]=useState({
@@ -2794,30 +2827,8 @@ function AddStaffModal({onClose,onSaved}){
           <Sect title={t("payroll.personal")}>
             <F label={t("common.name_2")}><input style={{...inp,...(picked?{background:T.surfaceB}:{})}} value={form.name} onChange={e=>set("name",e.target.value)} disabled={!!picked}/></F>
             <F label={t("payroll.mobile")}><input style={inp} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder={t("payroll.10_digit")}/></F>
-            {/* Designation pehle free text tha — isi wajah se ek hi company me
-                "ENGINEER" aur "Engineer" alag-alag gine jaate the. Ab Library
-                ki list; usme na ho to "+ New" se wahin jud jaata hai. */}
             <F label={t("master_library.designation")}>
-              {addingDesig ? (
-                <div style={{display:"flex",gap:6}}>
-                  <input autoFocus style={{...inp,flex:1}} value={newDesig} onChange={e=>setNewDesig(e.target.value)}
-                    placeholder={t("master_library.e_g_site_engineer")}
-                    onKeyDown={e=>{ if(e.key==="Enter"){e.preventDefault();saveNewDesig();} if(e.key==="Escape") setAddingDesig(false); }}/>
-                  <button type="button" onClick={saveNewDesig} style={{padding:"0 12px",borderRadius:7,border:"none",background:T.blu,color:"white",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t("common.add")}</button>
-                  <button type="button" onClick={()=>setAddingDesig(false)} style={{padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,color:T.t3,fontSize:12,cursor:"pointer"}}>{t("common.cancel")}</button>
-                </div>
-              ) : (
-                <div style={{display:"flex",gap:6}}>
-                  <select style={{...inp,flex:1}} value={form.designation} onChange={e=>set("designation",e.target.value)}>
-                    <option value="">{t("master_library.select_designation")}</option>
-                    {desigList.map(d=><option key={d.id||d.name} value={d.name}>{d.name}</option>)}
-                    {/* Purana naam jo list me nahi hai — warna edit karte hi gayab ho jaata */}
-                    {!!form.designation && !desigList.some(d=>d.name===form.designation) && <option value={form.designation}>{form.designation}</option>}
-                  </select>
-                  <button type="button" onClick={()=>{setNewDesig("");setAddingDesig(true);}}
-                    style={{padding:"0 12px",borderRadius:7,border:`1.5px dashed ${T.b1}`,background:T.surface,color:T.t3,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>+ {t("common.new")}</button>
-                </div>
-              )}
+              <DesigPicker value={form.designation} onChange={v=>set("designation",v)} inp={inp}/>
             </F>
             <F label={t("master_library.subtype")}>
               <select style={inp} value={form.staff_subtype} onChange={e=>set("staff_subtype",e.target.value)} disabled={!!picked}>

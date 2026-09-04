@@ -281,6 +281,77 @@ function SectionCard({ title, desc, children, action }) {
   );
 }
 
+// Designation — Library ki list se, free text nahi.
+//
+// Designation ek hi aadmi ke teen record par rehta hai (users, Party Library,
+// Team & HR). Jab tak wo har jagah free text tha, ek hi kaam do-teen naam se
+// likha jaata tha — "ENGINEER" aur "Engineer", "Supervisor" aur "Site
+// Supervisor" — aur "kaunse designation ke kitne log" ka jawab kabhi sahi
+// nahi aata tha. Ab har jagah yahi list hai: Library → Staff Designation.
+//
+// Purana naam jo list me nahi hai wo bhi dropdown me rehta hai, warna kisi
+// ka record edit karte hi uska designation chupchaap gayab ho jaata.
+// "+ New" se naam wahin Library me jud jaata hai — form chhod kar jaana
+// na pade.
+function DesignationField({ value, onChange, disabled = false, half = true, label = "Designation" }) {
+  const [list, setList] = useState([]);
+  const [adding, setAdding] = useState(false);
+  const [fresh, setFresh] = useState("");
+
+  const load = async () => {
+    try { const r = await api.get("/library/designations"); if (r.success) setList(r.data || []); } catch (e) {}
+  };
+  useEffect(() => { load(); }, []);
+
+  const saveNew = async () => {
+    const nm = fresh.trim();
+    if (!nm) return;
+    try {
+      const r = await api.post("/library/designations", { name: nm });
+      if (r.success) await load();
+      // Naam pehle se ho (ya Library me jodne ka adhikar na ho) to bhi wahi
+      // chun lo — user ka kaam yahan ruke nahi.
+      onChange(r.success ? (r.data?.name || nm) : nm);
+    } catch (e) { onChange(nm); }
+    setAdding(false);
+  };
+
+  const box = { width: "100%", padding: "10px 14px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`,
+    fontSize: 13.5, color: T.text, background: disabled ? T.borderLight : "white", outline: "none",
+    boxSizing: "border-box", fontFamily: T.font };
+  const btn = (dashed) => ({ padding: "0 12px", borderRadius: T.radiusSm, fontSize: 12.5, fontWeight: 600,
+    cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.font,
+    border: dashed ? `1.5px dashed ${T.border}` : "none",
+    background: dashed ? "white" : T.blue, color: dashed ? T.textMid : "white" });
+
+  return (
+    <div style={{ flex: half ? 1 : undefined, minWidth: half ? 200 : undefined }}>
+      <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, letterSpacing: "0.3px", display: "block", marginBottom: 6 }}>{label}</label>
+      {adding ? (
+        <div style={{ display: "flex", gap: 6 }}>
+          <input autoFocus value={fresh} onChange={e => setFresh(e.target.value)} placeholder="e.g. Site Engineer"
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); saveNew(); } if (e.key === "Escape") setAdding(false); }}
+            style={{ ...box, borderColor: T.blue }} />
+          <button type="button" onClick={saveNew} style={btn(false)}>Add</button>
+          <button type="button" onClick={() => setAdding(false)} style={btn(true)}>Cancel</button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 6 }}>
+          <select value={value || ""} onChange={e => onChange(e.target.value)} disabled={disabled}
+            style={{ ...box, flex: 1, cursor: disabled ? "not-allowed" : "pointer" }}>
+            <option value="">Select designation...</option>
+            {list.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+            {!!value && !list.some(d => d.name === value) && <option value={value}>{value}</option>}
+          </select>
+          {!disabled && (
+            <button type="button" onClick={() => { setFresh(""); setAdding(true); }} style={btn(true)}>+ New</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FormField({ label, value, onChange, placeholder, type = "text", half = false, disabled = false }) {
   return (
     <div style={{ flex: half ? 1 : undefined, minWidth: half ? 200 : undefined }}>
@@ -1614,7 +1685,7 @@ function RolesAccess() {
           <FormSelect label="Role" value={userForm.role} onChange={v => setUserForm(p => ({ ...p, role: v }))} options={roles.map(r => ({ value: r.id, label: r.name }))} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Designation" value={userForm.designation||""} onChange={v => setUserForm(p => ({ ...p, designation: v }))} placeholder="e.g. Site Engineer, PM" half disabled={!!linkedParty} />
+          <DesignationField value={userForm.designation||""} onChange={v => setUserForm(p => ({ ...p, designation: v }))} disabled={!!linkedParty} />
           {!editingUser && <FormField label="Password" value={userForm.password||""} onChange={v => setUserForm(p => ({ ...p, password: v }))} placeholder="Default: Welcome@123" half />}
         </div>
 
@@ -3701,7 +3772,7 @@ function MyProfile() {
           <FormField label="Phone" value={form.phone} onChange={v => setForm(f => ({ ...f, phone: v }))} placeholder="Mobile number" half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Designation" value={form.designation} onChange={v => setForm(f => ({ ...f, designation: v }))} placeholder="e.g. Project Manager" half />
+          <DesignationField value={form.designation} onChange={v => setForm(f => ({ ...f, designation: v }))} />
           <FormField label="Email (login — admin managed)" value={prof.email || ""} onChange={() => {}} disabled half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
