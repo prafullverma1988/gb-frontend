@@ -6361,6 +6361,10 @@ const dict = {
   "tasks.leave_blank_to_use_the_project":                      "Leave blank to use the project's own start date.",
   "tasks.level_parent_task":                                   "Level {parent} task",
   "tasks.line_par":                                            "✓ line par",
+
+  "tasks.kaam_kahan_hua":                                    "Kaam kahan hua?",
+
+  "tasks.nahi_bataya":                                       "nahi bataya",
   "tasks.line_se_hat_kar":                                     "⚠ line se hat kar",
   "tasks.load_task_template":                                  "📋 Load Task Template",
   "tasks.load_template":                                       "📋 Load Template",
@@ -6669,6 +6673,27 @@ const dict = {
   "tender_ai_plan.stage_tick_hint": "Aam taur par zaroorat nahi — stage kaam ki PARAT hai, alag jagah nahi. Sirf tab lagao jab ye sach me alag cheez ho.",
 
   "tender_ai_plan.same_len_warn": "Do stage par tick lagi hai aur dono ki lambai ek hi hai ({n} m) — kya sach me ye do alag jagah hain? Agar ek hi jagah ki parat hain to sirf upar wale kaam par tick rehne do.",
+
+
+  "tender_ai_plan.tukde_n": "Tukde: {n}",
+
+
+  "tender_ai_plan.tukde_hint": "Kaam alag-alag jagah ke tukdon me banta ho (gaon / chainage) to yahin likh do — plan seedha Sadak → Tukda → parat banega, qty lambai ke anupaat me",
+
+
+  "tender_ai_plan.tukde_intro": "Har tukde ke andar {parat} parat banengi, qty tukde ki lambai ke anupaat me (jod theek BOQ). Tick tukdon par lagegi, kaam par nahi.",
+
+
+  "tender_ai_plan.tukda_naam": "tukde ka naam (gaon / CH 0-1500)",
+
+
+  "tender_ai_plan.tukda_jodo": "+ tukda",
+
+
+  "tender_ai_plan.tukde_jod": "jod {sum} m · kaam {qty} {unit}",
+
+
+  "tender_ai_plan.tukde_ek_se_kuchh_nahi": "ek tukda = tukde nahi; do ya zyada likho",
   "tender_ai_plan.stages_2":                                   "+ stages",
   "tender_ai_plan.step":                                       "＋ step",
   "tender_ai_plan.task_isse_judega_mb_ra":                     " — task isse judega (MB/RA)",

@@ -6359,6 +6359,10 @@ const dict = {
   "tasks.leave_blank_to_use_the_project":                      "Leave blank to use the project's own start date.",
   "tasks.level_parent_task":                                   "Level {parent} task",
   "tasks.line_par":                                            "✓ on line",
+
+  "tasks.kaam_kahan_hua":                                    "Where was the work done?",
+
+  "tasks.nahi_bataya":                                       "not specified",
   "tasks.line_se_hat_kar":                                     "⚠ off line",
   "tasks.load_task_template":                                  "📋 Load Task Template",
   "tasks.load_template":                                       "📋 Load Template",
@@ -6667,6 +6671,27 @@ const dict = {
   "tender_ai_plan.stage_tick_hint": "Usually not needed — a stage is a LAYER of the same work, not a separate place. Tick only if it really is a different thing.",
 
   "tender_ai_plan.same_len_warn": "Two stages are ticked and both are the same length ({n} m) — are these really two different places? If they are layers of one place, keep the tick only on the work above.",
+
+
+  "tender_ai_plan.tukde_n": "Stretches: {n}",
+
+
+  "tender_ai_plan.tukde_hint": "If the work is built in separate stretches (villages / chainage), write them here — the plan becomes Road → Stretch → layers, quantity pro-rata to length",
+
+
+  "tender_ai_plan.tukde_intro": "Each stretch gets {parat} layers, quantity pro-rata to its length (total stays exactly BOQ). The map tick goes on the stretches, not on the work.",
+
+
+  "tender_ai_plan.tukda_naam": "stretch name (village / CH 0-1500)",
+
+
+  "tender_ai_plan.tukda_jodo": "+ stretch",
+
+
+  "tender_ai_plan.tukde_jod": "total {sum} m · work {qty} {unit}",
+
+
+  "tender_ai_plan.tukde_ek_se_kuchh_nahi": "one stretch = no split; add two or more",
   "tender_ai_plan.stages_2":                                   "+ stages",
   "tender_ai_plan.step":                                       "＋ step",
   "tender_ai_plan.task_isse_judega_mb_ra":                     " — task will link to this (MB/RA)",

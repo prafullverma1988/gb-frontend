@@ -6358,6 +6358,10 @@ const dict = {
   "tasks.leave_blank_to_use_the_project":                      "प्रोजेक्ट की अपनी स्टार्ट डेट यूज़ करने के लिए खाली छोड़ दो।",
   "tasks.level_parent_task":                                   "लेवल {parent} टास्क",
   "tasks.line_par":                                            "✓ लाइन पर",
+
+  "tasks.kaam_kahan_hua":                                    "काम कहाँ हुआ?",
+
+  "tasks.nahi_bataya":                                       "नहीं बताया",
   "tasks.line_se_hat_kar":                                     "⚠ लाइन से हट कर",
   "tasks.load_task_template":                                  "📋 टास्क टेम्पलेट लोड करो",
   "tasks.load_template":                                       "📋 टेम्पलेट लोड करो",
@@ -6666,6 +6670,27 @@ const dict = {
   "tender_ai_plan.stage_tick_hint": "आम तौर पर ज़रूरत नहीं — स्टेज काम की परत है, अलग जगह नहीं। सिर्फ़ तब लगाओ जब ये सच में अलग चीज़ हो।",
 
   "tender_ai_plan.same_len_warn": "दो स्टेज पर टिक लगी है और दोनों की लंबाई एक ही है ({n} m) — क्या सच में ये दो अलग जगह हैं? अगर एक ही जगह की परत हैं तो सिर्फ़ ऊपर वाले काम पर टिक रहने दो।",
+
+
+  "tender_ai_plan.tukde_n": "टुकड़े: {n}",
+
+
+  "tender_ai_plan.tukde_hint": "काम अलग-अलग जगह के टुकड़ों में बनता हो (गाँव / chainage) तो यहीं लिख दो — प्लान सीधा सड़क → टुकड़ा → परत बनेगा, मात्रा लंबाई के अनुपात में",
+
+
+  "tender_ai_plan.tukde_intro": "हर टुकड़े के अंदर {parat} परत बनेंगी, मात्रा टुकड़े की लंबाई के अनुपात में (जोड़ ठीक BOQ)। टिक टुकड़ों पर लगेगी, काम पर नहीं।",
+
+
+  "tender_ai_plan.tukda_naam": "टुकड़े का नाम (गाँव / CH 0-1500)",
+
+
+  "tender_ai_plan.tukda_jodo": "+ टुकड़ा",
+
+
+  "tender_ai_plan.tukde_jod": "जोड़ {sum} m · काम {qty} {unit}",
+
+
+  "tender_ai_plan.tukde_ek_se_kuchh_nahi": "एक टुकड़ा = टुकड़े नहीं; दो या ज़्यादा लिखो",
   "tender_ai_plan.stages_2":                                   "+ स्टेजेस",
   "tender_ai_plan.step":                                       "＋ स्टेप",
   "tender_ai_plan.task_isse_judega_mb_ra":                     " — टास्क इससे जुड़ेगा (MB/RA)",

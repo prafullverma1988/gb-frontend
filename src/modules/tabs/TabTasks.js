@@ -3377,6 +3377,17 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId}){
   const [vBusy,setVBusy]=useState(false);
   const [vSug,setVSug]=useState(null);          // voice ka sujhaav
   const [repDate,setRepDate]=useState(null);    // "kal" bola ho to wahi date
+  // Kaam kahan hua — sirf tab poochho jab is kaam par 2+ line judi hon
+  // (bina-bate sadak ke tukde). Web par GPS nahi, isliye khud nahi chunta.
+  const [lines,setLines]=useState([]);
+  const [lineId,setLineId]=useState("");
+  useEffect(()=>{ let dead=false; (async()=>{
+    if(!projectId)return;
+    const r=await api.get("/tenders/by-project/"+projectId+"/alignments?task_id="+task.id).catch(()=>null);
+    if(dead||!r?.success)return;
+    const l=r.data?.alignments||[];
+    setLines(r.data?.scoped&&l.length>=2?l:[]);
+  })(); return()=>{dead=true;}; },[projectId,task.id]);
   const recRef=useRef(null);
   const load=useCallback(async()=>{
     const r=await api.get("/budget/task/"+task.id);
@@ -3394,7 +3405,8 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId}){
     if(!(q>0)||saving)return;
     setSaving(true);
     const r=await api.post("/budget/task/"+task.id+"/progress",
-      {report_date:repDate||new Date().toISOString().split("T")[0],done_qty:q,remarks:note.trim()||"Web se darj"});
+      {report_date:repDate||new Date().toISOString().split("T")[0],done_qty:q,remarks:note.trim()||"Web se darj",
+       alignment_id:lineId?Number(lineId):undefined});
     setSaving(false);
     if(!r?.success){window.alert(r?.message||"Save nahi hua");return;}
     setQty("");setNote("");setVSug(null);setRepDate(null);
@@ -3465,6 +3477,16 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId}){
       <div style={{height:"100%",width:pct+"%",background:pct>=100?"#10B981":"#2563EB",borderRadius:4,transition:"width .3s"}}/>
     </div>
 
+    {lines.length>=2&&(
+      <div style={{marginBottom:8}}>
+        <div style={{fontSize:11,color:"#64748B",marginBottom:4}}>{t("tasks.kaam_kahan_hua")}</div>
+        <select value={lineId} onChange={e=>setLineId(e.target.value)}
+          style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #E2E8F0",fontSize:12.5,background:"white"}}>
+          <option value="">{t("tasks.nahi_bataya")}</option>
+          {lines.map(l=>(<option key={l.id} value={l.id}>{l.name}{l.length_m?` · ${Math.round(l.length_m)} m`:""}</option>))}
+        </select>
+      </div>
+    )}
     {/* Aaj ka kaam */}
     <div style={{display:"flex",gap:7,marginBottom:8}}>
       <input type="number" min="0" step="any" value={qty} onChange={e=>setQty(e.target.value)}

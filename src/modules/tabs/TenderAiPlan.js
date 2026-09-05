@@ -406,8 +406,19 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     </select>
   );
 
+  // ── Tukde — planning me hi ──
+  // Kaam alag-alag jagah ke tukdon me banta ho (Sendh 1500, Dhaba 1200 ...)
+  // to yahin likh do: executor seedha Sadak → Tukda (line ki tick) → parat
+  // banata hai, qty lambai ke anupaat me, jod theek BOQ. Tick tukdon par
+  // lagti hai, kaam par nahi.
+  const tukdeOf = (w) => (Array.isArray(w.tukde) ? w.tukde : []);
+  const hasTukde = (w) => tukdeOf(w).length >= 2;
+  // Har tukde me kitni parat: stage ke steps, steps na hon to stage khud,
+  // kuchh bhi na ho to kaam khud ek parat.
+  const paratCount = (w) => ((w.stages || []).reduce((a, s) => a + ((s.steps || []).length || 1), 0) || 1);
+
   const totalMarks = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false)
-    .reduce((b, w) => b + (markOn(w) ? 1 : 0) + (w.stages || []).filter((st) => st.map).length, 0), 0) : 0;
+    .reduce((b, w) => b + (hasTukde(w) ? tukdeOf(w).length : (markOn(w) ? 1 : 0)) + (w.stages || []).filter((st) => st.map).length, 0), 0) : 0;
 
   const totalWorks = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false).length, 0) : 0;
   const totalAmt = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false).reduce((b, w) => b + (Number(w.amount) || 0), 0), 0) : 0;
@@ -519,7 +530,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                         dikhegi hi nahi. */}
                     <label title={t("tender_ai_plan.map_tick_hint")}
                       style={{ display: "flex", alignItems: "center", gap: 3, cursor: "pointer", userSelect: "none",
-                        opacity: markOn(w) ? 1 : 0.4 }}>
+                        opacity: hasTukde(w) ? 0.25 : markOn(w) ? 1 : 0.4, pointerEvents: hasTukde(w) ? "none" : "auto" }}>
                       <input type="checkbox" checked={markOn(w)}
                         onChange={() => upd((p) => {
                           const nx = !markOn(w);
@@ -543,6 +554,14 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                         <option value="area+pin">{t("tender_ai_plan.mk_area_pin")}</option>
                       </select>
                     )}
+                    {LINE_W.includes(w.wtype) && (
+                      <button onClick={() => setOpen((o) => ({ ...o, ["tk:" + key]: !o["tk:" + key] }))}
+                        title={t("tender_ai_plan.tukde_hint")}
+                        style={{ border: `1px solid ${hasTukde(w) ? "#F59E0B" : T.b2}`, background: hasTukde(w) ? "#FEF3C7" : "none",
+                          color: hasTukde(w) ? "#92400E" : T.t3, borderRadius: 10, padding: "1px 8px", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
+                        {t("tender_ai_plan.tukde_n", { n: hasTukde(w) ? tukdeOf(w).length : 1 })}
+                      </button>
+                    )}
                     {!w.stages.length && pmSel(w,
                       (e) => upd((p) => { p.sites[si].works[wi].progress_mode = e.target.value; }))}
                     <button onClick={() => setOpen((o) => ({ ...o, [key]: !exp }))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, color: T.blu, fontWeight: 700 }}>
@@ -550,6 +569,37 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                     </button>
                   </div>
                   {w.source && <div style={{ padding: "0 12px 6px 35px", fontSize: 10, color: T.t4 }}>{t("tender_ai_plan.src_source", { source: w.source })}</div>}
+                  {open["tk:" + key] && LINE_W.includes(w.wtype) && (() => {
+                    const tk = tukdeOf(w);
+                    const sum = tk.reduce((a, x) => a + (Number(x.len) || 0), 0);
+                    const q = Number(w.qty) || 0;
+                    const off = q > 0 && Math.abs(sum - q) > q * 0.02;
+                    const setTk = (fn) => upd((p) => { const ww = p.sites[si].works[wi]; ww.tukde = Array.isArray(ww.tukde) ? ww.tukde : []; fn(ww.tukde); });
+                    return (
+                      <div style={{ margin: "0 12px 8px 35px", padding: "8px 10px", border: `1px solid ${T.b1}`, borderRadius: 8 }}>
+                        <div style={{ fontSize: 10.5, color: T.t3, marginBottom: 6, lineHeight: 1.5 }}>{t("tender_ai_plan.tukde_intro", { parat: paratCount(w) })}</div>
+                        {tk.map((x, k) => (
+                          <div key={k} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                            <span style={{ fontSize: 10.5, color: T.t4, width: 16 }}>{k + 1}.</span>
+                            <input value={x.name || ""} placeholder={t("tender_ai_plan.tukda_naam")} onChange={(e) => setTk((a) => { a[k].name = e.target.value; })} style={inp({ flex: "1 1 160px" })} />
+                            <input type="number" value={x.len || ""} placeholder="m" onChange={(e) => setTk((a) => { a[k].len = Number(e.target.value) || 0; })} style={inp({ width: 88, textAlign: "right" })} />
+                            <span style={{ fontSize: 10.5, color: T.t4 }}>m</span>
+                            <button onClick={() => setTk((a) => { a.splice(k, 1); })} style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 13 }}>×</button>
+                          </div>
+                        ))}
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+                          <button onClick={() => setTk((a) => { a.push({ name: "", len: 0 }); })}
+                            style={{ border: `1px dashed ${T.b2}`, background: "none", borderRadius: 6, padding: "2px 10px", fontSize: 10.5, color: T.t3, cursor: "pointer" }}>{t("tender_ai_plan.tukda_jodo")}</button>
+                          {tk.length > 0 && (
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: off ? "#B45309" : T.t3 }}>
+                              {t("tender_ai_plan.tukde_jod", { sum: fmtQty(sum), qty: fmtQty(q), unit: w.unit || "" })}
+                            </span>
+                          )}
+                          {tk.length === 1 && <span style={{ fontSize: 10.5, color: T.t4 }}>{t("tender_ai_plan.tukde_ek_se_kuchh_nahi")}</span>}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {sameLenWarn(w) && (
                     <div style={{ margin: "0 12px 8px 35px", padding: "6px 10px", background: T.ambL,
                       border: "1px solid " + T.ambM, borderRadius: 8, fontSize: 11, color: "#92400E" }}>
