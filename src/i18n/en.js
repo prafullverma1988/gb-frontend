@@ -6683,6 +6683,24 @@ const dict = {
   "tender_ai_plan.same_len_warn": "Two stages are ticked and both are the same length ({n} m) — are these really two different places? If they are layers of one place, keep the tick only on the work above.",
 
 
+  "tender_ai_plan.map_lines_se_bharo": "Fill from map lines",
+
+
+  "tender_ai_plan.map_lines_hint": "Fill stretches from the lines already on this site’s map (KML or drawn) — on execute each stretch links straight to its line",
+
+
+  "tender_ai_plan.map_line_nahi": "No lines on this tender’s map yet — upload a KML or draw first",
+
+
+  "tender_ai_plan.map_line_nahi_sites": "No map lines under a site named \"{site}\". Lines exist on: {sites}. Use that site name in the plan.",
+
+
+  "tender_ai_plan.line_se_juda": "from a map line — will link on execute",
+
+
+  "tender_ai_plan.lines_linked": "{n} stretches linked to their map lines",
+
+
   "tender_ai_plan.tukde_n": "Stretches: {n}",
 
 
