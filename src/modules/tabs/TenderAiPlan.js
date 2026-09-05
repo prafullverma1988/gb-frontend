@@ -197,6 +197,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   const [busy, setBusy] = useState("");        // "analyze" | "chat" | "save" | "exec"
   const [chat, setChat] = useState("");
   const [open, setOpen] = useState({});
+  const [tenderLines, setTenderLines] = useState(null);   // map ki lines — tukde bharne ke liye; null = abhi laayi nahi
   const [execOpen, setExecOpen] = useState(false);
   const [cities, setCities] = useState([]); const [ctypes, setCtypes] = useState([]);
   const [cityId, setCityId] = useState(""); const [ctypeId, setCtypeId] = useState("");
@@ -416,6 +417,30 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   // Har tukde me kitni parat: stage ke steps, steps na hon to stage khud,
   // kuchh bhi na ho to kaam khud ek parat.
   const paratCount = (w) => ((w.stages || []).reduce((a, s) => a + ((s.steps || []).length || 1), 0) || 1);
+  // Map ki lines se tukde bharo. KML aksar plan se PEHLE aa jaati hai — to
+  // naam aur lambai wahin se, aur execute par har tukda apni line se seedha
+  // jud jaata hai (site wale ko markna nahi padta). Line usi site ki honi
+  // chahiye jiska naam plan me hai; naam na mile to batate hain kahan hain.
+  const loadTenderLines = async () => {
+    if (tenderLines) return tenderLines;
+    const r = await api.get(`/tenders/${tenderId}/alignments`);
+    const list = r?.success && Array.isArray(r.data) ? r.data.filter((a) => a.kind === "line") : [];
+    setTenderLines(list);
+    return list;
+  };
+  const fillTukdeFromMap = async (si, wi, siteName) => {
+    const all = await loadTenderLines();
+    const nm = String(siteName || "").trim().toLowerCase();
+    const mine = all.filter((a) => String(a.project_name || "").trim().toLowerCase() === nm);
+    if (!mine.length) {
+      const sites = [...new Set(all.map((a) => a.project_name).filter(Boolean))];
+      window.alert(sites.length ? t("tender_ai_plan.map_line_nahi_sites", { site: siteName, sites: sites.join(", ") }) : t("tender_ai_plan.map_line_nahi"));
+      return;
+    }
+    upd((p) => {
+      p.sites[si].works[wi].tukde = mine.map((a) => ({ name: a.name, len: Math.round(Number(a.length_m) || 0), alignment_id: a.id }));
+    });
+  };
 
   const totalMarks = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false)
     .reduce((b, w) => b + (hasTukde(w) ? tukdeOf(w).length : (markOn(w) ? 1 : 0)) + (w.stages || []).filter((st) => st.map).length, 0), 0) : 0;
@@ -584,12 +609,15 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                             <input value={x.name || ""} placeholder={t("tender_ai_plan.tukda_naam")} onChange={(e) => setTk((a) => { a[k].name = e.target.value; })} style={inp({ flex: "1 1 160px" })} />
                             <input type="number" value={x.len || ""} placeholder="m" onChange={(e) => setTk((a) => { a[k].len = Number(e.target.value) || 0; })} style={inp({ width: 88, textAlign: "right" })} />
                             <span style={{ fontSize: 10.5, color: T.t4 }}>m</span>
+                            {x.alignment_id ? <span title={t("tender_ai_plan.line_se_juda")} style={{ fontSize: 11 }}>🔗</span> : null}
                             <button onClick={() => setTk((a) => { a.splice(k, 1); })} style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 13 }}>×</button>
                           </div>
                         ))}
                         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
                           <button onClick={() => setTk((a) => { a.push({ name: "", len: 0 }); })}
                             style={{ border: `1px dashed ${T.b2}`, background: "none", borderRadius: 6, padding: "2px 10px", fontSize: 10.5, color: T.t3, cursor: "pointer" }}>{t("tender_ai_plan.tukda_jodo")}</button>
+                          <button onClick={() => fillTukdeFromMap(si, wi, site.name)} title={t("tender_ai_plan.map_lines_hint")}
+                            style={{ border: `1px solid ${T.blu}`, background: "none", borderRadius: 6, padding: "2px 10px", fontSize: 10.5, color: T.blu, cursor: "pointer", fontWeight: 700 }}>{t("tender_ai_plan.map_lines_se_bharo")}</button>
                           {tk.length > 0 && (
                             <span style={{ fontSize: 10.5, fontWeight: 700, color: off ? "#B45309" : T.t3 }}>
                               {t("tender_ai_plan.tukde_jod", { sum: fmtQty(sum), qty: fmtQty(q), unit: w.unit || "" })}
@@ -688,6 +716,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
             <div>
               {t("tender_ai_plan.works_created_kaam_stages_created_stages", { works_created: execResult.works_created, stages_created: execResult.stages_created, steps: execResult.steps_created ? ` + ${execResult.steps_created} steps` : "" })}
               {execResult.boq_linked ? <> · <b style={{ color: T.grn }}>{t("tender_ai_plan.boq_linked_task_boq_se_jude", { boq_linked: execResult.boq_linked })}</b> {t("tender_ai_plan.inki_qty_mb_draft_tak_jayegi")}</> : ""}
+              {execResult.lines_linked ? <> · 🔗 {t("tender_ai_plan.lines_linked", { n: execResult.lines_linked })}</> : ""}
               {execResult.skipped?.length ? t("tender_ai_plan.skipped_pehle_se_the", { skipped: execResult.skipped.length }) : ""}
             </div>
             {execResult.skipped?.length > 0 && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{execResult.skipped.join(" · ")}</div>}

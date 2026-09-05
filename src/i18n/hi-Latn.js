@@ -6675,6 +6675,24 @@ const dict = {
   "tender_ai_plan.same_len_warn": "Do stage par tick lagi hai aur dono ki lambai ek hi hai ({n} m) — kya sach me ye do alag jagah hain? Agar ek hi jagah ki parat hain to sirf upar wale kaam par tick rehne do.",
 
 
+  "tender_ai_plan.map_lines_se_bharo": "Map ki lines se bharo",
+
+
+  "tender_ai_plan.map_lines_hint": "Is site par map me jo lines hain (KML ya haath se khinchi) unhi se tukde bharo — execute par har tukda apni line se seedha jud jayega",
+
+
+  "tender_ai_plan.map_line_nahi": "Is tender ke map par koi line nahi — pehle KML chadhao ya kheencho",
+
+
+  "tender_ai_plan.map_line_nahi_sites": "Site \"{site}\" ke naam par map me koi line nahi. Lines in site par hain: {sites}. Plan me site ka naam wahi rakho.",
+
+
+  "tender_ai_plan.line_se_juda": "map ki line se aaya — execute par jud jayega",
+
+
+  "tender_ai_plan.lines_linked": "{n} tukde map ki line se jud gaye",
+
+
   "tender_ai_plan.tukde_n": "Tukde: {n}",
 
 
