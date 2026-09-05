@@ -5670,6 +5670,16 @@ const dict = {
   "settings.language.hint":                                    "App, messages aur notifications isi language me aayenge",
   "settings.language.label":                                   "Language",
   "settings.language.saved":                                   "Language save ho gayi",
+  "settings.wh_add_location":                                  "Jagah lagao",
+  "settings.wh_cant_close":                                    "Isme stock ka kaam pada hai — pehle wo doosre godown me le jao, phir band karo",
+  "settings.wh_close":                                         "Band karo",
+  "settings.wh_close_confirm":                                 "\"{name}\" band karna hai? List se hat jayega, par uska purana record rahega.",
+  "settings.wh_close_failed":                                  "Band nahi ho paaya — dobara try karo",
+  "settings.wh_default":                                       "Default",
+  "settings.wh_empty":                                         "Isme abhi kuch nahi",
+  "settings.wh_has_work":                                      "Isme {n} entry ka kaam pada hai",
+  "settings.wh_no_location":                                   "Jagah nahi lagi — punch-in yahan kaam nahi karega",
+  "settings.wh_stock_only_note":                               "Neeche wale godown app me chal rahe hain aur stock inhi me pada hai, par inki jagah (location) kabhi lagi hi nahi — isliye ye Settings me pehle nahi dikhte the. Jagah laga do, phir mobile punch-in bhi inpar kaam karega.",
 
   // ── share_drawing ───────────────────────────────────────────
   "share_drawing.client_phone_target":                         "Client Phone {target}",

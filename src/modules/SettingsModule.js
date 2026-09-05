@@ -432,7 +432,9 @@ function LocationsSettings() {
     { v: "office",    label: "🏢 Office",    c: T.blue },
     { v: "warehouse", label: "📦 Warehouse", c: T.amber },
   ];
-  const blank = { id: null, kind: "office", label: "", address: "", lat: "", lng: "", radius: 100, incharge: "" };
+  // whId = wo stock-side godown jise jagah di ja rahi hai (uska geofence
+  // abhi nahi hai). Isse save naya godown nahi banata, purane ko jodta hai.
+  const blank = { id: null, whId: null, kind: "office", label: "", address: "", lat: "", lng: "", radius: 100, incharge: "" };
   const [rows, setRows] = useState([]);
   // Warehouse ka stock-side jodidar (wh_warehouses) — yahin se uska
   // incharge tay hota hai. Geofence attendance ke liye hai, incharge
@@ -460,6 +462,15 @@ function LocationsSettings() {
   // Geofence row ka warehouse jodidar (backend boot par khud jod deta hai).
   const whFor = (g) => whs.find(w => String(w.geofence_id) === String(g.id)) || null;
 
+  // Jo godown Settings me kabhi nahi dikhte the: multi-warehouse ke backfill
+  // ne purane `location` naamon se ye bana diye the, inka koi geofence nahi
+  // hai — aur aksar company ka DEFAULT yahi hota hai, yaani asli stock isi me
+  // pada rehta hai. Inhe chhupa dena hi wo dikkat thi jise ye list theek karti
+  // hai: aadmi Settings dekh kar samajhta tha sab theek hai.
+  const orphanWhs = (whs || []).filter(w => !w.geofence_id && w.is_active !== 0);
+  const rowsFor = (w) => (Number(w.stock_items) || 0) + (Number(w.grn_count) || 0)
+    + (Number(w.issue_count) || 0) + (Number(w.mr_count) || 0);
+
   const useCurrentLoc = () => {
     if (!navigator.geolocation) { setMsg("GPS not available"); return; }
     setMsg("📍 Getting location…");
@@ -479,10 +490,19 @@ function LocationsSettings() {
       const body = { project_id: null, kind: form.kind, label: form.label.trim(),
                      address: form.address || null, center_lat: lat, center_lng: lng, radius_m: Number(form.radius) || 100 };
       const r = form.id ? await api.put("/geofences/" + form.id, body) : await api.post("/geofences", body);
+      // Purana godown ko jagah mili — naya godown mat banao, usi ko jod do,
+      // warna wahi stock do godown me bat jaata.
+      if (r.success && form.whId) {
+        await api.patch("/warehouse/warehouses/" + form.whId, {
+          geofence_id: r.data?.id || form.id || null,
+          name: form.label.trim(), address: form.address || null,
+          incharge_user_id: form.incharge ? Number(form.incharge) : null,
+        }).catch(()=>{});
+      }
       // Warehouse hai to uska incharge bhi save karo. Naya warehouse abhi
       // bana ho to backend ne wh_warehouses row abhi tak nahi jodi —
       // isliye pehle naam se bana/dhoondh kar incharge lagate hain.
-      if (r.success && form.kind === "warehouse") {
+      if (r.success && form.kind === "warehouse" && !form.whId) {
         const existing = form.id ? whFor({ id: form.id }) : null;
         const inch = form.incharge ? Number(form.incharge) : null;
         if (existing) {
@@ -504,6 +524,19 @@ function LocationsSettings() {
   const edit = (g) => setForm({ id: g.id, kind: g.kind || "office", label: g.label || "", address: g.address || "",
                                 lat: String(g.center_lat), lng: String(g.center_lng), radius: g.radius_m || 100,
                                 incharge: whFor(g)?.incharge_user_id ? String(whFor(g).incharge_user_id) : "" });
+  // Stock-side godown ko jagah dena — naam/incharge wahi rehta hai.
+  const editWh = (w) => setForm({ id: null, whId: w.id, kind: "warehouse", label: w.name || "",
+                                  address: w.address || "", lat: "", lng: "", radius: 100,
+                                  incharge: w.incharge_user_id ? String(w.incharge_user_id) : "" });
+
+  // Hataana nahi, band karna — jisme stock ka kaam pada ho use haath nahi lagate.
+  const closeWh = async (w) => {
+    if (rowsFor(w) > 0) { setMsg(t("settings.wh_cant_close")); return; }
+    if (!await window.confirmAsync(t("settings.wh_close_confirm", { name: w.name }))) return;
+    const r = await api.patch("/warehouse/warehouses/" + w.id, { is_active: 0 }).catch(()=>({success:false}));
+    if (r.success) load(); else setMsg(r.message || t("settings.wh_close_failed"));
+  };
+
   const del = async (g) => {
     if (!await window.confirmAsync(`Delete "${g.label}"?`)) return;
     const r = await api.del("/geofences/" + g.id + "?hard=1").catch(()=>({success:false}));
@@ -517,15 +550,42 @@ function LocationsSettings() {
     <SectionCard title="Office & Warehouse Locations" desc="Add company offices and warehouses with geo-location. Mobile punch-in is geofenced to these sites (alongside project locations).">
       {/* Existing list */}
       {loading ? <div style={{ padding:"14px 0", color:T.textLight, fontSize:12.5 }}>Loading…</div> :
-        rows.length === 0 ? <div style={{ padding:"18px", textAlign:"center", color:T.textLight, fontSize:12.5, background:T.bg, borderRadius:9, marginBottom:16 }}>Koi office/warehouse location nahi — niche se add karo.</div> :
+        rows.length === 0 && orphanWhs.length === 0 ? <div style={{ padding:"18px", textAlign:"center", color:T.textLight, fontSize:12.5, background:T.bg, borderRadius:9, marginBottom:16 }}>Koi office/warehouse location nahi — niche se add karo.</div> :
         <div style={{ marginBottom:18 }}>
+          {orphanWhs.length > 0 && (
+            <div style={{ fontSize:11.5, color:T.amber, fontWeight:600, background:T.amber+"12", border:`1px solid ${T.amber}33`, borderRadius:8, padding:"9px 12px", marginBottom:8 }}>
+              {t("settings.wh_stock_only_note")}
+            </div>
+          )}
+          {orphanWhs.map(w => (
+            <div key={"wh" + w.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 13px", border:`1px solid ${T.amber}55`, borderRadius:9, marginBottom:8, background:"white" }}>
+              <span style={{ fontSize:11, fontWeight:700, color:T.amber, background:T.amber+"15", padding:"3px 9px", borderRadius:12, whiteSpace:"nowrap" }}>📦 Warehouse</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:T.text }}>
+                  {w.name}
+                  {w.is_default ? <span style={{ marginLeft:7, fontSize:10, fontWeight:700, color:T.blue, background:T.blueSoft, padding:"2px 7px", borderRadius:10 }}>{t("settings.wh_default")}</span> : null}
+                </div>
+                <div style={{ fontSize:11, color:T.textMid, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{w.address || "—"}</div>
+                <div style={{ fontSize:10.5, color:T.amber, fontWeight:600, marginTop:1 }}>⚠ {t("settings.wh_no_location")}</div>
+                <div style={{ fontSize:10.5, color:T.textLight, marginTop:1 }}>
+                  {rowsFor(w) > 0 ? t("settings.wh_has_work", { n: rowsFor(w) }) : t("settings.wh_empty")}
+                  {w.incharge_name ? " · 👤 " + w.incharge_name : ""}
+                </div>
+              </div>
+              <button onClick={()=>editWh(w)} style={{ padding:"5px 11px", borderRadius:6, background:T.blueSoft, color:T.blue, border:`1px solid ${T.blue}33`, fontSize:11, fontWeight:700, cursor:"pointer" }}>{t("settings.wh_add_location")}</button>
+              <button onClick={()=>closeWh(w)} title={t("settings.wh_close")} style={{ padding:"5px 9px", borderRadius:6, background:T.redSoft, color:T.red, border:`1px solid ${T.red}33`, fontSize:11, fontWeight:700, cursor:"pointer" }}>✕</button>
+            </div>
+          ))}
           {rows.map(g => {
             const k = KINDS.find(x => x.v === g.kind) || KINDS[0];
             return (
               <div key={g.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 13px", border:`1px solid ${T.border}`, borderRadius:9, marginBottom:8, background:"white" }}>
                 <span style={{ fontSize:11, fontWeight:700, color:k.c, background:k.c+"15", padding:"3px 9px", borderRadius:12, whiteSpace:"nowrap" }}>{k.label}</span>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:T.text }}>{g.label}</div>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.text }}>
+                    {g.label}
+                    {whFor(g)?.is_default ? <span style={{ marginLeft:7, fontSize:10, fontWeight:700, color:T.blue, background:T.blueSoft, padding:"2px 7px", borderRadius:10 }}>{t("settings.wh_default")}</span> : null}
+                  </div>
                   <div style={{ fontSize:11, color:T.textMid, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.address || "—"}</div>
                   <div style={{ fontSize:10.5, color:T.textLight, marginTop:1 }}>📍 {Number(g.center_lat).toFixed(5)}, {Number(g.center_lng).toFixed(5)} · {g.radius_m}m</div>
                   {g.kind === "warehouse" && (

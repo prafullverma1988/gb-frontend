@@ -5668,6 +5668,16 @@ const dict = {
   "settings.language.hint":                                    "The app, messages and notifications will use this language",
   "settings.language.label":                                   "Language",
   "settings.language.saved":                                   "Language saved",
+  "settings.wh_add_location":                                  "Add location",
+  "settings.wh_cant_close":                                    "This one still holds stock records — move them to another warehouse first",
+  "settings.wh_close":                                         "Close",
+  "settings.wh_close_confirm":                                 "Close \"{name}\"? It will drop off the list, but its past records stay.",
+  "settings.wh_close_failed":                                  "Could not close it — try again",
+  "settings.wh_default":                                       "Default",
+  "settings.wh_empty":                                         "Nothing in it yet",
+  "settings.wh_has_work":                                      "{n} entries are recorded here",
+  "settings.wh_no_location":                                   "No location set — punch-in will not work here",
+  "settings.wh_stock_only_note":                               "The warehouses below are in use and hold the stock, but no location was ever set for them — which is why Settings never showed them. Add a location and mobile punch-in will work there too.",
 
   // ── share_drawing ───────────────────────────────────────────
   "share_drawing.client_phone_target":                         "Client Phone {target}",

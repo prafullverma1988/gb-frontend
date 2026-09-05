@@ -5667,6 +5667,16 @@ const dict = {
   "settings.language.hint":                                    "ऐप, मैसेज और नोटिफिकेशन इसी भाषा में आएंगे",
   "settings.language.label":                                   "भाषा",
   "settings.language.saved":                                   "भाषा सेव हो गई",
+  "settings.wh_add_location":                                  "जगह लगाएँ",
+  "settings.wh_cant_close":                                    "इसमें stock का काम पड़ा है — पहले वो दूसरे godown में ले जाएँ, फिर बंद करें",
+  "settings.wh_close":                                         "बंद करें",
+  "settings.wh_close_confirm":                                 "\"{name}\" बंद करना है? List से हट जाएगा, पर उसका पुराना record रहेगा.",
+  "settings.wh_close_failed":                                  "बंद नहीं हो पाया — दोबारा try करें",
+  "settings.wh_default":                                       "Default",
+  "settings.wh_empty":                                         "इसमें अभी कुछ नहीं",
+  "settings.wh_has_work":                                      "इसमें {n} entry का काम पड़ा है",
+  "settings.wh_no_location":                                   "जगह नहीं लगी — punch-in यहाँ काम नहीं करेगा",
+  "settings.wh_stock_only_note":                               "नीचे वाले godown app में चल रहे हैं और stock इन्हीं में पड़ा है, पर इनकी जगह (location) कभी लगी ही नहीं — इसलिए ये Settings में पहले नहीं दिखते थे. जगह लगा दें, फिर mobile punch-in भी इन पर काम करेगा.",
 
   // ── share_drawing ───────────────────────────────────────────
   "share_drawing.client_phone_target":                         "क्लाइंट फ़ोन {target}",
