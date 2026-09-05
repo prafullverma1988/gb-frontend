@@ -7046,6 +7046,38 @@ const dict = {
   "tenders.jo_bhi_department_maange_wo_abhi":                  "Whatever the department requests, you can add it now (only EMD was applicable in the bid stage).",
   "tenders.jo_row_boq_ka_hissa_nahi":                          "Remove the checkbox for rows that are not part of BOQ (section heading, sub-total).",
   "tenders.jodo":                                              "🔗 Link",
+
+  "tenders.tukdo_me_baanto":                                 "Split into stretches",
+
+  "tenders.tukdo_me_baanto_title":                           "Several lines are marked for this work — split the work into the same stretches",
+
+  "tenders.tukde_btn":                                       "Split · {n}",
+
+  "tenders.tukde_sub":                                       "{n} lines → {n} stretches · {parat} layers in each · quantity pro-rata to BOQ, total stays exactly BOQ",
+
+  "tenders.hisaab_ho_raha":                                  "calculating…",
+
+  "tenders.hisaab_dobara":                                   "Recalculate",
+
+  "tenders.hisaab_nahi_hua":                                 "Could not calculate",
+
+  "tenders.baanto":                                          "Split",
+
+  "tenders.tukde_nahi_bane":                                 "Could not split",
+
+  "tenders.tukde_ban_gaye":                                  "\"{name}\" split into {n} stretches",
+
+  "tenders.napa_vs_boq":                                     "Measured on map {napa} m · BOQ {boq} m · difference {farak} m",
+
+  "tenders.tukde_niyam_note":                                "Change a share and quantities follow that ratio; the total always stays BOQ. Any map difference shows up in the MB as deviation. Work that already has entries cannot be split.",
+
+  "tenders.col_tukda":                                       "Stretch",
+
+  "tenders.col_napa":                                        "Measured",
+
+  "tenders.col_hissa":                                       "Share",
+
+  "tenders.col_plan_qty":                                    "Plan qty",
   "tenders.jodo_aur_mark_karo":                                "Add and start marking",
   "tenders.jud_raha":                                          "Linking...",
   "tenders.kaam":                                              "+ work",

@@ -7048,6 +7048,38 @@ const dict = {
   "tenders.jo_bhi_department_maange_wo_abhi":                  "jo bhi department maange, wo abhi add kar sakte ho (bid stage me sirf EMD chalti thi).",
   "tenders.jo_row_boq_ka_hissa_nahi":                          "Jo row BOQ ka part nahi hai (section heading, sub-total) uska checkbox remove kar do.",
   "tenders.jodo":                                              "🔗 Link karo",
+
+  "tenders.tukdo_me_baanto":                                 "Tukdo me baanto",
+
+  "tenders.tukdo_me_baanto_title":                           "Is kaam par kai line lag chuki hain — kaam ko bhi unhi tukdon me baanto",
+
+  "tenders.tukde_btn":                                       "Tukde banao · {n}",
+
+  "tenders.tukde_sub":                                       "{n} line → {n} tukde · har tukde me {parat} parat · qty BOQ ke anupaat me, jod theek BOQ",
+
+  "tenders.hisaab_ho_raha":                                  "hisaab ho raha hai…",
+
+  "tenders.hisaab_dobara":                                   "Hisaab dobara",
+
+  "tenders.hisaab_nahi_hua":                                 "Hisaab nahi hua",
+
+  "tenders.baanto":                                          "Baanto",
+
+  "tenders.tukde_nahi_bane":                                 "Tukde nahi bane",
+
+  "tenders.tukde_ban_gaye":                                  "\"{name}\" ke {n} tukde ban gaye",
+
+  "tenders.napa_vs_boq":                                     "Map par napa {napa} m · BOQ {boq} m · farak {farak} m",
+
+  "tenders.tukde_niyam_note":                                "Hissa badlo to qty usi anupaat me bat-ti hai; jod hamesha BOQ hi rehta hai. Map ka farak MB me deviation ban kar dikhega. Kaam shuru ho chuka ho (entry darj) to baantna nahi hota.",
+
+  "tenders.col_tukda":                                       "Tukda",
+
+  "tenders.col_napa":                                        "Napa",
+
+  "tenders.col_hissa":                                       "Hissa",
+
+  "tenders.col_plan_qty":                                    "Plan qty",
   "tenders.jodo_aur_mark_karo":                                "Add karke mark karo",
   "tenders.jud_raha":                                          "Link ho raha...",
   "tenders.kaam":                                              "+ work",

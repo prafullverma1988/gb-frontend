@@ -3969,6 +3969,11 @@ function MapTab({tenderId, sites}) {
   const [panel, setPanel]     = useState(null);   // stretch dashboard {loading, data}
   // "Kaam ↔ Jagah" — AI-plan ke qty-task map par kahan hain (P0: sirf sach)
   const [mapTasks, setMapTasks] = useState(null);
+  // Tukdo me baanto — kaunsa kaam, server ka hisaab (preview), PM ke hisse
+  const [splitFor, setSplitFor] = useState(null);
+  const [splitPv, setSplitPv] = useState(null);
+  const [splitW, setSplitW] = useState({});
+  const [splitBusy, setSplitBusy] = useState(false);
   const [mtBucket, setMtBucket] = useState("unmapped_line");
   const [mtSearch, setMtSearch] = useState("");
   const [mtType, setMtType]     = useState("");   // kaam ka type filter (khali = sab)
@@ -4561,6 +4566,36 @@ function MapTab({tenderId, sites}) {
 
   // Task ↔ line jodna — farak dikhe to poochh kar map wali lambai likh do
   // (Prafull ka niyam: qty alag ho to map se sudhar).
+  // ── Tukdo me baanto ──
+  // Server hisaab karta hai (dry_run): har parat ki BOQ qty tukdon me napi
+  // lambai ke anupaat me, jod theek BOQ. PM "hissa" badle to usi anupaat
+  // me dobara — BOQ se zyada kabhi nahi banta; map ka farak MB me dikhega.
+  const splitBody = (pv, w) => {
+    const st = (pv?.stretches || []).map((s) => {
+      const x = Number(w?.[s.alignment_id]);
+      return { alignment_id: s.alignment_id, weight: Number.isFinite(x) && x > 0 ? x : undefined };
+    });
+    return st.length ? { stretches: st } : {};
+  };
+  const previewSplit = async (row, w, pvNow) => {
+    setSplitBusy(true);
+    const r = await api.post(`/tasks/${row.task_id}/stretch-split`, { dry_run: true, ...splitBody(pvNow, w) });
+    setSplitBusy(false);
+    if (!r?.success) { toast.error(r?.message || t("tenders.hisaab_nahi_hua")); if (!pvNow) setSplitFor(null); return; }
+    setSplitPv(r.data.preview);
+  };
+  const openSplit = (row) => { setSplitFor(row); setSplitPv(null); setSplitW({}); previewSplit(row, {}, null); };
+  const applySplitNow = async () => {
+    if (!splitFor || !splitPv || splitBusy) return;
+    setSplitBusy(true);
+    const r = await api.post(`/tasks/${splitFor.task_id}/stretch-split`, splitBody(splitPv, splitW));
+    setSplitBusy(false);
+    if (!r?.success) { toast.error(r?.message || t("tenders.tukde_nahi_bane")); return; }
+    toast.success(t("tenders.tukde_ban_gaye", { n: (r.data?.tukde || []).length, name: splitFor.name }));
+    setSplitFor(null); setSplitPv(null);
+    load();
+  };
+
   const doLink = async (row, alignmentId) => {
     const r = await api.post(`/tasks/${row.task_id}/map-link`, { alignment_id: alignmentId });
     if (!r?.success) { toast.error(r?.message || "Jud nahi paya"); return false; }
@@ -5115,6 +5150,12 @@ function MapTab({tenderId, sites}) {
                   </div>
                 </div>
                 <div style={{display:"flex", gap:6, flexShrink:0}}>
+                  {r.stretches >= 2 && !r.tukde && (
+                    <button onClick={()=>openSplit(r)} title={t("tenders.tukdo_me_baanto_title")}
+                      style={{border:`1px solid ${T.amb}`, background:T.surface, color:T.amb, borderRadius:7, padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer"}}>
+                      {t("tenders.tukde_btn", { n: r.stretches })}
+                    </button>
+                  )}
                   {r.bucket.startsWith("unmapped") && (<>
 
                     {/rmt|^m$|^rm$|mtr|meter|metre|rft|^ft$/i.test(String(r.unit || "")) ? (
@@ -5213,6 +5254,56 @@ function MapTab({tenderId, sites}) {
     })()}
 
     {/* Picker: task ke liye line chuno (mode line) YA line ke liye task (mode task) */}
+    {splitFor && (() => {
+      const pv = splitPv;
+      const fq = (v) => Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+      const farakPct = pv && pv.boq_len > 0 ? Math.round(Math.abs(pv.farak) / pv.boq_len * 1000) / 10 : 0;
+      const inp = { width: 84, textAlign: "right", border: `1px solid ${T.b1}`, borderRadius: 6, padding: "3px 6px", fontSize: 12, background: T.surface, color: T.t1 };
+      const btn = (primary) => ({ border: `1px solid ${primary ? T.ind : T.b1}`, background: primary ? T.ind : T.surface, color: primary ? "#fff" : T.t2,
+        borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" });
+      return (
+        <Modal title={`"${splitFor.name}" — ${t("tenders.tukdo_me_baanto")}`} width={680}
+          sub={pv ? t("tenders.tukde_sub", { n: pv.stretches.length, parat: pv.parat.length }) : t("tenders.hisaab_ho_raha")}
+          onClose={()=>{ setSplitFor(null); setSplitPv(null); }}
+          footer={(
+            <div style={{display:"flex", gap:8, justifyContent:"flex-end"}}>
+              <button onClick={()=>previewSplit(splitFor, splitW, splitPv)} disabled={splitBusy || !pv} style={btn(false)}>{t("tenders.hisaab_dobara")}</button>
+              <button onClick={applySplitNow} disabled={splitBusy || !pv} style={btn(true)}>{splitBusy ? "…" : t("tenders.baanto")}</button>
+            </div>
+          )}>
+          {pv && (<>
+            <table style={{width:"100%", borderCollapse:"collapse", fontSize:12}}>
+              <thead><tr style={{color:T.t4, fontSize:10.5, textTransform:"uppercase", letterSpacing:".4px"}}>
+                <th align="left" style={{padding:"4px"}}>{t("tenders.col_tukda")}</th>
+                <th align="right" style={{padding:"4px"}}>{t("tenders.col_napa")}</th>
+                <th align="right" style={{padding:"4px"}}>{t("tenders.col_hissa")}</th>
+                <th align="left" style={{padding:"4px"}}>{t("tenders.col_plan_qty")}</th>
+              </tr></thead>
+              <tbody>
+                {pv.stretches.map((s) => (
+                  <tr key={s.alignment_id} style={{borderTop:`1px solid ${T.b1}`}}>
+                    <td style={{padding:"7px 4px", fontWeight:700, color:T.t1}}>{s.name}</td>
+                    <td align="right" style={{padding:"7px 4px", fontVariantNumeric:"tabular-nums", color:T.t3}}>{fq(s.length_m)} m</td>
+                    <td align="right" style={{padding:"7px 4px"}}>
+                      <input type="number" min="0" value={splitW[s.alignment_id] ?? s.length_m}
+                        onChange={(e)=>setSplitW({ ...splitW, [s.alignment_id]: e.target.value })}
+                        onBlur={()=>previewSplit(splitFor, splitW, splitPv)} style={inp}/>
+                    </td>
+                    <td style={{padding:"7px 4px", fontSize:11.5, color:T.t2}}>
+                      {s.parat.map((p) => `${p.name} ${fq(p.share)} ${p.unit || ""}`).join(" · ")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{marginTop:10, fontSize:12, fontWeight:700, color: farakPct > 2 ? T.amb : T.t3}}>
+              {t("tenders.napa_vs_boq", { napa: fq(pv.napa_total), boq: fq(pv.boq_len), farak: (pv.farak > 0 ? "+" : "") + fq(pv.farak) })}
+            </div>
+            <div style={{marginTop:6, fontSize:11, color:T.t4, lineHeight:1.5}}>{t("tenders.tukde_niyam_note")}</div>
+          </>)}
+        </Modal>
+      );
+    })()}
     {pickFor && (() => {
       const isLinePick = pickFor.mode === "line";
       const wantLine = isLinePick && /rmt|^m$|^rm$|mtr|meter|metre|rft|^ft$/i.test(String(pickFor.row?.unit || ""));

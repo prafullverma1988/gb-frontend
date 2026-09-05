@@ -7045,6 +7045,38 @@ const dict = {
   "tenders.jo_bhi_department_maange_wo_abhi":                  "जो भी डिपार्टमेंट माँगे, वो अभी ऐड कर सकते हो (बिड स्टेज में सिर्फ़ ईएमडी चलती थी)।",
   "tenders.jo_row_boq_ka_hissa_nahi":                          "जो रो बीओक्यू का पार्ट नहीं है (सेक्शन हेडिंग, सब-टोटल) उसका चेकबॉक्स रिमूव कर दो।",
   "tenders.jodo":                                              "🔗 लिंक करो",
+
+  "tenders.tukdo_me_baanto":                                 "टुकड़ों में बाँटो",
+
+  "tenders.tukdo_me_baanto_title":                           "इस काम पर कई लाइन लग चुकी हैं — काम को भी उन्हीं टुकड़ों में बाँटो",
+
+  "tenders.tukde_btn":                                       "टुकड़े बनाओ · {n}",
+
+  "tenders.tukde_sub":                                       "{n} लाइन → {n} टुकड़े · हर टुकड़े में {parat} परत · मात्रा BOQ के अनुपात में, जोड़ ठीक BOQ",
+
+  "tenders.hisaab_ho_raha":                                  "हिसाब हो रहा है…",
+
+  "tenders.hisaab_dobara":                                   "हिसाब दोबारा",
+
+  "tenders.hisaab_nahi_hua":                                 "हिसाब नहीं हुआ",
+
+  "tenders.baanto":                                          "बाँटो",
+
+  "tenders.tukde_nahi_bane":                                 "टुकड़े नहीं बने",
+
+  "tenders.tukde_ban_gaye":                                  "\"{name}\" के {n} टुकड़े बन गए",
+
+  "tenders.napa_vs_boq":                                     "नक्शे पर नापा {napa} m · BOQ {boq} m · फ़र्क {farak} m",
+
+  "tenders.tukde_niyam_note":                                "हिस्सा बदलो तो मात्रा उसी अनुपात में बँटती है; जोड़ हमेशा BOQ ही रहता है। नक्शे का फ़र्क MB में deviation बनकर दिखेगा। जिस काम पर entry दर्ज हो चुकी हो, वह बँटता नहीं।",
+
+  "tenders.col_tukda":                                       "टुकड़ा",
+
+  "tenders.col_napa":                                        "नापा",
+
+  "tenders.col_hissa":                                       "हिस्सा",
+
+  "tenders.col_plan_qty":                                    "Plan qty",
   "tenders.jodo_aur_mark_karo":                                "जोड़ो और मार्क करो",
   "tenders.jud_raha":                                          "लिंक हो रहा...",
   "tenders.kaam":                                              "+ वर्क",
