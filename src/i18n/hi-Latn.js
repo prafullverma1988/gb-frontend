@@ -7129,6 +7129,9 @@ const dict = {
 
   "tenders.tukde_niyam_note":                                "Hissa badlo to qty usi anupaat me bat-ti hai; jod hamesha BOQ hi rehta hai. Map ka farak MB me deviation ban kar dikhega. Kaam shuru ho chuka ho (entry darj) to baantna nahi hota.",
 
+
+  "tenders.baaki_tukda_note": "baaki {len} m — abhi markna hai",
+
   "tenders.col_tukda":                                       "Tukda",
 
   "tenders.col_napa":                                        "Napa",

@@ -7126,6 +7126,9 @@ const dict = {
 
   "tenders.tukde_niyam_note":                                "हिस्सा बदलो तो मात्रा उसी अनुपात में बँटती है; जोड़ हमेशा BOQ ही रहता है। नक्शे का फ़र्क MB में deviation बनकर दिखेगा। जिस काम पर entry दर्ज हो चुकी हो, वह बँटता नहीं।",
 
+
+  "tenders.baaki_tukda_note": "बाकी {len} m — अभी मार्क करना है",
+
   "tenders.col_tukda":                                       "टुकड़ा",
 
   "tenders.col_napa":                                        "नापा",

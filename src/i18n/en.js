@@ -7127,6 +7127,9 @@ const dict = {
 
   "tenders.tukde_niyam_note":                                "Change a share and quantities follow that ratio; the total always stays BOQ. Any map difference shows up in the MB as deviation. Work that already has entries cannot be split.",
 
+
+  "tenders.baaki_tukda_note": "remaining {len} m — still to mark",
+
   "tenders.col_tukda":                                       "Stretch",
 
   "tenders.col_napa":                                        "Measured",

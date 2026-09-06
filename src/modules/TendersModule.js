@@ -5281,13 +5281,16 @@ function MapTab({tenderId, sites}) {
               </tr></thead>
               <tbody>
                 {pv.stretches.map((s) => (
-                  <tr key={s.alignment_id} style={{borderTop:`1px solid ${T.b1}`}}>
-                    <td style={{padding:"7px 4px", fontWeight:700, color:T.t1}}>{s.name}</td>
-                    <td align="right" style={{padding:"7px 4px", fontVariantNumeric:"tabular-nums", color:T.t3}}>{fq(s.length_m)} m</td>
+                  <tr key={s.alignment_id || "baaki"} style={{borderTop:`1px solid ${T.b1}`, background: s.baaki ? T.ambL : "transparent"}}>
+                    <td style={{padding:"7px 4px", fontWeight:700, color: s.baaki ? "#92400E" : T.t1}}>{s.name}</td>
+                    <td align="right" style={{padding:"7px 4px", fontVariantNumeric:"tabular-nums", color:T.t3}}>{s.baaki ? "—" : fq(s.length_m) + " m"}</td>
                     <td align="right" style={{padding:"7px 4px"}}>
-                      <input type="number" min="0" value={splitW[s.alignment_id] ?? s.length_m}
-                        onChange={(e)=>setSplitW({ ...splitW, [s.alignment_id]: e.target.value })}
-                        onBlur={()=>previewSplit(splitFor, splitW, splitPv)} style={inp}/>
+                      {/* Baaki tukda = jo abhi marka hi nahi; uska hissa bacha hua hai, likhne ka nahi */}
+                      {s.baaki ? <span style={{fontSize:11.5, color:"#92400E", fontWeight:700}}>{t("tenders.baaki_tukda_note", { len: fq(s.length_m) })}</span> : (
+                        <input type="number" min="0" value={splitW[s.alignment_id] ?? s.length_m}
+                          onChange={(e)=>setSplitW({ ...splitW, [s.alignment_id]: e.target.value })}
+                          onBlur={()=>previewSplit(splitFor, splitW, splitPv)} style={inp}/>
+                      )}
                     </td>
                     <td style={{padding:"7px 4px", fontSize:11.5, color:T.t2}}>
                       {s.parat.map((p) => `${p.name} ${fq(p.share)} ${p.unit || ""}`).join(" · ")}
