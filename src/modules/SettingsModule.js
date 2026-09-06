@@ -3177,13 +3177,38 @@ function AttendanceSettings() {
   });
   const [saved, setSaved] = useState(false);
 
+  // Teeno mode ab company_prefs me rehte hain. localStorage sirf pehla
+  // rang bharne ke liye bacha hai (screen turant dikh jaye) — sach server
+  // ka hai, kyunki phone ko browser ka localStorage kabhi nahi milta aur
+  // wahi wajah thi ki app aur web alag-alag tareeke se hazri maangte the.
+  useEffect(() => {
+    api.get("/settings/prefs").then(r => {
+      const rows = (r?.success && Array.isArray(r.data)) ? r.data : [];
+      const v = (k) => (rows.find(x => x.key === k) || {}).value;
+      if (!v("att_company_mode")) return;
+      setS(p => ({
+        company: { ...p.company, mode: v("att_company_mode") },
+        subcon:  { ...p.subcon,  mode: v("att_subcon_mode")  },
+        vendor:  { ...p.vendor,  mode: v("att_vendor_mode")  },
+      }));
+    }).catch(() => {});
+  }, []);
+
   const updC = (k,v) => setS(p=>({...p,company:{...p.company,[k]:v}}));
   const updS = (k,v) => setS(p=>({...p,subcon:{...p.subcon,[k]:v}}));
   const updV = (k,v) => setS(p=>({...p,vendor:{...p.vendor,[k]:v}}));
 
-  const saveSettings = () => {
+  const saveSettings = async () => {
+    // Mode server par. Payment cycle aur "track vendor payment" abhi
+    // localStorage me hi hain — unka koi server-side catalogue nahi hai,
+    // aur unhe bhi bina zaroorat ke uthana is kaam ka hissa nahi tha.
     localStorage.setItem(ATT_KEY, JSON.stringify(s));
-    api.post("/settings/attendance", s).catch(()=>{});
+    const r = await api.put("/settings/prefs", {
+      att_company_mode: s.company.mode,
+      att_subcon_mode:  s.subcon.mode,
+      att_vendor_mode:  s.vendor.mode,
+    }).catch(() => null);
+    if (!r?.success) { window.alert(r?.message || "Setting server par save nahi hui — dobara try karo"); return; }
     setSaved(true); setTimeout(()=>setSaved(false), 2000);
   };
 
@@ -4028,28 +4053,77 @@ function OtherSettings() {
       {!prefs.length && (
         <div style={{ padding: 30, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Abhi koi setting nahi.</div>
       )}
-      {prefs.map(p => (
-        <div key={p.key} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{p.label}</div>
-          {p.hint && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4, lineHeight: 1.55 }}>{p.hint}</div>}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-            {(p.options || []).map(o => {
-              const on = p.value === o.v;
-              return (
-                <label key={o.v} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 12px",
-                  borderRadius: 9, cursor: "pointer",
-                  border: `1.5px solid ${on ? "#4B45C4" : "#E5E7EB"}`, background: on ? "#EEF0FB" : "#fff" }}>
-                  <input type="radio" name={p.key} checked={on} onChange={() => save(p.key, o.v)}
-                    disabled={saving === p.key} style={{ marginTop: 2, accentColor: "#4B45C4" }}/>
-                  <span style={{ fontSize: 13, color: on ? "#111827" : "#374151", fontWeight: on ? 600 : 400 }}>{o.l}</span>
-                </label>
-              );
-            })}
-          </div>
+      {/* Server har pref ke saath uska group bhejta hai. Ek group ke andar
+          "on/off" wali settings ek hi card me patti-patti karke baithti hain
+          — chhe alag card me chhe do-option wale radio jode padhne me thak
+          dete hain, aur ye sab ek hi screen ke switch hain. */}
+      {groupsOf(prefs).map(g => (
+        <div key={g.name || "_"} style={{ marginBottom: 22 }}>
+          {g.name && (
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase",
+              letterSpacing: ".6px", marginBottom: 8 }}>{g.name}</div>
+          )}
+          {g.bools.length > 0 && (
+            <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, marginBottom: g.choices.length ? 12 : 0 }}>
+              {g.bools.map((p, i) => {
+                const on = p.value !== "off";
+                return (
+                  <div key={p.key} style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "13px 18px",
+                    borderTop: i ? "1px solid #F3F4F6" : "none" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: "#111827" }}>{p.label}</div>
+                      {p.hint && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3, lineHeight: 1.5 }}>{p.hint}</div>}
+                    </div>
+                    <button onClick={() => save(p.key, on ? "off" : "on")} disabled={saving === p.key}
+                      title={on ? "Dikh raha hai" : "Chhupa hai"}
+                      style={{ width: 44, height: 25, borderRadius: 13, border: "none", flexShrink: 0, marginTop: 2,
+                        background: on ? "#4B45C4" : "#D1D5DB", cursor: saving === p.key ? "wait" : "pointer",
+                        padding: 0, position: "relative", transition: "background .15s" }}>
+                      <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 19, height: 19,
+                        borderRadius: "50%", background: "#fff", transition: "left .15s", display: "block" }}/>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {g.choices.map(p => (
+            <div key={p.key} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{p.label}</div>
+              {p.hint && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4, lineHeight: 1.55 }}>{p.hint}</div>}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+                {(p.options || []).map(o => {
+                  const on = p.value === o.v;
+                  return (
+                    <label key={o.v} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 12px",
+                      borderRadius: 9, cursor: "pointer",
+                      border: `1.5px solid ${on ? "#4B45C4" : "#E5E7EB"}`, background: on ? "#EEF0FB" : "#fff" }}>
+                      <input type="radio" name={p.key} checked={on} onChange={() => save(p.key, o.v)}
+                        disabled={saving === p.key} style={{ marginTop: 2, accentColor: "#4B45C4" }}/>
+                      <span style={{ fontSize: 13, color: on ? "#111827" : "#374151", fontWeight: on ? 600 : 400 }}>{o.l}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       ))}
     </div>
   );
+}
+
+// Server ke bheje kram me hi group banate hain — catalogue ka kram hi
+// screen ka kram hai, isliye yahan koi apni sorting nahi.
+function groupsOf(prefs) {
+  const out = [];
+  for (const p of prefs) {
+    const name = p.group || null;
+    let g = out.find(x => x.name === name);
+    if (!g) { g = { name, bools: [], choices: [] }; out.push(g); }
+    (p.type === "bool" ? g.bools : g.choices).push(p);
+  }
+  return out;
 }
 
 const settingsSections = [
