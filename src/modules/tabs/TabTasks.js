@@ -3363,7 +3363,7 @@ function TaskIssueChat({issueId}){
    din ki photos apne aap entry se jud jaati hain (A2). Neeche har entry ka
    geo-tag aur AI ka teen-cheez byora (qty + photo + note) bhi dikhta hai —
    AI sirf batata hai, rokta kuch nahi. */
-function QtyProgressBox({task,meIsPriv,onProgress,projectId,showPct=true,showMic=true,showNote=true}){
+function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNote=true}){
   const scope=Number(task.scope_qty)||0;
   const unit=task.unit||"";
   const [entries,setEntries]=useState(null);   // null = load ho raha
@@ -3473,21 +3473,12 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showPct=true,showMic
       <span style={{fontSize:13,color:"#64748B",fontWeight:600}}>/ {Math.round(scope*100)/100} {unit}</span>
       <span style={{marginLeft:"auto",fontSize:11,color:"#94A3B8"}}>{t("tasks.khud_nikalta_hai_done_scope")}</span>
     </div>
-    {/* Do alag sach, do alag lines: moti line quantity ki (site wale ki
-        bhasha), patli line % ki (office ki bhasha). Rang bhi alag, taaki
-        ek nazar me pata chale kaunsi kaunsi hai. */}
-    <div style={{height:10,background:"#F1F5F9",borderRadius:5,overflow:"hidden",border:"1px solid #E2E8F0"}}>
-      <div style={{height:"100%",width:pct+"%",background:pct>=100?"#10B981":"#0EA5E9",borderRadius:4,transition:"width .3s"}}/>
+    {/* Ek hi patli line — qty ki. % ka apna bar wahi baat doosri baar keh
+        raha tha (% upar bade akshar me hai, qty is line ke upar), aur do bar
+        sirf jagah khaate the. */}
+    <div style={{height:4,background:"#F1F5F9",borderRadius:2,overflow:"hidden"}}>
+      <div style={{height:"100%",width:pct+"%",background:pct>=100?"#10B981":"#0EA5E9",borderRadius:2,transition:"width .3s"}}/>
     </div>
-    {showPct&&(<>
-      <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",margin:"8px 0 4px"}}>
-        <span style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".4px"}}>{t("tasks.completion")}</span>
-        <span style={{fontSize:11.5,fontWeight:700,color:"#64748B"}}>{pct}%</span>
-      </div>
-      <div style={{height:4,background:"#F1F5F9",borderRadius:2,overflow:"hidden"}}>
-        <div style={{height:"100%",width:pct+"%",background:pct>=100?"#10B981":"#2563EB",borderRadius:2,transition:"width .3s"}}/>
-      </div>
-    </>)}
     <div style={{height:12}}/>
 
     {lines.length>=2&&(
@@ -3881,8 +3872,17 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
           </div>
           <div style={{background:"white",borderRadius:12,padding:16,border:"1px solid #E2E8F0",marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,.04)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isSummary?10:14}}>
-              <span style={{fontSize:14,fontWeight:600,color:"#1E293B"}}>{t("tasks.completion")}</span>
-              <span style={{fontSize:26,fontWeight:800,color:prog===100?"#10B981":prog>0?"#2563EB":"#94A3B8",lineHeight:1}}>{prog}%</span>
+              {/* Baayen kaam ki haalat, daayen ankda — pehle "Completion"
+                  likha aata tha aur haalat neeche ek alag patti me. */}
+              <span style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:sm.c,flexShrink:0}}/>
+                <span style={{fontSize:14,fontWeight:700,color:sm.c}}>{autoStatus(prog)}</span>
+              </span>
+              <span style={{fontSize:26,fontWeight:800,color:prog===100?"#10B981":prog>0?"#2563EB":"#94A3B8",lineHeight:1}}>
+                {(hasScope&&!ui.pctBar)
+                  ? <>{Math.round(Number(task.done_qty)||0)}<span style={{fontSize:13,color:"#94A3B8",fontWeight:600}}> {task.unit||""}</span></>
+                  : prog+"%"}
+              </span>
             </div>
             {isSummary?(<>
               {/* Summary row — the number belongs to the children, not this form */}
@@ -3900,7 +3900,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 <div style={{fontSize:11.5,color:"#64748B",lineHeight:1.5}}>{t("tasks.yeh_parent_task_hai_progress_childcount", { childCount, childCount2: childCount===1?"":"s" })}</div>
               )}
             </>):hasScope?(
-              <QtyProgressBox task={task} meIsPriv={meIsPriv} projectId={projectId} showPct={ui.pctBar} showMic={ui.voice} showNote={ui.notes}
+              <QtyProgressBox task={task} meIsPriv={meIsPriv} projectId={projectId} showMic={ui.voice} showNote={ui.notes}
                 onProgress={(p,extra)=>{setProg(p);onUpdate(task.id,extra);}}/>
             ):(<>
               <input type="range" min={0} max={100} step={5} value={prog} onChange={e=>setProg(Number(e.target.value))}
@@ -3911,13 +3911,6 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 <span style={{fontSize:9,color:"#94A3B8"}}>100%</span>
               </div>
             </>)}
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",background:sm.bg,border:"1px solid "+sm.brd,borderRadius:10,marginBottom:12}}>
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={sm.c} strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
-            <div>
-              <div style={{fontSize:12,color:sm.c,fontWeight:700}}>{t("tasks.status_autostatus", { autoStatus: autoStatus(prog) })}</div>
-              <div style={{fontSize:11,color:"#64748B"}}>{prog===0?t("tasks.not_started_yet"):prog===100?t("tasks.task_complete"):t("overview.in_progress")}</div>
-            </div>
           </div>
           {/* Quick % buttons + save — sirf bina-scope leaf par; qty task apni
               entry se chalta hai aur summary ka number derived hai */}
