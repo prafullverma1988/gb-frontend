@@ -717,6 +717,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
               {t("tender_ai_plan.works_created_kaam_stages_created_stages", { works_created: execResult.works_created, stages_created: execResult.stages_created, steps: execResult.steps_created ? ` + ${execResult.steps_created} steps` : "" })}
               {execResult.boq_linked ? <> · <b style={{ color: T.grn }}>{t("tender_ai_plan.boq_linked_task_boq_se_jude", { boq_linked: execResult.boq_linked })}</b> {t("tender_ai_plan.inki_qty_mb_draft_tak_jayegi")}</> : ""}
               {execResult.lines_linked ? <> · 🔗 {t("tender_ai_plan.lines_linked", { n: execResult.lines_linked })}</> : ""}
+              {execResult.replaced ? <> · ♻ {t("tender_ai_plan.replaced_n", { n: execResult.replaced })}</> : ""}
               {execResult.skipped?.length ? t("tender_ai_plan.skipped_pehle_se_the", { skipped: execResult.skipped.length }) : ""}
             </div>
             {execResult.skipped?.length > 0 && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{execResult.skipped.join(" · ")}</div>}

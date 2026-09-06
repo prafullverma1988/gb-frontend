@@ -6623,7 +6623,7 @@ const dict = {
   "tender_ai_plan.errsheets_sheets_me_tooti_ref_cells":        "{errSheets} sheets with broken (#REF!) cells",
   "tender_ai_plan.execute":                                    "▶ Execute",
   "tender_ai_plan.execute_ho_chuka":                           "✓ Executed",
-  "tender_ai_plan.execute_ho_chuka_dobara_chalana_surakshit":  "✓ Executed — safe to run again",
+  "tender_ai_plan.execute_ho_chuka_dobara_chalana_surakshit": "Executed — run again and works with no entries, photos or map links yet are rebuilt from the edited plan; the rest stay as they are",
   "tender_ai_plan.file_padh_li_sheets_sheets_items":           "File read: **{sheets} sheets** · {items} BOQ item · **{withTot}** sheets found with sums (Total/Cost per Meter)",
   "tender_ai_plan.files_files":                                "{files} files ·",
   "tender_ai_plan.haan_banao":                                 "▶ Yes, create",
@@ -6681,6 +6681,9 @@ const dict = {
   "tender_ai_plan.stage_tick_hint": "Usually not needed — a stage is a LAYER of the same work, not a separate place. Tick only if it really is a different thing.",
 
   "tender_ai_plan.same_len_warn": "Two stages are ticked and both are the same length ({n} m) — are these really two different places? If they are layers of one place, keep the tick only on the work above.",
+
+
+  "tender_ai_plan.replaced_n": "{n} works rebuilt from the edited plan",
 
 
   "tender_ai_plan.map_lines_se_bharo": "Fill from map lines",

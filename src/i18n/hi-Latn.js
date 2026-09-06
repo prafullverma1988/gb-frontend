@@ -6625,7 +6625,7 @@ const dict = {
   "tender_ai_plan.errsheets_sheets_me_tooti_ref_cells":        "{errSheets} sheets me tooti (#REF!) cells",
   "tender_ai_plan.execute":                                    "▶ Execute",
   "tender_ai_plan.execute_ho_chuka":                           "✓ Execute ho chuka",
-  "tender_ai_plan.execute_ho_chuka_dobara_chalana_surakshit":  "✓ execute ho chuka — dobara run karna safe",
+  "tender_ai_plan.execute_ho_chuka_dobara_chalana_surakshit": "Execute ho chuka — dobara chalao to jin kaamon par abhi koi entry, photo ya map ka jod nahi, wo naye plan se dobara banenge; baaki waise hi rahenge",
   "tender_ai_plan.file_padh_li_sheets_sheets_items":           "File padh li: **{sheets} sheets** · {items} BOQ item · **{withTot}** sheets me jod (Total/Cost per Meter) mila",
   "tender_ai_plan.files_files":                                "{files} files ·",
   "tender_ai_plan.haan_banao":                                 "▶ Haan, banao",
@@ -6683,6 +6683,9 @@ const dict = {
   "tender_ai_plan.stage_tick_hint": "Aam taur par zaroorat nahi — stage kaam ki PARAT hai, alag jagah nahi. Sirf tab lagao jab ye sach me alag cheez ho.",
 
   "tender_ai_plan.same_len_warn": "Do stage par tick lagi hai aur dono ki lambai ek hi hai ({n} m) — kya sach me ye do alag jagah hain? Agar ek hi jagah ki parat hain to sirf upar wale kaam par tick rehne do.",
+
+
+  "tender_ai_plan.replaced_n": "{n} kaam naye plan se dobara bane",
 
 
   "tender_ai_plan.map_lines_se_bharo": "Map ki lines se bharo",

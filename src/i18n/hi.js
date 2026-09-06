@@ -6622,7 +6622,7 @@ const dict = {
   "tender_ai_plan.errsheets_sheets_me_tooti_ref_cells":        "{errSheets} शीट्स में टूटी (#REF!) सेल्स",
   "tender_ai_plan.execute":                                    "▶ एग्जीक्यूट",
   "tender_ai_plan.execute_ho_chuka":                           "✓ एग्जीक्यूट हो चुका",
-  "tender_ai_plan.execute_ho_chuka_dobara_chalana_surakshit":  "✓ एग्जीक्यूट हो चुका — दोबारा रन करना सेफ",
+  "tender_ai_plan.execute_ho_chuka_dobara_chalana_surakshit": "Execute हो चुका — दोबारा चलाओ तो जिन कामों पर अभी कोई entry, photo या नक्शे का जोड़ नहीं, वे नए प्लान से दोबारा बनेंगे; बाकी वैसे ही रहेंगे",
   "tender_ai_plan.file_padh_li_sheets_sheets_items":           "फ़ाइल पढ़ ली: **{sheets} शीट्स** · {items} बीओक्यू आइटम · **{withTot}** शीट्स में जोड़ (टोटल/कॉस्ट पर मीटर) मिला",
   "tender_ai_plan.files_files":                                "{files} फाइल्स ·",
   "tender_ai_plan.haan_banao":                                 "▶ हाँ, बनाओ",
@@ -6680,6 +6680,9 @@ const dict = {
   "tender_ai_plan.stage_tick_hint": "आम तौर पर ज़रूरत नहीं — स्टेज काम की परत है, अलग जगह नहीं। सिर्फ़ तब लगाओ जब ये सच में अलग चीज़ हो।",
 
   "tender_ai_plan.same_len_warn": "दो स्टेज पर टिक लगी है और दोनों की लंबाई एक ही है ({n} m) — क्या सच में ये दो अलग जगह हैं? अगर एक ही जगह की परत हैं तो सिर्फ़ ऊपर वाले काम पर टिक रहने दो।",
+
+
+  "tender_ai_plan.replaced_n": "{n} काम नए प्लान से दोबारा बने",
 
 
   "tender_ai_plan.map_lines_se_bharo": "नक्शे की लाइनों से भरो",
