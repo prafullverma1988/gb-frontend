@@ -4027,7 +4027,11 @@ function OtherSettings() {
 
   useEffect(() => {
     api.get("/settings/prefs").then(r => {
-      setPrefs(r?.success && Array.isArray(r.data) ? r.data : []);
+      // Hazri ke mode (att_*) isi catalogue me rehte hain par unka ghar
+      // "Attendance Settings" tab hai — yahan dobara dikhana bhram tha.
+      // Ye page sirf task screen ki baat karta hai.
+      const rows = r?.success && Array.isArray(r.data) ? r.data : [];
+      setPrefs(rows.filter(x => !String(x.key).startsWith("att_")));
     }).finally(() => setLoad(false));
   }, []);
 
@@ -4132,7 +4136,7 @@ const settingsSections = [
   { id: "roles",         label: "Roles & Access",       Icon: IcShield,    Comp: RolesAccess,            section: null },
   { id: "approval",      label: "Multi-Level Approval", Icon: IcLayers,    Comp: ApprovalSettings,       section: null },
   { id: "practices",     label: "Company Practices",    Icon: IcClipboard, Comp: CompanyPractices,       section: null },
-  { id: "other",         label: "Other Settings",       Icon: IcLayers,    Comp: OtherSettings,          section: null },
+  { id: "other",         label: "Task Screen",          Icon: IcLayers,    Comp: OtherSettings,          section: null },
   { id: "backdate",      label: "Back-Date Control",    Icon: IcCalendar,  Comp: BackDateControl,        section: null },
   { id: "photo",         label: "Photo Settings",       Icon: IcCamera,    Comp: PhotoSettings,          section: null },
   { id: "attendance",    label: "Attendance Settings",  Icon: IcCalendar,  Comp: AttendanceSettings,     section: null },
@@ -4160,7 +4164,7 @@ export default function SettingsModule({ initialSection = "company" } = {}) {
     company: "Manage your company profile and regional settings", roles: "Configure user roles, permissions and project access",
     approval: "Set up multi-level approval workflows", backdate: "Control back-dated entry permissions",
     practices: "Aapki company ka apna tareeka — Sahayak inhi jawabon se madad karta hai",
-    other: "Task progress qty me le ya % me — aur aisi hi app-behaviour settings",
+    other: "Task kholne par kya dikhe — % bar, note, mic, Mark Used / MR / GRN ke button; aur progress qty me ya % me",
     attendance: "Configure attendance mode and payment cycle for each labour type",
     appearance: "Choose layout style and other visual preferences",
     bank: "Manage bank accounts and payment methods", material: "Configure material stock and inventory rules",
