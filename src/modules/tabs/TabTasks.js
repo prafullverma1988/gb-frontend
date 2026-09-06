@@ -3363,7 +3363,7 @@ function TaskIssueChat({issueId}){
    din ki photos apne aap entry se jud jaati hain (A2). Neeche har entry ka
    geo-tag aur AI ka teen-cheez byora (qty + photo + note) bhi dikhta hai —
    AI sirf batata hai, rokta kuch nahi. */
-function QtyProgressBox({task,meIsPriv,onProgress,projectId,showPct=true}){
+function QtyProgressBox({task,meIsPriv,onProgress,projectId,showPct=true,showMic=true,showNote=true}){
   const scope=Number(task.scope_qty)||0;
   const unit=task.unit||"";
   const [entries,setEntries]=useState(null);   // null = load ho raha
@@ -3506,16 +3506,20 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showPct=true}){
         placeholder={"Aaj kitna hua? ("+unit+")"}
         style={{flex:"0 0 150px",padding:"10px 11px",borderRadius:8,border:"1.5px solid #CBD5E1",fontSize:14,fontWeight:700,
           color:"#1E293B",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-      <input value={note} onChange={e=>setNote(e.target.value)} placeholder={t("tasks.note_kya_kaam_hua_ai_isse")}
-        onKeyDown={e=>{if(e.key==="Enter")save();}}
-        style={{flex:1,padding:"10px 11px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:12.5,
-          color:"#1E293B",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-      <button onClick={micToggle} disabled={vBusy} title={recOn?t("tasks.rok_kar_bhejo"):t("tasks.bolkar_entry_task_qty_note_bol")}
-        style={{padding:"10px 13px",borderRadius:8,border:`1.5px solid ${recOn?"#DC2626":"#C7D2FE"}`,
-          background:recOn?"#FEF2F2":"#EEF2FF",fontSize:14,cursor:"pointer",fontFamily:"inherit",
-          animation:recOn?"pulse 1s infinite":"none"}}>
-        {vBusy?"…":recOn?"⏹":"🎤"}
-      </button>
+      {showNote
+        ? <input value={note} onChange={e=>setNote(e.target.value)} placeholder={t("tasks.note_kya_kaam_hua_ai_isse")}
+            onKeyDown={e=>{if(e.key==="Enter")save();}}
+            style={{flex:1,padding:"10px 11px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:12.5,
+              color:"#1E293B",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+        : <span style={{flex:1}}/>}
+      {showMic&&(
+        <button onClick={micToggle} disabled={vBusy} title={recOn?t("tasks.rok_kar_bhejo"):t("tasks.bolkar_entry_task_qty_note_bol")}
+          style={{padding:"10px 13px",borderRadius:8,border:`1.5px solid ${recOn?"#DC2626":"#C7D2FE"}`,
+            background:recOn?"#FEF2F2":"#EEF2FF",fontSize:14,cursor:"pointer",fontFamily:"inherit",
+            animation:recOn?"pulse 1s infinite":"none"}}>
+          {vBusy?"…":recOn?"⏹":"🎤"}
+        </button>
+      )}
       <button onClick={save} disabled={saving||!(Number(qty)>0)}
         style={{padding:"10px 16px",borderRadius:8,border:"none",background:Number(qty)>0?"#2563EB":"#CBD5E1",color:"white",
           fontSize:13,fontWeight:700,cursor:Number(qty)>0?"pointer":"default",fontFamily:"inherit"}}>
@@ -3639,13 +3643,15 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   // Is screen par kya-kya dikhega — company ki apni setting
   // (Settings → Other Settings → "Task progress screen"). Server na mile to
   // sab dikhta hai; chhupana kabhi default nahi.
-  const [ui,setUi]=useState({pctBar:true,notes:true});
+  // Wahi 6 switch jo mobile task screen maanta hai — ek setting, dono screen.
+  const [ui,setUi]=useState({pctBar:true,notes:true,voice:true,markUsed:true,newMr:true,grn:true});
   useEffect(()=>{
     api.get("/settings/prefs").then(r=>{
       const rows=(r?.success&&Array.isArray(r.data))?r.data:[];
       const v=(k)=>(rows.find(x=>x.key===k)||{}).value;
       const on=(k)=>{const x=v(k);return x===undefined?true:x==="on";};
-      setUi({pctBar:on("task_screen_pct_bar"),notes:on("task_screen_notes")});
+      setUi({pctBar:on("task_screen_pct_bar"),notes:on("task_screen_notes"),voice:on("task_screen_voice"),
+        markUsed:on("task_screen_mark_used"),newMr:on("task_screen_new_mr"),grn:on("task_screen_grn")});
     }).catch(()=>{});
   },[]);
   // % wale task ka note — qty wale box me pehle se tha, yahan nahi.
@@ -3894,7 +3900,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 <div style={{fontSize:11.5,color:"#64748B",lineHeight:1.5}}>{t("tasks.yeh_parent_task_hai_progress_childcount", { childCount, childCount2: childCount===1?"":"s" })}</div>
               )}
             </>):hasScope?(
-              <QtyProgressBox task={task} meIsPriv={meIsPriv} projectId={projectId} showPct={ui.pctBar}
+              <QtyProgressBox task={task} meIsPriv={meIsPriv} projectId={projectId} showPct={ui.pctBar} showMic={ui.voice} showNote={ui.notes}
                 onProgress={(p,extra)=>{setProg(p);onUpdate(task.id,extra);}}/>
             ):(<>
               <input type="range" min={0} max={100} step={5} value={prog} onChange={e=>setProg(Number(e.target.value))}
@@ -3962,24 +3968,27 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
             <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.materials")}</span>
             {materials.length>0&&<span style={{background:"#D1FAE5",color:"#065F46",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{materials.length} items</span>}
           </div>
-          {/* 3 action buttons */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
-            <button onClick={()=>setMatTab(matTab==="usedlog"?"none":"usedlog")}
-              style={{padding:"12px 6px",borderRadius:10,border:"1.5px solid "+(matTab==="usedlog"?"#16A34A":"#BBF7D0"),background:matTab==="usedlog"?"#DCFCE7":"#F0FDF4",color:"#16A34A",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 12h6M9 16h4"/></svg>
-             {t("tasks.mark_used")}
-            </button>
-            <button onClick={()=>setShowMRModal(true)}
-              style={{padding:"12px 6px",borderRadius:10,border:"1.5px solid #BFDBFE",background:"#EFF6FF",color:"#2563EB",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14"/></svg>
-             {t("tasks.new_mr")}
-            </button>
-            <button onClick={()=>setShowGRNModal(true)}
-              style={{padding:"12px 6px",borderRadius:10,border:"1.5px solid #A7F3D0",background:"#ECFDF5",color:"#059669",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-              GRN
-            </button>
-          </div>
+          {/* 3 action buttons — company jo band kare wo nahi dikhta (Settings →
+              Other Settings → "Task progress screen"); teeno band to patti hi nahi. */}
+          {(()=>{
+            const btns=[
+              ui.markUsed&&{id:"used",l:t("tasks.mark_used"),on:matTab==="usedlog",click:()=>setMatTab(matTab==="usedlog"?"none":"usedlog"),c:"#16A34A",brd:"#BBF7D0",bg:"#F0FDF4",onBg:"#DCFCE7",ic:"M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 12h6M9 16h4"},
+              ui.newMr&&{id:"mr",l:t("tasks.new_mr"),on:false,click:()=>setShowMRModal(true),c:"#2563EB",brd:"#BFDBFE",bg:"#EFF6FF",onBg:"#EFF6FF",ic:"M12 5v14M5 12h14"},
+              ui.grn&&{id:"grn",l:"GRN",on:false,click:()=>setShowGRNModal(true),c:"#059669",brd:"#A7F3D0",bg:"#ECFDF5",onBg:"#ECFDF5",ic:"M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"},
+            ].filter(Boolean);
+            if(!btns.length) return null;
+            return (
+              <div style={{display:"grid",gridTemplateColumns:`repeat(${btns.length},1fr)`,gap:8,marginBottom:14}}>
+                {btns.map(b=>(
+                  <button key={b.id} onClick={b.click}
+                    style={{padding:"12px 6px",borderRadius:10,border:"1.5px solid "+(b.on?b.c:b.brd),background:b.on?b.onBg:b.bg,color:b.c,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d={b.ic}/></svg>
+                    {b.l}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
           {/* Mark Used panel */}
           {matTab==="usedlog"&&(
             <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,padding:"14px",marginBottom:12}}>
