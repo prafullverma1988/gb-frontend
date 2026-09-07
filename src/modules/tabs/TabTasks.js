@@ -290,6 +290,27 @@ function TabTasks({ projectId, isAdmin }) {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [projectId]);
+  // ── Kaam kisko dena hai: project se judi team ───────────────────
+  // Ye wahi log hain jo Project Settings > Team me jude hain
+  // (user_project_access — wahi list jo tay karti hai kaun ye site dekh
+  // sakta hai). Kisi project par team abhi jodi na ho to poori company ke
+  // log dikhate hain, warna dropdown khaali reh jaata aur kaam kisi ko
+  // diya hi nahi ja sakta.
+  const [team,setTeam] = useState([]);
+  useEffect(() => {
+    if (!projectId) { setTeam([]); return; }
+    let dead = false;
+    api.get("/projects/" + projectId + "/team").then(r => {
+      if (dead) return;
+      const list = (r && r.success && r.data) || [];
+      if (list.length) { setTeam(list); return; }
+      return api.get("/projects/team-members").then(r2 => {
+        if (!dead && r2 && r2.success) setTeam(r2.data || []);
+      });
+    }).catch(() => {});
+    return () => { dead = true; };
+  }, [projectId]);
+
   const [view,setView]       = useState("list");
   const [collapsed,setCollapsed] = useState({});
   const [fCat,setFCat]       = useState("All");
@@ -1516,11 +1537,14 @@ function TabTasks({ projectId, isAdmin }) {
           if (msg) window.toast?.success?.(msg); }}/>}
 
       {/* Edit Task drawer */}
-      {editTask&&<PTEditTask task={editTask} allTasks={allFlat} projectId={projectId}
+      {editTask&&<PTEditTask task={editTask} allTasks={allFlat} projectId={projectId} team={team}
         depsMode={hasDeps} phaseCodeMap={phaseCodeMap} onDepsChanged={refetchTasks}
         onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
         const orig = editTask;
         const r = await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress, base_start:u.baseStart, base_end:u.baseEnd, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen,
+          // Kaam kisko diya — user ki ID jaati hai, "" = kisi ko nahi.
+          // (Ye pehle bheja hi nahi jaata tha, isliye chunav gum ho jaata tha.)
+          assigned_to: u.assignedTo === "" || u.assignedTo == null ? "" : Number(u.assignedTo),
           // "" clears the link; undefined would leave it untouched.
           boq_item_id: u.boqItemId ?? "", alignment_id: u.alignId ?? "" });
         // A rejected link (wrong tender / wrong site) comes back as a message.
@@ -1546,7 +1570,14 @@ function TabTasks({ projectId, isAdmin }) {
           if (rp.pinned_count > 0)  window.toast?.info?.(t("tasks.replan_pinned_toast", { n: rp.pinned_count }));
         }
         else if (u.progress !== undefined || u.duration !== orig.duration || scopeChanged) await refetchTasks();
-        else setTasks(updateInTree(tasks,id,{...u, delay_reason:u.delayReason||null, delay_note:u.delayNote||null}));
+        else {
+          // Poori list dobara nahi aa rahi — to yahin naam bitha do, warna
+          // "Assigned" khaane me user ki id dikhne lagti hai.
+          const who = team.find(m => String(m.id) === String(u.assignedTo));
+          setTasks(updateInTree(tasks,id,{...u, assignee: who ? who.name : "",
+            assigned_to: u.assignedTo || null, assignee_name: who ? who.name : null,
+            delay_reason:u.delayReason||null, delay_note:u.delayNote||null}));
+        }
         // P2e: if the dates moved AND other tasks depend on this one, offer to
         // cascade the shift. The task itself is already saved above; the
         // cascade (dependents) is an explicit, previewed, opt-in follow-up.
@@ -1598,14 +1629,14 @@ function TabTasks({ projectId, isAdmin }) {
       />}
 
       {/* Add Task modal */}
-      {showAdd&&<PTAddTask parent={addParent} allTasks={allFlat} onClose={()=>{setShowAdd(false);setAddParent(null);}} onSave={async(form)=>{
+      {showAdd&&<PTAddTask parent={addParent} allTasks={allFlat} team={team} onClose={()=>{setShowAdd(false);setAddParent(null);}} onSave={async(form)=>{
         const res = await api.post("/tasks", {
           project_id: projectId,
           parent_id: addParent?.id || null,
           name: form.name,
           category: form.category,
           tag: form.tag || "",
-          assigned_to: null,
+          assigned_to: form.assignee ? Number(form.assignee) : null,
           base_start: form.baseStart || null,
           base_end: form.baseEnd || null,
           duration: form.duration || 0,
@@ -4678,12 +4709,19 @@ function PTDepEditor({task,allTasks,phaseCodeMap,onChanged}){
   );
 }
 
-function PTEditTask({task,allTasks,projectId,depsMode,phaseCodeMap,onDepsChanged,onClose,onSave}){
+// Team ki list dropdown ke liye: value = user ki ID (DB me yahi jaati hai),
+// dikhta hai naam + pad — 28 logon me "Aamir Khan" do bhi ho sakte hain.
+// Pehli row "kisi ko nahi" — isi se assignment hataayi jaati hai.
+const teamOpts=(team)=>[{id:"",name:t("tasks.kisi_ko_nahi")},
+  ...((team||[]).map(m=>({id:m.id,
+    name:m.name+(m.designation||m.role?" · "+String(m.designation||m.role).replace(/_/g," "):"")})))];
+
+function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsChanged,onClose,onSave}){
   // Dependency wale schedule me duration EXCLUSIVE hai (end = start + din) —
   // wahi ganit jo template apply karte waqt chala tha. Purane, haath se bane
   // schedule me duration inclusive hai (2 tarikh ke beech ke din + 1).
   const DSPAN = depsMode ? 0 : 1;
-  const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignee:task.assignee,status:task.status,progress:task.progress,unit:task.unit||"",scopeQty:task.scope_qty??"",baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+DSPAN:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
+  const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignedTo:task.assigned_to??"",status:task.status,progress:task.progress,unit:task.unit||"",scopeQty:task.scope_qty??"",baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+DSPAN:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
   // Tender links. A task made by hand ("Pipe line laying") carries no BOQ item,
   // so its daily quantity has nowhere to go. Linking it once here is what puts
   // that work into the measurement book and on the map — after which the
@@ -4716,7 +4754,7 @@ function PTEditTask({task,allTasks,projectId,depsMode,phaseCodeMap,onDepsChanged
   // A row with children is a summary row: its progress/status are derived, so
   // this form must neither edit nor submit them.
   const isSummary=(task.children?.length>0)||allTasks.some(t=>Number(t.parent_id)===Number(task.id));
-  const TEAM_PT=[];
+  const TEAM_PT=teamOpts(team);
   return(<>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:350,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(480px,95vw)",background:T.bg,zIndex:351,boxShadow:"-6px 0 32px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
@@ -4740,7 +4778,7 @@ function PTEditTask({task,allTasks,projectId,depsMode,phaseCodeMap,onDepsChanged
         </div>
         {/* Assignee + Status */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
-          {[{l:t("common.assigned_to"),k:"assignee",opts:TEAM_PT},{l:t("common.status"),k:"status",opts:["Not Started","Ongoing","Hold","Completed"]}].map(f=>(
+          {[{l:t("common.assigned_to"),k:"assignedTo",opts:TEAM_PT},{l:t("common.status"),k:"status",opts:["Not Started","Ongoing","Hold","Completed"]}].map(f=>(
             <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
               <SearchSelect value={form[f.k]} options={f.opts} onChange={v=>setForm(p=>({...p,[f.k]:v}))} placeholder={`Select ${f.l.toLowerCase()}...`}/>
             </div>
@@ -4898,7 +4936,7 @@ function PTEditTask({task,allTasks,projectId,depsMode,phaseCodeMap,onDepsChanged
 }
 
 // ── PT Add Task ───────────────────────────────────────────────────
-function PTAddTask({parent,allTasks,onClose,onSave}){
+function PTAddTask({parent,allTasks,team,onClose,onSave}){
   // ── Sub-task par qty ────────────────────────────────────────
   // Stretch ki qty hi shuruaati sujhav hai: "sec 30 me 780 m" hai to uske
   // har stage (excavation, laying…) me bhi 780 m — user ghata-badha sakta
@@ -4925,7 +4963,7 @@ function PTAddTask({parent,allTasks,onClose,onSave}){
   const setDur=(v)=>{const n=Math.max(0,parseInt(v,10)||0);setForm(p=>({...p,duration:n,baseEnd:(p.baseStart&&n>0)?_addD(p.baseStart,n-1):p.baseEnd}));};
   const toggleDep=(id)=>setForm(p=>({...p,dependencies:p.dependencies.includes(id)?p.dependencies.filter(x=>x!==id):[...p.dependencies,id]}));
   const filteredForDep=allTasks.filter(t=>!depSrch||t.name.toLowerCase().includes(depSrch.toLowerCase())||t.no.includes(depSrch));
-  const TEAM_PT=[];
+  const TEAM_PT=teamOpts(team);
   const dur=form.duration||0;
   // P2d: suggested start = max(dependency end dates) + 1 day (Finish-to-Start)
   const autoStart=(()=>{
@@ -4971,9 +5009,11 @@ function PTAddTask({parent,allTasks,onClose,onSave}){
               : <div style={{fontSize:10.5,color:T.t4,marginTop:6,lineHeight:1.45}}>{t("tasks.qty_bhar_doge_to_task_update")}</div>}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
-          {[{l:t("common.category"),k:"category",type:"select",opts:["Civil","Electrical","Plumbing","Finishing","Custom"]},{l:t("tasks.tag"),k:"tag",type:"input",ph:"e.g. critical"},{l:t("common.assigned_to"),k:"assignee",type:"select",opts:TEAM_PT}].map(f=>(
+          {[{l:t("common.category"),k:"category",type:"select",opts:["Civil","Electrical","Plumbing","Finishing","Custom"]},{l:t("tasks.tag"),k:"tag",type:"input",ph:"e.g. critical"},{l:t("common.assigned_to"),k:"assignee",type:"team",opts:TEAM_PT}].map(f=>(
             <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
-              {f.type==="select"?<select value={form[f.k]} onChange={upd(f.k)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>{f.opts.map(o=><option key={o}>{o}</option>)}</select>
+              {/* Team ki list lambi hoti hai (28 log) — isliye khoj wala box */}
+              {f.type==="team"?<SearchSelect value={form[f.k]} options={f.opts} onChange={v=>setForm(p=>({...p,[f.k]:v}))} placeholder={t("tasks.kisi_ko_nahi")}/>
+              :f.type==="select"?<select value={form[f.k]} onChange={upd(f.k)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>{f.opts.map(o=><option key={o}>{o}</option>)}</select>
               :<input value={form[f.k]} onChange={upd(f.k)} placeholder={f.ph} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
             </div>
           ))}

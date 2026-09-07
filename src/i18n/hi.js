@@ -6171,6 +6171,7 @@ const dict = {
   "tasks.deps_col":                                           "किसके बाद",
   "tasks.dep_fs_short":                                       "बाद",
   "tasks.dep_ss_short":                                       "साथ",
+  "tasks.kisi_ko_nahi":                                       "— किसी को नहीं —",
   "tasks.tpl_start_date":                                     "प्रोजेक्ट स्टार्ट डेट",
   "tasks.tpl_start_date_hint":                                "इसी दिन से पूरा शेड्यूल बनेगा। खाली छोड़ो तो प्रोजेक्ट की स्टार्ट डेट, वो भी न हो तो आज।",
   "tasks.tpl_optional_groups":                                "इस घर में क्या-क्या है?",

@@ -6172,6 +6172,7 @@ const dict = {
   "tasks.deps_col":                                           "Depends on",
   "tasks.dep_fs_short":                                       "after",
   "tasks.dep_ss_short":                                       "with",
+  "tasks.kisi_ko_nahi":                                       "— nobody —",
   "tasks.tpl_start_date":                                     "Project start date",
   "tasks.tpl_start_date_hint":                                "The whole schedule is built from this day. Leave blank to use the project start date, or today if that is not set.",
   "tasks.tpl_optional_groups":                                "What does this house include?",
