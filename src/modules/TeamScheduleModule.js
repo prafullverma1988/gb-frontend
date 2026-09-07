@@ -151,15 +151,20 @@ function WorkCard({item,onOpen,onStatusChange,compact=false}){
           <div style={{fontSize:compact?12:12.5,fontWeight:600,color:T.t1,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:compact?"nowrap":"normal"}}>{item.title}</div>
           {!compact&&item.description&&<div style={{fontSize:10.5,color:T.t4,marginTop:2,lineHeight:1.4,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{item.description}</div>}
         </div>
-        <Pill label={item.priority} c={pm.c} bg={pm.bg} brd={pm.brd}/>
+        {/* Task par priority ka khaana hai hi nahi — wahan chip dikhana
+            jhooth hota (sab "Medium" lagte). */}
+        {item.hasPriority!==false&&<Pill label={item.priority} c={pm.c} bg={pm.bg} brd={pm.brd}/>}
       </div>
 
       {/* Row 2: Site + Assignee + Due */}
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-        {site&&<span style={{display:"flex",alignItems:"center",gap:3,fontSize:10.5,color:T.t3}}>
-          <span style={{width:6,height:6,borderRadius:"50%",background:site.color,flexShrink:0}}/>
-          {site.name.slice(0,18)}{site.name.length>18?"…":""}
+        {/* Site ka naam server bhi bhejta hai — company ke todo ki koi site
+            nahi hoti, aur nayi site abhi list me na aayi ho to bhi naam dikhe. */}
+        {(site||item.siteName)&&<span style={{display:"flex",alignItems:"center",gap:3,fontSize:10.5,color:T.t3}}>
+          <span style={{width:6,height:6,borderRadius:"50%",background:site?.color||T.t4,flexShrink:0}}/>
+          {(site?.name||item.siteName).slice(0,18)}{(site?.name||item.siteName).length>18?"…":""}
         </span>}
+        {item.src==="task"&&item.ref&&<span style={{fontSize:9.5,fontFamily:"monospace",color:T.t4,background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:4,padding:"1px 5px"}}>{item.ref}</span>}
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
           {item.dueDate&&<span style={{fontSize:10.5,fontWeight:overdue||dueSoon?700:400,color:overdue?T.red:dueSoon?T.amb:T.t4}}>
             {overdue?"⚠ "+fmtDate(item.dueDate):fmtDate(item.dueDate)}
@@ -198,8 +203,8 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
   useEffect(()=>{
     (async()=>{
       try{
-        const res=await api.get("/team-schedule/items/"+item.id);
-        const d=res.data?.data;
+        const res=await api.get("/team-schedule/items/"+encodeURIComponent(item.id));
+        const d=res?.data;
         if(d?.comments) setComments(d.comments.map(c=>({id:c.id,user:c.user_name||"User",text:c.text,date:fmtDate(c.created_at)})));
       }catch(err){console.error("Load comments:",err);}
     })();
@@ -210,8 +215,8 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
   const addComment=async()=>{
     if(!comment.trim()) return;
     try{
-      const res=await api.post("/team-schedule/items/"+item.id+"/comments",{text:comment.trim()});
-      const c=res.data?.data;
+      const res=await api.post("/team-schedule/items/"+encodeURIComponent(item.id)+"/comments",{text:comment.trim()});
+      const c=res?.data;
       if(c) setComments(p=>[...p,{id:c.id,user:c.user_name||"You",text:c.text,date:"Just now"}]);
       setComment("");
     }catch(err){console.error("Add comment:",err);}
@@ -231,7 +236,14 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
         <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
           <TypeBadge type={item.type}/>
           <div style={{flex:1}}>
-            <div style={{fontSize:11,fontFamily:"monospace",color:"rgba(255,255,255,0.4)",marginBottom:2}}>{item.id}</div>
+            {/* Kahan ka kaam hai — bina iske "GSB layer" kis site ka hai,
+                ye pata hi nahi chalta. */}
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginBottom:2,display:"flex",gap:6,flexWrap:"wrap"}}>
+              <span style={{fontFamily:"monospace",color:"rgba(255,255,255,0.35)"}}>{item.ref||item.id}</span>
+              {item.siteName&&<span>· {item.siteName}</span>}
+              {item.src==="task"&&<span style={{color:"rgba(255,255,255,0.45)"}}>· {t("team_schedule.project_ka_task")}</span>}
+              {item.src==="issue"&&item.taskName&&<span>· {item.taskName}</span>}
+            </div>
             {editMode
               ?<input value={form.title} onChange={upd("title")} style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.blu}`,fontSize:14,fontWeight:700,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               :<div style={{fontSize:15,fontWeight:700,color:"white",lineHeight:1.3}}>{item.title}</div>
@@ -584,9 +596,37 @@ function ScheduleGanttView({items}){
 // ── MEMBER VIEW ────────────────────────────────────────────────
 function MemberView({items,onOpen,onStatusChange,onCreateFor,isAdmin=false}){
   const [expanded,setExpanded]=useState({});
+  // Jo kaam abhi kisi ka nahi — sabse upar, taaki PM wahin se baant de.
+  // Ye sainkdon me ho sakte hain (naye plan ke baad poora project), isliye
+  // pehle thode hi dikhate hain — warna screen bhar jaati hai.
+  const free=items.filter(i=>!i.assignee&&i.status!=="Done");
+  const [freeAll,setFreeAll]=useState(false);
+  const freeShown=freeAll?free:free.slice(0,12);
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {free.length>0&&(
+        <div style={{background:T.surface,borderRadius:10,border:`1.5px dashed ${T.ambM}`,overflow:"hidden"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 16px",background:T.ambL}}>
+            <div style={{width:34,height:34,borderRadius:"50%",background:T.surface,border:`1.5px dashed ${T.ambM}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:T.amb}}>?</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>{t("team_schedule.kisi_ko_nahi_diya")}</div>
+              <div style={{fontSize:11,color:T.t4}}>{t("team_schedule.free_kaam_baant_do",{n:free.length})}</div>
+            </div>
+          </div>
+          <div style={{padding:"10px 14px",borderTop:`1px solid ${T.b1}`,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:8}}>
+            {freeShown.map(item=><WorkCard key={item.id} item={item} onOpen={onOpen} onStatusChange={onStatusChange} compact/>)}
+          </div>
+          {free.length>freeShown.length&&(
+            <div style={{padding:"0 14px 12px"}}>
+              <button onClick={()=>setFreeAll(true)}
+                style={{border:"1px solid "+T.b1,background:T.surface,borderRadius:6,padding:"6px 12px",fontSize:11.5,fontWeight:600,color:T.t2,cursor:"pointer"}}>
+                {t("team_schedule.aur_dikhao",{n:free.length-freeShown.length})}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       {TEAM_MEMBERS.map(member=>{
         const memberItems=items.filter(i=>i.assignee===member.id);
         const open=memberItems.filter(i=>i.status!=="Done").length;
@@ -716,99 +756,142 @@ function TeamScheduleModule(){
   const [fDateFrom,setFDateFrom]=useState("");
   const [fDateTo,setFDateTo]=useState("");
   const [fStatus,setFStatus]=useState("Active");
+  // "assigned" = sirf wo kaam jo kisi ko diya gaya (screen ka asli sawaal),
+  // "all" = bina-diya kaam bhi — wahin se baanta ja sake.
+  const [fScope,setFScope]=useState("assigned");
+  const [meta,setMeta]=useState(null);
+  const [stats,setStats]=useState(null);   // poore company ka sach, chahe list chhoti ho
   const [search,setSearch]=useState("");
   const [showFilters,setShowFilters]=useState(false);
 
   // ── Data loading ─────────────────────────────────────────
+  // Server har source (project ka task, todo, issue, purana standalone) ko
+  // ek hi shakal me deta hai. `uid` ("task:123") hi item ki pehchan hai —
+  // sirf number rakhte to do source ke item ek doosre par chadh jaate.
   const mapItem=i=>({
-    id:i.id, type:i.type||"Task", title:i.title, description:i.description||"",
+    id:i.uid||String(i.id), src:i.src||"own", type:i.type||"Task",
+    title:i.title, description:i.description||"", ref:i.ref||null,
     assignee:i.assignee, site:i.site_id, priority:i.priority||"Medium", status:i.status||"Todo",
-    startDate:i.start_date?i.start_date.split("T")[0]:"",
-    dueDate:i.due_date?i.due_date.split("T")[0]:"",
-    completedAt:i.completed_at?i.completed_at.split("T")[0]:null,
+    hasPriority:i.has_priority!==false,
+    startDate:i.start_date?String(i.start_date).split("T")[0]:"",
+    dueDate:i.due_date?String(i.due_date).split("T")[0]:"",
+    completedAt:i.completed_at?String(i.completed_at).split("T")[0]:null,
     tags:i.tags||[], createdBy:i.created_by, createdAt:i.created_at,
     assigneeName:i.assignee_name, siteName:i.site_name,
+    projectId:i.project_id||null, taskId:i.task_id||null, taskName:i.task_name||null,
+    progress:i.progress||0, canEditDates:i.can_edit_dates!==false,
   });
 
+  // ⚠ Purana code `res.data?.data` padhta tha — par api seedha body deta
+  // hai ({success,data}). Isliye list HAMESHA khaali aati thi, chahe DB me
+  // kaam ho. (Demo company me 18 item padte reh gaye the.)
   const loadAll=useCallback(async()=>{
     setError(null);setLoading(true);
     try{
-      const [itemsRes,membersRes,sitesRes]=await Promise.all([
-        api.get("/team-schedule/items"),
+      const [itemsRes,membersRes,sitesRes,statsRes]=await Promise.all([
+        // include_done: khatam hua kaam bhi le aate hain, chhaant screen par
+        // hoti hai (wahi "Active/Done" filter jo pehle se hai).
+        api.get("/team-schedule/items?include_done=1&scope="+fScope),
         api.get("/team-schedule/members"),
         api.get("/team-schedule/sites"),
+        api.get("/team-schedule/stats?scope=all"),
       ]);
-      setItems((itemsRes.data?.data||[]).map(mapItem));
+      setItems((itemsRes.data||[]).map(mapItem));
+      setMeta(itemsRes.meta||null);
+      setStats(statsRes&&statsRes.success?statsRes.data:null);
 
-      TEAM_MEMBERS=(membersRes.data?.data||[]).map((m,idx)=>({
+      TEAM_MEMBERS=(membersRes.data||[]).map((m,idx)=>({
         id:m.id, name:m.name, role:m.role||"", dept:m.designation||"",
         color:MEMBER_COLORS[idx%MEMBER_COLORS.length],
       }));
 
-      SITES=(sitesRes.data?.data||[]).map((s,idx)=>({
+      SITES=(sitesRes.data||[]).map((s,idx)=>({
         id:s.id, name:s.name, city:s.city||"",
         color:SITE_COLORS[idx%SITE_COLORS.length],
       }));
     }catch(err){console.error("Load team schedule:",err);setError(err);}
     finally{setLoading(false);}
-  },[]);
+  },[fScope]);
 
   useEffect(()=>{loadAll();},[loadAll]);
 
   const filteredItems=useMemo(()=>items.filter(item=>{
-    if(fMember!=="All"&&item.assignee!==fMember) return false;
-    if(fSite!=="All"&&item.site!==fSite) return false;
+    // <select> ki value string hoti hai aur id number — pehle ye milaan
+    // kabhi sach nahi hota tha, isliye member/site ka filter chalta hi nahi tha.
+    if(fMember!=="All"&&String(item.assignee||"")!==String(fMember)) return false;
+    if(fSite!=="All"&&String(item.site||"")!==String(fSite)) return false;
     if(fType!=="All"&&item.type!==fType) return false;
     if(fPriority!=="All"&&item.priority!==fPriority) return false;
     if(fStatus==="Active"&&item.status==="Done") return false;
     if(fStatus==="Done"&&item.status!=="Done") return false;
     if(fDateFrom&&item.dueDate&&item.dueDate<fDateFrom) return false;
     if(fDateTo&&item.dueDate&&item.dueDate>fDateTo) return false;
-    if(search&&!item.title.toLowerCase().includes(search.toLowerCase())&&!item.description?.toLowerCase().includes(search.toLowerCase())) return false;
+    if(search){
+      const q=search.toLowerCase();
+      const hay=[item.title,item.description,item.siteName,item.assigneeName,item.ref].filter(Boolean).join(" ").toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
     return true;
   }),[items,fMember,fSite,fType,fPriority,fStatus,fDateFrom,fDateTo,search]);
 
   const activeF=[fMember!=="All",fSite!=="All",fType!=="All",fPriority!=="All",fStatus!=="Active"].filter(Boolean).length;
 
   // ── CRUD operations ──────────────────────────────────────
+  // Server mana bhi kar sakta hai (task par "Review" hota hi nahi, task ki
+  // tareekh schedule se badalti hai, baantna sirf admin/PM ka kaam). Us
+  // haalat me card ko wapas asli haal par le aate hain aur wajah dikhate
+  // hain — pehle screen par badlaav dikh jaata tha aur DB me kuchh nahi hota.
   const updateItem=async(id,update)=>{
+    const before=items.find(i=>i.id===id);
     setItems(p=>p.map(i=>i.id===id?{...i,...update}:i));
     if(selItem?.id===id) setSelItem(p=>({...p,...update}));
-    try{
-      const payload={};
-      if(update.type!==undefined) payload.type=update.type;
-      if(update.title!==undefined) payload.title=update.title;
-      if(update.description!==undefined) payload.description=update.description;
-      if(update.assignee!==undefined) payload.assignee=update.assignee;
-      if(update.site!==undefined) payload.site_id=update.site;
-      if(update.priority!==undefined) payload.priority=update.priority;
-      if(update.status!==undefined) payload.status=update.status;
-      if(update.startDate!==undefined) payload.start_date=update.startDate||null;
-      if(update.dueDate!==undefined) payload.due_date=update.dueDate||null;
-      if(update.tags!==undefined) payload.tags=update.tags;
-      await api.patch("/team-schedule/items/"+id,payload);
-    }catch(err){console.error("Update item:",err);loadAll();}
+    const payload={};
+    if(update.title!==undefined) payload.title=update.title;
+    if(update.description!==undefined) payload.description=update.description;
+    if(update.assignee!==undefined) payload.assignee=update.assignee===""||update.assignee==null?"":Number(update.assignee);
+    if(update.site!==undefined) payload.site_id=update.site;
+    if(update.priority!==undefined) payload.priority=update.priority;
+    if(update.status!==undefined) payload.status=update.status;
+    if(update.startDate!==undefined) payload.start_date=update.startDate||null;
+    if(update.dueDate!==undefined) payload.due_date=update.dueDate||null;
+    if(update.tags!==undefined) payload.tags=update.tags;
+    const r=await api.patch("/team-schedule/items/"+encodeURIComponent(id),payload).catch(()=>null);
+    if(!r||r.success===false){
+      window.toast?.error?.(r?.message||t("team_schedule.badla_nahi_ja_saka"));
+      if(before){
+        setItems(p=>p.map(i=>i.id===id?before:i));
+        if(selItem?.id===id) setSelItem(before);
+      }
+      return;
+    }
+    // Server ne jo laut kar diya wahi sach hai (status ka shabd, naya naam).
+    if(r.data){
+      const fresh=mapItem(r.data);
+      setItems(p=>p.map(i=>i.id===id?fresh:i));
+      if(selItem?.id===id) setSelItem(fresh);
+    }
   };
 
+  // Naya kaam ab yahin ka tapu nahi banta: site chuni to us project ka todo,
+  // warna company ka todo — wahi kaam project ki Todos list me bhi dikhta hai.
   const addItem=async(form)=>{
-    try{
-      const res=await api.post("/team-schedule/items",{
-        type:form.type, title:form.title, description:form.description||null,
-        assignee:form.assignee||null, site_id:form.site||null,
-        priority:form.priority, status:form.status,
-        start_date:form.startDate||null, due_date:form.dueDate||null,
-        tags:form.tags||[],
-      });
-      const d=res.data?.data;
-      if(d) setItems(p=>[mapItem(d),...p]);
-    }catch(err){console.error("Add item:",err);}
+    const r=await api.post("/team-schedule/items",{
+      type:form.type, title:form.title, description:form.description||null,
+      assignee:form.assignee||null, site_id:form.site||null,
+      priority:form.priority, status:form.status, due_date:form.dueDate||null,
+    }).catch(()=>null);
+    if(!r||r.success===false){ window.toast?.error?.(r?.message||t("team_schedule.ban_nahi_paya")); return; }
+    if(r.data) setItems(p=>[mapItem(r.data),...p]);
+    window.toast?.success?.(t("team_schedule.kaam_jud_gaya"));
   };
 
+  // Asli task/todo/issue yahan se nahi mitte — unke apne module me delete ka
+  // apna hisaab hai. Server mana karta hai, hum wahi wajah dikhate hain.
   const deleteItem=async(id)=>{
+    const r=await api.del("/team-schedule/items/"+encodeURIComponent(id)).catch(()=>null);
+    if(!r||r.success===false){ window.toast?.error?.(r?.message||t("team_schedule.hata_nahi_paye")); return; }
     setItems(p=>p.filter(i=>i.id!==id));
     setSelItem(null);
-    try{await api.del("/team-schedule/items/"+id);}
-    catch(err){console.error("Delete item:",err);loadAll();}
   };
 
   const openCreateFor=(memberId,type,mode="member")=>{
@@ -968,6 +1051,19 @@ function TeamScheduleModule(){
                 ))}
               </div>
             </div>
+            {/* Kaun sa kaam — ye server par tay hota hai (bina-diya kaam
+                query se hi aata hai), isliye badalne par list dobara aati hai. */}
+            <div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{t("team_schedule.kaun_sa_kaam")}</div>
+              <div style={{display:"flex",gap:3}}>
+                {[["assigned",t("team_schedule.sirf_jinko_diya")],["all",t("team_schedule.sab_kaam")]].map(([v,l])=>(
+                  <button key={v} onClick={()=>setFScope(v)}
+                    style={{padding:"5px 9px",borderRadius:5,border:"1.5px solid "+(fScope===v?T.blu:T.b1),background:fScope===v?T.bluL:"none",color:fScope===v?T.blu:T.t3,fontSize:11,fontWeight:fScope===v?700:400,cursor:"pointer"}}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
             {/* Priority */}
             <div>
               <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>{t("common.priority")}</div>
@@ -1020,6 +1116,18 @@ function TeamScheduleModule(){
         {items.length===0&&view!=="live"&&<div style={{textAlign:"center",padding:"80px 0"}}><div style={{fontSize:36,marginBottom:8}}>📅</div><div style={{color:"#64748B",fontSize:14,fontWeight:600}}>{t("team_schedule.no_work_items_yet")}</div><div style={{color:"#94A3B8",fontSize:12,marginTop:4}}>{t("team_schedule.create_tasks_issues_or_todos_to")}</div></div>}
 
         {/* BOARD VIEW — Kanban by status */}
+        {/* Screen khaali-si lage to wajah saaf ho: kaam hai, par kisi ko
+            diya nahi gaya. Ek click me sab dikh jaate hain. */}
+        {fScope==="assigned"&&stats&&stats.unassigned>0&&(
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",background:T.ambL,border:"1px solid "+T.ambM,borderRadius:9,padding:"9px 13px",marginBottom:12}}>
+            <span style={{fontSize:12,color:"#92400E",fontWeight:600}}>{t("team_schedule.n_kaam_bina_diye",{n:stats.unassigned})}</span>
+            <button onClick={()=>setFScope("all")}
+              style={{border:"1px solid "+T.ambM,background:T.surface,color:"#92400E",borderRadius:6,padding:"4px 11px",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+              {t("team_schedule.sab_dikhao_aur_baanto")}
+            </button>
+            {meta&&meta.truncated&&<span style={{fontSize:11,color:T.t4}}>{t("team_schedule.bahut_zyada_kaam")}</span>}
+          </div>
+        )}
         {view==="board"&&(
           <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:12,minHeight:400,alignItems:"flex-start"}}>
             {Object.entries(STATUS_META).map(([status,sm])=>{
