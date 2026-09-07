@@ -1541,14 +1541,24 @@ function TabTasks({ projectId, isAdmin }) {
         depsMode={hasDeps} phaseCodeMap={phaseCodeMap} onDepsChanged={refetchTasks}
         onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
         const orig = editTask;
-        const r = await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress, base_start:u.baseStart, base_end:u.baseEnd, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen,
+        const r = await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress,
+          // Khaali tareekh par "" bhejna = server par 500 (MySQL date me ""
+          // ja hi nahi sakta). null = "is khaane ko haath mat lagao".
+          base_start:u.baseStart||null, base_end:u.baseEnd||null, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen,
           // Kaam kisko diya — user ki ID jaati hai, "" = kisi ko nahi.
           // (Ye pehle bheja hi nahi jaata tha, isliye chunav gum ho jaata tha.)
           assigned_to: u.assignedTo === "" || u.assignedTo == null ? "" : Number(u.assignedTo),
           // "" clears the link; undefined would leave it untouched.
           boq_item_id: u.boqItemId ?? "", alignment_id: u.alignId ?? "" });
-        // A rejected link (wrong tender / wrong site) comes back as a message.
-        if (r && r.success === false && r.message) window.toast?.error(r.message);
+        // Save fail hua to yahin ruko. Pehle hum aage badh kar list me naya
+        // naam/assignee bitha dete the — screen par kaam hua dikhta tha aur
+        // DB me kuchh gaya hi nahi hota tha. Ab: galti dikhao, list ko
+        // server ke sach par le aao, aur box khula rehne do (edit bacha rahe).
+        if (r && r.success === false) {
+          window.toast?.error(r.message || t("tasks.save_nahi_hua"));
+          await refetchTasks();
+          return;
+        }
         // Scope/unit budget-PATCH se jaate hain — tasks PUT inhe leta hi nahi.
         // Scope badla to completion ka MODE hi badla (qty ↔ %), isliye refetch.
         const scopeChanged = String(u.scopeQty ?? "") !== String(orig.scope_qty ?? "") || String(u.unit || "") !== String(orig.unit || "");

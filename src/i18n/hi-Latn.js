@@ -6175,6 +6175,7 @@ const dict = {
   "tasks.dep_fs_short":                                       "baad",
   "tasks.dep_ss_short":                                       "saath",
   "tasks.kisi_ko_nahi":                                       "— kisi ko nahi —",
+  "tasks.save_nahi_hua":                                      "Save nahi hua — dobara koshish karo",
   "tasks.tpl_start_date":                                     "Project start date",
   "tasks.tpl_start_date_hint":                                "Isi din se poora schedule banega. Khali chhodo to project ki start date, wo bhi na ho to aaj.",
   "tasks.tpl_optional_groups":                                "Is ghar me kya-kya hai?",
