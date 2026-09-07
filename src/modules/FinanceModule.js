@@ -945,6 +945,71 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
   );
 }
 
+// ── Search jo rakam aur tareekh dono samajhti hai ──────────────────
+// Pehle Fin Activity / Cash Book ki search sirf party + narration par
+// chalti thi. "5000" likhne par ₹5,000 wali entry nahi milti thi (sirf wo
+// milti jiske note me "5000" likha ho), aur "4/6/25" par kuch bhi nahi.
+//
+// Ab teen tarah se dhoondhti hai:
+//   1. RAKAM  — sirf ank (₹ , . space chalega): amount se exact ya shuruaat
+//      se milaan. "5000" → ₹5,000 aur ₹5,00,000 (prefix), par ₹45,000 nahi.
+//      Typing ke saath dayra apne aap chhota hota jaata hai.
+//   2. TAREEKH — 4/6/25, 04-06-2025, 2025-06-04, "4 jun", "jun 2026".
+//   3. TEXT    — pehle jaisa: party, narration, note, project...
+// Ank wali query text me bhi mil sakti hai ("Bobcat 5000 sqft"), isliye
+// rakam na milne par text bhi dekha jaata hai — purana vyavhaar bacha rehta.
+const MONTHS_SHORT = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+
+// "₹5,000.00" / "5000" → "5000". Ank ke alawa kuch ho to null.
+function amountNeedle(raw) {
+  const s = String(raw).trim().replace(/[₹,\s]/g, "");
+  if (!/^\d+(\.\d+)?$/.test(s)) return null;
+  return s.replace(/\.0*$/, "");
+}
+
+function looksLikeDate(raw) {
+  const s = String(raw).trim();
+  return /^\d{1,4}[/\-.]\d{1,2}([/\-.]\d{1,4})?$/.test(s)      // 4/6/25, 2025-06-04, 4/6
+      || /^\d{1,2}\s+[a-z]{3,9}(\s+\d{2,4})?$/i.test(s)          // 4 jun 2026
+      || /^[a-z]{3,9}\s+\d{2,4}$/i.test(s);                      // jun 2026
+}
+
+// ds = YYYYMMDD integer (mapTxn isi ko sort key banata hai).
+function dateHaystack(ds) {
+  const n = Number(ds) || 0;
+  if (n < 10000000) return "";
+  const Y = Math.floor(n / 10000), M = Math.floor(n / 100) % 100, D = n % 100;
+  if (M < 1 || M > 12) return "";
+  const p = (x) => String(x).padStart(2, "0");
+  const yy = String(Y).slice(-2), mon = MONTHS_SHORT[M - 1];
+  return [
+    `${Y}/${p(M)}/${p(D)}`,
+    `${D}/${M}/${Y}`, `${p(D)}/${p(M)}/${Y}`,
+    `${D}/${M}/${yy}`, `${p(D)}/${p(M)}/${yy}`,
+    `${D} ${mon} ${Y}`, `${p(D)} ${mon} ${Y}`, `${mon} ${Y}`, `${mon} ${yy}`,
+  ].join(" | ");
+}
+
+// Ek row is search se milti hai ya nahi. `texts` = jin field me text dhoondhna hai.
+function txnMatchesSearch(raw, { texts = [], amount = null, ds = null }) {
+  const needle = String(raw || "").trim().toLowerCase();
+  if (!needle) return true;
+
+  const amt = amountNeedle(needle);
+  if (amt !== null && amount != null) {
+    const n = Math.abs(Number(amount) || 0);
+    const plain = String(Math.round(n * 100) / 100);
+    if (plain === amt || plain.startsWith(amt)) return true;
+  }
+
+  if (ds != null && looksLikeDate(needle)) {
+    const norm = (s) => s.replace(/[-.]/g, "/");
+    if (norm(dateHaystack(ds)).includes(norm(needle))) return true;
+  }
+
+  return texts.some((v) => v && String(v).toLowerCase().includes(needle));
+}
+
 // "party nahi mili?" escape hatch on the payment pickers. Dropdown ke
 // theek pehle ek chhota square "+" — text link neeche latakne se form ki
 // line toot jati thi.
@@ -3251,7 +3316,8 @@ function CashDayBook({ txns, view="cashbook" }){ // view driven by parent sub-ta
     if(chip==="Payments"&&!t.dr) return false;
     if(fromN&&t.ds<fromN) return false;
     if(toN&&t.ds>toN)     return false;
-    if(search){const q=search.toLowerCase(); if(!(t.sub||"").toLowerCase().includes(q)&&!(t.party||"").toLowerCase().includes(q)) return false;}
+    // Rakam / tareekh / text — teeno ek hi box se (txnMatchesSearch dekho).
+    if(search && !txnMatchesSearch(search,{texts:[t.sub,t.party,t.note,t.project,t.account],amount:t.amount,ds:t.ds})) return false;
     return true;
   }).sort((a,b)=>(a.ds-b.ds)||((a.id||0)-(b.id||0))),
   [txns,fSite,fHead,fMOP,fAcc,fParty,chip,fromN,toN,search]);
@@ -3993,9 +4059,10 @@ function FinanceModule(){
   // activeTxns or any filter input changes. Search box typing is
   // covered by `dbTxnSearch` upstream (see #67's useDebounce wrap).
   const txnFiltered = useMemo(() => {
-    const q = (dbTxnSearch || "").toLowerCase();
+    const q = (dbTxnSearch || "").trim();
     return activeTxns.filter(t => {
-      if (q && !t.party.toLowerCase().includes(q) && !t.sub.toLowerCase().includes(q)) return false;
+      // Rakam / tareekh / text — teeno ek hi box se (txnMatchesSearch dekho).
+      if (q && !txnMatchesSearch(q, { texts: [t.party, t.sub, t.note, t.project, t.account], amount: t.amount, ds: t.ds })) return false;
       if (fProject !== "All" && t.project !== fProject) return false;
       if (fType    !== "All" && t.type    !== fType)    return false;
       if (fAcc     !== "All" && t.account !== fAcc)     return false;
