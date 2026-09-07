@@ -149,6 +149,15 @@ const PERM_HELP = {
     create: "—", edit: "—", delete: "—", approve: "—",
     export: "P&L ko CSV/PDF me nikalna",
   },
+  "Pulse": {
+    view: "Site Pulse band — \"kis site par kya hua\" wali khabrein (app ka Pulse tab aur web ka Site Pulse drawer). Pulse apna koi data nahi rakhta, isliye ISKE ANDAR har khabar apne module ke adhikar se hi khulti hai: payment Finance se, maal aana Warehouse se, MR Procurement se, progress/photo/document Projects se, aur manzoori ki khabar sirf unhe jo khud kuchh approve karte hain. Yani ye row poori screen ka switch hai, khabron ka nahi.",
+    create: "—", edit: "—", delete: "—", approve: "—", export: "—",
+  },
+  "Assets": {
+    view: "Sidebar se Assets gayab — plate, prop, shuttering jaisa saamaan jo site par jaata hai aur wapas aata hai (meter wali machine Machinery me hai).",
+    create: "Naya asset jodna, site ko issue karna", edit: "Asset ki detail ya jagah badalna",
+    delete: "Asset hatana", approve: "Asset ka issue/wapsi approve karna", export: "Asset register nikalna",
+  },
   "Procurement": {
     view: "Sidebar se Procurement gayab — Material Request (MR), RFQ, quotation compare aur Purchase Order sab band.",
     create: "Nayi MR banana, RFQ nikalna, PO banana", edit: "MR/PO ki detail badalna",
@@ -1033,7 +1042,7 @@ function RolesAccess() {
   // "Users & Roles" — user aur role ka prashasan. "Settings" row apni jagah
   // rehti hai (My Profile, password), warna Settings.view hataate hi wo apna
   // password bhi nahi badal paata.
-  const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Procurement","Warehouse","Fuel","Machinery","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings","Users & Roles"];
+  const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Pulse","Procurement","Warehouse","Fuel","Machinery","Assets","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings","Users & Roles"];
   // Project ke ANDAR ke saare tabs. Budget/Party/To Do/Tasks/Files/Site-DPR
   // pehle yahan the hi nahi, isliye unhe kabhi rok hi nahi sakte the — wo har
   // role ko hamesha dikhte the. (Design aur MOM upar "Modules" me hain, isliye
