@@ -202,6 +202,10 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   const [cities, setCities] = useState([]); const [ctypes, setCtypes] = useState([]);
   const [cityId, setCityId] = useState(""); const [ctypeId, setCtypeId] = useState("");
   const [execResult, setExecResult] = useState(null);
+  // Pehle se bana hua plan? — execute se pehle server se poochhte hain, tabhi
+  // "purana hata kar naya" ya "milao" ka chunav dikhta hai.
+  const [execPrev, setExecPrev] = useState(null);     // null | {loading} | {has_existing, sites}
+  const [execMode, setExecMode] = useState("merge");  // "merge" | "overwrite"
   const [job, setJob] = useState(null);        // {status,kind,error} — peechhe chal raha kaam
   const [dinfo, setDinfo] = useState(null);    // digest ka saar — screen par dikhta hai
   const [boqCount, setBoqCount] = useState(0); // tender me imported BOQ items
@@ -321,7 +325,16 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   };
 
   const openExec = async () => {
-    setExecOpen(true);
+    setExecOpen(true); setExecPrev({ loading: true });
+    // Haath ke edit pehle save — preview usi plan par bane jo execute hoga
+    if (dirty && plan) { try { await api.put(`/tenders/${tenderId}/ai-plan`, { plan }); setDirty(false); } catch (_) {} }
+    api.get(`/tenders/${tenderId}/ai-plan/execute-preview`).then((r) => {
+      const d = r?.success && r.data ? r.data : { has_existing: false, sites: [] };
+      setExecPrev(d);
+      // Purane/alag naam ke kaam pade hon to "purana hata kar naya" hi default —
+      // yahi wo haalat hai jisme milaane se purana upar baitha reh jaata tha.
+      setExecMode(d.has_existing && (d.sites || []).some((s) => s.not_in_plan > 0) ? "overwrite" : "merge");
+    }).catch(() => setExecPrev({ has_existing: false, sites: [] }));
     if (!cities.length) {
       const [cr, tr] = await Promise.all([api.get("/library/cities").catch(() => null), api.get("/library/construction-types").catch(() => null)]);
       if (cr?.success) setCities(cr.data || []);
@@ -333,8 +346,13 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
     setBusy("exec"); setErr("");
     try {
       if (dirty && plan) { await api.put(`/tenders/${tenderId}/ai-plan`, { plan }); setDirty(false); }
-      const r = await api.post(`/tenders/${tenderId}/ai-plan/execute`, { city_id: cityId || null, construction_type_id: ctypeId || null }, { timeoutMs: 120000 });
-      if (r?.success) { setExecResult(r.data); setExecOpen(false); window.toast?.success?.("Plan execute ho gaya — " + r.data.projects.length + " site, " + r.data.works_created + " kaam"); }
+      const overwrite = execMode === "overwrite" && !!execPrev?.has_existing;
+      const r = await api.post(`/tenders/${tenderId}/ai-plan/execute`, { city_id: cityId || null, construction_type_id: ctypeId || null, mode: overwrite ? "overwrite" : "merge" }, { timeoutMs: 120000 });
+      if (r?.success) {
+        setExecResult(r.data); setExecOpen(false);
+        window.toast?.success?.("Plan execute ho gaya — " + r.data.projects.length + " site, " + r.data.works_created + " kaam"
+          + (r.data.removed ? ", " + r.data.removed + " purane hate" : "") + (r.data.archived?.length ? ", " + r.data.archived.length + " archive" : ""));
+      }
       else setErr(r?.message || "Execute fail");
     } catch (e) { setErr(e?.message || "error"); }
     setBusy("");
@@ -718,9 +736,11 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
               {execResult.boq_linked ? <> · <b style={{ color: T.grn }}>{t("tender_ai_plan.boq_linked_task_boq_se_jude", { boq_linked: execResult.boq_linked })}</b> {t("tender_ai_plan.inki_qty_mb_draft_tak_jayegi")}</> : ""}
               {execResult.lines_linked ? <> · 🔗 {t("tender_ai_plan.lines_linked", { n: execResult.lines_linked })}</> : ""}
               {execResult.replaced ? <> · ♻ {t("tender_ai_plan.replaced_n", { n: execResult.replaced })}</> : ""}
+              {execResult.removed ? <> · 🗑 {t("tender_ai_plan.removed_n", { n: execResult.removed })}</> : ""}
+              {execResult.archived?.length ? <> · 📦 {t("tender_ai_plan.archived_n", { n: execResult.archived.length })}</> : ""}
               {execResult.skipped?.length ? t("tender_ai_plan.skipped_pehle_se_the", { skipped: execResult.skipped.length }) : ""}
             </div>
-            {execResult.skipped?.length > 0 && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{execResult.skipped.join(" · ")}</div>}
+            {(execResult.skipped?.length > 0 || execResult.archived?.length > 0) && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{[...(execResult.skipped || []), ...(execResult.archived || [])].join(" · ")}</div>}
           </div>
         )}
 
@@ -749,9 +769,39 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
         <div onClick={() => setExecOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 400 }} />
         <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", background: T.surface, borderRadius: 12, width: "min(440px,94vw)", zIndex: 401, padding: "18px 20px", boxShadow: "0 24px 64px rgba(0,0,0,0.3)" }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: T.t1, marginBottom: 4 }}>{t("tender_ai_plan.plan_execute_karein")}</div>
-          <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.6, marginBottom: 12 }}><Rich k="tender_ai_plan.plan_sites_plan2_totalworks_kaam_budget" params={{ plan: plan.sites.length, plan2: plan.sites.map((s) => s.name).join(", "), totalWorks, fmtAmt: fmtAmt(totalAmt) }} /><br />
-            <Rich k="tender_ai_plan.dobara_nahi_banega" />
+          <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.6, marginBottom: 12 }}><Rich k="tender_ai_plan.plan_sites_plan2_totalworks_kaam_budget" params={{ plan: plan.sites.length, plan2: plan.sites.map((s) => s.name).join(", "), totalWorks, fmtAmt: fmtAmt(totalAmt) }} />
+            {execPrev && !execPrev.loading && !execPrev.has_existing && <><br /><Rich k="tender_ai_plan.dobara_nahi_banega" /></>}
           </div>
+
+          {/* Pehle se bana hai? To pehle chunav: purana hata kar naya, ya milao.
+              Bina is chunav ke naya plan purane ke neeche jud jaata tha aur
+              purana upar baitha rehta tha — "execute hua hi nahi" lagta tha. */}
+          {execPrev?.loading && <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 12 }}>{t("tender_ai_plan.pehle_se_kya_bana_dekh_raha")}</div>}
+          {execPrev && !execPrev.loading && execPrev.has_existing && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: T.amb, marginBottom: 5 }}>{t("tender_ai_plan.pehle_se_bana_hai")}</div>
+              {(execPrev.sites || []).filter((s) => s.roots > 0).map((s) => (
+                <div key={s.name} style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.5 }}>
+                  <Rich k="tender_ai_plan.preview_site_line" params={{ site: s.name, roots: s.roots, tasks: s.tasks, in_plan: s.in_plan, extra: s.not_in_plan }} />
+                  {s.touched ? t("tender_ai_plan.preview_touched", { n: s.touched }) : ""}
+                  {s.plan_locked ? t("tender_ai_plan.preview_lock") : ""}
+                </div>
+              ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 9 }}>
+                {[["overwrite", "tender_ai_plan.mode_overwrite", "tender_ai_plan.mode_overwrite_hint", T.amb],
+                  ["merge", "tender_ai_plan.mode_merge", "tender_ai_plan.mode_merge_hint", T.grn]].map(([m, k, hk, col]) => (
+                  <label key={m} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 10px", borderRadius: 8, cursor: "pointer",
+                    border: `1px solid ${execMode === m ? col : T.b1}`, background: execMode === m ? T.surfaceB : "transparent" }}>
+                    <input type="radio" name="execMode" checked={execMode === m} onChange={() => setExecMode(m)} style={{ marginTop: 2 }} />
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{t(k)}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4, lineHeight: 1.45 }}>{t(hk)}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
             <div><label style={{ fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>{t("tender_ai_plan.city_nayi_site_ke_liye")}</label>
               <select value={cityId} onChange={(e) => setCityId(e.target.value)} style={inp({ width: "100%", marginTop: 3 })}>
@@ -762,7 +812,10 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => setExecOpen(false)} style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surfaceB, border: `1px solid ${T.b1}`, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer" }}>{t("tender_ai_plan.cancel")}</button>
-            <button onClick={doExecute} disabled={busy === "exec"} style={{ flex: 2, padding: "9px", borderRadius: 7, border: "none", background: T.grn, color: "white", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{busy === "exec" ? t("tender_ai_plan.ban_raha_hai") : t("tender_ai_plan.haan_banao")}</button>
+            <button onClick={doExecute} disabled={busy === "exec" || !!execPrev?.loading}
+              style={{ flex: 2, padding: "9px", borderRadius: 7, border: "none", background: (execMode === "overwrite" && execPrev?.has_existing) ? T.amb : T.grn, color: "white", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+              {busy === "exec" ? t("tender_ai_plan.ban_raha_hai")
+                : (execMode === "overwrite" && execPrev?.has_existing) ? t("tender_ai_plan.haan_purana_hata_kar_banao") : t("tender_ai_plan.haan_banao")}</button>
           </div>
         </div>
       </>)}
