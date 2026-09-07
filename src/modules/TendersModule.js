@@ -4560,11 +4560,29 @@ function MapTab({tenderId, sites}) {
     setPending(null); clearDraft(); load();
   };
 
+  // Line hataana. Jispar koi kaam tika nahi wo seedha hat jaati hai; jispar
+  // tika hai uspar server 409 (LINE_IN_USE) deta hai aur company ka
+  // DELETE-PASSWORD maangta hai — wahi taala jo Danger Zone par hai. Pehle
+  // yahan sirf rok thi: tukde ban chuke hon to har tukde par line ka link
+  // hota hai, matlab galat khinchi line kabhi hat hi nahi sakti thi.
   const del = async (it) => {
     if (!await window.confirmAsync(t("tenders.name_hataayein", { name: it.name }))) return;
-    const res = await api.del(`/tenders/${tenderId}/alignments/${it.id}`);
+    let res = await api.del(`/tenders/${tenderId}/alignments/${it.id}`);
+    if (!res?.success && res?.code === "LINE_IN_USE") {
+      // Options-object wala roop — promptAsync(msg, default) sirf do argument
+      // leta hai, teesra chup-chaap gir jaata aur password khula dikhta.
+      const pw = await window.promptAsync({
+        message: res.message + "\n\n" + t("tenders.line_delete_password_maango"),
+        password: true, okLabel: t("tenders.hatao"),
+      });
+      if (!pw) return;
+      res = await api.del(`/tenders/${tenderId}/alignments/${it.id}`, { password: pw });
+    }
     if (!res?.success) { toast.error(res?.message || "Delete nahi hua"); return; }
-    toast.success("Hat gaya"); load();
+    toast.success(res.data?.unlinked
+      ? t("tenders.line_hat_gayi_link_bhi", { n: res.data.unlinked })
+      : "Hat gaya");
+    load();
   };
 
   // Task ↔ line jodna — farak dikhe to poochh kar map wali lambai likh do

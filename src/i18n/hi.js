@@ -7298,6 +7298,8 @@ const dict = {
   "tenders.new_site":                                          "नई साइट",
   "tenders.nit_date":                                          "एनआईटी डेट *",
   "tenders.nit_date_2":                                        "एनआईटी डेट",
+  "tenders.line_delete_password_maango":                       "डिलीट-पासवर्ड डालो — इस लाइन से जुड़े काम का जगह वाला लिंक हट जाएगा",
+  "tenders.line_hat_gayi_link_bhi":                            "लाइन हट गई — {n} काम का जगह वाला लिंक भी हटा",
   "tenders.nit_date_zaroori_hai":                              "एनआईटी डेट ज़रूरी है",
   "tenders.nit_ke_main_points":                                "एनआईटी के मेन पॉइंट्स",
   "tenders.nit_loa_agreement_bg_copy":                         "एनआईटी · एलओए · एग्रीमेंट · बीजी कॉपी",

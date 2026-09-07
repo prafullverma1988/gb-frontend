@@ -7301,6 +7301,8 @@ const dict = {
   "tenders.new_site":                                          "New Site",
   "tenders.nit_date":                                          "NIT Date *",
   "tenders.nit_date_2":                                        "NIT Date",
+  "tenders.line_delete_password_maango":                       "Delete-password daalo — is line se jude kaam ka jagah wala link hat jayega",
+  "tenders.line_hat_gayi_link_bhi":                            "Line hat gayi — {n} kaam ka jagah wala link bhi hata",
   "tenders.nit_date_zaroori_hai":                              "NIT date zaroori hai",
   "tenders.nit_ke_main_points":                                "NIT ke Main Points",
   "tenders.nit_loa_agreement_bg_copy":                         "NIT · LOA · Agreement · BG copy",

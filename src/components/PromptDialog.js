@@ -47,6 +47,10 @@ export function PromptProvider({ children }) {
         defaultValue: opts.defaultValue != null ? String(opts.defaultValue) : "",
         placeholder: opts.placeholder || "",
         multiline: !!opts.multiline,
+        // password: true → akshar chhupe rahen (delete-password jaisa taala).
+        // Browser ke autofill se bhi bachao — ye company ka taala hai, kisi
+        // login ka field nahi, save/suggest hona hi nahi chahiye.
+        password: !!opts.password,
         okLabel: opts.okLabel || "OK",
         cancelLabel: opts.cancelLabel || "Cancel",
         resolve: res,
@@ -108,6 +112,8 @@ export function PromptProvider({ children }) {
               ) : (
                 <input ref={inputRef} value={value} onChange={(e) => setValue(e.target.value)}
                   placeholder={pending.placeholder}
+                  type={pending.password ? "password" : "text"}
+                  autoComplete={pending.password ? "off" : undefined}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); resolve(value); } }}
                   style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1.5px solid ${T.borderM}`, fontSize: 13.5, color: T.text, background: T.surface, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
                   onFocus={(e) => e.target.style.borderColor = T.blu} onBlur={(e) => e.target.style.borderColor = T.borderM} />
