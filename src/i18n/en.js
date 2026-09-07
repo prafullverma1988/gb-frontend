@@ -7142,6 +7142,10 @@ const dict = {
   "tenders.tukde_ban_gaye":                                  "\"{name}\" split into {n} stretches",
 
   "tenders.napa_vs_boq":                                     "Measured on map {napa} m · BOQ {boq} m · difference {farak} m",
+  "tenders.extra_title": "These are not length-based — what should happen to them?",
+  "tenders.extra_split": "Split",
+  "tenders.extra_keep": "Keep whole",
+  "tenders.bacha_hua_note": "The remaining {len} m stays on \"{name}\" itself — no new task is created. Mark more later and split again.",
 
   "tenders.tukde_niyam_note":                                "Change a share and quantities follow that ratio; the total always stays BOQ. Any map difference shows up in the MB as deviation. Work that already has entries cannot be split.",
 

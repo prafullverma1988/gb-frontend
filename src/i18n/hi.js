@@ -7141,6 +7141,10 @@ const dict = {
   "tenders.tukde_ban_gaye":                                  "\"{name}\" के {n} टुकड़े बन गए",
 
   "tenders.napa_vs_boq":                                     "नक्शे पर नापा {napa} m · BOQ {boq} m · फ़र्क {farak} m",
+  "tenders.extra_title": "ये लंबाई वाली नहीं हैं — इनका क्या करें?",
+  "tenders.extra_split": "बाँटो",
+  "tenders.extra_keep": "मत बाँटो",
+  "tenders.bacha_hua_note": "बचा हुआ {len} m \"{name}\" पर ही रहेगा — इसका नया टास्क नहीं बनेगा। आगे मार्किंग करके दोबारा बाँट सकते हो।",
 
   "tenders.tukde_niyam_note":                                "हिस्सा बदलो तो मात्रा उसी अनुपात में बँटती है; जोड़ हमेशा BOQ ही रहता है। नक्शे का फ़र्क MB में deviation बनकर दिखेगा। जिस काम पर entry दर्ज हो चुकी हो, वह बँटता नहीं।",
 

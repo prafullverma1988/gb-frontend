@@ -7144,6 +7144,10 @@ const dict = {
   "tenders.tukde_ban_gaye":                                  "\"{name}\" ke {n} tukde ban gaye",
 
   "tenders.napa_vs_boq":                                     "Map par napa {napa} m · BOQ {boq} m · farak {farak} m",
+  "tenders.extra_title": "Ye lambai wali nahi hain — inka kya karein?",
+  "tenders.extra_split": "Baanto",
+  "tenders.extra_keep": "Mat baanto",
+  "tenders.bacha_hua_note": "Bacha hua {len} m \"{name}\" par hi rahega — iska naya task nahi banega. Aage marking karke dobara baant sakte ho.",
 
   "tenders.tukde_niyam_note":                                "Hissa badlo to qty usi anupaat me bat-ti hai; jod hamesha BOQ hi rehta hai. Map ka farak MB me deviation ban kar dikhega. Kaam shuru ho chuka ho (entry darj) to baantna nahi hota.",
 
