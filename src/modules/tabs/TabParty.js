@@ -268,9 +268,20 @@ function TabParty({ projectId, projectName }) {
                   : type === "settle_in"  ? "receipt" : type;
         // Money that left THIS staff's wallet for the project — we owe them for it,
         // so CR regardless of the underlying expense type.
+        // Rejected / pending / cancelled row balance me nahi ginti — wahi
+        // niyam jo utils/partyBalance aur party-ledger endpoint chalate hain.
+        const ap = t.approval_status;
+        const cleared = Number(t.is_active) !== 0
+          && String(t.status || "") !== "cancelled"
+          && (!ap || ap === "approved" || ap === "auto")
+          && (Number(t.requires_receiver_confirmation) !== 1 || !!t.receiver_confirmed_at)
+          && !t.receiver_rejected_at;
+        if (!cleared) continue;
+        // Staff ke wallet se gaya paisa — kisi ko bhi, KHUD ko bhi (petrol /
+        // salary self-draw). Pehle 'party_id <> khud' ki shart self-draw ko
+        // DR bana deti thi aur card se mel nahi khata tha.
         const walletSpend = p.is_staff === 1
-          && Number(t.paid_via_staff_id) === Number(p.id)
-          && Number(t.party_id) !== Number(p.id);
+          && Number(t.paid_via_staff_id) === Number(p.id);
         let isCR;
         if (walletSpend) isCR = true; else
         if (isVendor) {

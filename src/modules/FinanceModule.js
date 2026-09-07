@@ -3988,6 +3988,12 @@ function FinanceModule(){
           txnType:t.type||"",
           paidBy:t.paid_by||null,
           walletSpend:t.wallet_spend===1||t.wallet_spend===true,
+          // Server ab har row ka sign + 'ginti me hai ya nahi' bhejta hai —
+          // card, drawer, bot sab ek niyam par. Purane response (bina in
+          // fields ke) par neeche wala fallback chalta hai.
+          ledgerSign:(t.ledger_sign===0||t.ledger_sign)?Number(t.ledger_sign):null,
+          counted:t.counted===0?false:true,
+          notCountedReason:t.not_counted_reason||null,
           items:t.line_items||null,
           sourceKind:t.source_kind||null,
           refId:t.ref_id||null,
@@ -4209,7 +4215,7 @@ function FinanceModule(){
       // A staff's wallet spend (money paid out of their wallet) always reduces
       // what the staff holds / increases what we owe them → CR (−1), whatever
       // the underlying txn type is.
-      const sign=t.walletSpend ? -1 : ledgerSign(t.txnType||t.type||"");
+      const sign=(t.ledgerSign!=null) ? t.ledgerSign : (t.walletSpend ? -1 : ledgerSign(t.txnType||t.type||""));
       return {...t, ledSign:sign, dr:sign>0}; // dr kept for row tint / legacy reads
     });
 
@@ -4972,7 +4978,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                             const sgn = txn.ledSign||0;
                             return(
                           <div onClick={()=>setSelTxn(txn)}
-                            style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"9px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",background:isExpanded?T.bluL+"44":"none",borderLeft:`3px solid ${sgn<0?T.grn:sgn>0?T.red:T.b2}33`,transition:"background 0.1s"}}
+            style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"9px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",background:isExpanded?T.bluL+"44":"none",borderLeft:`3px solid ${sgn<0?T.grn:sgn>0?T.red:T.b2}33`,transition:"background 0.1s",opacity:txn.counted===false?0.55:1}}
                             onMouseEnter={e=>{if(!isExpanded)e.currentTarget.style.background=T.surfaceB;}}
                             onMouseLeave={e=>{if(!isExpanded)e.currentTarget.style.background="none";}}>
                             {/* 1. Date */}
@@ -4988,6 +4994,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                               <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:500,color:T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",width:"fit-content",maxWidth:"100%"}}><span style={{width:6,height:6,borderRadius:"50%",background:txn.sourceKind==="customer_invoice"?T.blu:T.slt,flexShrink:0}}/>
                                 {txn.invoiceNo ? `${typeLabel} · ${txn.invoiceNo}` : typeLabel}
                               </span>
+                              {txn.counted===false && (
+                                /* Rejected / pending / cancelled — dikhti hai, balance me nahi */
+                                <span style={{fontSize:9,fontWeight:700,color:T.red,textTransform:"uppercase",letterSpacing:.3,marginTop:1}}>
+                                  {txn.notCountedReason||"not counted"} · balance me nahi
+                                </span>
+                              )}
                               {isBillType && txn.sourceKind!=="customer_invoice" && (
                                 <span onClick={e=>{e.stopPropagation();setSelBill(isExpanded?null:txn.id);}} style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer",marginTop:1}}>{isExpanded?t("finance.hide"):t("finance.view_bill")}{hasItems?` (${txn.items.length})`:""}</span>
                               )}
