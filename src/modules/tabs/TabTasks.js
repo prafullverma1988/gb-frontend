@@ -3632,17 +3632,17 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   const [labDate,setLabDate]=useState(new Date().toISOString().split("T")[0]);
 
   // Is screen par kya-kya dikhega — company ki apni setting
-  // (Settings → Other Settings → "Task progress screen"). Server na mile to
-  // sab dikhta hai; chhupana kabhi default nahi.
+  // (Settings → Task Screen). Server na mile to
+  // wahi dikhta hai jo default hai — mic aur New MR default se band.
   // Wahi 6 switch jo mobile task screen maanta hai — ek setting, dono screen.
-  const [ui,setUi]=useState({pctBar:true,notes:true,voice:true,markUsed:true,newMr:true,grn:true});
+  const [ui,setUi]=useState({pctBar:true,notes:true,voice:false,markUsed:true,newMr:false,grn:true});
   useEffect(()=>{
     api.get("/settings/prefs").then(r=>{
       const rows=(r?.success&&Array.isArray(r.data))?r.data:[];
       const v=(k)=>(rows.find(x=>x.key===k)||{}).value;
-      const on=(k)=>{const x=v(k);return x===undefined?true:x==="on";};
-      setUi({pctBar:on("task_screen_pct_bar"),notes:on("task_screen_notes"),voice:on("task_screen_voice"),
-        markUsed:on("task_screen_mark_used"),newMr:on("task_screen_new_mr"),grn:on("task_screen_grn")});
+      const on=(k,d=true)=>{const x=v(k);return x===undefined?d:x==="on";};
+      setUi({pctBar:on("task_screen_pct_bar"),notes:on("task_screen_notes"),voice:on("task_screen_voice",false),
+        markUsed:on("task_screen_mark_used"),newMr:on("task_screen_new_mr",false),grn:on("task_screen_grn")});
     }).catch(()=>{});
   },[]);
   // % wale task ka note — qty wale box me pehle se tha, yahan nahi.
@@ -3962,7 +3962,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
             {materials.length>0&&<span style={{background:"#D1FAE5",color:"#065F46",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{materials.length} items</span>}
           </div>
           {/* 3 action buttons — company jo band kare wo nahi dikhta (Settings →
-              Other Settings → "Task progress screen"); teeno band to patti hi nahi. */}
+              Task Screen); teeno band to patti hi nahi. New MR default se band. */}
           {(()=>{
             const btns=[
               ui.markUsed&&{id:"used",l:t("tasks.mark_used"),on:matTab==="usedlog",click:()=>setMatTab(matTab==="usedlog"?"none":"usedlog"),c:"#16A34A",brd:"#BBF7D0",bg:"#F0FDF4",onBg:"#DCFCE7",ic:"M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 12h6M9 16h4"},
