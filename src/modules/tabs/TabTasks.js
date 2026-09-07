@@ -40,6 +40,25 @@ function TaskSkeleton({gridTemplate}={}){
 const PROJECT_TASKS=[];
 
 function ptFlatten(tasks,out=[]){tasks.forEach(t=>{out.push(t);if(t.children?.length)ptFlatten(t.children,out)});return out;}
+
+// ── Tukde ka chainage — "0+435" ─────────────────────────────────────
+// Sadak tukdon me bat jaaye to "Site ki safai" chhah baar aata hai —
+// nali ke kinare wala, nahar ke kinare wala, bacha hua wala. Ped me
+// indentation se pata chal jaata hai, par tukde ki ROW par chainage kahin
+// likha hi nahi tha, aur Schedule view (jo chapta hai) me to tukda hi gum
+// ho jaata tha. Mobile me ye 2026-09-07 se hai; web par bhi wahi.
+const ptFmtCh = (m) => { const v = Math.max(0, Math.round(Number(m) || 0)); return Math.floor(v / 1000) + "+" + String(v % 1000).padStart(3, "0"); };
+// Line judi ho aur naam khud "CH ..." na ho tabhi — warna "CH 0+000 – 0+136 ·
+// 0+000 – 0+136" jaisa dohra ho jaata hai.
+function ptChSuffix(item, alignById) {
+  const al = item && item.alignment_id ? alignById[Number(item.alignment_id)] : null;
+  if (!al) return "";
+  if (/^CH\s/i.test(String(item.name || ""))) return "";
+  if (al.start_chainage_m == null && !(Number(al.length_m) > 0)) return "";
+  const st = Number(al.start_chainage_m) || 0;
+  const en = al.end_chainage_m != null ? Number(al.end_chainage_m) : st + (Number(al.length_m) || 0);
+  return ptFmtCh(st) + " – " + ptFmtCh(en);
+}
 function fmtDate(d){
   if(!d) return "—";
   const s=String(d).slice(0,10);
@@ -137,6 +156,10 @@ const PT_REASON_MAP=Object.fromEntries(PT_DELAY_REASONS.map(r=>[r.key,r]));
 
 function TabTasks({ projectId, isAdmin }) {
   const [tasks,setTasks]     = useState([]);
+  // Chainage line par likha hai, task par nahi — isliye site ki lines ek
+  // baar utha lete hain. Na mile (tender wala project na ho) to sab waisa
+  // hi chalta hai, bas chainage nahi dikhta.
+  const [alignById,setAlignById] = useState({});
   const [loading, setLoading] = useState(true);
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   useEffect(()=>{const fn=()=>setIsMobile(window.innerWidth<768);window.addEventListener("resize",fn);return()=>window.removeEventListener("resize",fn);},[]);
@@ -190,6 +213,16 @@ function TabTasks({ projectId, isAdmin }) {
     try { const r = await api.get("/projects/"+projectId); if (r.success) setProj(r.data); } catch(_){}
   };
   useEffect(()=>{ loadProj(); /* eslint-disable-next-line */ }, [projectId]);
+  useEffect(()=>{
+    if(!projectId){ setAlignById({}); return; }
+    let dead=false;
+    api.get("/tenders/by-project/"+projectId+"/alignments").then(r=>{
+      if(dead) return;
+      const m={}; (r?.data?.alignments||[]).forEach(a=>{ m[Number(a.id)]=a; });
+      setAlignById(m);
+    }).catch(()=>{ if(!dead) setAlignById({}); });
+    return ()=>{ dead=true; };
+  }, [projectId]);
   const canEditSchedule = isAdmin || !proj?.plan_locked;
   const lockPlan = async () => {
     if(!await window.confirmAsync(t("tasks.plan_lock_karein_iske_baad_sirf"))) return;
@@ -503,6 +536,17 @@ function TabTasks({ projectId, isAdmin }) {
       return null;
     }).filter(Boolean);
   }
+  // Har row ka tukda = uska sabse paas ka POORVAJ jispar line judi hai.
+  // Ped me ye indentation se dikh jaata hai; Schedule view chapta hai,
+  // wahan yahi batata hai ki row kaunse part ki hai.
+  const tukdaOf={};
+  (function walkTukda(list,cur){
+    (list||[]).forEach(t=>{
+      if(cur) tukdaOf[t.id]=cur;
+      if(t.children?.length) walkTukda(t.children, t.alignment_id ? t : cur);
+    });
+  })(tasks,null);
+
   const filtered=applyFilters(tasks,undefined);
   const flatFiltered=ptFlatten(filtered);
   // Schedule view: all matched tasks flattened + sorted by baseStart
@@ -636,6 +680,9 @@ function TabTasks({ projectId, isAdmin }) {
             <div onClick={(e)=>{e.stopPropagation();handleOpen(item);}} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",flex:1,minWidth:0}}>
               {item.dhyanRakhen&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
               <span style={{fontSize:depth===0?13:12.5,fontWeight:depth===0?600:depth===1?500:400,color:"#1E293B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</span>
+              {(()=>{const ch=ptChSuffix(item,alignById); return ch
+                ? <span style={{fontSize:10.5,color:T.t4,fontVariantNumeric:"tabular-nums",flexShrink:0,whiteSpace:"nowrap"}}>· {ch}</span>
+                : null;})()}
               {item.tag&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{item.tag}</span>}
               {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:8,fontWeight:600,padding:"1px 4px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
               {(()=>{const fv=ptFinishVar(item);
@@ -1334,6 +1381,10 @@ function TabTasks({ projectId, isAdmin }) {
                             {codeLbl&&<span style={{fontSize:9,fontWeight:700,color:"white",background:pcd.phaseColor||T.blu,
                               padding:"1px 5px",borderRadius:3,flexShrink:0,fontFamily:"monospace"}}>{codeLbl}</span>}
                             <span style={{fontSize:12,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+                            {/* Yahan ped nahi hai, isliye tukde ka naam saath likhna padta hai */}
+                            {(()=>{const tk=tukdaOf[t.id]; if(!tk) return null;
+                              const ch=ptChSuffix(tk,alignById);
+                              return <span style={{fontSize:10,color:T.t4,flexShrink:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:180}}>· {tk.name}{ch?" "+ch:""}</span>;})()}
                             {delay>0&&<span style={{fontSize:10,color:T.red,fontWeight:700,flexShrink:0,marginLeft:3}}>⚠{delay}d</span>}
                           </div>
                           {/* Status — colored dot only, no text (progress bar shows state) */}
