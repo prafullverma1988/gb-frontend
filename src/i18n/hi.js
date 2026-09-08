@@ -2195,6 +2195,8 @@ const dict = {
   "finance.auto_total_qty_approx_bill_amount":                 "ऑटो: टोटल ÷ क्वांटिटी (≈ एप्रोक्स — बिल अमाउंट टोटल से ही बनेगा)",
   "finance.auto_total_rate_type_karke_fix":                    "ऑटो: टोटल ÷ रेट — टाइप करके फिक्स कर सकते हो",
   "finance.balance_advance_me_jaayega_confirm_checkbox":       "बैलेंस एडवांस में जाएगा — कन्फर्म चेकबॉक्स टिक करो।",
+  "finance.not_counted":                                       "गिना नहीं गया",
+  "finance.not_counted_reason":                                "{reason} · बैलेंस में नहीं",
   "finance.balance_due":                                       "बैलेंस ड्यू",
   "finance.bank_cash_total":                                   "बैंक + कैश टोटल",
   "finance.bank_neft":                                         "बैंक / एनईएफटी",

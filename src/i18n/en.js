@@ -2196,6 +2196,8 @@ const dict = {
   "finance.auto_total_qty_approx_bill_amount":                 "Auto: Total ÷ Qty (≈ approx — bill amount will be based on Total only)",
   "finance.auto_total_rate_type_karke_fix":                    "Auto: Total ÷ Rate — you can fix it by typing",
   "finance.balance_advance_me_jaayega_confirm_checkbox":       "Balance will go to advance — tick the confirm checkbox.",
+  "finance.not_counted":                                       "not counted",
+  "finance.not_counted_reason":                                "{reason} · not in balance",
   "finance.balance_due":                                       "Balance Due",
   "finance.bank_cash_total":                                   "Bank + Cash Total",
   "finance.bank_neft":                                         "Bank / NEFT",

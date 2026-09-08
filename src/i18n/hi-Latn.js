@@ -2198,6 +2198,8 @@ const dict = {
   "finance.auto_total_qty_approx_bill_amount":                 "Auto: Total ÷ Qty (≈ approx — bill amount Total se hi banega)",
   "finance.auto_total_rate_type_karke_fix":                    "Auto: Total ÷ Rate — type karke fix kar sakte ho",
   "finance.balance_advance_me_jaayega_confirm_checkbox":       "Balance advance me jaayega — confirm checkbox tick karo.",
+  "finance.not_counted":                                       "gina nahi gaya",
+  "finance.not_counted_reason":                                "{reason} · balance me nahi",
   "finance.balance_due":                                       "Balance Due",
   "finance.bank_cash_total":                                   "Bank + Cash Total",
   "finance.bank_neft":                                         "Bank / NEFT",
@@ -6660,7 +6662,7 @@ const dict = {
   "tender_ai_plan.kisi_site_me_nahi_w":                        "◌ Kisi site me nahi: {w}",
   "tender_ai_plan.line_kaam_road_drain_pipe_me":               "Line-kaam me stage ki qty khali chhodo to poori lambai jayegi ({fmtQty} {unit}); structure ke stage % me. Step = asli kaam (GSB, RCC…) apni qty apne unit me — roz ki entry aur BOQ ka jod wahi hai. ₹ na baanto to poora paisa pehle bachche par jayega.",
   "tender_ai_plan.loading":                                    "Loading…",
-  "tender_ai_plan.mode_merge":                                "Milao — purana rakho, naya jodo",
+  "tender_ai_plan.mode_merge":                                "Milao — purana rakho, naya add karo",
   "tender_ai_plan.mode_merge_hint":                           "Naam se milte kaam naye plan se dobara banenge (agar unpar kuchh na hua ho). Baaki purane waise hi rahenge, naye kaam jud jayenge.",
   "tender_ai_plan.mode_overwrite":                            "Purana hata kar naya banao",
   "tender_ai_plan.mode_overwrite_hint":                       "Site ka poora purana plan hatega — jin kaamon par entry, photo ya map ka jod hai wo archive honge (mitenge nahi), baaki mit jayenge. Phir ye plan poora banega.",
@@ -7146,11 +7148,11 @@ const dict = {
 
   "tenders.tukde_sub":                                       "{n} line → {n} tukde · har tukde me {parat} parat · qty BOQ ke anupaat me, jod theek BOQ",
 
-  "tenders.hisaab_ho_raha":                                  "hisaab ho raha hai…",
+  "tenders.hisaab_ho_raha":                                  "calculate ho raha hai…",
 
-  "tenders.hisaab_dobara":                                   "Hisaab dobara",
+  "tenders.hisaab_dobara":                                   "Dobara calculate",
 
-  "tenders.hisaab_nahi_hua":                                 "Hisaab nahi hua",
+  "tenders.hisaab_nahi_hua":                                 "Calculate nahi hua",
 
   "tenders.baanto":                                          "Baanto",
 

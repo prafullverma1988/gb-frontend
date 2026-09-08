@@ -4998,7 +4998,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                               {txn.counted===false && (
                                 /* Rejected / pending / cancelled — dikhti hai, balance me nahi */
                                 <span style={{fontSize:9,fontWeight:700,color:T.red,textTransform:"uppercase",letterSpacing:.3,marginTop:1}}>
-                                  {txn.notCountedReason||"not counted"} · balance me nahi
+                                  {t("finance.not_counted_reason", { reason: txn.notCountedReason || t("finance.not_counted") })}
                                 </span>
                               )}
                               {isBillType && txn.sourceKind!=="customer_invoice" && (
