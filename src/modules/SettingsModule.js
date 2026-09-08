@@ -3772,6 +3772,109 @@ function PhotoSettings() {
   );
 }
 
+// ── Task screen ke chaar step ki photo policy ───────────────────────
+// Prafull (2026-09-09): "task screen setting me sabko photo policy set
+// karane ka option dedo." Poori list Settings → Photo Settings me hai
+// (25 jagah); yahan sirf wo chaar jo task kholne par saamne aate hain,
+// taaki ek hi screen ke sab faisle ek jagah milein. Data dono jagah ek
+// hi API se aata-jaata hai, isliye kahin bhi badlo — dono me dikhega.
+const TASK_PHOTO_KEYS = ["task_progress", "task_material", "attendance", "grn"];
+
+function TaskPhotoPolicy() {
+  const [locations, setLocations] = useState([]);
+  const [settings, setSettings] = useState({});
+  const [dirty, setDirty] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
+
+  useEffect(() => {
+    api.get("/settings/photo").then(r => {
+      if (r?.success && r.data) {
+        const byKey = new Map((r.data.locations || []).map(l => [l.key, l]));
+        // Kram wahi jo task screen par hai — pehle progress, phir material,
+        // phir hazri, phir GRN. Server ka apna kram alag hai (Maal pehle).
+        setLocations(TASK_PHOTO_KEYS.map(k => byKey.get(k)).filter(Boolean));
+        setSettings(r.data.settings || {});
+      }
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const patch = (key, field, value) => {
+    setSettings(s => ({ ...s, [key]: { ...s[key], [field]: value } }));
+    setDirty(d => ({ ...d, [key]: true }));
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const body = {};
+      Object.keys(dirty).forEach(k => { if (settings[k]) body[k] = settings[k]; });
+      const r = await api.put("/settings/photo", { settings: body });
+      clearPhotoPolicyCache();
+      if (r?.success && r.data?.settings) setSettings(r.data.settings);
+      setDirty({});
+      setSavedTick(true);
+      setTimeout(() => setSavedTick(false), 1800);
+    } catch (e) { window.alert(e?.message || "Save failed"); }
+    setSaving(false);
+  };
+
+  if (loading || !locations.length) return null;
+  const changed = Object.keys(dirty).length;
+
+  return (
+    <SectionCard
+      title="Photo — kis step par kya"
+      desc="Task kholne par jo chaar kaam hote hain, unme photo lagani zaroori hai ya nahi, gallery se lag sakti hai ya sirf live camera se, aur photo ke saath location darj ho ya nahi. Yahi settings Photo Settings page par bhi hain."
+      action={
+        <button onClick={save} disabled={saving || !changed}
+          style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : (changed ? `linear-gradient(135deg, ${T.blue}, ${T.blueMid})` : T.border), color: changed || savedTick ? "white" : T.textLight, fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : (changed ? "pointer" : "default"), opacity: saving ? 0.7 : 1 }}>
+          {savedTick ? "✓ Saved" : saving ? "Saving..." : changed ? `Save (${changed})` : "Save"}
+        </button>
+      }>
+      <div style={{ overflowX: "auto" }}>
+        <div style={{ minWidth: 620 }}>
+          <div style={{ display: "flex", gap: 12, padding: "0 0 8px", borderBottom: `1px solid ${T.borderLight}` }}>
+            <div style={{ flex: "1 1 220px", fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: ".5px" }}>Jagah</div>
+            <div style={{ width: 186, fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: ".5px" }}>Photo</div>
+            <div style={{ width: 168, fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: ".5px" }}>Kahan se</div>
+            <div style={{ width: 86, fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: ".5px" }}>Location</div>
+          </div>
+          {locations.map(l => {
+            const st = settings[l.key] || { mode: "optional", source: "both", geo: true };
+            const off = st.mode === "off";
+            return (
+              <div key={l.key} style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 0", borderBottom: `1px solid ${T.borderLight}` }}>
+                <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: off ? T.textLight : T.text }}>{l.label}</div>
+                  {l.hint && <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 2, lineHeight: 1.45 }}>{l.hint}</div>}
+                </div>
+                <Segmented width={186} value={st.mode} disabled={false}
+                  options={[
+                    { v: "off", l: "Band" },
+                    { v: "optional", l: "Marzi" },
+                    { v: "required", l: "Zaroori", tone: T.amber },
+                  ]}
+                  onChange={v => patch(l.key, "mode", v)} />
+                <Segmented width={168} value={st.source} disabled={off}
+                  options={[
+                    { v: "both", l: "Gallery bhi" },
+                    { v: "camera", l: "Sirf camera", tone: T.amber },
+                  ]}
+                  onChange={v => patch(l.key, "source", v)} />
+                <div style={{ width: 86, display: "flex", justifyContent: "flex-start", opacity: off ? 0.4 : 1, pointerEvents: off ? "none" : "auto" }}>
+                  <Toggle value={!!st.geo} onChange={v => patch(l.key, "geo", v)} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
 // Chhota segmented control — do ya teen vikalp, ek hi patti me.
 function Segmented({ value, options, onChange, width, disabled }) {
   return (
@@ -4130,6 +4233,9 @@ function OtherSettings() {
           ))}
         </div>
       ))}
+      {/* Photo ki policy usi screen ke saath — switch upar, photo neeche.
+          Ye Photo Settings page se alag copy nahi hai, wahi API hai. */}
+      <TaskPhotoPolicy/>
     </div>
   );
 }
