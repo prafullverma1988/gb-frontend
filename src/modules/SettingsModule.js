@@ -158,6 +158,14 @@ const PERM_HELP = {
     create: "Naya asset jodna, site ko issue karna", edit: "Asset ki detail ya jagah badalna",
     delete: "Asset hatana", approve: "Asset ka issue/wapsi approve karna", export: "Asset register nikalna",
   },
+  "Mapping": {
+    view: "\"Site se map banao\" aur uski library band — site par khinchi gayi line/rakba/pin. View hone par aadmi ko SIRF APNI banayi hui marking dikhti hai.",
+    create: "Nayi marking aur naya folder banana",
+    edit: "Marking ka naam badalna, doosre folder me khiskana",
+    delete: "Marking ya folder hatana (folder me doosre ki marking ho to nahi hatega)",
+    approve: "⚠️ Yahan iska matlab MANZOORI nahi, DEKH-REKH hai — is box se aadmi ko POORI COMPANY ki library dikhne lagti hai, doosron ki banayi marking bhi. Admin/super admin ko wo bina box ke bhi dikhti hai. Default me Project Manager ke paas ye laga hua hai.",
+    export: "Library se KML / GeoJSON / CSV nikalna",
+  },
   "Procurement": {
     view: "Sidebar se Procurement gayab — Material Request (MR), RFQ, quotation compare aur Purchase Order sab band.",
     create: "Nayi MR banana, RFQ nikalna, PO banana", edit: "MR/PO ki detail badalna",
@@ -1042,7 +1050,7 @@ function RolesAccess() {
   // "Users & Roles" — user aur role ka prashasan. "Settings" row apni jagah
   // rehti hai (My Profile, password), warna Settings.view hataate hi wo apna
   // password bhi nahi badal paata.
-  const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Pulse","Procurement","Warehouse","Fuel","Machinery","Assets","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings","Users & Roles"];
+  const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Pulse","Mapping","Procurement","Warehouse","Fuel","Machinery","Assets","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings","Users & Roles"];
   // Project ke ANDAR ke saare tabs. Budget/Party/To Do/Tasks/Files/Site-DPR
   // pehle yahan the hi nahi, isliye unhe kabhi rok hi nahi sakte the — wo har
   // role ko hamesha dikhte the. (Design aur MOM upar "Modules" me hain, isliye
