@@ -3608,7 +3608,9 @@ function MeasurementModal({tenderId, sites, boqItems, edit, onClose, onDone}) {
   const [f, setF] = useState({
     project_id:  edit?.project_id  || (sites.length===1 ? sites[0].id : ""),
     boq_item_id: edit?.boq_item_id || "",
-    mdate:       edit?.mdate ? String(edit.mdate).slice(0,10) : new Date().toISOString().slice(0,10),
+    // Apni ghadi ka din — UTC se raat 12 baje ke baad kal ki tareekh aati thi.
+    mdate:       edit?.mdate ? String(edit.mdate).slice(0,10)
+                 : new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10),
     qty:         edit?.qty ?? "",
     mb_ref:      edit?.mb_ref || "",
     remarks:     edit?.remarks || "",
@@ -5957,8 +5959,13 @@ function PhotoCheckDetail({row, tenderId, from, to, onDone}) {
 // rows are what RA billing reads — one truth, entered once.
 function MBDraftModal({tenderId, onClose, onDone}) {
   const toast = useToast();
-  const monthStart = () => { const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0,10); };
-  const today = () => new Date().toISOString().slice(0,10);
+  // Dono tareekhein APNI ghadi se. Pehle .toISOString() (UTC) chalta tha:
+  // IST me mahine ki 1 taareekh ka local aadhi-raat UTC me PICHHLE mahine
+  // ki aakhri taareekh banti hai — yaani draft ka period hamesha ek din
+  // pehle se shuru hota tha aur pichhle mahine ka aakhri din is mahine ke
+  // draft me ghus jaata tha (jo pichhle MB me commit ho chuka ho sakta hai).
+  const monthStart = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-01"; };
+  const today = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
   const [from, setFrom]   = useState(monthStart());
   const [to, setTo]       = useState(today());
   const [mdate, setMdate] = useState(today());
@@ -6445,7 +6452,10 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
   // edit = draft bill ka detail object → wahi wizard PUT par chalta hai.
   const toast = useToast();
   const [step, setStep]   = useState(1);
-  const [upto, setUpto]   = useState(edit?.upto_date ? String(edit.upto_date).slice(0,10) : new Date().toISOString().slice(0,10));
+  // Apni ghadi ka din (UTC se raat me ek din peechhe chala jaata tha —
+  // RA bill ka period usi par kata hai).
+  const [upto, setUpto]   = useState(edit?.upto_date ? String(edit.upto_date).slice(0,10)
+    : new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10));
   const [prem, setPrem]   = useState(edit ? String(edit.premium_pct ?? "") : (defaultPremium === null || defaultPremium === undefined ? "" : String(defaultPremium)));
   const [manual, setManual] = useState(()=>{
     // Edit me manual heads ke snapshot amounts wapas bhar do.
