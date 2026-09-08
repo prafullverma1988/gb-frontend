@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
 import { canSeeFinancials } from "../utils/perms";
+import { daysAgoISO } from "../utils/today";
 
 const COMPANY_NAME = "Company";
 
@@ -246,7 +247,7 @@ function CashBookModule(){
   const [fParty,setFParty]=useState("All");
   // Default range: last 30 days through today — covers most recent
   // activity without the user having to set dates every visit.
-  const [fFrom,setFFrom]=useState(() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().slice(0,10); });
+  const [fFrom,setFFrom]=useState(() => daysAgoISO(30));
   const [fTo,setFTo]=useState(TODAY);
   const [search,setSearch]=useState("");
 
@@ -658,7 +659,7 @@ function ChallanModule(){
   const [fParty,setFParty]=useState("All");
   const [fHead,setFHead]=useState("All");
   const [fStatus,setFStatus]=useState("All");
-  const [fFrom,setFFrom]=useState(() => { const d = new Date(); d.setDate(d.getDate()-90); return d.toISOString().slice(0,10); });
+  const [fFrom,setFFrom]=useState(() => daysAgoISO(90));
   const [fTo,setFTo]=useState(TODAY);
   const [search,setSearch]=useState("");
 

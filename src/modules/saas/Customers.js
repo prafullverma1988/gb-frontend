@@ -7,6 +7,7 @@ import { apiFetch, T, fmtDate, fmtNum, fmtMoney, fmtAmt, DOMAIN_LABELS,
          IcDollar, IcTrend, IcRefresh, IcChevL, th, td } from "./tokens";
 import { Toast, StatCard, Badge, Btn, InputField, SelectField, EmptyState, TableHeader, PageHeader } from "./ui";
 import DeleteCompanyModal from "./DeleteCompany";
+import { todayISO } from "../../utils/today";
 
 // Customer buckets. The backend derives these (utils/clientLifecycle.js) and
 // may also carry a human override; this only holds how they LOOK.
@@ -614,7 +615,7 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
   const [editInv, setEditInv] = useState(null);
   const [payInv, setPayInv] = useState(null);
   const [payRef, setPayRef] = useState("");
-  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [payDate, setPayDate] = useState(todayISO());
   const [allCompanies, setAllCompanies] = useState([]);
   const [assignCompanyId, setAssignCompanyId] = useState("");
   const [showAddCompany, setShowAddCompany] = useState(false);
@@ -804,7 +805,7 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
                   <Badge text={currentSub.status.toUpperCase()} color={SUB_COLORS[currentSub.status] || T.slt}/>
                   <span style={{ fontSize:12, color:T.t3 }}>{CYCLE_LABELS[currentSub.billing_cycle]} · {currentSub.term_months} months{currentSub.order_ref ? ` · ${currentSub.order_ref}` : ""}</span>
                   {currentSub.status === "pending" && (
-                    <Btn color={T.grn} onClick={() => { setActivateSub(currentSub); setActivateDate(new Date().toISOString().slice(0, 10)); }} style={{ padding:"5px 12px", fontSize:11.5, marginLeft:"auto" }}>Activate →</Btn>
+                    <Btn color={T.grn} onClick={() => { setActivateSub(currentSub); setActivateDate(todayISO()); }} style={{ padding:"5px 12px", fontSize:11.5, marginLeft:"auto" }}>Activate →</Btn>
                   )}
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:10 }}>
@@ -863,7 +864,7 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
                         <td style={td}>
                           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                             {inv.status === "scheduled" && <Btn variant="outline" onClick={() => act(`/saas-admin/client-invoices/${inv.id}/issue`, {}, "Invoice issued")} style={{ padding:"3px 8px", fontSize:10.5 }}>Issue</Btn>}
-                            {["scheduled", "issued"].includes(inv.status) && <Btn color={T.grn} onClick={() => { setPayInv(inv); setPayRef(""); setPayDate(new Date().toISOString().slice(0, 10)); }} style={{ padding:"3px 8px", fontSize:10.5 }}>Mark Paid</Btn>}
+                            {["scheduled", "issued"].includes(inv.status) && <Btn color={T.grn} onClick={() => { setPayInv(inv); setPayRef(""); setPayDate(todayISO()); }} style={{ padding:"3px 8px", fontSize:10.5 }}>Mark Paid</Btn>}
                             {["scheduled", "issued"].includes(inv.status) && <Btn variant="outline" onClick={() => setEditInv(inv)} style={{ padding:"3px 8px", fontSize:10.5 }}><IcEdit size={10}/></Btn>}
                             {["scheduled", "issued"].includes(inv.status) && <Btn variant="outline" color={T.red} onClick={() => window.confirm("Cancel this invoice?") && act(`/saas-admin/client-invoices/${inv.id}/cancel`, {}, "Invoice cancelled")} style={{ padding:"3px 8px", fontSize:10.5 }}><IcX size={10}/></Btn>}
                             {inv.status === "paid" && <Btn variant="outline" color={T.amb} onClick={() => window.confirm("Revert this payment?") && act(`/saas-admin/client-invoices/${inv.id}/revert-paid`, {}, "Payment reverted")} style={{ padding:"3px 8px", fontSize:10.5 }}>Revert</Btn>}

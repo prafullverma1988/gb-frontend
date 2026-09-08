@@ -16,6 +16,7 @@
 import { useState, useEffect, useMemo } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
+import { todayISO } from "../utils/today";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -56,7 +57,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
   useEffect(() => {
     if (material) {
       setTab("all"); setSortNew(true); setMrs(null); setMarkUsed(false); setErr("");
-      setUForm({ qty: "", remark: "", used_date: new Date().toISOString().slice(0, 10) });
+      setUForm({ qty: "", remark: "", used_date: todayISO() });
     }
   }, [material]);
 

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { t, Rich } from "../i18n";
+import { todayISO } from "../utils/today";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -2767,7 +2768,7 @@ function AddStaffModal({onClose,onSaved}){
         pf_custom_amount:Number(form.pf_custom_amount)||0,
         esic_applicable:form.esic_applicable?1:0,
         project:form.project||null,
-        join_date:new Date().toISOString().slice(0,10),
+        join_date:todayISO(),
       });
       if(sRes.success){ onSaved&&onSaved(); }
       else setErr(sRes.message||"Staff add failed");

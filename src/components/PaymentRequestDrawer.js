@@ -19,6 +19,7 @@ import SearchSelect from "./SearchSelect";
 import LibrarySelect from "./LibrarySelect";
 import { Credit, fmtTimeAgo } from "./Credit";
 import { t } from "../i18n";
+import { todayISO } from "../utils/today";
 
 const T = {
   bg: "#F4F6F9",
@@ -561,7 +562,7 @@ export default function PaymentRequestDrawer({
           <div style={{ marginBottom: 14 }}>
             <label style={lbl}>{t("payment_request.payment_needed_by")}</label>
             <input type="date" value={neededBy} onChange={e => setNeededBy(e.target.value)}
-              min={new Date().toISOString().slice(0, 10)}
+              min={todayISO()}
               style={inp} onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
             <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>{t("payment_request.approver_ko_bata_do_kab_tak")}</div>
           </div>

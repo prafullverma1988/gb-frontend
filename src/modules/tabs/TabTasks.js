@@ -9,6 +9,7 @@ import MapPlanWizard from "./MapPlanWizard";
 import KalKaPlanModal from "./KalKaPlanModal";
 import { T } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
+import { isoDate, todayISO } from "../../utils/today";
 
 // ─── SKELETON LOADER ─────────────────────────────────────────────
 function Sk({ w="100%", h=14, r=6, mb=0 }) {
@@ -1906,7 +1907,9 @@ function StartDateModal({ mode, projectId, currentStart, phaseList, onClose, onD
             // Compute shift from first changed task — backend omits cascaded tasks from preview
             const firstC = allChanges.find(c=>c.old_start&&c.new_start&&c.old_start!==c.new_start);
             const shiftDays = firstC ? Math.round((new Date(firstC.new_start)-new Date(firstC.old_start))/86400000) : 0;
-            const addDays = (ds,n)=>{ if(!ds)return null; const d=new Date(ds+"T00:00:00"); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+            // "2026-09-07T00:00:00" LOCAL aadhi-raat banti hai; usi ko UTC me
+            // likhne se IST me EK DIN peechhe chali jaati thi.
+            const addDays = (ds,n)=>{ if(!ds)return null; const d=new Date(ds+"T00:00:00"); d.setDate(d.getDate()+n); return isoDate(d); };
             const subCount = Math.max(0, totalChanged - list.length);
             return(
               <div style={{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"10px 12px",marginBottom:4}}>
@@ -2018,7 +2021,7 @@ function BaselineStrip({ status, showCols, onToggleCols, onSet, onRebaseline, on
 function RebaselineModal({ mode, projectId, onClose, onSuccess }) {
   const isSet = mode === "set";
   const [reason, setReason] = useState("");
-  const [baselineDate, setBaselineDate] = useState(new Date().toISOString().slice(0,10));
+  const [baselineDate, setBaselineDate] = useState(todayISO());
   const [rbMode, setRbMode] = useState("auto");
   const [shiftDays, setShiftDays] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -2503,7 +2506,7 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
 
   // ── Date range computation ────────────────────────────────────
   const today = new Date();
-  const todayStr = today.toISOString().slice(0,10);
+  const todayStr = isoDate(today);
   const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
   const allDates = allFlat.flatMap(t=>[t.baseStart,t.baseEnd,t.actualStart].filter(Boolean)).map(d=>new Date(d).getTime()).filter(n=>!isNaN(n));

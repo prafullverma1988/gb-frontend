@@ -8,6 +8,7 @@ import useDebounce from "../utils/useDebounce";
 import { t, Rich } from "../i18n";
 import { canSeeFinancials } from "../utils/perms";
 import TabAccounts from "./tabs/TabAccounts";
+import { isoDate, todayISO } from "../utils/today";
 
 // A party holds multiple roles: `roles` is the canonical comma list and
 // `type` is only the primary one. Matching on `type` alone dropped equipment
@@ -720,7 +721,7 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
   const [payer,setPayer]=useState("");
   const [payee,setPayee]=useState("");
   const [amount,setAmount]=useState("");
-  const [date,setDate]=useState(new Date().toISOString().slice(0,10));
+  const [date,setDate]=useState(todayISO());
   const [project,setProject]=useState("");
   const [note,setNote]=useState("");
   const [linkedBill,setLinkedBill]=useState(null);   // {id, no, amount}
@@ -1136,7 +1137,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     :ALL_PARTIES;
 
   // ── core state ──────────────────────────────────────────────
-  const _today = new Date().toISOString().slice(0,10);
+  const _today = todayISO();
   const [billDate,setBillDate]=useState(_today);
   const [delivDate,setDelivDate]=useState(prefillGRN?.deliveryDate||_today);
   // Delivery issues jo is bill ke GRNs par khule hain. Default sab TICKED —
@@ -1213,7 +1214,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // ── invoice state ────────────────────────────────────────────
   const [invMode,setInvMode]=useState("fresh");
   const [invoiceNo,setInvoiceNo]=useState("INV-2026-001");
-  const _today15 = (() => { const d = new Date(); d.setDate(d.getDate()+15); return d.toISOString().slice(0,10); })();
+  const _today15 = (() => { const d = new Date(); d.setDate(d.getDate()+15); return isoDate(d); })();
   const [dueDate,setDueDate]=useState(_today15);
 
   // ── Material Bill: payment due date (default = bill_date + party.credit_days) ──
@@ -1245,7 +1246,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const partyCreditDays = parseInt(partyObj?.credit_days)||7;
   const [payDueDate,setPayDueDate]=useState(()=>{
     const d=new Date(); d.setDate(d.getDate()+7);
-    return d.toISOString().slice(0,10);
+    return isoDate(d);
   });
   const [payDueDirty,setPayDueDirty]=useState(false);
   // Auto-recompute payDueDate when bill date or party credit_days change (unless user edited it)
@@ -1255,7 +1256,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     const d=new Date(billDate);
     if(isNaN(d.getTime())) return;
     d.setDate(d.getDate()+partyCreditDays);
-    setPayDueDate(d.toISOString().slice(0,10));
+    setPayDueDate(isoDate(d));
   // eslint-disable-next-line
   },[billDate,partyCreditDays,party]);
 
@@ -1614,7 +1615,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         const invRes=await api.post("/customer-estimates/invoices",{
           project_id:projId,
           source:"manual",
-          invoice_date:billDate||new Date().toISOString().slice(0,10),
+          invoice_date:billDate||todayISO(),
           customer_id:clientObj?.id||null,
           customer_name:party||null,
           remark:note||null,
@@ -1650,7 +1651,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       const payload={
         type:backType,
         amount:amt,
-        date:billDate||new Date().toISOString().slice(0,10),
+        date:billDate||todayISO(),
         // Project is carried in its own project_name field (and has its own
         // column everywhere it's shown) — keeping it in the description just
         // repeated it. Format now matches the backend fallback exactly:
@@ -3156,7 +3157,7 @@ function ProjectPnlView(){
   const pnlCol=(n)=> Number(n)>=0 ? T.grn : T.red;
 
   const dlExcel=()=>{
-    downloadCSV(`Project_PnL_${new Date().toISOString().slice(0,10)}.csv`,[
+    downloadCSV(`Project_PnL_${todayISO()}.csv`,[
       ["Company — Project-wise P&L (accrual, invoice-basis)"],
       [`Generated: ${new Date().toLocaleDateString("en-IN")}`],[],
       ["Project","Status","Revenue (Invoiced)","Cost","P&L",
@@ -5621,7 +5622,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           // Phase 1: settlement is visible + payable-pending. The actual
                           // Pay routing (vendor cash + against-party contra) is Phase 2.
                           return (
-                            <button onClick={()=>{ setSettleAcct(""); setSettleDate(new Date().toISOString().slice(0,10)); setSettleMop("Cash"); setSettleNote(""); setSettlePay(pmt); }}
+                            <button onClick={()=>{ setSettleAcct(""); setSettleDate(todayISO()); setSettleMop("Cash"); setSettleNote(""); setSettlePay(pmt); }}
                               title={t("finance.record_payment")}
                               style={{padding:"5px 9px",borderRadius:5,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",gap:3}}>
                               <IcSend size={9} color="white"/> {t("finance.pay")}
@@ -5634,7 +5635,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           : pmt.id;
                         const refresh = ()=>{ refreshPayReqs(); refreshPendPmts(); };
                         const onExtend = async ()=>{
-                          const cur = pmt.dueDateRaw ? new Date(pmt.dueDateRaw).toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
+                          const cur = pmt.dueDateRaw ? new Date(pmt.dueDateRaw).toISOString().slice(0,10) : todayISO();
                           const newDate = await window.promptAsync(t("finance.extend_no_due_date_enter_new", { no: pmt.no }), cur);
                           if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return;
                           try {

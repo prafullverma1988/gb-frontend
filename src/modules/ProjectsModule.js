@@ -8,6 +8,7 @@ import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 import { t, Rich } from "../i18n";
+import { isoDate } from "../utils/today";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -1354,7 +1355,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
   const [manualVendor,setManualVendor]=useState("");
   const [manualDelivery,setManualDelivery]=useState(()=>{
     const d=new Date(); d.setDate(d.getDate()+3);
-    return d.toISOString().slice(0,10);
+    return isoDate(d);
   });
   // Site par maal kise dena hai — vendor ko yahi naam/number jaate hain.
   const [contacts,setContacts]=useState([]);

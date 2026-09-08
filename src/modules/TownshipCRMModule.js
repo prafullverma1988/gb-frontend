@@ -31,6 +31,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import api from "../config/api";
 import { t, Rich } from "../i18n";
+import { todayISO } from "../utils/today";
 
 // ── THEME TOKENS ──────────────────────────────────────────────
 const T = {
@@ -2775,7 +2776,7 @@ function BookingFormModal({ unit, interestedProspects, onClose, onSaved }) {
   const [form, setForm] = useState({
     prospect_id: interestedProspects[0]?.id || "",
     agreement_value: unit.final_offered_price || "",
-    booked_date: new Date().toISOString().slice(0, 10),
+    booked_date: todayISO(),
     note: "Agreement signed",
   });
   const [saving, setSaving] = useState(false);
@@ -2851,7 +2852,7 @@ function PaymentRecordModal({ milestone, onClose, onSaved }) {
   const remaining = Math.max(0, Number(milestone.due_amount || 0) - Number(milestone.paid_amount || 0));
   const [form, setForm] = useState({
     amount: remaining || "",
-    paid_date: new Date().toISOString().slice(0, 10),
+    paid_date: todayISO(),
     payment_mode: "NEFT",
     txn_ref: "",
   });
