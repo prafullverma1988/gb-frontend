@@ -1028,6 +1028,231 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
   );
 }
 
+// ── UNBILLED — jinka bill abhi aaya hi nahi ─────────────────────
+// Wahi kaam jo Material ke Unbilled me hota hai: pump ki entries vendor
+// ke hisaab se jodi hui padi hain, finance unhe dekh kar EK bill banata
+// hai, aur vendor ka khaata TAB hilta hai.
+//
+// Har entry ke saath uski slip photo yahin dikhti hai — bill banate waqt
+// finance ko yahi teen cheezein chahiye: kitna diesel, kis daam par, aur
+// saboot kya hai. Photo dekhne ke liye kahin aur jaana padta to koi
+// dekhta hi nahi.
+//
+// Cash wali entries alag patti me hain. Unka paisa nikal chuka hai,
+// isliye unka bill nahi banta — unhe sirf "post" kiya jaata hai, aur tab
+// wo kharche me utarti hain (wallet se di gayi ho to us aadmi ke wallet se).
+function UnbilledTab({ onReload }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState({});      // { [vendorId]: true }
+  const [ticked, setTicked] = useState({});  // { [purchaseId]: true }
+  const [billFor, setBillFor] = useState(null);
+  const [billNo, setBillNo] = useState("");
+  const [billDate, setBillDate] = useState(todayStr());
+  const [msg, setMsg] = useState(null);
+  const [shot, setShot] = useState(null);    // poori photo dekhne ke liye
+
+  const load = useCallback(async () => {
+    const r = await api.get("/fuel/unbilled").catch(() => null);
+    setData(r && r.success ? r.data : { groups: [], total_entries: 0, total_amount: 0 });
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  if (!data) return <Empty>{t("common.loading")}</Empty>;
+  if (!data.total_entries) return <Empty>{t("fuel.koi_entry_bill_ke_intezaar_me")}</Empty>;
+
+  const pickedIn = (g) => g.entries.filter((e) => ticked[e.id]);
+  const toggle = (id) => setTicked((p) => ({ ...p, [id]: !p[id] }));
+  const toggleAll = (g, mode) => {
+    const next = { ...ticked };
+    for (const e of g.entries) if ((e.payment_mode || "credit") === mode) next[e.id] = true;
+    setTicked(next);
+  };
+
+  const makeBill = async (g) => {
+    const picked = pickedIn(g).filter((e) => (e.payment_mode || "credit") === "credit");
+    if (!picked.length) return;
+    setBusy(true); setMsg(null);
+    const r = await api.post("/fuel/bills", {
+      purchase_ids: picked.map((e) => e.id),
+      bill_no: billNo.trim() || null,
+      bill_date: billDate,
+    }).catch((e) => ({ success: false, message: e && e.message }));
+    setBusy(false);
+    setMsg({ bad: !r || !r.success, text: (r && r.message) || "Bill nahi ban paya" });
+    if (r && r.success) {
+      setBillFor(null); setBillNo(""); setTicked({});
+      await load(); onReload && onReload();
+    }
+  };
+
+  const postCash = async (g) => {
+    const picked = pickedIn(g).filter((e) => e.payment_mode === "cash");
+    if (!picked.length) return;
+    setBusy(true); setMsg(null);
+    const r = await api.post("/fuel/post-cash", { purchase_ids: picked.map((e) => e.id) })
+      .catch((e) => ({ success: false, message: e && e.message }));
+    setBusy(false);
+    setMsg({ bad: !r || !r.success, text: (r && r.message) || "Post nahi ho paya" });
+    if (r && r.success) { setTicked({}); await load(); onReload && onReload(); }
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      {msg && (
+        <div style={{ padding: "9px 13px", borderRadius: 8, fontSize: 12,
+          background: msg.bad ? T.redL : T.grnL, border: `1px solid ${msg.bad ? T.red : T.grn}`,
+          color: msg.bad ? T.red : T.grn, fontWeight: 600 }}>{msg.text}</div>
+      )}
+
+      <div style={{ display: "flex", gap: 14, alignItems: "baseline" }}>
+        <span style={{ fontSize: 19, fontWeight: 800, color: T.t1 }}>{fmtC(data.total_amount)}</span>
+        <span style={{ fontSize: 12, color: T.t3 }}>
+          {t("fuel.n_entry_bill_ke_intezaar_me", { n: data.total_entries })}
+        </span>
+      </div>
+
+      {data.groups.map((g) => {
+        const credit = g.entries.filter((e) => (e.payment_mode || "credit") === "credit");
+        const cash = g.entries.filter((e) => e.payment_mode === "cash");
+        const isOpen = open[g.vendor_party_id] !== false;
+        return (
+          <Panel key={g.vendor_party_id}
+            title={`${g.vendor_name} · ${g.entries.length} fill · ${fmtL(g.litres)}`}
+            action={
+              <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {g.flagged > 0 && <Pill label={`${g.flagged} slip mismatch`} c={T.amb} bg={T.ambL} />}
+                <b style={{ fontSize: 13, color: T.t1 }}>{fmtC(g.amount)}</b>
+                <Btn ghost size="sm" onClick={() => setOpen((p) => ({ ...p, [g.vendor_party_id]: !isOpen }))}>
+                  {isOpen ? t("fuel.chhupao") : t("fuel.kholo")}
+                </Btn>
+              </span>
+            }>
+            {/* Party hi mit chuki ho to bill kahin ja hi nahi sakta —
+                chupchaap fail hone dene se behtar hai pehle hi bata dena. */}
+            {g.vendor_missing && (
+              <div style={{ padding: "9px 15px", background: T.ambL, borderBottom: `1px solid ${T.b1}`,
+                fontSize: 11.5, color: T.amb, fontWeight: 600 }}>
+                {t("fuel.is_vendor_ki_party_ab_maujood")}
+              </div>
+            )}
+
+            {isOpen && (
+              <>
+                <Row head cols="28px 92px 1fr 76px 68px 92px 90px 70px">
+                  <span />
+                  <span>{t("common.date")}</span>
+                  <span>{t("fuel.machine_barrel")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.litre")}</span>
+                  <span style={{ textAlign: "right" }}>{t("fuel.rate_l")}</span>
+                  <span style={{ textAlign: "right" }}>{t("common.amount")}</span>
+                  <span>{t("common.payment")}</span>
+                  <span>{t("fuel.photo")}</span>
+                </Row>
+                {g.entries.map((e) => (
+                  <Row key={e.id} cols="28px 92px 1fr 76px 68px 92px 90px 70px">
+                    <input type="checkbox" checked={!!ticked[e.id]} onChange={() => toggle(e.id)} />
+                    <span>{String(e.filled_at || "").slice(0, 10)}</span>
+                    <span>
+                      {e.equipment_name || e.store_name || "—"}
+                      {e.project_name && <span style={{ color: T.t4 }}>{" · " + e.project_name}</span>}
+                      {e.slip_flag === "mismatch" && (
+                        <span style={{ color: T.amb, fontWeight: 700 }}>{" · " + t("fuel.slip_se_alag")}</span>
+                      )}
+                      {e.purpose && <div style={{ fontSize: 10.5, color: T.t4 }}>{e.purpose}</div>}
+                    </span>
+                    <span style={{ textAlign: "right" }}>{fmtN(e.litres)}</span>
+                    <span style={{ textAlign: "right" }}>{fmtN(e.rate)}</span>
+                    <span style={{ textAlign: "right", fontWeight: 600 }}>{fmtC(e.amount)}</span>
+                    <span style={{ fontSize: 11 }}>
+                      {e.payment_mode === "cash"
+                        ? (e.cash_source === "company"
+                            ? t("fuel.cash_company")
+                            : (e.paid_via_staff_name || t("fuel.cash_wallet")))
+                        : t("fuel.udhaar")}
+                    </span>
+                    <span style={{ display: "flex", gap: 3 }}>
+                      {(e.photos || []).slice(0, 3).map((u, i) => (
+                        <img key={i} src={u} alt="" onClick={() => setShot(u)}
+                          style={{ width: 26, height: 26, objectFit: "cover", borderRadius: 4,
+                            border: `1px solid ${T.b1}`, cursor: "pointer" }} />
+                      ))}
+                      {!(e.photos || []).length && (
+                        <span style={{ fontSize: 10.5, color: e.photos_pending ? T.amb : T.t4 }}>
+                          {e.photos_pending ? t("fuel.aa_rahi_hai") : "—"}
+                        </span>
+                      )}
+                    </span>
+                  </Row>
+                ))}
+
+                <div style={{ padding: "11px 15px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  {credit.length > 0 && (
+                    <>
+                      <Btn ghost size="sm" onClick={() => toggleAll(g, "credit")}>
+                        {t("fuel.saari_udhaar_wali_select_karo")}
+                      </Btn>
+                      <Btn size="sm" disabled={busy || !pickedIn(g).some((e) => (e.payment_mode || "credit") === "credit")}
+                        onClick={() => { setBillFor(g); setMsg(null); }}>
+                        {t("fuel.bill_banao")}
+                      </Btn>
+                    </>
+                  )}
+                  {cash.length > 0 && (
+                    <>
+                      <Btn ghost size="sm" onClick={() => toggleAll(g, "cash")}>
+                        {t("fuel.saari_cash_wali_select_karo")}
+                      </Btn>
+                      <Btn size="sm" c={T.grn} disabled={busy || !pickedIn(g).some((e) => e.payment_mode === "cash")}
+                        onClick={() => postCash(g)}>
+                        {t("fuel.cash_post_karo")}
+                      </Btn>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </Panel>
+        );
+      })}
+
+      <Modal open={!!billFor} onClose={() => setBillFor(null)} width={480}
+        title={t("fuel.bill_banao")}
+        sub={billFor ? `${billFor.vendor_name} · ${pickedIn(billFor).filter((e) => (e.payment_mode || "credit") === "credit").length} fill` : ""}
+        footer={
+          <Btn onClick={() => makeBill(billFor)} disabled={busy}>
+            {busy ? t("fuel.ban_raha_hai") : t("fuel.bill_banao")}
+          </Btn>
+        }>
+        <div style={{ padding: 18, display: "grid", gap: 12 }}>
+          <Field label={t("fuel.pump_ka_bill_number")} hint={t("fuel.na_ho_to_chhod_dein")}>
+            <input value={billNo} onChange={(e) => setBillNo(e.target.value)} style={inp} />
+          </Field>
+          <Field label={t("fuel.bill_ki_date")}>
+            <input type="date" value={billDate} onChange={(e) => setBillDate(e.target.value)} style={inp} />
+          </Field>
+          {billFor && (
+            <div style={{ padding: "10px 12px", background: T.surfaceB, borderRadius: 7, fontSize: 12, color: T.t2 }}>
+              {t("fuel.vendor_ke_khaate_me_jayega", {
+                amt: fmtC(pickedIn(billFor).filter((e) => (e.payment_mode || "credit") === "credit")
+                  .reduce((a, e) => a + Number(e.amount || 0), 0)),
+              })}
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {shot && (
+        <div onClick={() => setShot(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,.8)",
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
+          <img src={shot} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8 }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VendorTab({ vendorRows, from, to, onRange }) {
   const tot = vendorRows.reduce((a, v) => ({
     litres: a.litres + Number(v.litres || 0),
@@ -2296,11 +2521,17 @@ function FuelModule() {
   const spendInRange = byProject.reduce((a, p) => a + Number(p.amount || 0), 0);
   const litresInRange = byProject.reduce((a, p) => a + Number(p.litres || 0), 0);
   const unpaid = byVendor.reduce((a, v) => a + Number(v.unpaid_amount || 0), 0);
+  // Badge ke liye alag call ki zaroorat nahi — purchases me billed_at
+  // pehle se aata hai.
+  const unbilledN = purchases.filter((p) => !p.billed_at).length;
 
   const TABS = [
     { id: "overview",  l: t("common.overview"),      I: IcGauge },
     { id: "refueling", l: t("fuel.refueling"),     I: IcDrop, badge: purchases.length + issues.length || null },
     { id: "barrel",    l: t("fuel.barrel_stock_2"),  I: IcDrum, badge: stores.filter((s) => s.below_reorder).length || null, bc: T.amb },
+    // Unbilled vendor ledger ke theek pehle — kaam ka kram wahi hai:
+    // pehle bill banao, tabhi ledger me kuch aata hai.
+    { id: "unbilled",  l: t("fuel.unbilled"),        I: IcFile, badge: unbilledN || null, bc: T.amb },
     { id: "vendor",    l: t("fuel.vendor_ledger_2"), I: IcTruck },
     // No badge: a count here would have to be invented until the sensor
     // checks (E3) actually run.
@@ -2358,6 +2589,9 @@ function FuelModule() {
         {tab === "barrel" && (
           <BarrelTab stores={stores} projects={projects} onReload={reloadAll}
             onOpenLedger={setLedgerStore} onRefuel={() => setRefuelOpen(true)} />
+        )}
+        {tab === "unbilled" && (
+          <UnbilledTab onReload={reloadAll} />
         )}
         {tab === "vendor" && (
           <VendorTab vendorRows={byVendor} from={from} to={to}
