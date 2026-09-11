@@ -3256,6 +3256,7 @@ const dict = {
   "machinery.hours":                                           "आवर्स",
   "machinery.hours_ya_km_ek_to_bharein":                       "आवर्स या किमी, एक तो भरो",
   "machinery.idle":                                            "आइडल",
+  "machinery.imp_check_n":                                     "जाँच करें ({n})",
   "machinery.import_ho_raha_hai":                              "इम्पोर्ट हो रहा है…",
   "machinery.in_use":                                          "इन यूज़",
   "machinery.insights":                                        "इनसाइट्स",

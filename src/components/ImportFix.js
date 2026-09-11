@@ -13,11 +13,13 @@
 //   <ImportFixPanel fx={fx} fields={FIELDS} title={(raw) => raw.name} />
 //   api.post(url, { rows: fx.payload(), dry_run })
 //
-// fields: [{ key, col, type: text|number|select|list, options?: string[] |
-//   (lists, raw) => string[], same?, wide?, showIf?: (raw) => bool }]
+// fields: [{ key, col, type: text|number|select|list|date, options?: string[] |
+//   (lists, raw) => string[], optionLabel?: (value) => text, same?, wide?, showIf?: (raw) => bool }]
 //   col    = template ka column naam (box ka label bhi yahi — user file me wahi dhoondhta hai)
 //   select = sirf list me se (list khaali ho to likhne wala box)
 //   list   = likh bhi sakte ho, list sirf sujhaati hai
+//   date   = date-picker; value YYYY-MM-DD (server padhi hui tareekh isi shakl me lautata hai)
+//   optionLabel = option ki value data hai (jaise "owned"), dikhaya bhasha me jaata hai
 //   same   = ek row theek karne par baaki rows me bhi lagane ka button
 import { useState } from "react";
 import SearchSelect from "./SearchSelect";
@@ -148,7 +150,7 @@ function RowEditor({ r, rows, lists, fields, onSet, onSame }) {
       // ne purana naam maan liya, jaise "Supplier") waisi hi dikhao.
       const oddText = msgOf(k) ? t("import_fix.bad_value", { value: val }) : val;
       if (opts.length > 12) {
-        const list = opts.map((o) => ({ id: o, name: o }));
+        const list = opts.map((o) => ({ id: o, name: f.optionLabel ? f.optionLabel(o) : o }));
         const all = odd ? [{ id: val, name: oddText }, ...list] : list;
         return (
           <div style={{ borderRadius: 8, boxShadow: msgOf(k) ? `0 0 0 1.5px ${C.red}` : "none" }}>
@@ -160,8 +162,17 @@ function RowEditor({ r, rows, lists, fields, onSet, onSame }) {
         <select value={hit || (odd ? "__odd" : "")} onChange={(e) => { if (e.target.value !== "__odd") onSet(k, e.target.value); }} style={style(k)}>
           <option value="">{t("import_fix.select")}</option>
           {odd && <option value="__odd">{oddText}</option>}
-          {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+          {opts.map((o) => <option key={o} value={o}>{f.optionLabel ? f.optionLabel(o) : o}</option>)}
         </select>
+      );
+    }
+    if (f.type === "date") {
+      const iso = /^\d{4}-\d{2}-\d{2}$/.test(String(val)) ? val : "";
+      return (
+        <>
+          <input type="date" value={iso} onChange={(e) => onSet(k, e.target.value)} style={style(k)} />
+          {filled(k) && !iso && <div style={{ fontSize: 10.5, color: C.t4, marginTop: 3 }}>{t("import_fix.bad_value", { value: val })}</div>}
+        </>
       );
     }
     if (f.type === "list") {

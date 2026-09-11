@@ -19,6 +19,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api, { API_BASE, getToken } from "../config/api";
 import { t, Rich } from "../i18n";
+import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -827,54 +828,6 @@ const IMPORT_COLS = [
   { key: "telematics_api_url", get label() { return t("machinery.telematics_api_url"); }, aliases: ["gps api", "api url"] },
 ];
 
-// "haan/nahi" ke wo saare roop jo log sach me likhte hain.
-const YESNO = { haan: 1, ha: 1, hai: 1, yes: 1, y: 1, true: 1, "1": 1, laga: 1, lga: 1, on: 1,
-                nahi: 0, nhi: 0, no: 0, n: 0, false: 0, "0": 0, off: 0 };
-
-const DOC_IMPORT = [
-  { type: "insurance", no: "insurance_no", till: "insurance_till", get label() { return t("machinery.insurance"); } },
-  { type: "fitness", no: "fitness_no", till: "fitness_till", get label() { return t("machinery.fitness"); } },
-  { type: "puc", no: "puc_no", till: "puc_till", label: "PUC" },
-];
-
-// Excel se date teen shakl me aati hai: serial number (date-formatted cell),
-// JS Date, ya plain text. Text me Bharat ka riwaaj dd/mm/yyyy hai — us par
-// hi chalte hain, par parse ki hui date preview me dikhayi jaati hai taaki
-// galat padhi gayi date chhupe nahi.
-const EXCEL_EPOCH = Date.UTC(1899, 11, 30);   // 1900 leap-year bug samet
-function parseSheetDate(v) {
-  if (v == null || v === "") return null;
-  if (v instanceof Date && !isNaN(v)) {
-    const p = (n) => String(n).padStart(2, "0");
-    return v.getFullYear() + "-" + p(v.getMonth() + 1) + "-" + p(v.getDate());
-  }
-  const s = String(v).trim();
-  if (!s) return null;
-  // Serial number — 1990 se 2100 tak ka hi maano, warna "42" jaisa koi number
-  // bhi date ban jayega.
-  if (/^\d+(\.\d+)?$/.test(s)) {
-    const n = Number(s);
-    if (n < 32874 || n > 73415) return null;
-    const d = new Date(EXCEL_EPOCH + Math.round(n) * 86400000);
-    return d.toISOString().slice(0, 10);
-  }
-  let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);          // yyyy-mm-dd
-  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
-  m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);          // dd/mm/yyyy
-  if (m) {
-    let [, d, mo, y] = m;
-    if (y.length === 2) y = (Number(y) > 70 ? "19" : "20") + y;
-    if (Number(mo) > 12) return null;
-    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
-  const parsed = new Date(s);                                       // "15 Aug 2027"
-  if (!isNaN(parsed)) {
-    const p = (n) => String(n).padStart(2, "0");
-    return parsed.getFullYear() + "-" + p(parsed.getMonth() + 1) + "-" + p(parsed.getDate());
-  }
-  return null;
-}
-
 const norm = (s) => String(s == null ? "" : s).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 // Header ka naam target column se milao. Exact match pehle, phir alias, phir
@@ -891,37 +844,53 @@ function autoMap(header) {
   return map;
 }
 
-const OWNERSHIP_WORDS = { owned: "owned", own: "owned", apni: "owned", self: "owned", company: "owned", rented: "rented", rent: "rented", hired: "rented", kiraya: "rented", kiraye: "rented", leased: "rented" };
-const MODE_WORDS = { hourly: "hourly", hour: "hourly", hr: "hourly", ghanta: "hourly", daily: "daily", day: "daily", din: "daily", monthly: "monthly", month: "monthly", mahina: "monthly", maheena: "monthly", mah: "monthly", km: "km", kilometer: "km", kms: "km", trip: "trip", trips: "trip", fera: "trip", fixed: "fixed", lump: "fixed", lumpsum: "fixed" };
-const UNIT_WORDS = { hours: "hours", hour: "hours", hr: "hours", hmr: "hours", km: "km", odometer: "km", both: "both", dono: "both" };
-// "Diesel kiska" — Excel me log ye poora vaakya likhte hain, ek shabd nahi.
-// Isliye pehla shabd nahi, poora text dekha jaata hai.
-const FUEL_RESP_WORDS = [
-  [/rent|kiray|kiraye|vendor|shaamil|shamil|included|malik/i, "rent_included"],
-  [/company|hamara|humara|apna|apni|self|own|hum/i, "company"],
-];
-const fuelRespOf = (raw) => {
-  const s = String(raw || "").trim();
-  if (!s) return null;                       // column khaali = kuch mat kaho
-  for (const [re, val] of FUEL_RESP_WORDS) if (re.test(s)) return val;
-  return null;
+// Galti sudhaar screen ke box. Jin column me tay shabd hote hain wahan dropdown
+// (value data hai — server wahi pehchanta hai — label bhasha me), kaagaz ki date
+// par date-picker, vendor/type par likhne ke saath list. Shabd pehchanna aur
+// tareekh padhna ab server par hai (POST /machinery/import/rows): pehle yahan
+// hota tha aur na samjha shabd chupchaap "rented"/"hourly" ban jaata tha.
+const FIX_OPTS = {
+  ownership: { type: "select", options: ["owned", "rented"], optionLabel: (v) => (v === "owned" ? t("machinery.apni") : t("machinery.kiraye_ki")), same: true },
+  measurement_mode: { type: "select", options: MODES.map((m) => m.k), optionLabel: (v) => (MODES.find((m) => m.k === v) || {}).l || v, same: true },
+  meter_unit: { type: "select", options: ["hours", "km", "both"], optionLabel: (v) => (v === "hours" ? t("machinery.hour_meter_ghante") : v === "km" ? t("machinery.odometer_km") : t("machinery.dono")), same: true },
+  fuel_responsibility: { type: "select", options: ["company", "rent_included"], optionLabel: (v) => (v === "company" ? t("machinery.hamara_company_deti_hai") : t("machinery.kiraye_me_shaamil_vendor_ka")), same: true },
+  telematics_enabled: { type: "select", options: ["haan", "nahi"], optionLabel: (v) => (v === "haan" ? t("machinery.haan") : t("machinery.nahi")), same: true },
+  default_vendor: { type: "list", options: (L) => L.vendors, same: true },
+  telematics_vendor: { type: "list", options: (L) => L.vendors, same: true },
+  machine_type: { type: "list", options: (L) => L.machine_types, same: true },
+  default_rate: { type: "number" },
+  opening_hours: { type: "number" },
+  opening_km: { type: "number" },
+  fuel_per_hour: { type: "number" },
+  insurance_till: { type: "date" },
+  fitness_till: { type: "date" },
+  puc_till: { type: "date" },
 };
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+// Row ke neeche padhi hui tareekh — 06-07 ulta padha gaya ho to yahin dikhe, import ke baad nahi.
+const importRowSub = (r) => [
+  r.registration_no,
+  r.machine_type,
+  ...["insurance", "fitness", "puc"].map((d) => (ISO_DAY.test(String(r[d + "_till"] || "")) ? `${docLabel(d).slice(0, 3)} ${fmtD(r[d + "_till"])}` : null)),
+].filter(Boolean).join(" · ");
 
 function ImportWizard({ open, onClose, onDone }) {
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState("");
   const [aoa, setAoa] = useState([]);
+  const [firstRow, setFirstRow] = useState(1);
   const [headerRow, setHeaderRow] = useState(0);
   const [map, setMap] = useState({});
-  const [preview, setPreview] = useState(null);
   const [result, setResult] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const fx = useImportFix();
 
   useEffect(() => {
     if (!open) return;
-    setStep(1); setFileName(""); setAoa([]); setHeaderRow(0); setMap({});
-    setPreview(null); setResult(null); setError("");
+    setStep(1); setFileName(""); setAoa([]); setFirstRow(1); setHeaderRow(0); setMap({});
+    setResult(null); setBusy(""); setError(""); fx.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const onFile = async (e) => {
@@ -935,101 +904,68 @@ function ImportWizard({ open, onClose, onDone }) {
       // cellFormula:false → formula load hi nahi hota, sirf cached value.
       const wb = XLSX.read(new Uint8Array(buf), { type: "array", cellFormula: false, cellText: true, cellDates: false });
       if (!wb.SheetNames.length) { setError(t("machinery.file_me_koi_sheet_nahi_mili")); return; }
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false, defval: "" });
-      if (!rows.length) { setError(t("machinery.sheet_khaali_hai")); return; }
-      // Header wo row hai jisme sabse zyada bhare hue khaane hain — file ke
-      // upar aksar title/logo ki adhoori rows hoti hain.
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      // blankrows:true — row ka index sheet ki asli row se juda rahe. Khaali row
+      // hata dene par row number khisak jaate the aur screen par galat row dikhti.
+      const rows = ws && ws["!ref"] ? XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: true, defval: "" }) : [];
+      if (!rows.some((r) => (r || []).some((c) => String(c).trim()))) { setError(t("machinery.sheet_khaali_hai")); return; }
+      // Header wo row hai jisme sabse zyada bhare hue cell hain — file ke upar
+      // aksar title/logo ki adhoori rows hoti hain.
       let best = 0, bestN = -1;
       for (let i = 0; i < Math.min(rows.length, 10); i++) {
         const n = (rows[i] || []).filter((c) => String(c).trim()).length;
         if (n > bestN) { bestN = n; best = i; }
       }
-      setFileName(f.name); setAoa(rows); setHeaderRow(best);
+      setFileName(f.name); setAoa(rows); setFirstRow(XLSX.utils.decode_range(ws["!ref"]).s.r + 1); setHeaderRow(best);
       setMap(autoMap(rows[best] || []));
       setStep(2);
     } catch (_) { setError(t("machinery.file_padhne_me_dikkat_sahi_xlsx")); }
   };
 
   const header = aoa[headerRow] || [];
-  const parsed = useMemo(() => {
-    if (map.name == null) return [];
+  // Har row ka likha hua text, bina badle — pehchanna aur padhna server karta hai.
+  const fileRows = useMemo(() => {
     const out = [];
     for (let i = headerRow + 1; i < aoa.length; i++) {
       const r = aoa[i] || [];
-      const cell = (k) => (map[k] == null ? "" : String(r[map[k]] == null ? "" : r[map[k]]).trim());
-      const rawCell = (k) => (map[k] == null ? null : r[map[k]]);
-      const name = cell("name");
-      if (!name) continue;
-      const numOf = (k) => { const v = cell(k).replace(/[^0-9.-]/g, ""); return v === "" ? null : Number(v); };
-
-      // Kaagaz: date parse ho gayi to document banega. Jo date padhi na ja
-      // sake wo chup-chaap girni nahi chahiye — use badDates me rakh kar
-      // preview me naam le kar dikhate hain.
-      const documents = [];
-      const badDates = [];
-      for (const d of DOC_IMPORT) {
-        const rawTill = rawCell(d.till);
-        const no = cell(d.no) || null;
-        const till = parseSheetDate(rawTill);
-        if (till) documents.push({ doc_type: d.type, doc_no: no, valid_till: till });
-        else if (String(rawTill == null ? "" : rawTill).trim()) badDates.push(`${d.label}: "${String(rawTill).trim()}"`);
-        else if (no) badDates.push(`${d.label} ka number hai par date nahi`);
+      const raw = {};
+      let any = false;
+      for (const c of IMPORT_COLS) {
+        if (map[c.key] == null) continue;
+        const v = r[map[c.key]];
+        const s = v == null ? "" : String(v).trim();
+        raw[c.key] = s;
+        if (s) any = true;
       }
-
-      out.push({
-        documents,
-        _bad_dates: badDates,
-        _row: i + 1,
-        name,
-        registration_no: cell("registration_no") || null,
-        code: cell("code") || null,
-        machine_type: cell("machine_type") || null,
-        type: cell("machine_type") || null,
-        ownership: OWNERSHIP_WORDS[norm(cell("ownership")).split(" ")[0]] || "rented",
-        measurement_mode: MODE_WORDS[norm(cell("measurement_mode")).split(" ")[0]] || "hourly",
-        default_rate: numOf("default_rate") || 0,
-        meter_unit: UNIT_WORDS[norm(cell("meter_unit")).split(" ")[0]] || null,
-        opening_hours: numOf("opening_hours"),
-        opening_km: numOf("opening_km"),
-        // Vendor Excel me NAAM se aata hai (id kaun likhega) — server use party
-        // master se milata hai, aur na mile to chup-chaap null nahi karta,
-        // preview me likh kar batata hai.
-        _default_vendor_name: cell("default_vendor") || null,
-        fuel_responsibility: fuelRespOf(cell("fuel_responsibility")),
-        fuel_per_hour: numOf("fuel_per_hour"),
-        make: cell("make") || null, model: cell("model") || null,
-        chassis_no: cell("chassis_no") || null, engine_no: cell("engine_no") || null,
-        operator_name: cell("operator_name") || null,
-        // NULL = column hi nahi tha (poocha hi nahi gaya). 0 = "nahi" — wo
-        // poora jawab hai aur completeness me ginta hai.
-        telematics_enabled: (() => {
-          const raw = cell("telematics_enabled");
-          if (!raw) return null;
-          const v = YESNO[norm(raw)];
-          return v == null ? null : v;
-        })(),
-        telematics_device_id: cell("telematics_device_id") || null,
-        telematics_api_url: cell("telematics_api_url") || null,
-        _telematics_vendor_name: cell("telematics_vendor") || null,
-      });
+      if (any) out.push({ row: firstRow + i, raw });
     }
     return out;
-  }, [aoa, headerRow, map]);
+  }, [aoa, headerRow, map, firstRow]);
 
-  const runPreview = async () => {
-    setBusy(true); setError("");
-    const r = await api.post("/machinery/import", { rows: parsed, dry_run: true });
-    setBusy(false);
-    if (!r || !r.success) { setError((r && r.message) || "Preview nahi ban paya"); return; }
-    setPreview(r.data); setStep(3);
+  const send = (rows, dryRun) => api.post("/machinery/import/rows", { rows, dry_run: dryRun }, { timeoutMs: dryRun ? 60000 : 120000 });
+
+  const runCheck = async () => {
+    setBusy("check"); setError("");
+    const r = await send(fileRows, true);
+    setBusy("");
+    // Galti par server 422 + wahi rows bhejta hai; api() use { success:false, data } bana deta hai.
+    if (r && r.data && r.data.rows) { fx.take(r.data, r.message, true); setStep(3); return; }
+    setError((r && r.message) || t("import_fix.failed"));
   };
 
-  const commit = async () => {
-    setBusy(true); setError("");
-    const r = await api.post("/machinery/import", { rows: parsed, dry_run: false });
-    setBusy(false);
-    if (!r || !r.success) { setError((r && r.message) || "Import fail hua — kuch bhi save nahi hua"); return; }
-    setResult(r.data); setStep(4); onDone();
+  const run = async (dryRun) => {
+    const rows = fx.payload();
+    if (!rows.length) { setError(t("import_fix.none_left")); return; }
+    setBusy(dryRun ? "check" : "import"); setError("");
+    const r = await send(rows, dryRun);
+    setBusy("");
+    if (!dryRun && r && r.success && r.data && r.data.committed) {
+      setResult({ message: r.message, created: r.data.committed.created || [] });
+      setStep(4); onDone();
+      return;
+    }
+    if (r && r.data && r.data.rows) { fx.take(r.data, r.message, false); return; }
+    setError((r && r.message) || t("import_fix.failed"));
   };
 
   const template = async () => {
@@ -1070,16 +1006,23 @@ function ImportWizard({ open, onClose, onDone }) {
   };
 
   const missingReq = IMPORT_COLS.filter((c) => c.required && map[c.key] == null);
+  // Sudhaar screen par wahi box jinka column file me hai, ya jin par kisi row me galti hai.
+  const errCols = new Set(fx.rows.flatMap((r) => r.error_fields || []));
+  const fixFields = IMPORT_COLS
+    .filter((c) => map[c.key] != null || errCols.has(c.key))
+    .map((c) => ({ key: c.key, col: c.label.replace(/\s*\*\s*$/, ""), ...(FIX_OPTS[c.key] || {}) }));
 
   return (
-    <Modal open={open} onClose={onClose} width={860} title={t("machinery.excel_se_machines_import")}
+    <Modal open={open} onClose={onClose} width={step === 3 ? 1040 : 860} title={t("machinery.excel_se_machines_import")}
       sub={fileName || t("machinery.naam_ke_alawa_sab_optional_baad")}
       footer={
         step === 1 ? <Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
         : step === 2 ? <><Btn ghost onClick={() => setStep(1)}>{t("common.peeche")}</Btn>
-            <Btn onClick={runPreview} disabled={busy || !!missingReq.length || !parsed.length}>{busy ? t("machinery.dekh_rahe_hain") : `Jaanch karo (${parsed.length})`}</Btn></>
+            <Btn onClick={runCheck} disabled={!!busy || !!missingReq.length || !fileRows.length}>{busy ? t("machinery.dekh_rahe_hain") : t("machinery.imp_check_n", { n: fileRows.length })}</Btn></>
         : step === 3 ? <><Btn ghost onClick={() => setStep(2)}>{t("common.peeche")}</Btn>
-            <Btn onClick={commit} disabled={busy || !preview || !preview.summary.ok}>{busy ? t("machinery.import_ho_raha_hai") : `${preview ? preview.summary.ok : 0} machine import karo`}</Btn></>
+            {fx.stale
+              ? <Btn onClick={() => run(true)} disabled={!!busy}>{busy ? t("import_fix.checking") : t("import_fix.recheck")}</Btn>
+              : <Btn onClick={() => run(false)} disabled={!!busy || !fx.canImport}>{busy === "import" ? t("machinery.import_ho_raha_hai") : t("import_fix.import_go", { n: fx.counts.ok })}</Btn>}</>
         : <Btn onClick={onClose}>{t("machinery.theek_hai")}</Btn>
       }>
 
@@ -1108,32 +1051,21 @@ function ImportWizard({ open, onClose, onDone }) {
             <span style={{ fontSize: 11.5, color: T.t3 }}>{t("common.header_row")}</span>
             <select value={headerRow} onChange={(e) => { const h = Number(e.target.value); setHeaderRow(h); setMap(autoMap(aoa[h] || [])); }}
               style={{ ...inp, width: 150 }}>
-              {aoa.slice(0, 10).map((r, i) => <option key={i} value={i}>{t("machinery.row_i", { i: i + 1 })}</option>)}
+              {aoa.slice(0, 10).map((r, i) => <option key={i} value={i}>{t("machinery.row_i", { i: firstRow + i })}</option>)}
             </select>
-            <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.parsed_machine_mili", { parsed: parsed.length })}</span>
+            <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.parsed_machine_mili", { parsed: fileRows.length })}</span>
           </div>
           {!!missingReq.length && (
             <div style={{ marginBottom: 12, padding: "9px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>{t("machinery.missingreq_ka_column_chuno_uske_bina", { missingReq: missingReq.map((c) => c.label).join(", ") })}</div>
           )}
           {/* Ownership bahut kuch tay karti hai — kaagaz ka scope, diesel kiska,
-              aur completeness ka hisaab. Column na mile to sab chup-chaap
-              "rented" ban jaate; ye keh dena zaroori hai. */}
+              aur completeness ka hisaab. Column na mile to sab "rented" maani
+              jaati hain; ye keh dena zaroori hai. */}
           {map.ownership == null && (
             <div style={{ marginBottom: 12, padding: "9px 12px", background: T.ambL, color: T.amb, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>
              {t("machinery.ownership_ka_column_nahi_chuna_saari")} <b>{t("machinery.rented")}</b> {t("machinery.maani_jayengi_apni_machines_baad_me")}
             </div>
           )}
-          {map.measurement_mode != null && (() => {
-            // Jo shabd hum pehchante hi nahi wo chup-chaap 'hourly' ban jaate
-            // hain — ek tipper ka km rate ghante ka ban jana mehanga padta hai.
-            const bad = [...new Set(parsed.map((p, i) => {
-              const raw = String((aoa[headerRow + 1 + i] || [])[map.measurement_mode] || "").trim();
-              return raw && !MODE_WORDS[norm(raw).split(" ")[0]] ? raw : null;
-            }).filter(Boolean))];
-            return bad.length ? (
-              <div style={{ marginBottom: 12, padding: "9px 12px", background: T.ambL, color: T.amb, fontSize: 12, borderRadius: 7, fontWeight: 600 }}>{t("machinery.rate_type_me_ye_shabd_samajh", { bad: bad.slice(0, 5).join(", ") })}</div>
-            ) : null;
-          })()}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {IMPORT_COLS.map((c) => (
               <Field key={c.key} label={c.label + (c.required ? " *" : "")}>
@@ -1149,77 +1081,14 @@ function ImportWizard({ open, onClose, onDone }) {
         </>
       )}
 
-      {step === 3 && preview && (
-        <>
-          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-            {[
-              { l: t("machinery.banengi"), v: preview.summary.ok, c: T.grn },
-              { l: t("machinery.skip_pehle_se_hai"), v: preview.summary.skip, c: T.amb },
-              { l: t("machinery.galti"), v: preview.summary.error, c: T.red },
-              { l: t("machinery.kaagaz_banenge"), v: preview.summary.documents || 0, c: T.ind },
-            ].map((x) => (
-              <div key={x.l} style={{ flex: 1, border: `1.5px solid ${T.b1}`, borderTop: `3px solid ${x.c}`, borderRadius: 10, padding: "10px 13px" }}>
-                <div style={{ fontSize: 19, fontWeight: 800, color: x.c }}>{x.v}</div>
-                <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>{x.l}</div>
-              </div>
-            ))}
-          </div>
-          {/* Jo date padhi hi na ja saki wo chup-chaap girni nahi chahiye —
-              us machine ka kaagaz banega hi nahi aur bell kabhi bajegi nahi. */}
-          {(() => {
-            const bad = parsed.filter((p) => p._bad_dates && p._bad_dates.length);
-            if (!bad.length) return null;
-            return (
-              <div style={{ marginBottom: 12, padding: "9px 12px", background: T.ambL, color: T.amb, fontSize: 11.5, borderRadius: 7, fontWeight: 600, lineHeight: 1.5 }}>
-                {t("machinery.rows_date_samajh_nahi_aayi")}
-                {bad.slice(0, 4).map((p) => (
-                  <div key={p._row} style={{ fontWeight: 500 }}>row {p._row} · {p.name} — {p._bad_dates.join(", ")}</div>
-                ))}
-                {bad.length > 4 && <div style={{ fontWeight: 500 }}>{t("machinery.aur_bad_row", { bad: bad.length - 4 })}</div>}
-                <div style={{ fontWeight: 500, marginTop: 4 }}>{t("machinery.date_ka_format")} <b>{t("machinery.dd_mm_yyyy")}</b> {t("machinery.rakhein_jaise_30_06_2027")}</div>
-              </div>
-            );
-          })()}
-          <div style={{ maxHeight: 320, overflowY: "auto", border: `1px solid ${T.b1}`, borderRadius: 10 }}>
-            <Row head cols="46px 1.4fr 0.9fr 78px 1.1fr 1.2fr">
-              <span>{t("machinery.row")}</span><span>{t("fuel.machine")}</span><span>{t("machinery.gadi_no")}</span><span>{t("machinery.faisla")}</span><span>{t("machinery.kaagaz")}</span><span>{t("machinery.wajah")}</span>
-            </Row>
-            {preview.verdicts.map((v) => {
-              const src = parsed.find((p) => p._row === v.row);
-              const docs = (src && src.documents) || [];
-              return (
-                <Row key={v.row} cols="46px 1.4fr 0.9fr 78px 1.1fr 1.2fr">
-                  <span style={{ fontSize: 11.5, color: T.t4 }}>{v.row}</span>
-                  <span style={{ fontSize: 12, color: T.t1 }}>{v.name || "—"}</span>
-                  <span style={{ fontSize: 11.5, color: T.t3 }}>{v.registration_no || "—"}</span>
-                  <span>
-                    {v.status === "ok" ? <Pill label={t("machinery.banegi")} c={T.grn} bg={T.grnL} />
-                      : v.status === "skip" ? <Pill label={t("crm.skip")} c={T.amb} bg={T.ambL} />
-                      : <Pill label={t("machinery.galti")} c={T.red} bg={T.redL} />}
-                  </span>
-                  {/* Parse ki hui date dikhana zaroori hai — 06-07 ulta padha
-                      gaya ho to yahin pakda jayega, import ke baad nahi. */}
-                  <span style={{ fontSize: 10.5, color: T.t3, lineHeight: 1.45 }}>
-                    {docs.length
-                      ? docs.map((d) => `${docLabel(d.doc_type).slice(0, 3)} ${fmtD(d.valid_till)}`).join(" · ")
-                      : <span style={{ color: T.t4 }}>—</span>}
-                  </span>
-                  <span style={{ fontSize: 11, color: v.note ? T.amb : T.t3 }}>{v.reason || v.note || "—"}</span>
-                </Row>
-              );
-            })}
-          </div>
-        </>
+      {step === 3 && (
+        <ImportFixPanel fx={fx} fields={fixFields} title={(r) => r.name} sub={importRowSub} />
       )}
 
       {step === 4 && result && (
         <>
           <div style={{ padding: "13px 15px", background: T.grnL, border: `1px solid ${T.grn}33`, borderRadius: 10, marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: T.grn }}>{t("machinery.result_machine_ban_gayi", { result: result.created.length })}</div>
-            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 3 }}>{t("machinery.skip_skip_pehle_se_thi_error", { skip: result.summary.skip, error: result.summary.error })}{result.documents_created > 0
-                ? <>{t("machinery.documents_created_kaagaz_bhi_darj_ho", { documents_created: result.documents_created })}</>
-                : <> {t("machinery.kaagaz_kisi_row_me_nahi_mile")}</>}
-            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.grn }}>{result.message}</div>
           </div>
           <div style={{ maxHeight: 260, overflowY: "auto", border: `1px solid ${T.b1}`, borderRadius: 10 }}>
             {result.created.map((c) => (

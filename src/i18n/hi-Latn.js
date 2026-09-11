@@ -3259,6 +3259,7 @@ const dict = {
   "machinery.hours":                                           "Hours",
   "machinery.hours_ya_km_ek_to_bharein":                       "Hours ya km, ek to bharo",
   "machinery.idle":                                            "Idle",
+  "machinery.imp_check_n":                                     "Jaanch karo ({n})",
   "machinery.import_ho_raha_hai":                              "Import ho raha hai…",
   "machinery.in_use":                                          "In Use",
   "machinery.insights":                                        "Insights",
