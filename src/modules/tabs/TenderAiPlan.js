@@ -20,7 +20,8 @@ import { t, Rich } from "../../i18n";
    Backend: routes/tender-ai-plan.js (analyze/discuss/PUT/execute)
    ──────────────────────────────────────────────────────────────────── */
 
-const WTYPE_LABEL = { road: "Road", drain: "Drain", pipeline: "Pipeline", water: "Water", sewer: "Sewer", electrical: "Electrical", structure: "Structure", other: "Anya" };
+// Label render ke waqt banta hai — module load par t() chalta to bhasha badalne par purana label atka rehta.
+const wtypeLabel = (w) => ({ road: t("tender_ai_plan.wtype_road"), drain: t("tender_ai_plan.wtype_drain"), pipeline: t("tender_ai_plan.wtype_pipeline"), water: t("tender_ai_plan.wtype_water"), sewer: t("tender_ai_plan.wtype_sewer"), electrical: t("tender_ai_plan.wtype_electrical"), structure: t("tender_ai_plan.wtype_structure"), other: t("tender_ai_plan.wtype_other") })[w];
 const WTYPE_COLOR = { road: "#B45309", drain: "#0E7490", pipeline: "#1565C0", water: "#0284C7", sewer: "#7C3AED", electrical: "#D97706", structure: "#475569", other: "#64748B" };
 const fmtAmt = (n) => { const v = Number(n || 0); if (!v) return "—"; if (v >= 1e7) return "₹" + (v / 1e7).toFixed(2) + " Cr"; if (v >= 1e5) return "₹" + (v / 1e5).toFixed(2) + " L"; return "₹" + v.toLocaleString("en-IN"); };
 const fmtQty = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
@@ -260,7 +261,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
       const d = await load(true);
       if (d && d.job_status !== "running") {
         clearInterval(id);
-        if (d.job_status === "failed") setErr(d.job_error || "AI ka kaam poora nahi hua");
+        if (d.job_status === "failed") setErr(d.job_error || t("tender_ai_plan.ai_ka_kaam_poora_nahi_hua"));
         setBusy("");
       }
     }, 5000);
@@ -298,8 +299,8 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
         setJob({ status: "running", kind: "analyze" });
         return;   // busy chalta rahe — polling khatam hone par hatega
       }
-      setErr(r?.message || "Analyze fail");
-    } catch (e) { setErr("File padhne me dikkat: " + (e?.message || "error")); }
+      setErr(r?.message || t("tender_ai_plan.analyze_fail"));
+    } catch (e) { setErr(t("tender_ai_plan.file_padhne_me_dikkat", { error: e?.message || t("common.something_went_wrong") })); }
     setBusy("");
   };
 
@@ -312,15 +313,15 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
       if (dirty && plan) { await api.put(`/tenders/${tenderId}/ai-plan`, { plan }); setDirty(false); }
       const r = await api.post(`/tenders/${tenderId}/ai-plan/discuss`, { text }, { timeoutMs: 120000 });
       if (r?.success) { setJob({ status: "running", kind: "discuss" }); return; }
-      setMsgs((m) => [...m, { role: "ai", text: "⚠ " + (r?.message || "AI se baat nahi ho payi") }]);
-    } catch (e) { setMsgs((m) => [...m, { role: "ai", text: "⚠ " + (e?.message || "error") }]); }
+      setMsgs((m) => [...m, { role: "ai", text: "⚠ " + (r?.message || t("tender_ai_plan.ai_se_baat_nahi_ho_payi")) }]);
+    } catch (e) { setMsgs((m) => [...m, { role: "ai", text: "⚠ " + (e?.message || t("common.something_went_wrong")) }]); }
     setBusy("");
   };
 
   const save = async () => {
     if (!plan) return; setBusy("save");
     const r = await api.put(`/tenders/${tenderId}/ai-plan`, { plan }).catch(() => null);
-    if (r?.success) setDirty(false); else setErr(r?.message || "Save fail");
+    if (r?.success) setDirty(false); else setErr(r?.message || t("tender_ai_plan.save_fail"));
     setBusy("");
   };
 
@@ -350,11 +351,11 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
       const r = await api.post(`/tenders/${tenderId}/ai-plan/execute`, { city_id: cityId || null, construction_type_id: ctypeId || null, mode: overwrite ? "overwrite" : "merge" }, { timeoutMs: 120000 });
       if (r?.success) {
         setExecResult(r.data); setExecOpen(false);
-        window.toast?.success?.("Plan execute ho gaya — " + r.data.projects.length + " site, " + r.data.works_created + " kaam"
-          + (r.data.removed ? ", " + r.data.removed + " purane hate" : "") + (r.data.archived?.length ? ", " + r.data.archived.length + " archive" : ""));
+        window.toast?.success?.(t("tender_ai_plan.toast_execute_ho_gaya", { sites: r.data.projects.length, works: r.data.works_created })
+          + (r.data.removed ? t("tender_ai_plan.toast_purane_hate", { n: r.data.removed }) : "") + (r.data.archived?.length ? t("tender_ai_plan.toast_archive", { n: r.data.archived.length }) : ""));
       }
-      else setErr(r?.message || "Execute fail");
-    } catch (e) { setErr(e?.message || "error"); }
+      else setErr(r?.message || t("tender_ai_plan.execute_fail"));
+    } catch (e) { setErr(e?.message || t("common.something_went_wrong")); }
     setBusy("");
   };
 
@@ -521,7 +522,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
               setErr(""); setBusy("analyze"); setDinfo(null);
               const r = await api.post(`/tenders/${tenderId}/ai-plan/analyze`, { from_boq: true }, { timeoutMs: 120000 }).catch((e) => ({ success: false, message: e?.message }));
               if (r?.success) { setPlan(null); setDirty(false); setExecResult(null); setMsgs([]); setJob({ status: "running", kind: "analyze" }); return; }
-              setErr(r?.message || "Analyze fail"); setBusy("");
+              setErr(r?.message || t("tender_ai_plan.analyze_fail")); setBusy("");
             }}
               style={{ padding: "8px 16px", borderRadius: 8, border: `1.5px solid ${T.bluM}`, background: T.bluL, color: T.blu, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
               {t("tender_ai_plan.imported_boq_se_banao", { boqCount })}
@@ -534,8 +535,8 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
       {/* PLAN TREE */}
       {plan && <>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 11.5, color: T.t3 }}>
-          <span style={{ background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 20, padding: "3px 12px", fontWeight: 700, color: T.blu }}>{plan.sites.length} sites</span>
-          <span style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 20, padding: "3px 12px" }}>{totalWorks} kaam</span>
+          <span style={{ background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 20, padding: "3px 12px", fontWeight: 700, color: T.blu }}>{t("tender_ai_plan.n_sites", { n: plan.sites.length })}</span>
+          <span style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 20, padding: "3px 12px" }}>{t("tender_ai_plan.n_kaam", { n: totalWorks })}</span>
           <span style={{ background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 20, padding: "3px 12px", color: T.grn, fontWeight: 700 }}>{fmtAmt(totalAmt)}</span>
           {draftMeta?.status === "executed" && <span style={{ background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 20, padding: "3px 12px", color: T.grn }}>{t("tender_ai_plan.execute_ho_chuka_dobara_chalana_surakshit")}</span>}
         </div>
@@ -562,7 +563,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                   <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", flexWrap: "wrap" }}>
                     <input type="checkbox" checked={on} onChange={() => upd((p) => { p.sites[si].works[wi].take = !on; })} style={{ width: 15, height: 15, cursor: "pointer" }} />
                     <input value={w.name} onChange={(e) => upd((p) => { p.sites[si].works[wi].name = e.target.value; })} style={inp({ flex: "1 1 220px", fontWeight: 700, fontSize: 12.5 })} />
-                    <span style={{ fontSize: 9.5, fontWeight: 700, color: "white", background: WTYPE_COLOR[w.wtype] || WTYPE_COLOR.other, padding: "2px 8px", borderRadius: 10, textTransform: "uppercase" }}>{WTYPE_LABEL[w.wtype] || w.wtype}</span>
+                    <span style={{ fontSize: 9.5, fontWeight: 700, color: "white", background: WTYPE_COLOR[w.wtype] || WTYPE_COLOR.other, padding: "2px 8px", borderRadius: 10, textTransform: "uppercase" }}>{wtypeLabel(w.wtype) || w.wtype}</span>
                     <input type="number" value={w.qty || ""} placeholder="qty" onChange={(e) => upd((p) => { p.sites[si].works[wi].qty = Number(e.target.value) || 0; })} style={inp({ width: 88, textAlign: "right", fontWeight: 700 })} />
                     <input value={w.unit || ""} placeholder="unit" onChange={(e) => upd((p) => { p.sites[si].works[wi].unit = e.target.value; })} style={inp({ width: 58 })} />
                     <input type="number" value={w.amount || ""} placeholder="₹" onChange={(e) => upd((p) => { p.sites[si].works[wi].amount = Number(e.target.value) || 0; })} style={inp({ width: 110, textAlign: "right", color: T.grn, fontWeight: 700 })} />
@@ -608,7 +609,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                     {!w.stages.length && pmSel(w,
                       (e) => upd((p) => { p.sites[si].works[wi].progress_mode = e.target.value; }))}
                     <button onClick={() => setOpen((o) => ({ ...o, [key]: !exp }))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, color: T.blu, fontWeight: 700 }}>
-                      {w.stages.length ? `${w.stages.length} stages ${exp ? "▴" : "▾"}` : (exp ? t("tender_ai_plan.stages") : t("tender_ai_plan.stages_2"))}
+                      {w.stages.length ? t("tender_ai_plan.n_stages", { n: w.stages.length }) + (exp ? " ▴" : " ▾") : (exp ? t("tender_ai_plan.stages") : t("tender_ai_plan.stages_2"))}
                     </button>
                   </div>
                   {w.source && <div style={{ padding: "0 12px 6px 35px", fontSize: 10, color: T.t4 }}>{t("tender_ai_plan.src_source", { source: w.source })}</div>}
@@ -732,7 +733,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
               ))}
             </div>
             <div>
-              {t("tender_ai_plan.works_created_kaam_stages_created_stages", { works_created: execResult.works_created, stages_created: execResult.stages_created, steps: execResult.steps_created ? ` + ${execResult.steps_created} steps` : "" })}
+              {t("tender_ai_plan.works_created_kaam_stages_created_stages", { works_created: execResult.works_created, stages_created: execResult.stages_created, steps: execResult.steps_created ? t("tender_ai_plan.plus_n_steps", { n: execResult.steps_created }) : "" })}
               {execResult.boq_linked ? <> · <b style={{ color: T.grn }}>{t("tender_ai_plan.boq_linked_task_boq_se_jude", { boq_linked: execResult.boq_linked })}</b> {t("tender_ai_plan.inki_qty_mb_draft_tak_jayegi")}</> : ""}
               {execResult.lines_linked ? <> · 🔗 {t("tender_ai_plan.lines_linked", { n: execResult.lines_linked })}</> : ""}
               {execResult.replaced ? <> · ♻ {t("tender_ai_plan.replaced_n", { n: execResult.replaced })}</> : ""}
