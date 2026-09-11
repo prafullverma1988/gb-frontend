@@ -18,10 +18,11 @@ import { t } from "../../i18n";
             POST /tasks/project/:id/tender-plan
    ──────────────────────────────────────────────────────────────────── */
 
-const WTYPE_LABEL = {
-  pipeline: "Pipeline", structure: "Structure", road: "Road",
-  drain: "Drain", electrical: "Electrical", other: "Anya",
-};
+// Label render ke waqt banta hai — module load par t() chalta to bhasha badalne par purana label atka rehta.
+const wtypeLabel = (w) => ({
+  pipeline: t("tender_plan_wizard.wtype_pipeline"), structure: t("tender_plan_wizard.wtype_structure"), road: t("tender_plan_wizard.wtype_road"),
+  drain: t("tender_plan_wizard.wtype_drain"), electrical: t("tender_plan_wizard.wtype_electrical"), other: t("tender_plan_wizard.wtype_other"),
+})[w];
 const fmtQty = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 
 // BOQ ki lambi description se task ka pehla naam. Sheet me poora spec
@@ -43,7 +44,7 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
 
   const load = useCallback(async () => {
     const r = await api.get(`/tasks/project/${projectId}/tender-packages`);
-    if (!r?.success) { setErr(r?.message || "Packages nahi mile"); return; }
+    if (!r?.success) { setErr(r?.message || t("tender_plan_wizard.packages_nahi_mile")); return; }
     setData(r.data);
     if (r.data.tender_id) {
       // Pipeline/road/drain package me stretch chun sakte hain — is site ki.
@@ -87,7 +88,7 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
       })),
     });
     setBusy(false);
-    if (!r?.success) { setErr(r?.message || "Plan nahi bana"); return; }
+    if (!r?.success) { setErr(r?.message || t("tender_plan_wizard.plan_nahi_bana")); return; }
     onDone?.(r.message);
     onClose?.();
   };
@@ -106,7 +107,7 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
         <div style={{ padding: "13px 16px", borderBottom: `1px solid ${T.b1}` }}>
           <div style={{ fontSize: 14.5, fontWeight: 800, color: T.t1 }}>{t("tasks.tender_se_plan_lao")}</div>
           <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>
-            {pkg ? `"${pkg.name}" — jo items is site par karne hain wo chuno`
+            {pkg ? t("tender_plan_wizard.pkg_items_is_site_par", { name: pkg.name })
                  : t("tender_plan_wizard.package_chuno_uske_boq_items_is")}
           </div>
         </div>
@@ -139,12 +140,12 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
                     cursor: p.pending_items ? "pointer" : "default", opacity: p.pending_items ? 1 : 0.6 }}>
                   <span style={{ fontSize: 9.5, fontWeight: 800, padding: "3px 7px", borderRadius: 5,
                     background: T.surfaceB, color: T.t3, whiteSpace: "nowrap" }}>
-                    {WTYPE_LABEL[p.wtype] || p.wtype}
+                    {wtypeLabel(p.wtype) || p.wtype}
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: T.t1,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
-                    <span style={{ display: "block", fontSize: 10.5, color: T.t4, marginTop: 1 }}>{t("tender_plan_wizard.total_items_item_p", { total_items: p.total_items, p: p.pending_items ? `${p.pending_items} abhi plan me nahi` : "sab pehle se plan me hain" })}</span>
+                    <span style={{ display: "block", fontSize: 10.5, color: T.t4, marginTop: 1 }}>{t("tender_plan_wizard.total_items_item_p", { total_items: p.total_items, p: p.pending_items ? t("tender_plan_wizard.n_abhi_plan_me_nahi", { n: p.pending_items }) : t("tender_plan_wizard.sab_pehle_se_plan_me_hain") })}</span>
                   </span>
                 </button>
               ))}
@@ -186,7 +187,7 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
                           outline: "none", fontFamily: "inherit" }} />
                       <div style={{ fontSize: 10, color: T.t4, marginTop: 2 }}>
                         BOQ {fmtQty(r.qty_total ?? r.qty + r.planned_elsewhere)} {r.unit}
-                        {r.planned_elsewhere > 0 && ` · ${fmtQty(r.planned_elsewhere)} kahin aur`}
+                        {r.planned_elsewhere > 0 && t("tender_plan_wizard.n_kahin_aur", { qty: fmtQty(r.planned_elsewhere) })}
                         {r.site_qty != null && (
                           <span style={{ color: "#059669", fontWeight: 700 }}> {t("tender_plan_wizard.is_site_ka_hissa")}</span>
                         )}
@@ -224,7 +225,7 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
             style={{ padding: "7px 15px", borderRadius: 7, border: "none", background: T.ind, color: "#fff",
               fontSize: 12, fontWeight: 700, cursor: busy || !chosen.length ? "default" : "pointer",
               opacity: busy || !chosen.length ? 0.6 : 1, fontFamily: "inherit" }}>
-            {busy ? t("common.ban_raha_hai") : `${chosen.length} task banao`}
+            {busy ? t("common.ban_raha_hai") : t("tender_plan_wizard.n_task_banao", { n: chosen.length })}
           </button>}
         </div>
       </div>

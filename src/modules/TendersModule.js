@@ -2678,10 +2678,11 @@ function RevertImportModal({tenderId, imp, onClose, onDone}) {
 // BOQ ek file me kai tarah ka kaam rakhti hai. Package wahi baant hai —
 // aur usi se tay hota hai ki map ke km me kya ginega, aur site par kis
 // cheez ka task-plan banega.
-const WTYPE_LABEL = {
-  pipeline: "Pipeline", structure: "Structure", road: "Road",
-  drain: "Drain", electrical: "Electrical", other: "Anya",
-};
+// Label render ke waqt banta hai — module load par t() chalta to bhasha badalne par purana label atka rehta.
+const wtypeLabels = () => ({
+  pipeline: t("tenders.wtype_pipeline"), structure: t("tenders.wtype_structure"), road: t("tenders.wtype_road"),
+  drain: t("tenders.wtype_drain"), electrical: t("tenders.wtype_electrical"), other: t("tenders.wtype_other"),
+});
 const WTYPE_COLOUR = {
   pipeline: "#1D4ED8", structure: "#7C3AED", road: "#B45309",
   drain: "#0E7490", electrical: "#BE123C", other: "#475569",
@@ -2803,7 +2804,7 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
               borderBottom:`1px solid ${T.b1}`}}>
               <span style={{fontSize:9.5, fontWeight:800, padding:"3px 7px", borderRadius:5,
                 color:WTYPE_COLOUR[p.wtype]||T.t3, background:T.surfaceB, whiteSpace:"nowrap"}}>
-                {WTYPE_LABEL[p.wtype]||p.wtype}
+                {wtypeLabels()[p.wtype]||p.wtype}
               </span>
               <div style={{flex:1, minWidth:0}}>
                 <div style={{fontSize:12.5, color:T.t1, fontWeight:600, overflow:"hidden",
@@ -2885,7 +2886,7 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
                   onChange={e=>setAi(a=>({...a, picked:{...a.picked, [i]:e.target.checked}}))}/>
                 <span style={{fontSize:9.5, fontWeight:800, padding:"3px 7px", borderRadius:5, marginTop:1,
                   color:WTYPE_COLOUR[g.wtype]||T.t3, background:T.surfaceB, whiteSpace:"nowrap"}}>
-                  {WTYPE_LABEL[g.wtype]||g.wtype}
+                  {wtypeLabels()[g.wtype]||g.wtype}
                 </span>
                 <span style={{flex:1, minWidth:0}}>
                   <div style={{fontSize:12.5, fontWeight:600, color:T.t1}}>{g.name} <span style={{color:T.t4, fontWeight:400}}>· {g.items} item</span></div>
@@ -2909,7 +2910,7 @@ function PackagesPanel({tenderId, canEdit, items, onChanged}) {
           <div style={{marginTop:11}}>
             <Field label={t("tenders.kaam_ka_type")}>
               <SelIn value={edit.wtype} onChange={v=>setEdit(e=>({...e,wtype:v}))}
-                options={Object.entries(WTYPE_LABEL).map(([v,l])=>({v,l}))}/>
+                options={Object.entries(wtypeLabels()).map(([v,l])=>({v,l}))}/>
             </Field>
           </div>
           <div style={{fontSize:11, color:T.t4, marginTop:10, lineHeight:1.55}}>
@@ -5133,8 +5134,8 @@ function MapTab({tenderId, sites}) {
       // click karte hi sirf structure wale bache kaam dikhein.
       const tCount = {};
       inBucket.forEach((r) => { const k = r.wtype || "other"; tCount[k] = (tCount[k] || 0) + 1; });
-      const TYPE_LBL = { pipeline:"Pipeline", water:"Water", sewer:"Sewer", structure:"Structure",
-        road:"Road", drain:"Naali", electrical:"Electrical", other:"Anya" };
+      const TYPE_LBL = { pipeline:t("tenders.wtype_pipeline"), water:t("tenders.wtype_water"), sewer:t("tenders.wtype_sewer"), structure:t("tenders.wtype_structure"),
+        road:t("tenders.wtype_road"), drain:t("tenders.wtype_naali"), electrical:t("tenders.wtype_electrical"), other:t("tenders.wtype_other") };
       const types = Object.keys(tCount).sort((a, b) => tCount[b] - tCount[a]);
       const list = inBucket
         .filter((r) => !mtType || (r.wtype || "other") === mtType)
@@ -5241,8 +5242,8 @@ function MapTab({tenderId, sites}) {
       const rows = (mapTasks?.tasks || []).filter((r) => r.bucket.startsWith("unmapped"));
       const tc = {};
       rows.forEach((r) => { const k = r.wtype || "other"; tc[k] = (tc[k] || 0) + 1; });
-      const TL = { pipeline:"Pipeline", water:"Water", sewer:"Sewer", structure:"Structure",
-        road:"Road", drain:"Naali", electrical:"Electrical", other:"Anya" };
+      const TL = { pipeline:t("tenders.wtype_pipeline"), water:t("tenders.wtype_water"), sewer:t("tenders.wtype_sewer"), structure:t("tenders.wtype_structure"),
+        road:t("tenders.wtype_road"), drain:t("tenders.wtype_naali"), electrical:t("tenders.wtype_electrical"), other:t("tenders.wtype_other") };
       const q = taskMark.q.trim().toLowerCase();
       const list = rows
         .filter((r) => !taskMark.wtype || (r.wtype || "other") === taskMark.wtype)
