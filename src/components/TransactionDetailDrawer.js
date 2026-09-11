@@ -651,6 +651,20 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
             </div>
           )}
 
+          {/* Bill bina naye payment ke paid kyon hua — vendor ko pehle diya
+              paisa (advance) is bill se juda. Ye naya paisa nahi hai. */}
+          {!editing && Array.isArray(txn.advance_adjust) && txn.advance_adjust.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.grn, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("finance.advance_se_adjust")}</div>
+              <div style={{ background: T.grnL, border: `1px solid ${T.grnM}`, borderLeft: `3px solid ${T.grn}`, borderRadius: 8, padding: "9px 11px" }}>
+                {txn.advance_adjust.map((a, i) => (
+                  <div key={`${a.payment_txn_id}-${i}`} style={{ fontSize: 11.5, color: T.t1, padding: "3px 0" }}>
+                    {t("finance.advance_adjust_row", { amt: "₹" + fmtN(a.amount), date: fmtDate(a.date) })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Activity Log — full kisne kya kab kiya trail from audit_logs */}
           {txn.id && (
             <div style={{ marginTop: 12 }}>

@@ -1058,6 +1058,23 @@ function UnbilledTab({ onReload }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // Bill banne se pehle: vendor ko pehle diya paisa is bill me kitna judega
+  // (GET /finance/parties/:id/advance). Bill banate hi backend khud jodta hai.
+  const [adv, setAdv] = useState(null);
+  const billAmt = billFor
+    ? billFor.entries.filter((e) => ticked[e.id] && (e.payment_mode || "credit") === "credit")
+        .reduce((a, e) => a + Number(e.amount || 0), 0)
+    : 0;
+  const billParty = billFor ? billFor.vendor_party_id : null;
+  useEffect(() => {
+    setAdv(null);
+    if (!billParty || billAmt <= 0) return undefined;
+    let alive = true;
+    api.get(`/finance/parties/${billParty}/advance?amount=${billAmt}&date=${billDate}`)
+      .then((r) => { if (alive && r && r.success) setAdv(r.data); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [billParty, billAmt, billDate]);
   if (!data) return <Empty>{t("common.loading")}</Empty>;
   if (!data.total_entries) return <Empty>{t("fuel.koi_entry_bill_ke_intezaar_me")}</Empty>;
 
@@ -1079,7 +1096,9 @@ function UnbilledTab({ onReload }) {
       bill_date: billDate,
     }).catch((e) => ({ success: false, message: e && e.message }));
     setBusy(false);
-    setMsg({ bad: !r || !r.success, text: (r && r.message) || "Bill nahi ban paya" });
+    const adjAmt = r && r.success && r.data ? Number(r.data.advance_adjusted) || 0 : 0;
+    setMsg({ bad: !r || !r.success, text: ((r && r.message) || "Bill nahi ban paya")
+      + (adjAmt > 0 ? " · " + t("finance.advance_se_adjust_hua", { amt: fmtC(adjAmt) }) : "") });
     if (r && r.success) {
       setBillFor(null); setBillNo(""); setTicked({});
       await load(); onReload && onReload();
@@ -1236,6 +1255,14 @@ function UnbilledTab({ onReload }) {
               {t("fuel.vendor_ke_khaate_me_jayega", {
                 amt: fmtC(pickedIn(billFor).filter((e) => (e.payment_mode || "credit") === "credit")
                   .reduce((a, e) => a + Number(e.amount || 0), 0)),
+              })}
+            </div>
+          )}
+          {adv && adv.on_new_bill && adv.on_new_bill.adjust > 0 && (
+            <div style={{ padding: "10px 12px", background: T.grnL, border: `1px solid ${T.grn}`, borderRadius: 7,
+              fontSize: 12, color: T.grn, fontWeight: 600 }}>
+              {t("finance.advance_adjust_preview", {
+                advance: fmtC(adv.advance), adjust: fmtC(adv.on_new_bill.adjust), pending: fmtC(adv.on_new_bill.pending),
               })}
             </div>
           )}

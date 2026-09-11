@@ -1468,6 +1468,22 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   },[rows,focusMatId]);
   const grandTotal=rows.reduce((s,r)=>s+(Number(r.total)||0),0);
   const subTotal=subMode==="boq"?subBoqTotal:grandTotal;
+  // Bill banne se pehle: is vendor ko pehle diya paisa is bill me kitna judega
+  // (GET /finance/parties/:id/advance). Save par backend khud jodta hai.
+  const [advPreview,setAdvPreview]=useState(null);
+  const [savedNote,setSavedNote]=useState("");
+  const advBillAmt=isMaterial?grandTotal:isSubcon?subTotal:0;
+  useEffect(()=>{
+    setAdvPreview(null);
+    if(!(advBillAmt>0&&payPartyObj?.id)) return undefined;
+    let alive=true;
+    const h=setTimeout(()=>{
+      api.get(`/finance/parties/${payPartyObj.id}/advance?amount=${advBillAmt}&date=${billDate||""}`)
+        .then(r=>{ if(alive&&r?.success) setAdvPreview(r.data); })
+        .catch(()=>{});
+    },400);
+    return ()=>{ alive=false; clearTimeout(h); };
+  },[advBillAmt,payPartyObj?.id,billDate]);
 
   // ── GRN auto-suggest for non-prefill Material Bill flow ───────
   // P1 fix: when user opens Material Bill modal from Party Ledger / Create
@@ -1826,7 +1842,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       console.log("[FinanceModule] Save success:", res);
       if(onSaved) onSaved(); // refresh parent
       setSaved(true);
-      setTimeout(()=>{setSaved(false);onClose();},900);
+      // Advance se kuch juda ho to user ko dikhe — isliye modal thoda der khula rehta hai.
+      const adjAmt=Number(res?.advance_adjusted)||0;
+      if(adjAmt>0) setSavedNote(t("finance.advance_se_adjust_hua",{amt:"₹"+fmtN(adjAmt)}));
+      setTimeout(()=>{setSaved(false);onClose();},adjAmt>0?2200:900);
       // savingRef stays locked until modal closes — prevents any post-success double-click
 
     }catch(e){
@@ -2789,6 +2808,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
             {isMaterial&&grandTotal>0&&<span style={{color:T.grn}}>{t("finance.rs_grandtotal_rows_itemrows2", { grandTotal: grandTotal.toLocaleString("en-IN"), rows: rows.filter(r=>r.total>0).length, rows2: rows.filter(r=>r.total>0).length!==1?"s":"" })}</span>}
             {isSubcon&&<span style={{color:T.slt}}>{t("finance.rs_subtotal", { subTotal: subTotal.toLocaleString("en-IN") })}{payOutLinked?<span style={{color:T.t4,fontWeight:400,fontSize:11}}>{t("finance.payment_out_rs_number", { Number: Number(payOutAmt||0).toLocaleString("en-IN") })}</span>:null}
             </span>}
+            {(isMaterial||isSubcon)&&!saved&&advPreview?.on_new_bill?.adjust>0&&(
+              <div style={{fontSize:11,fontWeight:600,color:T.grn,marginTop:2}}>
+                {t("finance.advance_adjust_preview",{advance:"₹"+fmtN(advPreview.advance),adjust:"₹"+fmtN(advPreview.on_new_bill.adjust),pending:"₹"+fmtN(advPreview.on_new_bill.pending)})}
+              </div>
+            )}
+            {saved&&savedNote&&<div style={{fontSize:11,fontWeight:600,color:T.grn,marginTop:2}}>{savedNote}</div>}
             {isInvoice&&invTotal>0&&<span style={{color:T.grn}}>{t("finance.invoiceno_rs_invtotal", { invoiceNo, invTotal: invTotal.toLocaleString("en-IN") })}{payInLinked?<span style={{color:T.t4,fontWeight:400,fontSize:11}}>{t("finance.received_rs_number", { Number: Number(payInAmt||0).toLocaleString("en-IN") })}</span>:null}
             </span>}
             {isPayment&&payAmt&&<span style={{color:tc}}>{t("finance.rs_numbertype", { Number: Number(payAmt).toLocaleString("en-IN"), type: type==="Payment Received"?" received":type==="Payment Made"?" paid out":"" })}</span>}
@@ -3815,6 +3840,9 @@ function FinanceModule(){
       // Delivery issues jo finance ne is bill par flag kiye — detail drawer
       // inhe "⚠ Delivery Issues" section me dikhata hai.
       grn_issues:t.grn_issues||null,
+      // Vendor ko pehle diya paisa jo is bill se juda (advance adjust) — drawer
+      // "Advance se adjust" me dikhata hai.
+      advance_adjust:t.advance_adjust||null,
       // Wallet-origin spend (staff paid from their imprest wallet). The cash
       // already left the company at TOP-UP time, so these rows must NOT hit
       // the company Cash Book / Day Book again (double-count).
