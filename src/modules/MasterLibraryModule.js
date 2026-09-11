@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import ImportFixPanel, { useImportFix } from "../components/ImportFix";
+import { readSheet, sheetToRows } from "../utils/sheetRows";
 import { t, Rich } from "../i18n";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
@@ -304,70 +306,58 @@ function downloadTemplate(headers, sampleRows, filename, instructions) {
   URL.revokeObjectURL(url);
 }
 
-function parseCSV(text) {
-  // Strip BOM character if present (Excel adds \uFEFF)
-  const clean = text.replace(/^\uFEFF/, "");
-  const lines = clean.split(/\r?\n/).filter(l => l.trim());
-  // Skip instruction rows (first rows that don't look like headers)
-  let headerIdx = 0;
-  for (let i = 0; i < Math.min(lines.length, 5); i++) {
-    const cols = lines[i].split(",");
-    if (cols.length >= 2 && cols[0].trim() && cols[1].trim()) { headerIdx = i; break; }
-  }
-  const headers = lines[headerIdx].split(",").map(h =>
-    h.replace(/^\uFEFF/, "").replace(/^"|"$/g, "").replace(/""/g, '"').replace(/ \*/g, "").trim()
-  );
-  const rows = [];
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    const vals = lines[i].split(",").map(v => v.replace(/^"|"$/g, "").replace(/""/g, '"').trim());
-    if (vals.some(v => v)) rows.push(Object.fromEntries(headers.map((h, idx) => [h, vals[idx] || ""])));
-  }
-  return { headers, rows };
-}
-
 // ─── IMPORT / EXPORT MODAL ───────────────────────────────────────────
-function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, currentData, onImport }) {
+// Import: template → file (CSV ya Excel) → server par jaanch (dry run) →
+// galat rows yahin theek (components/ImportFix) → "Dobara check karo" → import.
+// Column naam se pehchane jaate hain (utils/sheetRows) — har section sirf
+// templateConfig.fields aur importUrl batata hai; niyam server par hain
+// (routes/library.js POST /import/:entity, routes/finance.js POST /parties/import).
+function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, currentData }) {
   const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState(null);
   const [step, setStep] = useState(1); // 1=template, 2=upload
+  const [busy, setBusy] = useState(""); // "" | "check" | "import"
+  const [error, setError] = useState("");
+  const [warn, setWarn] = useState("");
+  const [result, setResult] = useState(null);
+  const fx = useImportFix();
 
-  const resetAll = () => { setFile(null); setPreview(null); setResult(null); setStep(1); };
+  const resetAll = () => { setFile(null); setStep(1); setBusy(""); setError(""); setWarn(""); setResult(null); fx.reset(); };
 
-  const handleFile = (e) => {
-    const f = e.target.files[0];
+  const tc = templateConfig || {};
+  const send = (rows, dryRun) => api.post(tc.importUrl, { rows, dry_run: dryRun }, { timeoutMs: dryRun ? 120000 : 180000 });
+
+  const handleFile = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
     if (!f) return;
-    setFile(f);
-    setResult(null);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const parsed = parseCSV(ev.target.result);
-        setPreview(parsed);
-      } catch { setPreview(null); }
-    };
-    reader.readAsText(f);
+    setFile(f); setResult(null); setError(""); setWarn(""); fx.reset();
+    let parsed;
+    try { parsed = sheetToRows(await readSheet(f), tc.fields || []); }
+    catch (_) { setError(t("import_fix.read_failed")); return; }
+    if (!parsed.found.length) { setError(t("import_fix.no_columns")); return; }
+    if (!parsed.rows.length) { setError(t("import_fix.no_rows")); return; }
+    if (parsed.missing.length) setWarn(t("import_fix.missing_columns", { cols: parsed.missing.join(", ") }));
+    setBusy("check");
+    const r = await send(parsed.rows, true);
+    setBusy("");
+    // Galti par server 422 + wahi rows bhejta hai; api() use { success:false, data } bana deta hai.
+    if (r && r.data && r.data.rows) { fx.take(r.data, r.message, true); return; }
+    setError((r && r.message) || t("import_fix.failed"));
   };
 
-  const doImport = async () => {
-    if (!preview || !preview.rows.length) return;
-    setImporting(true);
-    try {
-      const validRows = preview.rows.filter(r => {
-        const firstKey = Object.keys(r)[0];
-        return r[firstKey] && String(r[firstKey]).trim();
-      });
-      const importResult = await Promise.resolve(onImport(validRows));
-      // onImport may return { inserted, skipped } from API, or nothing (client-only)
-      const successCount = importResult?.inserted ?? validRows.length;
-      const skippedCount = importResult?.skipped ?? (preview.rows.length - validRows.length);
-      setResult({ success: successCount, skipped: skippedCount, updated: importResult?.updated || 0 });
-    } catch(e) {
-      console.error("Import error:", e);
-      setResult({ success: 0, skipped: preview.rows.length, error: e.message });
+  const run = async (dryRun) => {
+    const rows = fx.payload();
+    if (!rows.length) { setError(t("import_fix.none_left")); return; }
+    setBusy(dryRun ? "check" : "import"); setError("");
+    const r = await send(rows, dryRun);
+    setBusy("");
+    if (!dryRun && r && r.success && r.data && r.data.committed) {
+      setResult({ message: r.message });
+      if (tc.onImported) tc.onImported(r.data);
+      return;
     }
-    setImporting(false);
+    if (r && r.data && r.data.rows) { fx.take(r.data, r.message, false); return; }
+    setError((r && r.message) || t("import_fix.failed"));
   };
 
   const doExport = () => {
@@ -384,13 +374,17 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
 
   if (!open) return null;
 
-  const tc = templateConfig || {};
+  const bigBtn = (on, color) => ({
+    padding: "10px 24px", borderRadius: 8, background: on ? color : T.textLight, color: "white", fontSize: 13, fontWeight: 700,
+    border: "none", cursor: on ? "pointer" : "not-allowed", display: "flex", alignItems: "center", gap: 6,
+  });
+  const fixing = fx.rows.length > 0 && !result;
 
   return (
     <Modal open={open} onClose={() => { onClose(); resetAll(); }}
       title={mode === "import" ? `Import ${sectionName}` : `Export ${sectionName}`}
       desc={mode === "import" ? t("master_library.download_template_fill_your_data_then") : t("master_library.download_current_data_or_blank_template")}
-      width={mode === "import" ? 660 : 520}>
+      width={mode === "import" ? (fixing ? 1000 : 660) : 520}>
 
       {mode === "export" ? (
         <div>
@@ -485,8 +479,9 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                 <div style={{ padding: "14px 20px", borderTop: `1px solid ${T.border}` }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10 }}>{t("master_library.template_columns_tc", { tc: tc.headers?.length || 0 })}</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {(tc.headers || []).map((h, i) => {
-                      const isRequired = (tc.sampleRows?.[0]?.[i] !== undefined && tc.sampleRows?.[0]?.[i] !== "");
+                    {(tc.headers || []).map((h) => {
+                      // Zaroori column wahi jo section ke fields me required hai.
+                      const isRequired = (tc.fields || []).some((f) => f.required && f.col === h);
                       return (
                         <span key={h} style={{
                           fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 6,
@@ -543,7 +538,7 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
             </div>
           )}
 
-          {/* ─── STEP 2: Upload & Import ─── */}
+          {/* ─── STEP 2: Upload → jaanch → sudhaar → import ─── */}
           {step === 2 && (
             <div>
               {/* Quick template link at top */}
@@ -558,50 +553,39 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
               </div>
 
               {/* Upload area */}
-              <div style={{ border: `2px dashed ${file ? T.green : T.border}`, borderRadius: 12, padding: "32px 20px", textAlign: "center", marginBottom: 16, background: file ? T.greenSoft + "44" : "white", transition: "all 0.2s", cursor: "pointer", position: "relative" }}
-                onClick={() => document.getElementById("csv-upload-input")?.click()}>
-                <input id="csv-upload-input" type="file" accept=".csv,.txt" onChange={handleFile} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
-                {file ? (
-                  <div>
-                    <IcCheck size={30} color={T.green} />
-                    <div style={{ fontSize: 15, fontWeight: 700, color: T.green, marginTop: 8 }}>{file.name}</div>
-                    <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>{t("master_library.file_kb_click_to_change_file", { file: (file.size / 1024).toFixed(1) })}</div>
-                  </div>
-                ) : (
-                  <div>
-                    <IcUpload size={30} color={T.textLight} />
-                    <div style={{ fontSize: 15, fontWeight: 600, color: T.textMid, marginTop: 8 }}>{t("master_library.click_to_upload_your_csv_file")}</div>
-                    <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>{t("master_library.supports_csv_files_utf_8_encoding")}</div>
-                  </div>
-                )}
-              </div>
+              {!result && (
+                <div style={{ border: `2px dashed ${file ? T.green : T.border}`, borderRadius: 12, padding: fixing ? "12px 20px" : "32px 20px", textAlign: "center", marginBottom: 16, background: file ? T.greenSoft + "44" : "white", transition: "all 0.2s", cursor: "pointer", position: "relative" }}
+                  onClick={() => document.getElementById("csv-upload-input")?.click()}>
+                  <input id="csv-upload-input" type="file" accept=".csv,.txt,.xlsx,.xls" onChange={handleFile} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
+                  {file ? (
+                    <div>
+                      {!fixing && <IcCheck size={30} color={T.green} />}
+                      <div style={{ fontSize: fixing ? 13 : 15, fontWeight: 700, color: T.green, marginTop: fixing ? 0 : 8 }}>{file.name}</div>
+                      <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>{t("master_library.file_kb_click_to_change_file", { file: (file.size / 1024).toFixed(1) })}</div>
+                    </div>
+                  ) : (
+                    <div>
+                      <IcUpload size={30} color={T.textLight} />
+                      <div style={{ fontSize: 15, fontWeight: 600, color: T.textMid, marginTop: 8 }}>{t("master_library.click_to_upload_your_csv_file")}</div>
+                      <div style={{ fontSize: 12, color: T.textLight, marginTop: 4 }}>{t("master_library.supports_csv_files_utf_8_encoding")}</div>
+                    </div>
+                  )}
+                </div>
+              )}
 
-              {/* Preview */}
-              {preview && preview.rows.length > 0 && !result && (
+              {busy === "check" && !fx.rows.length && (
+                <div style={{ textAlign: "center", fontSize: 12.5, color: T.textMid, marginBottom: 12 }}>{t("import_fix.checking")}</div>
+              )}
+              {warn && !result && (
+                <div style={{ background: T.amberSoft, color: T.amber, border: `1px solid ${T.amber}33`, borderRadius: 8, padding: "9px 12px", fontSize: 12, marginBottom: 12 }}>{warn}</div>
+              )}
+              {error && (
+                <div style={{ background: T.redSoft, color: T.red, borderRadius: 8, padding: "9px 12px", fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{error}</div>
+              )}
+
+              {fixing && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{t("master_library.preview_preview_valid_rows", { preview: preview.rows.filter(r => Object.values(r).some(v => v?.trim())).length })}</div>
-                    <Badge text={`${preview.headers.length} columns detected`} color={T.blue} bg={T.blueSoft} />
-                  </div>
-                  <div style={{ overflowX: "auto", maxHeight: 180, border: `1px solid ${T.border}`, borderRadius: 8 }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
-                      <thead>
-                        <tr>{preview.headers.map(h => (
-                          <th key={h} style={{ padding: "8px 10px", background: T.borderLight, fontWeight: 700, color: T.textMid, textAlign: "left", borderBottom: `2px solid ${T.border}`, whiteSpace: "nowrap", position: "sticky", top: 0 }}>{h}</th>
-                        ))}</tr>
-                      </thead>
-                      <tbody>
-                        {preview.rows.slice(0, 6).map((r, i) => (
-                          <tr key={i} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
-                            {preview.headers.map(h => <td key={h} style={{ padding: "6px 10px", color: r[h] ? T.text : T.textLight, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r[h] || "—"}</td>)}
-                          </tr>
-                        ))}
-                        {preview.rows.length > 6 && (
-                          <tr><td colSpan={preview.headers.length} style={{ padding: "8px 10px", textAlign: "center", color: T.textLight, fontSize: 11, fontStyle: "italic" }}>{t("master_library.and_preview_more_rows", { preview: preview.rows.length - 6 })}</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ImportFixPanel fx={fx} fields={tc.fields || []} title={tc.rowTitle} sub={tc.rowSub} />
                 </div>
               )}
 
@@ -613,9 +597,7 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                   </div>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: T.green }}>{t("master_library.import_successful")}</div>
-                    <div style={{ fontSize: 12.5, color: T.textMid, marginTop: 2 }}>{t("master_library.success_items_imported", { success: result.success })}{result.updated > 0 && <span>{t("master_library.updated_existing_updated", { updated: result.updated })}</span>}
-                      {result.skipped > 0 && <span> — {result.skipped} skipped</span>}
-                    </div>
+                    <div style={{ fontSize: 12.5, color: T.textMid, marginTop: 2 }}>{result.message}</div>
                   </div>
                 </div>
               )}
@@ -626,19 +608,15 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                   style={{ padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 13, fontWeight: 600, color: T.textMid, cursor: "pointer" }}>
                   {result ? t("common.done") : t("common.back")}
                 </button>
-                {!result && (
-                  <button onClick={doImport} disabled={!preview || !preview.rows.length || importing}
-                    style={{
-                      padding: "10px 24px", borderRadius: 8,
-                      background: (!preview || importing) ? T.textLight : `linear-gradient(135deg, ${T.green}, #10B981)`,
-                      color: "white", fontSize: 13, fontWeight: 700, border: "none",
-                      cursor: (!preview || importing) ? "not-allowed" : "pointer",
-                      display: "flex", alignItems: "center", gap: 6,
-                      boxShadow: (preview && !importing) ? `0 3px 12px ${T.green}33` : "none",
-                    }}>
-                    {importing ? t("master_library.importing") : <><IcUpload size={15} color="white" />{t("master_library.import_preview_items", { preview: preview?.rows.filter(r => Object.values(r).some(v => v?.trim())).length || 0 })}</>}
+                {fixing && (fx.stale ? (
+                  <button onClick={() => run(true)} disabled={!!busy} style={bigBtn(!busy, T.blue)}>
+                    {busy ? t("import_fix.checking") : t("import_fix.recheck")}
                   </button>
-                )}
+                ) : (
+                  <button onClick={() => run(false)} disabled={!!busy || !fx.canImport} style={bigBtn(!busy && fx.canImport, T.green)}>
+                    {busy === "import" ? t("import_fix.importing") : <><IcUpload size={15} color="white" />{t("import_fix.import_go", { n: fx.counts.ok })}</>}
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -649,7 +627,7 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
 }
 
 // ─── ENHANCED TOOLBAR with import/export modals ──────────────────────
-function ToolbarWithIO({ search, setSearch, count, label, onAdd, addLabel, filterEl, templateConfig, currentData, onImportData }) {
+function ToolbarWithIO({ search, setSearch, count, label, onAdd, addLabel, filterEl, templateConfig, currentData }) {
   const [ioMode, setIoMode] = useState(null); // "import" | "export" | null
   return (
     <>
@@ -664,9 +642,11 @@ function ToolbarWithIO({ search, setSearch, count, label, onAdd, addLabel, filte
         </div>
         <Badge text={`${count} items`} color={T.textMid} bg={T.borderLight} />
         {filterEl}
-        <button onClick={() => setIoMode("import")} style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.green}`, background: T.greenSoft, fontSize: 12, fontWeight: 600, color: T.green, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-          <IcUpload size={14} color={T.green} /> {t("master_library.import_csv")}
-        </button>
+        {templateConfig && templateConfig.importUrl && (
+          <button onClick={() => setIoMode("import")} style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.green}`, background: T.greenSoft, fontSize: 12, fontWeight: 600, color: T.green, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+            <IcUpload size={14} color={T.green} /> {t("master_library.import_csv")}
+          </button>
+        )}
         <button onClick={() => setIoMode("export")} style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 12, fontWeight: 600, color: T.textMid, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
           <IcDownload size={14} color={T.textMid} /> {t("common.export")}
         </button>
@@ -675,7 +655,7 @@ function ToolbarWithIO({ search, setSearch, count, label, onAdd, addLabel, filte
         </button>
       </div>
       <ImportExportModal open={!!ioMode} onClose={() => setIoMode(null)} mode={ioMode || "export"}
-        sectionName={label} templateConfig={templateConfig} currentData={currentData} onImport={onImportData} />
+        sectionName={label} templateConfig={templateConfig} currentData={currentData} />
     </>
   );
 }
@@ -760,19 +740,17 @@ function MaterialCategorySection() {
     ],
     filename: "gb_material_categories_export.csv",
     templateFilename: "gb_template_material_categories.csv",
-    instructions: "Instructions: Fill Category Name (required) and Code (required). Description is optional. Delete sample rows before importing.",
-    mapRow: (c) => [c.name, c.code, c.desc],
-  };
-
-  const handleImport = async (rows) => {
-    const mapped = rows.map(r => ({
-      name:        (r["Category Name"] || r["name"] || "").trim(),
-      code:        (r["Code"]          || r["code"] || "").trim(),
-      description: (r["Description"]   || r["desc"] || "").trim(),
-    })).filter(r => r.name);
-    const res = await api.post("/library/material-categories/bulk", { rows: mapped });
-    if (res.success) await reload();
-    return res.data; // { inserted, skipped }
+    instructions: "Instructions: Category Name is required. Code and Description are optional. Delete sample rows before importing.",
+    mapRow: (c) => [c.name, c.code, c.description],
+    importUrl: "/library/import/material-categories",
+    fields: [
+      { key: "name", col: "Category Name", aliases: ["name"], required: true },
+      { key: "code", col: "Code" },
+      { key: "description", col: "Description", aliases: ["desc"], wide: true },
+    ],
+    rowTitle: (r) => r.name,
+    rowSub: (r) => [r.code, r.description].filter(Boolean).join(" · "),
+    onImported: () => reload(),
   };
 
   const columns = [
@@ -785,7 +763,7 @@ function MaterialCategorySection() {
   return (
     <div>
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="categories" onAdd={openCreate} addLabel="Add Category"
-        templateConfig={templateConfig} currentData={cats} onImportData={handleImport} />
+        templateConfig={templateConfig} currentData={cats} />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} emptyMsg="No categories found" />
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_category") : t("common.add_category_2")} width={460}>
         <FormField label={t("master_library.category_name")} value={form.name} onChange={v => upd("name", v)} placeholder={t("master_library.e_g_cement_binding")} required />
@@ -878,23 +856,22 @@ function MaterialMasterSection() {
     filename: "gb_materials_export.csv",
     templateFilename: "gb_template_materials.csv",
     instructions: "Instructions: Fill Material Name (required), Category (required), Unit (required), Base Rate (required). GST Rate: 0, 5, 12, 18, or 28.",
-    mapRow: (m) => [m.name, m.code, m.category, m.unit, m.hsnCode, m.gstRate, m.baseRate, m.lastRate, m.supplier, m.minStock, m.currentStock],
-  };
-  const handleMatImport = async (rows) => {
-    const mapped = rows.map(r => ({
-      name:        (r["Material Name"] || "").trim(),
-      code:        (r["Code"] || "").trim(),
-      category:    (r["Category"] || "").trim(),
-      unit:        (r["Unit"] || "Kg").trim(),
-      hsn_code:    (r["HSN Code"] || "").trim(),
-      gst_rate:    parseFloat(r["GST Rate %"]) || 18,
-      base_rate:   parseFloat(r["Base Rate (Rs.)"]) || 0,
-      last_rate:   parseFloat(r["Last Purchase Rate"]) || 0,
-      min_stock:   parseInt(r["Min Stock Level"]) || 0,
-    })).filter(m => m.name);
-    const res = await api.post("/library/materials/bulk", { rows: mapped });
-    if (res.success) await reload();
-    return res.data;
+    mapRow: (m) => [m.name, m.code, m.category_name || m.category, m.unit, m.hsn_code, m.gst_rate, m.base_rate, m.last_rate, "", m.min_stock, ""],
+    importUrl: "/library/import/materials",
+    fields: [
+      { key: "name", col: "Material Name", aliases: ["name", "material"], required: true },
+      { key: "code", col: "Code" },
+      { key: "category", col: "Category", type: "list", options: (L) => L.categories, same: true, required: true },
+      { key: "unit", col: "Unit", type: "list", options: (L) => [...new Set([...units, ...(L.units || [])])], same: true, required: true },
+      { key: "hsn_code", col: "HSN Code", aliases: ["hsn"] },
+      { key: "gst_rate", col: "GST Rate %", aliases: ["gst", "gst rate"], type: "select", options: ["0", "5", "12", "18", "28"], same: true },
+      { key: "base_rate", col: "Base Rate (Rs.)", aliases: ["base rate"], type: "number", required: true },
+      { key: "last_rate", col: "Last Purchase Rate", aliases: ["last rate"], type: "number" },
+      { key: "min_stock", col: "Min Stock Level", aliases: ["min stock"], type: "number" },
+    ],
+    rowTitle: (r) => r.name,
+    rowSub: (r) => [r.category, r.unit, r.base_rate].filter(Boolean).join(" · "),
+    onImported: () => reload(),
   };
 
   const columns = [
@@ -917,7 +894,7 @@ function MaterialMasterSection() {
   return (
     <div>
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="materials" onAdd={openCreate} addLabel="Add Material"
-        templateConfig={matTemplateConfig} currentData={materials} onImportData={handleMatImport}
+        templateConfig={matTemplateConfig} currentData={materials}
         filterEl={
           <div style={{ minWidth: 180 }}>
             <SearchSelect value={filterCat} options={allCats} onChange={setFilterCat} placeholder={t("master_library.filter_category")}/>
@@ -1180,28 +1157,25 @@ function PartyMasterSection() {
   const partyTemplateConfig = {
     headers: ["Party Name", "Type", "Phone", "Email", "GSTIN", "City"],
     sampleRows: [
-      ["UltraTech Cement Ltd", "Supplier", "+91 98765 10001", "rajesh@ultratech.com", "22AABCU1234F1Z5", "Raipur"],
+      ["UltraTech Cement Ltd", "Material Vendor", "+91 98765 10001", "rajesh@ultratech.com", "22AABCU1234F1Z5", "Raipur"],
       ["Shree Hari Developers", "Client", "+91 98765 00000", "client@email.com", "", "Nashik"],
     ],
     filename: "gb_parties_export.csv",
     templateFilename: "gb_template_parties.csv",
-    instructions: "Type must be: Supplier, Client, Subcontractor, Transporter, or Consultant. Party Name and Type are required.",
+    instructions: "Party Name is required. Type: Material Vendor, Equipment Vendor, Fuel Vendor, Client, Subcontractor, Labour Vendor, Transporter, Consultant (blank = Material Vendor). Staff cannot be imported.",
     mapRow: (p) => [p.name, p.type, p.phone, p.email, p.gstin, p.city],
-  };
-
-  const handlePartyImport = async (rows) => {
-    const mapped = rows.map(r => ({
-      name:  (r["Party Name"] || "").trim(),
-      type:  (r["Type"] || "Supplier").trim(),
-      phone: (r["Phone"] || "").trim(),
-      email: (r["Email"] || "").trim(),
-      gstin: (r["GSTIN"] || "").trim(),
-      city:  (r["City"] || "").trim(),
-      opening_balance: 0,
-    })).filter(p => p.name);
-    const res = await api.post("/finance/parties/bulk", { rows: mapped });
-    if (res.success) await loadParties();
-    return res.data;
+    importUrl: "/finance/parties/import",
+    fields: [
+      { key: "name", col: "Party Name", aliases: ["name", "party"], required: true },
+      { key: "type", col: "Type", aliases: ["role"], type: "select", options: (L) => L.types, same: true },
+      { key: "phone", col: "Phone" },
+      { key: "email", col: "Email" },
+      { key: "gstin", col: "GSTIN", aliases: ["gst", "gst no"] },
+      { key: "city", col: "City", same: true },
+    ],
+    rowTitle: (r) => r.name,
+    rowSub: (r) => [r.type, r.city, r.phone].filter(Boolean).join(" · "),
+    onImported: () => loadParties(),
   };
 
   const columns = [
@@ -1255,7 +1229,7 @@ function PartyMasterSection() {
   return (
     <div>
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="parties" onAdd={openCreate} addLabel="Add Party"
-        templateConfig={partyTemplateConfig} currentData={parties} onImportData={handlePartyImport}
+        templateConfig={partyTemplateConfig} currentData={parties}
         filterEl={<>
           <div style={{minWidth:180}}><SearchSelect value={filterType} options={types} onChange={setFilterType} placeholder={t("master_library.filter_type")}/></div>
           <div style={{minWidth:190}}><SearchSelect value={filterDesig} options={desigOptions} onChange={setFilterDesig} placeholder={t("master_library.filter_designation")}/></div>
@@ -1560,18 +1534,15 @@ function WorkCategorySection() {
     templateFilename: "gb_template_work_categories.csv",
     instructions: "Instructions: Name required. Code is a short uppercase ID (e.g. RCC, EXC). Description is the scope of work this category covers.",
     mapRow: (c) => [c.name, c.code, c.description || c.desc],
-  };
-  const handleWorkImport = async (rows) => {
-    const mapped = rows.map(r => ({
-      name:        (r["Work Category Name"] || "").trim(),
-      code:        (r["Code"] || "").trim(),
-      description: (r["Description"] || "").trim(),
-      unit:        "",
-      rate:        0,
-    })).filter(c => c.name);
-    const res = await api.post("/library/work-categories/bulk", { rows: mapped });
-    if (res.success) await reload();
-    return res.data;
+    importUrl: "/library/import/work-categories",
+    fields: [
+      { key: "name", col: "Work Category Name", aliases: ["name", "work category"], required: true },
+      { key: "code", col: "Code" },
+      { key: "description", col: "Description", aliases: ["desc"], wide: true },
+    ],
+    rowTitle: (r) => r.name,
+    rowSub: (r) => [r.code, r.description].filter(Boolean).join(" · "),
+    onImported: () => reload(),
   };
 
   const columns = [
@@ -1585,7 +1556,7 @@ function WorkCategorySection() {
   return (
     <div>
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label={t("master_library.work_categories")} onAdd={openCreate} addLabel="Add Work Category"
-        templateConfig={workTemplateConfig} currentData={cats} onImportData={handleWorkImport} />
+        templateConfig={workTemplateConfig} currentData={cats} />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_work_category") : t("master_library.add_work_category")} width={520}>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
@@ -1644,26 +1615,24 @@ function SubcontractorSection() {
           filename: "gb_subcontractors_export.csv",
           templateFilename: "gb_template_subcontractors.csv",
           instructions: t("master_library.subcon_csv_trade_from_work_category"),
-          mapRow: (s) => [s.name, s.owner, s.trade, s.phone, s.city, s.gstin, s.labourStrength, s.rateType, s.rate],
+          mapRow: (s) => [s.name, s.owner, s.trade, s.phone, s.city, s.gstin, s.labour_strength, s.rate_type, s.rate],
+          importUrl: "/library/import/subcontractors",
+          fields: [
+            { key: "name", col: "Firm Name", aliases: ["name", "firm"], required: true },
+            { key: "owner", col: "Owner/Contact", aliases: ["owner", "contact"] },
+            { key: "trade", col: "Trade", type: "select", options: (L) => L.trades, same: true },
+            { key: "phone", col: "Phone" },
+            { key: "city", col: "City", same: true },
+            { key: "gstin", col: "GSTIN", aliases: ["gst"] },
+            { key: "labour_strength", col: "Labour Strength", aliases: ["labour"], type: "number" },
+            { key: "rate_type", col: "Rate Unit", aliases: ["rate type"], type: "list", options: (L) => L.rate_units, same: true },
+            { key: "rate", col: "Rate (Rs.)", aliases: ["rate"], type: "number" },
+          ],
+          rowTitle: (r) => r.name,
+          rowSub: (r) => [r.trade, r.owner, r.city].filter(Boolean).join(" · "),
+          onImported: () => reload(),
         }}
         currentData={subcons}
-        onImportData={async (rows) => {
-          const mapped = rows.map(r => ({
-            name:             (r["Firm Name"] || "").trim(),
-            owner:            (r["Owner/Contact"] || "").trim(),
-            trade:            (r["Trade"] || "").trim(),
-            phone:            (r["Phone"] || "").trim(),
-            city:             (r["City"] || "").trim(),
-            gstin:            (r["GSTIN"] || "").trim(),
-            labour_strength:  parseInt(r["Labour Strength"]) || 0,
-            rate_type:        (r["Rate Unit"] || "Sq.Ft").trim(),
-            rate:             parseFloat(r["Rate (Rs.)"]) || 0,
-            status:           "Active",
-          })).filter(s => s.name);
-          const res = await api.post("/library/subcontractors/bulk", { rows: mapped });
-          if (res.success) await reload();
-          return res.data;
-        }}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_subcontractor") : t("master_library.add_subcontractor")} desc={t("master_library.subcontractor_firm_details")} width={580}>
@@ -5870,7 +5839,7 @@ function BoqItemLibrarySection() {
 // 7. LABOUR RATE CARD (My idea)
 // ═══════════════════════════════════════════════════════════════════════
 function LabourRateSection() {
-  const { items: labourRates, loading, save: apiSave, del: apiDel } = useSection("labour-rates");
+  const { items: labourRates, loading, save: apiSave, del: apiDel, reload } = useSection("labour-rates");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -5900,10 +5869,20 @@ function LabourRateSection() {
           sampleRows: [["Mason (Mistri)","Skilled","800","120","Raipur"],["Helper (Mazdoor)","Unskilled","450","70","Raipur"]],
           filename: "gb_labour_rates_export.csv", templateFilename: "gb_template_labour_rates.csv",
           instructions: "Instructions: Category must be Skilled, Semi-Skilled, Unskilled, or Staff. Skill and Daily Rate required.",
-          mapRow: (r) => [r.skill, r.category, r.dailyRate, r.otRate, r.city],
+          mapRow: (r) => [r.role || r.skill, r.category, r.rate, r.overtime_rate, r.description],
+          importUrl: "/library/import/labour-rates",
+          fields: [
+            { key: "role", col: "Skill / Labour Type", aliases: ["skill", "role", "labour type"], required: true },
+            { key: "category", col: "Category", type: "select", options: (L) => L.categories, same: true },
+            { key: "rate", col: "Daily Rate (Rs.)", aliases: ["daily rate", "rate"], type: "number", required: true },
+            { key: "overtime_rate", col: "OT Rate/Hour (Rs.)", aliases: ["ot rate", "overtime rate"], type: "number" },
+            { key: "description", col: "City/Area", aliases: ["city", "area"], same: true },
+          ],
+          rowTitle: (r) => r.role,
+          rowSub: (r) => [r.category, r.rate, r.description].filter(Boolean).join(" · "),
+          onImported: () => reload(),
         }}
         currentData={labourRates}
-        onImportData={(rows) => { /* CSV import */ }}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_labour_rate") : t("master_library.add_labour_rate")} width={480}>
@@ -5971,19 +5950,6 @@ function UOMMasterSection() {
     reload();
   };
 
-  const handleImport = async (rows) => {
-    let added=0, skipped=0;
-    for (const r of rows) {
-      const name = r["Unit Name"]||r["name"]||"";
-      if (!name) continue;
-      if (uoms.some(u=>u.name.toLowerCase()===name.toLowerCase())) { skipped++; continue; }
-      const res = await api.post("/library/uom",{ name, symbol:r["Symbol"]||r["symbol"]||"", type:r["Type"]||r["type"]||"Count" }).catch(()=>null);
-      if (res?.success) added++;
-    }
-    reload();
-    alert(added+" units added, "+skipped+" duplicates skipped");
-  };
-
   const columns = [
     { key:"symbol", label:t("master_library.symbol"), minW:80, render: r=><code style={{fontSize:12,fontWeight:700,color:T.blue,background:T.blueSoft,padding:"2px 8px",borderRadius:4}}>{r.symbol||"—"}</code> },
     { key:"name",   label:t("master_library.unit_name"), minW:160, render: r=><span style={{fontWeight:600}}>{r.name}</span> },
@@ -5994,8 +5960,17 @@ function UOMMasterSection() {
     <div>
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="units"
         onAdd={openCreate} addLabel="Add Unit"
-        templateConfig={{ headers:["Unit Name","Symbol","Type"], sampleRows:[["Kilogram","Kg","Weight"],["Square Feet","Sqft","Area"],["Piece","Pcs","Count"]], filename:"gb_uom_export.csv", templateFilename:"gb_template_uom.csv", instructions:"Type: Weight, Area, Volume, Length, Count, Work, Time, Transport, Bulk, Flat", mapRow:u=>[u.name,u.symbol||"",u.type||""] }}
-        currentData={uoms} onImportData={handleImport}/>
+        templateConfig={{ headers:["Unit Name","Symbol","Type"], sampleRows:[["Kilogram","Kg","Weight"],["Square Feet","Sqft","Area"],["Piece","Pcs","Count"]], filename:"gb_uom_export.csv", templateFilename:"gb_template_uom.csv", instructions:"Type: Weight, Area, Volume, Length, Count, Work, Time, Transport, Bulk, Flat", mapRow:u=>[u.name,u.symbol||"",u.type||u.unit_type||""],
+          importUrl: "/library/import/uom",
+          fields: [
+            { key: "name", col: "Unit Name", aliases: ["name", "unit"], required: true },
+            { key: "symbol", col: "Symbol" },
+            { key: "type", col: "Type", type: "select", options: (L) => L.types, same: true },
+          ],
+          rowTitle: (r) => r.name,
+          rowSub: (r) => [r.symbol, r.type].filter(Boolean).join(" · "),
+          onImported: () => reload() }}
+        currentData={uoms}/>
       {loading?<div style={{padding:"40px",textAlign:"center",color:T.textLight}}>{t("common.loading")}</div>
         :<DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} emptyMsg="No units found"/>}
       <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?t("master_library.edit_unit"):t("master_library.add_unit")} width={400}>
@@ -6015,7 +5990,7 @@ function UOMMasterSection() {
 
 
 function ExpenseHeadSection() {
-  const { items: heads, loading, save: apiSave, del: apiDel } = useSection("expense-heads");
+  const { items: heads, loading, save: apiSave, del: apiDel, reload } = useSection("expense-heads");
   const [search, setSearch] = useState("");
   const filtered = heads.filter(h => h.name.toLowerCase().includes(search.toLowerCase()));
   const groupColors = { "Direct Cost": T.blue, "Site Overhead": T.amber, "Admin Overhead": T.purple, Quality: T.green, Other: T.textMid };
@@ -6040,14 +6015,23 @@ function ExpenseHeadSection() {
     <div>
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label={t("master_library.expense_heads")} onAdd={openCreate} addLabel="Add Head"
         templateConfig={{
-          headers: ["Expense Head","Code","Group","Tax Deductible"],
-          sampleRows: [["Material Purchase","EH-001","Direct Cost","Yes"],["Labour Wages","EH-002","Direct Cost","Yes"],["Site Petty Cash","EH-006","Site Overhead","No"]],
+          headers: ["Expense Head","Code","Type","Description"],
+          sampleRows: [["Material Purchase","EH-001","Material","Cement, steel, sand"],["Labour Wages","EH-002","Labour",""],["Site Petty Cash","EH-006","Overhead",""]],
           filename: "gb_expense_heads_export.csv", templateFilename: "gb_template_expense_heads.csv",
-          instructions: "Instructions: Group: Direct Cost, Site Overhead, Admin Overhead, Quality, Other. Tax Deductible: Yes or No",
-          mapRow: (h) => [h.name, h.code, h.group, h.taxDeductible ? "Yes" : "No"],
+          instructions: "Instructions: Expense Head is required. Type: Material, Labour, Equipment, Overhead, Other (blank = Other).",
+          mapRow: (h) => [h.name, h.code, h.type, h.description],
+          importUrl: "/library/import/expense-heads",
+          fields: [
+            { key: "name", col: "Expense Head", aliases: ["name", "head"], required: true },
+            { key: "code", col: "Code" },
+            { key: "type", col: "Type", aliases: ["group"], type: "select", options: (L) => L.types, same: true },
+            { key: "description", col: "Description", aliases: ["desc"], wide: true },
+          ],
+          rowTitle: (r) => r.name,
+          rowSub: (r) => [r.code, r.type].filter(Boolean).join(" · "),
+          onImported: () => reload(),
         }}
         currentData={heads}
-        onImportData={() => {}}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? t("master_library.edit_expense_head") : t("master_library.add_expense_head")} width={440}>
@@ -6376,27 +6360,23 @@ function WorkersSection() {
     filename: "gb_workers_export.csv",
     templateFilename: "gb_template_workers.csv",
     instructions: "Worker Name and Skill/Role are required. Category: Skilled, Semi-Skilled, Unskilled, Supervisor, Staff.",
-    mapRow: (w) => [w.name, w.role, w.category, w.daily_rate, w.phone, w.city, w.id_number, w.status],
-  };
-
-  const handleImport = async (rows) => {
-    const mapped = rows.map(r => ({
-      name:       (r["Worker Name"] || "").trim(),
-      role:       (r["Skill / Role"] || r["role"] || "Labour").trim(),
-      category:   (r["Category"]    || "Unskilled").trim(),
-      daily_rate: parseFloat(r["Daily Rate (Rs.)"] || r["daily_rate"] || 0),
-      phone:      (r["Phone"]       || "").trim(),
-      city:       (r["City"]        || "").trim(),
-      id_number:  (r["Aadhar / ID"] || "").trim(),
-      status:     (r["Status"]      || "Active").trim(),
-    })).filter(r => r.name);
-    const res = await api.post("/library/workers/bulk", { rows: mapped });
-    if (res.success) await reload();
-    // An import is not a way around the rate card either — rows whose rate
-    // differs land at the card rate with an approval raised. Say how many,
-    // otherwise the sheet's numbers appear to have been ignored.
-    if (res.data?.rate_pending && res.data?.message) alert(res.data.message);
-    return res.data;
+    mapRow: (w) => [w.name, w.role, w.category, w.daily_rate, w.phone, w.city, w.aadhar || w.id_number, w.status],
+    importUrl: "/library/import/workers",
+    // Rate card se alag rate: server card rate lagata hai aur approval uthata hai —
+    // jaanch me note, import ke baad message me kitne (sheet ka number chupchaap nahi badalta).
+    fields: [
+      { key: "name", col: "Worker Name", aliases: ["name", "worker"], required: true },
+      { key: "role", col: "Skill / Role", aliases: ["role", "skill"], type: "list", options: (L) => L.roles, same: true },
+      { key: "category", col: "Category", type: "select", options: (L) => L.categories, same: true },
+      { key: "daily_rate", col: "Daily Rate (Rs.)", aliases: ["daily rate", "daily_rate", "rate"], type: "number" },
+      { key: "phone", col: "Phone" },
+      { key: "city", col: "City", same: true },
+      { key: "aadhar", col: "Aadhar / ID", aliases: ["aadhar", "aadhaar", "id number", "id"] },
+      { key: "status", col: "Status", type: "select", options: (L) => L.statuses, same: true },
+    ],
+    rowTitle: (r) => r.name,
+    rowSub: (r) => [r.role, r.category, r.phone].filter(Boolean).join(" · "),
+    onImported: () => reload(),
   };
 
   // Summary by role
@@ -6458,7 +6438,7 @@ function WorkersSection() {
       )}
 
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="workers" onAdd={openCreate} addLabel="+ Add Worker"
-        templateConfig={templateConfig} currentData={workers} onImportData={handleImport} />
+        templateConfig={templateConfig} currentData={workers} />
 
       {loading ? (
         <div style={{textAlign:"center",padding:"40px 0",color:T.textLight}}>{t("common.loading")}</div>
