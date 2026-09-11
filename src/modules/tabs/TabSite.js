@@ -31,6 +31,9 @@ const fetchPdf = async (path) => {
   }
   return await res.blob();
 };
+// Client copy ke hisse — kram wahi jo server (utils/dprSections.js) ka hai.
+const SEC_KEYS = ["hazri", "kaam", "maal", "machine", "photo", "issue", "todo", "rukawat", "mausam", "suraksha", "note"];
+
 const saveBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -100,6 +103,22 @@ function TabSite({ project, isAdmin }) {
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(null), 4000); };
 
+  // ── Client copy ke hisse ────────────────────────────────────────
+  // Tick project-wise server par hain (utils/dprSections.js). App ki
+  // PDF/WhatsApp sheet aur ye panel ek hi jagah likhte hain, isliye dono jagah
+  // ek jaisa kagaz banta hai.
+  const [secOpen, setSecOpen] = useState(false);
+  const [secs, setSecs] = useState(null);
+  useEffect(() => { setSecs(day?.share?.client || null); }, [day]);
+  const toggleSec = async (k) => {
+    const cur = new Set(secs || []);
+    if (cur.has(k)) cur.delete(k); else cur.add(k);
+    const list = SEC_KEYS.filter((s) => cur.has(s));
+    setSecs(list);
+    const r = await api.put("/dpr/client-sections", { project_id: projectId, sections: list }).catch(() => null);
+    if (!r || !r.success) flash((r && r.message) || t("site.client_copy_save_nahi_hua"));
+  };
+
   const approveDPR = async () => {
     if (!day?.dpr?.id || busy) return;
     setBusy(true);
@@ -108,13 +127,15 @@ function TabSite({ project, isAdmin }) {
     if (r && r.success) load(); else flash((r && r.message) || t("site.approve_failed"));
   };
 
-  const downloadPdf = async () => {
+  // copy = "client" → sirf wo hisse jo is project ki client copy me tick hain.
+  const downloadPdf = async (copy) => {
     if (busy) return;
     setBusy(true);
     try {
-      const blob = await fetchPdf(`/dpr/day/pdf?project_id=${projectId}&date=${date}`);
+      const cq = copy === "client" ? "&copy=client" : "";
+      const blob = await fetchPdf(`/dpr/day/pdf?project_id=${projectId}&date=${date}${cq}`);
       const safe = String(project?.name || "DPR").replace(/[^\w\- ]+/g, "").trim().slice(0, 40) || "DPR";
-      saveBlob(blob, `DPR_${safe}_${date}.pdf`);
+      saveBlob(blob, `DPR_${safe}_${date}${copy === "client" ? "_client" : ""}.pdf`);
     } catch (e) { flash(e.message); }
     setBusy(false);
   };
@@ -188,11 +209,39 @@ function TabSite({ project, isAdmin }) {
           <span style={{ fontSize: 11.5, color: T.t4 }}>{t("site.bhara_hua_x", { s: day.completeness.score })}</span>
         )}
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-          <button onClick={downloadPdf} disabled={busy}
+          <button onClick={() => downloadPdf("full")} disabled={busy}
             style={{ padding: "6px 13px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface,
               color: T.t2, fontSize: 11.5, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit" }}>
             {t("site.pdf")}
           </button>
+          {/* Client PDF, aur ▾ se uske hisse — ek jude hue jode me */}
+          <div style={{ position: "relative", display: "flex" }}>
+            <button onClick={() => downloadPdf("client")} disabled={busy}
+              style={{ padding: "6px 11px", borderRadius: "7px 0 0 7px", border: `1px solid ${T.b1}`, borderRight: "none", background: T.surface,
+                color: T.t2, fontSize: 11.5, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit" }}>
+              {t("site.client_pdf")}
+            </button>
+            <button onClick={() => setSecOpen((v) => !v)} title={t("site.client_copy_me_kya_jaaye")}
+              style={{ padding: "6px 8px", borderRadius: "0 7px 7px 0", border: `1px solid ${T.b1}`, background: T.surface,
+                color: T.t3, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
+              ▾
+            </button>
+            {secOpen && (
+              <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 30, width: 236, background: T.surface,
+                border: `1px solid ${T.b1}`, borderRadius: 9, boxShadow: "0 10px 28px rgba(15,23,42,.14)", padding: "10px 12px" }}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: .4, marginBottom: 6 }}>
+                  {t("site.client_copy_me_kya_jaaye")}
+                </div>
+                {SEC_KEYS.map((k) => (
+                  <label key={k} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: T.t2, padding: "3px 0", cursor: "pointer" }}>
+                    <input type="checkbox" checked={(secs || []).includes(k)} onChange={() => toggleSec(k)} />
+                    {t("dpr.sec_" + k)}
+                  </label>
+                ))}
+                <div style={{ fontSize: 10.5, color: T.t4, marginTop: 6, lineHeight: 1.4 }}>{t("site.client_copy_yaad_rehta")}</div>
+              </div>
+            )}
+          </div>
           {day?.status === "submitted" && isAdmin && (
             <button onClick={approveDPR} disabled={busy}
               style={{ padding: "6px 15px", borderRadius: 7, background: T.grn, color: "white", border: "none",
