@@ -368,6 +368,10 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         }
         setErr(res.message || "Delete failed"); setDeleting(false); return;
       }
+      // Bill / expense hatne par jo wapas khula (fuel entry Unbilled me,
+      // settlement Pending me) wo backend sandesh me batata hai — dikhao.
+      const released = res?.released;
+      if (released && (released.fuel || released.settlement) && window.toast) window.toast.success(res.message);
       onChanged && onChanged();
       onClose && onClose();
     } catch (e) {

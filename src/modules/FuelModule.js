@@ -2548,9 +2548,10 @@ function FuelModule() {
   const spendInRange = byProject.reduce((a, p) => a + Number(p.amount || 0), 0);
   const litresInRange = byProject.reduce((a, p) => a + Number(p.litres || 0), 0);
   const unpaid = byVendor.reduce((a, v) => a + Number(v.unpaid_amount || 0), 0);
-  // Badge ke liye alag call ki zaroorat nahi — purchases me billed_at
-  // pehle se aata hai.
-  const unbilledN = purchases.filter((p) => !p.billed_at).length;
+  // Badge ke liye alag call ki zaroorat nahi — purchases me billed_at,
+  // settlement_id aur transaction_id pehle se aate hain (mit chuki cheez ki
+  // link server khaali bhejta hai). Unbilled wahi jiska paisa kahin nahi laga.
+  const unbilledN = purchases.filter((p) => !p.billed_at && !p.settlement_id && !p.transaction_id).length;
 
   const TABS = [
     { id: "overview",  l: t("common.overview"),      I: IcGauge },
