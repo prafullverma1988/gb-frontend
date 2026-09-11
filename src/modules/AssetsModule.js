@@ -637,7 +637,7 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
 // ══════════════════════════════════════════════════════════════════
 // REGISTER
 // ══════════════════════════════════════════════════════════════════
-function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIncharge, onImport, onExport, exportErr }) {
+function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIncharge, onImport, onExport, exportErr, onAddAsset }) {
   const [q, setQ] = useState("");
   const [tracking, setTracking] = useState("");
   const [cat, setCat] = useState("");
@@ -657,6 +657,7 @@ function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIn
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
           {canEdit && <Btn size="sm" ghost icon={IcTag} onClick={onCats}>{t("assets.btn_categories")}</Btn>}
           {canEdit && <Btn size="sm" ghost icon={IcUser} onClick={onIncharge}>{t("assets.btn_incharge")}</Btn>}
+          {canCreate && <Btn size="sm" icon={IcAdd} onClick={onAddAsset}>{t("assets.btn_add_asset")}</Btn>}
           {canCreate && <Btn size="sm" ghost icon={IcDown} onClick={onImport}>{t("assets.btn_import")}</Btn>}
           <Btn size="sm" ghost icon={IcSheet} onClick={onExport}>{t("assets.btn_export")}</Btn>
         </div>}>
@@ -1640,9 +1641,186 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
 // ki wahan kitni padi hai.
 const groupKey = (h) => (h.warehouse_id ? `w:${h.warehouse_id}` : `s:${h.project_id}:${h.holder_type}:${h.holder_id}:${h.custodian_user_id}`);
 
+// ══════════════════════════════════════════════════════════════════
+// EK ASSET HAATH SE — opening stock, Excel ke bina
+// ══════════════════════════════════════════════════════════════════
+// Excel ki ek row jaisa hi: kya hai, kitna, kahan pada hai, kiske paas.
+// Server wahi niyam aur wahi commitOpening chalata hai jo import chalata hai,
+// isliye yahan sirf pehli jaanch hai — asli faisla wahan hota hai.
+// GRN se alag: ye purana saamaan hai, Finance me kuch nahi jaata.
+const newRent = () => ({ charge_mode: "free", rent_rate: "", rent_basis: "day" });
+function AddAssetForm({ open, meta, pickers, cats, me, onClose, onSaved }) {
+  const toast = useToast();
+  const [mode, setMode] = useState("new");
+  const [f, setF] = useState({});
+  const [where, setWhere] = useState("store");
+  const [site, setSite] = useState({ holder_type: "user" });
+  const [rent, setRent] = useState(newRent());
+  const [bulkItems, setBulkItems] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const stores = (meta && meta.warehouses) || [];
+  useEffect(() => {
+    if (!open) return;
+    const def = stores.find((w) => w.is_default) || stores[0];
+    setMode("new"); setWhere("store"); setSite({ holder_type: "user" }); setRent(newRent()); setError("");
+    setF({
+      name: "", spec: "", unit: "Nos", tracking_mode: "bulk", category_id: "", code: "", asset_item_id: "",
+      qty: "", condition: "good", warehouse_id: def ? String(def.id) : "",
+      purchase_date: "", purchase_cost: "", vendor_name: "", remarks: "",
+    });
+    api.get("/assets/items?tracking=bulk").then((r) => setBulkItems(r && r.success ? r.data || [] : [])).catch(() => setBulkItems([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const catOf = (id) => (cats || []).find((c) => String(c.id) === String(id));
+  const serial = mode === "new" && f.tracking_mode === "serialized";
+  const many = Number(f.qty) > 1;
+  const external = where === "site" && ["worker", "subcon"].includes(site.holder_type);
+
+  const save = async () => {
+    setError("");
+    if (mode === "existing" && !f.asset_item_id) { setError(t("assets.err_pick_item")); return; }
+    if (mode === "new" && !String(f.name || "").trim()) { setError(t("assets.err_name_required")); return; }
+    const qty = Number(f.qty);
+    if (!(qty > 0)) { setError(t("assets.err_qty_positive")); return; }
+    if (serial && !Number.isInteger(qty)) { setError(t("assets.err_serial_int")); return; }
+    if (where === "store" && !f.warehouse_id) { setError(t("assets.err_warehouse_required")); return; }
+    if (where === "site" && !siteLocValid(site)) { setError(t("assets.err_to_required")); return; }
+    const useRent = external && rent.charge_mode === "rent";
+    if (useRent && !(Number(rent.rent_rate) > 0)) { setError(t("assets.err_rent_rate_add")); return; }
+
+    const body = {
+      qty, condition: f.condition,
+      location: where === "store" ? { warehouse_id: Number(f.warehouse_id) } : siteLocBody(site),
+      charge_mode: useRent ? "rent" : "free",
+      rent_rate: useRent ? Number(rent.rent_rate) : null,
+      rent_basis: useRent ? (rent.rent_basis || "day") : null,
+      remarks: f.remarks || null,
+    };
+    if (mode === "existing") body.asset_item_id = Number(f.asset_item_id);
+    else Object.assign(body, {
+      name: f.name.trim(), spec: f.spec || null, unit: f.unit || "Nos",
+      tracking_mode: f.tracking_mode, category_id: f.category_id ? Number(f.category_id) : null,
+      code: serial && qty === 1 && f.code ? f.code.trim() : null,
+      // Kharid ki baatein item ki hain — register ke purane item par wo pehle se likhi hain.
+      purchase_date: f.purchase_date || null,
+      purchase_cost: f.purchase_cost === "" ? null : Number(f.purchase_cost),
+      vendor_name: f.vendor_name || null,
+    });
+
+    setBusy(true);
+    const r = await api.post("/assets/items/opening", body);
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.add_done")); onSaved(r.data); onClose(); }
+    else setError((r && r.message) || t("assets.save_failed"));
+  };
+
+  const condSelect = (
+    <select value={f.condition || "good"} onChange={(e) => upd("condition", e.target.value)} style={inp}>
+      <option value="good">{t("assets.cond_good")}</option>
+      <option value="damaged">{t("assets.cond_damaged")}</option>
+    </select>
+  );
+  const qtyInput = (
+    <input value={f.qty || ""} inputMode="decimal" onChange={(e) => upd("qty", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
+  );
+
+  return (
+    <Modal open={open} onClose={onClose} width={780} title={t("assets.add_title")} sub={t("assets.add_sub")}
+      footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy} icon={IcAdd}>{busy ? t("assets.saving") : t("assets.add_save")}</Btn></>}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <Seg value={mode} onChange={(k) => { setMode(k); upd("asset_item_id", ""); }}
+          options={[{ k: "new", l: t("assets.add_mode_new") }, { k: "existing", l: t("assets.add_mode_existing") }]} />
+
+        {mode === "existing" ? (
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 100px 130px", gap: 10 }}>
+            <Field label={t("assets.item")}>
+              <SearchSelect value={f.asset_item_id || ""} onChange={(k) => upd("asset_item_id", k)} accent={T.ind}
+                options={bulkItems.map((b) => ({ id: b.id, name: `${lineLabel(b)} (${fmtN(b.total_qty)} ${b.unit || ""})` }))}
+                placeholder={t("assets.select_bulk_item")} />
+            </Field>
+            <Field label={t("assets.qty")}>{qtyInput}</Field>
+            <Field label={t("assets.condition")}>{condSelect}</Field>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 90px 120px", gap: 10 }}>
+            <Field label={t("assets.item_name")}><input value={f.name || ""} onChange={(e) => upd("name", e.target.value)} style={inp} placeholder={t("assets.item_name_ph")} /></Field>
+            <Field label={t("assets.spec")}><input value={f.spec || ""} onChange={(e) => upd("spec", e.target.value)} style={inp} placeholder={t("assets.spec_ph")} /></Field>
+            <Field label={t("assets.unit")}><input value={f.unit || ""} onChange={(e) => upd("unit", e.target.value)} style={inp} list="assets-units-add" /></Field>
+            <Field label={t("assets.tracking")}>
+              <select value={f.tracking_mode || "bulk"} onChange={(e) => upd("tracking_mode", e.target.value)} style={inp}>
+                <option value="bulk">{t("assets.tracking_bulk")}</option>
+                <option value="serialized">{t("assets.tracking_serialized")}</option>
+              </select>
+            </Field>
+            <Field label={t("assets.category")}>
+              <select value={f.category_id || ""} style={inp}
+                onChange={(e) => {
+                  const c = catOf(e.target.value);
+                  setF((p) => ({ ...p, category_id: e.target.value, tracking_mode: c ? c.tracking_mode : p.tracking_mode, unit: c && c.default_unit ? c.default_unit : p.unit }));
+                }}>
+                <option value="">—</option>
+                {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+            <Field label={t("assets.qty")}>{qtyInput}</Field>
+            <Field label={t("assets.condition")}>{condSelect}</Field>
+            {serial ? (
+              // Code apna purana tag hai — ek piece par hi. Qty abhi likhi na ho to band mat karo.
+              <Field label={t("assets.code")} hint={many ? t("assets.code_hint_multi") : t("assets.code_hint_single")}>
+                <input value={many ? "" : f.code || ""} onChange={(e) => upd("code", e.target.value)} style={inp} disabled={many} placeholder={t("assets.code_ph")} />
+              </Field>
+            ) : <div />}
+          </div>
+        )}
+
+        <Seg value={where} onChange={setWhere}
+          options={[{ k: "store", l: t("assets.add_where_store") }, { k: "site", l: t("assets.add_where_site") }]} />
+        {where === "store" ? (
+          <Field label={t("assets.add_store")}>
+            <select value={f.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
+              <option value="">{t("assets.select")}</option>
+              {stores.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </Field>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <ToSiteFields v={site} onChange={setSite} pickers={pickers} me={me} />
+          </div>
+        )}
+        {external && (
+          <Field label={t("assets.charge")}>
+            <RentCell ln={rent} onChange={setRent} enabled />
+          </Field>
+        )}
+
+        {mode === "new" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.4fr", gap: 10 }}>
+            <Field label={t("assets.purchase_date_opt")}><input type="date" value={f.purchase_date || ""} onChange={(e) => upd("purchase_date", e.target.value)} style={inp} /></Field>
+            <Field label={t("assets.purchase_cost_opt")}><input value={f.purchase_cost || ""} inputMode="decimal" onChange={(e) => upd("purchase_cost", e.target.value.replace(/[^0-9.]/g, ""))} style={inp} placeholder="₹" /></Field>
+            <Field label={t("assets.vendor_opt")}><input value={f.vendor_name || ""} onChange={(e) => upd("vendor_name", e.target.value)} style={inp} /></Field>
+          </div>
+        )}
+        <Field label={t("assets.remarks")}><input value={f.remarks || ""} onChange={(e) => upd("remarks", e.target.value)} style={inp} /></Field>
+        <div style={{ fontSize: 11, color: T.t4 }}>{t("assets.add_note")}</div>
+      </div>
+      <ErrBox>{error}</ErrBox>
+      <datalist id="assets-units-add">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
+    </Modal>
+  );
+}
+
 function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
   const toast = useToast();
   const isReturn = kind === "return";
+  // Transfer ke do raaste — store se store, ya kisi ki custody se. Pehle dono
+  // ek hi form me ghule the: store tabhi dikhta jab usme maal pada ho, aur
+  // "kahan bhejna" tab tak Project hi dikhata jab tak source store na chuna
+  // jaaye. Isliye lagta tha ki store se store hota hi nahi.
+  const [src, setSrc] = useState("store");
   const [cust, setCust] = useState(String(me.id || ""));
   const [hold, setHold] = useState(null);
   const [from, setFrom] = useState("");
@@ -1659,11 +1837,13 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
   const all = (meta && meta.warehouses) || [];
   const myIds = (meta && meta.my_warehouse_ids) || [];
   const myWh = canAll ? all : all.filter((w) => myIds.includes(w.id));
+  const storeMode = !isReturn && src === "store";
 
   useEffect(() => {
     if (!open) return;
     const def = all.find((w) => w.is_default) || all[0];
-    setCust(String(me.id || "")); setFrom(""); setDate(todayStr()); setToWh(def ? String(def.id) : ""); setToSite({ holder_type: "user" });
+    setCust(String(me.id || "")); setFrom(""); setDate(todayStr()); setToWh(kind === "return" && def ? String(def.id) : ""); setToSite({ holder_type: "user" });
+    setSrc(kind !== "return" && myWh.length ? "store" : "custody");
     setLines([newMoveLine()]); setRet(""); setRemarks(""); setPhoto(""); setError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, kind]);
@@ -1688,27 +1868,29 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
   const groups = useMemo(() => {
     const m = new Map();
     for (const h of hold || []) {
+      // Transfer me dono tarah ki holding aati hai; jo raasta chuna hai sirf wahi dikhe.
+      if (!isReturn && (storeMode ? !h.warehouse_id : !h.project_id)) continue;
       const k = groupKey(h);
       if (!m.has(k)) m.set(k, {
         key: k, warehouse_id: h.warehouse_id, project_id: h.project_id, holder_type: h.holder_type, holder_id: h.holder_id, custodian_user_id: h.custodian_user_id,
-        label: h.warehouse_id ? `${t("assets.warehouse")} · ${h.warehouse_name || ""}` : `${h.project_name || ""} · ${h.holder_name || ""} (${holderLabel(h.holder_type)})`,
+        label: h.warehouse_id ? (storeMode ? h.warehouse_name || "" : `${t("assets.warehouse")} · ${h.warehouse_name || ""}`) : `${h.project_name || ""} · ${h.holder_name || ""} (${holderLabel(h.holder_type)})`,
         rows: [],
       });
       m.get(k).rows.push(h);
     }
     return [...m.values()];
-  }, [hold]);
+  }, [hold, storeMode, isReturn]);
   const g = groups.find((x) => x.key === from);
   const fromIsWh = !!(g && g.warehouse_id);
   const stockOf = (key) => (g ? g.rows.find((h) => String(h.id) === String(key)) : null);
   const updLine = (i, v) => setLines((p) => p.map((l, j) => (j === i ? v : l)));
-  const external = !isReturn && !fromIsWh && ["worker", "subcon"].includes(toSite.holder_type);
+  const external = !isReturn && !storeMode && ["worker", "subcon"].includes(toSite.holder_type);
 
   const save = async () => {
     setError("");
     if (!g) { setError(t("assets.err_from_required")); return; }
     let toLoc;
-    if (isReturn || fromIsWh) {
+    if (isReturn || storeMode) {
       if (!toWh) { setError(t("assets.err_warehouse_required")); return; }
       if (fromIsWh && Number(toWh) === Number(g.warehouse_id)) { setError(t("assets.err_same_place")); return; }
       toLoc = { warehouse_id: Number(toWh) };
@@ -1737,7 +1919,7 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
     setBusy(true);
     const r = await api.post("/assets/vouchers", {
       type: isReturn ? "return" : "transfer", date, from: fromLoc, to: toLoc, items,
-      expected_return_date: !isReturn && !fromIsWh && ret ? ret : null, remarks: remarks || null, photo_url: photo || null,
+      expected_return_date: !isReturn && !storeMode && ret ? ret : null, remarks: remarks || null, photo_url: photo || null,
     });
     setBusy(false);
     if (r && r.success) { toast.success(r.message || t("assets.voucher_done", { no: (r.data && r.data.voucher_no) || "" })); onSaved(r.data); onClose(); }
@@ -1751,13 +1933,19 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
       sub={isReturn ? t("assets.return_sub") : t("assets.transfer_sub")}
       footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy} icon={isReturn ? IcIn : IcTrns}>{busy ? t("assets.saving") : isReturn ? t("assets.return_save") : t("assets.transfer_save")}</Btn></>}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-        {canAll && (
+        {!isReturn && myWh.length > 0 && (
+          <div style={{ gridColumn: "span 2" }}>
+            <Seg value={src} onChange={(k) => { setSrc(k); setFrom(""); setLines([newMoveLine()]); setToWh(""); }}
+              options={[{ k: "store", l: t("assets.src_store") }, { k: "custody", l: t("assets.src_custody") }]} />
+          </div>
+        )}
+        {canAll && !storeMode && (
           <Field label={t("assets.custodian")} span={2} hint={t("assets.custodian_admin_hint")}>
             <SearchSelect value={cust} onChange={(k) => { setCust(k); setFrom(""); setLines([newMoveLine()]); }} accent={T.ind}
               options={(pickers.users || []).map((u) => ({ id: u.id, name: u.name + (u.role ? ` · ${u.role}` : "") }))} placeholder={t("assets.select_custodian")} />
           </Field>
         )}
-        <Field label={t("assets.from")} hint={hold && hold.length === 0 ? t("assets.from_empty_hint") : undefined}>
+        <Field label={storeMode ? t("assets.from_store") : t("assets.from")} hint={hold && groups.length === 0 ? (storeMode ? t("assets.from_store_empty") : t("assets.from_empty_hint")) : undefined}>
           <select value={from} onChange={(e) => { setFrom(e.target.value); setLines([newMoveLine()]); }} style={inp} disabled={hold == null}>
             <option value="">{hold == null ? t("assets.loading") : t("assets.select")}</option>
             {groups.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
@@ -1765,11 +1953,11 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
         </Field>
         <Field label={t("assets.date")}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inp} /></Field>
 
-        {(isReturn || fromIsWh) ? (
-          <Field label={t("assets.to_warehouse")} span={2}>
+        {(isReturn || storeMode) ? (
+          <Field label={storeMode ? t("assets.to_store") : t("assets.to_warehouse")} span={2}>
             <select value={toWh} onChange={(e) => setToWh(e.target.value)} style={inp}>
               <option value="">{t("assets.select")}</option>
-              {all.filter((w) => !(fromIsWh && w.id === g.warehouse_id)).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+              {all.filter((w) => !(g && g.warehouse_id && w.id === g.warehouse_id)).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </Field>
         ) : (
@@ -1815,7 +2003,7 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
       {isReturn && <div style={{ fontSize: 11, color: T.t4, marginTop: 8 }}>{t("assets.lost_hint")}</div>}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 14 }}>
-        {!isReturn && !fromIsWh && <Field label={t("assets.expected_return")} hint={t("assets.expected_return_hint")}><input type="date" value={ret} onChange={(e) => setRet(e.target.value)} style={inp} /></Field>}
+        {!isReturn && !storeMode && <Field label={t("assets.expected_return")} hint={t("assets.expected_return_hint")}><input type="date" value={ret} onChange={(e) => setRet(e.target.value)} style={inp} /></Field>}
         <Field label={t("assets.remarks")}><input value={remarks} onChange={(e) => setRemarks(e.target.value)} style={inp} /></Field>
         <PhotoField value={photo} onChange={setPhoto} />
       </div>
@@ -2630,6 +2818,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
   const [catsOpen, setCatsOpen] = useState(false);
   const [inchOpen, setInchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   // Export "abhi kya kahan pada hai" ki Excel deta hai. Ise wapas import nahi
   // karna — server bhi rok deta hai; qty sudhaarne ka rasta Ginti hai.
   const [exportErr, setExportErr] = useState("");
@@ -2726,7 +2915,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
         {tab === "dashboard" && <DashboardTab dash={dash} onOpenVoucher={setVoucherId} onGo={setTab} />}
         {tab === "register" && (
           <RegisterTab items={items} cats={cats} canEdit={canEdit} canCreate={canCreate} onOpenItem={setOpenItem}
-            onCats={() => setCatsOpen(true)} onIncharge={() => setInchOpen(true)} onImport={() => setImportOpen(true)}
+            onCats={() => setCatsOpen(true)} onIncharge={() => setInchOpen(true)} onImport={() => setImportOpen(true)} onAddAsset={() => setAddOpen(true)}
             onExport={doExport} exportErr={exportErr} />
         )}
         {tab === "grn" && <GrnTab refreshKey={refreshKey} canCreate={canCreate} onNew={() => setGrnOpen(true)} onOpenVoucher={setVoucherId} />}
@@ -2754,6 +2943,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
       <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} onClose={() => setGrnOpen(false)} onSaved={refresh} />
       <IssueForm open={issueOpen} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setIssueOpen(false)} onSaved={refresh} />
       <MoveForm open={!!moveKind} kind={moveKind || "transfer"} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setMoveKind(null)} onSaved={refresh} />
+      <AddAssetForm open={addOpen} meta={meta} pickers={pickers} cats={cats} me={me} onClose={() => setAddOpen(false)} onSaved={refresh} />
       <RepairForm open={!!repairKind} kind={repairKind || "out"} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setRepairKind(null)} onSaved={refresh} />
       <NewVerificationModal open={newVerify} meta={meta} pickers={pickers} me={me}
         onClose={() => setNewVerify(false)} onCreated={(d) => { refresh(); if (d && d.id) setVerifyId(d.id); }} onOpenExisting={setVerifyId} />
