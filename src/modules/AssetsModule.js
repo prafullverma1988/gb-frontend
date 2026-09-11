@@ -1021,15 +1021,155 @@ function InchargesModal({ open, meta, users, onClose, onChanged }) {
 }
 
 // ── OPENING STOCK IMPORT ──────────────────────────────────────────
+// Teen kadam: file select → preview (galat rows yahin theek karo) → ho gaya.
+// Pehli jaanch Excel file par hoti hai. Uske baad har "Dobara check karo" aur
+// aakhri import /assets/import/opening/rows par jaate hain — wahi rows jo screen
+// par hain, badlav ke saath — taaki ek galti ke liye Excel dobara na banani pade.
+// Server har baar poori jaanch khud karta hai; yahan ki jaanch sirf dikhane ki hai.
+const IMP_COLS = "46px 84px 1.5fr 78px 1.25fr 1.1fr 1.7fr 150px";
+// Value wahi rehti hai jo template ki list me hai (server unhi ko pehchanta
+// hai) — sirf dikhaya bhasha me jaata hai.
+const IMP_ENUMS = {
+  tracking: [["Bulk", () => t("assets.tracking_bulk")], ["Serialized", () => t("assets.tracking_serialized")]],
+  loc_type: [["Warehouse", () => t("assets.warehouse")], ["Site", () => t("assets.site")]],
+  holder_type: [["Store", () => t("assets.holder_store")], ["User", () => t("assets.holder_user")], ["Worker", () => t("assets.holder_worker")], ["Subcon", () => t("assets.holder_subcon")]],
+  condition: [["Good", () => t("assets.cond_good")], ["Damaged", () => t("assets.cond_damaged")]],
+  charge_mode: [["Free", () => t("assets.charge_free")], ["Rent", () => t("assets.charge_rent")]],
+  rent_basis: [["Day", () => t("assets.per_day")], ["Month", () => t("assets.per_month")]],
+};
+// Ek hi galat value aksar kai rows me hoti hai (store ka naam, holder…) — ek row
+// me theek karte hi baaki rows me bhi lagane ka button. Qty ya item ka naam har
+// row ka apna hota hai, un par ye kabhi nahi.
+const IMP_SAME_FIELDS = ["category", "tracking", "unit", "loc_type", "loc_name", "holder_type", "holder_name", "custodian", "condition", "charge_mode", "rent_basis"];
+const impNorm = (s) => String(s ?? "").toLowerCase().trim().replace(/\s+/g, " ");
+const impLink = { display: "block", marginTop: 4, padding: 0, border: "none", background: "none", color: T.ind, fontSize: 10.5, fontWeight: 700, cursor: "pointer", textAlign: "left", fontFamily: "inherit" };
+
+// Ek row ka sudhaar. Box ke label Excel ke column ke naam hi hain — user ko
+// apni file me wahi column dhoondhna hota hai.
+function ImportRowEditor({ r, rows, lists, onSet, onSame }) {
+  const v = r.raw || {};
+  const fields = r.error_fields || [];
+  const msgOf = (k) => (r.errors || []).filter((_, i) => fields[i] === k).join(" · ");
+  const loose = (r.errors || []).filter((_, i) => !fields[i]);
+  const filled = (k) => String(v[k] ?? "").trim() !== "";
+  const lt = impNorm(v.loc_type), ht = impNorm(v.holder_type);
+  const site = lt === "site";
+  const ext = site && (ht === "worker" || ht === "subcon");
+  const rent = impNorm(v.charge_mode) === "rent";
+  const box = (k) => ({ ...inpSm, borderColor: msgOf(k) ? T.red : T.b1 });
+
+  // Isi galat value wali baaki rows — jinme wahi galti thi aur abhi badli nahi.
+  const sameRows = (k) => {
+    if (!IMP_SAME_FIELDS.includes(k) || !fields.includes(k)) return [];
+    const was = impNorm((r.orig || {})[k]), now = impNorm(v[k]);
+    if (!now || now === was) return [];
+    return rows.filter((x) => x.row !== r.row && !x.removed && (x.error_fields || []).includes(k)
+      && impNorm((x.orig || {})[k]) === was && impNorm((x.raw || {})[k]) !== now);
+  };
+
+  const text = (k, extra) => <input value={v[k] ?? ""} onChange={(e) => onSet(k, e.target.value)} style={box(k)} {...(extra || {})} />;
+  const listed = (k, listId) => <input value={v[k] ?? ""} onChange={(e) => onSet(k, e.target.value)} style={box(k)} list={listId} />;
+  const pick = (k) => {
+    const cur = IMP_ENUMS[k].find(([val]) => impNorm(val) === impNorm(v[k]));
+    const odd = filled(k) && !cur;
+    return (
+      <select value={cur ? cur[0] : odd ? "__odd" : ""} onChange={(e) => onSet(k, e.target.value)} style={box(k)}>
+        <option value="">{t("assets.select")}</option>
+        {odd && <option value="__odd" disabled>{t("assets.imp_bad_value", { value: v[k] })}</option>}
+        {IMP_ENUMS[k].map(([val, label]) => <option key={val} value={val}>{label()}</option>)}
+      </select>
+    );
+  };
+  const master = (k, names) => {
+    const list = (names || []).map((n) => ({ id: n, name: n }));
+    const hit = list.find((o) => impNorm(o.id) === impNorm(v[k]));
+    // Excel wala naam app me nahi mila — list me sabse upar wahi, taaki dikhe kya likha tha.
+    const opts = filled(k) && !hit ? [{ id: v[k], name: t("assets.imp_not_found_opt", { value: v[k] }) }, ...list] : list;
+    return (
+      <div style={{ borderRadius: 8, boxShadow: msgOf(k) ? `0 0 0 1.5px ${T.red}` : "none" }}>
+        <SearchSelect value={hit ? hit.id : v[k] || ""} onChange={(id) => onSet(k, id)} options={opts} accent={T.ind} compact placeholder={t("assets.select")} />
+      </div>
+    );
+  };
+  const date = (k) => {
+    const iso = /^\d{4}-\d{2}-\d{2}$/.test(String(v[k] || "")) ? v[k] : "";
+    return (
+      <>
+        <input type="date" value={iso} onChange={(e) => onSet(k, e.target.value)} style={box(k)} />
+        {filled(k) && !iso && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("assets.imp_bad_value", { value: v[k] })}</div>}
+      </>
+    );
+  };
+
+  const cell = (k, control, after) => {
+    const msg = msgOf(k), same = sameRows(k);
+    return (
+      <div key={k} style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 700, color: msg ? T.red : T.t3, marginBottom: 4 }}>{t("assets.xl_" + k)}</div>
+        {control}
+        {msg && <div style={{ fontSize: 10.5, color: T.red, marginTop: 3, lineHeight: 1.4 }}>{msg}</div>}
+        {after}
+        {same.length > 0 && (
+          <button type="button" style={impLink} onClick={() => onSame(k, v[k], same.map((x) => x.row))}>
+            {t("assets.imp_apply_same", { n: same.length, value: v[k] })}
+          </button>
+        )}
+      </div>
+    );
+  };
+  // Warehouse ki row me holder/charge ka koi matlab nahi (server Store maan leta
+  // hai) — wo box tabhi dikhe jab site ho, ya usi par galti ho.
+  const showIf = (k, when) => when || !!msgOf(k);
+  const holderPool = ht === "user" ? lists.users : ht === "worker" ? lists.workers : ht === "subcon" ? lists.subcons : [];
+  const placePool = lt === "warehouse" ? lists.warehouses : site ? lists.projects : [...(lists.warehouses || []), ...(lists.projects || [])];
+
+  const cells = [
+    cell("name", text("name")),
+    cell("spec", text("spec")),
+    cell("category", listed("category", "imp-cats")),
+    cell("tracking", pick("tracking")),
+    cell("qty", text("qty", { inputMode: "decimal" })),
+    cell("unit", listed("unit", "imp-units")),
+    showIf("code", impNorm(v.tracking) === "serialized" || filled("code")) && cell("code", text("code"),
+      msgOf("code") && filled("code") ? <button type="button" style={impLink} onClick={() => onSet("code", "")}>{t("assets.imp_clear_code")}</button> : null),
+    cell("condition", pick("condition")),
+    cell("loc_type", pick("loc_type")),
+    cell("loc_name", master("loc_name", placePool)),
+    showIf("holder_type", site) && cell("holder_type", pick("holder_type")),
+    showIf("holder_name", site) && cell("holder_name", master("holder_name", holderPool)),
+    showIf("custodian", ext) && cell("custodian", master("custodian", lists.users)),
+    showIf("charge_mode", ext) && cell("charge_mode", pick("charge_mode")),
+    showIf("rent_rate", ext && rent) && cell("rent_rate", text("rent_rate", { inputMode: "decimal" })),
+    showIf("rent_basis", ext && rent) && cell("rent_basis", pick("rent_basis")),
+    cell("purchase_date", date("purchase_date")),
+    cell("purchase_cost", text("purchase_cost", { inputMode: "decimal" })),
+    cell("vendor", text("vendor")),
+    cell("remarks", text("remarks")),
+  ].filter(Boolean);
+
+  return (
+    <>
+      {loose.length > 0 && <div style={{ fontSize: 11, color: T.red, marginBottom: 8 }}>{loose.join(" · ")}</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>{cells}</div>
+    </>
+  );
+}
+
 function ImportModal({ open, onClose, onDone }) {
   const [step, setStep] = useState(1);
   const [fileName, setFileName] = useState("");
   const [b64, setB64] = useState("");
-  const [preview, setPreview] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [lists, setLists] = useState({});
+  const [message, setMessage] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [stale, setStale] = useState(false);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { if (open) { setStep(1); setFileName(""); setB64(""); setPreview(null); setResult(null); setError(""); } }, [open]);
+  useEffect(() => {
+    if (open) { setStep(1); setFileName(""); setB64(""); setRows([]); setLists({}); setMessage(""); setFilter("all"); setStale(false); setResult(null); setError(""); }
+  }, [open]);
 
   const template = async () => {
     setError("");
@@ -1049,33 +1189,93 @@ function ImportModal({ open, onClose, onDone }) {
     rd.readAsDataURL(f);
   };
 
+  // Server ka jawab screen ki rows me. orig = jo server ne dekha — "yahi galti
+  // aur rows me" usi se jodta hai. Hatayi rows server tak jaati hi nahi, isliye
+  // wo apni pichhli haalat me rehti hain.
+  const take = (data, msg, fresh) => {
+    const got = (data.rows || []).map((r) => ({
+      ...r, raw: r.raw || {}, orig: r.raw || {}, error_fields: r.error_fields || [],
+      removed: false, dirty: false, open: r.status === "error",
+    }));
+    const seen = new Set(got.map((r) => r.row));
+    setRows((prev) => [...got, ...(fresh ? [] : prev.filter((x) => x.removed && !seen.has(x.row)))].sort((a, b) => a.row - b.row));
+    if (data.lists) setLists(data.lists);
+    setMessage(msg || "");
+    setStale(false);
+    const s = data.summary || {};
+    setFilter(N(s.error) > 0 ? "error" : fresh && N(s.skipped) > 0 ? "skipped" : "all");
+  };
+
   // Galti par server 422 + wahi rows/summary bhejta hai — api() use
   // { success:false, data } bana kar deta hai, isliye preview dono haal me dikhta hai.
   const check = async () => {
     setBusy(true); setError("");
     const r = await api.post("/assets/import/opening", { file_b64: b64, dry_run: true }, { timeoutMs: 120000 });
     setBusy(false);
-    if (r && r.data && r.data.rows) { setPreview({ ...r.data, message: r.message }); setStep(2); return; }
-    setError((r && r.message) || t("assets.import_failed"));
-  };
-  const commit = async () => {
-    setBusy(true); setError("");
-    const r = await api.post("/assets/import/opening", { file_b64: b64, dry_run: false }, { timeoutMs: 180000 });
-    setBusy(false);
-    if (r && r.success) { setResult(r); setStep(3); onDone(); return; }
-    if (r && r.data && r.data.rows) { setPreview({ ...r.data, message: r.message }); }
+    if (r && r.data && r.data.rows) { take(r.data, r.message, true); setStep(2); return; }
     setError((r && r.message) || t("assets.import_failed"));
   };
 
-  const sum = (preview && preview.summary) || {};
+  const sendRows = async (dryRun) => {
+    const list = rows.filter((x) => !x.removed).map((x) => ({ row: x.row, raw: x.raw }));
+    if (!list.length) { setError(t("assets.imp_none_left")); return; }
+    setBusy(true); setError("");
+    const r = await api.post("/assets/import/opening/rows", { rows: list, dry_run: dryRun }, { timeoutMs: dryRun ? 120000 : 180000 });
+    setBusy(false);
+    if (!dryRun && r && r.success && r.data && r.data.committed) { setResult(r); setStep(3); onDone(); return; }
+    if (r && r.data && r.data.rows) { take(r.data, r.message, false); return; }
+    setError((r && r.message) || t("assets.import_failed"));
+  };
+
+  const setRaw = (rowNo, k, value) => {
+    setRows((p) => p.map((x) => {
+      if (x.row !== rowNo) return x;
+      const raw = { ...x.raw, [k]: value };
+      // Jagah ka type badla to purana naam/holder us type ka nahi rehta.
+      if (k === "loc_type") {
+        const lt = impNorm(value);
+        const pool = lt === "warehouse" ? lists.warehouses : lt === "site" ? lists.projects : null;
+        if (pool && !pool.some((n) => impNorm(n) === impNorm(raw.loc_name))) raw.loc_name = "";
+        if (lt === "warehouse") raw.holder_type = "Store";
+        else if (impNorm(raw.holder_type) === "store") raw.holder_type = "";
+      }
+      if (k === "holder_type") {
+        const pool = { user: lists.users, worker: lists.workers, subcon: lists.subcons }[impNorm(value)];
+        if (!pool || !pool.some((n) => impNorm(n) === impNorm(raw.holder_name))) raw.holder_name = "";
+      }
+      return { ...x, raw, dirty: true };
+    }));
+    setStale(true);
+  };
+  const applySame = (k, value, rowNos) => {
+    const set = new Set(rowNos);
+    setRows((p) => p.map((x) => (set.has(x.row) ? { ...x, raw: { ...x.raw, [k]: value }, dirty: true } : x)));
+    setStale(true);
+  };
+  const toggleOpen = (rowNo) => setRows((p) => p.map((x) => (x.row === rowNo ? { ...x, open: !x.open } : x)));
+  const toggleRemove = (rowNo) => {
+    setRows((p) => p.map((x) => (x.row === rowNo ? { ...x, removed: !x.removed, open: false } : x)));
+    setStale(true);
+  };
+
+  const live = rows.filter((x) => !x.removed);
+  const cnt = {
+    ok: live.filter((x) => x.status === "ok").length,
+    error: live.filter((x) => x.status === "error").length,
+    skipped: live.filter((x) => x.status === "skipped").length,
+    removed: rows.length - live.length,
+  };
+  const shown = rows.filter((x) => (filter === "all" ? true : filter === "removed" ? x.removed : !x.removed && x.status === filter));
   const rowTone = (s) => (s === "ok" ? { c: T.grn, bg: T.grnL } : s === "error" ? { c: T.red, bg: T.redL } : { c: T.slt, bg: T.sltL });
 
   return (
-    <Modal open={open} onClose={onClose} width={900} title={t("assets.import_title")} sub={fileName || t("assets.import_sub")}
+    <Modal open={open} onClose={onClose} width={step === 2 ? 1040 : 900} title={t("assets.import_title")} sub={fileName || t("assets.import_sub")}
       footer={
         step === 1 ? <><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={check} disabled={busy || !b64}>{busy ? t("assets.checking") : t("assets.check_file")}</Btn></>
         : step === 2 ? <><Btn ghost onClick={() => setStep(1)}>{t("assets.back")}</Btn>
-            <Btn onClick={commit} disabled={busy || N(sum.error) > 0 || N(sum.ok) === 0}>{busy ? t("assets.importing") : t("assets.import_go", { n: N(sum.ok) })}</Btn></>
+            {stale
+              ? <Btn onClick={() => sendRows(true)} disabled={busy}>{busy ? t("assets.checking") : t("assets.imp_recheck")}</Btn>
+              : <Btn onClick={() => sendRows(false)} disabled={busy || cnt.error > 0 || cnt.ok === 0}>{busy ? t("assets.importing") : t("assets.import_go", { n: cnt.ok })}</Btn>}</>
         : <Btn onClick={onClose}>{t("assets.ok")}</Btn>
       }>
       {step === 1 && (
@@ -1092,31 +1292,86 @@ function ImportModal({ open, onClose, onDone }) {
           <ErrBox>{error}</ErrBox>
         </>
       )}
-      {step === 2 && preview && (
+      {step === 2 && (
         <>
-          <Notice tone={N(sum.error) > 0 ? "warn" : undefined}>
-            {preview.message || t("assets.import_summary", { total: N(sum.total), ok: N(sum.ok), error: N(sum.error), skipped: N(sum.skipped) })}
-            {N(sum.error) > 0 && <div style={{ marginTop: 4 }}>{t("assets.import_fix_hint")}</div>}
+          <Notice tone={stale || cnt.error > 0 || cnt.skipped > 0 ? "warn" : undefined}>
+            {stale
+              ? <div style={{ fontWeight: 700 }}>{t("assets.imp_dirty_hint")}</div>
+              : message && <div style={{ fontWeight: 700 }}>{message}</div>}
+            <div style={{ marginTop: 3 }}>{t("assets.imp_summary", { ok: cnt.ok, error: cnt.error, skipped: cnt.skipped, removed: cnt.removed })}</div>
+            {!stale && cnt.error > 0 && <div style={{ marginTop: 4 }}>{t("assets.import_fix_hint")}</div>}
+            {cnt.skipped > 0 && <div style={{ marginTop: 4 }}>{t("assets.imp_skipped_warn", { n: cnt.skipped })}</div>}
           </Notice>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+            <Seg value={filter} onChange={setFilter} options={[
+              { k: "all", l: t("assets.imp_filter_all", { n: rows.length }) },
+              { k: "error", l: t("assets.imp_filter_error", { n: cnt.error }) },
+              { k: "skipped", l: t("assets.imp_filter_skipped", { n: cnt.skipped }) },
+              { k: "removed", l: t("assets.imp_filter_removed", { n: cnt.removed }) },
+            ]} />
+            <span style={{ fontSize: 11, color: T.t4 }}>{t("assets.imp_file_note")}</span>
+          </div>
           <Panel>
-            <Scroll minWidth={760}>
-              <Row head cols="50px 80px 1.6fr 80px 1fr 1fr 2fr"><span>{t("assets.row")}</span><span>{t("assets.status")}</span><span>{t("assets.item")}</span><span>{t("assets.qty")}</span><span>{t("assets.where")}</span><span>{t("assets.holder")}</span><span>{t("assets.problem")}</span></Row>
-              {(preview.rows || []).map((r) => {
-                const d = r.data || {}, tone = rowTone(r.status);
+            <Scroll minWidth={940}>
+              <Row head cols={IMP_COLS}><span>{t("assets.row")}</span><span>{t("assets.status")}</span><span>{t("assets.item")}</span><span>{t("assets.qty")}</span><span>{t("assets.where")}</span><span>{t("assets.holder")}</span><span>{t("assets.problem")}</span><span></span></Row>
+              {shown.length === 0 && <Empty>{t("assets.imp_filter_empty")}</Empty>}
+              {shown.map((r) => {
+                const v = r.raw || {};
+                const tone = r.removed ? { l: t("assets.imp_status_removed"), c: T.slt, bg: T.sltL }
+                  : r.dirty ? { l: t("assets.imp_status_changed"), c: "#7A5306", bg: T.ambL }
+                  : { l: t("assets.import_status_" + r.status), ...rowTone(r.status) };
+                const redRow = r.status === "error" && !r.dirty && !r.removed;
+                const problem = r.removed ? t("assets.imp_removed_hint")
+                  : r.dirty ? t("assets.imp_changed_hint")
+                  : r.status === "skipped" ? t("assets.import_skipped_example")
+                  : (r.errors || []).join(" · ");
                 return (
-                  <Row key={r.row} cols="50px 80px 1.6fr 80px 1fr 1fr 2fr" style={{ background: r.status === "error" ? "#FFF8F8" : "transparent" }}>
-                    <span style={{ color: T.t3 }}>{r.row}</span>
-                    <span><Pill label={t("assets.import_status_" + r.status)} c={tone.c} bg={tone.bg} /></span>
-                    <div>{d.name ? <><div style={{ fontWeight: 600, color: T.t1 }}>{d.name}{d.code ? ` · ${d.code}` : ""}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{[d.spec, d.category, d.tracking ? trackLabel(d.tracking) : null].filter(Boolean).join(" · ")}</div></> : <span style={{ color: T.t4 }}>—</span>}</div>
-                    <span>{d.qty != null ? `${fmtN(d.qty)} ${d.unit || ""}` : "—"}</span>
-                    <span style={{ fontSize: 11.5 }}>{d.loc_type ? t(d.loc_type === "warehouse" ? "assets.warehouse" : "assets.site") : "—"}</span>
-                    <span style={{ fontSize: 11.5 }}>{d.holder_type ? holderLabel(d.holder_type) : "—"}</span>
-                    <span style={{ fontSize: 11.5, color: r.status === "error" ? T.red : T.t4 }}>{(r.errors || []).join(" · ") || (r.status === "skipped" ? t("assets.import_skipped_example") : "")}</span>
-                  </Row>
+                  <div key={r.row}>
+                    <Row cols={IMP_COLS} style={{ background: r.removed ? T.surfaceB : redRow ? "#FFF8F8" : "transparent", opacity: r.removed ? 0.65 : 1 }}>
+                      <span style={{ color: T.t3 }}>{r.row}</span>
+                      <span><Pill label={tone.l} c={tone.c} bg={tone.bg} /></span>
+                      <div style={{ minWidth: 0 }}>
+                        {v.name
+                          ? <div style={{ fontWeight: 600, color: T.t1, textDecoration: r.removed ? "line-through" : "none" }}>{v.name}{v.code ? ` · ${v.code}` : ""}</div>
+                          : <span style={{ color: T.t4 }}>—</span>}
+                        <div style={{ fontSize: 10.5, color: T.t4 }}>{[v.spec, v.category, v.tracking].filter(Boolean).join(" · ")}</div>
+                      </div>
+                      <span>{v.qty ? `${v.qty} ${v.unit || ""}` : "—"}</span>
+                      <div style={{ fontSize: 11.5, minWidth: 0 }}>
+                        <div>{v.loc_type || "—"}</div>
+                        {v.loc_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{v.loc_name}</div>}
+                      </div>
+                      <div style={{ fontSize: 11.5, minWidth: 0 }}>
+                        <div>{v.holder_type || "—"}</div>
+                        {v.holder_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{v.holder_name}</div>}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: redRow ? T.red : T.t4, minWidth: 0 }}>
+                        {problem}
+                        {r.status === "skipped" && !r.dirty && !r.removed && (
+                          <button type="button" style={impLink} onClick={() => setRaw(r.row, "remarks", "")}>{t("assets.imp_use_example")}</button>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                        {r.removed
+                          ? <Btn size="sm" ghost onClick={() => toggleRemove(r.row)}>{t("assets.imp_restore")}</Btn>
+                          : <>
+                              <Btn size="sm" ghost={!redRow || r.open} onClick={() => toggleOpen(r.row)}>{r.open ? t("assets.imp_close") : redRow ? t("assets.imp_fix") : t("assets.imp_edit")}</Btn>
+                              <Btn size="sm" ghost onClick={() => toggleRemove(r.row)} title={t("assets.imp_remove")}><IcTrash size={12} color={T.red} /></Btn>
+                            </>}
+                      </div>
+                    </Row>
+                    {r.open && !r.removed && (
+                      <div style={{ padding: "12px 14px 14px", background: "#FFFCF7", borderBottom: `1px solid ${T.b1}` }}>
+                        <ImportRowEditor r={r} rows={rows} lists={lists} onSet={(k, val) => setRaw(r.row, k, val)} onSame={applySame} />
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </Scroll>
           </Panel>
+          <datalist id="imp-cats">{(lists.categories || []).map((n) => <option key={n} value={n} />)}</datalist>
+          <datalist id="imp-units">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
           <ErrBox>{error}</ErrBox>
         </>
       )}
