@@ -304,7 +304,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
   useEffect(() => {
     if (!open) return;
     setPath("pump_machine");
-    setF({ filled_at: nowLocal(), payment_mode: "credit" });
+    setF({ filled_at: nowLocal(), payment_mode: "credit", fuel_type: "diesel" });
     setError("");
   }, [open]);
 
@@ -456,6 +456,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           meter_reading: f.meter_reading ? parseFloat(f.meter_reading) : null,
           meter_missing_reason: f.meter_missing ? (f.meter_missing_reason || null) : null,
           payment_mode: f.payment_mode || "credit",
+          fuel_type: path === "pump_machine" ? (f.fuel_type || "diesel") : "diesel",
           note: f.note || null,
         });
       }
@@ -557,6 +558,21 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           </Field>
         )}
 
+        {path === "pump_machine" && (
+          <Field label={t("fuel.kaunsa_fuel")}>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[{ k: "diesel", l: t("fuel.diesel") }, { k: "petrol", l: t("fuel.petrol") }].map((o) => {
+                const on = (f.fuel_type || "diesel") === o.k;
+                return (
+                  <button key={o.k} type="button" onClick={() => upd("fuel_type", o.k)}
+                    style={{ flex: 1, padding: "9px", borderRadius: 7, border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface, color: on ? T.ind : T.t3, fontSize: 12, fontWeight: on ? 700 : 600, cursor: "pointer", fontFamily: "inherit" }}>
+                    {o.l}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+        )}
         {path === "pump_machine" && (
           <Field label={t("common.project")}>
             <select value={f.project_id || ""} onChange={(e) => upd("project_id", e.target.value)} style={inp}>
@@ -847,6 +863,7 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
               </span>
               <span style={{ fontSize: 11.5, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r._k === "purchase" ? (r.store_name || r.equipment_name || "—") : (r.equipment_name || "—")}
+                {r._k === "purchase" && r.fuel_type === "petrol" && <b style={{ color: T.amb }}>{" · " + t("fuel.petrol")}</b>}
               </span>
               <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{fmtL(r.litres)}</span>
               <span style={{ fontSize: 11.5, color: T.t3 }}>₹{fmtN(r._k === "purchase" ? r.rate : r.rate_used)}</span>
@@ -1174,6 +1191,7 @@ function UnbilledTab({ onReload }) {
                     <span>{String(e.filled_at || "").slice(0, 10)}</span>
                     <span>
                       {e.equipment_name || e.store_name || "—"}
+                      {e.fuel_type === "petrol" && <b style={{ color: T.amb }}>{" · " + t("fuel.petrol")}</b>}
                       {e.project_name && <span style={{ color: T.t4 }}>{" · " + e.project_name}</span>}
                       {e.slip_flag === "mismatch" && (
                         <span style={{ color: T.amb, fontWeight: 700 }}>{" · " + t("fuel.slip_se_alag")}</span>

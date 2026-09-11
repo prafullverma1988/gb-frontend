@@ -281,7 +281,10 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
 
   // Material Purchase Bill supports full line-item editing (add/edit/delete).
   // Amount is derived from the rows, so the manual amount box is hidden.
-  const isMaterialBill = backendType === "material_purchase";
+  // Fuel → Unbilled se bana bill: lines fuel entries se bani hain, yahan badli
+  // nahi ja sakti (server bhi rokta hai) — isliye material wala items editor nahi.
+  const isFuelBill = Array.isArray(txn.fuel_entries) && txn.fuel_entries.length > 0;
+  const isMaterialBill = backendType === "material_purchase" && !isFuelBill;
   const editItemsTotal = editItems.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0), 0);
   const updItem = (i, k, v) => setEditItems(p => p.map((it, idx) => idx === i ? { ...it, [k]: v } : it));
   const addItem = () => setEditItems(p => [...p, { item: "", qty: "", unit: "", rate: "", head: "", description: "", _fromGRN: false, _locked: false }]);
@@ -629,6 +632,47 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
             </div>
           )}
 
+          {/* Fuel → Unbilled se bana bill / cash expense: har fill ka poora byora
+              aur uski slip photo — bilkul Unbilled jaisa (utils/fuelBillDetail.js). */}
+          {!editing && Array.isArray(txn.fuel_entries) && txn.fuel_entries.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>
+                {t("transaction_detail.fuel_entries", { n: txn.fuel_entries.length })}
+              </div>
+              {txn.fuel_entries.map((e) => (
+                <div key={e.id} style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "9px 11px", marginBottom: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>
+                      {e.fuel_type === "petrol" ? t("fuel.petrol") : t("fuel.diesel")} · {fmtN(e.litres)} L × ₹{fmtN(e.rate)}
+                    </span>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: T.t1 }}>₹{fmtN(e.amount)}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: T.t3, marginTop: 3 }}>
+                    {[fmtDate(e.filled_at), e.machine || e.barrel, e.project_name,
+                      e.slip_no ? `${t("fuel.parchi")} ${e.slip_no}` : null, e.entered_by_name].filter(Boolean).join(" · ")}
+                  </div>
+                  {e.purpose && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{e.purpose}</div>}
+                  {e.slip_flag === "mismatch" && (
+                    <div style={{ fontSize: 10.5, color: T.amb, fontWeight: 700, marginTop: 3 }}>
+                      {t("fuel.slip_se_alag")}{e.slip_note ? ` — ${e.slip_note}` : ""}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 6, marginTop: 7, flexWrap: "wrap" }}>
+                    {(e.photos || []).map((u, i) => (
+                      <a key={i} href={u} target="_blank" rel="noreferrer" title={t("transaction_detail.photo_proof")}>
+                        <img src={u} alt="" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}` }} />
+                      </a>
+                    ))}
+                    {!(e.photos || []).length && (
+                      <span style={{ fontSize: 10.5, color: e.photos_pending ? T.amb : T.t4 }}>
+                        {e.photos_pending ? t("transaction_detail.photo_aa_rahi_hai") : t("transaction_detail.photo_nahi_lagi")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {/* Delivery issues finance ne is bill par flag kiye the — 6 mahine
               baad bhi pata rahe ki deduction kis wajah se hua tha. */}
           {!editing && Array.isArray(txn.grn_issues) && txn.grn_issues.length > 0 && (

@@ -3843,6 +3843,8 @@ function FinanceModule(){
       // Vendor ko pehle diya paisa jo is bill se juda (advance adjust) — drawer
       // "Advance se adjust" me dikhata hai.
       advance_adjust:t.advance_adjust||null,
+      // Fuel → Unbilled se bana bill: har fill ka byora aur slip photo.
+      fuel_entries:t.fuel_entries||null,
       // Wallet-origin spend (staff paid from their imprest wallet). The cash
       // already left the company at TOP-UP time, so these rows must NOT hit
       // the company Cash Book / Day Book again (double-count).
@@ -4024,6 +4026,10 @@ function FinanceModule(){
           counted:t.counted===0?false:true,
           notCountedReason:t.not_counted_reason||null,
           items:t.line_items||null,
+          // Drawer ke liye: party ka naam (warna "—" dikhta tha) aur fuel bill
+          // ka byora — har fill aur uski slip photo.
+          party_display:t.party_display||t.row_party_name||null,
+          fuel_entries:t.fuel_entries||null,
           sourceKind:t.source_kind||null,
           refId:t.ref_id||null,
           invoiceNo:t.invoice_no||null,
