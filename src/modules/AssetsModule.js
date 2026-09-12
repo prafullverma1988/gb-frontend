@@ -116,9 +116,12 @@ const condTone = (c) =>
 // Ginti ka status voucher wale se alag hai (draft/closed/cancelled) — apna tone.
 const verifTone = (s) =>
   s === "draft" ? { c: T.amb, bg: T.ambL }
+  : s === "pending" ? { c: T.blu, bg: T.bluL }
   : s === "closed" ? { c: T.grn, bg: T.grnL }
   : { c: T.slt, bg: T.sltL };
-const verifStatusLabel = (s) => t(s === "closed" ? "assets.verify_closed" : s === "cancelled" ? "assets.status_cancelled" : "assets.verify_draft");
+const verifStatusLabel = (s) => t(s === "closed" ? "assets.verify_closed"
+  : s === "cancelled" ? "assets.status_cancelled"
+  : s === "pending" ? "assets.verify_pending_status" : "assets.verify_draft");
 
 // Voucher ka ek sira (from / to) — jahan bhi voucher dikhta hai wahi shakl.
 const sideText = (v, side) => {
@@ -875,6 +878,7 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
   const [f, setF] = useState({});
   const [holdings, setHoldings] = useState(null);
   const [history, setHistory] = useState(null);
+  const [counts, setCounts] = useState(null);    // is item ki saari ginti (kab, kitna, kyun)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const id = item && item.id;
@@ -895,14 +899,16 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
   useEffect(() => {
     if (!id) return;
     let alive = true;
-    setHoldings(null); setHistory(null);
+    setHoldings(null); setHistory(null); setCounts(null);
     Promise.all([
       api.get(`/assets/items/${id}/holdings`).catch(() => null),
       api.get(`/assets/items/${id}/history`).catch(() => null),
-    ]).then(([h, hs]) => {
+      api.get(`/assets/items/${id}/verifications`).catch(() => null),
+    ]).then(([h, hs, cs]) => {
       if (!alive) return;
       setHoldings(h && h.success ? h.data || [] : []);
       setHistory(hs && hs.success ? hs.data || [] : []);
+      setCounts(cs && cs.success ? cs.data || [] : []);
     });
     return () => { alive = false; };
   }, [id]);
@@ -1010,6 +1016,43 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
         </Panel>
       )}
 
+      {/* Ginti ka itihaas — kab gina, ledger me kitna tha, kitna mila, kya wajah. */}
+      {tab === "history" && counts && counts.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <Panel title={t("assets.item_counts")}>
+            <Scroll minWidth={820}>
+              <Row head cols="118px 80px 90px 78px 78px 70px 1.6fr">
+                <span>{t("assets.verify_no")}</span><span>{t("assets.date")}</span><span>{t("assets.status")}</span>
+                <span>{t("assets.verify_system")}</span><span>{t("assets.verify_counted")}</span><span>{t("assets.verify_gap")}</span><span>{t("assets.remarks")}</span>
+              </Row>
+              {counts.map((c, i) => {
+                const sys = N(c.system_good) + N(c.system_damaged);
+                const got = N(c.counted_good) + N(c.counted_damaged);
+                const gap = got - sys;
+                return (
+                  <Row key={c.id + "-" + i} cols="118px 80px 90px 78px 78px 70px 1.6fr">
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: T.t1 }}>{c.verification_no}</div>
+                      {c.adjust_voucher_no && <div style={{ fontSize: 10.5, color: T.ind }}>{c.adjust_voucher_no}</div>}
+                    </div>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(c.date)}</span>
+                    <span><Pill label={verifStatusLabel(c.status)} {...verifTone(c.status)} /></span>
+                    <span>{fmtN(sys)}</span>
+                    <span>{fmtN(got)}</span>
+                    <span style={{ fontWeight: 700, color: gap < 0 ? T.red : gap > 0 ? T.grn : T.t4 }}>
+                      {gap === 0 ? "—" : `${gap > 0 ? "+" : ""}${fmtN(gap)}`}
+                    </span>
+                    <div style={{ fontSize: 11.5, color: T.t3, minWidth: 0 }}>
+                      {c.remarks || "—"}
+                      {c.count_note && <div style={{ fontSize: 10.5, color: T.t4 }}>{c.count_note}</div>}
+                    </div>
+                  </Row>
+                );
+              })}
+            </Scroll>
+          </Panel>
+        </div>
+      )}
       {tab === "history" && (
         <Panel>
           {history == null && <Spinner />}
@@ -2625,25 +2668,30 @@ function NewVerificationModal({ open, meta, pickers, me, onClose, onCreated, onO
   );
 }
 
-function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, onOpenVoucher }) {
+function VerificationDrawer({ id, me, isAdmin, canApprove, canEdit, onClose, onChanged, onOpenVoucher }) {
   const toast = useToast();
   const [v, setV] = useState(null);
   const [failed, setFailed] = useState("");
   const [edit, setEdit] = useState({});          // line id → { g, d, r } — sirf jo haath se badla
+  const [note, setNote] = useState("");          // poori ginti ka note (kya kam/zyada aur kyun)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setFailed("");
     const r = await api.get(`/assets/verifications/${id}`).catch(() => null);
-    if (r && r.success) setV(r.data);
+    if (r && r.success) { setV(r.data); setNote(r.data.remarks || ""); }
     else { setV(null); setFailed((r && r.message) || t("assets.verify_load_failed")); }
   }, [id]);
   useEffect(() => { setV(null); setEdit({}); setError(""); load(); }, [load]);
 
   const draft = v && v.status === "draft";
+  const pending = v && v.status === "pending";
   const canCount = !!(v && v.can_count);
-  const canCancel = !!(draft && v && (isAdmin || v.created_by === me.id));
+  // Approve ke liye Assets me approve AUR edit — dono ka haq. Wahi jaanch server
+  // par bhi lagti hai; yahan sirf button chhupane ke liye.
+  const canDecide = !!(pending && canApprove && canEdit);
+  const canCancel = !!((draft || pending) && v && (isAdmin || v.created_by === me.id));
 
   // Line ki abhi ki value: pehle jo haath se bhara, warna server se aayi.
   const cellOf = (ln) => {
@@ -2656,28 +2704,57 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
   };
   const setCell = (ln, k, val) => setEdit((p) => ({ ...p, [ln.id]: { ...cellOf(ln), ...(p[ln.id] || {}), [k]: val } }));
 
+  const itemsPayload = () => Object.keys(edit).map((lid) => {
+    const e = edit[lid];
+    const g = e.g === undefined ? undefined : (e.g === "" ? null : Number(e.g));
+    return { id: Number(lid), counted_good: g, counted_damaged: g == null ? null : (e.d === "" || e.d === undefined ? 0 : Number(e.d)), remarks: e.r };
+  });
+  const took = (r) => { toast.success(r.message || t("assets.saved")); setEdit({}); setV(r.data); setNote((r.data && r.data.remarks) || ""); onChanged(); };
+
   const saveCount = async () => {
     setError("");
-    const ids = Object.keys(edit);
-    if (!ids.length) { setError(t("assets.verify_nothing_changed")); return; }
-    const items = ids.map((lid) => {
-      const e = edit[lid];
-      const g = e.g === undefined ? undefined : (e.g === "" ? null : Number(e.g));
-      return { id: Number(lid), counted_good: g, counted_damaged: g == null ? null : (e.d === "" || e.d === undefined ? 0 : Number(e.d)), remarks: e.r };
-    });
+    if (!Object.keys(edit).length && note === (v.remarks || "")) { setError(t("assets.verify_nothing_changed")); return; }
     setBusy(true);
-    const r = await api.put(`/assets/verifications/${v.id}/count`, { items });
+    const r = await api.put(`/assets/verifications/${v.id}/count`, { items: itemsPayload(), remarks: note });
     setBusy(false);
-    if (r && r.success) { toast.success(r.message || t("assets.saved")); setEdit({}); setV(r.data); onChanged(); }
+    if (r && r.success) took(r);
     else setError((r && r.message) || t("assets.save_failed"));
   };
 
-  const doClose = async () => {
-    if (!window.confirm(t("assets.verify_close_confirm"))) return;
+  // Bhejne se pehle jo screen par bhara hai wo save ho jaata hai — aadmi ko do
+  // button dabane ki zaroorat na pade.
+  const doSubmit = async () => {
+    setError("");
     setBusy(true);
-    const r = await api.post(`/assets/verifications/${v.id}/close`, {});
+    if (Object.keys(edit).length) {
+      const saved = await api.put(`/assets/verifications/${v.id}/count`, { items: itemsPayload(), remarks: note });
+      if (!(saved && saved.success)) { setBusy(false); setError((saved && saved.message) || t("assets.save_failed")); return; }
+      setEdit({});
+    }
+    const r = await api.post(`/assets/verifications/${v.id}/submit`, { remarks: note });
     setBusy(false);
-    if (r && r.success) { toast.success(r.message || t("assets.saved")); setEdit({}); setV(r.data); onChanged(); }
+    if (r && r.success) took(r);
+    else setError((r && r.message) || t("assets.action_failed"));
+  };
+
+  const doApprove = async () => {
+    const ask = window.confirmAsync || ((m) => Promise.resolve(window.confirm(m)));
+    if (!(await ask(t("assets.verify_approve_confirm")))) return;
+    setBusy(true);
+    const r = await api.post(`/assets/verifications/${v.id}/approve`, {});
+    setBusy(false);
+    if (r && r.success) took(r);
+    else toast.error((r && r.message) || t("assets.action_failed"));
+  };
+
+  const doReject = async () => {
+    const ask = window.promptAsync || ((m) => Promise.resolve(window.prompt(m)));
+    const reason = await ask(t("assets.verify_reject_ask"));
+    if (!reason || !String(reason).trim()) return;
+    setBusy(true);
+    const r = await api.post(`/assets/verifications/${v.id}/reject`, { reason: String(reason).trim() });
+    setBusy(false);
+    if (r && r.success) took(r);
     else toast.error((r && r.message) || t("assets.action_failed"));
   };
   const doCancel = async () => {
@@ -2695,8 +2772,10 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
     : <>
         <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
         {canCancel && <Btn ghost onClick={doCancel} disabled={busy} style={{ color: T.red }}>{t("assets.verify_cancel_btn")}</Btn>}
-        {draft && canCount && <Btn onClick={saveCount} disabled={busy}>{busy ? t("assets.saving") : t("assets.verify_save_count")}</Btn>}
-        {draft && canApprove && <Btn c={T.grn} icon={IcChk} onClick={doClose} disabled={busy}>{t("assets.verify_close_btn")}</Btn>}
+        {draft && canCount && <Btn ghost onClick={saveCount} disabled={busy}>{busy ? t("assets.saving") : t("assets.verify_save_count")}</Btn>}
+        {draft && canCount && <Btn c={T.blu} onClick={doSubmit} disabled={busy}>{busy ? t("assets.saving") : t("assets.verify_submit_btn")}</Btn>}
+        {canDecide && <Btn ghost onClick={doReject} disabled={busy} style={{ color: T.red }}>{t("assets.verify_reject_btn")}</Btn>}
+        {canDecide && <Btn c={T.grn} icon={IcChk} onClick={doApprove} disabled={busy}>{t("assets.verify_approve_btn")}</Btn>}
       </>;
 
   return (
@@ -2711,6 +2790,8 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
         <>
           {draft && canCount && <Notice>{t("assets.verify_null_hint")}</Notice>}
           {draft && !canCount && <Notice tone="warn">{t("assets.verify_readonly")}</Notice>}
+          {draft && v.reject_reason && <Notice tone="warn">{t("assets.verify_rejected_note", { reason: v.reject_reason })}</Notice>}
+          {pending && <Notice tone="warn">{t("assets.verify_pending_note", { by: v.submitted_by_name || "—" })}</Notice>}
           {v.status === "closed" && (
             <Notice>{v.adjust_voucher_no ? t("assets.verify_closed_diff_note", { no: v.adjust_voucher_no }) : t("assets.verify_closed_ok_note")}</Notice>
           )}
@@ -2721,7 +2802,12 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
             <KV k={t("assets.custodian")} v={v.custodian_name} />
             <KV k={t("assets.lines")} v={fmtN(v.line_count)} />
             <KV k={t("assets.verify_pending")} v={<span style={{ color: N(v.pending_count) ? T.amb : T.t1 }}>{fmtN(v.pending_count)}</span>} />
-            <KV k={t("assets.verify_diff")} v={<span style={{ color: N(v.diff_count) ? T.red : T.t1 }}>{fmtN(v.diff_count)}</span>} />
+            <KV k={t("assets.verify_diff")} v={<span style={{ color: N(v.diff_count) ? T.red : T.t1 }}>
+              {fmtN(v.diff_count)}
+              {N(v.net_qty) !== 0 && <span style={{ display: "block", fontSize: 11, fontWeight: 400, color: T.t3 }}>
+                {t("assets.verify_net")}: {N(v.net_qty) > 0 ? "+" : ""}{fmtN(v.net_qty)}
+              </span>}
+            </span>} />
             <KV k={t("assets.verify_adjust_voucher")} v={v.adjust_voucher_no
               ? <span onClick={() => onOpenVoucher(v.adjust_voucher_id)} style={{ color: T.ind, cursor: "pointer" }}>{v.adjust_voucher_no}</span>
               : null} />
@@ -2740,6 +2826,8 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
                 const cg = counted ? Number(c.g) : 0, cd = counted ? (c.d === "" ? 0 : Number(c.d)) : 0;
                 const net = counted ? (cg + cd) - (sg + sd) : null;
                 const condChanged = counted && net === 0 && cg !== sg;
+                // Jiski ginti alag mili uspar wajah bina ginti bheji nahi jaati.
+                const needNote = !!draft && canCount && counted && (net !== 0 || condChanged) && !String(c.r || "").trim();
                 return (
                   <Row key={ln.id} cols={cols}>
                     <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>{ln.code || "—"}</span>
@@ -2770,13 +2858,49 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
                       </span>
                       {condChanged && <div style={{ fontSize: 10, color: T.amb }}>{t("assets.verify_cond_changed")}</div>}
                     </div>
-                    <input value={c.r} style={inpSm} readOnly={!canCount} onChange={(e) => setCell(ln, "r", e.target.value)} />
+                    <div style={{ minWidth: 0 }}>
+                      <input value={c.r} readOnly={!draft || !canCount}
+                        placeholder={needNote ? t("assets.verify_line_note_ph") : ""}
+                        style={{ ...inpSm, borderColor: needNote ? T.red : T.b1 }}
+                        onChange={(e) => setCell(ln, "r", e.target.value)} />
+                      {needNote && <div style={{ fontSize: 10, color: T.red, marginTop: 2 }}>{t("assets.verify_line_note_req")}</div>}
+                    </div>
                   </Row>
                 );
               })}
             </Scroll>
           </Panel>
-          {v.remarks && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 10 }}>{t("assets.remarks")}: {v.remarks}</div>}
+          {draft && canCount ? (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: N(v.diff_count) && !String(note || "").trim() ? T.red : T.t2, marginBottom: 4 }}>
+                {t("assets.verify_note_label")}
+              </div>
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("assets.verify_note_ph")}
+                style={{ ...inp, minHeight: 58, resize: "vertical" }} />
+            </div>
+          ) : v.remarks ? (
+            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 10 }}>{t("assets.verify_note_label")}: {v.remarks}</div>
+          ) : null}
+
+          {/* Ginti ka permanent record — kab bheji, kisne approve/wapas ki, kya wajah thi. */}
+          {(v.log || []).length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <Panel title={t("assets.verify_trail")}>
+                {v.log.map((e, i) => (
+                  <div key={i} style={{ padding: "9px 14px", fontSize: 11.5, borderBottom: i < v.log.length - 1 ? `1px solid ${T.b1}` : "none" }}>
+                    <div style={{ fontWeight: 700, color: T.t2 }}>
+                      {t("assets.verify_log_" + e.action)}
+                      <span style={{ fontWeight: 400, color: T.t4 }}> · {e.by_name || "—"} · {fmtD(e.created_at)}</span>
+                    </div>
+                    <div style={{ color: T.t3, marginTop: 2 }}>
+                      {t("assets.verify_log_diff", { n: fmtN(e.diff_count), net: `${N(e.net_qty) > 0 ? "+" : ""}${fmtN(e.net_qty)}` })}
+                      {e.note ? ` · ${e.note}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </Panel>
+            </div>
+          )}
           <ErrBox>{error}</ErrBox>
         </>
       )}
@@ -2805,6 +2929,7 @@ function VerificationsTab({ refreshKey, meta, pickers, canCreate, onNew, onOpen,
         <select value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 140 }}>
           <option value="">{t("assets.all_status")}</option>
           <option value="draft">{t("assets.verify_draft")}</option>
+          <option value="pending">{t("assets.verify_pending_status")}</option>
           <option value="closed">{t("assets.verify_closed")}</option>
           <option value="cancelled">{t("assets.status_cancelled")}</option>
         </select>
@@ -3173,7 +3298,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
 
       {voucherId && <VoucherDrawer id={voucherId} onClose={() => setVoucherId(null)} onChanged={refresh} />}
       {verifyId && (
-        <VerificationDrawer id={verifyId} me={me} isAdmin={isAdmin} canApprove={canApprove}
+        <VerificationDrawer id={verifyId} me={me} isAdmin={isAdmin} canApprove={canApprove} canEdit={canEdit}
           onClose={() => setVerifyId(null)} onChanged={refresh}
           onOpenVoucher={(vid) => { setVerifyId(null); openVoucherInMovements(vid); }} />
       )}
