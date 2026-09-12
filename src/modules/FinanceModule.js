@@ -3310,7 +3310,7 @@ function ProjectPnlView(){
 // running ledger balance, plus a per-day "Day Balance" (net in−out).
 // Negative balances render in red WITH a leading minus sign (fmtS).
 // ══════════════════════════════════════════════════════════════
-function CashDayBook({ txns, view="cashbook" }){ // view driven by parent sub-tab (cashbook | daybook)
+function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by parent sub-tab (cashbook | daybook)
   const [chip,setChip]   = useState("All");      // All | Receipts | Payments
   const [fSite,setFSite] = useState("All");
   const [fHead,setFHead] = useState("All");
@@ -3325,7 +3325,9 @@ function CashDayBook({ txns, view="cashbook" }){ // view driven by parent sub-ta
   const SITES  = useMemo(()=>uniq(txns.map(t=>t.project)),[txns]);
   const HEADS  = useMemo(()=>uniq(txns.map(t=>t.type)),[txns]);
   const MOPS   = useMemo(()=>uniq(txns.map(t=>t.mop)),[txns]);
-  const ACCTS  = useMemo(()=>uniq(txns.map(t=>t.account)),[txns]);
+  // Company ke saare khaate + jo entries me dikhe (wallet jaise) — sirf
+  // entries se banane par bina-entry ya purani-entry wala khaata gayab tha.
+  const ACCTS  = useMemo(()=>uniq([...accounts.map(a=>a.name),...txns.map(t=>t.account)]),[txns,accounts]);
   const PARTIES= useMemo(()=>uniq(txns.map(t=>t.party)),[txns]);
 
   // date inputs ("2026-05-22") → numeric YYYYMMDD to compare against txn.ds
@@ -3923,11 +3925,27 @@ function FinanceModule(){
   });
 
   // ── REFRESH FUNCTIONS (called after mutations) ────────────────
+  // GET /finance/transactions ek baar me zyada se zyada 1000 row deta hai
+  // (bina limit ke sirf 500). Pehle yahan bina limit ke maanga jaata tha, to
+  // 4,000+ entry wali company me Fin Activity / Cash Book / Day Book sirf
+  // aakhri ~6 hafte dikhate the — totals adhoore, aur jis account ki entry
+  // us window se pehle ki thi wo dropdown se gayab. Ab page-by-page sab.
+  const fetchAllTxns=async()=>{
+    const PAGE=1000, MAX_PAGES=30;   // 30k rows — isse bada tenant aaye to server-side filter chahiye
+    let all=[];
+    for(let i=0;i<MAX_PAGES;i++){
+      const r=await api.get(`/finance/transactions?limit=${PAGE}&offset=${i*PAGE}`);
+      if(!r?.success||!Array.isArray(r.data)) break;
+      all=all.concat(r.data);
+      if(r.data.length<PAGE) break;
+    }
+    return all;
+  };
   const refreshTxns=async()=>{
     try{
       setLoading(l=>({...l,txns:true}));
-      const r=await api.get("/finance/transactions");
-      if(r.success&&r.data?.length) setApiTransactions(r.data.map(mapTxn));
+      const rows=await fetchAllTxns();
+      if(rows.length) setApiTransactions(rows.map(mapTxn));
     }catch(e){console.error("Refresh txns:",e);}
     finally{setLoading(l=>({...l,txns:false}));}
   };
@@ -5341,7 +5359,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
 
         {/* CASH BOOK + DAY BOOK TAB */}
         {(tab==="cashbook"||tab==="daybook")&&(
-          <CashDayBook txns={cbTxnsBase} view={tab==="daybook"?"daybook":"cashbook"}/>
+          <CashDayBook txns={cbTxnsBase} accounts={apiAccounts||[]} view={tab==="daybook"?"daybook":"cashbook"}/>
         )}
 
         {/* PROJECT-WISE P&L TAB (Reports) */}
