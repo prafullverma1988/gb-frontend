@@ -21,6 +21,12 @@
 //   date   = date-picker; value YYYY-MM-DD (server padhi hui tareekh isi shakl me lautata hai)
 //   optionLabel = option ki value data hai (jaise "owned"), dikhaya bhasha me jaata hai
 //   same   = ek row theek karne par baaki rows me bhi lagane ka button
+//   clearable = galti hone par box ke neeche "Hata do" (jaise bulk item par likha code)
+//
+// ImportFixPanel ke marzi wale props:
+//   cols        = [{ head, cell(raw) }] — item ke baad apne column (Assets: Qty/Kahan/Kiske paas)
+//   rowAction(r)= { label, onClick } — us row par ek chhota link (Assets: example row)
+//   skippedHint = Skip wali rows ki apni baat (default: "pehle se app me hain")
 import { useState } from "react";
 import SearchSelect from "./SearchSelect";
 import { t } from "../i18n";
@@ -50,10 +56,13 @@ const pill = (c, bg) => ({
   display: "inline-block", fontSize: 9.5, fontWeight: 700, padding: "3px 8px", borderRadius: 8,
   color: c, background: bg, whiteSpace: "nowrap",
 });
-const grid = {
-  display: "grid", gridTemplateColumns: "46px 84px minmax(170px, 1.4fr) minmax(210px, 2fr) 118px",
+// Beech ke column module apne hisaab se deta hai — Assets ki screen par Qty,
+// Kahan aur Kiske paas bhi dikhte hain, baaki import me sirf item aur dikkat.
+const gridOf = (cols) => ({
+  display: "grid",
+  gridTemplateColumns: `46px 84px minmax(170px, 1.4fr) ${cols.map(() => "minmax(84px, 0.8fr)").join(" ")} minmax(210px, 2fr) 118px`,
   gap: 8, alignItems: "center", padding: "9px 14px", borderBottom: `1px solid ${C.b1}`,
-};
+});
 const optsOf = (f, lists, raw) => (typeof f.options === "function" ? f.options(lists || {}, raw || {}) : f.options) || [];
 
 export function useImportFix() {
@@ -191,6 +200,9 @@ function RowEditor({ r, rows, lists, fields, onSet, onSame }) {
           <div style={{ fontSize: 10.5, fontWeight: 700, color: msg ? C.red : C.t3, marginBottom: 4 }}>{f.col}</div>
           {control(f)}
           {msg && <div style={{ fontSize: 10.5, color: C.red, marginTop: 3, lineHeight: 1.4 }}>{msg}</div>}
+          {f.clearable && msg && filled(f.key) && (
+            <button type="button" style={linkBtn} onClick={() => onSet(f.key, "")}>{t("import_fix.clear_field")}</button>
+          )}
           {same.length > 0 && (
             <button type="button" style={linkBtn} onClick={() => onSame(f.key, v[f.key], same.map((x) => x.row))}>
               {t("import_fix.apply_same", { n: same.length, value: v[f.key] })}
@@ -210,7 +222,7 @@ function RowEditor({ r, rows, lists, fields, onSet, onSame }) {
 
 // title(raw) / sub(raw): row ki pehchaan (jaise naam, aur neeche code/category).
 // adjust: useImportFix().setRaw ko jaata hai — judi hui values theek karne ke liye.
-export default function ImportFixPanel({ fx, fields, title, sub, adjust }) {
+export default function ImportFixPanel({ fx, fields, title, sub, adjust, cols = [], rowAction, skippedHint }) {
   const { rows, lists, message, filter, setFilter, stale, counts } = fx;
   const shown = rows.filter((x) => (filter === "all" ? true : filter === "removed" ? x.removed : !x.removed && x.status === filter));
   const tone = (s) => (s === "ok" ? [C.grn, C.grnL] : s === "error" ? [C.red, C.redL] : [C.slt, C.sltL]);
@@ -233,7 +245,7 @@ export default function ImportFixPanel({ fx, fields, title, sub, adjust }) {
           : message && <div style={{ fontWeight: 700 }}>{message}</div>}
         <div style={{ marginTop: 3 }}>{t("import_fix.summary", { ok: counts.ok, error: counts.error, skipped: counts.skipped, removed: counts.removed })}</div>
         {!stale && counts.error > 0 && <div style={{ marginTop: 4 }}>{t("import_fix.fix_hint")}</div>}
-        {counts.skipped > 0 && <div style={{ marginTop: 4 }}>{t("import_fix.skipped_hint")}</div>}
+        {counts.skipped > 0 && <div style={{ marginTop: 4 }}>{skippedHint || t("import_fix.skipped_hint")}</div>}
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
@@ -251,11 +263,12 @@ export default function ImportFixPanel({ fx, fields, title, sub, adjust }) {
 
       <div style={{ border: `1.5px solid ${C.b1}`, borderRadius: 12, overflow: "hidden", background: C.card }}>
         <div style={{ overflowX: "auto" }}>
-          <div style={{ minWidth: 700 }}>
-            <div style={{ ...grid, fontSize: 10.5, fontWeight: 700, color: C.t3, textTransform: "uppercase", letterSpacing: ".4px", background: C.soft }}>
+          <div style={{ minWidth: 700 + cols.length * 120 }}>
+            <div style={{ ...gridOf(cols), fontSize: 10.5, fontWeight: 700, color: C.t3, textTransform: "uppercase", letterSpacing: ".4px", background: C.soft }}>
               <span>{t("import_fix.col_row")}</span>
               <span>{t("import_fix.col_status")}</span>
               <span>{t("import_fix.col_item")}</span>
+              {cols.map((c, i) => <span key={i}>{c.head}</span>)}
               <span>{t("import_fix.col_problem")}</span>
               <span />
             </div>
@@ -272,16 +285,23 @@ export default function ImportFixPanel({ fx, fields, title, sub, adjust }) {
                 : (r.errors || []).join(" · ") || r.note || "";
               const head = (title && title(v)) || "—";
               const subText = sub ? sub(v) : "";
+              const act = !r.removed && !r.dirty && rowAction ? rowAction(r) : null;
               return (
                 <div key={r.row}>
-                  <div style={{ ...grid, background: r.removed ? C.soft : redRow ? C.redRow : "transparent", opacity: r.removed ? 0.65 : 1 }}>
+                  <div style={{ ...gridOf(cols), background: r.removed ? C.soft : redRow ? C.redRow : "transparent", opacity: r.removed ? 0.65 : 1 }}>
                     <span style={{ color: C.t3, fontSize: 12 }}>{r.row}</span>
                     <span><span style={pill(pc, pbg)}>{pillText}</span></span>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 600, color: C.t1, fontSize: 12.5, textDecoration: r.removed ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{head}</div>
                       {subText && <div style={{ fontSize: 10.5, color: C.t4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{subText}</div>}
                     </div>
-                    <div style={{ fontSize: 11.5, color: redRow ? C.red : C.t3, minWidth: 0, lineHeight: 1.45 }}>{problem}</div>
+                    {cols.map((c, i) => (
+                      <div key={i} style={{ fontSize: 11.5, color: C.t2, minWidth: 0, lineHeight: 1.4 }}>{c.cell(v, r)}</div>
+                    ))}
+                    <div style={{ fontSize: 11.5, color: redRow ? C.red : C.t3, minWidth: 0, lineHeight: 1.45 }}>
+                      {problem}
+                      {act && <button type="button" style={linkBtn} onClick={act.onClick}>{act.label}</button>}
+                    </div>
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                       {r.removed ? (
                         <button type="button" style={smallBtn(false)} onClick={() => fx.toggleRemove(r.row)}>{t("import_fix.restore")}</button>
