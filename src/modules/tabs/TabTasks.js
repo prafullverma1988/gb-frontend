@@ -4,12 +4,27 @@ import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import LibrarySelect from "../../components/LibrarySelect";
 import BoqImportWizard from "./BoqImportWizard";
+import ImportFileModal from "../../components/ImportFileModal";
 import TenderPlanWizard from "./TenderPlanWizard";
 import MapPlanWizard from "./MapPlanWizard";
 import KalKaPlanModal from "./KalKaPlanModal";
 import { T } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
 import { isoDate, todayISO } from "../../utils/today";
+
+// Tasks ka CSV/Excel import — common sudhaar screen (components/ImportFileModal),
+// jaanch server par (POST /tasks/import/rows). Column NAAM se pehchane jaate hain,
+// isliye isi list ka Export ("Base Start / Base End") bhi wapas chadh jaata hai.
+const TASK_IMPORT_FIELDS=[
+  {key:"name",col:"Name",aliases:["task","task name"],required:true},
+  {key:"category",col:"Category",type:"list",options:(L)=>L.categories||[],same:true},
+  {key:"tag",col:"Tag"},
+  {key:"base_start",col:"Start Date",aliases:["base start","start","start date"],type:"date"},
+  {key:"base_end",col:"End Date",aliases:["base end","end","end date"],type:"date"},
+];
+const TASK_IMPORT_TEMPLATE={filename:"sanchalan-tasks-template.csv",
+  headers:["Name","Category","Tag","Start Date","End Date"],
+  sample:[["Excavation","Civil","","01-10-2026","15-10-2026"],["Wiring","Electrical","","",""]]};
 
 // ─── SKELETON LOADER ─────────────────────────────────────────────
 function Sk({ w="100%", h=14, r=6, mb=0 }) {
@@ -174,6 +189,7 @@ function TabTasks({ projectId, isAdmin }) {
   const [showBaselineHistory, setShowBaselineHistory] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showBoqWizard, setShowBoqWizard] = useState(false);
+  const [showTaskImport, setShowTaskImport] = useState(false);
   // Tender wali site par hi "Tender se plan lao" dikhta hai. Ek hi call se
   // dono pata chal jaate hain — tender juda hai ya nahi, aur package hain
   // ya nahi (endpoint tender na hone par {tender_id:null} deta hai).
@@ -1089,43 +1105,11 @@ function TabTasks({ projectId, isAdmin }) {
          {t("common.export")}
         </button>
         {/* Excel Import */}
-        {isAdmin&&<label title={t("tasks.import_from_excel_csv")}
+        {isAdmin&&<button onClick={()=>setShowTaskImport(true)} title={t("tasks.import_from_excel_csv")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
          {t("master_library.import")}
-          <input type="file" accept=".csv" style={{display:"none"}} onChange={async e=>{
-            const file=e.target.files[0]; if(!file) return;
-            const text=await file.text();
-            const lines=text.split("\n").filter(Boolean);
-            const headers=lines[0].split(",").map(h=>h.replace(/"/g,"").trim());
-            const rows=lines.slice(1).map(line=>{
-              const vals=line.split(",").map(v=>v.replace(/"/g,"").trim());
-              const obj={}; headers.forEach((h,i)=>obj[h]=vals[i]||""); return obj;
-            });
-            for(const row of rows){
-              if(!row["Name"]&&!row["name"]) continue;
-              await api.post("/tasks",{
-                project_id:projectId,
-                name:row["Name"]||row["name"],
-                category:row["Category"]||row["category"]||"Civil",
-                tag:row["Tag"]||row["tag"]||"",
-                base_start:row["Start Date"]||row["start_date"]||null,
-                base_end:row["End Date"]||row["end_date"]||null,
-                status:row["Status"]||"Not Started",
-              });
-            }
-            // Reload
-            const r=await api.get("/tasks?project_id="+projectId);
-            if(r.success){
-              const flat=(r.data||[]).filter(t=>!String(t.task_no||"").startsWith("TODO-"));const map={};
-              flat.forEach(t=>{t.children=[];t.no=t.task_no;t.baseStart=t.base_start;t.baseEnd=t.base_end;t.dhyanRakhen=t.dhyan_rakhen;t.assignee=t.assignee_name||"";map[t.id]=t;});
-              const roots=[];flat.forEach(t=>{if(t.parent_id&&map[t.parent_id])map[t.parent_id].children.push(t);else roots.push(t);});
-              setTasks(roots);
-            }
-            alert(t("tasks.import_complete"));
-            e.target.value="";
-          }}/>
-        </label>}
+        </button>}
         {isAdmin&&<button onClick={()=>setShowBoqWizard(true)} title={t("tasks.boq_excel_se_tasks_import_karein")}
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.ind}`,background:T.indL,fontSize:12,fontWeight:700,color:T.ind,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 17V7h6v10M4 21h16M6 21V5a2 2 0 012-2h8a2 2 0 012 2v16"/></svg>
@@ -1569,6 +1553,13 @@ function TabTasks({ projectId, isAdmin }) {
       {overrideTask&&<PTOverrideModal task={overrideTask} onClose={()=>setOverrideTask(null)}
         onSaved={async()=>{setOverrideTask(null);await refetchTasks();}}/>}
 
+      {/* Tasks CSV/Excel import — jaanch aur sudhaar ke saath */}
+      <ImportFileModal open={showTaskImport} onClose={()=>setShowTaskImport(false)}
+        title={t("tasks.imp_title")} sub={t("tasks.imp_sub")}
+        importUrl="/tasks/import/rows" body={{project_id:projectId}}
+        fields={TASK_IMPORT_FIELDS} template={TASK_IMPORT_TEMPLATE}
+        rowTitle={(r)=>r.name} rowSub={(r)=>[r.category,r.base_start,r.base_end].filter(Boolean).join(" · ")}
+        onDone={async()=>{ apiCache.invalidate("tasks"); apiCache.invalidate("projects"); await refetchTasks(); }}/>
       {/* BOQ Import wizard */}
       {showBoqWizard&&<BoqImportWizard projectId={projectId} existingTasks={allFlat}
         onClose={()=>setShowBoqWizard(false)}

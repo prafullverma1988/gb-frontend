@@ -6,6 +6,7 @@ import LeadDesignDrawer from "../components/LeadDesignDrawer";
 import ShareDrawingDrawer from "../components/ShareDrawingDrawer";
 import DesignOverviewDrawer from "../components/DesignOverviewDrawer";
 import ExportMenu from "../components/DataExport";
+import ImportFileModal from "../components/ImportFileModal";
 import { t } from "../i18n";
 
 // ── ICONS ──────────────────────────────────────────────────────────
@@ -77,6 +78,24 @@ const STAGES=[
 
 const SOURCES=["Direct Call","Reference","Site Visit","Facebook Ad","Instagram","Google","Newspaper","Banner","Just Dial","Builder Fair","Other"];
 const PROJ_TYPES=["Residential","Commercial","Industrial","Interior","Renovation","Bungalow","Apartment","Villa","Township","Other"];
+
+// Leads ka CSV/Excel import — common sudhaar screen (components/ImportFileModal),
+// jaanch server par (POST /crm/leads/import/rows). Aliases me is screen ke Export
+// wale (bhasha ke hisaab se badalte) column naam bhi, taaki export wapas chadh sake.
+const leadImportFields=()=>[
+  {key:"name",col:"Name",aliases:["client name","lead name",t("common.name_2")],required:true},
+  {key:"phone",col:"Phone",aliases:["mobile","mobile number",t("common.phone")]},
+  {key:"email",col:"Email",aliases:[t("common.email")]},
+  {key:"city",col:"City",aliases:[t("common.city")],type:"list",options:(L)=>L.cities||[],same:true},
+  {key:"proj_type",col:"Project Type",aliases:["projtype",t("crm.project_type")],type:"list",options:(L)=>L.proj_types||[],same:true},
+  {key:"budget",col:"Budget",aliases:[t("common.budget")]},
+  {key:"source",col:"Source",aliases:[t("common.source")],type:"list",options:(L)=>L.sources||[],same:true},
+  {key:"priority",col:"Priority",aliases:[t("common.priority")],type:"select",options:(L)=>L.priorities||[],same:true},
+  {key:"notes",col:"Notes",aliases:["note","remarks",t("common.notes")],wide:true},
+];
+const LEAD_IMPORT_TEMPLATE={filename:"sanchalan-leads-template.csv",
+  headers:["Name","Phone","Email","City","Project Type","Budget","Source","Priority","Notes"],
+  sample:[["Ramesh Sahu","9876543210","","Raipur","Residential","20-30L","Reference","High","2BHK duplex"]]};
 
 // Stages that require city_id + construction_type_id (so the quotation
 // builder can match a rate package). Fresh "lead" or "soft_lead" allow
@@ -4283,6 +4302,7 @@ function CRMModule(){
   const [quotPromptLead,setQuotPromptLead]=useState(null);
   const [selectFinalLead,setSelectFinalLead]=useState(null);
   const [showTemplates,setShowTemplates]=useState(false);
+  const [showLeadImport,setShowLeadImport]=useState(false);
   const [loading,setLoading]=useState(true);
   const [teamMembers,setTeamMembers]=useState([]);
 
@@ -4509,29 +4529,7 @@ function CRMModule(){
               {key:"notes",label:t("common.notes")},
             ]}
             rows={[...(canConstruction?leads:[]),...(canSolar?solarLeads:[])]}
-            onImport={async(rows)=>{
-              if(!rows.length){alert(t("crm.no_rows_to_import"));return;}
-              if(!await window.confirmAsync(`Import ${rows.length} lead${rows.length>1?"s":""}?`))return;
-              let ok=0,fail=0;
-              for(const r of rows){
-                try{
-                  const res=await api.post("/crm/leads",{
-                    name:r.Name||r.name||"",
-                    phone:r.Phone||r.phone||"",
-                    email:r.Email||r.email||"",
-                    city:r.City||r.city||"",
-                    projType:r["Project Type"]||r.projType||"Residential",
-                    budget:Number(String(r.Budget||r.budget||"").replace(/[^\d.]/g,""))||0,
-                    source:r.Source||r.source||"",
-                    stage:"lead",priority:r.Priority||r.priority||"Medium",
-                    notes:r.Notes||r.notes||"",
-                  });
-                  if(res.success)ok++;else fail++;
-                }catch{fail++;}
-              }
-              alert(`Imported: ${ok}${fail?` · Failed: ${fail}`:""}`);
-              loadLeads();
-            }}
+            onImportClick={()=>setShowLeadImport(true)}
           />
           <button onClick={()=>setShowTemplates(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
@@ -4694,6 +4692,12 @@ function CRMModule(){
 
       {/* Template Builder */}
       {showTemplates&&<TemplateBuilderModal onClose={()=>setShowTemplates(false)}/>}
+      {/* Leads CSV/Excel import — jaanch aur sudhaar ke saath */}
+      <ImportFileModal open={showLeadImport} onClose={()=>setShowLeadImport(false)}
+        title={t("crm.imp_title")} sub={t("crm.imp_sub")}
+        importUrl="/crm/leads/import/rows" fields={leadImportFields()} template={LEAD_IMPORT_TEMPLATE}
+        rowTitle={(r)=>r.name} rowSub={(r)=>[r.phone,r.city,r.proj_type].filter(Boolean).join(" · ")}
+        onDone={()=>loadLeads()}/>
 
       <style>{`
         @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}

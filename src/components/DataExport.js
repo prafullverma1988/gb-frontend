@@ -9,7 +9,8 @@
 //     title="CRM Leads"
 //     columns={[{key:"name",label:"Name"},{key:"phone",label:"Phone"}]}
 //     rows={leads}
-//     onImport={(rows)=>...}   // optional — show Import action
+//     onImport={(rows)=>...}        // optional — CSV padh kar rows deta hai
+//     onImportClick={()=>...}       // optional — module apni import screen kholta hai
 //   />
 //
 // You can also call the helpers directly:
@@ -202,6 +203,7 @@ export default function ExportMenu({
   columns = [],
   rows = [],
   onImport,
+  onImportClick,
   size = "md", // "sm" | "md"
   style = {},
 }) {
@@ -253,6 +255,9 @@ export default function ExportMenu({
     setOpen(false);
   };
   const handleImport = () => {
+    // onImportClick wale module apni jaanch wali screen khud kholte hain (CSV ya
+    // Excel, galti wahin theek). onImport purana seedha-CSV raasta hai.
+    if (onImportClick) { setOpen(false); onImportClick(); return; }
     importCSV((rows) => {
       onImport && onImport(rows);
       setOpen(false);
@@ -327,7 +332,7 @@ export default function ExportMenu({
             sub="Print-friendly"
             onClick={handlePDF}
           />
-          {onImport && (
+          {(onImport || onImportClick) && (
             <>
               <div style={{ borderTop: `1px solid ${T.b1}` }} />
               <MenuItem
