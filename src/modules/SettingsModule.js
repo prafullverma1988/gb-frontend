@@ -113,14 +113,19 @@ function ToggleRow({ icon, label, desc, value, onChange }) {
 // tooltip apne aap sach bolne lagega.
 // Kaunsi rok kahan tak SACH ME lagti hai. Ye list asli code se banayi
 // gayi hai (scripts/gen-perm-reference.js wahi routes padhta hai).
-//   "server" — API bhi rokti hai   "app" — sirf mobile ka button chhupta hai
+//   "server" — API bhi rokti hai   "app" — sirf screen (web/mobile) ka button chhupta hai
+//
+// Mapping: create/edit/delete routes/map-library.js me requirePerm se rukte
+// hain. Approve ka bit bhi server padhta hai (poori company ki library kise
+// dikhe). Export ka koi server route nahi — file browser/phone me banti hai,
+// isliye wahan sirf button chhupta hai ("app").
 const PERM_LIVE = {
   view:    { "*": "server" },
-  create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "server" },
-  edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server" },
-  delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server" },
-  approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server" },
-  export:  {},
+  create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "server", "Mapping": "server" },
+  edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server" },
+  delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server" },
+  approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server", "Mapping": "server" },
+  export:  { "Mapping": "app" },
 };
 const permLive = (mod, act) => (PERM_LIVE[act] || {})["*"] || (PERM_LIVE[act] || {})[mod] || null;
 
@@ -159,12 +164,12 @@ const PERM_HELP = {
     delete: "Asset hatana", approve: "Asset ka issue/wapsi approve karna", export: "Asset register nikalna",
   },
   "Mapping": {
-    view: "\"Site se map banao\" aur uski library band — site par khinchi gayi line/rakba/pin. View hone par aadmi ko SIRF APNI banayi hui marking dikhti hai.",
-    create: "Nayi marking aur naya folder banana",
-    edit: "Marking ka naam badalna, doosre folder me khiskana",
-    delete: "Marking ya folder hatana (folder me doosre ki marking ho to nahi hatega)",
+    view: "Site mapping aur uski library khulti hai — mobile app ka \"Site mapping\" aur web ka \"Site Mapping\" (sidebar). Sirf View par aadmi ko APNI banayi marking dikhti hai (aur wo folder jo use diya gaya ho). Box hatao to dono jagah screen band.",
+    create: "Nayi marking aur naya folder banana.",
+    edit: "Marking ka naam badalna aur use doosre folder me khiskana (apne folder ka naam badalna bhi).",
+    delete: "Marking ya folder hatana. ⚠️ Ye box tick na ho to hatana BAND hai — naye ya custom role ko ye apne aap nahi milta, admin ko khud tick karna padta hai. Hatayi marking \"Hatayi hui\" me jaati hai, aur jiske paas Delete hai wo use wahan se wapas la sakta hai. Folder me doosre ki banayi marking ho to folder nahi hatega.",
     approve: "⚠️ Yahan iska matlab MANZOORI nahi, DEKH-REKH hai — is box se aadmi ko POORI COMPANY ki library dikhne lagti hai, doosron ki banayi marking bhi. Admin/super admin ko wo bina box ke bhi dikhti hai. Default me Project Manager ke paas ye laga hua hai.",
-    export: "Library se KML / GeoJSON / CSV nikalna",
+    export: "KML / GeoJSON / CSV ke button — folder ya file ki marking nikalna (web aur mobile dono). Box na ho to button nahi dikhte.",
   },
   "Procurement": {
     view: "Sidebar se Procurement gayab — Material Request (MR), RFQ, quotation compare aur Purchase Order sab band.",
@@ -279,7 +284,7 @@ function permTip(moduleName, action) {
   const head = base || `${moduleName} me ${action}`;
   const live = permLive(moduleName, action);
   if (live === "server") return `${action.toUpperCase()}: ${head}`;
-  if (live === "app")    return `${action.toUpperCase()}: ${head}\n\nAbhi sirf mobile app ka button chhupta hai — server par rok nahi lagti.`;
+  if (live === "app")    return `${action.toUpperCase()}: ${head}\n\nAbhi sirf screen ka button chhupta hai (web aur mobile) — server par rok nahi lagti.`;
   return `${action.toUpperCase()}: ${head}\n\nAbhi sirf record hota hai — ye tick hataane se kaam nahi rukta. (Module-by-module lagaya ja raha hai.)`;
 }
 

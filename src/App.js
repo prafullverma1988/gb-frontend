@@ -46,6 +46,7 @@ const WarehouseModule    = lazyWithPreload("warehouse",    () => import("./modul
 const FuelModule         = lazyWithPreload("fuel",         () => import("./modules/FuelModule"));
 const MachineryModule    = lazyWithPreload("machinery",    () => import("./modules/MachineryModule"));
 const AssetsModule       = lazyWithPreload("assets",       () => import("./modules/AssetsModule"));
+const MapLibraryModule   = lazyWithPreload("mapping",      () => import("./modules/MapLibraryModule"));
 const TownshipCRMModule  = lazyWithPreload("township",     () => import("./modules/TownshipCRMModule"));
 const ReportsModule      = lazyWithPreload("reports",      () => import("./modules/ReportsModule"));
 const TendersModule      = lazyWithPreload("tenders",      () => import("./modules/TendersModule"));
@@ -97,6 +98,7 @@ function prefetchAllModules(){
     safePreload("FuelModule",          FuelModule);
     safePreload("MachineryModule",     MachineryModule);
     safePreload("AssetsModule",        AssetsModule);
+    safePreload("MapLibraryModule",    MapLibraryModule);
     safePreload("TownshipCRMModule",   TownshipCRMModule);
     safePreload("ReportsModule",       ReportsModule);
     safePreload("SaaSModule",          SaaSModule);
@@ -118,6 +120,7 @@ const IcWH    =(p)=><Ic {...p} d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/>;
 const IcFuel  =(p)=><Ic {...p} d="M12 2.7s6 6.3 6 10.3a6 6 0 01-12 0c0-4 6-10.3 6-10.3z"/>;
 const IcMach  =(p)=><Ic {...p} d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z"/>;
 const IcAsset =(p)=><Ic {...p} d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>;
+const IcMap   =(p)=><Ic {...p} d="M9 20l-5.4-2.7A1 1 0 013 16.4V5.6a1 1 0 011.4-.9L9 7m0 13l6-3m-6 3V7m6 10l4.6 2.3a1 1 0 001.4-.9V7.6a1 1 0 00-.6-.9L15 4m0 13V4m0 0L9 7"/>;
 const IcTown  =(p)=><Ic {...p} d="M3 21h18M5 21V7l6-4v18M19 21V11l-6-4M9 9v.01M9 13v.01M9 17v.01"/>;
 const IcGavel =(p)=><Ic {...p} d="M3 21h9M6 15l6-6M4 11l6 6M14.5 3.5l6 6M17.5 6.5L11 13"/>;
 const IcProc  =(p)=><Ic {...p} d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/>;
@@ -205,6 +208,7 @@ const NAV_GROUPS=[
     {id:"fuel",        get label() { return t("app.fuel"); },        Icon:IcFuel},
     {id:"machinery",   get label() { return t("app.machinery"); },   Icon:IcMach},
     {id:"assets",      get label() { return t("app.assets"); },      Icon:IcAsset},
+    {id:"mapping",     get label() { return t("app.site_mapping"); }, Icon:IcMap},
     {id:"township",    get label() { return t("app.township_crm"); },Icon:IcTown, sc:"G"},
     {id:"payroll",     get label() { return t("app.team_hr"); },   Icon:IcPay,  sc:"Y"},
     {id:"tenders",     get label() { return t("app.tenders"); },     Icon:IcGavel},
@@ -591,6 +595,7 @@ const SEARCH_ITEMS=[
   {id:"fuel",      get label() { return t("app.fuel"); },          icon:"M12 2.7s6 6.3 6 10.3a6 6 0 01-12 0c0-4 6-10.3 6-10.3z",   section:"Finance & Ops"},
   {id:"machinery", get label() { return t("app.machinery"); },     icon:"M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z", section:"Finance & Ops"},
   {id:"assets",    get label() { return t("app.assets"); },        icon:"M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.27 6.96L12 12.01l8.73-5.05M12 22.08V12", section:"Finance & Ops"},
+  {id:"mapping",   get label() { return t("app.site_mapping"); }, icon:"M9 20l-5.4-2.7A1 1 0 013 16.4V5.6a1 1 0 011.4-.9L9 7m0 13l6-3m-6 3V7m6 10l4.6 2.3a1 1 0 001.4-.9V7.6a1 1 0 00-.6-.9L15 4m0 13V4m0 0L9 7", section:"Finance & Ops"},
   {id:"township",  get label() { return t("app.township_crm"); },  icon:"M3 21h18M5 21V7l6-4v18M19 21V11l-6-4",                    sc:"Alt+G", section:"Finance & Ops"},
   {id:"payroll",   get label() { return t("app.team_hr"); },     icon:"M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2",    sc:"Alt+Y", section:"Finance & Ops"},
   {id:"crm",       label:"CRM",           icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+C", section:"Navigation"},
@@ -790,7 +795,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     // Iske bina machinery kisi bhi non-admin ko dikh hi nahi sakti (isVisible
     // ALWAYS_ON par gir jaata hai) — jabki kaagaz-expiry ki bell accountant ko
     // jaati hai aur uska link /machinery hai. Yahan hone se ye grantable ho jata hai.
-    fuel:"Fuel",machinery:"Machinery",assets:"Assets"
+    fuel:"Fuel",machinery:"Machinery",assets:"Assets",mapping:"Mapping"
   };
   const isVisible=(id)=>{
     if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
@@ -1035,7 +1040,7 @@ function MobileBottomNav({active,setActive,enabledModules,user}){
     finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
     reports:"Reports",library:"Library",settings:"Settings",
     crm:"CRM",mom:"MOM",payroll:"Payroll",
-    fuel:"Fuel",machinery:"Machinery",assets:"Assets"
+    fuel:"Fuel",machinery:"Machinery",assets:"Assets",mapping:"Mapping"
   };
   const isVisible=(id)=>{
     if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
@@ -2066,6 +2071,7 @@ function App(){
     fuel:{title:t("app.fuel"),sub:t("app.diesel_barrel_stock_machine_consumption")},
     machinery:{title:t("app.machinery"),sub:t("app.fleet_health_service_documents_reminders")},
     assets:{title:t("app.assets"),sub:t("app.assets_sub")},
+    mapping:{title:t("app.site_mapping"),sub:t("app.site_mapping_sub")},
     township:{title:t("app.township_crm"),sub:t("app.real_estate_projects_sales")},
     payroll:{title:t("common.payroll"),sub:t("app.staff_payments")},
     tenders:{title:t("app.tenders"),sub:t("app.bid_emd_bg_agreement_dlp")},
@@ -2103,6 +2109,7 @@ function App(){
     fuel:      guard("fuel","Fuel",                <FuelModule/>),
     machinery: guard("machinery","Machinery",      <MachineryModule/>),
     assets:    guard("assets",   "Assets",         <AssetsModule deepLink={assetDeepLink} onDeepLinkDone={clearAssetDeepLink}/>),
+    mapping:   guard("mapping", "Site Mapping",   <MapLibraryModule/>),
     township:  guard("township", "Township CRM",   <TownshipCRMModule/>),
     reports:   guard("reports",  "Reports",        <ReportsModule/>),
     tenders:   guard("tenders",  "Tenders",        <TendersModule onOpenProject={(pid)=>handleNotifNav("projects","/projects/"+pid+"/overview")}/>),
