@@ -6620,7 +6620,11 @@ const masterSections = [
   // ── OTHER ─────────────────────────────────────────────────────────
   { id: "design_library", get label() { return t("master_library.design_library"); },     Icon: IcLayers,    Comp: DesignLibrarySection,     section: "OTHER", countKey: null, color: T.purple },
   { id: "uom",           get label() { return t("master_library.units_uom"); },         Icon: IcRuler,     Comp: UOMMasterSection,         section: null, countKey: "uom", color: T.teal },
-  { id: "expense_head",  get label() { return t("master_library.expense_heads"); },       Icon: IcDollar,    Comp: ExpenseHeadSection,       section: null, count: "14", color: T.amber },
+  // Count hardcoded "14" tha jabki /library/summary asli `expense_heads`
+  // ginti pehle se deta hai — live DB me wo 0 thi, to sidebar ek bhari hui
+  // list ka jhootha bharosa de raha tha. Ab ye list mobile ke Quick expense
+  // ka zaroori dropdown bharti hai, isliye sahi ginti dikhna maayne rakhta hai.
+  { id: "expense_head",  get label() { return t("master_library.expense_heads"); },       Icon: IcDollar,    Comp: ExpenseHeadSection,       section: null, countKey: "expense_heads", color: T.amber },
 ];
 
 export default function MasterLibraryModule() {
