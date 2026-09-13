@@ -289,6 +289,16 @@ const PATHS = [
   { id: "store_machine",get l() { return t("fuel.barrel_machine"); }, get sub() { return t("fuel.drum_se_machine_me_paisa_nahi"); }, I: IcDrop },
 ];
 
+// ── Drum kahan pada hai ──────────────────────────────────────────
+// List, dropdown aur ledger me ek hi tarah likha jaaye. Project delete ho chuka
+// ho ya warehouse set na ho to wahi saaf dikhe — wahi drum shift karne layak hain.
+// Jagah sirf pata hai: diesel ka cost tab lagta hai jab wo drum se machine me
+// jaata hai, drum kahin bhi pada ho.
+const placeOf = (s) => (!s ? "" : s.project_id
+  ? (s.project_name || t("fuel.project_delete_ho_chuka"))
+  : (s.warehouse_name || t("fuel.warehouse_set_nahi")));
+const placeKey = (s) => (s.project_id ? "p" + s.project_id : "w" + (s.warehouse_id || 0));
+const placeUnclear = (s) => !!s && (s.place_kind === "project_missing" || (!s.project_id && !s.warehouse_id));
 function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projects }) {
   const [path, setPath] = useState("pump_machine");
   const [f, setF] = useState({});
@@ -333,20 +343,28 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
   const machine = equipment.find((e) => String(e.id) === String(f.equipment_id));
   const isIssue = path === "store_machine";
 
-  // Barrel do jagah ho sakta hai: warehouse me, ya kisi project par. Pehle wo
-  // chuna jaata hai, phir usi ka barrel — isse list chhoti aur naam saaf.
-  const projectsWithStores = useMemo(() => {
+  // Barrel do jagah ho sakta hai: kisi warehouse me, ya kisi project par. Pehle
+  // jagah select hoti hai, phir usi ka barrel — isse list chhoti aur naam saaf.
+  // Har warehouse apni alag jagah hai (pehle saare warehouse ek "Warehouse" me
+  // ghul jaate the).
+  const placesWithStores = useMemo(() => {
     const seen = new Map();
-    for (const s of stores) if (s.project_id) seen.set(s.project_id, s.project_name || ("Project #" + s.project_id));
-    return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    for (const s of stores) {
+      const k = placeKey(s);
+      if (!seen.has(k)) seen.set(k, { key: k, label: placeOf(s), wh: !s.project_id });
+    }
+    return [...seen.values()].sort((a, b) => String(a.label).localeCompare(String(b.label)));
   }, [stores]);
 
-  const scopedStores = useMemo(() => {
-    if (!f.store_scope) return [];
-    if (f.store_scope === "warehouse") return stores.filter((s) => !s.project_id);
-    const pid = String(f.store_scope).slice(1);
-    return stores.filter((s) => String(s.project_id) === pid);
-  }, [stores, f.store_scope]);
+  const scopedStores = useMemo(
+    () => (f.store_scope ? stores.filter((s) => placeKey(s) === f.store_scope) : []),
+    [stores, f.store_scope]);
+
+  // Drum jis project par darj hai aur diesel jis project ke kaam me likha ja
+  // raha hai, wo alag hon to batao — ya to galat project select hua, ya drum
+  // shift ho chuka hai aur uski jagah theek karni hai.
+  const drumElsewhere = isIssue && store && (placeUnclear(store) ||
+    (store.project_id && f.project_id && String(store.project_id) !== String(f.project_id)));
 
   // ── Parchi padho (F3) ─────────────────────────────────────────
   // Ye sirf form bharta hai. Milaan SERVER par hota hai jab entry save hoti
@@ -394,11 +412,6 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
     if (!isIssue && !f.vendor_party_id) { setError(t("fuel.pump_vendor_chunein")); return; }
     if (path !== "pump_store" && !f.equipment_id) { setError(t("fuel.machine_chunein")); return; }
     if (path !== "pump_machine" && !f.store_id) { setError(t("fuel.barrel_chunein")); return; }
-    // Warehouse ka barrel kisi ek project ka nahi hota. Diesel jis site par
-    // pi liya gaya, kharcha wahin jaata hai — aur wo sirf yahin pata chalta hai.
-    if (isIssue && store && !store.project_id && !f.project_id) {
-      setError(t("fuel.warehouse_ke_barrel_se_nikaal_rahe")); return;
-    }
     if (isIssue && store && litres > Number(store.litres) + 0.001) {
       setError(`${store.name} me sirf ${fmtL(store.litres)} hai`); return;
     }
@@ -431,8 +444,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
         res = await api.post("/fuel/issues", {
           store_id: parseInt(f.store_id, 10),
           equipment_id: parseInt(f.equipment_id, 10),
-          // Khaali chhoda to server barrel ka apna project le lega. Doosra
-          // chuna to kharcha wahan transfer hoga.
+          // Khaali = company level. Cost isi par jaata hai, drum kahin bhi pada ho.
           project_id: f.project_id ? parseInt(f.project_id, 10) : null,
           litres,
           issued_at: toSqlDateTime(f.filled_at),
@@ -494,26 +506,38 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
 
       {isIssue && (
         <div style={{ padding: "9px 12px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 7, fontSize: 11.5, color: T.ind, fontWeight: 600, marginBottom: 14 }}>
-         {t("fuel.barrel_se_nikaalne_par_koi_naya")}
+         {t("fuel.barrel_se_machine_cost_yahin")}
         </div>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        {/* Barrel chunne se PEHLE ye poochte hain ki wo kahan pada hai. Ek hi
-            lambi list me site aur warehouse ke drum ghul-mil jaate the, aur
-            "drum 3258" jaise naam se koi nahi bata sakta ki wo kaunsa hai. */}
         {path !== "pump_machine" && (
           <>
             <Field label={t("fuel.barrel_kahan_ka")}>
               <select value={f.store_scope || ""} onChange={(e) => { upd("store_scope", e.target.value); upd("store_id", ""); }} style={inp}>
                 <option value="">{t("fuel.chunein")}</option>
-                <option value="warehouse">{t("fuel.warehouse_central_store")}</option>
-                {projectsWithStores.map((p) => <option key={p.id} value={"p" + p.id}>{p.name}</option>)}
+                {placesWithStores.some((p) => p.wh) && (
+                  <optgroup label={t("fuel.warehouse_central_store")}>
+                    {placesWithStores.filter((p) => p.wh).map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </optgroup>
+                )}
+                {placesWithStores.some((p) => !p.wh) && (
+                  <optgroup label={t("common.project")}>
+                    {placesWithStores.filter((p) => !p.wh).map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </optgroup>
+                )}
               </select>
             </Field>
             <Field label={t("fuel.barrel_store")}>
-              <select value={f.store_id || ""} onChange={(e) => upd("store_id", e.target.value)} style={inp}
-                disabled={!f.store_scope}>
+              <select value={f.store_id || ""} style={inp} disabled={!f.store_scope}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const s = stores.find((x) => String(x.id) === String(v));
+                  // Machine me daalte waqt kaam ka project pehle se drum ka project
+                  // maan lo — zyadatar wahi hota hai. Badalna ho to neeche badlo.
+                  setF((p) => ({ ...p, store_id: v,
+                    project_id: isIssue && s && s.project_id && s.project_name ? String(s.project_id) : (p.project_id || "") }));
+                }}>
                 <option value="">{f.store_scope ? t("fuel.chunein") : t("fuel.pehle_upar_wala_chunein")}</option>
                 {scopedStores.map((s) => <option key={s.id} value={s.id}>{s.name} — {fmtL(s.litres)}</option>)}
               </select>
@@ -524,19 +548,19 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           </>
         )}
 
-        {/* Warehouse ka drum kisi ek site ka nahi hota. Diesel jis project par
-            pi liya gaya, kharcha wahin jaata hai — aur wo baat sirf isi pal
-            pata chalti hai, isliye yahin poochi jaati hai. */}
+        {/* Kharcha yahin banta hai: diesel jis kaam me gaya — project, ya company
+            level. Drum kahan pada hai isse cost nahi badalti. */}
         {isIssue && store && (
-          <Field label={t("fuel.kis_project_ka_kaam")} span={2}
-            hint={store.project_id
-              ? t("fuel.diesel_jis_site_par_pi_liya")
-              : t("fuel.warehouse_ka_diesel_hai_jitna_nikla")}>
-            <select value={f.project_id || (store.project_id ? String(store.project_id) : "")}
-              onChange={(e) => upd("project_id", e.target.value)} style={inp}>
-              <option value="">{t("fuel.chunein")}</option>
+          <Field label={t("fuel.kis_project_ka_kaam")} span={2} hint={t("fuel.cost_machine_ke_kaam_par")}>
+            <select value={f.project_id || ""} onChange={(e) => upd("project_id", e.target.value)} style={inp}>
+              <option value="">{t("fuel.company_level_koi_project_nahi")}</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+            {drumElsewhere && (
+              <div style={{ marginTop: 6, padding: "8px 11px", borderRadius: 6, background: T.ambL, border: `1px solid ${T.ambM}`, fontSize: 11.5, color: T.amb, fontWeight: 600 }}>
+                {t("fuel.drum_doosri_jagah_darj", { place: placeOf(store) })}
+              </div>
+            )}
           </Field>
         )}
 
@@ -893,23 +917,32 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
 function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
   const [newOpen, setNewOpen] = useState(false);
   const [dipFor, setDipFor] = useState(null);
+  const [shiftFor, setShiftFor] = useState(null);
+  const [places, setPlaces] = useState({ projects: [], warehouses: [], can_shift: false });
   const [f, setF] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // Jagah ki list server se — projects ke saath company ke warehouses (Settings →
+  // Warehouse), aur ye ki is user ko drum shift karne ki permission hai ya nahi.
+  useEffect(() => {
+    api.get("/fuel/store-places")
+      .then((r) => { if (r?.success && r.data) setPlaces(r.data); })
+      .catch(() => {});
+  }, []);
+  const placeProjects = places.projects.length ? places.projects : projects;
+
   const saveStore = async () => {
     setError("");
-    // Barrel do jagah ho sakta hai: kisi project par, ya central warehouse me.
-    // Warehouse wale ka koi project nahi hota — uska diesel jis site par pi
-    // liya jayega, kharcha wahin jayega.
     const atWarehouse = f.scope === "warehouse";
     if (!atWarehouse && !f.project_id) { setError(t("fuel.project_chunein_ya_warehouse_chunein")); return; }
+    if (atWarehouse && !f.warehouse_id) { setError(t("fuel.warehouse_select_karo")); return; }
     if (!f.name?.trim()) { setError(t("fuel.barrel_ka_naam_likhein")); return; }
     setBusy(true);
     try {
       const r = await api.post("/fuel/stores", {
         project_id: atWarehouse ? null : parseInt(f.project_id, 10),
-        location: atWarehouse ? (f.location || "").trim() || null : null,
+        warehouse_id: atWarehouse ? parseInt(f.warehouse_id, 10) : null,
         name: f.name.trim(),
         capacity_l: f.capacity_l ? parseFloat(f.capacity_l) : null,
         reorder_level_l: f.reorder_level_l ? parseFloat(f.reorder_level_l) : null,
@@ -937,8 +970,57 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
     setBusy(false);
   };
 
-  const variance = dipFor && f.physical_l !== undefined && f.physical_l !== ""
-    ? Math.round((parseFloat(f.physical_l) - Number(dipFor.litres)) * 100) / 100 : null;
+  // Drum shift — sirf jagah badalti hai, paisa nahi. Dipstick lazmi: drum uthte
+  // waqt usme kitna tha, wahi nayi jagah ki shuruaat hai.
+  const saveShift = async () => {
+    setError("");
+    const toWh = f.to_scope === "warehouse";
+    if (toWh ? !f.to_warehouse_id : !f.to_project_id) { setError(t("fuel.kahan_le_ja_rahe_ho_select_karo")); return; }
+    if (f.physical_l === undefined || f.physical_l === "") { setError(t("fuel.shift_se_pehle_dipstick_daalo")); return; }
+    setBusy(true);
+    try {
+      const r = await api.post(`/fuel/stores/${shiftFor.id}/shift`, {
+        to_project_id: toWh ? null : parseInt(f.to_project_id, 10),
+        to_warehouse_id: toWh ? parseInt(f.to_warehouse_id, 10) : null,
+        moved_at: toSqlDateTime(f.moved_at || nowLocal()),
+        physical_l: parseFloat(f.physical_l),
+        note: f.note || null,
+      });
+      if (r?.success) {
+        setShiftFor(null); setF({}); onReload();
+        if (window.toast && r.message) window.toast.success(r.message);
+      } else setError(r?.message || "Save failed");
+    } catch (e) { setError(e?.message || "Network error"); }
+    setBusy(false);
+  };
+
+  const measuring = dipFor || shiftFor;
+  const variance = measuring && f.physical_l !== undefined && f.physical_l !== ""
+    ? Math.round((parseFloat(f.physical_l) - Number(measuring.litres)) * 100) / 100 : null;
+  const varianceBox = variance != null && (
+    <div style={{ padding: "10px 13px", borderRadius: 7, background: variance === 0 ? T.grnL : T.ambL, border: `1px solid ${variance === 0 ? T.grnM : T.ambM}`, fontSize: 12, fontWeight: 600, color: variance === 0 ? T.grn : T.amb }}>{t("fuel.variance_variancefmtn_l", { variance: variance > 0 ? "+" : "", fmtN: fmtN(variance) })}<div style={{ fontSize: 10.5, fontWeight: 500, marginTop: 3 }}>
+       {t("fuel.stock_apne_aap_adjust_nahi_hoga")}
+      </div>
+    </div>
+  );
+  const errorBox = error && <div style={{ padding: "8px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 6, fontWeight: 600 }}>{error}</div>;
+
+  const scopeToggle = (value, onPick) => (
+    <div style={{ display: "flex", gap: 8 }}>
+      {[{ k: "project", l: t("fuel.kisi_project_par") }, { k: "warehouse", l: t("fuel.warehouse_central_store") }].map((o) => {
+        const on = value === o.k;
+        return (
+          <button key={o.k} type="button" onClick={() => onPick(o.k)}
+            style={{ flex: 1, padding: "9px 10px", borderRadius: 7, cursor: "pointer", fontFamily: "inherit",
+              fontSize: 12.5, fontWeight: 700,
+              border: "1.5px solid " + (on ? T.ind : T.border),
+              background: on ? T.indL || T.surfaceB : T.surface,
+              color: on ? T.ind : T.t2 }}>{o.l}</button>
+        );
+      })}
+    </div>
+  );
+  const onlyWarehouse = places.warehouses.length === 1 ? String(places.warehouses[0].id) : "";
 
   return (
     <>
@@ -949,18 +1031,21 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
         {stores.length === 0 && <Empty>{t("fuel.abhi_koi_barrel_nahi_bana_naya")}</Empty>}
         {stores.length > 0 && (
           <>
-            <Row head cols="1.5fr 1.2fr 100px 100px 110px 150px">
-              <span>{t("fuel.barrel_2")}</span><span>{t("common.project")}</span><span>{t("common.stock")}</span><span>{t("fuel.avg_rate")}</span><span>{t("fuel.value")}</span><span />
+            <Row head cols="1.4fr 1.3fr 100px 100px 110px 230px">
+              <span>{t("fuel.barrel_2")}</span><span>{t("fuel.kahan_hai")}</span><span>{t("common.stock")}</span><span>{t("fuel.avg_rate")}</span><span>{t("fuel.value")}</span><span />
             </Row>
             {stores.map((s) => (
-              <Row key={s.id} cols="1.5fr 1.2fr 100px 100px 110px 150px">
+              <Row key={s.id} cols="1.4fr 1.3fr 100px 100px 110px 230px">
                 <div>
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{s.name}</div>
                   {s.capacity_l != null && (
                     <div style={{ fontSize: 10.5, color: T.t4 }}>capacity {fmtL(s.capacity_l)}</div>
                   )}
                 </div>
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{s.project_name || "—"}</span>
+                <div>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: placeUnclear(s) ? T.red : T.t2 }}>{placeOf(s)}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4 }}>{s.project_id ? t("common.project") : t("fuel.jagah_warehouse")}</div>
+                </div>
                 <span style={{ fontSize: 13, fontWeight: 700, color: s.below_reorder ? T.amb : T.t1 }}>
                   {fmtL(s.litres)}
                   {s.below_reorder && <span style={{ marginLeft: 6 }}><Pill label={t("fuel.low")} c={T.amb} bg={T.ambL} /></span>}
@@ -969,6 +1054,12 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
                 <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{fmtC(s.value)}</span>
                 <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                   <Btn size="sm" ghost icon={IcRuler} onClick={() => { setF({ checked_at: nowLocal() }); setError(""); setDipFor(s); }}>{t("fuel.dipstick")}</Btn>
+                  {places.can_shift && (
+                    <Btn size="sm" ghost onClick={() => {
+                      setF({ moved_at: nowLocal(), to_scope: s.project_id ? "warehouse" : "project", to_warehouse_id: s.project_id ? onlyWarehouse : "" });
+                      setError(""); setShiftFor(s);
+                    }}>{t("fuel.shift")}</Btn>
+                  )}
                   <Btn size="sm" ghost onClick={() => onOpenLedger(s)}>{t("fuel.ledger")}</Btn>
                 </div>
               </Row>
@@ -980,46 +1071,38 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
       <Modal open={newOpen} onClose={() => setNewOpen(false)} title={t("fuel.naya_barrel_store")} width={520}
         footer={<><Btn ghost onClick={() => setNewOpen(false)}>{t("common.cancel")}</Btn><Btn onClick={saveStore} disabled={busy}>{busy ? t("common.saving") : t("fuel.banayein")}</Btn></>}>
         <div style={{ display: "grid", gap: 12 }}>
-          {/* Barrel kahan rakha hai — site par ya central store me. Warehouse
-              wala har project ko diesel deta hai, isliye uska koi ek project
-              nahi hota. */}
           <Field label={t("fuel.barrel_kahan_hai")}>
-            <div style={{ display: "flex", gap: 8 }}>
-              {[{ k: "project", l: t("fuel.kisi_project_par") }, { k: "warehouse", l: t("fuel.warehouse_central_store") }].map((o) => {
-                const on = (f.scope || "project") === o.k;
-                return (
-                  <button key={o.k} type="button"
-                    onClick={() => setF((p) => ({ ...p, scope: o.k, project_id: o.k === "warehouse" ? "" : p.project_id }))}
-                    style={{ flex: 1, padding: "9px 10px", borderRadius: 7, cursor: "pointer", fontFamily: "inherit",
-                      fontSize: 12.5, fontWeight: 700,
-                      border: "1.5px solid " + (on ? T.ind : T.border),
-                      background: on ? T.indL || T.surfaceB : T.surface,
-                      color: on ? T.ind : T.t2 }}>{o.l}</button>
-                );
-              })}
-            </div>
+            {scopeToggle(f.scope || "project", (k) => setF((p) => ({ ...p, scope: k,
+              project_id: k === "warehouse" ? "" : p.project_id,
+              warehouse_id: k === "warehouse" ? (p.warehouse_id || onlyWarehouse) : "" })))}
           </Field>
 
           {(f.scope || "project") === "project" ? (
             <Field label={t("common.project")}>
               <select value={f.project_id || ""} onChange={(e) => setF((p) => ({ ...p, project_id: e.target.value }))} style={inp}>
                 <option value="">{t("fuel.chunein")}</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {placeProjects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
           ) : (
-            <Field label={t("fuel.kahan_rakha_hai_optional")} hint={t("fuel.warehouse_ka_diesel_har_project_ko")}>
-              <input value={f.location || ""} onChange={(e) => setF((p) => ({ ...p, location: e.target.value }))} placeholder={t("fuel.e_g_main_site_store")} style={inp} />
+            <Field label={t("fuel.jagah_warehouse")}
+              hint={places.warehouses.length ? t("fuel.warehouse_ka_diesel_har_project_ko") : t("fuel.koi_warehouse_nahi_bana")}>
+              <select value={f.warehouse_id || ""} onChange={(e) => setF((p) => ({ ...p, warehouse_id: e.target.value }))} style={inp}>
+                <option value="">{t("fuel.chunein")}</option>
+                {places.warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
             </Field>
           )}
-          <Field label={t("common.naam")}><input value={f.name || ""} onChange={(e) => setF((p) => ({ ...p, name: e.target.value }))} placeholder={t("fuel.e_g_site_drum_1")} style={inp} /></Field>
+          <Field label={t("common.naam")} hint={t("fuel.drum_par_likha_naam_number")}>
+            <input value={f.name || ""} onChange={(e) => setF((p) => ({ ...p, name: e.target.value }))} placeholder={t("fuel.e_g_site_drum_1")} style={inp} />
+          </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label={t("fuel.capacity_l")}><input value={f.capacity_l || ""} onChange={(e) => setF((p) => ({ ...p, capacity_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} /></Field>
             <Field label={t("fuel.reorder_level_l")} hint={t("fuel.isse_neeche_jaate_hi_alert_aayega")}>
               <input value={f.reorder_level_l || ""} onChange={(e) => setF((p) => ({ ...p, reorder_level_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} />
             </Field>
           </div>
-          {error && <div style={{ padding: "8px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 6, fontWeight: 600 }}>{error}</div>}
+          {errorBox}
         </div>
       </Modal>
 
@@ -1031,20 +1114,56 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
           <Field label={t("fuel.naapa_hua_diesel_l")}>
             <input value={f.physical_l ?? ""} inputMode="decimal" onChange={(e) => setF((p) => ({ ...p, physical_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} />
           </Field>
-          {variance != null && (
-            <div style={{ padding: "10px 13px", borderRadius: 7, background: variance === 0 ? T.grnL : T.ambL, border: `1px solid ${variance === 0 ? T.grnM : T.ambM}`, fontSize: 12, fontWeight: 600, color: variance === 0 ? T.grn : T.amb }}>{t("fuel.variance_variancefmtn_l", { variance: variance > 0 ? "+" : "", fmtN: fmtN(variance) })}<div style={{ fontSize: 10.5, fontWeight: 500, marginTop: 3 }}>
-               {t("fuel.stock_apne_aap_adjust_nahi_hoga")}
-              </div>
-            </div>
-          )}
+          {varianceBox}
           <Field label={t("common.note_optional")}><input value={f.note || ""} onChange={(e) => setF((p) => ({ ...p, note: e.target.value }))} style={inp} /></Field>
-          {error && <div style={{ padding: "8px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 6, fontWeight: 600 }}>{error}</div>}
+          {errorBox}
         </div>
+      </Modal>
+
+      <Modal open={!!shiftFor} onClose={() => setShiftFor(null)} title={t("fuel.drum_shift_karo")} width={560}
+        sub={shiftFor ? t("fuel.drum_abhi_yahan_hai", { name: shiftFor.name, place: placeOf(shiftFor) }) : ""}
+        footer={<><Btn ghost onClick={() => setShiftFor(null)}>{t("common.cancel")}</Btn><Btn onClick={saveShift} disabled={busy}>{busy ? t("common.saving") : t("fuel.shift_karo")}</Btn></>}>
+        {shiftFor && (
+        <div style={{ display: "grid", gap: 12 }}>
+          <Field label={t("fuel.kahan_le_ja_rahe_ho")}>
+            {scopeToggle(f.to_scope || "project", (k) => setF((p) => ({ ...p, to_scope: k,
+              to_warehouse_id: k === "warehouse" ? (p.to_warehouse_id || onlyWarehouse) : p.to_warehouse_id })))}
+            <div style={{ marginTop: 8 }}>
+              {f.to_scope === "warehouse" ? (
+                <select value={f.to_warehouse_id || ""} onChange={(e) => setF((p) => ({ ...p, to_warehouse_id: e.target.value }))} style={inp}>
+                  <option value="">{t("fuel.chunein")}</option>
+                  {places.warehouses
+                    .filter((w) => shiftFor.project_id || Number(shiftFor.warehouse_id) !== Number(w.id))
+                    .map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              ) : (
+                <select value={f.to_project_id || ""} onChange={(e) => setF((p) => ({ ...p, to_project_id: e.target.value }))} style={inp}>
+                  <option value="">{t("fuel.chunein")}</option>
+                  {placeProjects
+                    .filter((p) => String(p.id) !== String(shiftFor.project_id))
+                    .map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
+            </div>
+          </Field>
+          <Field label={t("fuel.kab_shift_hua")}>
+            <input type="datetime-local" value={f.moved_at || ""} onChange={(e) => setF((p) => ({ ...p, moved_at: e.target.value }))} style={inp} />
+          </Field>
+          <Field label={t("fuel.dipstick_drum_me_kitna_diesel")} hint={t("fuel.kitaab_ke_hisaab_se_l", { l: fmtL(shiftFor.litres) })}>
+            <input value={f.physical_l ?? ""} inputMode="decimal" onChange={(e) => setF((p) => ({ ...p, physical_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} />
+          </Field>
+          {varianceBox}
+          <Field label={t("common.note_optional")}><input value={f.note || ""} onChange={(e) => setF((p) => ({ ...p, note: e.target.value }))} style={inp} /></Field>
+          <div style={{ padding: "9px 12px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 7, fontSize: 11.5, color: T.ind, fontWeight: 600 }}>
+            {t("fuel.shift_se_paisa_nahi_hilta")}
+          </div>
+          {errorBox}
+        </div>
+        )}
       </Modal>
     </>
   );
 }
-
 // ── UNBILLED — jinka bill abhi aaya hi nahi ─────────────────────
 // Wahi kaam jo Material ke Unbilled me hota hai: pump ki entries vendor
 // ke hisaab se jodi hui padi hain, finance unhe dekh kar EK bill banata
@@ -2445,24 +2564,34 @@ function LedgerModal({ store, onClose }) {
           <Row head cols="110px 90px 1.4fr 90px 90px 100px">
             <span>{t("fuel.kab")}</span><span>{t("fuel.kya")}</span><span>{t("fuel.kaun")}</span><span>{t("fuel.litres")}</span><span>{t("common.rate")}</span><span style={{ textAlign: "right" }}>{t("common.balance")}</span>
           </Row>
-          {data.rows.map((r, i) => (
+          {data.rows.map((r, i) => {
+            const measured = r.kind === "check" || r.kind === "shift";
+            const fromTo = r.kind === "shift"
+              ? `${r.from_project_name || r.from_warehouse_name || (r.from_project_id ? t("fuel.project_delete_ho_chuka") : t("fuel.warehouse_set_nahi"))} → ${r.to_project_name || r.to_warehouse_name || "—"}`
+              : "";
+            return (
             <Row key={i} cols="110px 90px 1.4fr 90px 90px 100px">
               <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r.at)}</span>
               <span>{r.kind === "purchase" ? <Pill label={t("fuel.aaya")} c={T.grn} bg={T.grnL} />
                 : r.kind === "issue" ? <Pill label={t("fuel.gaya")} c={T.slt} bg={T.sltL} />
+                : r.kind === "shift" ? <Pill label={t("fuel.shift")} c={T.ind} bg={T.indL} />
                 : <Pill label={t("fuel.dipstick")} c={T.amb} bg={T.ambL} />}</span>
-              <span style={{ fontSize: 11.5, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.kind === "check"
+              <span style={{ fontSize: 11.5, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                title={r.kind === "shift" ? fromTo : undefined}>
+                {r.kind === "shift"
+                  ? t("fuel.shift_row_detail", { fromTo, physical: fmtL(r.physical_l), book: fmtL(r.book_l) })
+                  : r.kind === "check"
                   ? `naapa ${fmtL(r.physical_l)} · kitaab ${fmtL(r.book_l)}`
                   : (r.party_name || "—")}
               </span>
-              <span style={{ fontSize: 12, fontWeight: r.kind === "check" ? 400 : 600, color: r.kind === "check" ? (Number(r.litres) === 0 ? T.t3 : T.amb) : T.t1 }}>
-                {r.kind === "check" ? `${Number(r.litres) > 0 ? "+" : ""}${fmtN(r.litres)} L` : fmtL(r.litres)}
+              <span style={{ fontSize: 12, fontWeight: measured ? 400 : 600, color: measured ? (Number(r.litres) === 0 ? T.t3 : T.amb) : T.t1 }}>
+                {measured ? `${Number(r.litres) > 0 ? "+" : ""}${fmtN(r.litres)} L` : fmtL(r.litres)}
               </span>
               <span style={{ fontSize: 11.5, color: T.t3 }}>{r.rate != null ? `₹${fmtN(r.rate)}` : "—"}</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtL(r.balance_l)}</span>
             </Row>
-          ))}
+            );
+          })}
         </div>
       )}
     </Modal>
