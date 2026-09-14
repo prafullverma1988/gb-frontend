@@ -4126,12 +4126,21 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
       return;
     }
     if (method === "manual") {
+      // WO qty se zyada = over-bill: pehle "exceeds WO" sirf laal rang tha aur
+      // Submit phir bhi chala jaata; ab Over-Billing Mode + reason chahiye (server bhi rokta hai — SUB-11)
+      const over = sections.some(sec => sec.items.some(it => {
+        const q = parseFloat(it.qty || 0);
+        return q > 0 && parseFloat(cumQtys[it.id] || 0) > q;
+      }));
+      if (over && !overBillMode) {
+        alert(t("subcon.manual_exceeds_wo_turn_on_overbill"));
+        return;
+      }
       const items = sections.flatMap(sec => sec.items.map(it => ({
         wo_item_id: it.id,
         cumulative_qty: parseFloat(cumQtys[it.id]||0),
-        rate: parseFloat(it.rate),
       })));
-      onSave({ bill_date: billDate, remark, items, over_bill_mode: 0, over_bill_reason: "" });
+      onSave({ bill_date: billDate, remark, items, over_bill_mode: over ? 1 : 0, over_bill_reason: over ? overBillReason.trim() : "" });
       return;
     }
     if (method === "milestone_percent") {

@@ -6357,6 +6357,7 @@ const dict = {
   "subcon.manual_bill":                                        "📝 Manual Bill",
   "subcon.manual_billing":                                     "MANUAL BILLING",
   "subcon.manual_cumulative":                                  "✍️ Manual (Cumulative)",
+  "subcon.manual_exceeds_wo_turn_on_overbill":                 "Some items' cumulative qty exceeds the WO qty — turn on Over-Billing Mode and add a reason, or reduce the qty.",
   "subcon.manual_item":                                        "+ Manual Item",
   "subcon.manual_items":                                       "Manual Items",
   "subcon.manual_ra_bill":                                     "Manual RA Bill",
