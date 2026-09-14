@@ -8082,6 +8082,7 @@ const dict = {
   "township_crm.modification":                                 "Modification",
   "township_crm.modified":                                     "Modified",
   "township_crm.new_customization":                            "New Customization",
+  "township_crm.n_installments_overdue_amount":                "{n} installments overdue · {amount}",
   "township_crm.next_due":                                     "Next due",
   "township_crm.no_batches":                                   "No batches.",
   "township_crm.no_bookings_in_the_window":                    "No bookings in the window",

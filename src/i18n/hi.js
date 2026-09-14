@@ -8081,6 +8081,7 @@ const dict = {
   "township_crm.modification":                                 "मॉडिफिकेशन",
   "township_crm.modified":                                     "मॉडिफाइड",
   "township_crm.new_customization":                            "न्यू कस्टमाइजेशन",
+  "township_crm.n_installments_overdue_amount":                "{n} किस्त ओवरड्यू · {amount}",
   "township_crm.next_due":                                     "नेक्स्ट ड्यू",
   "township_crm.no_batches":                                   "कोई बैचेज नहीं।",
   "township_crm.no_bookings_in_the_window":                    "इस विंडो में कोई बुकिंग नहीं।",

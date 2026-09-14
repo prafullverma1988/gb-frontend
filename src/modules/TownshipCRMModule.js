@@ -82,6 +82,13 @@ const fmtDate = (d) => {
   if (isNaN(dt.getTime())) return "—";
   return dt.toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" });
 };
+// Kist ka pill. Overdue = baaki kist (pending YA aadha-jama partial) jiski
+// tareekh nikal gayi — server `overdue` bhejta hai (CRM-10). Pehle partial
+// kist kabhi laal nahi hoti thi.
+const payPill = (m) => m.status === "paid" ? { tone:"green", label:t("common.paid") }
+  : m.overdue ? { tone:"coral", label:t("common.overdue") }
+  : m.status === "partial" ? { tone:"amber", label:t("common.partial") }
+  : { tone:"gray", label:t("common.pending") };
 // Numeric sort key for unit_no like "A-15" → ["A", 15]
 const unitSortKey = (uno) => {
   const m = String(uno || "").match(/^([A-Za-z]+)-?(\d+)/);
@@ -1282,7 +1289,9 @@ function BookingsTab({ bookings, onRowClick }) {
   const [filter, setFilter] = useState("All");
 
   const rows = bookings.filter(b => {
-    if (filter === "Pending payment") return b.due !== "—";
+    // Baaki rakam par — "Next due" ki tareekh par nahi (saari kist overdue ho
+    // tab bhi booking is filter me rahe).
+    if (filter === "Pending payment") return b.pending_amount != null ? Number(b.pending_amount) > 0 : b.due !== "—";
     if (filter === "Hold only")       return b.status === "HOLD";
     if (filter === "Sold only")       return b.status === "SOLD";
     return true;
@@ -1323,7 +1332,14 @@ function BookingsTab({ bookings, onRowClick }) {
                 </td>
                 <td style={td}>{b.value}</td>
                 <td style={td}>{b.paid}</td>
-                <td style={{ ...td, color: b.due === "—" ? T.t3 : T.t1 }}>{b.due}</td>
+                <td style={{ ...td, color: b.due === "—" ? T.t3 : Number(b.overdue_count) > 0 ? PILL_TONES.coral.c : T.t1 }}>
+                  {b.due}
+                  {Number(b.overdue_count) > 0 && (
+                    <div style={{ fontSize:10.5, fontWeight:600, color:PILL_TONES.coral.c, marginTop:2 }}>
+                      {t("township_crm.n_installments_overdue_amount", { n: b.overdue_count, amount: inr(b.overdue_amount) })}
+                    </div>
+                  )}
+                </td>
                 <td style={td}><Pill label={(UNIT_STATUS[b.status] || {}).label || b.status} tone={statusTone(b.status)}/></td>
               </tr>
             ))}
@@ -2192,8 +2208,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
                       </thead>
                       <tbody>
                         {payments.milestones.map(m => {
-                          const tone = m.status === "paid" ? "green" : m.status === "partial" ? "amber"
-                            : m.overdue ? "coral" : "gray";
+                          const pill = payPill(m);
                           return (
                             <tr key={m.id}>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.t1 }}>{m.milestone_label}</td>
@@ -2201,7 +2216,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.t1 }}>{inr(m.due_amount)}</td>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.kGrn }}>{inr(m.paid_amount)}</td>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
-                                <Pill label={m.overdue && m.status==="pending" ? t("common.overdue") : m.status} tone={tone}/>
+                                <Pill label={pill.label} tone={pill.tone}/>
                               </td>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
                                 {m.status !== "paid" && (
@@ -2708,6 +2723,10 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
         <ModalInfo label={t("township_crm.agreement_value")} value={booking.value}/>
         <ModalInfo label={t("township_crm.paid_so_far")} value={booking.paid}/>
         <ModalInfo label={t("township_crm.next_due")} value={booking.due}/>
+        {Number(booking.overdue_count) > 0 && (
+          <ModalInfo label={t("common.overdue")}
+            value={t("township_crm.n_installments_overdue_amount", { n: booking.overdue_count, amount: inr(booking.overdue_amount) })}/>
+        )}
       </div>
 
       <SectionH style={{ marginTop:0 }}>{t("township_crm.payment_schedule")}</SectionH>
@@ -2727,8 +2746,7 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
             </thead>
             <tbody>
               {payments.milestones.map(m => {
-                const tone = m.status === "paid" ? "green" : m.status === "partial" ? "amber"
-                  : m.overdue ? "coral" : "gray";
+                const pill = payPill(m);
                 return (
                   <tr key={m.id}>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.t1 }}>{m.milestone_label}</td>
@@ -2736,7 +2754,7 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.t1 }}>{inr(m.due_amount)}</td>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.kGrn }}>{inr(m.paid_amount)}</td>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
-                      <Pill label={m.overdue && m.status==="pending" ? t("common.overdue") : m.status} tone={tone}/>
+                      <Pill label={pill.label} tone={pill.tone}/>
                     </td>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
                       {m.status !== "paid" && <Btn small label={t("estimate.record")} onClick={() => setRecordRow(m)}/>}
