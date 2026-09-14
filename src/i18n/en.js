@@ -4237,6 +4237,7 @@ const dict = {
   "material_flow.order_placed":                                "Order Placed",
   "material_flow.photo_attached_proof_of_issue":               "Photo attached — proof of issue",
   "material_flow.photo_lagao_optional_quality_damage_proof":   "Attach photo (optional) — quality/damage proof",
+  "material_flow.possible_mr_not_linked":                      "No MR linked. Possibly {mr} ({item} · {qty} {unit}, {date}) — name and vendor match, but this GRN is not linked to that MR.",
   "material_flow.raise_issue":                                 "⚠ Raise Issue",
   "material_flow.raised_by_iss":                               "👤 Raised by {iss}",
   "material_flow.received_on":                                 "Received On",

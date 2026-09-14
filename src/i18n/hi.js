@@ -4236,6 +4236,7 @@ const dict = {
   "material_flow.order_placed":                                "ऑर्डर प्लेस हो गया",
   "material_flow.photo_attached_proof_of_issue":               "फोटो अटैच है — इश्यू का प्रूफ",
   "material_flow.photo_lagao_optional_quality_damage_proof":   "फोटो लगाओ (ऑप्शनल) — क्वालिटी/डैमेज प्रूफ",
+  "material_flow.possible_mr_not_linked":                      "कोई MR जुड़ी नहीं। शायद {mr} ({item} · {qty} {unit}, {date}) — नाम और वेंडर मिलते हैं, पर ये GRN उस MR से जुड़ा नहीं है।",
   "material_flow.raise_issue":                                 "⚠ इश्यू उठाओ",
   "material_flow.raised_by_iss":                               "👤 {iss} द्वारा उठाया गया",
   "material_flow.received_on":                                 "रिसीव्ड ऑन",
