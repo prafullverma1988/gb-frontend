@@ -1217,7 +1217,7 @@ function ImportModal({ open, onClose, onDone }) {
 // ══════════════════════════════════════════════════════════════════
 const newGrnLine = () => ({ mode: "existing", asset_item_id: "", name: "", spec: "", unit: "Nos", tracking_mode: "bulk", category_id: "", code: "", qty: "", rate: "" });
 
-function GrnForm({ open, meta, pickers, cats, onClose, onSaved }) {
+function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
   const toast = useToast();
   const [f, setF] = useState({});
   const [lines, setLines] = useState([newGrnLine()]);
@@ -1226,13 +1226,20 @@ function GrnForm({ open, meta, pickers, cats, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // GRN sirf apne store me — server bhi yahi rokta hai (asset incharge /
+  // storekeeper, ya admin/approve ko sab). Issue form jaisa hi filter.
+  const allWh = (meta && meta.warehouses) || [];
+  const myWhIds = (meta && meta.my_warehouse_ids) || [];
+  const whOptions = canAll ? allWh : allWh.filter((w) => myWhIds.includes(w.id));
+
   useEffect(() => {
     if (!open) return;
-    const def = ((meta && meta.warehouses) || []).find((w) => w.is_default) || ((meta && meta.warehouses) || [])[0];
+    const def = whOptions.find((w) => w.is_default) || whOptions[0];
     setF({ warehouse_id: def ? String(def.id) : "", date: todayStr(), party_id: "", vendor_name: "", invoice_no: "", invoice_date: "", remarks: "" });
     setLines([newGrnLine()]); setError(""); setVendorMode("party");
     api.get("/assets/items?tracking=bulk").then((r) => setBulkItems(r && r.success ? r.data || [] : [])).catch(() => setBulkItems([]));
-  }, [open, meta]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, meta, canAll]);
 
   const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const updLine = (i, v) => setLines((p) => p.map((l, j) => (j === i ? v : l)));
@@ -1274,12 +1281,13 @@ function GrnForm({ open, meta, pickers, cats, onClose, onSaved }) {
 
   return (
     <Modal open={open} onClose={onClose} width={920} title={t("assets.grn_new")} sub={t("assets.grn_new_sub")}
-      footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy}>{busy ? t("assets.saving") : t("assets.grn_save")}</Btn></>}>
+      footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy || !whOptions.length}>{busy ? t("assets.saving") : t("assets.grn_save")}</Btn></>}>
+      {!whOptions.length && <Notice tone="warn">{t("assets.issue_no_warehouse")}</Notice>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
         <Field label={t("assets.warehouse")}>
           <select value={f.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
             <option value="">{t("assets.select")}</option>
-            {((meta && meta.warehouses) || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            {whOptions.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
         </Field>
         <Field label={t("assets.date")}><input type="date" value={f.date || ""} onChange={(e) => upd("date", e.target.value)} style={inp} /></Field>
@@ -3025,7 +3033,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
       )}
       {itemFull && <ItemDrawer item={itemFull} cats={cats} canEdit={canEdit} onClose={() => setOpenItem(null)} onChanged={refresh} onOpenVoucher={setVoucherId} />}
 
-      <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} onClose={() => setGrnOpen(false)} onSaved={refresh} />
+      <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} canAll={isAdmin || canApprove} onClose={() => setGrnOpen(false)} onSaved={refresh} />
       <IssueForm open={issueOpen} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setIssueOpen(false)} onSaved={refresh} />
       <MoveForm open={!!moveKind} kind={moveKind || "transfer"} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setMoveKind(null)} onSaved={refresh} />
       <AddAssetForm open={addOpen} meta={meta} pickers={pickers} cats={cats} me={me} onClose={() => setAddOpen(false)} onSaved={refresh} />
