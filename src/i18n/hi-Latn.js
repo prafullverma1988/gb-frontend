@@ -4520,6 +4520,8 @@ const dict = {
   "overview.hatao_archive":                                    "Hatao (archive)",
   "overview.in":                                               "In",
   "overview.in_progress":                                      "In progress",
+  "overview.n_active":                                         "{n} active",
+  "overview.n_in_progress":                                    "{n} chal rahe",
   "overview.isme_nahi":                                        "isme nahi",
   "overview.kaam_ka_bill_cost_material_sub":                   "(kaam ka bill). Cost = material + sub-con + site + equipment + transfer − material-return. Payment/receipt",
   "overview.labour_payments":                                  "Labour / Payments",

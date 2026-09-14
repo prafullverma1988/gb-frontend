@@ -4518,6 +4518,8 @@ const dict = {
   "overview.hatao_archive":                                    "Remove (archive)",
   "overview.in":                                               "In",
   "overview.in_progress":                                      "In progress",
+  "overview.n_active":                                         "{n} active",
+  "overview.n_in_progress":                                    "{n} in progress",
   "overview.isme_nahi":                                        "not in this",
   "overview.kaam_ka_bill_cost_material_sub":                   "(work bill). Cost = material + sub-con + site + equipment + transfer − material-return. Payment/receipt",
   "overview.labour_payments":                                  "Labour / Payments",

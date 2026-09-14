@@ -4,6 +4,7 @@ import { T, fmt, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead } from "../shared/ui";
 import { t } from "../../i18n";
 import { canSeeFinancials } from "../../utils/perms";
+import { todayISO } from "../../utils/today";
 
 /* ────────────────────────────────────────────────────────────────────
    Project Overview — mirrors the company dashboard's depth at the
@@ -221,9 +222,19 @@ function TabOverview({proj, onRequestPayment}) {
   /* ── OPERATIONS derivations ── */
   const ops = useMemo(()=>{
     const done=s=>/done|complete/i.test(s||"");
-    const open=tasks.filter(t=>!done(t.status));
-    const ongoing=tasks.filter(t=>/progress/i.test(t.status||""));
-    const overdue=open.filter(t=>{ const e=t.base_end||t.actual_end||t.end_date; return e && new Date(e) < new Date(); });
+    // Ginti sirf PATTE (leaf) task ki — maa-baap (phase/summary) row ka status
+    // aur progress uske bachchon ka roll-up hai; unhe ginne se KEWAL SAHU par
+    // Open 297 dikhta tha jabki asli task 251 (46 summary). Status ki asli value
+    // 'Ongoing' hai — /progress/ kabhi milta hi nahi tha, to "in progress"
+    // hamesha 0 (PRJ-04). 'In Progress'/'in_progress' purani value, woh bhi.
+    const parentIds=new Set(tasks.map(x=>x.parent_id).filter(x=>x!=null).map(String));
+    const leaves=tasks.filter(x=>!parentIds.has(String(x.id)));
+    const open=leaves.filter(x=>!done(x.status));
+    const ongoing=leaves.filter(x=>["Ongoing","In Progress","in_progress"].includes(x.status));
+    // Overdue = end date BEET chuki (aaj ki local tareekh se pehle) — "aaj" khatam
+    // hone wala task aaj overdue nahi.
+    const today=todayISO();
+    const overdue=open.filter(x=>{ const e=x.base_end||x.actual_end||x.end_date; return e && String(e).slice(0,10) < today; });
     // Stage = English id (STAGES/STAGE_S ki key); label t() se sirf dikhate
     // waqt. Pehle yahan t() ka jawab hi id tha — Hindi me "रिक्वेस्टेड" kisi key
     // se nahi milta, to "Material due" 0 aur pills gayab. Aur Rejected / Closed
@@ -238,7 +249,7 @@ function TabOverview({proj, onRequestPayment}) {
     const byStage={}; STAGES.forEach(s=>byStage[s]=0);
     mrs.forEach(m=>{ const s=stageOf(m); if(byStage[s]!==undefined) byStage[s]+=1; });
     const matPending=mrs.filter(m=>["Requested","Approved","Ordered"].includes(stageOf(m))).length;
-    return {open, ongoing, overdue, byStage, matPending, stageOf};
+    return {leaves, open, ongoing, overdue, byStage, matPending, stageOf};
   },[tasks, mrs]);
   const stageLabel = { Requested:t("overview.requested"), Approved:t("common.approved"), Ordered:t("common.ordered"),
     Received:t("common.received"), Used:t("common.used"), Rejected:t("common.rejected"), Closed:t("common.closed") };
@@ -303,7 +314,7 @@ function TabOverview({proj, onRequestPayment}) {
             note={`${pipe.done_m>=1000?(pipe.done_m/1000).toFixed(2)+" km":Math.round(pipe.done_m)+" m"} / ${pipe.length_m>=1000?(pipe.length_m/1000).toFixed(2)+" km":Math.round(pipe.length_m)+" m"}`}
             color={T.ind}/>}
           <Stat label={t("overview.days_left")}     value={daysLeft}                  note={daysNote}            color={T.pur}/>
-          <Stat label={t("overview.open_tasks")}    value={String(ops.open.length)}   note={`${ops.ongoing.length} in progress`} color={T.amb}/>
+          <Stat label={t("overview.open_tasks")}    value={String(ops.open.length)}   note={t("overview.n_in_progress", { n: ops.ongoing.length })} color={T.amb}/>
           <Stat label={t("overview.team_on_site")}  value={String(team.length)}       note="Workforce assigned"  color={T.grn}/>
           <Stat label={t("overview.material_due")}  value={String(ops.matPending)}    note="Requests in pipeline" color={T.slt}/>
           <Stat label={t("common.overdue")}       value={String(ops.overdue.length)} note="Tasks need action"  color={ops.overdue.length?T.red:T.grn}/>
@@ -325,13 +336,13 @@ function TabOverview({proj, onRequestPayment}) {
               <div style={{flex:1, minWidth:0}}>
                 <div style={{display:"flex", justifyContent:"space-between", marginBottom:8}}>
                   <span style={{fontSize:11, color:T.t4}}>{t("overview.tasks_done")}</span>
-                  <span style={{fontSize:12, fontWeight:700, color:T.t1}}>{tasks.length-ops.open.length}/{tasks.length}</span>
+                  <span style={{fontSize:12, fontWeight:700, color:T.t1}}>{ops.leaves.length-ops.open.length}/{ops.leaves.length}</span>
                 </div>
-                <PBar pct={tasks.length?Math.round((tasks.length-ops.open.length)/tasks.length*100):0} color={T.grn} h={6}/>
+                <PBar pct={ops.leaves.length?Math.round((ops.leaves.length-ops.open.length)/ops.leaves.length*100):0} color={T.grn} h={6}/>
                 <div style={{display:"flex", gap:14, marginTop:12}}>
                   <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("overview.in_progress")}</div><div style={{fontSize:15, fontWeight:700, color:T.blu}}>{ops.ongoing.length}</div></div>
                   <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.overdue")}</div><div style={{fontSize:15, fontWeight:700, color:ops.overdue.length?T.red:T.t3}}>{ops.overdue.length}</div></div>
-                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.total")}</div><div style={{fontSize:15, fontWeight:700, color:T.t1}}>{tasks.length}</div></div>
+                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.total")}</div><div style={{fontSize:15, fontWeight:700, color:T.t1}}>{ops.leaves.length}</div></div>
                 </div>
               </div>
             </div>
@@ -339,7 +350,7 @@ function TabOverview({proj, onRequestPayment}) {
 
           {/* Ongoing tasks list */}
           <Panel>
-            <PHead title={t("overview.ongoing_tasks")} action={<Pill label={`${ops.ongoing.length} active`} c={T.blu} bg={T.bluL}/>}/>
+            <PHead title={t("overview.ongoing_tasks")} action={<Pill label={t("overview.n_active", { n: ops.ongoing.length })} c={T.blu} bg={T.bluL}/>}/>
             <div style={{maxHeight:230, overflowY:"auto"}}>
               {ops.ongoing.length===0
                 ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?t("common.loading_2"):t("overview.no_tasks_in_progress")}</div>
