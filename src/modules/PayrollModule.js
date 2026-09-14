@@ -2524,6 +2524,7 @@ function EditStaffModal({emp,onClose,onSaved}){
     bank_acc:         emp.bankAcc||"",
     ifsc:             emp.ifsc||"",
     pan:              emp.pan||"",
+    ...(emp.gender!==undefined ? { gender: emp.gender||"" } : {}),
   });
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
@@ -2559,6 +2560,17 @@ function EditStaffModal({emp,onClose,onSaved}){
             <F label={t("payroll.mobile")}><input style={inp} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder={t("payroll.10_digit")}/></F>
             <F label={t("common.email")}><input style={inp} value={form.email} onChange={e=>set("email",e.target.value)}/></F>
             <F label={t("payroll.aadhaar")}><input style={inp} value={form.aadhaar} onChange={e=>set("aadhaar",e.target.value)} placeholder={t("payroll.12_digit")}/></F>
+            {/* Gender sirf Maternity (female) / Paternity (male) leave baantne
+                ke kaam aata hai — bina bhare ye type kisi ko allocate nahi hote. */}
+            {"gender" in form && (
+              <F label={t("payroll.gender")}>
+                <select style={inp} value={form.gender} onChange={e=>set("gender",e.target.value)} title={t("payroll.gender_leave_hint")}>
+                  <option value="">{t("payroll.gender_not_set")}</option>
+                  <option value="female">{t("payroll.gender_female")}</option>
+                  <option value="male">{t("payroll.gender_male")}</option>
+                </select>
+              </F>
+            )}
             {/* Pehle yahan "Role / Designation" naam ka free-text tha jo
                 payroll_staff.role likhta tha — yaani Team & HR se kisi ka
                 designation badla hi nahi ja sakta tha, aur wo naam kahin aur
@@ -6147,6 +6159,9 @@ function PayrollModule(){
     mobile:s.phone||"",                          // contact mobile (DB column `phone`)
     email:s.email||"",
     aadhaar:s.aadhaar||"",
+    // Sirf ML/PL leave allocation ke liye. undefined = server par column abhi
+    // nahi (migration baaki) — tab form gender bhejta hi nahi.
+    gender:s.gender,
     // Phase 2 — PF configuration
     pfApplicable:s.pf_applicable===undefined?true:!!s.pf_applicable,
     pfMethod:s.pf_method||"capped_15k",
