@@ -3417,6 +3417,13 @@ const SOLAR_STAGES = [
   {id:"lost",      get label() { return t("crm.lost"); },      color:"#6B7280", bg:"#F1F5F9", get desc() { return t("crm.not_interested"); }},
   {id:"project",   get label() { return t("crm.converted_to_project"); }, color:"#1565C0", bg:"#E3F2FD", get desc() { return t("crm.active_solar_project"); }},
 ];
+// solar_leads.stage DB ENUM (new, contacted, site_visit, quotation, negotiation,
+// converted, project, lost) is screen ki ids (lead, followup, proposal …) se alag
+// hai. Pehle screen ki id seedhe jaati thi — 'lead' strict mode me save hi nahi
+// hota tha aur modal band ho jaata (CRM-08). Bhejte waqt DB wali, padhte waqt screen wali.
+const SOLAR_STAGE_TO_DB = { lead:"new", followup:"contacted", proposal:"quotation", converted:"converted", lost:"lost", project:"project" };
+const SOLAR_STAGE_FROM_DB = { new:"lead", contacted:"followup", site_visit:"followup", quotation:"proposal", negotiation:"proposal", converted:"converted", lost:"lost", project:"project" };
+const solarUiStage = (s) => SOLAR_STAGE_FROM_DB[s] || (SOLAR_STAGE_TO_DB[s] ? s : "lead");
 
 const KW_OPTIONS = ["1","2","3","4","5","6","7","8","9","10"];
 
@@ -3498,7 +3505,7 @@ function AddSolarLeadModal({onClose, onSave, assignedToList, defaultStage}) {
     if (!form.name.trim() || !form.phone.trim()) return setErr(t("crm.name_aur_phone_required"));
     setSaving(true); setErr("");
     try { await onSave(form); onClose(); }
-    catch(e) { setErr(t("crm.error_saving_lead")); }
+    catch(e) { setErr((e && e.message) || t("crm.error_saving_lead")); }
     setSaving(false);
   };
 
@@ -3742,10 +3749,12 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
   const patchLead = async (updates) => {
     setSaving(true); setErr("");
     try {
-      const res = await api.patch("/solar/leads/"+data.id, updates);
+      const body = updates.stage ? {...updates, stage: SOLAR_STAGE_TO_DB[updates.stage] || updates.stage} : updates;
+      const res = await api.patch("/solar/leads/"+data.id, body);
       if (res.success) {
-        setData(p=>({...p,...updates,...(res.data||{})}));
-        onUpdate(data.id, {...updates,...(res.data||{})});
+        const fresh = res.data ? {...res.data, stage: solarUiStage(res.data.stage)} : {};
+        setData(p=>({...p,...updates,...fresh}));
+        onUpdate(data.id, {...updates,...fresh});
       } else setErr(res.message||"Save failed");
     } catch(e) { setErr(e.message); }
     setSaving(false);
@@ -4388,7 +4397,7 @@ function CRMModule(){
     loadLeads();loadTeam();
     // Load solar leads
     api.get("/solar/leads").then(r=>{
-      if(r.success) setSolarLeads(r.data.map(l=>({...l,_type:"solar",stage:l.stage||"lead",priority:l.priority||"Medium",source:l.source||"Direct Call",assignedTo:l.assigned_to_name||l.assignedTo||"—",budget:0,projType:`${l.requirement_kw||"?"}kW Solar`,city:l.city||"",contactDate:l.followup_date?new Date(l.followup_date).toISOString().split("T")[0]:null,tags:[],followupHistory:[]})));
+      if(r.success) setSolarLeads(r.data.map(l=>({...l,_type:"solar",stage:solarUiStage(l.stage),priority:l.priority||"Medium",source:l.source||"Direct Call",assignedTo:l.assigned_to_name||l.assignedTo||"—",budget:0,projType:`${l.requirement_kw||"?"}kW Solar`,city:l.city||"",contactDate:l.followup_date?new Date(l.followup_date).toISOString().split("T")[0]:null,tags:[],followupHistory:[]})));
     }).catch(()=>{});
   },[loadLeads,loadTeam]);
 
@@ -4491,13 +4500,14 @@ function CRMModule(){
         source:form.source, priority:form.priority,
         assigned_to: teamMembers.find(m=>m.name===form.assignedTo)?.id||null,
         followup_date:form.contactDate||null, notes:form.notes||null,
-        stage:"lead",
+        stage:SOLAR_STAGE_TO_DB[form.stage]||"new",
       });
+      if(!res.success) throw new Error(res.message||t("crm.error_saving_lead"));
       if(res.success && res.data){
-        const mapped = {...res.data,_type:"solar",stage:"lead",priority:form.priority||"Medium",source:form.source,assignedTo:form.assignedTo,budget:0,projType:`${form.requirement_kw||"3"}kW Solar`,city:form.city,contactDate:form.contactDate||null,tags:[],followupHistory:[]};
+        const mapped = {...res.data,_type:"solar",stage:solarUiStage(res.data.stage),priority:form.priority||"Medium",source:form.source,assignedTo:form.assignedTo,budget:0,projType:`${form.requirement_kw||"3"}kW Solar`,city:form.city,contactDate:form.contactDate||null,tags:[],followupHistory:[]};
         setSolarLeads(p=>[mapped,...p]);
       }
-    } catch(e){ console.error("Add solar lead error:",e); }
+    } catch(e){ console.error("Add solar lead error:",e); throw e; }
   };
 
   // Merge all leads for KPI counts
