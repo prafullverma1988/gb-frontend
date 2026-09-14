@@ -4,6 +4,7 @@ import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import { T, localYMD } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
+import { can, currentUser } from "../../utils/perms";
 
 function TabSubcon({ projectId, project }) {
   const [wos, setWos] = useState([]);
@@ -27,7 +28,9 @@ function TabSubcon({ projectId, project }) {
   const [editBillSaving, setEditBillSaving] = useState(false);
   const [billItems, setBillItems] = useState({});
   const [billForm, setBillForm] = useState({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
-  const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: new Date().toISOString().split("T")[0], payment_mode:"Bank Transfer", reference_no:"", remark:"" });
+  const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: new Date().toISOString().split("T")[0], payment_mode:"Bank Transfer", reference_no:"", remark:"", account_id:"" });
+  // Finance me gaye RA bill (fin_txn_id) ka payment Finance entry banta hai — account zaroori (SUB-08)
+  const [payAccounts, setPayAccounts] = useState([]);
   const [showManualRaBill, setShowManualRaBill] = useState(false);
   const [manualBillForm, setManualBillForm] = useState({ bill_date: localYMD(), remark:"", items:[{description:"",qty:"",rate:""}] });
   const [manualBillSaving, setManualBillSaving] = useState(false);
@@ -168,6 +171,15 @@ function TabSubcon({ projectId, project }) {
   };
 
   const reloadWo = async () => { if (selWo) await selectWo(selWo); };
+
+  // Finance me gaye bill ka payment modal khule to account list (ek baar) — SUB-08
+  const payBillPosted = !!(showPayModal && bills.find(x => x.id === showPayModal)?.fin_txn_id);
+  useEffect(() => {
+    if (!payBillPosted || payAccounts.length) return;
+    api.get("/finance/accounts").then(r => { if (r?.success) setPayAccounts(r.data || []); }).catch(() => {});
+  }, [payBillPosted, payAccounts.length]);
+  // Finance entry banane ka haq — server bhi yahi maangta hai (admin / accountant + Finance create)
+  const canFinancePay = (() => { const u = currentUser(); return ["admin", "super_admin", "accountant"].includes(u?.role) && can("Finance", "create", u); })();
 
   // ── BILLING-METHOD SWITCH ──
   const switchBillingMethod = async (method) => {
@@ -349,6 +361,8 @@ function TabSubcon({ projectId, project }) {
   // ── RECORD PAYMENT ──
   const submitPayment = async (billId) => {
     if(!payForm.amount_paid) return alert(t("estimate.amount_required"));
+    const payBill = bills.find(x => x.id === billId);
+    if (payBill?.fin_txn_id && !payForm.account_id) return alert(t("subcon.payment_account_select_karo"));
     setSaving(true);
     const res = await api.post("/subcon/payments",{
       bill_id: billId, wo_id: selWo.id,
@@ -357,9 +371,10 @@ function TabSubcon({ projectId, project }) {
       payment_mode: payForm.payment_mode,
       reference_no: payForm.reference_no,
       remark: payForm.remark,
+      account_id: payBill?.fin_txn_id ? Number(payForm.account_id) : undefined,
     }).catch(()=>({success:false}));
     setSaving(false);
-    if(res.success){ setShowPayModal(false); selectWo(selWo); setPayForm({amount_paid:"",payment_date:new Date().toISOString().split("T")[0],payment_mode:"Bank Transfer",reference_no:"",remark:""}); }
+    if(res.success){ setShowPayModal(false); selectWo(selWo); setPayForm({amount_paid:"",payment_date:new Date().toISOString().split("T")[0],payment_mode:"Bank Transfer",reference_no:"",remark:"",account_id:""}); }
     else alert(res.message||"Failed");
   };
 
@@ -874,7 +889,7 @@ function TabSubcon({ projectId, project }) {
                       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
                         {b.status==="Draft"&&<button onClick={async()=>{const r=await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"});if(r&&r.success===false)alert(r.message||t("common.something_went_wrong"));selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
                         {b.status==="Submitted"&&<button onClick={async()=>{const r=await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});if(r&&r.success===false)alert(r.message||t("common.something_went_wrong"));selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
-                        {b.status==="Approved"&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.record_payment")}</button>}
+                        {b.status==="Approved"&&(!b.fin_txn_id||canFinancePay)&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.record_payment")}</button>}
                         {/* Edit + Delete (not for Paid) */}
                         {b.status!=="Paid"&&(
                           <button onClick={async()=>{
@@ -1765,6 +1780,15 @@ function TabSubcon({ projectId, project }) {
               </div>
             </div>
             <input value={payForm.remark} onChange={e=>setPayForm(p=>({...p,remark:e.target.value}))} placeholder={t("common.remark_optional")} style={{...inpStyle,marginBottom:12}}/>
+            {payBillPosted && (
+              <div style={{marginBottom:12}}>
+                <label style={lblStyle}>{t("subcon.payment_account")}</label>
+                <SearchSelect value={payForm.account_id ? String(payForm.account_id) : ""}
+                  options={payAccounts.map(a => ({ value: String(a.id), label: a.name }))}
+                  onChange={v=>setPayForm(p=>({...p,account_id:v}))} placeholder={t("finance.select_account")}/>
+                <div style={{fontSize:10.5,color:T.t3,marginTop:5,lineHeight:1.45}}>{t("subcon.payment_finance_note")}</div>
+              </div>
+            )}
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setShowPayModal(false)} style={{flex:1,padding:"8px",borderRadius:6,border:"1px solid "+T.b1,background:T.surface,cursor:"pointer",fontSize:12}}>{t("common.cancel")}</button>
               <button onClick={()=>submitPayment(showPayModal)} disabled={saving} style={{flex:2,padding:"8px",borderRadius:6,background:saving?T.t4:T.grn,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>{saving?t("common.saving"):t("subcon.save_payment")}</button>
