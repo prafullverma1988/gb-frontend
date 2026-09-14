@@ -491,6 +491,7 @@ const dict = {
   "assets.ok":                                                 "ठीक है",
   "assets.on_rent":                                            "रेंट पर",
   "assets.overdue_empty":                                      "सब टाइम पर है",
+  "assets.overdue_left":                                       "{n} अभी वापस नहीं आए",
   "assets.overdue_title":                                      "रिटर्न डेट निकल गई",
   "assets.pending_empty":                                      "कुछ पेंडिंग नहीं",
   "assets.pending_note":                                       "{name} के एक्सेप्ट का इंतज़ार — तब तक सामान रास्ते में गिना जाता है",

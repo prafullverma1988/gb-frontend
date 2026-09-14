@@ -492,6 +492,7 @@ const dict = {
   "assets.ok":                                                 "OK",
   "assets.on_rent":                                            "On rent",
   "assets.overdue_empty":                                      "Nothing overdue",
+  "assets.overdue_left":                                       "{n} not back yet",
   "assets.overdue_title":                                      "Return overdue",
   "assets.pending_empty":                                      "Nothing pending",
   "assets.pending_note":                                       "Waiting for {name} to accept — until then the items count as in transit",

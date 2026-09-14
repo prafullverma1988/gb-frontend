@@ -539,6 +539,8 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{to.main}</div>
                   <div style={{ fontSize: 10.5, color: T.t4 }}>{to.sub}{v.to_custodian_name ? ` · ${v.to_custodian_name}` : ""}</div>
+                  {/* Isi voucher ka jo abhi wapas nahi aaya — server voucher history se ginta hai */}
+                  {v.outstanding_qty != null && <div style={{ fontSize: 10.5, color: T.red }}>{t("assets.overdue_left", { n: fmtN(v.outstanding_qty) })}</div>}
                 </div>
                 <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(v.expected_return_date)}</span>
                 <span><Pill label={t("assets.days_overdue", { n: N(v.days_overdue) })} c={T.red} bg={T.redL} /></span>

@@ -494,6 +494,7 @@ const dict = {
   "assets.ok":                                                 "Theek hai",
   "assets.on_rent":                                            "Rent par",
   "assets.overdue_empty":                                      "Sab time par hai",
+  "assets.overdue_left":                                       "{n} abhi wapas nahi aaye",
   "assets.overdue_title":                                      "Return date nikal gayi",
   "assets.pending_empty":                                      "Kuch pending nahi",
   "assets.pending_note":                                       "{name} ke accept ka intezaar — tab tak saaman raaste me gina jaata hai",
