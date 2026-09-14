@@ -6635,6 +6635,7 @@ const dict = {
   "tasks.end_date_nikal_gayi_abhi_bhi":                        "End date nikal gayi, abhi bhi incomplete",
   "tasks.enter_name":                                          "Enter name...",
   "tasks.entries_aa_rahi_hain":                                "Entries aa rahi hain…",
+  "tasks.entries_load_nahi_hui":                               "Entries load nahi hui — upar ka total task ka pichhla darj aankda hai. Thodi der baad dobara kholo.",
   "tasks.entry_hatao":                                         "Entry hatao",
   "tasks.entry_kal_ki_jayegi":                                 "(entry KAL ki jayegi)",
   "tasks.export_to_csv":                                       "Export to CSV",

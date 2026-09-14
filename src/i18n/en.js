@@ -6633,6 +6633,7 @@ const dict = {
   "tasks.end_date_nikal_gayi_abhi_bhi":                        "End date passed, still incomplete",
   "tasks.enter_name":                                          "Enter name...",
   "tasks.entries_aa_rahi_hain":                                "Entries loading…",
+  "tasks.entries_load_nahi_hui":                               "Could not load the entries — the total above is the task's last saved figure. Try opening it again shortly.",
   "tasks.entry_hatao":                                         "Remove entry",
   "tasks.entry_kal_ki_jayegi":                                 "(entry will be for TOMORROW)",
   "tasks.export_to_csv":                                       "Export to CSV",

@@ -6632,6 +6632,7 @@ const dict = {
   "tasks.end_date_nikal_gayi_abhi_bhi":                        "एंड डेट निकल गई, अभी भी इनकम्प्लीट",
   "tasks.enter_name":                                          "नाम एंटर करो...",
   "tasks.entries_aa_rahi_hain":                                "एंट्रीज़ आ रही हैं…",
+  "tasks.entries_load_nahi_hui":                               "एंट्रीज़ लोड नहीं हुईं — ऊपर का कुल टास्क का पिछला दर्ज आंकड़ा है। थोड़ी देर बाद दोबारा खोलो।",
   "tasks.entry_hatao":                                         "एंट्री हटाओ",
   "tasks.entry_kal_ki_jayegi":                                 "(एंट्री कल की जाएगी)",
   "tasks.export_to_csv":                                       "सीएसवी में एक्सपोर्ट करो",
