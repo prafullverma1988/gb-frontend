@@ -3058,7 +3058,9 @@ function FeatureRequests() {
   const submit = async () => {
     if (!form.title.trim()) { setToast({ msg:"Title required", ok:false }); return; }
     setSaving(true);
-    const res = await api("/saas-admin/my-feature-requests", { method:"POST", body: form });
+    // api.post — body JSON banke jaata hai. Kachcha api() object ko
+    // "[object Object]" bana deta tha aur har submit 500 par girta tha (CON-02).
+    const res = await api.post("/saas-admin/my-feature-requests", form);
     setSaving(false);
     if (res.success) {
       setShowForm(false);
