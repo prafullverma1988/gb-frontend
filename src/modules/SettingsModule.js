@@ -150,7 +150,7 @@ const PERM_HELP = {
     create: "Nayi transaction (bill, payment, receipt), nayi party, nayi payment request banana",
     edit: "Transaction ya party ki detail badalna, pending payment close/extend karna",
     delete: "Party ya payment request delete karna",
-    approve: "Payment request approve karna",
+    approve: "Payment request aur staff wallet ka kharcha approve / reject karna",
     export: "Ledger aur transaction CSV/PDF me nikalna",
   },
   "Financial Reports": {
