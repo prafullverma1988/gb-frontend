@@ -3316,7 +3316,8 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
   },[transfer?.dbId]);
 
   const handleDelete=async()=>{
-    if(!await window.confirmAsync(`${detail.id} ko delete karein?\n\nSource project ka debit reverse hoga.${detail.status!=="Pending"?" Dest project ka GRN bhi hatega.":""}\nYeh undo nahi ho sakta.`)) return;
+    // (MAT-17) Ab server store wale sire bhi ulte karta hai — text wahi bataye jo sach me hota hai.
+    if(!await window.confirmAsync(t("warehouse.transfer_delete_confirm", { id: detail.id }))) return;
     setDeleting(true);
     const r=await api.del(`/warehouse/transfers/${detail.dbId}`);
     setDeleting(false);

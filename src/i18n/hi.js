@@ -8329,6 +8329,7 @@ const dict = {
   "warehouse.default_fifo":                                    "डिफ़ॉल्ट FIFO",
   "warehouse.default_tag":                                    "डिफ़ॉल्ट",
   "warehouse.delete_reverse":                                  "डिलीट करो और रिवर्स करो",
+  "warehouse.transfer_delete_confirm":                         "{id} को डिलीट करें?\n\nभेजने वाले सिरे का डेबिट वापस होगा (स्टोर का स्टॉक या प्रोजेक्ट लेजर)। जो रिसीव हो चुका है वो लेने वाले सिरे से हटेगा (साइट की GRN या स्टोर का स्टॉक) — लेने वाले स्टोर में वो खर्च हो चुका हो तो डिलीट नहीं होगा।\nयह वापस नहीं हो सकता।",
   "warehouse.dikh_raha_receive_karne_par_grn":                 "दिख रहा है — रिसीव करने पर GRN बनेगा",
   "warehouse.direct_grn":                                      "डायरेक्ट GRN",
   "warehouse.direct_grn_2":                                    "डायरेक्ट GRN:",
