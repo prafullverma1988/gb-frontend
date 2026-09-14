@@ -731,7 +731,8 @@ function CostReport({ econ, health }) {
               <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{m.name}</span>
               <span><Pill label={m.owned ? t("machinery.apni") : t("machinery.kiraye")} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
               <span style={{ fontSize: 11.5, color: T.t3 }}>kharcha {rupee(m.cost.total)}</span>
-              <span style={{ fontSize: 11, color: T.amb }}>{m.run.reason}</span>
+              {/* Meter theek ho par kharcha/kiraya darj na ho to wajah cost_reason me (MCH-19) */}
+              <span style={{ fontSize: 11, color: T.amb }}>{m.cost_reason || m.run.reason}</span>
             </Row>
           ))}
         </Panel>
