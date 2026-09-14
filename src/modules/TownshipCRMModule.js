@@ -82,6 +82,22 @@ const fmtDate = (d) => {
   if (isNaN(dt.getTime())) return "—";
   return dt.toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" });
 };
+// Kist ka pill. Overdue = baaki kist (pending YA aadha-jama partial) jiski
+// tareekh nikal gayi — server `overdue` bhejta hai (CRM-10). Pehle partial
+// kist kabhi laal nahi hoti thi.
+const payPill = (m) => m.cancelled_booking ? { tone:"gray", label:t("township_crm.cancelled_booking") }
+  : m.status === "paid" ? { tone:"green", label:t("common.paid") }
+  : m.overdue ? { tone:"coral", label:t("common.overdue") }
+  : m.status === "partial" ? { tone:"amber", label:t("common.partial") }
+  : { tone:"gray", label:t("common.pending") };
+// Booking cancel ke baad batao kya hua — merger ki saari units saath cancel
+// hoti hain, aur jo paisa aa chuka wo Collected me hi rehta hai (CRM-12).
+const cancelNotice = (r) => {
+  const units = (r.cancelled_units || []).join(" + ");
+  const kept = Number(r.received_kept) || 0;
+  if ((r.cancelled_units || []).length < 2 && kept <= 0) return;
+  alert(t("township_crm.booking_cancelled_units", { units }) + (kept > 0 ? " " + t("township_crm.received_money_stays", { amount: inr(kept) }) : ""));
+};
 // Numeric sort key for unit_no like "A-15" → ["A", 15]
 const unitSortKey = (uno) => {
   const m = String(uno || "").match(/^([A-Za-z]+)-?(\d+)/);
@@ -472,10 +488,12 @@ export default function TownshipCRMModule() {
 
   // ── Seed Demo Data ──────────────────────────────────────────
   const handleSeed = async () => {
-    if (!await window.confirmAsync(t("township_crm.existing_units_prospects_delete_ho_jayenge"))) return;
+    if (!await window.confirmAsync(t("township_crm.seed_demo_confirm_empty"))) return;
     setSeeding(true);
     try {
-      const res = await api.post("/township-crm/seed-demo", { wipe_existing: true });
+      // Pehle wipe_existing:true — server project ka saara data hard-delete
+      // karta tha. Ab sirf khula (empty) project, delete kabhi nahi (CRM-13).
+      const res = await api.post("/township-crm/seed-demo", { project_id: PROJECT_ID });
       if (res?.success) {
         const d = res.data;
         alert(t("township_crm.seeded_units_created_units_prospects_created", { units_created: d.units_created, prospects_created: d.prospects_created, customers_created: d.customers_created, bookings_created: d.bookings_created, payments_created: d.payments_created, customizations_created: d.customizations_created }));
@@ -553,7 +571,8 @@ export default function TownshipCRMModule() {
         {activeTab === "Construction"   && <ConstructionTab constructionSync={constructionSync} onOpenProject={handleOpenProject}/>}
         {activeTab === "Reports"        && <ReportsTab salesVelocity={salesVelocity} typeDemand={typeDemand}
           revenueForecast={revenueForecast} onStuckUnits={() => setShowStuckUnits(true)}/>}
-        {activeTab === "Settings"       && <SettingsTab project={project} unitTypes={unitTypes} seeding={seeding} onSeed={handleSeed} projectId={PROJECT_ID} onChanged={loadAll}/>}
+        {activeTab === "Settings"       && <SettingsTab project={project} unitTypes={unitTypes} seeding={seeding} onSeed={handleSeed} projectId={PROJECT_ID} onChanged={loadAll}
+          canSeed={units.length === 0 && prospects.length === 0}/>}
       </div>
 
       {/* ── MODALS ─────────────────────────────────────────────── */}
@@ -1282,7 +1301,9 @@ function BookingsTab({ bookings, onRowClick }) {
   const [filter, setFilter] = useState("All");
 
   const rows = bookings.filter(b => {
-    if (filter === "Pending payment") return b.due !== "—";
+    // Baaki rakam par — "Next due" ki tareekh par nahi (saari kist overdue ho
+    // tab bhi booking is filter me rahe).
+    if (filter === "Pending payment") return b.pending_amount != null ? Number(b.pending_amount) > 0 : b.due !== "—";
     if (filter === "Hold only")       return b.status === "HOLD";
     if (filter === "Sold only")       return b.status === "SOLD";
     return true;
@@ -1323,7 +1344,14 @@ function BookingsTab({ bookings, onRowClick }) {
                 </td>
                 <td style={td}>{b.value}</td>
                 <td style={td}>{b.paid}</td>
-                <td style={{ ...td, color: b.due === "—" ? T.t3 : T.t1 }}>{b.due}</td>
+                <td style={{ ...td, color: b.due === "—" ? T.t3 : Number(b.overdue_count) > 0 ? PILL_TONES.coral.c : T.t1 }}>
+                  {b.due}
+                  {Number(b.overdue_count) > 0 && (
+                    <div style={{ fontSize:10.5, fontWeight:600, color:PILL_TONES.coral.c, marginTop:2 }}>
+                      {t("township_crm.n_installments_overdue_amount", { n: b.overdue_count, amount: inr(b.overdue_amount) })}
+                    </div>
+                  )}
+                </td>
                 <td style={td}><Pill label={(UNIT_STATUS[b.status] || {}).label || b.status} tone={statusTone(b.status)}/></td>
               </tr>
             ))}
@@ -1517,10 +1545,16 @@ function ReportsTab({ salesVelocity, typeDemand, revenueForecast, onStuckUnits }
       <SectionH>{t("township_crm.revenue_forecast")}</SectionH>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:8 }}>
         <KPI label={t("township_crm.total_potential")} value={inr(rf.total_potential)} sub={t("township_crm.all_units")} color={T.t1}/>
+        {/* Booked value = BOOKED + SOLD; HOLD (sirf token) alag KPI me (CRM-15) */}
         <KPI label={t("township_crm.booked_value")}    value={inr(rf.booked_value)}
-          sub={rf.total_potential ? `${Math.round((rf.booked_value/rf.total_potential)*100)}% absorbed` : "—"} color={T.kBlu}/>
+          sub={rf.total_potential ? t("township_crm.absorbpct_absorbed", { absorbPct: Math.round((rf.booked_value/rf.total_potential)*100) }) : "—"} color={T.kBlu}/>
+        <KPI label={t("township_crm.on_hold_value")}   value={inr(rf.hold_value)}
+          sub={t("township_crm.n_hold_units_token", { n: rf.hold_units || 0, token: inr(rf.hold_tokens) })} color={T.kAmb}/>
         <KPI label={t("township_crm.collected")}       value={inr(rf.collected)}
-          sub={rf.booked_value ? `${Math.round((rf.collected/rf.booked_value)*100)}% of booked` : "—"} color={T.kGrn}/>
+          sub={rf.booked_value
+            ? t("township_crm.pct_of_booked", { pct: Math.round((rf.collected/rf.booked_value)*100) })
+              + (Number(rf.collected_on_cancelled) > 0 ? " · " + t("township_crm.incl_cancelled_amount", { amount: inr(rf.collected_on_cancelled) }) : "")
+            : "—"} color={T.kGrn}/>
       </div>
 
       <SectionH>{t("township_crm.available_reports")}</SectionH>
@@ -1542,7 +1576,7 @@ function ReportsTab({ salesVelocity, typeDemand, revenueForecast, onStuckUnits }
 // ════════════════════════════════════════════════════════════════
 // TAB 9 — SETTINGS (live project + unit types + Seed Demo button)
 // ════════════════════════════════════════════════════════════════
-function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged }) {
+function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged, canSeed }) {
   const [showAddType, setShowAddType] = useState(false);
   const [editType, setEditType]       = useState(null);
   const [busyTypeId, setBusyTypeId]   = useState(null);
@@ -1572,7 +1606,9 @@ function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged
 
   return (
     <div style={{ display:"grid", gap:14 }}>
-      {/* Demo Data section */}
+      {/* Demo Data section — sirf empty project par (server bhi yahi rokta hai,
+          aur kabhi kuch delete nahi karta — CRM-13) */}
+      {canSeed && (
       <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:14 }}>
         <div style={{ fontSize:14, fontWeight:600, color:T.t1, marginBottom:8 }}>{t("township_crm.demo_data")}</div>
         <div style={{ fontSize:12, color:T.t2, marginBottom:10 }}>
@@ -1581,9 +1617,10 @@ function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged
         <Btn primary small onClick={onSeed} disabled={seeding}
           label={seeding ? t("township_crm.seeding") : t("township_crm.seed_demo_data")}/>
         <div style={{ fontSize:11, color:T.t3, marginTop:8 }}>
-         {t("township_crm.yeh_existing_units_prospects_aur_followup")}
+         {t("township_crm.seed_demo_empty_only_note")}
         </div>
       </div>
+      )}
 
       <Frame title={t("township_crm.project_configuration")} sub={t("township_crm.anadi_ananta_setup_details")}>
         {/* Section 1 — Project info */}
@@ -1941,7 +1978,8 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
     if (reason === null) return;
     setBusy(true);
     try {
-      const r = await api.post(`/township-crm/units/${unitId}/cancel-booking`, { reason, refund_amount:0 });
+      const r = await api.post(`/township-crm/units/${unitId}/cancel-booking`, { reason });
+      if (r?.success) cancelNotice(r);
       if (r?.success) onRefresh && onRefresh();
       else alert("Failed: " + (r?.message || ""));
     } catch (e) { alert("Failed: " + (e?.message || e)); }
@@ -2192,8 +2230,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
                       </thead>
                       <tbody>
                         {payments.milestones.map(m => {
-                          const tone = m.status === "paid" ? "green" : m.status === "partial" ? "amber"
-                            : m.overdue ? "coral" : "gray";
+                          const pill = payPill(m);
                           return (
                             <tr key={m.id}>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.t1 }}>{m.milestone_label}</td>
@@ -2201,10 +2238,10 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.t1 }}>{inr(m.due_amount)}</td>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.kGrn }}>{inr(m.paid_amount)}</td>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
-                                <Pill label={m.overdue && m.status==="pending" ? t("common.overdue") : m.status} tone={tone}/>
+                                <Pill label={pill.label} tone={pill.tone}/>
                               </td>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
-                                {m.status !== "paid" && (
+                                {m.status !== "paid" && !m.cancelled_booking && (
                                   <Btn small label={t("estimate.record")} onClick={() => setRecordPaymentRow(m)}/>
                                 )}
                               </td>
@@ -2690,7 +2727,8 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
     if (reason === null) return;
     setBusy(true);
     try {
-      const r = await api.post(`/township-crm/units/${unitId}/cancel-booking`, { reason, refund_amount:0 });
+      const r = await api.post(`/township-crm/units/${unitId}/cancel-booking`, { reason });
+      if (r?.success) cancelNotice(r);
       if (r?.success) { onChanged && onChanged(); onClose(); }
       else alert("Failed: " + (r?.message || ""));
     } catch (e) { alert("Failed: " + (e?.message || e)); }
@@ -2708,6 +2746,10 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
         <ModalInfo label={t("township_crm.agreement_value")} value={booking.value}/>
         <ModalInfo label={t("township_crm.paid_so_far")} value={booking.paid}/>
         <ModalInfo label={t("township_crm.next_due")} value={booking.due}/>
+        {Number(booking.overdue_count) > 0 && (
+          <ModalInfo label={t("common.overdue")}
+            value={t("township_crm.n_installments_overdue_amount", { n: booking.overdue_count, amount: inr(booking.overdue_amount) })}/>
+        )}
       </div>
 
       <SectionH style={{ marginTop:0 }}>{t("township_crm.payment_schedule")}</SectionH>
@@ -2727,8 +2769,7 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
             </thead>
             <tbody>
               {payments.milestones.map(m => {
-                const tone = m.status === "paid" ? "green" : m.status === "partial" ? "amber"
-                  : m.overdue ? "coral" : "gray";
+                const pill = payPill(m);
                 return (
                   <tr key={m.id}>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.t1 }}>{m.milestone_label}</td>
@@ -2736,10 +2777,10 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.t1 }}>{inr(m.due_amount)}</td>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}`, color:T.kGrn }}>{inr(m.paid_amount)}</td>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
-                      <Pill label={m.overdue && m.status==="pending" ? t("common.overdue") : m.status} tone={tone}/>
+                      <Pill label={pill.label} tone={pill.tone}/>
                     </td>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
-                      {m.status !== "paid" && <Btn small label={t("estimate.record")} onClick={() => setRecordRow(m)}/>}
+                      {m.status !== "paid" && !m.cancelled_booking && <Btn small label={t("estimate.record")} onClick={() => setRecordRow(m)}/>}
                     </td>
                   </tr>
                 );
@@ -2773,8 +2814,12 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
 // BOOKING FORM MODAL — convert HOLD/AVAILABLE → BOOKED
 // ════════════════════════════════════════════════════════════════
 function BookingFormModal({ unit, interestedProspects, onClose, onSaved }) {
+  // HOLD unit sirf token dene wale prospect ke naam book hoti hai (server 409
+  // deta hai) — isliye wahi pehle se chuna hua aaye.
+  const holderId = unit.status === "HOLD" && interestedProspects.some(p => p.id === unit.current_followup_prospect_id)
+    ? unit.current_followup_prospect_id : null;
   const [form, setForm] = useState({
-    prospect_id: interestedProspects[0]?.id || "",
+    prospect_id: holderId || interestedProspects[0]?.id || "",
     agreement_value: unit.final_offered_price || "",
     booked_date: todayISO(),
     note: "Agreement signed",

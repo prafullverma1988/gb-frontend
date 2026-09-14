@@ -8,6 +8,7 @@ import DesignOverviewDrawer from "../components/DesignOverviewDrawer";
 import ExportMenu from "../components/DataExport";
 import ImportFileModal from "../components/ImportFileModal";
 import { t } from "../i18n";
+import { todayISO, isoDate } from "../utils/today";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -75,6 +76,9 @@ const STAGES=[
   {id:"lost",     get label() { return t("crm.lost"); },       color:"#6B7280", bg:"#F1F5F9", get desc() { return t("crm.not_interested"); }},
   {id:"project",  get label() { return t("crm.converted_to_project"); }, color:"#1565C0", bg:"#E3F2FD", get desc() { return t("crm.active_project"); }},
 ];
+// Kanban ke ← → sirf is seedhi pipeline me chalte hain. Lost aur "project"
+// (convert ho chuka) is line me nahi — wahan arrow nahi (CRM-07).
+const PIPELINE_IDS=["soft_lead","lead","followup","proposal","converted"];
 
 const SOURCES=["Direct Call","Reference","Site Visit","Facebook Ad","Instagram","Google","Newspaper","Banner","Just Dial","Builder Fair","Other"];
 const PROJ_TYPES=["Residential","Commercial","Industrial","Interior","Renovation","Bungalow","Apartment","Villa","Township","Other"];
@@ -132,10 +136,18 @@ const Pill=({label,c,bg,brd})=>(
 );
 const PRIO_S={"High":{c:T.red,bg:T.redL,brd:T.redM},"Medium":{c:T.amb,bg:T.ambL,brd:T.ambM},"Low":{c:T.slt,bg:T.sltL,brd:T.b2}};
 
+// Aaj se kitne din. "Aaj" = asli local tareekh (utils/today) — pehle yahan
+// demo ki 2026-03-16 likhi reh gayi thi, isliye har follow-up "aage ka"
+// dikhta tha, "Follow-up today" 0 aur koi card laal nahi hota (CRM-04).
+// Dono taraf YYYY-MM-DD ki UTC aadhi-raat, to farak hamesha poore din.
 const daysDiff=(dateStr)=>{
   if(!dateStr) return null;
-  return Math.round((new Date(dateStr)-new Date("2026-03-16"))/(1000*86400));
+  const d=Date.parse(String(dateStr).slice(0,10));
+  if(isNaN(d)) return null;
+  return Math.round((d-Date.parse(todayISO()))/(1000*86400));
 };
+// Aaj + n din (local) — Quick set chips ke liye
+const addDaysISO=(n)=>{ const d=new Date(); d.setDate(d.getDate()+n); return isoDate(d); };
 
 
 // ── CONTACT REMINDER POPUP ───────────────────────────────────────
@@ -166,7 +178,7 @@ function ContactReminderPopup({lead,onDismiss,onWhatsApp,onCall}){
           {/* Contact date info */}
           <div style={{padding:"10px 13px",background:isOverdue?T.redL:isToday?T.ambL:T.bluL,border:`1px solid ${isOverdue?T.redM:isToday?T.ambM:T.bluM}`,borderRadius:8,marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:12.5,fontWeight:600,color:isOverdue?T.red:isToday?T.amb:T.blu}}>
-              {isOverdue?`${Math.abs(diff)} day${Math.abs(diff)>1?"s":""} overdue`:isToday?t("crm.scheduled_for_today"):`In ${diff} days · ${lead.contactDate}`}
+              {isOverdue?t("crm.n_days_overdue",{n:Math.abs(diff)}):isToday?t("crm.scheduled_for_today"):`${t("crm.in_n_days",{n:diff})} · ${lead.contactDate}`}
             </span>
             {lead.phone&&<span style={{fontSize:12,color:T.t3,fontFamily:"monospace"}}>{lead.phone}</span>}
           </div>
@@ -299,6 +311,8 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
   const isOverdue=diff!==null&&diff<0;
   const isToday=diff===0;
   const isDueSoon=diff!==null&&diff>0&&diff<=2;
+  // Solar lead ki apni stage-flow (drawer me) hai — Kanban arrow sirf construction lead par.
+  const pipeIdx=lead._type==="solar"?-1:PIPELINE_IDS.indexOf(lead.stage);
   const stage=STAGES.find(s=>s.id===lead.stage);
   const ps=PRIO_S[lead.priority]||PRIO_S["Medium"];
 
@@ -376,14 +390,18 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
             style={{width:24,height:24,borderRadius:5,background:"#DCFCE7",border:"1px solid #A7F3D0",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <IcWA size={11} color={T.wa}/>
           </button>
+          {pipeIdx>0&&(
           <button onClick={()=>onMove(lead,-1)}
             style={{width:24,height:24,borderRadius:5,background:T.surfaceB,border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}}>
             ←
           </button>
+          )}
+          {pipeIdx>=0&&pipeIdx<PIPELINE_IDS.length-1&&(
           <button onClick={()=>onMove(lead,1)}
             style={{width:24,height:24,borderRadius:5,background:T.surfaceB,border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}}>
             →
           </button>
+          )}
         </div>
       </div>
     </div>
@@ -425,7 +443,7 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,on
                 <div style={{display:"flex",gap:5,alignItems:"center"}}>
                   {overdueInStage>0&&(
                     <span style={{background:"rgba(255,255,255,0.25)",color:"white",fontSize:9.5,fontWeight:800,padding:"1px 6px",borderRadius:10,border:"1px solid rgba(255,255,255,0.3)"}}>
-                      {overdueInStage} overdue
+                      {t("crm.n_overdue",{n:overdueInStage})}
                     </span>
                   )}
                   <span style={{background:"rgba(255,255,255,0.25)",color:"white",fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{stageLeads.length}</span>
@@ -597,11 +615,12 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
     if (!moveCityId || !moveTypeId) return;
     setMoveSaving(true);
     try {
-      await onUpdate(lead.id, {
+      const saved = await onUpdate(lead.id, {
         stage:                pendingMove.stage,
         cityId:               Number(moveCityId),
         constructionTypeId:   Number(moveTypeId),
       });
+      if (saved === false) return;
       setPendingMove(null);
       // If user was actually trying to move to "converted", surface the
       // project-creation panel now that rates are set.
@@ -619,7 +638,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
     if (!convertOpen) return;
     setConvertForm({
       project_name: `${lead.name} — Project`,
-      start_date:   new Date().toISOString().split("T")[0],
+      start_date:   todayISO(),
       end_date:     "",
       quote_id:     "",       // empty = no final quote selected
       boq_value:    lead.budget || 0,
@@ -956,7 +975,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                 style={{width:"100%",padding:"10px 13px",borderRadius:8,border:`1.5px solid ${editContact?T.blu:T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               {editContact&&daysDiff(editContact)!==null&&(
                 <div style={{fontSize:11.5,color:daysDiff(editContact)<0?T.red:daysDiff(editContact)===0?T.amb:T.grn,marginTop:5,fontWeight:600}}>
-                  {daysDiff(editContact)<0?`${Math.abs(daysDiff(editContact))} days overdue`:daysDiff(editContact)===0?t("crm.today"):daysDiff(editContact)===1?t("crm.tomorrow"):`In ${daysDiff(editContact)} days`}
+                  {daysDiff(editContact)<0?t("crm.n_days_overdue",{n:Math.abs(daysDiff(editContact))}):daysDiff(editContact)===0?t("crm.today"):daysDiff(editContact)===1?t("crm.tomorrow"):t("crm.in_n_days",{n:daysDiff(editContact)})}
                 </div>
               )}
             </div>
@@ -965,12 +984,15 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
             <div style={{marginBottom:14}}>
               <div style={{fontSize:10.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("crm.quick_set")}</div>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                {[["Today","2026-03-16"],["Tomorrow","2026-03-17"],["In 3 days","2026-03-19"],["In 1 week","2026-03-23"],["In 2 weeks","2026-03-30"]].map(([l,d])=>(
-                  <button key={l} onClick={()=>setEditContact(d)}
+                {[[t("common.today"),0],[t("crm.tomorrow"),1],[t("crm.in_n_days",{n:3}),3],[t("crm.in_1_week"),7],[t("crm.in_2_weeks"),14]].map(([l,n])=>{
+                  const d=addDaysISO(n);   // aaj se — pehle March 2026 ki likhi tareekh jaati thi
+                  return(
+                  <button key={n} onClick={()=>setEditContact(d)}
                     style={{padding:"5px 12px",borderRadius:20,border:`1.5px solid ${editContact===d?T.blu:T.b1}`,background:editContact===d?T.bluL:"none",color:editContact===d?T.blu:T.t3,fontSize:11.5,fontWeight:editContact===d?700:400,cursor:"pointer"}}>
                     {l}
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -3052,13 +3074,16 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
     {l:t("crm.apx_buildup_area_sq_ft"),k:"apxBuildupArea",type:"number",ph:"e.g. 2400",col:1},
     {l:t("crm.lead_source"),k:"source",type:"select",opts:SOURCES,col:1},
     {l:t("common.assigned_to"),k:"assignedTo",type:"select",opts:ASSIGNED_TO,col:1},
-    {l:t("crm.initial_stage"),k:"stage",type:"select",opts:STAGES.map(s=>s.id),col:1},
+    {l:t("crm.initial_stage"),k:"stage",type:"select",opts:STAGES.filter(s=>s.id!=="project").map(s=>s.id),col:1},
     {l:t("common.priority"),k:"priority",type:"select",opts:["High","Medium","Low"],col:1},
   ];
 
   // Required gates — only name + phone are mandatory at fresh-lead time.
-  // City + Construction Type are enforced when moving to Follow Up or beyond.
-  const canSave = form.name.trim() && form.phone.trim();
+  // City + Construction Type are enforced when moving to Follow Up or beyond —
+  // aur seedha Follow Up / Proposal / Converted me banate waqt bhi (server
+  // POST par wahi niyam, CRM-05).
+  const stageNeedsCityType = ["followup","proposal","converted"].includes(form.stage);
+  const canSave = form.name.trim() && form.phone.trim() && (!stageNeedsCityType || (form.cityId && form.constructionTypeId));
   return(<>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(560px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
@@ -3110,11 +3135,15 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
         </div>
 
         {/* Soft hint — these become required at Follow-Up stage */}
-        {(!form.cityId || !form.constructionTypeId) && (
+        {(!form.cityId || !form.constructionTypeId) && (stageNeedsCityType ? (
+          <div style={{padding:"7px 10px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,fontSize:11,color:T.red,marginBottom:10}}>
+           {t("common.city")} + {t("common.construction_type")} · {t("crm.required_to_move_to")} <strong>{STAGES.find(s=>s.id===form.stage)?.label}</strong> {t("crm.so_we_can_match_the_right")}
+          </div>
+        ) : (
           <div style={{padding:"7px 10px",background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:6,fontSize:11,color:"#92400E",marginBottom:10}}>
            {t("crm.you_can_skip_city_construction_type")} <strong>{t("crm.follow_up")}</strong> {t("crm.so_the_quotation_builder_can_match")}
           </div>
-        )}
+        ))}
 
         {/* Contact date */}
         <div style={{marginBottom:10}}>
@@ -3123,7 +3152,7 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
             <input type="date" value={form.contactDate} onChange={upd("contactDate")}
               style={{flex:1,padding:"8px 10px",borderRadius:7,border:`1.5px solid ${form.contactDate?T.grn:T.b1}`,fontSize:12.5,color:T.t1,background:form.contactDate?T.grnL:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             {form.contactDate&&<span style={{fontSize:11.5,color:T.grn,fontWeight:600}}>
-              {daysDiff(form.contactDate)===0?t("crm.today"):daysDiff(form.contactDate)===1?t("crm.tomorrow"):`In ${daysDiff(form.contactDate)} days`}
+              {daysDiff(form.contactDate)<0?t("crm.n_days_overdue",{n:Math.abs(daysDiff(form.contactDate))}):daysDiff(form.contactDate)===0?t("crm.today"):daysDiff(form.contactDate)===1?t("crm.tomorrow"):t("crm.in_n_days",{n:daysDiff(form.contactDate)})}
             </span>}
           </div>
           {form.contactDate&&<div style={{fontSize:11,color:T.grn,marginTop:3}}>{t("crm.auto_reminder_will_be_set_for")}</div>}
@@ -3388,6 +3417,13 @@ const SOLAR_STAGES = [
   {id:"lost",      get label() { return t("crm.lost"); },      color:"#6B7280", bg:"#F1F5F9", get desc() { return t("crm.not_interested"); }},
   {id:"project",   get label() { return t("crm.converted_to_project"); }, color:"#1565C0", bg:"#E3F2FD", get desc() { return t("crm.active_solar_project"); }},
 ];
+// solar_leads.stage DB ENUM (new, contacted, site_visit, quotation, negotiation,
+// converted, project, lost) is screen ki ids (lead, followup, proposal …) se alag
+// hai. Pehle screen ki id seedhe jaati thi — 'lead' strict mode me save hi nahi
+// hota tha aur modal band ho jaata (CRM-08). Bhejte waqt DB wali, padhte waqt screen wali.
+const SOLAR_STAGE_TO_DB = { lead:"new", followup:"contacted", proposal:"quotation", converted:"converted", lost:"lost", project:"project" };
+const SOLAR_STAGE_FROM_DB = { new:"lead", contacted:"followup", site_visit:"followup", quotation:"proposal", negotiation:"proposal", converted:"converted", lost:"lost", project:"project" };
+const solarUiStage = (s) => SOLAR_STAGE_FROM_DB[s] || (SOLAR_STAGE_TO_DB[s] ? s : "lead");
 
 const KW_OPTIONS = ["1","2","3","4","5","6","7","8","9","10"];
 
@@ -3469,7 +3505,7 @@ function AddSolarLeadModal({onClose, onSave, assignedToList, defaultStage}) {
     if (!form.name.trim() || !form.phone.trim()) return setErr(t("crm.name_aur_phone_required"));
     setSaving(true); setErr("");
     try { await onSave(form); onClose(); }
-    catch(e) { setErr(t("crm.error_saving_lead")); }
+    catch(e) { setErr((e && e.message) || t("crm.error_saving_lead")); }
     setSaving(false);
   };
 
@@ -3550,7 +3586,7 @@ function FollowupLogSection({leadId, isActive, autoOpen=false}) {
   const [showAdd, setShowAdd] = useState(autoOpen); // auto-open if prop passed
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    call_date: new Date().toISOString().split("T")[0],
+    call_date: todayISO(),
     summary: "",
     next_followup_date: "",
     additional_requirements: "",
@@ -3571,7 +3607,7 @@ function FollowupLogSection({leadId, isActive, autoOpen=false}) {
       const res = await api.post("/solar/leads/"+leadId+"/followup-logs", form);
       if (res.success) {
         setLogs(p=>[res.data,...p]);
-        setForm({call_date:new Date().toISOString().split("T")[0],summary:"",next_followup_date:"",additional_requirements:"",senior_consultant_needed:false});
+        setForm({call_date:todayISO(),summary:"",next_followup_date:"",additional_requirements:"",senior_consultant_needed:false});
         setShowAdd(false);
       }
     } catch(e){}
@@ -3713,10 +3749,12 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
   const patchLead = async (updates) => {
     setSaving(true); setErr("");
     try {
-      const res = await api.patch("/solar/leads/"+data.id, updates);
+      const body = updates.stage ? {...updates, stage: SOLAR_STAGE_TO_DB[updates.stage] || updates.stage} : updates;
+      const res = await api.patch("/solar/leads/"+data.id, body);
       if (res.success) {
-        setData(p=>({...p,...updates,...(res.data||{})}));
-        onUpdate(data.id, {...updates,...(res.data||{})});
+        const fresh = res.data ? {...res.data, stage: solarUiStage(res.data.stage)} : {};
+        setData(p=>({...p,...updates,...fresh}));
+        onUpdate(data.id, {...updates,...fresh});
       } else setErr(res.message||"Save failed");
     } catch(e) { setErr(e.message); }
     setSaving(false);
@@ -4359,7 +4397,7 @@ function CRMModule(){
     loadLeads();loadTeam();
     // Load solar leads
     api.get("/solar/leads").then(r=>{
-      if(r.success) setSolarLeads(r.data.map(l=>({...l,_type:"solar",stage:l.stage||"lead",priority:l.priority||"Medium",source:l.source||"Direct Call",assignedTo:l.assigned_to_name||l.assignedTo||"—",budget:0,projType:`${l.requirement_kw||"?"}kW Solar`,city:l.city||"",contactDate:l.followup_date?new Date(l.followup_date).toISOString().split("T")[0]:null,tags:[],followupHistory:[]})));
+      if(r.success) setSolarLeads(r.data.map(l=>({...l,_type:"solar",stage:solarUiStage(l.stage),priority:l.priority||"Medium",source:l.source||"Direct Call",assignedTo:l.assigned_to_name||l.assignedTo||"—",budget:0,projType:`${l.requirement_kw||"?"}kW Solar`,city:l.city||"",contactDate:l.followup_date?new Date(l.followup_date).toISOString().split("T")[0]:null,tags:[],followupHistory:[]})));
     }).catch(()=>{});
   },[loadLeads,loadTeam]);
 
@@ -4374,20 +4412,37 @@ function CRMModule(){
     if(today&&!reminderLead) setReminderLead(today);
   },[leads,dismissedReminders]);
 
+  // Pehle STAGES ki poori list (… Converted, Lost, project) me ±1 hota tha:
+  // Converted par → Lost bana deta, Lost par → 'project' bhejta jo DB stage hi
+  // nahi (CRM-07). Ab sirf PIPELINE_IDS ke andar, solar lead par kuch nahi.
   const moveLead=(lead,dir)=>{
-    const idx=STAGES.findIndex(s=>s.id===lead.stage);
-    const newIdx=Math.min(Math.max(0,idx+dir),STAGES.length-1);
-    updateLead(lead.id,{stage:STAGES[newIdx].id});
+    if(lead._type==="solar") return;
+    const idx=PIPELINE_IDS.indexOf(lead.stage);
+    const next=idx<0?null:PIPELINE_IDS[idx+dir];
+    if(!next) return;
+    updateLead(lead.id,{stage:next});
   };
 
   const updateLead=async(id,update)=>{
+    const prev=leads.find(l=>l.id===id);
     // Optimistic update — note camelCase keys (cityId, constructionTypeId)
     // will live alongside the snake_case ones in state until the re-fetch
     // below replaces them with authoritative server values + joined names.
     setLeads(p=>p.map(l=>l.id===id?{...l,...update}:l));
     if(selLead?.id===id) setSelLead(p=>({...p,...update}));
     try{
-      await api.patch("/crm/leads/"+id,update);
+      const r=await api.patch("/crm/leads/"+id,update);
+      // api client throw nahi karta — {success:false} par badlav wapas lo aur
+      // wajah dikhao. Pehle card chupchaap laut jaata tha, koi sandesh nahi (CRM-07).
+      if(!r?.success){
+        if(prev){
+          const back=Object.fromEntries(Object.keys(update).map(k=>[k,prev[k]]));
+          setLeads(p=>p.map(l=>l.id===id?{...l,...back}:l));
+          if(selLead?.id===id) setSelLead(p=>({...p,...back}));
+        }
+        alert(r?.message||t("crm.error_saving_lead"));
+        return false;
+      }
       // Re-fetch authoritative state (with joined city_name +
       // construction_type_name + snake_case FK columns). This is what
       // makes city_id / construction_type_id propagate correctly into
@@ -4409,22 +4464,30 @@ function CRMModule(){
         const lead=leads.find(l=>l.id===id);
         if(lead) setSelectFinalLead({...lead,...update});
       }
-    }catch(e){console.error("Update lead error:",e);loadLeads();}
+      return true;
+    }catch(e){console.error("Update lead error:",e);loadLeads();return false;}
   };
 
   const addLead=async(form)=>{
     try{
+      // Form Library ki City/Construction Type chunta tha par ids bhejta hi nahi
+      // tha — lead sirf naam ke saath banta aur baad me Follow Up par atak
+      // jaata (CRM-05). Ab ids bhi jaati hain.
       const res=await api.post("/crm/leads",{
         name:form.name,phone:form.phone,email:form.email,city:form.city,
         projType:form.projType,budget:Number(form.budget)||0,source:form.source,
+        cityId:form.cityId?Number(form.cityId):null,
+        constructionTypeId:form.constructionTypeId?Number(form.constructionTypeId):null,
         plotArea:Number(form.plotArea)||0,apxBuildupArea:Number(form.apxBuildupArea)||0,
         assignedTo:teamMembers.find(m=>m.name===form.assignedTo)?.id||null,
         stage:form.stage,priority:form.priority,
         contactDate:form.contactDate||null,notes:form.notes||null,
-        tags:form.tags?form.tags.split(",").map(t=>t.trim()).filter(Boolean):[],
+        tags:form.tags?form.tags.split(",").map(x=>x.trim()).filter(Boolean):[],
       });
       if(res.success){
         loadLeads(); // Reload from API
+      }else{
+        alert(res.message||t("crm.error_saving_lead"));
       }
     }catch(e){console.error("Add lead error:",e);}
   };
@@ -4437,19 +4500,22 @@ function CRMModule(){
         source:form.source, priority:form.priority,
         assigned_to: teamMembers.find(m=>m.name===form.assignedTo)?.id||null,
         followup_date:form.contactDate||null, notes:form.notes||null,
-        stage:"lead",
+        stage:SOLAR_STAGE_TO_DB[form.stage]||"new",
       });
+      if(!res.success) throw new Error(res.message||t("crm.error_saving_lead"));
       if(res.success && res.data){
-        const mapped = {...res.data,_type:"solar",stage:"lead",priority:form.priority||"Medium",source:form.source,assignedTo:form.assignedTo,budget:0,projType:`${form.requirement_kw||"3"}kW Solar`,city:form.city,contactDate:form.contactDate||null,tags:[],followupHistory:[]};
+        const mapped = {...res.data,_type:"solar",stage:solarUiStage(res.data.stage),priority:form.priority||"Medium",source:form.source,assignedTo:form.assignedTo,budget:0,projType:`${form.requirement_kw||"3"}kW Solar`,city:form.city,contactDate:form.contactDate||null,tags:[],followupHistory:[]};
         setSolarLeads(p=>[mapped,...p]);
       }
-    } catch(e){ console.error("Add solar lead error:",e); }
+    } catch(e){ console.error("Add solar lead error:",e); throw e; }
   };
 
   // Merge all leads for KPI counts
   const allLeads = [...(canConstruction?leads:[]),...(canSolar?solarLeads:[])];
   const todayDueCount=allLeads.filter(l=>l.contactDate&&daysDiff(l.contactDate)<=0&&!dismissedReminders.includes(l.id)&&l.stage!=="converted"&&l.stage!=="project"&&l.stage!=="lost").length;
-  const pipelineValue=leads.filter(l=>l.stage!=="lost"&&l.stage!=="project").reduce((s,l)=>s+(Number(l.budget)||0),0);
+  // Pipeline = sirf khule lead (Soft Lead…Proposal). Converted deal pehle isme bhi judta tha
+  // aur Converted tile me bhi — double count (CRM-17).
+  const pipelineValue=leads.filter(l=>["soft_lead","lead","followup","proposal"].includes(l.stage)).reduce((s,l)=>s+(Number(l.budget)||0),0);
   const convertedValue=leads.filter(l=>l.stage==="converted"||l.stage==="project").reduce((s,l)=>s+(Number(l.convertedValue)||Number(l.budget)||0),0);
   const conversionRate=allLeads.length?Math.round((allLeads.filter(l=>l.stage==="converted"||l.stage==="project").length/allLeads.length)*100):0;
 
