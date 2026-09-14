@@ -633,12 +633,15 @@ function DualBillStrip({ row, onFields }){
   useEffect(()=>{
     if(!nameKey||row.grnHadAlt){ setLearned(null); return; }
     let alive=true;
-    api.get("/procurement/grns/last-alt?name="+encodeURIComponent(nameKey))
+    // Receiving unit bhi bhejo — ratio sirf usi unit ki pichhli GRN line ka (MAT-28)
+    api.get("/procurement/grns/last-alt?name="+encodeURIComponent(nameKey)+"&unit="+encodeURIComponent(primaryUnit))
       .then(r=>{ if(alive&&r&&r.success) setLearned(r.data||null); }).catch(()=>{});
     return ()=>{alive=false;};
-  },[nameKey,row.grnHadAlt]);
+  },[nameKey,row.grnHadAlt,primaryUnit]);
 
-  const ratio=row.alt_ratio ?? learned?.ratio ?? null;
+  // Alag unit ki pichhli line (Bundle→Kg) ka ratio Kg par nahi lagta (MAT-28)
+  const learnedRatio=(learned&&String(learned.unit||"").trim().toLowerCase()===primaryUnit.trim().toLowerCase()&&String(learned.alt_unit||"").trim().toLowerCase()!==primaryUnit.trim().toLowerCase())?learned.ratio:null;
+  const ratio=row.alt_ratio ?? learnedRatio ?? null;
   const units=UNITS_CONST.filter(u=>u!==primaryUnit);
   const suggest=(ratio&&primaryQty>0)?Math.round(primaryQty*ratio*100)/100:null;
 
@@ -649,7 +652,7 @@ function DualBillStrip({ row, onFields }){
       altOn:true,
       alt_unit:defUnit,
       alt_qty:row.alt_qty||(suggest!=null?String(suggest):""),
-      alt_ratio:learned?.ratio ?? row.alt_ratio ?? null,
+      alt_ratio:learnedRatio ?? row.alt_ratio ?? null,
     });
   };
 

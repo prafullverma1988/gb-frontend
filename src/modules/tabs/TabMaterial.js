@@ -24,17 +24,24 @@ function DualUnitToggle({ units, primaryUnit, itemName, qty, value, onChange }) 
   const [learned, setLearned] = React.useState(null);   // {unit, alt_unit, ratio}
   const on = !!value?.altOn;
   const nameKey = (itemName || "").trim();
+  const sameUnit = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 
   React.useEffect(() => {
     if (!nameKey) { setLearned(null); return; }
     let alive = true;
-    api.get("/procurement/grns/last-alt?name=" + encodeURIComponent(nameKey))
+    // Aaj ki receiving unit bhi bhejo — ratio sirf usi unit ki pichhli line ka (MAT-28)
+    api.get("/procurement/grns/last-alt?name=" + encodeURIComponent(nameKey) + "&unit=" + encodeURIComponent(primaryUnit || ""))
       .then(r => { if (alive && r && r.success) setLearned(r.data || null); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [nameKey]);
+  }, [nameKey, primaryUnit]);
 
-  const ratio = value?.ratio ?? learned?.ratio ?? null;
+  const altUnitOptions = units.filter(u => u !== primaryUnit);
+  // Pichhli line alag unit ki ho (Bundle→Kg) ya billing unit hi aaj ki unit ho
+  // (Kg→Kg) to ratio ka koi matlab nahi — 5 Kg par "506 Kg" bhar deta tha (MAT-28).
+  const learnedOk = !!learned && sameUnit(learned.unit, primaryUnit) && !sameUnit(learned.alt_unit, primaryUnit);
+  const learnedRatio = learnedOk ? learned.ratio : null;
+  const ratio = value?.ratio ?? learnedRatio ?? null;
   const suggestQty = (on && ratio && Number(qty) > 0)
     ? Math.round(Number(qty) * ratio * 100) / 100 : null;
 
@@ -42,16 +49,14 @@ function DualUnitToggle({ units, primaryUnit, itemName, qty, value, onChange }) 
     if (on) { onChange({ altOn: false, alt_unit: "", alt_qty: "", ratio: null }); return; }
     // Turning ON: default the billing unit to the learned one (else kg), carry
     // the learned ratio so the qty box can prefill, but leave alt_qty editable.
-    const defUnit = learned?.alt_unit || (units.includes("Kg") ? "Kg" : units[0]);
+    const defUnit = (learnedOk && learned.alt_unit) || (altUnitOptions.includes("Kg") ? "Kg" : altUnitOptions[0]);
     onChange({
       altOn: true,
       alt_unit: value?.alt_unit || defUnit,
-      alt_qty: value?.alt_qty || (learned?.ratio && Number(qty) > 0 ? String(Math.round(Number(qty) * learned.ratio * 100) / 100) : ""),
-      ratio: learned?.ratio || null,
+      alt_qty: value?.alt_qty || (learnedRatio && Number(qty) > 0 ? String(Math.round(Number(qty) * learnedRatio * 100) / 100) : ""),
+      ratio: learnedRatio || null,
     });
   };
-
-  const altUnitOptions = units.filter(u => u !== primaryUnit);
 
   return (
     <div style={{ gridColumn: "1 / -1", paddingTop: on ? 6 : 2 }}>
