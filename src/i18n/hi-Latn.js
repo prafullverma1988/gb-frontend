@@ -4676,6 +4676,8 @@ const dict = {
   "payroll.auto_detected_locations_suggestions_new":           "Auto-Detected Locations — {suggestions} new",
   "payroll.auto_finance_queue":                                "Auto Finance Queue",
   "payroll.auto_punch_out":                                    "Auto punch-out",
+  "payroll.auto_punch_out_at":                                 "🚪 Auto punch-out: {time} (punch-out bhool gaye)",
+  "payroll.auto_punch_out_sahi_waqt":                          "Asli out time pata ho to badlo, phir Approve:",
   "payroll.awaiting":                                          "Awaiting",
   "payroll.baaki_unmarkedmanual_ko_present_mark_karo":         "✓ Baaki {unmarkedManual} ko Present mark karo",
   "payroll.backstop_har_auto_close":                           "backstop. Har auto-close",

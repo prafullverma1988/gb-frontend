@@ -4673,6 +4673,8 @@ const dict = {
   "payroll.auto_detected_locations_suggestions_new":           "ऑटो-डिटेक्टेड लोकेशन — {suggestions} नए",
   "payroll.auto_finance_queue":                                "ऑटो फाइनेंस क्यू",
   "payroll.auto_punch_out":                                    "ऑटो पंच-आउट",
+  "payroll.auto_punch_out_at":                                 "🚪 ऑटो पंच-आउट: {time} (पंच-आउट भूल गए)",
+  "payroll.auto_punch_out_sahi_waqt":                          "असली आउट टाइम पता हो तो बदलो, फिर अप्रूव:",
   "payroll.awaiting":                                          "वेटिंग",
   "payroll.baaki_unmarkedmanual_ko_present_mark_karo":         "✓ बाकी {unmarkedManual} को प्रेजेंट मार्क करो",
   "payroll.backstop_har_auto_close":                           "बैकस्टॉप. हर ऑटो-क्लोज",
