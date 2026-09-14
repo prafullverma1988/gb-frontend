@@ -1000,8 +1000,25 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
   };
 
   const measuring = dipFor || shiftFor;
+  // Kitaab ka stock US samay tak ka jo upar chuna hai (GET /stores/:id/stock?at=).
+  // Purani tareekh ki dipstick / shift par aaj ka stock dikhana jhootha farq
+  // (chori jaisa) dikhata tha — server bhi ab usi samay ki kitaab likhta hai.
+  const whenPicked = dipFor ? f.checked_at : shiftFor ? f.moved_at : null;
+  const [bookAt, setBookAt] = useState(null);
+  useEffect(() => {
+    setBookAt(null);
+    if (!measuring || !whenPicked) return undefined;
+    let alive = true;
+    const tm = setTimeout(() => {
+      api.get(`/fuel/stores/${measuring.id}/stock?at=${encodeURIComponent(toSqlDateTime(whenPicked))}`)
+        .then((r) => { if (alive && r?.success && r.data) setBookAt(Number(r.data.litres)); })
+        .catch(() => {});
+    }, 250);
+    return () => { alive = false; clearTimeout(tm); };
+  }, [measuring, whenPicked]);
+  const bookL = bookAt != null ? bookAt : Number(measuring ? measuring.litres : 0);
   const variance = measuring && f.physical_l !== undefined && f.physical_l !== ""
-    ? Math.round((parseFloat(f.physical_l) - Number(measuring.litres)) * 100) / 100 : null;
+    ? Math.round((parseFloat(f.physical_l) - bookL) * 100) / 100 : null;
   const varianceBox = variance != null && (
     <div style={{ padding: "10px 13px", borderRadius: 7, background: variance === 0 ? T.grnL : T.ambL, border: `1px solid ${variance === 0 ? T.grnM : T.ambM}`, fontSize: 12, fontWeight: 600, color: variance === 0 ? T.grn : T.amb }}>{t("fuel.variance_variancefmtn_l", { variance: variance > 0 ? "+" : "", fmtN: fmtN(variance) })}<div style={{ fontSize: 10.5, fontWeight: 500, marginTop: 3 }}>
        {t("fuel.stock_apne_aap_adjust_nahi_hoga")}
@@ -1112,7 +1129,7 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
       </Modal>
 
       <Modal open={!!dipFor} onClose={() => setDipFor(null)} title={t("fuel.dipstick_check")} width={520}
-        sub={dipFor ? `${dipFor.name} — kitaab ke hisaab se ${fmtL(dipFor.litres)}` : ""}
+        sub={dipFor ? `${dipFor.name} — ${t("fuel.kitaab_ke_hisaab_se_l", { l: fmtL(bookL) })}` : ""}
         footer={<><Btn ghost onClick={() => setDipFor(null)}>{t("common.cancel")}</Btn><Btn onClick={saveDip} disabled={busy}>{busy ? t("common.saving") : t("fuel.record_karein")}</Btn></>}>
         <div style={{ display: "grid", gap: 12 }}>
           <Field label={t("fuel.kab_naapa")}><input type="datetime-local" value={f.checked_at || ""} onChange={(e) => setF((p) => ({ ...p, checked_at: e.target.value }))} style={inp} /></Field>
@@ -1154,7 +1171,7 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
           <Field label={t("fuel.kab_shift_hua")}>
             <input type="datetime-local" value={f.moved_at || ""} onChange={(e) => setF((p) => ({ ...p, moved_at: e.target.value }))} style={inp} />
           </Field>
-          <Field label={t("fuel.dipstick_drum_me_kitna_diesel")} hint={t("fuel.kitaab_ke_hisaab_se_l", { l: fmtL(shiftFor.litres) })}>
+          <Field label={t("fuel.dipstick_drum_me_kitna_diesel")} hint={t("fuel.kitaab_ke_hisaab_se_l", { l: fmtL(bookL) })}>
             <input value={f.physical_l ?? ""} inputMode="decimal" onChange={(e) => setF((p) => ({ ...p, physical_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} />
           </Field>
           {varianceBox}
