@@ -85,10 +85,19 @@ const fmtDate = (d) => {
 // Kist ka pill. Overdue = baaki kist (pending YA aadha-jama partial) jiski
 // tareekh nikal gayi — server `overdue` bhejta hai (CRM-10). Pehle partial
 // kist kabhi laal nahi hoti thi.
-const payPill = (m) => m.status === "paid" ? { tone:"green", label:t("common.paid") }
+const payPill = (m) => m.cancelled_booking ? { tone:"gray", label:t("township_crm.cancelled_booking") }
+  : m.status === "paid" ? { tone:"green", label:t("common.paid") }
   : m.overdue ? { tone:"coral", label:t("common.overdue") }
   : m.status === "partial" ? { tone:"amber", label:t("common.partial") }
   : { tone:"gray", label:t("common.pending") };
+// Booking cancel ke baad batao kya hua — merger ki saari units saath cancel
+// hoti hain, aur jo paisa aa chuka wo Collected me hi rehta hai (CRM-12).
+const cancelNotice = (r) => {
+  const units = (r.cancelled_units || []).join(" + ");
+  const kept = Number(r.received_kept) || 0;
+  if ((r.cancelled_units || []).length < 2 && kept <= 0) return;
+  alert(t("township_crm.booking_cancelled_units", { units }) + (kept > 0 ? " " + t("township_crm.received_money_stays", { amount: inr(kept) }) : ""));
+};
 // Numeric sort key for unit_no like "A-15" → ["A", 15]
 const unitSortKey = (uno) => {
   const m = String(uno || "").match(/^([A-Za-z]+)-?(\d+)/);
@@ -1957,7 +1966,8 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
     if (reason === null) return;
     setBusy(true);
     try {
-      const r = await api.post(`/township-crm/units/${unitId}/cancel-booking`, { reason, refund_amount:0 });
+      const r = await api.post(`/township-crm/units/${unitId}/cancel-booking`, { reason });
+      if (r?.success) cancelNotice(r);
       if (r?.success) onRefresh && onRefresh();
       else alert("Failed: " + (r?.message || ""));
     } catch (e) { alert("Failed: " + (e?.message || e)); }
@@ -2219,7 +2229,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
                                 <Pill label={pill.label} tone={pill.tone}/>
                               </td>
                               <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
-                                {m.status !== "paid" && (
+                                {m.status !== "paid" && !m.cancelled_booking && (
                                   <Btn small label={t("estimate.record")} onClick={() => setRecordPaymentRow(m)}/>
                                 )}
                               </td>
@@ -2705,7 +2715,8 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
     if (reason === null) return;
     setBusy(true);
     try {
-      const r = await api.post(`/township-crm/units/${unitId}/cancel-booking`, { reason, refund_amount:0 });
+      const r = await api.post(`/township-crm/units/${unitId}/cancel-booking`, { reason });
+      if (r?.success) cancelNotice(r);
       if (r?.success) { onChanged && onChanged(); onClose(); }
       else alert("Failed: " + (r?.message || ""));
     } catch (e) { alert("Failed: " + (e?.message || e)); }
@@ -2757,7 +2768,7 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
                       <Pill label={pill.label} tone={pill.tone}/>
                     </td>
                     <td style={{ padding:"6px 8px", borderBottom:`1px solid ${T.b1}` }}>
-                      {m.status !== "paid" && <Btn small label={t("estimate.record")} onClick={() => setRecordRow(m)}/>}
+                      {m.status !== "paid" && !m.cancelled_booking && <Btn small label={t("estimate.record")} onClick={() => setRecordRow(m)}/>}
                     </td>
                   </tr>
                 );
