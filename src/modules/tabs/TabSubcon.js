@@ -27,8 +27,8 @@ function TabSubcon({ projectId, project }) {
   const [editBill, setEditBill] = useState(null);
   const [editBillSaving, setEditBillSaving] = useState(false);
   const [billItems, setBillItems] = useState({});
-  const [billForm, setBillForm] = useState({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
-  const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: new Date().toISOString().split("T")[0], payment_mode:"Bank Transfer", reference_no:"", remark:"", account_id:"" });
+  const [billForm, setBillForm] = useState({ bill_date: localYMD(), remark:"", items:[] });
+  const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: localYMD(), /* IST din — UTC nahi (SUB-15) */ payment_mode:"Bank Transfer", reference_no:"", remark:"", account_id:"" });
   // Finance me gaye RA bill (fin_txn_id) ka payment Finance entry banta hai — account zaroori (SUB-08)
   const [payAccounts, setPayAccounts] = useState([]);
   const [showManualRaBill, setShowManualRaBill] = useState(false);
@@ -323,7 +323,7 @@ function TabSubcon({ projectId, project }) {
       onSuccess(res.data);
       if (res.data?.warnings?.length) alert("Saved with warnings:\n" + res.data.warnings.join("\n"));
       setShowNewBill(false);
-      setBillForm({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
+      setBillForm({ bill_date: localYMD(), remark:"", items:[] });
       selectWo(selWo);
     }
     else alert(res.message||"Failed");
@@ -374,7 +374,7 @@ function TabSubcon({ projectId, project }) {
       account_id: payBill?.fin_txn_id ? Number(payForm.account_id) : undefined,
     }).catch(()=>({success:false}));
     setSaving(false);
-    if(res.success){ setShowPayModal(false); selectWo(selWo); setPayForm({amount_paid:"",payment_date:new Date().toISOString().split("T")[0],payment_mode:"Bank Transfer",reference_no:"",remark:"",account_id:""}); }
+    if(res.success){ setShowPayModal(false); selectWo(selWo); setPayForm({amount_paid:"",payment_date:localYMD(),payment_mode:"Bank Transfer",reference_no:"",remark:"",account_id:""}); }
     else alert(res.message||"Failed");
   };
 
