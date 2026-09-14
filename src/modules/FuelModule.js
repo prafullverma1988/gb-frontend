@@ -314,7 +314,9 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
   useEffect(() => {
     if (!open) return;
     setPath("pump_machine");
-    setF({ filled_at: nowLocal(), payment_mode: "credit", fuel_type: "diesel" });
+    // Office se cash entry aksar company ke paise ki hoti hai — default "company";
+    // apne wallet se diya ho to wahi select karo (MCH-13).
+    setF({ filled_at: nowLocal(), payment_mode: "credit", cash_source: "company", fuel_type: "diesel" });
     setError("");
   }, [open]);
 
@@ -468,6 +470,9 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           meter_reading: f.meter_reading ? parseFloat(f.meter_reading) : null,
           meter_missing_reason: f.meter_missing ? (f.meter_missing_reason || null) : null,
           payment_mode: f.payment_mode || "credit",
+          // Pehle bheja hi nahi jaata tha — server wallet maan kar entry karne
+          // wale admin/accountant ke wallet se kaat deta tha.
+          cash_source: f.payment_mode === "cash" ? (f.cash_source || "company") : null,
           fuel_type: path === "pump_machine" ? (f.fuel_type || "diesel") : "diesel",
           note: f.note || null,
         });
@@ -670,6 +675,19 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
                 })}
               </div>
             </Field>
+            {f.payment_mode === "cash" && (
+              <Field label={t("fuel.paisa_kisne_diya")} span={2} hint={t("fuel.paisa_kisne_diya_hint")}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[{ k: "company", l: t("fuel.company_ne_direct_diya") }, { k: "wallet", l: t("fuel.mere_wallet_se") }].map((o) => {
+                    const on = (f.cash_source || "company") === o.k;
+                    return (
+                      <button key={o.k} type="button" onClick={() => upd("cash_source", o.k)}
+                        style={{ flex: 1, padding: "9px", borderRadius: 7, border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface, color: on ? T.ind : T.t3, fontSize: 12, fontWeight: on ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>{o.l}</button>
+                    );
+                  })}
+                </div>
+              </Field>
+            )}
           </>
         )}
 
