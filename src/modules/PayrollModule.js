@@ -3,6 +3,7 @@ import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { t, Rich } from "../i18n";
 import { todayISO } from "../utils/today";
+import { apiMonth, rowOf, slipOf, payStateOf, tilesOf } from "../utils/salarySheet";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -1197,9 +1198,11 @@ function PunchReviewStrip({onActed}){
   const [openId,setOpenId]=useState(null);          // session whose day-timeline is expanded
   const [tl,setTl]=useState({});                    // { [sessionId]: {loading,pings} }
   const [outTimes,setOutTimes]=useState({});        // { [sessionId]: 'HH:MM' } — reviewer ka badla hua out time
+  const [loadErr,setLoadErr]=useState("");          // server ne mana kiya to chup khaali list nahi, wahi sandesh (HR-13)
   const load=useCallback(()=>{
     api.get("/attendance-sessions/pending-review").then(r=>{
-      if(r.success) setRows(r.data||[]);
+      if(r.success){ setRows(r.data||[]); setLoadErr(""); }
+      else setLoadErr(r.message||"");
     }).catch(()=>{});
   },[]);
   useEffect(()=>{load();},[load]);
@@ -1228,7 +1231,7 @@ function PunchReviewStrip({onActed}){
       }catch(e){ setTl(p=>({...p,[id]:{loading:false,pings:[]}})); }
     }
   };
-  if(!rows.length) return null;
+  if(!rows.length) return loadErr?<div style={{background:T.redL,border:`1px solid ${T.redM}`,borderRadius:10,padding:"9px 14px",marginBottom:12,fontSize:11.5,color:T.red,fontWeight:600}}>{loadErr}</div>:null;
   return(
     <div style={{background:"#F0FDFA",border:"2px dashed #0D9488",borderRadius:10,padding:"11px 14px",marginBottom:12}}>
       <div style={{fontSize:12.5,fontWeight:800,color:"#0D9488",marginBottom:8}}>{t("payroll.punch_review_rows_geofence_ke_bahar", { rows: rows.length })}</div>
@@ -1841,72 +1844,70 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
 }
 
 // ── SALARY SLIP MODAL ─────────────────────────────────────────────
-function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
-  const WD=workingDays||26;
-  const days=att[emp.id]||{};
-  const P=Object.values(days).filter(v=>v==="P").length;
-  const H=Object.values(days).filter(v=>v==="H").length;
-  const A=Object.values(days).filter(v=>v==="A").length;
-  const effective=P+(H*0.5);
-  const fullGross=emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone;
-  const pType=paymentType||emp.paymentType||"fixed";
-  const grossEarned=pType==="fixed"
-    ? fullGross
-    : Math.round((fullGross/WD)*effective);
-  const pf=Math.round(emp.basicSalary*0.12);
-  // ESI eligibility on wage (fullGross ≤ ₹21k), deduction on earned gross
-  const esi=fullGross<=21000?Math.round(grossEarned*0.0075):0;
-  const tds=grossEarned>15000?Math.round(grossEarned*0.05):0;
-  const advDed=ADVANCE_DATA.find(a=>a.empId===emp.id&&a.status==="Pending deduction");
-  const advDeduction=advDed?.amount||0;
-  const totalDed=pf+esi+tds+advDeduction;
-  const netPay=grossEarned-totalDed;
-  const isAttBased=pType==="attendance";
+function SalarySlipModal({emp,item,month,year,locked,workingDays,onClose}){
+  // Slip wahi rakam dikhata hai jo Monthly Salary table aur Create Salary run —
+  // GET /payroll/run/salary-sheet ka item (finalize hua mahina = frozen run).
+  // Pehle yahan apna purana formula tha: PF band hone par bhi 12% PF, ₹15,000 se
+  // upar apne aap 5% TDS, leave/chhutti nahi, petrol/special allowance nahi aur
+  // net 0 se neeche — RATNA me 39 me se 38 slip minus me aati thi. [HR-03]
+  const s=slipOf(item);
+  const at=(item.breakdown&&item.breakdown.attendance)||{};
+  const WD=at.wd||workingDays||26;
+  const {P,H,A,fullGross}=s;
+  const effective=s.payable;
+  const grossEarned=s.gross;
+  const netPay=s.net;
+  const totalDed=s.totalDeductions;
+  const isAttBased=s.payType==="attendance";
+  const EARN={basic:t("payroll.basic"),hra:"HRA",conveyance:t("payroll.conveyance"),medical:t("payroll.medical"),phone:t("payroll.phone_allowance"),petrol:t("payroll.petrol_allowance"),special:t("payroll.special_allowance")};
+  const DED={pf:"PF",esi:"ESI",tds:"TDS",advance:t("payroll.advance_recovery")};
+  const adjLabel=item.salary_edit?t("payroll.salary_edit_approved"):t("payroll.adjustments");
+  const esc=(v)=>String(v==null?"":v).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+  const signed=(v)=>(v<0?"−":"+")+"₹"+fmtN(v<0?-v:v);
 
   const printSlip=()=>{
     const w=window.open("","_blank","width=600,height=700");
-    const calcRow = isAttBased
-      ? "<tr><td>Calculation</td><td>\u20b9" + fmtN(fullGross) + " \u00f7 " + WD + " \u00d7 " + effective + " = \u20b9" + fmtN(grossEarned) + "</td></tr>"
-      : "<tr><td>Calculation</td><td>Full monthly salary (attendance not deducted)</td></tr>";
-    const salaryTypeColor = isAttBased ? "#7C3AED" : "#059669";
-    const salaryTypeLabel = isAttBased ? "Attendance Based (Pro-rata)" : "Fixed Monthly Salary";
-    const esiRow = esi > 0 ? "<tr><td>ESI (0.75%)</td><td>\u20b9" + fmtN(esi) + "</td></tr>" : "";
-    const tdsRow = tds > 0 ? "<tr><td>TDS</td><td>\u20b9" + fmtN(tds) + "</td></tr>" : "";
-    const advRow = advDeduction > 0 ? "<tr><td>Advance Recovery</td><td>\u20b9" + fmtN(advDeduction) + "</td></tr>" : "";
-    w.document.write(`<html><head><title>Salary Slip</title>
+    if(!w) return;
+    const row=(l,v)=>"<tr><td>"+l+"</td><td>"+v+"</td></tr>";
+    const money=(v)=>"&#8377;"+fmtN(v);
+    const calc=isAttBased
+      ? esc(t("payroll.fmtn_wd_days_effective_eff_days",{fmtN:fmtN(fullGross),WD,effective,fmtN2:fmtN(grossEarned)}))
+      : esc(t("payroll.full_gross_paid_regardless_of_attendance",{P,H:H>0?`${H}H `:"",A:A>0?`${A}A`:""}));
+    const salaryTypeColor=isAttBased?"#7C3AED":"#059669";
+    const salaryTypeLabel=isAttBased?t("payroll.attendance_based_pro_rata"):t("payroll.fixed_monthly_salary");
+    w.document.write(`<html><head><title>${esc(t("payroll.salary_slip"))}</title>
     <style>*{font-family:Arial,sans-serif;font-size:12px}body{padding:20px}
     .header{background:#1565C0;color:white;padding:14px;border-radius:6px;margin-bottom:14px}
     table{width:100%;border-collapse:collapse}td,th{padding:7px 10px;border:1px solid #E5E7EB}
     th{background:#F8F9FB;font-weight:600}
     .net{background:#ECFDF5;font-size:15px;font-weight:800;color:#059669}
     </style></head><body>
-    <div class="header"><h2 style="margin:0">Salary Slip</h2><p style="margin:4px 0 0">Month: ${MONTHS[month]} ${year}</p></div>
-    <table><tr><th colspan="2">Employee Details</th></tr>
-    <tr><td>Name</td><td><b>${emp.name}</b></td></tr>
-    <tr><td>Employee ID</td><td>${emp.id}</td></tr>
-    <tr><td>Designation</td><td>${emp.role}</td></tr>
-    <tr><td>Department</td><td>${emp.dept}</td></tr>
-    <tr><td>Bank A/C</td><td>${emp.bankAcc}</td></tr>
-    <tr><td>IFSC</td><td>${emp.ifsc}</td></tr>
-    <tr><th colspan="2">Attendance</th></tr>
-    <tr><td>Salary Type</td><td><b style="color:${salaryTypeColor}">${salaryTypeLabel}</b></td></tr>
-    <tr><td>Working Days</td><td>${WD}</td></tr>
-    <tr><td>Present</td><td>${P} days (+ ${H} Half days)</td></tr>
-    <tr><td>Effective Days</td><td>${effective}</td></tr>
-    ${calcRow}
-    <tr><th colspan="2">Earnings</th></tr>
-    <tr><td>Basic Salary</td><td>&#8377;${fmtN(emp.basicSalary)}</td></tr>
-    <tr><td>HRA</td><td>&#8377;${fmtN(emp.hra)}</td></tr>
-    <tr><td>Conveyance</td><td>&#8377;${fmtN(emp.conveyance)}</td></tr>
-    <tr><td>Medical Allowance</td><td>&#8377;${fmtN(emp.medical)}</td></tr>
-    <tr><td>Phone Allowance</td><td>&#8377;${fmtN(emp.phone)}</td></tr>
-    <tr><td><b>Gross Earned</b></td><td><b>&#8377;${fmtN(grossEarned)}</b></td></tr>
-    <tr><th colspan="2">Deductions</th></tr>
-    <tr><td>PF (12%)</td><td>&#8377;${fmtN(pf)}</td></tr>
-    ${esiRow}${tdsRow}${advRow}
-    <tr><td><b>Total Deductions</b></td><td><b>&#8377;${fmtN(totalDed)}</b></td></tr>
-    <tr><td class="net"><b>NET PAY</b></td><td class="net"><b>&#8377;${fmtN(netPay)}</b></td></tr>
-    </table><p style="margin-top:20px;font-size:10px;color:#6B7280">Generated by Payroll System &middot; ${new Date().toLocaleDateString("en-IN")}</p>
+    <div class="header"><h2 style="margin:0">${esc(t("payroll.salary_slip"))}</h2><p style="margin:4px 0 0">${esc(t("payroll.month_year",{month:MONTHS[month],year}))} · ${esc(locked?t("payroll.slip_from_finalized_run"):t("payroll.slip_not_finalized"))}</p></div>
+    <table><tr><th colspan="2">${esc(t("payroll.employee_details"))}</th></tr>
+    ${row(esc(t("common.name_2")),"<b>"+esc(item.staff_name||emp.name)+"</b>")}
+    ${row(esc(t("payroll.employee_id")),esc(item.staff_id))}
+    ${row(esc(t("master_library.designation")),esc(emp.designation||emp.role||item.designation||""))}
+    ${row(esc(t("payroll.department")),esc(emp.dept||""))}
+    ${row(esc(t("payroll.bank_account_number")),esc(emp.bankAcc||""))}
+    ${row("IFSC",esc(emp.ifsc||""))}
+    <tr><th colspan="2">${esc(t("payroll.attendance"))}</th></tr>
+    ${row(esc(t("payroll.salary_type")),`<b style="color:${salaryTypeColor}">${esc(salaryTypeLabel)}</b>`)}
+    ${row(esc(t("payroll.working_days")),WD)}
+    ${row(esc(t("common.present")),esc(t("payroll.slip_present_half",{P,H})))}
+    ${s.paidLeave?row(esc(t("payroll.slip_paid_leave")),s.paidLeave):""}
+    ${s.holidays?row(esc(t("payroll.holidays")),s.holidays):""}
+    ${row(esc(t("payroll.effective")),effective)}
+    ${row(esc(t("payroll.calculation_method")),calc)}
+    <tr><th colspan="2">${esc(t("payroll.earnings"))}</th></tr>
+    ${s.earnings.map(([k,v])=>row(esc(EARN[k]),money(v))).join("")}
+    ${s.ot>0?row(esc(t("payroll.ot_ot_hours_hrs",{ot_hours:s.otHours})),money(s.ot)):""}
+    ${row("<b>"+esc(t("common.gross"))+"</b>","<b>"+money(s.grossWithOt)+"</b>")}
+    <tr><th colspan="2">${esc(t("payroll.deductions"))}</th></tr>
+    ${s.deductions.length?s.deductions.map(([k,v])=>row(esc(DED[k]),money(v))).join(""):row(esc(t("payroll.no_deductions")),"")}
+    ${row("<b>"+esc(t("payroll.total_deductions"))+"</b>","<b>"+money(totalDed)+"</b>")}
+    ${s.adjustment?row(esc(adjLabel)+(item.adjustment_note?" <small>("+esc(item.adjustment_note)+")</small>":""),esc(signed(s.adjustment))):""}
+    <tr><td class="net"><b>${esc(t("payroll.net_pay_months_year",{MONTHS:MONTHS[month],year}))}</b></td><td class="net"><b>${money(netPay)}</b></td></tr>
+    </table><p style="margin-top:20px;font-size:10px;color:#6B7280">${esc(t("payroll.slip_generated_on",{date:new Date().toLocaleDateString("en-IN")}))}</p>
     </body></html>`);
     w.document.close();
     setTimeout(()=>w.print(),400);
@@ -1917,10 +1918,10 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(520px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       {/* Header */}
       <div style={{background:"#0D1B2A",padding:"13px 18px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
-        <Avatar name={emp.name} size={38} color={T.blu}/>
+        <Avatar name={item.staff_name||emp.name} size={38} color={T.blu}/>
         <div style={{flex:1}}>
-          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{emp.name}</div>
-          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)"}}>{emp.id} · {emp.role} · {MONTHS[month]} {year}</div>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{item.staff_name||emp.name}</div>
+          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)"}}>{item.staff_id} · {emp.designation||emp.role||item.designation} · {MONTHS[month]} {year}</div>
         </div>
         <button onClick={printSlip} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
           <IcPrint size={13} color="white"/> {t("payroll.print_slip")}
@@ -1929,12 +1930,15 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>
+        {/* Final (frozen run) ya abhi ka hisaab */}
+        <div style={{fontSize:11,fontWeight:600,color:locked?T.grn:T.amb,marginBottom:10}}>{locked?t("payroll.slip_from_finalized_run"):t("payroll.slip_not_finalized")}</div>
+
         {/* Attendance summary */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
-          {[{l:t("common.present"),v:P,c:T.grn},{l:t("common.half_day"),v:H,c:T.amb},{l:t("common.absent"),v:A,c:T.red},{l:t("payroll.effective"),v:effective,c:T.blu}].map((s,i)=>(
-            <div key={i} style={{padding:"9px 10px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,borderTop:`3px solid ${s.c}`,textAlign:"center"}}>
-              <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
-              <div style={{fontSize:9.5,color:T.t4,marginTop:1}}>{s.l}</div>
+          {[{l:t("common.present"),v:P,c:T.grn},{l:t("common.half_day"),v:H,c:T.amb},{l:t("common.absent"),v:A,c:T.red},{l:t("payroll.effective"),v:effective,c:T.blu}].map((x,i)=>(
+            <div key={i} style={{padding:"9px 10px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,borderTop:`3px solid ${x.c}`,textAlign:"center"}}>
+              <div style={{fontSize:18,fontWeight:700,color:x.c}}>{x.v}</div>
+              <div style={{fontSize:9.5,color:T.t4,marginTop:1}}>{x.l}</div>
             </div>
           ))}
         </div>
@@ -1960,7 +1964,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
             <div style={{padding:"8px 12px",background:T.grnL,borderBottom:`1px solid ${T.grnM}`}}>
               <span style={{fontSize:11,fontWeight:700,color:T.grn,textTransform:"uppercase",letterSpacing:".4px"}}>{t("payroll.earnings")}</span>
             </div>
-            {[["Basic",emp.basicSalary],["HRA",emp.hra],["Conveyance",emp.conveyance],["Medical",emp.medical],emp.phone?["Phone",emp.phone]:null].filter(Boolean).map(([l,v])=>(
+            {[...s.earnings.map(([k,v])=>[EARN[k],v]),...(s.ot>0?[[t("payroll.ot_ot_hours_hrs",{ot_hours:s.otHours}),s.ot]]:[])].map(([l,v])=>(
               <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"7px 12px",borderBottom:`1px solid ${T.b1}`}}>
                 <span style={{fontSize:12,color:T.t2}}>{l}</span>
                 <span style={{fontSize:12,fontWeight:500,color:T.t1}}>₹{fmtN(v)}</span>
@@ -1968,7 +1972,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
             ))}
             <div style={{display:"flex",justifyContent:"space-between",padding:"9px 12px",background:T.grnL}}>
               <span style={{fontSize:12.5,fontWeight:700,color:T.grn}}>{t("common.gross")}</span>
-              <span style={{fontSize:13,fontWeight:800,color:T.grn}}>₹{fmtN(grossEarned)}</span>
+              <span style={{fontSize:13,fontWeight:800,color:T.grn}}>₹{fmtN(s.grossWithOt)}</span>
             </div>
           </div>
 
@@ -1977,9 +1981,9 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
             <div style={{padding:"8px 12px",background:T.redL,borderBottom:`1px solid ${T.redM}`}}>
               <span style={{fontSize:11,fontWeight:700,color:T.red,textTransform:"uppercase",letterSpacing:".4px"}}>{t("payroll.deductions")}</span>
             </div>
-            {[[`PF (12%)`,pf],esi>0?[`ESI (0.75%)`,esi]:null,tds>0?[`TDS`,tds]:null,advDeduction>0?[`Advance`,advDeduction]:null].filter(Boolean).map(([l,v])=>(
-              <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"7px 12px",borderBottom:`1px solid ${T.b1}`}}>
-                <span style={{fontSize:12,color:T.t2}}>{l}</span>
+            {s.deductions.map(([k,v])=>(
+              <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"7px 12px",borderBottom:`1px solid ${T.b1}`}}>
+                <span style={{fontSize:12,color:T.t2}}>{DED[k]}</span>
                 <span style={{fontSize:12,fontWeight:500,color:T.red}}>-₹{fmtN(v)}</span>
               </div>
             ))}
@@ -1991,11 +1995,22 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
           </div>
         </div>
 
+        {/* Approved Salary Edit / run adjustment */}
+        {s.adjustment!==0&&(
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"8px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:8,marginBottom:12}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.blu}}>{adjLabel}</div>
+              {item.adjustment_note&&<div style={{fontSize:10.5,color:T.t3}}>{item.adjustment_note}</div>}
+            </div>
+            <span style={{fontSize:13,fontWeight:800,color:T.blu,whiteSpace:"nowrap"}}>{signed(s.adjustment)}</span>
+          </div>
+        )}
+
         {/* Net Pay */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px",background:`linear-gradient(135deg,${T.grn}18,${T.grn}08)`,border:`2px solid ${T.grnM}`,borderRadius:10}}>
           <div>
             <div style={{fontSize:11,color:T.grn,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{t("payroll.net_pay_months_year", { MONTHS: MONTHS[month], year })}</div>
-            <div style={{fontSize:11,color:T.t4}}>{t("payroll.bank_bankacc_ifsc_ifsc", { bankAcc: emp.bankAcc, ifsc: emp.ifsc })}</div>
+            <div style={{fontSize:11,color:T.t4}}>{t("payroll.bank_bankacc_ifsc_ifsc", { bankAcc: emp.bankAcc||"", ifsc: emp.ifsc||"" })}</div>
           </div>
           <div style={{fontSize:26,fontWeight:800,color:T.grn}}>₹{fmtN(netPay)}</div>
         </div>
@@ -2924,19 +2939,30 @@ function AddStaffModal({onClose,onSaved}){
 }
 
 // ── MONTHLY SALARY TAB ────────────────────────────────────────────
-function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,isAdmin,onStaffUpdate,holidays}){
+function MonthlySalaryTab({staff,month,year,onViewSlip,workingDays,isAdmin,isApprover,canSettle,onStaffUpdate,onOpenPay}){
   const [search,setSearch]=useState("");
-  const [payStatus,setPayStatus]=useState({});
-  // local paymentType overrides — can be toggled per employee
-  const [paymentTypes,setPaymentTypes]=useState(()=>{
-    const m={};
-    staff.forEach(e=>{m[e.id]=e.paymentType||"fixed";});
-    return m;
-  });
+
+  // ─── Salary sheet — table, Slip aur Create Salary run ek hi hisaab ───
+  // GET /payroll/run/salary-sheet: mahina finalize ho to frozen run items
+  // (settle ki sthiti ke saath), warna wahi computeRun jo run ka preview chalata
+  // hai. Pehle yahan calcNet() apna formula tha — OT nahi, approved edit sirf
+  // dikhawa, chhutti/PF alag — table aur run alag rakam dikhate. [HR-03/HR-10/HR-24]
+  const [sheet,setSheet]=useState(null);
+  const [sheetErr,setSheetErr]=useState("");
+  const [sheetLoading,setSheetLoading]=useState(true);
+  const loadSheet=async()=>{
+    setSheetErr("");
+    const r=await api.get(`/payroll/run/salary-sheet?month=${apiMonth(month)}&year=${year}`);
+    if(r&&r.success) setSheet(r.data);
+    else { setSheet(null); setSheetErr((r&&r.message)||t("payroll.salary_sheet_load_failed")); }
+    setSheetLoading(false);
+  };
+  const locked=!!(sheet&&sheet.locked);
 
   // ─── Salary Edit Approval (Phase 2) ──────────────────────
   const [editReqs,setEditReqs]=useState([]);      // all requests for current month
   const [editModalEmp,setEditModalEmp]=useState(null);
+  const [editModalNet,setEditModalNet]=useState(0);
   const [editNewAmt,setEditNewAmt]=useState("");
   const [editReason,setEditReason]=useState("");
   const [editSubmitting,setEditSubmitting]=useState(false);
@@ -2947,59 +2973,23 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
   const [showAddStaff,setShowAddStaff]=useState(false); // Add Staff modal
 
   // ─── Manual TDS per staff/month (Payroll v2 — Phase 2) ───
-  const [tdsByEmpMonth,setTdsByEmpMonth]=useState({});  // {staffId: amount}
-  const loadTds=async()=>{
-    try{
-      const r=await api.get(`/payroll/tds?month=${month}&year=${year}`);
-      if(r.success){
-        const m={};
-        (r.data||[]).forEach(t=>{m[t.staff_id]=Number(t.tds_amount)||0;});
-        setTdsByEmpMonth(m);
-      }
-    }catch(e){ /* endpoint comes online with Phase 2 backend — silent */ }
-  };
-
-  // ─── LOP day-map per staff for this month (Phase 3) ──────
-  // Approved leave applications with is_unpaid=1 → mark those dates as
-  // "L but unpaid". Fraction 0.5 for half-day LOP (worked half stays
-  // payable), 1 for a full unpaid day — mirrors backend computeRun.
-  const [lopDays,setLopDays]=useState({});  // {staffId: Map<dayNum,fraction>}
-  const loadLopDays=async()=>{
-    try{
-      const yfmt=year, mfmt=String(month+1).padStart(2,"0");
-      const monthStart=`${yfmt}-${mfmt}-01`;
-      const lastDay=new Date(year,month+1,0).getDate();
-      const monthEnd=`${yfmt}-${mfmt}-${String(lastDay).padStart(2,"0")}`;
-      const r=await api.get(`/payroll/leave-applications?status=Approved&from=${monthStart}&to=${monthEnd}`);
-      if(!r.success) return;
-      const lopOnly=(r.data||[]).filter(a=>a.is_unpaid);
-      const map={};
-      lopOnly.forEach(a=>{
-        if(!map[a.staff_id]) map[a.staff_id]=new Map();
-        const f=new Date(a.from_date), t=new Date(a.to_date);
-        const cur=new Date(f);
-        while(cur<=t){
-          if(cur.getFullYear()===year && cur.getMonth()===month) map[a.staff_id].set(cur.getDate(),a.is_half_day?0.5:1);
-          cur.setDate(cur.getDate()+1);
-        }
-      });
-      setLopDays(map);
-    }catch(e){ /* silent */ }
-  };
+  // Mahina 1-12 bhejo — run wahi padhta hai (pehle JS ka 0-based jaata tha aur
+  // September ka TDS August ke run me katta). Save ke baad sheet dobara. [HR-07]
+  const [tdsDraft,setTdsDraft]=useState({});  // {staffId: typed value} — sirf type karte waqt
   const saveTds=async(staffId,amount)=>{
-    setTdsByEmpMonth(p=>({...p,[staffId]:Number(amount)||0}));
-    try{
-      await api.post("/payroll/tds",{staff_id:staffId,month_num:month,year_num:year,tds_amount:Number(amount)||0});
-    }catch(e){ /* best-effort; UI already updated */ }
+    const r=await api.post("/payroll/tds",{staff_id:staffId,month_num:apiMonth(month),year_num:year,tds_amount:Number(amount)||0});
+    if(!r||!r.success) alert((r&&r.message)||t("payroll.tds_save_failed"));
+    setTdsDraft(p=>{ const n={...p}; delete n[staffId]; return n; });
+    await loadSheet();
   };
 
   const loadRequests=async()=>{
     try{
-      const r=await api.get(`/payroll/salary-edit-requests?month=${month}&year=${year}`);
+      const r=await api.get(`/payroll/salary-edit-requests?month=${apiMonth(month)}&year=${year}`);
       if(r.success) setEditReqs(r.data||[]);
     }catch(e){ /* table might not exist yet — silent */ }
   };
-  useEffect(()=>{ loadRequests(); loadTds(); loadLopDays(); /* eslint-disable-next-line */ },[month,year]);
+  useEffect(()=>{ setSheetLoading(true); loadSheet(); loadRequests(); },[month,year]);
 
   // Get latest request for a staff member (approved takes priority, else pending, else rejected)
   const reqFor=(sid)=>{
@@ -3009,6 +2999,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
 
   const openEdit=(emp,currentNet)=>{
     setEditModalEmp(emp);
+    setEditModalNet(currentNet);
     setEditNewAmt(String(currentNet));
     setEditReason("");
     setReqErr("");
@@ -3019,12 +3010,11 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
     if(isNaN(newAmt)||newAmt<0){ setReqErr("Invalid amount"); return; }
     setEditSubmitting(true);setReqErr("");
     try{
-      const oldAmt=calcNet(editModalEmp).net;
       const r=await api.post("/payroll/salary-edit-requests",{
         staff_id:editModalEmp.id,
-        month_num:month,
+        month_num:apiMonth(month),   // 1-12 — run isi mahine me lagata hai [HR-04]
         year_num:year,
-        old_amount:oldAmt,
+        old_amount:editModalNet,
         new_amount:newAmt,
         reason:editReason||null,
       });
@@ -3038,12 +3028,24 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
   const approveReq=async(id,status)=>{
     try{
       const r=await api.patch(`/payroll/salary-edit-requests/${id}`,{status});
-      if(r.success) await loadRequests();
+      if(r.success){ await loadRequests(); await loadSheet(); }
+      else alert(r.message);
     }catch(e){ alert(e.message); }
   };
 
-  const togglePayType=(empId)=>{
-    setPaymentTypes(p=>({...p,[empId]:p[empId]==="fixed"?"attendance":"fixed"}));
+  // Salary type = staff master (PATCH /payroll/staff/:id), confirm ke baad. Pehle
+  // toggle sirf screen ka state badalta tha — refresh par wapas, run purana type
+  // hi leta. Finalize hue mahine me frozen type dikhta hai, toggle nahi. [HR-08]
+  const [typeSaving,setTypeSaving]=useState(null);
+  const togglePayType=async(emp,cur)=>{
+    const to=cur==="fixed"?"attendance":"fixed";
+    if(!await window.confirmAsync(t("payroll.pay_type_change_confirm",{name:emp.name,to:to==="fixed"?t("payroll.fixed"):t("payroll.attendance")}))) return;
+    setTypeSaving(emp.id);
+    const r=await api.patch(`/payroll/staff/${emp.id}`,{payment_type:to});
+    setTypeSaving(null);
+    if(!r||!r.success){ alert((r&&r.message)||t("payroll.pay_type_save_failed")); return; }
+    if(onStaffUpdate) onStaffUpdate();
+    await loadSheet();
   };
 
   const [filterDesig,setFilterDesig]=useState("All");
@@ -3067,71 +3069,37 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
   },[staff]);
   const desigOpts=useMemo(()=>[...desigCounts.keys()].sort((a,b)=>a.localeCompare(b)),[desigCounts]);
 
-  const filtered=staff.filter(e=>e.salaryEnabled!==false)
-    .filter(e=>filterDesig==="All"||String(e.designation||e.role||"").trim()===filterDesig)
-    .filter(e=>!search||e.name.toLowerCase().includes(search.toLowerCase())||(e.role||"").toLowerCase().includes(search.toLowerCase()));
+  // Rows = sheet ke items (server wahi staff deta hai jo run me hain — salary ON,
+  // zinda; finalize hue mahine me run ke log). Staff master se sirf naam ke neeche
+  // ki jaankari aur edit ke button.
+  const staffById=useMemo(()=>new Map(staff.map(e=>[e.id,e])),[staff]);
+  const sheetRows=((sheet&&sheet.items)||[]).map(it=>({it,r:rowOf(it),master:staffById.get(it.staff_id)||null}))
+    .map(x=>({...x,emp:x.master||{id:x.it.staff_id,name:x.it.staff_name,role:"",designation:x.it.designation||"",dept:""}}));
+  const filtered=sheetRows
+    .filter(x=>filterDesig==="All"||String(x.emp.designation||x.emp.role||"").trim()===filterDesig)
+    .filter(x=>!search||x.emp.name.toLowerCase().includes(search.toLowerCase())||(x.emp.role||"").toLowerCase().includes(search.toLowerCase()));
 
-  const WD=workingDays||26;
-  // Holidays payable (mirrors backend computeRun): non-optional, non-Sunday
-  // holidays of this month are paid days for attendance-type staff.
-  const payableHolidayDays=(holidays||[]).filter(h=>{
-    const d=new Date(h.holiday_date);
-    return d.getFullYear()===year&&d.getMonth()===month&&!h.is_optional&&d.getDay()!==0;
-  }).map(h=>new Date(h.holiday_date).getDate());
-  const calcNet=(emp)=>{
-    const days=att[emp.id]||{};
-    const P=Object.values(days).filter(v=>v==="P").length;
-    const H=Object.values(days).filter(v=>v==="H").length;
-    const A=Object.values(days).filter(v=>v==="A").length;
-    // Paid leave counts as present; LOP (unpaid) leave does NOT.
-    // lopDays[emp.id] holds Map<day,fraction> approved as LOP this month —
-    // 0.5 for half-day LOP (worked half stays payable), 1 for full day.
-    const lopSet=lopDays[emp.id]||new Map();
-    let L_paid=0, L_unpaid=0, lopHalfCredit=0;
-    Object.entries(days).forEach(([d,v])=>{ if(v==="L"){ const frac=lopSet.get(Number(d)); if(frac===undefined) L_paid++; else { L_unpaid+=frac; if(frac===0.5) lopHalfCredit+=0.5; } } });
-    const pType=paymentTypes[emp.id]||emp.paymentType||"fixed";
-    // Holidays on/after join date (mid-month joiners) — attendance staff only;
-    // no cap at WD (extra Sunday work marked P legitimately exceeds WD).
-    let joinDay=1;
-    if(emp.joinDate){ const jd=new Date(emp.joinDate); if(jd.getFullYear()===year&&jd.getMonth()===month) joinDay=jd.getDate(); }
-    const payableHolidays=pType==="attendance"?payableHolidayDays.filter(d=>d>=joinDay).length:0;
-    const effective=P+(H*0.5)+L_paid+lopHalfCredit+payableHolidays;
-    // Petrol + Special allowance added as part of gross (Phase 2 fields,
-    // default 0 when not set so legacy rows keep working)
-    const fullGross=emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone+(emp.petrolAllowance||0)+(emp.specialAllowance||0);
-    const gross=pType==="fixed"
-      ? fullGross
-      : Math.round((fullGross/WD)*effective);
-    // PF — method-aware (Phase 2); fall back to legacy capped_15k when unset
-    const pfMethod=emp.pfMethod||"capped_15k";
-    const pfApplicable=emp.pfApplicable===undefined?true:!!emp.pfApplicable;
-    let pfFull=0;
-    if(pfApplicable){
-      if(pfMethod==="none") pfFull=0;
-      else if(pfMethod==="full_basic") pfFull=Math.round(emp.basicSalary*0.12);
-      else if(pfMethod==="custom") pfFull=Math.round(emp.pfCustomAmount||0);
-      else pfFull=Math.round(Math.min(emp.basicSalary,15000)*0.12); // capped_15k
-    }
-    const esicApplicable=emp.esicApplicable===undefined?true:!!emp.esicApplicable;
-    // ESI: eligibility on the monthly WAGE (fullGross ≤ ₹21k), deduction 0.75%
-    // of earned gross — gross is already prorated, so no re-proration.
-    const esi=(esicApplicable&&fullGross<=21000)?Math.round(gross*0.0075):0;
-    // PF prorated for attendance-paid staff; 'fixed' staff full month value.
-    const pf=pType==="fixed"?pfFull:Math.round((pfFull/WD)*effective);
-    const adv=(advances||[]).find(a=>a.empId===emp.id&&a.status==="Pending deduction")?.amount||0;
-    // Manual TDS for this month (looked up from `tdsByEmpMonth` if set)
-    const tds=Math.round((tdsByEmpMonth&&tdsByEmpMonth[emp.id])||0);
-    const net=Math.max(0,gross-pf-esi-adv-tds);
-    return{gross,net,effective,pf,esi,tds,pType,P,H,A,fullGross};
-  };
+  const WD=(sheet&&sheet.wd)||workingDays||26;
+  const totalNet=filtered.reduce((s,x)=>s+x.r.net,0);
+  const paidCount=filtered.filter(x=>payStateOf(x.it,locked)==="paid").length;
 
-  const totalNet=filtered.reduce((s,e)=>s+calcNet(e).net,0);
-  const paidCount=filtered.filter(e=>payStatus[e.id]==="Paid").length;
-
-  const markAllPaid=()=>{
-    const upd={};
-    filtered.forEach(e=>{upd[e.id]="Paid";});
-    setPayStatus(p=>({...p,...upd}));
+  // Status khaana: sirf finalize hue mahine me Paid/Partial/Pending (run item +
+  // salary ledger). "Pay Now" asli payment wali jagah kholta hai (Create Salary →
+  // Settle, accountant ke liye Salary Ledger). Pehle "Pay Now"/"Mark All Paid"
+  // sirf screen par hara kar dete the, kuch save nahi hota tha. [HR-08]
+  const payCell=(it)=>{
+    const st=payStateOf(it,locked);
+    const pill=(label,c,bg,brd,icon)=>(<span title={t("payroll.pay_via_create_salary_hint")} style={{display:"inline-flex",alignItems:"center",gap:4,background:bg,color:c,fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:20,border:`1px solid ${brd}`}}>{icon}{label}</span>);
+    if(st==="paid") return pill(t("common.paid"),T.grn,T.grnL,T.grnM,<IcChk size={10} color={T.grn}/>);
+    if(st==="hold") return pill(t("common.hold"),T.slt,T.sltL||T.surfaceB,T.b1);
+    if(st==="partial") return pill(t("payroll.partial_settled_of_net",{settled:fmtN(it.settled),net:fmtN(it.net_amount)}),T.blu,T.bluL,T.bluM);
+    if(st==="pending") return canSettle
+      ?<button onClick={onOpenPay} title={t("payroll.pay_via_create_salary_hint")}
+        style={{padding:"4px 11px",borderRadius:20,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+        {t("finance.pay_now")}
+      </button>
+      :pill(t("common.pending"),T.amb,T.ambL,T.ambM);
+    return pill(t("payroll.salary_not_finalized"),T.t3,T.surfaceB,T.b1);
   };
 
   return(
@@ -3154,20 +3122,20 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
             <span style={{fontSize:11,color:T.blu}}>{t("payroll.total_net_payroll")} </span>
             <span style={{fontSize:14,fontWeight:800,color:T.blu}}>₹{fmtN(totalNet)}</span>
           </div>
-          <div style={{padding:"6px 13px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7}}>
-            <span style={{fontSize:11,color:T.grn}}>{t("payroll.paidcount_filtered_paid", { paidCount, filtered: filtered.length })}</span>
+          <div title={t("payroll.pay_via_create_salary_hint")} style={{padding:"6px 13px",background:locked?T.grnL:T.surfaceB,border:`1px solid ${locked?T.grnM:T.b1}`,borderRadius:7}}>
+            <span style={{fontSize:11,color:locked?T.grn:T.t3}}>{locked?t("payroll.paidcount_filtered_paid", { paidCount, filtered: filtered.length }):t("payroll.salary_not_finalized")}</span>
           </div>
           {isAdmin&&<button onClick={()=>setShowAddStaff(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
             <IcAdd size={13} color="white"/> {t("payroll.add_staff")}
           </button>}
-          {isAdmin&&<button onClick={markAllPaid}
+          {canSettle&&<button onClick={onOpenPay} title={t("payroll.pay_via_create_salary_hint")}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-            <IcChk size={13} color="white"/> {t("payroll.mark_all_paid")}
+            <IcChk size={13} color="white"/> {isApprover?t("payroll.open_create_salary"):t("payroll.salary_ledger")}
           </button>}
           <button onClick={()=>{
             const headers=["Employee","ID","Designation","Dept","Pay Type","Basic","Gross","PF","ESI","TDS","Net Pay"];
-            const rows=filtered.map(emp=>{const c=calcNet(emp);return[emp.name,emp.id,emp.designation||emp.role||"",emp.dept,c.pType,emp.basicSalary,c.gross,c.pf,c.esi,c.tds||0,c.net];});
+            const rows=filtered.map(({it,r,emp})=>[emp.name,it.staff_id,emp.designation||emp.role||"",emp.dept,r.payType,r.basic,r.gross,r.pf,r.esi,r.tds,r.net]);
             exportCSV(headers,rows,`Monthly_Salary_${MONTHS[month]}_${year}.csv`);
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             <IcDown size={12} color={T.t2}/> {t("common.export")}
@@ -3175,8 +3143,17 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
         </div>
       </div>
 
+      {locked&&(
+        <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:9,padding:"8px 14px",marginBottom:12,fontSize:11.5,color:T.grn,fontWeight:600}}>
+          {t("payroll.salary_sheet_locked_note",{month:MONTHS[month],year})}
+        </div>
+      )}
+      {sheetErr&&(
+        <div style={{background:T.redL,border:`1px solid ${T.redM}`,borderRadius:9,padding:"8px 14px",marginBottom:12,fontSize:11.5,color:T.red,fontWeight:600}}>{sheetErr}</div>
+      )}
+
       {/* Pending Edit Approvals Banner (admin-only) */}
-      {isAdmin && editReqs.filter(r=>r.status==="pending").length>0 && (
+      {isApprover && editReqs.filter(r=>r.status==="pending").length>0 && (
         <div style={{background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:9,padding:"10px 14px",marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:700,color:T.amb,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
             <IcAlert size={14} color={T.amb}/>{t("payroll.editreqs_salary_edit_request_s_pending", { editReqs: editReqs.filter(r=>r.status==="pending").length })}</div>
@@ -3202,7 +3179,8 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
         </div>
       )}
 
-      {filtered.length===0&&!search&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No staff members added yet" sub={t("payroll.add_monthly_staff_to_see_salary")}/>}
+      {sheetLoading&&!sheet&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:12}}>{t("common.loading_2")}</div>}
+      {!sheetLoading&&sheet&&filtered.length===0&&!search&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No staff members added yet" sub={t("payroll.add_monthly_staff_to_see_salary")}/>}
       {filtered.length===0&&search&&<EmptyState icon={<IcSearch size={32} color={T.b2}/>} message={`No results for "${search}"`}/>}
 
       {/* Table */}
@@ -3212,14 +3190,15 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
             <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
           ))}
         </div>
-        {filtered.map((emp,ei)=>{
-          const {gross,net,effective,pf,esi,pType,P,H,A,fullGross}=calcNet(emp);
-          const isPaid=payStatus[emp.id]==="Paid";
-          const hasAdv=(advances||[]).find(a=>a.empId===emp.id&&a.status==="Pending deduction");
+        {filtered.map(({it,r,emp,master},ei)=>{
+          const {gross,net,pf,esi,tds,ot,P,H,A,fullGross}=r;
+          const effective=r.payable;
+          const pType=r.payType;
           const deptColor=emp.dept==="Management"?T.pur:emp.dept==="Civil"?T.blu:emp.dept==="Design"?T.grn:emp.dept==="Electrical"?T.amb:T.slt;
           const isAttBased=pType==="attendance";
+          const req=reqFor(it.staff_id);
           return(
-            <div key={emp.id} style={{display:"grid",gridTemplateColumns:"210px 100px 90px 110px 70px 70px 80px 100px 110px 110px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:ei%2===0?"transparent":T.surfaceB,borderLeft:`3px solid ${isAttBased?T.pur:T.grn}33`,transition:"background .1s"}}
+            <div key={it.staff_id} style={{display:"grid",gridTemplateColumns:"210px 100px 90px 110px 70px 70px 80px 100px 110px 110px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:ei%2===0?"transparent":T.surfaceB,borderLeft:`3px solid ${isAttBased?T.pur:T.grn}33`,transition:"background .1s"}}
               onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"55"}
               onMouseLeave={e=>e.currentTarget.style.background=ei%2===0?"transparent":T.surfaceB}>
 
@@ -3246,10 +3225,10 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
 
               {/* Pay Type toggle */}
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                {isAdmin?<button
-                  onClick={()=>togglePayType(emp.id)}
+                {isAdmin&&!locked&&master?<button
+                  onClick={()=>togglePayType(master,pType)} disabled={typeSaving===emp.id}
                   title={isAttBased?t("payroll.switch_to_fixed_monthly"):t("payroll.switch_to_attendance_based")}
-                  style={{display:"flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:20,border:`1.5px solid ${isAttBased?T.pur:T.grn}`,background:isAttBased?T.purL:T.grnL,color:isAttBased?T.pur:T.grn,fontSize:10.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",transition:"all .2s"}}>
+                  style={{display:"flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:20,border:`1.5px solid ${isAttBased?T.pur:T.grn}`,background:isAttBased?T.purL:T.grnL,color:isAttBased?T.pur:T.grn,fontSize:10.5,fontWeight:700,cursor:typeSaving===emp.id?"wait":"pointer",whiteSpace:"nowrap",transition:"all .2s"}}>
                   <div style={{width:7,height:7,borderRadius:"50%",background:isAttBased?T.pur:T.grn,flexShrink:0}}/>
                   {isAttBased?t("payroll.attendance"):t("payroll.fixed")}
                 </button>:<span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:20,border:`1.5px solid ${isAttBased?T.pur:T.grn}`,background:isAttBased?T.purL:T.grnL,color:isAttBased?T.pur:T.grn,fontSize:10.5,fontWeight:700,whiteSpace:"nowrap"}}><div style={{width:7,height:7,borderRadius:"50%",background:isAttBased?T.pur:T.grn,flexShrink:0}}/>{isAttBased?t("payroll.attendance"):t("payroll.fixed")}</span>}
@@ -3260,81 +3239,68 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
                 )}
               </div>
 
-              <span style={{fontSize:12.5,color:T.t2}}>₹{fmt(emp.basicSalary)}</span>
+              <span style={{fontSize:12.5,color:T.t2}}>₹{fmt(r.basic)}</span>
 
-              {/* Gross — show diff if attendance cuts */}
+              {/* Gross — show diff if attendance cuts; OT run se (HR-24) */}
               <div>
                 <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>₹{fmt(gross)}</div>
                 {isAttBased&&gross<fullGross&&(
                   <div style={{fontSize:9.5,color:T.red}}>-₹{fmtN(fullGross-gross)} cut</div>
                 )}
+                {ot>0&&<div style={{fontSize:9.5,color:T.blu}}>{t("payroll.ot_plus_amount",{amount:fmtN(ot)})}</div>}
               </div>
 
               <span style={{fontSize:12,color:T.red}}>-₹{fmtN(pf)}</span>
               <span style={{fontSize:12,color:esi>0?T.red:T.t4}}>{esi>0?`-₹${fmtN(esi)}`:"—"}</span>
 
-              {/* TDS — inline editable for admins, read-only otherwise */}
-              {isAdmin ? (
+              {/* TDS — inline editable for admins (mahina finalize nahi hua ho), read-only otherwise */}
+              {isAdmin&&!locked ? (
                 <input
                   type="number" min="0"
-                  value={tdsByEmpMonth[emp.id]||""}
-                  onChange={e=>setTdsByEmpMonth(p=>({...p,[emp.id]:Number(e.target.value)||0}))}
-                  onBlur={e=>saveTds(emp.id,Number(e.target.value)||0)}
+                  value={tdsDraft[it.staff_id]!==undefined?tdsDraft[it.staff_id]:(tds||"")}
+                  onChange={e=>{ const v=e.target.value; setTdsDraft(p=>({...p,[it.staff_id]:v})); }}
+                  onBlur={e=>{ const v=Number(e.target.value)||0; if(tdsDraft[it.staff_id]!==undefined&&v!==tds) saveTds(it.staff_id,v); else setTdsDraft(p=>{ const n={...p}; delete n[it.staff_id]; return n; }); }}
                   placeholder="0"
-                  style={{width:70,padding:"3px 6px",borderRadius:5,border:`1.5px solid ${(tdsByEmpMonth[emp.id]||0)>0?T.redM:T.b1}`,fontSize:11.5,color:(tdsByEmpMonth[emp.id]||0)>0?T.red:T.t2,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:(tdsByEmpMonth[emp.id]||0)>0?T.redL:T.surface,textAlign:"right"}}
+                  style={{width:70,padding:"3px 6px",borderRadius:5,border:`1.5px solid ${tds>0?T.redM:T.b1}`,fontSize:11.5,color:tds>0?T.red:T.t2,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:tds>0?T.redL:T.surface,textAlign:"right"}}
                   title={t("payroll.manual_tds_for_this_month_saves")}
                 />
               ) : (
-                <span style={{fontSize:12,color:(tdsByEmpMonth[emp.id]||0)>0?T.red:T.t4}}>{(tdsByEmpMonth[emp.id]||0)>0?`-₹${fmtN(tdsByEmpMonth[emp.id])}`:"—"}</span>
+                <span style={{fontSize:12,color:tds>0?T.red:T.t4}}>{tds>0?`-₹${fmtN(tds)}`:"—"}</span>
               )}
 
               <div>
-                {(() => {
-                  const req = reqFor(emp.id);
-                  const approvedOverride = req && req.status === "approved" ? Number(req.new_amount) : null;
-                  const displayNet = approvedOverride !== null ? approvedOverride : net;
-                  return (
-                    <>
-                      <div style={{fontSize:13,fontWeight:800,color:approvedOverride!==null?T.blu:T.grn}}>
-                        ₹{fmtN(displayNet)}
-                      </div>
-                      {approvedOverride!==null && (
-                        <div style={{fontSize:9,color:T.blu}} title={t("payroll.approved_edit")}>{t("payroll.edited_was_fmtn", { fmtN: fmtN(net) })}</div>
-                      )}
-                      {req && req.status === "pending" && (
-                        <div style={{fontSize:9,color:T.amb}}>{t("payroll.edit_pending")}</div>
-                      )}
-                      {hasAdv && approvedOverride === null && (
-                        <div style={{fontSize:9.5,color:T.amb}}>{t("payroll.fmtn_adv", { fmtN: fmtN(hasAdv.amount) })}</div>
-                      )}
-                    </>
-                  );
-                })()}
+                <div style={{fontSize:13,fontWeight:800,color:r.edited?T.blu:T.grn}}>
+                  ₹{fmtN(net)}
+                </div>
+                {r.edited && (
+                  <div style={{fontSize:9,color:T.blu}} title={t("payroll.approved_edit")}>{t("payroll.edited_was_fmtn", { fmtN: fmtN(r.computedNet) })}</div>
+                )}
+                {req && req.status === "pending" && (
+                  <div style={{fontSize:9,color:T.amb}}>{t("payroll.edit_pending")}</div>
+                )}
+                {r.advance>0 && !r.edited && (
+                  <div style={{fontSize:9.5,color:T.amb}}>{t("payroll.fmtn_adv", { fmtN: fmtN(r.advance) })}</div>
+                )}
+                {r.advanceLeft>0 && (
+                  <div style={{fontSize:9,color:T.t4}}>{t("payroll.advance_left_next_month", { amount: fmtN(r.advanceLeft) })}</div>
+                )}
               </div>
 
-              <div>
-                {isPaid
-                  ?<span style={{display:"inline-flex",alignItems:"center",gap:4,background:T.grnL,color:T.grn,fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:20,border:`1px solid ${T.grnM}`}}><IcChk size={10} color={T.grn}/>{t("common.paid")}</span>
-                  :<button onClick={()=>setPayStatus(p=>({...p,[emp.id]:"Paid"}))}
-                    style={{padding:"4px 11px",borderRadius:20,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                   {t("finance.pay_now")}
-                  </button>
-                }
-              </div>
+              <div>{payCell(it)}</div>
 
               <div style={{display:"flex",gap:5}}>
-                <button onClick={()=>onViewSlip(emp,pType,paymentTypes)}
+                <button onClick={()=>onViewSlip(emp,it,locked)}
                   style={{display:"flex",alignItems:"center",gap:3,padding:"4px 9px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
                   <IcEye size={11} color={T.blu}/> {t("payroll.slip")}
                 </button>
-                {isAdmin && (
-                  <button onClick={()=>openEdit(emp,net)} title={t("payroll.request_salary_edit_needs_approval")}
+                {isAdmin && !locked && master && (
+                  <button onClick={()=>openEdit(master,net)} title={t("payroll.request_salary_edit_needs_approval")}
                     style={{display:"flex",alignItems:"center",gap:3,padding:"4px 7px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11,fontWeight:600,cursor:"pointer"}}>
                     <IcEdit size={11} color={T.amb}/>
                   </button>
                 )}
-                {isAdmin && (
-                  <button onClick={()=>setEditStaffEmp(emp)} title={t("payroll.edit_staff_master_pf_method_allowances")}
+                {isAdmin && master && (
+                  <button onClick={()=>setEditStaffEmp(master)} title={t("payroll.edit_staff_master_pf_method_allowances")}
                     style={{display:"flex",alignItems:"center",gap:3,padding:"4px 7px",borderRadius:6,background:T.purL,border:`1px solid ${T.purM}`,color:T.pur,fontSize:11,fontWeight:600,cursor:"pointer"}}>
                     <IcSet size={11} color={T.pur}/>
                   </button>
@@ -3350,7 +3316,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
         <EditStaffModal
           emp={editStaffEmp}
           onClose={()=>setEditStaffEmp(null)}
-          onSaved={()=>{ if(onStaffUpdate) onStaffUpdate(); }}
+          onSaved={()=>{ if(onStaffUpdate) onStaffUpdate(); loadSheet(); }}
         />
       )}
 
@@ -3358,13 +3324,13 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
       {showAddStaff && (
         <AddStaffModal
           onClose={()=>setShowAddStaff(false)}
-          onSaved={()=>{ setShowAddStaff(false); if(onStaffUpdate) onStaffUpdate(); }}
+          onSaved={()=>{ setShowAddStaff(false); if(onStaffUpdate) onStaffUpdate(); loadSheet(); }}
         />
       )}
 
       {/* ─── Salary Edit Request Modal ─── */}
       {editModalEmp && (
-        <div 
+        <div
           style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
           <div onClick={e=>e.stopPropagation()}
             style={{background:T.surface,borderRadius:12,padding:20,width:440,maxWidth:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
@@ -3388,7 +3354,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
                {t("payroll.current_calculated_net")}
               </label>
               <div style={{fontSize:14,fontWeight:700,color:T.t2,padding:"8px 12px",background:T.b1,borderRadius:7}}>
-                ₹ {fmtN(calcNet(editModalEmp).net)}
+                ₹ {fmtN(editModalNet)}
               </div>
             </div>
 
@@ -3429,21 +3395,26 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
 }
 
 // ── ADVANCES TAB ──────────────────────────────────────────────────
-function AdvancesTab({advances,setAdvances,isAdmin}){
+function AdvancesTab({advances,setAdvances,staff,isAdmin}){
   const [showAdd,setShowAdd]=useState(false);
-  const [form,setForm]=useState({name:"",amount:"",date:new Date().toISOString().split("T")[0],reason:""});
+  // Advance kis staff ka — list se chuno (payroll_staff.id jaata hai). Pehle sirf
+  // naam likhte the: emp_id khaali, salary run kabhi nahi kaatta. Kaatna sirf run
+  // (Create Salary → Finalize) karta hai — yahan "Deduct" button nahi. [HR-09]
+  const [form,setForm]=useState({empId:"",amount:"",date:todayISO(),reason:""});
+  const [addErr,setAddErr]=useState("");
+  const salaryStaff=(staff||[]).filter(s=>s.salaryEnabled!==false);
 
   const addAdvance=async()=>{
-    if(!form.name||!form.amount) return;
-    try{
-      const res=await api.post("/payroll/advances",{name:form.name,amount:Number(form.amount),date:form.date,reason:form.reason});
-      const d=res.data?.data;
-      if(d) setAdvances(p=>[{id:d.id,empId:d.emp_id,name:d.name,amount:Number(d.amount),date:d.date?d.date.split("T")[0]:"",reason:d.reason,status:d.status},...p]);
-    }catch(err){console.error("Add advance:",err);}
-    setForm({name:"",amount:"",date:new Date().toISOString().split("T")[0],reason:""});setShowAdd(false);
+    setAddErr("");
+    const res=await api.post("/payroll/advances",{emp_id:Number(form.empId)||null,amount:Number(form.amount),date:form.date,reason:form.reason});
+    if(!res||!res.success){ setAddErr((res&&res.message)||t("payroll.advance_save_failed")); return; }
+    const d=res.data;
+    if(d) setAdvances(p=>[{id:d.id,empId:d.emp_id,name:d.name,amount:Number(d.amount),recovered:0,date:d.date?String(d.date).split("T")[0]:"",reason:d.reason,status:d.status},...p]);
+    setForm({empId:"",amount:"",date:todayISO(),reason:""});setShowAdd(false);
   };
 
-  const totalPending=advances.filter(a=>a.status==="Pending deduction").reduce((s,a)=>s+a.amount,0);
+  const leftOf=(a)=>Math.max(0,(Number(a.amount)||0)-(Number(a.recovered)||0));
+  const totalPending=advances.filter(a=>a.status==="Pending deduction").reduce((s,a)=>s+leftOf(a),0);
 
   return(
     <div>
@@ -3473,15 +3444,22 @@ function AdvancesTab({advances,setAdvances,isAdmin}){
       {showAdd&&(
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"13px 14px",marginBottom:12}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:9,marginBottom:9}}>
-            {[{l:t("common.name_2"),k:"name",ph:"Employee name"},{l:t("crm.amount"),k:"amount",ph:"Amount",type:"number"},{l:t("common.date"),k:"date",type:"date"},{l:t("common.reason"),k:"reason",ph:"Medical, personal..."}].map(f=>(
+            <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{t("master_library.staff")}</label>
+              <select value={form.empId} onChange={e=>setForm(p=>({...p,empId:e.target.value}))}
+                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                <option value="">{t("payroll.select")}</option>
+                {salaryStaff.map(s=><option key={s.id} value={s.id}>{s.name}{(s.designation||s.role)?` (${s.designation||s.role})`:""}</option>)}
+              </select></div>
+            {[{l:t("crm.amount"),k:"amount",ph:"Amount",type:"number"},{l:t("common.date"),k:"date",type:"date"},{l:t("common.reason"),k:"reason",ph:"Medical, personal..."}].map(f=>(
               <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{f.l}</label>
                 <input type={f.type||"text"} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
                   style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/></div>
             ))}
           </div>
+          {addErr&&<div style={{padding:"7px 10px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,fontSize:11.5,color:T.red,fontWeight:600,marginBottom:9}}>{addErr}</div>}
           <div style={{display:"flex",gap:7}}>
-            <button onClick={()=>setShowAdd(false)} style={{padding:"7px 14px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
+            <button onClick={()=>{setShowAdd(false);setAddErr("");}} style={{padding:"7px 14px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
             <button onClick={addAdvance} style={{padding:"7px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>{t("payroll.save_advance")}</button>
           </div>
         </div>
@@ -3505,12 +3483,9 @@ function AdvancesTab({advances,setAdvances,isAdmin}){
               <span style={{fontSize:13,fontWeight:700,color:isPending?T.amb:T.grn}}>₹{fmtN(adv.amount)}</span>
               <span style={{fontSize:11.5,color:T.t3}}>{adv.date}</span>
               <span style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>{adv.reason}</span>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                 <Pill label={adv.status==="Deducted"?t("payroll.deducted"):t("common.pending")} c={isPending?T.amb:T.grn} bg={isPending?T.ambL:T.grnL} brd={isPending?T.ambM:T.grnM}/>
-                {isPending&&isAdmin&&<button onClick={async()=>{try{await api.patch("/payroll/advances/"+adv.id,{status:"Deducted"});}catch(err){console.error(err);}setAdvances(p=>p.map(a=>a.id===adv.id?{...a,status:"Deducted"}:a));}}
-                  style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,cursor:"pointer",fontWeight:600}}>
-                 {t("payroll.deduct")}
-                </button>}
+                {isPending&&<span style={{fontSize:10,color:T.t4}}>{adv.recovered>0?t("payroll.advance_recovered_of",{ recovered: fmtN(adv.recovered), left: fmtN(leftOf(adv)) }):t("payroll.advance_deducts_in_run")}</span>}
               </div>
             </div>
           );
@@ -5821,7 +5796,11 @@ function RWPreviewRow({it,open,setOpen,adj,setAdj,net}){
         <td style={{textAlign:"center",fontWeight:600,color:it.ot_amount?T.blu:T.t4}}>{it.ot_amount?`+₹${fmtN(it.ot_amount)}`:"—"}</td>
         <td style={{textAlign:"center",color:T.red}}>−₹{fmtN(ded)}</td>
         <td style={{textAlign:"center"}}><input type="number" value={adj} onChange={ev=>setAdj(Number(ev.target.value)||0)} style={{width:74,padding:"5px 7px",border:`1px solid ${T.b2}`,borderRadius:7,fontSize:12,textAlign:"right",color:adj>0?T.grn:adj<0?T.red:T.t2,fontWeight:600,fontFamily:"inherit"}}/></td>
-        <td style={{textAlign:"center",fontWeight:800,color:T.grn,fontSize:13.5}}>₹{fmtN(net)}</td>
+        <td style={{textAlign:"center",fontWeight:800,color:it.salary_edit?T.blu:T.grn,fontSize:13.5}}>₹{fmtN(net)}
+          {/* Approved Salary Edit ab run me hi (HR-04) — net wahi, hisaab wali rakam neeche */}
+          {it.salary_edit&&<div style={{fontSize:9.5,fontWeight:600,color:T.blu}} title={t("payroll.approved_edit")}>{t("payroll.edited_was_fmtn",{ fmtN: fmtN(it.computed_net) })}</div>}
+          {it.advance_remaining>0&&<div style={{fontSize:9.5,fontWeight:600,color:T.t4}}>{t("payroll.advance_left_next_month",{ amount: fmtN(it.advance_remaining) })}</div>}
+        </td>
         <td style={{textAlign:"center"}}><button onClick={setOpen} style={{background:"none",border:"none",cursor:"pointer",transform:open?"rotate(90deg)":"none",transition:"transform .15s"}}><IcChev size={15} color={T.t3}/></button></td>
       </tr>
       {open&&(
@@ -5860,7 +5839,8 @@ function RunFinalize({preview,adjs,finalized,items,month,year,busy,onFinalize,on
     items.forEach(it=>{ totG+=Number(it.gross_earned); totOt+=Number(it.ot_amount); totD+=Number(it.pf)+Number(it.esi)+Number(it.tds)+Number(it.advance_deducted); totAdj+=Number(it.adjustment); totN+=Number(it.net_amount); });
   }else if(preview){
     const list=preview.items||[]; count=list.length;
-    list.forEach(it=>{ const adj=Number(adjs[it.staff_id])||0; totG+=it.gross_earned; totOt+=it.ot_amount; totD+=it.pf+it.esi+it.tds+it.advance_deducted; totAdj+=adj; totN+=Math.max(0,it.net_amount+adj); });
+    // approved Salary Edit ka farq bhi adjustment — finalize ke baad run header yahi jamaata hai (HR-04)
+    list.forEach(it=>{ const adj=Number(adjs[it.staff_id])||0; totG+=it.gross_earned; totOt+=it.ot_amount; totD+=it.pf+it.esi+it.tds+it.advance_deducted; totAdj+=adj+(Number(it.edit_adjustment)||0); totN+=Math.max(0,it.net_amount+adj); });
   }
   return(
     <div>
@@ -6117,6 +6097,14 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
 function PayrollModule(){
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   const isAdmin = ["admin","super_admin","project_manager"].includes(currentUser.role);
+  // Screen wahi dikhaye jo server karne de [HR-13]: leave review/approve, day
+  // approve/unlock, punch review, attendance-edit approve, holidays/leave types,
+  // Create Salary (finalize/revert), geofence aur attendance settings — server
+  // par sirf admin/super_admin (isApprover / requireRole). Pehle Project Manager
+  // ko ye button dikhte the aur har click par 403 aata tha.
+  const isApprover = ["admin","super_admin"].includes(currentUser.role);
+  // Salary settle/pay (POST /wallets/salary/settle) — server FIN_ROLES
+  const canSettle = ["admin","super_admin","accountant"].includes(currentUser.role);
 
   // Mode: "office" (permanent staff) | "daily" (daily wages labour)
   const [mode,setMode]=useState(()=>localStorage.getItem("gb_payroll_mode")||"office");
@@ -6147,8 +6135,8 @@ function PayrollModule(){
   const [attSearch,setAttSearch]=useState("");
   const [attView,setAttView]=useState("day");     // day (aaj — marking) | grid (month overview)
   const [dailyAtt,setDailyAtt]=useState({});
-  const [selSlipEmp,setSelSlipEmp]=useState(null);
-  const [selSlipPayType,setSelSlipPayType]=useState("fixed");
+  const [selSlip,setSelSlip]=useState(null);     // {emp,item,locked,month,year} — salary-sheet ka item
+  const [ovSheet,setOvSheet]=useState(null);     // Overview tiles ke liye salary-sheet (HR-10)
   const [selProject,setSelProject]=useState("All");
   const [salaryRecords,setSalaryRecords]=useState([]);
   const [defaultDueDays,setDefaultDueDays]=useState(10);
@@ -6216,6 +6204,7 @@ function PayrollModule(){
   const mapAdvance=a=>({
     id:a.id,empId:a.emp_id,name:a.name,
     amount:Number(a.amount),
+    recovered:Number(a.recovered)||0,   // finalized runs me salary se kata (HR-09)
     date:a.date?a.date.split("T")[0]:"",
     reason:a.reason,status:a.status,
   });
@@ -6273,6 +6262,18 @@ function PayrollModule(){
   useEffect(()=>{loadAll();},[loadAll]);
   useEffect(()=>{loadAttendance();},[loadAttendance]);
   useEffect(()=>{loadHolidays();},[loadHolidays]);
+  // Overview ki "Monthly Net Payroll" / "Salary Pending" tile — wahi salary-sheet
+  // jo Monthly Salary table aur run padhte hain. Pehle tile ka apna formula tha
+  // (chhutti/LOP/TDS/advance nahi, salary OFF staff bhi) aur Salary Pending record
+  // id ko staff id maan kar ghatata tha — RATNA Sep ₹99,749 vs table ₹1,73,616. [HR-10]
+  useEffect(()=>{
+    if(mode!=="office"||tab!=="office-overview") return;
+    let alive=true;
+    setOvSheet(null);
+    api.get(`/payroll/run/salary-sheet?month=${apiMonth(month)}&year=${year}`)
+      .then(r=>{ if(alive) setOvSheet(r&&r.success?r.data:{error:(r&&r.message)||t("payroll.salary_sheet_load_failed")}); });
+    return ()=>{ alive=false; };
+  },[mode,tab,month,year]);
 
   // Attendance API callbacks
   const onMonthlyAttChange=(empId,day,status,note)=>{
@@ -6300,37 +6301,9 @@ function PayrollModule(){
 
   // Summary KPIs
   const WORKING_DAYS=workingDays;
-  const totalMonthlyNet=staff.reduce((s,emp)=>{
-    const days=monthlyAtt[emp.id]||{};
-    const P=Object.values(days).filter(v=>v==="P").length;
-    const H=Object.values(days).filter(v=>v==="H").length;
-    // Paid leave (L not in LOP) counts as present at company level too.
-    // We don't have LOP day-set at parent scope yet — approximate by
-    // counting ALL L as paid. The MonthlySalaryTab tab itself shows the
-    // precise number; this tile is a summary.
-    const L=Object.values(days).filter(v=>v==="L").length;
-    const eff=P+(H*0.5)+L;
-    const WD=WORKING_DAYS||26;
-    const fullGross=emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone+(emp.petrolAllowance||0)+(emp.specialAllowance||0);
-    const pType=emp.paymentType||"fixed";
-    const gross=pType==="fixed"?fullGross:Math.round((fullGross/WD)*eff);
-    // PF — method-aware
-    const pfMethod=emp.pfMethod||"capped_15k";
-    const pfApplicable=emp.pfApplicable===undefined?true:!!emp.pfApplicable;
-    let pfFull=0;
-    if(pfApplicable){
-      if(pfMethod==="none") pfFull=0;
-      else if(pfMethod==="full_basic") pfFull=Math.round(emp.basicSalary*0.12);
-      else if(pfMethod==="custom") pfFull=Math.round(emp.pfCustomAmount||0);
-      else pfFull=Math.round(Math.min(emp.basicSalary,15000)*0.12);
-    }
-    const esicApplicable=emp.esicApplicable===undefined?true:!!emp.esicApplicable;
-    // ESI eligibility on wage (fullGross), deduction on earned gross — no re-proration
-    const esi=(esicApplicable&&fullGross<=21000)?Math.round(gross*0.0075):0;
-    const pf=pType==="fixed"?pfFull:Math.round((pfFull/WD)*eff);
-    // Clamp net at 0 — never display negative payroll
-    return s+Math.max(0,gross-pf-esi);
-  },0);
+  // Monthly net payroll + salary pending = server salary-sheet (HR-10) — table/run jaisa
+  const ovReady=!!(ovSheet&&!ovSheet.error);
+  const ovTiles=tilesOf(ovReady?ovSheet:null);
 
   const totalDailyPayable=workers.reduce((s,w)=>{
     let total=0;
@@ -6342,7 +6315,7 @@ function PayrollModule(){
     return s+total;
   },0);
 
-  const pendingAdvances=advances.filter(a=>a.status==="Pending deduction").reduce((s,a)=>s+a.amount,0);
+  const pendingAdvances=advances.filter(a=>a.status==="Pending deduction").reduce((s,a)=>s+Math.max(0,a.amount-(a.recovered||0)),0);
 
   // Office Staff mode — 5 tabs (Settings gear icon me, right side)
   const TABS_OFFICE=[
@@ -6361,20 +6334,13 @@ function PayrollModule(){
   const TABS = mode==="office" ? TABS_OFFICE : TABS_DAILY;
   const settingsTabId = mode==="office" ? "office-settings" : "daily-settings";
 
-  // Pending payroll for the CURRENT month/year (real number):
-  //   pending = max(0, totalMonthlyNet − paid for this month)
-  //   pendingCount = staff who have no Paid record for this month
-  const paidThisMonthRecs=salaryRecords.filter(r=>r.status==="Paid"&&r.month===month&&r.year===year);
-  const paidThisMonthAmt=paidThisMonthRecs.reduce((s,r)=>s+(r.amount||0),0);
-  const manualPending=Math.max(0,totalMonthlyNet-paidThisMonthAmt);
-  const paidEmpIds=new Set(paidThisMonthRecs.map(r=>r.id));
-  const pendingCount=Math.max(0,staff.length-paidEmpIds.size);
-
+  // Salary pending (is mahine): finalize hua ho to net − settle hua (run items);
+  // warna poora net baaki. Sirf salary-sheet se — koi alag hisaab nahi. [HR-10]
   const TILES_OFFICE=[
     {l:t("payroll.office_staff"),         v:staff.length,        sub:t("payroll.permanent_employees"),               c:T.blu},
-    {l:t("payroll.monthly_net_payroll"),  v:`₹${fmt(totalMonthlyNet)}`,  sub:t("payroll.month_year", { month: MONTHS[month], year }),          c:T.grn},
+    {l:t("payroll.monthly_net_payroll"),  v:ovReady?`₹${fmt(ovTiles.net)}`:"…",  sub:ovSheet&&ovSheet.error?ovSheet.error:t("payroll.month_year", { month: MONTHS[month], year }),          c:T.grn},
     {l:t("payroll.pending_advances"),     v:`₹${fmt(pendingAdvances)}`,  sub:t("payroll.length_to_deduct", { length: advances.filter(a=>a.status==="Pending deduction").length }), c:T.pur},
-    {l:t("payroll.salary_pending"),       v:`₹${fmt(manualPending)}`,    sub:`${pendingCount} ${pendingCount===1?"employee":"employees"} unpaid`, c:manualPending>0?T.amb:T.grn},
+    {l:t("payroll.salary_pending"),       v:ovReady?`₹${fmt(ovTiles.pendingNet)}`:"…",    sub:ovReady?(ovTiles.locked?t("payroll.n_staff_salary_pending",{ n: ovTiles.pendingCount }):t("payroll.salary_not_finalized")):"", c:ovTiles.pendingNet>0?T.amb:T.grn},
   ];
   const TILES_DAILY=[
     {l:t("payroll.daily_workers"),        v:workers.length,              sub:t("payroll.active_labour"),                     c:T.blu},
@@ -6434,10 +6400,13 @@ function PayrollModule(){
           {/* Export */}
           <button onClick={()=>{
             if(tab==="office-salary"&&salarySub==="monthly"){
-              const WD=workingDays||26;
-              exportCSV(["Name","Role","Dept","Basic","HRA","Conv","Medical","Phone","Days Present","Gross","PF","Net"],
-                staff.map(emp=>{const days=monthlyAtt[emp.id]||{};const P=Object.values(days).filter(v=>v==="P").length;const H=Object.values(days).filter(v=>v==="H").length;const eff=P+(H*0.5);const perDay=(emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone)/(WD);const gross=Math.round(perDay*eff);const pf=Math.round(emp.basicSalary*0.12);return[emp.name,emp.role,emp.dept,emp.basicSalary,emp.hra,emp.conveyance,emp.medical,emp.phone,eff,gross,pf,gross-pf];}),
-                `monthly_salary_${MONTHS[month]}_${year}.csv`);
+              // wahi salary-sheet jo table/slip/run — pehle yahan bhi apna formula tha (PF 12% hamesha) [HR-03]
+              api.get(`/payroll/run/salary-sheet?month=${apiMonth(month)}&year=${year}`).then(r=>{
+                if(!r||!r.success){ alert((r&&r.message)||t("payroll.salary_sheet_load_failed")); return; }
+                exportCSV(["Name","Role","Dept","Basic","HRA","Conv","Medical","Phone","Days Present","Gross","PF","Net"],
+                  (r.data.items||[]).map(it=>{const s=slipOf(it);const e=(it.breakdown||{}).earnings||{};const emp=staff.find(x=>x.id===it.staff_id)||{};return[it.staff_name,it.designation||emp.role||"",emp.dept||"",s.basic,Number(e.hra)||0,Number(e.conveyance)||0,Number(e.medical)||0,Number(e.phone)||0,s.payable,s.grossWithOt,s.pf,s.net];}),
+                  `monthly_salary_${MONTHS[month]}_${year}.csv`);
+              });
             }else if(tab==="daily-att"){
               exportCSV(["Name","Trade","Rate/Day","OT Rate","Project","Days","OT Hours","Total"],
                 workers.map(w=>{let days=0,ot=0,total=0;Object.entries(dailyAtt[w.id]||{}).forEach(([d,v])=>{if(v?.status==="P"){days++;total+=w.ratePerDay+(v.ot||0)*w.rateOT;ot+=(v.ot||0);}else if(v?.status==="H"){days+=0.5;total+=w.ratePerDay/2;}});return[w.name,w.trade,w.ratePerDay,w.rateOT,w.project,days,ot,total];}),
@@ -6473,8 +6442,8 @@ function PayrollModule(){
         {/* ─── OFFICE STAFF MODE ─── */}
         {mode==="office" && tab==="office-att" && (
           <>
-          <PunchReviewStrip onActed={loadAttendance}/>
-          {isAdmin&&<StaffEditRequestsStrip staff={staff} onActed={loadAttendance}/>}
+          {isApprover&&<PunchReviewStrip onActed={loadAttendance}/>}
+          {isApprover&&<StaffEditRequestsStrip staff={staff} onActed={loadAttendance}/>}
           {/* View toggle + search — Day view (marking) | Month grid (overview) */}
           <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
             <div style={{display:"inline-flex",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:3}}>
@@ -6502,7 +6471,7 @@ function PayrollModule(){
             <DayAttendanceView
               staff={staff.filter(s=>!attSearch||s.name.toLowerCase().includes(attSearch.toLowerCase()))}
               att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange} holidays={holidays} punchDays={punchDays}
-              notes={attNotes} dayLocks={dayLocks} isAdmin={isAdmin} onLocksChanged={loadAttendance}/>
+              notes={attNotes} dayLocks={dayLocks} isAdmin={isApprover} onLocksChanged={loadAttendance}/>
           ):(
             <MonthlyAttGrid
               staff={staff
@@ -6514,11 +6483,11 @@ function PayrollModule(){
           </>
         )}
         {mode==="office" && tab==="office-overview" && (
-          <OverviewTab isAdmin={isAdmin} setTab={setTab}
+          <OverviewTab isAdmin={isApprover} setTab={setTab}
             onOpenSalary={(sub)=>{ setSalarySub(sub); setTab("office-salary"); }}/>
         )}
         {mode==="office" && tab==="office-leave" && (
-          <LeaveTab staff={staff} month={month} year={year} isAdmin={isAdmin} onAttendanceChanged={loadAttendance}
+          <LeaveTab staff={staff} month={month} year={year} isAdmin={isApprover} onAttendanceChanged={loadAttendance}
             holidays={holidays} setHolidays={setHolidays}/>
         )}
         {mode==="office" && tab==="office-salary" && (
@@ -6527,7 +6496,7 @@ function PayrollModule(){
             <div style={{display:"flex",gap:6,marginBottom:14,borderBottom:`1px solid ${T.b1}`,paddingBottom:6}}>
               {[
                 {id:"monthly", l:t("payroll.monthly_salary"), c:T.blu},
-                ...(isAdmin?[{id:"run", l:t("payroll.create_salary"), c:T.grn}]:[]),
+                ...(isApprover?[{id:"run", l:t("payroll.create_salary"), c:T.grn}]:[]),
                 {id:"ledger",  l:t("payroll.salary_ledger"), c:T.pur},
               ].map(s=>(
                 <button key={s.id} onClick={()=>setSalarySub(s.id)}
@@ -6537,11 +6506,14 @@ function PayrollModule(){
               ))}
             </div>
             {salarySub==="monthly" && (
-              <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} holidays={holidays} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}} isAdmin={isAdmin} onStaffUpdate={loadAll}/>
+              <MonthlySalaryTab staff={staff} month={month} year={year} workingDays={WORKING_DAYS}
+                onViewSlip={(emp,item,locked)=>setSelSlip({emp,item,locked,month,year})}
+                isAdmin={isAdmin} isApprover={isApprover} canSettle={canSettle} onStaffUpdate={loadAll}
+                onOpenPay={()=>setSalarySub(isApprover?"run":"ledger")}/>
             )}
             {salarySub==="run" && (
-              isAdmin
-                ? <PayrollRunWizard month={month} year={year} isAdmin={isAdmin} workingDays={workingDays}
+              isApprover
+                ? <PayrollRunWizard month={month} year={year} isAdmin={isApprover} workingDays={workingDays}
                     setTab={(id)=>{ if(id==="office-salary") setSalarySub("monthly"); else setTab(id); }} onChanged={loadAll}/>
                 : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>{t("payroll.create_salary_run_is_only_accessible")}</div>
             )}
@@ -6551,10 +6523,10 @@ function PayrollModule(){
           </div>
         )}
         {mode==="office" && tab==="office-advances" && (
-          <AdvancesTab advances={advances} setAdvances={setAdvances} isAdmin={isAdmin}/>
+          <AdvancesTab advances={advances} setAdvances={setAdvances} staff={staff} isAdmin={isAdmin}/>
         )}
         {mode==="office" && tab==="office-settings" && (
-          isAdmin ? (
+          isApprover ? (
             <div>
               {/* Settings group — Payroll Config / Sites & Geofences */}
               <div style={{display:"flex",gap:6,marginBottom:14,borderBottom:`1px solid ${T.b1}`,paddingBottom:6}}>
@@ -6570,7 +6542,7 @@ function PayrollModule(){
               </div>
               {settingsSub==="config"
                 ? <PayrollSettingsTab defaultDueDays={defaultDueDays} setDefaultDueDays={setDefaultDueDays} workingDays={workingDays} setWorkingDays={setWorkingDays}/>
-                : <GeofenceAdminTab isAdmin={isAdmin}/>}
+                : <GeofenceAdminTab isAdmin={isApprover}/>}
             </div>
           ) : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>{t("payroll.settings_are_only_accessible_to_admins")}</div>
         )}
@@ -6580,7 +6552,7 @@ function PayrollModule(){
           <DailyWorkersTab workers={workers} setWorkers={setWorkers} isAdmin={isAdmin}/>
         )}
         {mode==="daily" && tab==="daily-att" && (
-          <DailyWagesTab workers={workers} att={dailyAtt} setAtt={setDailyAtt} selProject={selProject} setSelProject={setSelProject} month={month} year={year} onDailyAttChange={onDailyAttChange} isAdmin={isAdmin} onResync={loadAttendance}/>
+          <DailyWagesTab workers={workers} att={dailyAtt} setAtt={setDailyAtt} selProject={selProject} setSelProject={setSelProject} month={month} year={year} onDailyAttChange={onDailyAttChange} isAdmin={isApprover} onResync={loadAttendance}/>
         )}
         {mode==="daily" && tab==="daily-payments" && (
           <DailyPaymentsTab workers={workers} isAdmin={isAdmin} attMonth={dailyAtt} month={month} year={year}/>
@@ -6593,7 +6565,7 @@ function PayrollModule(){
       </div>
 
       {/* Salary slip modal */}
-      {selSlipEmp&&<SalarySlipModal emp={selSlipEmp} att={monthlyAtt} month={month} year={year} onClose={()=>setSelSlipEmp(null)} paymentType={selSlipPayType} workingDays={workingDays}/>}
+      {selSlip&&<SalarySlipModal emp={selSlip.emp} item={selSlip.item} locked={selSlip.locked} month={selSlip.month} year={selSlip.year} onClose={()=>setSelSlip(null)} workingDays={workingDays}/>}
 
       <style>{`
         *{box-sizing:border-box}
