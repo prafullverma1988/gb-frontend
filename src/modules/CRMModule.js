@@ -8,6 +8,7 @@ import DesignOverviewDrawer from "../components/DesignOverviewDrawer";
 import ExportMenu from "../components/DataExport";
 import ImportFileModal from "../components/ImportFileModal";
 import { t } from "../i18n";
+import { todayISO, isoDate } from "../utils/today";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -132,10 +133,18 @@ const Pill=({label,c,bg,brd})=>(
 );
 const PRIO_S={"High":{c:T.red,bg:T.redL,brd:T.redM},"Medium":{c:T.amb,bg:T.ambL,brd:T.ambM},"Low":{c:T.slt,bg:T.sltL,brd:T.b2}};
 
+// Aaj se kitne din. "Aaj" = asli local tareekh (utils/today) — pehle yahan
+// demo ki 2026-03-16 likhi reh gayi thi, isliye har follow-up "aage ka"
+// dikhta tha, "Follow-up today" 0 aur koi card laal nahi hota (CRM-04).
+// Dono taraf YYYY-MM-DD ki UTC aadhi-raat, to farak hamesha poore din.
 const daysDiff=(dateStr)=>{
   if(!dateStr) return null;
-  return Math.round((new Date(dateStr)-new Date("2026-03-16"))/(1000*86400));
+  const d=Date.parse(String(dateStr).slice(0,10));
+  if(isNaN(d)) return null;
+  return Math.round((d-Date.parse(todayISO()))/(1000*86400));
 };
+// Aaj + n din (local) — Quick set chips ke liye
+const addDaysISO=(n)=>{ const d=new Date(); d.setDate(d.getDate()+n); return isoDate(d); };
 
 
 // ── CONTACT REMINDER POPUP ───────────────────────────────────────
@@ -166,7 +175,7 @@ function ContactReminderPopup({lead,onDismiss,onWhatsApp,onCall}){
           {/* Contact date info */}
           <div style={{padding:"10px 13px",background:isOverdue?T.redL:isToday?T.ambL:T.bluL,border:`1px solid ${isOverdue?T.redM:isToday?T.ambM:T.bluM}`,borderRadius:8,marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:12.5,fontWeight:600,color:isOverdue?T.red:isToday?T.amb:T.blu}}>
-              {isOverdue?`${Math.abs(diff)} day${Math.abs(diff)>1?"s":""} overdue`:isToday?t("crm.scheduled_for_today"):`In ${diff} days · ${lead.contactDate}`}
+              {isOverdue?t("crm.n_days_overdue",{n:Math.abs(diff)}):isToday?t("crm.scheduled_for_today"):`${t("crm.in_n_days",{n:diff})} · ${lead.contactDate}`}
             </span>
             {lead.phone&&<span style={{fontSize:12,color:T.t3,fontFamily:"monospace"}}>{lead.phone}</span>}
           </div>
@@ -425,7 +434,7 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,on
                 <div style={{display:"flex",gap:5,alignItems:"center"}}>
                   {overdueInStage>0&&(
                     <span style={{background:"rgba(255,255,255,0.25)",color:"white",fontSize:9.5,fontWeight:800,padding:"1px 6px",borderRadius:10,border:"1px solid rgba(255,255,255,0.3)"}}>
-                      {overdueInStage} overdue
+                      {t("crm.n_overdue",{n:overdueInStage})}
                     </span>
                   )}
                   <span style={{background:"rgba(255,255,255,0.25)",color:"white",fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{stageLeads.length}</span>
@@ -619,7 +628,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
     if (!convertOpen) return;
     setConvertForm({
       project_name: `${lead.name} — Project`,
-      start_date:   new Date().toISOString().split("T")[0],
+      start_date:   todayISO(),
       end_date:     "",
       quote_id:     "",       // empty = no final quote selected
       boq_value:    lead.budget || 0,
@@ -956,7 +965,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                 style={{width:"100%",padding:"10px 13px",borderRadius:8,border:`1.5px solid ${editContact?T.blu:T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               {editContact&&daysDiff(editContact)!==null&&(
                 <div style={{fontSize:11.5,color:daysDiff(editContact)<0?T.red:daysDiff(editContact)===0?T.amb:T.grn,marginTop:5,fontWeight:600}}>
-                  {daysDiff(editContact)<0?`${Math.abs(daysDiff(editContact))} days overdue`:daysDiff(editContact)===0?t("crm.today"):daysDiff(editContact)===1?t("crm.tomorrow"):`In ${daysDiff(editContact)} days`}
+                  {daysDiff(editContact)<0?t("crm.n_days_overdue",{n:Math.abs(daysDiff(editContact))}):daysDiff(editContact)===0?t("crm.today"):daysDiff(editContact)===1?t("crm.tomorrow"):t("crm.in_n_days",{n:daysDiff(editContact)})}
                 </div>
               )}
             </div>
@@ -965,12 +974,15 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
             <div style={{marginBottom:14}}>
               <div style={{fontSize:10.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("crm.quick_set")}</div>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                {[["Today","2026-03-16"],["Tomorrow","2026-03-17"],["In 3 days","2026-03-19"],["In 1 week","2026-03-23"],["In 2 weeks","2026-03-30"]].map(([l,d])=>(
-                  <button key={l} onClick={()=>setEditContact(d)}
+                {[[t("common.today"),0],[t("crm.tomorrow"),1],[t("crm.in_n_days",{n:3}),3],[t("crm.in_1_week"),7],[t("crm.in_2_weeks"),14]].map(([l,n])=>{
+                  const d=addDaysISO(n);   // aaj se — pehle March 2026 ki likhi tareekh jaati thi
+                  return(
+                  <button key={n} onClick={()=>setEditContact(d)}
                     style={{padding:"5px 12px",borderRadius:20,border:`1.5px solid ${editContact===d?T.blu:T.b1}`,background:editContact===d?T.bluL:"none",color:editContact===d?T.blu:T.t3,fontSize:11.5,fontWeight:editContact===d?700:400,cursor:"pointer"}}>
                     {l}
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -3123,7 +3135,7 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
             <input type="date" value={form.contactDate} onChange={upd("contactDate")}
               style={{flex:1,padding:"8px 10px",borderRadius:7,border:`1.5px solid ${form.contactDate?T.grn:T.b1}`,fontSize:12.5,color:T.t1,background:form.contactDate?T.grnL:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             {form.contactDate&&<span style={{fontSize:11.5,color:T.grn,fontWeight:600}}>
-              {daysDiff(form.contactDate)===0?t("crm.today"):daysDiff(form.contactDate)===1?t("crm.tomorrow"):`In ${daysDiff(form.contactDate)} days`}
+              {daysDiff(form.contactDate)<0?t("crm.n_days_overdue",{n:Math.abs(daysDiff(form.contactDate))}):daysDiff(form.contactDate)===0?t("crm.today"):daysDiff(form.contactDate)===1?t("crm.tomorrow"):t("crm.in_n_days",{n:daysDiff(form.contactDate)})}
             </span>}
           </div>
           {form.contactDate&&<div style={{fontSize:11,color:T.grn,marginTop:3}}>{t("crm.auto_reminder_will_be_set_for")}</div>}
@@ -3550,7 +3562,7 @@ function FollowupLogSection({leadId, isActive, autoOpen=false}) {
   const [showAdd, setShowAdd] = useState(autoOpen); // auto-open if prop passed
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    call_date: new Date().toISOString().split("T")[0],
+    call_date: todayISO(),
     summary: "",
     next_followup_date: "",
     additional_requirements: "",
@@ -3571,7 +3583,7 @@ function FollowupLogSection({leadId, isActive, autoOpen=false}) {
       const res = await api.post("/solar/leads/"+leadId+"/followup-logs", form);
       if (res.success) {
         setLogs(p=>[res.data,...p]);
-        setForm({call_date:new Date().toISOString().split("T")[0],summary:"",next_followup_date:"",additional_requirements:"",senior_consultant_needed:false});
+        setForm({call_date:todayISO(),summary:"",next_followup_date:"",additional_requirements:"",senior_consultant_needed:false});
         setShowAdd(false);
       }
     } catch(e){}
