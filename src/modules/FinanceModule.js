@@ -9,6 +9,7 @@ import { t, Rich } from "../i18n";
 import { canSeeFinancials } from "../utils/perms";
 import TabAccounts from "./tabs/TabAccounts";
 import { isoDate, todayISO } from "../utils/today";
+import { cashMoveOf, isTransferIn, round2 } from "../utils/moneyRules";
 
 // A party holds multiple roles: `roles` is the canonical comma list and
 // `type` is only the primary one. Matching on `type` alone dropped equipment
@@ -3306,6 +3307,15 @@ function ProjectPnlView(){
   );
 }
 
+// ── Khaate (bank/cash) par asli asar — cashMoveOf (utils/moneyRules) ──
+// FIN-10: Cash Book, Day Book aur unke tiles wahi niyam lagate hain jo Accounts
+// screen ka live_balance, Khaata Ledger aur bot lagate hain (backend
+// utils/accountBalance + utils/txnCleared ki copy utils/moneyRules me). Pehle
+// Cash Book staff wallet wali har row (paid_via_staff_id) hata deta tha — account
+// wali jama bhi — aur transfer ka IN leg bhi payment ginta tha; balance 0 se
+// shuru hota tha.
+const r2c = round2;
+
 // ══════════════════════════════════════════════════════════════
 // CASH BOOK + DAY BOOK  (self-contained — Finance module owns its
 // own copy; nothing imported from Reports, per module-independence)
@@ -3313,7 +3323,10 @@ function ProjectPnlView(){
 // running ledger balance, plus a per-day "Day Balance" (net in−out).
 // Negative balances render in red WITH a leading minus sign (fmtS).
 // ══════════════════════════════════════════════════════════════
-function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by parent sub-tab (cashbook | daybook)
+function CashDayBook({ txns: bookTxns, accounts=[], view="cashbook" }){ // view driven by parent sub-tab (cashbook | daybook)
+  // FIN-10: har row ka Receipt/Payment aur rakam uske khaate par asli asar
+  // (cashMove) se — list wala `dr` nahi (usme transfer ka IN leg bhi payment tha).
+  const txns = useMemo(()=>bookTxns.map(t=>({...t, dr:t.cashMove<0, amount:Math.abs(t.cashMove||0)})),[bookTxns]);
   const [chip,setChip]   = useState("All");      // All | Receipts | Payments
   const [fSite,setFSite] = useState("All");
   const [fHead,setFHead] = useState("All");
@@ -3354,8 +3367,23 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
   [txns,fSite,fHead,fMOP,fAcc,fParty,chip,fromN,toN,search]);
 
   // Cash Book — running ledger balance row-by-row
-  let rb=0;
-  const withBal=filtered.map(t=>{rb+=t.dr?-t.amount:t.amount;return{...t,runBal:rb};});
+  // FIN-10: balance khaate (ya sab khaaton) ki OPENING se shuru hota hai, aur
+  // "Se" tareekh se pehle ki entries opening me jud jaati hain — Khaata Ledger
+  // jaisa. Party/site/head/MOP/search/chip sirf row chhupate hain, Balance
+  // column hamesha us khaate ka asli balance rehta hai (chhupi row samet).
+  const book=useMemo(()=>{
+    const rows=txns.filter(t=>fAcc==="All"||t.account===fAcc).sort((a,b)=>(a.ds-b.ds)||((a.id||0)-(b.id||0)));
+    const bookAccts=fAcc==="All"?accounts:accounts.filter(a=>a.name===fAcc);
+    let b=r2c(bookAccts.reduce((s,a)=>s+(Number(a.opening)||0),0));
+    rows.forEach(t=>{ if(fromN&&t.ds<fromN) b=r2c(b+t.cashMove); });
+    const opening=b, after=new Map(), dayEnd={};
+    rows.forEach(t=>{
+      if((fromN&&t.ds<fromN)||(toN&&t.ds>toN)) return;
+      b=r2c(b+t.cashMove); after.set(t,b); dayEnd[t.ds]=b;
+    });
+    return {opening, closing:b, after, dayEnd};
+  },[txns,accounts,fAcc,fromN,toN]);
+  const withBal=filtered.map(t=>({...t,runBal:book.after.get(t)??book.opening}));
 
   // Day Book — group by day; per-day net + cumulative ledger
   const daybook=useMemo(()=>{
@@ -3365,13 +3393,14 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
       map[t.ds].entries.push(t);
       if(t.dr) map[t.ds].pay+=t.amount; else map[t.ds].rec+=t.amount;
     });
-    let r=0;
-    return Object.values(map).sort((a,b)=>a.ds-b.ds).map(d=>{r+=d.rec-d.pay;return{...d,runBal:r};});
-  },[filtered]);
+    // din ke aakhir ka asli balance (us din ki chhupi row samet)
+    return Object.values(map).sort((a,b)=>a.ds-b.ds).map(d=>({...d,runBal:book.dayEnd[d.ds]??book.opening}));
+  },[filtered,book]);
 
   const totalRec=filtered.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
   const totalPay=filtered.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
   const balance=totalRec-totalPay;
+  const closing=book.closing;   // FIN-10: khaate ka asli closing (opening + saari entries)
 
   // ── Exports ──────────────────────────────────────────────────
   const dlExcel=()=>{
@@ -3379,25 +3408,27 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
       downloadCSV(`CashBook_${fFrom||"all"}_${fTo||"all"}.csv`,[
         ["Company — Cash Book"],[`Generated: ${new Date().toLocaleDateString("en-IN")}`],[],
         ["Date","Party","Description","Account","Head","MOP","Receipt","Payment","Balance"],
+        ["","",t("common.opening_balance"),"","","","","",book.opening],
         ...withBal.map(e=>[e.date,e.party||"",e.sub,e.account,e.type,e.mop,!e.dr?e.amount:"",e.dr?e.amount:"",e.runBal]),
-        [],["","","","","","","TOTAL",totalRec,totalPay,balance],
+        [],["","","","","","TOTAL",totalRec,totalPay,closing],
       ]);
     }else{
       downloadCSV(`DayBook_${fFrom||"all"}_${fTo||"all"}.csv`,[
         ["Company — Day Book"],[`Generated: ${new Date().toLocaleDateString("en-IN")}`],[],
         ["Date","Receipts","Payments","Day Balance","Ledger Balance","Entries"],
+        [t("common.opening_balance"),"","","",book.opening,""],
         ...daybook.map(d=>[d.date,d.rec,d.pay,d.rec-d.pay,d.runBal,d.entries.map(e=>e.sub).join(" | ")]),
-        [],["TOTAL",totalRec,totalPay,balance,balance,""],
+        [],["TOTAL",totalRec,totalPay,balance,closing,""],
       ]);
     }
   };
   const printOut=()=>{
     if(view==="cashbook"){
       const rows=withBal.map(e=>`<tr><td>${e.date}</td><td style="font-weight:600">${e.party||"—"}</td><td>${e.sub||""}</td><td>${e.account||""}</td><td>${e.type||""}</td><td>${e.mop||""}</td><td class="r" style="color:#059669">${!e.dr?"₹"+fmtN(e.amount):""}</td><td class="r" style="color:#DC2626">${e.dr?"₹"+fmtN(e.amount):""}</td><td class="r" style="font-weight:700;color:${e.runBal>=0?"#2563EB":"#DC2626"}">${fmtS(e.runBal)}</td></tr>`).join("");
-      printHTML("Cash Book — Company",`<h2>Cash Book</h2><table><tr><th>Date</th><th>Party</th><th>Description</th><th>Account</th><th>Head</th><th>MOP</th><th class="r">Receipt ₹</th><th class="r">Payment ₹</th><th class="r">Balance ₹</th></tr>${rows}<tr style="font-weight:800;background:#F1F5F9"><td colspan="6" style="text-align:right">TOTAL</td><td class="r" style="color:#059669">₹${fmtN(totalRec)}</td><td class="r" style="color:#DC2626">₹${fmtN(totalPay)}</td><td class="r" style="color:${balance>=0?"#2563EB":"#DC2626"}">${fmtS(balance)}</td></tr></table>`);
+      printHTML("Cash Book — Company",`<h2>Cash Book</h2><table><tr><th>Date</th><th>Party</th><th>Description</th><th>Account</th><th>Head</th><th>MOP</th><th class="r">Receipt ₹</th><th class="r">Payment ₹</th><th class="r">Balance ₹</th></tr><tr style="background:#F8F9FB"><td colspan="8" style="font-style:italic;color:#6B7280">${t("common.opening_balance")}</td><td class="r" style="font-weight:700;color:${book.opening>=0?"#2563EB":"#DC2626"}">${fmtS(book.opening)}</td></tr>${rows}<tr style="font-weight:800;background:#F1F5F9"><td colspan="6" style="text-align:right">TOTAL</td><td class="r" style="color:#059669">₹${fmtN(totalRec)}</td><td class="r" style="color:#DC2626">₹${fmtN(totalPay)}</td><td class="r" style="color:${closing>=0?"#2563EB":"#DC2626"}">${fmtS(closing)}</td></tr></table>`);
     }else{
       const rows=daybook.map(d=>`<tr style="background:#F0F4FF;font-weight:700"><td>${d.date}</td><td>${d.entries.length} entr${d.entries.length>1?"ies":"y"}</td><td class="r" style="color:#059669">${d.rec>0?"₹"+fmtN(d.rec):"—"}</td><td class="r" style="color:#DC2626">${d.pay>0?"₹"+fmtN(d.pay):"—"}</td><td class="r" style="color:${(d.rec-d.pay)>=0?"#059669":"#DC2626"}">${fmtS(d.rec-d.pay)}</td><td class="r" style="color:${d.runBal>=0?"#2563EB":"#DC2626"}">${fmtS(d.runBal)}</td></tr>`+d.entries.map(e=>`<tr><td></td><td style="padding-left:20px">${e.sub||""}</td><td class="r" style="color:#059669">${!e.dr?"₹"+fmtN(e.amount):""}</td><td class="r" style="color:#DC2626">${e.dr?"₹"+fmtN(e.amount):""}</td><td></td><td></td></tr>`).join("")).join("");
-      printHTML("Day Book — Company",`<h2>Day Book</h2><table><tr><th>Date</th><th>Summary</th><th class="r">Receipt ₹</th><th class="r">Payment ₹</th><th class="r">Day Bal ₹</th><th class="r">Ledger Bal ₹</th></tr>${rows}<tr style="font-weight:800;background:#F1F5F9"><td colspan="2" style="text-align:right">TOTAL</td><td class="r" style="color:#059669">₹${fmtN(totalRec)}</td><td class="r" style="color:#DC2626">₹${fmtN(totalPay)}</td><td class="r" style="color:${balance>=0?"#059669":"#DC2626"}">${fmtS(balance)}</td><td class="r" style="color:${balance>=0?"#2563EB":"#DC2626"}">${fmtS(balance)}</td></tr></table>`);
+      printHTML("Day Book — Company",`<h2>Day Book</h2><table><tr><th>Date</th><th>Summary</th><th class="r">Receipt ₹</th><th class="r">Payment ₹</th><th class="r">Day Bal ₹</th><th class="r">Ledger Bal ₹</th></tr><tr style="background:#F8F9FB"><td colspan="5" style="font-style:italic;color:#6B7280">${t("common.opening_balance")}</td><td class="r" style="font-weight:700;color:${book.opening>=0?"#2563EB":"#DC2626"}">${fmtS(book.opening)}</td></tr>${rows}<tr style="font-weight:800;background:#F1F5F9"><td colspan="2" style="text-align:right">TOTAL</td><td class="r" style="color:#059669">₹${fmtN(totalRec)}</td><td class="r" style="color:#DC2626">₹${fmtN(totalPay)}</td><td class="r" style="color:${balance>=0?"#059669":"#DC2626"}">${fmtS(balance)}</td><td class="r" style="color:${closing>=0?"#2563EB":"#DC2626"}">${fmtS(closing)}</td></tr></table>`);
     }
   };
 
@@ -3454,6 +3485,13 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
             ))}
           </div>
           <div style={{flex:1,overflowY:"auto"}}>
+            {/* FIN-10: shuruaati balance — khaate ka opening (+ "Se" tareekh se pehle ki entries) */}
+            {(withBal.length>0||book.opening!==0)&&(
+              <div style={{display:"grid",gridTemplateColumns:CB_COLS,padding:"8px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:T.surfaceB}}>
+                <span style={{gridColumn:"1/9",fontSize:12,fontStyle:"italic",fontWeight:600,color:T.t3}}>{t("common.opening_balance")}</span>
+                <span style={{fontSize:12,fontWeight:700,color:book.opening>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(book.opening)}</span>
+              </div>
+            )}
             {withBal.map((e,i)=>(
               <div key={e.id||i} style={{display:"grid",gridTemplateColumns:CB_COLS,padding:"8px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:T.surfaceB,borderLeft:`3px solid ${!e.dr?T.grn:T.red}55`}}>
                 <span style={{fontSize:11,color:T.t4,fontWeight:500,whiteSpace:"nowrap"}}>{e.date}</span>
@@ -3474,7 +3512,7 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
             <span/>
             <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(totalPay)}</span>
-            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(balance)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:closing>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(closing)}</span>
           </div>
         </div>
       )}
@@ -3488,6 +3526,12 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
             ))}
           </div>
           <div style={{flex:1,overflowY:"auto"}}>
+            {(daybook.length>0||book.opening!==0)&&(
+              <div style={{display:"grid",gridTemplateColumns:DB_COLS,padding:"8px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:T.surfaceB}}>
+                <span style={{gridColumn:"1/8",fontSize:12,fontStyle:"italic",fontWeight:600,color:T.t3}}>{t("common.opening_balance")}</span>
+                <span style={{fontSize:12.5,fontWeight:800,color:book.opening>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(book.opening)}</span>
+              </div>
+            )}
             {daybook.map((day,di)=>(
               <div key={day.ds}>
                 <div style={{display:"grid",gridTemplateColumns:DB_COLS,padding:"8px 14px",gap:6,background:di%2===0?"#F0F4FF":"#E8F5E9",borderBottom:`1px solid ${T.b1}`,borderLeft:`4px solid ${T.blu}`}}>
@@ -3524,7 +3568,7 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
             <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(totalPay)}</span>
             <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.grn:T.red,textAlign:"right"}}>{fmtS(balance)}</span>
-            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(balance)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:closing>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(closing)}</span>
           </div>
         </div>
       )}
@@ -3707,6 +3751,8 @@ function FinanceModule(){
   const [sortCB,setSortCB]=useState({col:"date",dir:"desc"});
   // PR / Pending
   const [editReqId,setEditReqId]=useState(null);const [editAmt,setEditAmt]=useState("");
+  // FIN-09: modify panel ka Reason / Note bhi ab server tak jaata hai
+  const [editReason,setEditReason]=useState("");const [editNote,setEditNote]=useState("");const [editBusy,setEditBusy]=useState(false);
   const [payReqs,setPayReqs]=useState(PAY_REQS_DATA);
   // pendBills holds only non-PR bills (from backend). Approved PRs are derived from payReqs.
   const [pendBills,setPendBills]=useState(PEND_PMTS_DATA);
@@ -3714,7 +3760,7 @@ function FinanceModule(){
   const pendPmts = (()=>{
     const today = new Date(); today.setHours(0,0,0,0);
     const fromPRs = payReqs
-      .filter(r=>r.status==="Approved" && !r.paid)
+      .filter(r=>r.status==="approved" && !r.paid)
       .map(r=>({
         id:`pr-${r.id}`,
         type:"pr",
@@ -3811,7 +3857,9 @@ function FinanceModule(){
       "subcon_expense","wallet_payment","wallet_topup","bank_transfer"];
     // settle_out mirrors party_payment (out-like −), settle_in mirrors receipt
     // (in-like +) — only for the list's +/− display; no cash is actually moved.
-    const isDebit=BACK_DEBIT.includes(t.type)||t.type==="settle_out"||t.dr===true||(!t.type&&t.dr);
+    // FIN-10: bank transfer ka IN leg ("Bank Transfer IN…", jis khaate me paisa
+    // aaya) + hai — pehle dono leg − (payment) dikhte the.
+    const isDebit=(BACK_DEBIT.includes(t.type)&&!(t.type==="bank_transfer"&&isTransferIn(t)))||t.type==="settle_out"||t.dr===true||(!t.type&&t.dr);
     return {
       id:t.id,
       date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
@@ -3854,12 +3902,28 @@ function FinanceModule(){
       // already left the company at TOP-UP time, so these rows must NOT hit
       // the company Cash Book / Day Book again (double-count).
       walletSpend:!!t.paid_via_staff_id,
+      // FIN-10: company khaate par asli asar (utils/accountBalance ka niyam) —
+      // Cash Book / Day Book / unke tiles isi se. 0 = koi khaata nahi hila.
+      account_id:t.account_id??null,
+      cashMove:cashMoveOf(t),
     };
   };
 
+  // FIN-08: PR ka status DB wali English key hi rehta hai (pending / approved /
+  // rejected / paid / cancelled) — button, Pending Payments, tiles, chips sab
+  // isi se chalte hain. Tarjuma sirf dikhane ke liye (statusLabel). Pehle status
+  // me hi t() ka label rakha tha: Hindi me "पेंडिंग" !== "Pending", to ✓/✗ button,
+  // approved PR aur tiles sab gayab ho jaate the.
+  const prStatusLabel=(st)=>{const s=String(st||"").toLowerCase();
+    return s==="approved"?t("common.approved"):s==="rejected"?t("common.rejected"):s==="paid"?t("common.paid"):s==="cancelled"?t("common.cancelled"):t("common.pending");};
   const mapPayReq=r=>{
     const rawDate=r.created_at||r.date||"";
     const d=rawDate?new Date(rawDate):new Date();
+    // FIN-09: approver ne rakam badal kar approve kiya (approved_amount) to wahi
+    // rakam chalti hai — server ka /pending-payments bhi wahi deta hai; maangi
+    // hui rakam kati hui (originalAmt) dikhti hai. Reject/cancel par maangi hui.
+    const reqAmt=parseFloat(r.amount)||0, apprAmt=parseFloat(r.approved_amount)||0;
+    const amtChanged=apprAmt>0&&Math.abs(apprAmt-reqAmt)>=0.005&&!["rejected","cancelled"].includes(String(r.status||"").toLowerCase());
     return {
       id:r.id,
       no:r.pr_number||`PR-${r.id}`,
@@ -3868,12 +3932,13 @@ function FinanceModule(){
         (d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate()),
       party:r.party_name||r.party||"",
       project:r.project_name||r.project||"",
-      amount:parseFloat(r.amount)||0,
+      amount:amtChanged?apprAmt:reqAmt,
       // Map EVERY backend status — earlier this fell through to "Pending" for
       // 'paid'/'cancelled', so a paid PR reappeared as "Pending" in the list +
       // pending-approval count (the "regenerated request" bug).
       status:(()=>{const s=String(r.status||"").toLowerCase();
-        return s==="approved"?t("common.approved"):s==="rejected"?t("common.rejected"):s==="paid"?t("common.paid"):s==="cancelled"?t("common.cancelled"):t("common.pending");})(),
+        return ["approved","rejected","paid","cancelled"].includes(s)?s:"pending";})(),
+      statusLabel:prStatusLabel(r.status),
       paid:String(r.status||"").toLowerCase()==="paid",
       by:r.requested_by_name||r.requested_by||r.created_by_name||"",
       purpose:r.purpose||r.description||r.note||"",
@@ -3883,8 +3948,8 @@ function FinanceModule(){
       prType:(()=>{const m=String(r.purpose||r.description||"").match(/^\[([^\]]+)\]/);return m?m[1].trim():"";})(),
       approvedBy:r.approved_by_name||r.approved_by||"",
       approvedDate:r.approved_at?new Date(r.approved_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"",
-      originalAmt:r.original_amount?parseFloat(r.original_amount):undefined,
-      modified:!!r.original_amount,
+      originalAmt:amtChanged?reqAmt:undefined,
+      modified:amtChanged,
     };
   };
 
@@ -3923,6 +3988,8 @@ function FinanceModule(){
     // live_balance is backend-computed from transactions (drift-proof).
     // ?? not || so a genuine 0 / negative balance isn't discarded.
     balance:parseFloat(a.live_balance ?? a.current_balance ?? a.balance ?? 0)||0,
+    // FIN-10: khaate ka asli opening (Settings → Bank) — Cash Book yahin se shuru
+    opening:parseFloat(a.opening_balance)||0,
     color:a.type==="bank"||a.account_type==="bank"?C.p:
           a.type==="cash"||a.account_type==="cash"?C.g:C.teal,
   });
@@ -4159,7 +4226,7 @@ function FinanceModule(){
   const tOut=txnFiltered.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
   const totalBal=activeAccounts.reduce((s,a)=>s+a.balance,0);
   const totalWalletBal=walletList.reduce((s,w)=>s+w.balance,0);
-  const pendPR=payReqs.filter(r=>r.status==="Pending").length;
+  const pendPR=payReqs.filter(r=>r.status==="pending").length;
   const pendTotal=pendPmts.reduce((s,p)=>s+p.amount,0);
 
   const allPartyTxns=activeTxns.length>0?activeTxns:Object.values(PARTY_TXNS).flat();
@@ -4167,14 +4234,23 @@ function FinanceModule(){
   const partyTotalDR=allPartyTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
   const toReceive=partiesWithBalance.filter(p=>p.balType==="To Receive").reduce((s,p)=>s+p.balance,0);
   const toPay=partiesWithBalance.filter(p=>p.balType==="To Pay").reduce((s,p)=>s+p.balance,0);
-  const allTxnIn=activeTxns.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
-  const allTxnOut=activeTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
-  const unpaidBills=activeTxns.filter(t=>t.status==="unpaid").reduce((s,t)=>s+t.amount,0);
-  const netFlow=allTxnIn-allTxnOut;
-  const prPendAmt=payReqs.filter(r=>r.status==="Pending").reduce((s,r)=>s+r.amount,0);
-  const prApprovedAmt=payReqs.filter(r=>r.status==="Approved").reduce((s,r)=>s+r.amount,0);
-  const prRejected=payReqs.filter(r=>r.status==="Rejected").length;
-  const prRejectedAmt=payReqs.filter(r=>r.status==="Rejected").reduce((s,r)=>s+r.amount,0);
+  // FIN-11: Fin Activity ke tiles paise ke ASLI aane-jaane par — Cash Book wala
+  // niyam (cashMove, utils/accountBalance): Cash In = khaaton me aayi clear
+  // receipt, Cash Out = khaaton se gaya clear payment (transfer nahi — wo apne hi
+  // khaaton ke beech hai). Pehle har "dr" row judti thi: bill + usi bill ka
+  // payment + dono transfer leg + settlement, cancel/reject samet (greenbox
+  // bhilai "Total Expense" ₹8.1 Cr, "Net" −₹3.7 Cr jabki khaaton me ₹62 L).
+  const allTxnIn=round2(activeTxns.reduce((s,t)=>s+(t.txnType==="receipt"&&t.cashMove>0?t.cashMove:0),0));
+  const allTxnOut=round2(activeTxns.reduce((s,t)=>s+(t.txnType!=="bank_transfer"&&t.cashMove<0?-t.cashMove:0),0));
+  // Unpaid = bills ka BAAKI (partial samet) — wahi server list jo Pending Payments
+  // dikhata hai. Pehle sirf status "unpaid" ki POORI rakam (partial chhoot, site
+  // expense jud jaata).
+  const unpaidBills=round2(pendBills.filter(p=>p.type==="bill").reduce((s,p)=>s+(Number(p.amount)||0),0));
+  const netFlow=round2(allTxnIn-allTxnOut);
+  const prPendAmt=payReqs.filter(r=>r.status==="pending").reduce((s,r)=>s+r.amount,0);
+  const prApprovedAmt=payReqs.filter(r=>r.status==="approved").reduce((s,r)=>s+r.amount,0);
+  const prRejected=payReqs.filter(r=>r.status==="rejected").length;
+  const prRejectedAmt=payReqs.filter(r=>r.status==="rejected").reduce((s,r)=>s+r.amount,0);
   const pendPRTotal=pendPmts.filter(p=>p.type==="pr").reduce((s,p)=>s+p.amount,0);
   const pendBillDue=pendPmts.filter(p=>p.type==="bill"&&!p.overdue).reduce((s,p)=>s+p.amount,0);
   const pendOverdue=pendPmts.filter(p=>p.overdue).reduce((s,p)=>s+p.amount,0);
@@ -4184,20 +4260,20 @@ function FinanceModule(){
   // subcon_expense, sales_invoice, material_return) are liabilities /
   // invoices, not cash events — they live in Pending Payments / Billed
   // Material until a Payment Out / Receipt is posted against them.
-  const CASH_TXN_TYPES_RAW = ["receipt","payment","party_payment","site_expense","bank_transfer","wallet_payment","wallet_topup"];
   // Company Cash Book = COMPANY account movements only. Wallet-origin spends
-  // (walletSpend — staff paying from their imprest) are excluded: that cash
-  // already left the company when the wallet was topped up, so counting the
-  // spend again double-debits the company balance. Wallet spends stay visible
-  // in Fin Activity and in the staff-wallet ledger.
-  const isCashEvent = (t) => !t.walletSpend && (CASH_TXN_TYPES_RAW.includes(t.txnType||"") ||
-    ["Payment In","Payment Out","Party Payment","Site Expense","Bank Transfer","Wallet Payment","Wallet Top-up"].includes(t.type));
+  // (staff paying from their imprest, koi khaata nahi) aate hi nahi: that cash
+  // already left the company when the wallet was topped up. Wallet spends stay
+  // visible in Fin Activity and in the staff-wallet ledger.
+  // FIN-10: pehchan paid_via_staff_id se nahi, khaate par asli asar (cashMove,
+  // utils/accountBalance) se — staff ki jama ki hui "Bank Transfer IN" (khaata
+  // bhi, staff bhi) pehle gayab thi aur transfer ka IN leg payment ginta tha.
+  const isCashEvent = (t) => t.account_id!=null && (t.cashMove||0)!==0;
   const cbTxnsBase=activeTxns.length>0
     ? activeTxns.filter(isCashEvent)
     : TRANSACTIONS_DATA.filter(isCashEvent);
   const cbTxns=cbTxnsBase;
-  const cbIn=cbTxns.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
-  const cbOut=cbTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+  const cbIn=cbTxns.reduce((s,t)=>s+(t.cashMove>0?t.cashMove:0),0);
+  const cbOut=cbTxns.reduce((s,t)=>s+(t.cashMove<0?-t.cashMove:0),0);
 
   const TILE_SETS={
     party:[
@@ -4207,23 +4283,24 @@ function FinanceModule(){
       {l:t("finance.to_pay"),v:`₹${fmt(toPay)}`,sub:t("finance.against_bills_received"),Icon:IcBillDue,c:T.amb,bg:T.ambL,brd:T.ambM},
     ],
     transaction:[
-      {l:t("finance.total_income"),v:`₹${fmt(allTxnIn)}`,sub:t("finance.all_payment_in"),Icon:IcTrendUp,c:T.grn,bg:T.grnL,brd:T.grnM},
-      {l:t("finance.total_expense"),v:`₹${fmt(allTxnOut)}`,sub:t("finance.all_payment_out"),Icon:IcTrendDn,c:T.red,bg:T.redL,brd:T.redM},
-      {l:t("finance.unpaid_bills"),v:`₹${fmt(unpaidBills)}`,sub:t("finance.pending_payment"),Icon:IcCalDue,c:T.amb,bg:T.ambL,brd:T.ambM},
+      {l:t("finance.cash_in"),v:`₹${fmt(allTxnIn)}`,sub:t("finance.cash_in_sub"),Icon:IcTrendUp,c:T.grn,bg:T.grnL,brd:T.grnM},
+      {l:t("finance.cash_out"),v:`₹${fmt(allTxnOut)}`,sub:t("finance.cash_out_sub"),Icon:IcTrendDn,c:T.red,bg:T.redL,brd:T.redM},
+      {l:t("finance.unpaid_bills"),v:`₹${fmt(unpaidBills)}`,sub:t("finance.unpaid_bills_sub"),Icon:IcCalDue,c:T.amb,bg:T.ambL,brd:T.ambM},
       {l:t("finance.net_cash_flow"),v:`₹${fmt(Math.abs(netFlow))}`,sub:netFlow>=0?"Surplus":"Deficit",Icon:IcPulse,c:netFlow>=0?T.grn:T.red,bg:netFlow>=0?T.grnL:T.redL,brd:netFlow>=0?T.grnM:T.redM},
     ],
     cashbook:(()=>{
-      // Closing Balance = THE actual cash-in-hand right now = live sum of
-      // every account + every staff wallet. Opening is back-calculated
-      // (Closing − Receipts + Payments) so the row stays internally
-      // consistent (Opening + In − Out = Closing) without double-counting.
+      // Cash in hand = THE actual cash right now = live sum of every account +
+      // every staff wallet. FIN-10: Opening = khaaton ka asli opening_balance
+      // (pehle Closing − Receipts + Payments se ulta nikalte the, jo wallets aur
+      // galat Cash Book dono ki galti utha leta tha). Ab
+      // Opening + Receipts − Payments = khaaton ka jod (totalBal) — exact.
       const cashInHand=totalBal+totalWalletBal;        // bank + cash + wallets
-      const openingBal=cashInHand-cbIn+cbOut;
+      const openingBal=r2c(activeAccounts.reduce((s,a)=>s+(Number(a.opening)||0),0));
       const sgn=(n)=>`${n<0?"-₹":"₹"}${fmt(Math.abs(n))}`;
       return [
         {l:t("common.opening_balance"),v:sgn(openingBal),sub:t("finance.before_period_all_accounts"),Icon:IcBank,c:openingBal>=0?T.blu:T.red,bg:openingBal>=0?T.bluL:T.redL,brd:openingBal>=0?T.bluM:T.redM},
-        {l:t("finance.total_receipts"),v:`₹${fmt(cbIn)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>!t.dr).length }),Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
-        {l:t("finance.total_payments"),v:`₹${fmt(cbOut)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>t.dr).length }),Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
+        {l:t("finance.total_receipts"),v:`₹${fmt(cbIn)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>t.cashMove>0).length }),Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
+        {l:t("finance.total_payments"),v:`₹${fmt(cbOut)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>t.cashMove<0).length }),Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
         // Split shown so it's obvious how much is COMPANY money (bank+cash)
         // vs money sitting in staff wallets — avoids "balance kyu kam hai"
         // confusion now that wallet spends don't touch the company book.
@@ -4476,18 +4553,18 @@ Status: ${ledgerRow.status||"unpaid"}`;
   };
   const dlTxnPDF=()=>{
     const rowsHTML=txnFiltered.map(t=>`<tr><td>${t.date}</td><td><strong>${t.party}</strong><br/><span style="font-size:10px;color:#6B7280">${t.sub}</span></td><td>${t.project}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:#F1F5F9;color:#64748B">${t.type}</span></td><td>${t.account}</td><td style="font-weight:700;color:${t.dr?"#DC2626":"#059669"}">${t.dr?"−":"+"} ₹${fmtN(t.amount)}</td><td><span style="font-size:10px;padding:1px 6px;border-radius:20px;background:${t.status==="paid"?"#ECFDF5":t.status==="unbilled"?"#F5F3FF":"#FEF2F2"};color:${t.status==="paid"?"#059669":t.status==="unbilled"?"#7C3AED":"#DC2626"}">${t.status}</span></td></tr>`).join("");
-    printHTML("Transactions — Company",`<h2>Transactions — Company</h2><p>${txnFiltered.length} entries &nbsp;|&nbsp; IN: ₹${fmtN(tIn)} &nbsp;|&nbsp; OUT: ₹${fmtN(tOut)} &nbsp;|&nbsp; NET: ₹${fmtN(tIn-tOut)}</p><table><tr><th>Date</th><th>Party / Note</th><th>Project</th><th>Type</th><th>Account</th><th>Amount</th><th>Status</th></tr>${rowsHTML}</table><p class="footer">Generated by Company</p>`);
+    printHTML("Transactions — Company",`<h2>Transactions — Company</h2><p>${txnFiltered.length} entries &nbsp;|&nbsp; IN: ₹${fmtN(tIn)} &nbsp;|&nbsp; OUT: ₹${fmtN(tOut)} &nbsp;|&nbsp; NET: ${fmtS(tIn-tOut)}</p><table><tr><th>Date</th><th>Party / Note</th><th>Project</th><th>Type</th><th>Account</th><th>Amount</th><th>Status</th></tr>${rowsHTML}</table><p class="footer">Generated by Company</p>`);
   };
 
   // ── Payment Requests CSV/PDF ──────────────────────────────────
   const dlPRcsv=()=>{
     downloadCSV("Payment_Requests.csv",[
       ["Company — Payment Requests"],["PR No.","Date","Party","Project","Amount","Status","Requested By"],
-      ...payReqs.map(r=>[r.no,r.date,r.party,r.project,r.amount,r.status,r.by]),
+      ...payReqs.map(r=>[r.no,r.date,r.party,r.project,r.amount,r.statusLabel,r.by]),
     ]);
   };
   const dlPRpdf=()=>{
-    const rowsHTML=payReqs.map(r=>`<tr><td><strong>${r.no}</strong></td><td>${r.date}</td><td>${r.party}</td><td>${r.project}</td><td style="font-weight:700">₹${fmtN(r.amount)}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:${r.status==="Approved"?"#ECFDF5":r.status==="Rejected"?"#FEF2F2":"#FFFBEB"};color:${r.status==="Approved"?"#059669":r.status==="Rejected"?"#DC2626":"#D97706"}">${r.status}</span></td><td>${r.by}</td></tr>`).join("");
+    const rowsHTML=payReqs.map(r=>`<tr><td><strong>${r.no}</strong></td><td>${r.date}</td><td>${r.party}</td><td>${r.project}</td><td style="font-weight:700">₹${fmtN(r.amount)}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:${r.status==="approved"?"#ECFDF5":r.status==="paid"?"#EFF6FF":r.status==="rejected"?"#FEF2F2":r.status==="cancelled"?"#F1F5F9":"#FFFBEB"};color:${r.status==="approved"?"#059669":r.status==="paid"?"#2563EB":r.status==="rejected"?"#DC2626":r.status==="cancelled"?"#64748B":"#D97706"}">${r.statusLabel}</span></td><td>${r.by}</td></tr>`).join("");
     printHTML("Payment Requests — Company",`<h2>Payment Requests — Company</h2><p>Total ${payReqs.length} requests</p><table><tr><th>PR No.</th><th>Date</th><th>Party</th><th>Project</th><th>Amount</th><th>Status</th><th>Requested By</th></tr>${rowsHTML}</table><p class="footer">Generated by Company</p>`);
   };
 
@@ -4505,28 +4582,38 @@ Status: ${ledgerRow.status||"unpaid"}`;
   };
 
   const APPROVER_NAME=localStorage.getItem("gb_user_name")||"Admin"; // logged-in admin
-  const approveReq=async(id)=>{
+  const approveReq=async(id,opts={})=>{
     const req=payReqs.find(r=>r.id===id);
+    // FIN-09: "Modify Payment Before Approving" ki badli rakam + reason/note bhi
+    // isi asli API se jaate hain (opts). Pehle us panel ka "Approve ₹X" sirf
+    // screen ki state badalta tha — refresh par request phir Pending, purani rakam.
+    const amt=opts.amount!=null?Number(opts.amount):(req?.amount||0);
+    const orig=req?(req.originalAmt??req.amount):amt;
     // Optimistic update — pendPmts derives from payReqs automatically
-    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Approved",approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}:r));
+    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"approved",statusLabel:prStatusLabel("approved"),amount:amt,originalAmt:amt!==orig?orig:undefined,modified:amt!==orig,approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}:r));
     try{
-      await api.put(`/finance/payment-requests/${id}/approve`,{
-        approved_amount:req?.amount||0,
+      const res=await api.put(`/finance/payment-requests/${id}/approve`,{
+        approved_amount:amt,
         approved_by:APPROVER_NAME,
         status:"approved",
+        ...(opts.remarks?{remarks:opts.remarks}:{}),
       });
-      // Refresh from server after API success
+      // Server ne mana kiya (permission / engine) to chupchaap "Approved" na dikhe
+      if(!res?.success) window.alert(res?.message||t("finance.pr_approve_failed"));
+      // Refresh from server — multi-level me request abhi Pending hi reh sakti hai
       await Promise.allSettled([refreshPayReqs(),refreshPendPmts()]);
-    }catch(e){console.error("Approve PR error:",e);}
+      return !!res?.success;
+    }catch(e){console.error("Approve PR error:",e);await refreshPayReqs();return false;}
   };
   const rejectReq=async(id)=>{
     // Optimistic update
-    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Rejected"}:r));
+    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"rejected",statusLabel:prStatusLabel("rejected")}:r));
     try{
-      await api.put(`/finance/payment-requests/${id}/approve`,{
+      const res=await api.put(`/finance/payment-requests/${id}/approve`,{
         approved_amount:0,
         status:"rejected",
       });
+      if(!res?.success) window.alert(res?.message||t("finance.pr_reject_failed"));
       await refreshPayReqs();
     }catch(e){console.error("Reject PR error:",e);}
   };
@@ -4649,19 +4736,22 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:7,marginTop:3,background:T.grnL,border:`1px solid ${T.grnM}`,borderLeft:`3px solid ${T.grn}`}}>
                           <IcWallet size={14} color={T.grn}/>
                           <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.grn}}>{t("finance.total_staff_wallets")}</div><div style={{fontSize:10,color:T.t4}}>{walletList.length} members</div></div>
-                          <div style={{fontSize:12.5,fontWeight:700,color:T.grn}}>₹{fmtN(totalWalletBal)}</div>
+                          {/* WAL-10: minus wala jod = staff ne apna paisa lagaya, company ko dena hai — sign mat khao */}
+                          <div style={{textAlign:"right"}}><div style={{fontSize:12.5,fontWeight:700,color:totalWalletBal<0?T.red:T.grn}}>{fmtS(totalWalletBal)}</div>{totalWalletBal<0&&<div style={{fontSize:9,fontWeight:600,color:T.red}}>{t("finance.staff_wallet_company_owes")}</div>}</div>
                         </div>
                         <div style={{display:"flex",justifyContent:"space-between",padding:"7px 10px 2px",borderTop:`1px solid ${T.b1}`,marginTop:5}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>{t("common.grand_total")}</span><span style={{fontSize:12.5,fontWeight:800,color:(totalBal+totalWalletBal)<0?T.red:T.blu}}>{fmtS(totalBal+totalWalletBal)}</span></div>
                       </>
                     ):(
                       <>
                       {walletList.length===0&&<div style={{padding:"14px 8px",textAlign:"center",fontSize:11,color:T.t4}}>{t("finance.koi_staff_wallet_nahi")}</div>}
-                      {walletList.map(w=>{const pct=w.limit>0?Math.min(100,Math.round(w.balance/w.limit*100)):0;const due=Number(salaryDues[w.id])||0;return(
+                      {walletList.map(w=>{const pct=w.limit>0?Math.max(0,Math.min(100,Math.round(w.balance/w.limit*100))):0;const due=Number(salaryDues[w.id])||0;return(
                         <div key={w.id} style={{padding:"8px 10px",borderRadius:7,marginBottom:4,background:T.surfaceB,border:`1px solid ${T.b1}`}}>
                           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                             <div style={{width:26,height:26,borderRadius:"50%",background:w.color+"22",border:`1px solid ${w.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:w.color,flexShrink:0}}>{w.initials}</div>
                             <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.pending>0?`₹${fmtN(w.pending)} pending`:w.role}</div></div>
-                            <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:T.t1}}>₹{fmtN(w.balance)}</div><div style={{fontSize:9,color:T.t4}}>{w.limit>0?`/ ₹${fmtN(w.limit)}`:t("finance.no_limit")}</div></div>
+                            {/* WAL-10: minus balance = staff ne apne paise se kharcha kiya, company ko dena hai.
+                                Pehle fmtN (Math.abs) se −₹3,69,237 bhi "₹3,69,237" dikhta tha — jaise paisa staff ke paas ho. */}
+                            <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:w.balance<0?T.red:T.t1}}>{fmtS(w.balance)}</div>{w.balance<0&&<div style={{fontSize:9,fontWeight:600,color:T.red}}>{t("finance.staff_wallet_company_owes")}</div>}<div style={{fontSize:9,color:T.t4}}>{w.limit>0?`/ ₹${fmtN(w.limit)}`:t("finance.no_limit")}</div></div>
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:w.limit>0?5:0}}>
                             {due>0&&<span style={{fontSize:9.5,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,padding:"2px 7px",borderRadius:10}}>{t("finance.salary_due_fmtn", { fmtN: fmtN(due) })}</span>}
@@ -5428,16 +5518,16 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 if(col==="by") return ((a.by||"")>(b.by||"")? 1:-1)*mul;
                 if(col==="priority"){const pw={High:3,Medium:2,Low:1};return((pw[a.priority||"Medium"]||2)-(pw[b.priority||"Medium"]||2))*mul;}
                 return (b.ds||0)-(a.ds||0);
-              }).filter(r=>chipPR==="All"||r.status===chipPR).filter(r=>{
+              }).filter(r=>chipPR==="All"||r.status===chipPR.toLowerCase()).filter(r=>{
                 const q=searchPR.trim().toLowerCase();
                 if(!q) return true;
                 const pi=masterParties.find(p=>p.name===r.party);
                 const pt=pi?.type||"Vendor";
-                const hay=[r.no,r.date,r.party,pt,r.project,r.purpose,r.note,r.by,r.priority,r.amount,r.status].join(" ").toLowerCase();
+                const hay=[r.no,r.date,r.party,pt,r.project,r.purpose,r.note,r.by,r.priority,r.amount,r.status,r.statusLabel].join(" ").toLowerCase();
                 return hay.includes(q);
               }).map((req,i)=>{
                 const isEditing=editReqId===req.id;
-                const sc=req.status==="Approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="Paid"?{c:T.blu,bg:T.bluL,brd:T.bluM}:req.status==="Rejected"?{c:T.red,bg:T.redL,brd:T.redM}:req.status==="Cancelled"?{c:T.t3,bg:T.sltL,brd:T.b1}:{c:T.amb,bg:T.ambL,brd:T.ambM};
+                const sc=req.status==="approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="paid"?{c:T.blu,bg:T.bluL,brd:T.bluM}:req.status==="rejected"?{c:T.red,bg:T.redL,brd:T.redM}:req.status==="cancelled"?{c:T.t3,bg:T.sltL,brd:T.b1}:{c:T.amb,bg:T.ambL,brd:T.ambM};
                 const pri=req.priority||"Medium";
                 const pm=pri==="High"?{c:T.red,bg:T.redL}:pri==="Low"?{c:T.grn,bg:T.grnL}:{c:T.amb,bg:T.ambL};
                 return(
@@ -5478,36 +5568,36 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         {req.originalAmt&&<div style={{fontSize:10,color:T.t4,textDecoration:"line-through"}}>₹{fmtN(req.originalAmt)}</div>}
                       </div>
                       {/* Status — soft subtle pill (no border) */}
-                      <span><span style={{fontSize:10,fontWeight:600,padding:"3px 9px",borderRadius:20,background:sc.bg,color:sc.c,whiteSpace:"nowrap"}}>{req.status}</span></span>
+                      <span><span style={{fontSize:10,fontWeight:600,padding:"3px 9px",borderRadius:20,background:sc.bg,color:sc.c,whiteSpace:"nowrap"}}>{req.statusLabel}</span></span>
                       {/* Action */}
                       <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
-                        {req.status==="Pending"&&(<>
-                          <button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));}}}
+                        {req.status==="pending"&&(<>
+                          <button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));setEditReason("");setEditNote("");}}}
                             style={{padding:"4px 7px",borderRadius:5,background:isEditing?T.bluL:T.sltL,color:isEditing?T.blu:T.t3,border:`1px solid ${isEditing?T.blu:T.b1}`,fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
                             <IcEdit size={10} color="currentColor"/> {t("common.edit_2")}
                           </button>
                           <button onClick={()=>approveReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✓</button>
                           <button onClick={()=>rejectReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✗</button>
                         </>)}
-                        {req.status==="Approved"&&(
+                        {req.status==="approved"&&(
                           <div style={{display:"flex",flexDirection:"column",gap:1}}>
                             <span style={{fontSize:10,color:T.grn,fontWeight:600}}>✓ {req.approvedBy||APPROVER_NAME}</span>
                             {req.approvedDate&&<span style={{fontSize:9.5,color:T.t4}}>{req.approvedDate}</span>}
                           </div>
                         )}
-                        {req.status==="Rejected"&&(
+                        {req.status==="rejected"&&(
                           <span style={{fontSize:10.5,color:T.red,fontWeight:600}}>{t("common.rejected_2")}</span>
                         )}
                       </div>
                     </div>
                     {/* Edit panel */}
-                    {isEditing&&req.status==="Pending"&&(
+                    {isEditing&&req.status==="pending"&&(
                       <div style={{borderTop:`1px solid ${T.bluM}`,background:T.bluL,padding:"12px 14px"}}>
                         <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:10}}>{t("finance.modify_payment_before_approving")}</div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                           <div>
                             <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("finance.requested_amount")}</label>
-                            <input readOnly value={"₹"+fmtN(req.amount)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t4,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                            <input readOnly value={"₹"+fmtN(req.originalAmt??req.amount)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t4,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                           </div>
                           <div>
                             <label style={{fontSize:10,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("finance.approve_amount")}</label>
@@ -5518,23 +5608,26 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                           <div>
                             <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.reason")}</label>
-                            <select style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                              <option>{t("finance.partial_stock_available")}</option><option>{t("finance.budget_limit")}</option><option>{t("finance.price_negotiated")}</option><option>{t("finance.split_payment")}</option><option>{t("common.other")}</option>
+                            <select value={editReason} onChange={e=>setEditReason(e.target.value)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                              <option value="">{t("finance.pr_reason_select")}</option><option>{t("finance.partial_stock_available")}</option><option>{t("finance.budget_limit")}</option><option>{t("finance.price_negotiated")}</option><option>{t("finance.split_payment")}</option><option>{t("common.other")}</option>
                             </select>
                           </div>
                           <div>
                             <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.note")}</label>
-                            <input type="text" placeholder={t("finance.optional_note")} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                            <input type="text" value={editNote} onChange={e=>setEditNote(e.target.value)} placeholder={t("finance.optional_note")} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                           </div>
                         </div>
                         <div style={{display:"flex",gap:7,justifyContent:"flex-end"}}>
                           <button onClick={()=>setEditReqId(null)} style={{padding:"6px 14px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
-                          <button onClick={()=>{
-                            const newAmt=Number(editAmt);if(!newAmt||newAmt<=0) return;const orig=req.amount;
-                            // pendPmts derives from payReqs automatically — no separate push needed
-                            setPayReqs(prev=>prev.map(r=>r.id===req.id?{...r,status:"Approved",amount:newAmt,originalAmt:newAmt!==orig?orig:undefined,modified:newAmt!==orig,approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}:r));
-                            setEditReqId(null);
-                          }} style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+                          <button disabled={editBusy} onClick={async()=>{
+                            const newAmt=Number(editAmt);if(!newAmt||newAmt<=0) return;
+                            // FIN-09: asli approve API — badli rakam + reason/note server tak (approveReq)
+                            const remarks=[editReason,editNote.trim()].filter(Boolean).join(" — ");
+                            setEditBusy(true);
+                            const ok=await approveReq(req.id,{amount:newAmt,remarks});
+                            setEditBusy(false);
+                            if(ok) setEditReqId(null);
+                          }} style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:editBusy?"wait":"pointer",opacity:editBusy?0.7:1,display:"flex",alignItems:"center",gap:5}}>
                             <IcThumbUp size={13} color="white"/>{t("finance.approve_number", { Number: Number(editAmt)?"₹"+fmtN(Number(editAmt)):"..." })}</button>
                         </div>
                       </div>

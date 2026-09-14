@@ -69,7 +69,8 @@ function detect(grid) {
 // Indian bank hamesha day-first deta hai — 03/04/2026 ka matlab 3 April hai,
 // 4 March nahi. Isliye ambiguity me day-first hi maana jaata hai.
 function toIso(v) {
-  if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
+  // Local din (toISOString UTC deta hai — IST me aadhi raat ki date pichhla din)
+  if (v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
   const s = String(v === undefined || v === null ? "" : v).trim();
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
   if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
@@ -96,6 +97,43 @@ const num = (v) => {
   const n = Number(s);
   return Number.isFinite(n) ? Math.abs(n) : 0;
 };
+// FIN-28: Balance ka sign rehna chahiye — OD / CC khaate ka balance minus hota
+// hai. num() rakam ke liye abs karta hai (direction alag column se aati hai),
+// balance par wahi lagne se −₹25,000 wala closing +₹25,000 se milta aur check
+// hamesha fail hota. "-45,000.00", "(45,000.00)", "45,000.00 Dr" → −45000;
+// "45,000.00 Cr" → +45000.
+const numSigned = (v) => {
+  let s = String(v === undefined || v === null ? "" : v).replace(/[₹,\s]/g, "").trim();
+  if (!s) return 0;
+  let neg = false, pos = false;
+  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+  const tag = /(dr|cr)\.?$/i.exec(s);
+  if (tag) { if (tag[1].toLowerCase() === "dr") neg = true; else pos = true; s = s.slice(0, tag.index); }
+  const n = Number(s);
+  if (!Number.isFinite(n)) return 0;
+  return neg ? -Math.abs(n) : pos ? Math.abs(n) : n;
+};
+
+// FIN-28: Excel ki ASLI date cell ka text SheetJS apne default format (m/d/yy)
+// me deta hai — "4/3/26" = 3 April, par statement Indian hai isliye toIso
+// day-first padhta hai → 4 March; "4/15/26" → mahina 15 (kabhi milta hi nahi).
+// Isliye date cell ka ISO seedha uske Excel serial se (SSF.parse_date_code —
+// timezone ka koi chakkar nahi; cellDates wale Date object IST me 10 second
+// peeche aakar pichhla din ban jaate). Text me likhi date jaisi thi waisi rehti hai.
+function excelDatesToIso(XLSX, ws, grid) {
+  if (!ws || !ws["!ref"]) return;
+  const rg = XLSX.utils.decode_range(ws["!ref"]);
+  for (let r = rg.s.r; r <= rg.e.r; r++) {
+    const row = grid[r - rg.s.r];
+    if (!row) continue;
+    for (let c = rg.s.c; c <= rg.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (!cell || cell.t !== "n" || !cell.z || !XLSX.SSF.is_date(cell.z)) continue;
+      const d = XLSX.SSF.parse_date_code(cell.v);
+      if (d && d.y) row[c - rg.s.c] = `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
+    }
+  }
+}
 
 function buildRows(grid, hdr) {
   const rows = [];
@@ -119,7 +157,7 @@ function buildRows(grid, hdr) {
       description: hdr.map.desc >= 0 ? String(c[hdr.map.desc] || "").trim() : null,
       ref: hdr.map.ref >= 0 ? String(c[hdr.map.ref] || "").trim() : null,
       balance: hdr.map.balance >= 0 && String(c[hdr.map.balance] || "").trim() !== ""
-        ? num(c[hdr.map.balance]) : null,
+        ? numSigned(c[hdr.map.balance]) : null,
     });
   }
   return { rows, skipped };
@@ -215,11 +253,15 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
       // isliye uska bigadna sirf badsurat nahi, kaam-kharab hai.
       // .xlsx binary hai, wahan bytes hi sahi raasta hai.
       const isCsv = /\.csv$/i.test(f.name) || /csv|text\/plain/i.test(f.type || "");
+      // FIN-28: CSV me raw:true — SheetJS "16-Apr-2026" / "03/04/2026" jaisi text
+      // date ko khud month-first date bana kar "4/16/26" likh deta tha. Excel me
+      // cellNF: date cell pehchaan kar ISO banate hain (excelDatesToIso).
       const wb = isCsv
-        ? XLSX.read(await f.text(), { type: "string", raw: false })
-        : XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: "array", raw: false, cellDates: true });
+        ? XLSX.read(await f.text(), { type: "string", raw: true })
+        : XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: "array", raw: false, cellNF: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const g = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "", blankrows: true });
+      if (!isCsv) excelDatesToIso(XLSX, ws, g);
       const h = detect(g);
       setGrid(g); setHdr(h); setFileName(f.name);
       if (!h) setErr(t("stmt.no_header"));

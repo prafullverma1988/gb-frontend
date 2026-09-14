@@ -63,12 +63,18 @@ const PRIORITIES = [
 ];
 
 // Status pill meta (matches what admin approval sets)
+// FIN-27: GET /finance/payment-requests DB ki lowercase key bhejta hai
+// (pending/approved/rejected/paid/cancelled). Pehle yahan "Pending"/"Approved"
+// Title-case keys thi — har request PENDING dikhti, chips 0, "Approved by" kabhi
+// nahi. Ab key lowercase (prStatus), label t() se render par.
 const STATUS_META = {
-  Pending:  { label: "PENDING",  c: T.amb, bg: T.ambL, brd: T.ambM },
-  Approved: { label: "APPROVED", c: T.grn, bg: T.grnL, brd: T.grnM },
-  Rejected: { label: "REJECTED", c: T.red, bg: T.redL, brd: T.redM },
-  Paid:     { label: "PAID",     c: T.blu, bg: T.bluL, brd: T.bluM },
+  pending:   { get label() { return t("common.pending"); },   c: T.amb, bg: T.ambL,     brd: T.ambM },
+  approved:  { get label() { return t("common.approved"); },  c: T.grn, bg: T.grnL,     brd: T.grnM },
+  rejected:  { get label() { return t("common.rejected"); },  c: T.red, bg: T.redL,     brd: T.redM },
+  paid:      { get label() { return t("common.paid"); },      c: T.blu, bg: T.bluL,     brd: T.bluM },
+  cancelled: { get label() { return t("common.cancelled"); }, c: T.t3,  bg: T.surfaceB, brd: T.b1 },
 };
+const prStatus = (r) => { const s = String(r?.status || "pending").toLowerCase(); return STATUS_META[s] ? s : "pending"; };
 
 // Quick lookup of type meta by id
 const TYPE_BY_ID = TYPES.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
@@ -278,10 +284,10 @@ export default function PaymentRequestDrawer({
           <>
             {/* Status filter chips */}
             <div style={{ padding: "10px 16px", borderBottom: `1px solid ${T.b1}`, display: "flex", gap: 6, flexShrink: 0, background: T.surfaceB, overflowX: "auto" }}>
-              {["All", "Pending", "Approved", "Rejected", "Paid"].map(s => {
+              {["All", "pending", "approved", "rejected", "paid"].map(s => {
                 const active = statusFilter === s;
                 const meta = s !== "All" ? STATUS_META[s] : null;
-                const count = s === "All" ? requests.length : requests.filter(r => (r.status || "Pending") === s).length;
+                const count = s === "All" ? requests.length : requests.filter(r => prStatus(r) === s).length;
                 return (
                   <button key={s} onClick={() => setStatusFilter(s)}
                     style={{
@@ -294,7 +300,7 @@ export default function PaymentRequestDrawer({
                       display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0,
                       transition: "all .12s",
                     }}>
-                    {s}
+                    {meta ? meta.label : t("common.all")}
                     {count > 0 && <span style={{ fontSize: 9.5, fontWeight: 700, padding: "1px 5px", borderRadius: 8, background: active ? (meta?.c || T.blu) : T.b1, color: active ? "white" : T.t3 }}>{count}</span>}
                   </button>
                 );
@@ -306,7 +312,7 @@ export default function PaymentRequestDrawer({
               {loadingList ? (
                 <div style={{ padding: "32px", textAlign: "center", color: T.t4, fontSize: 12 }}>{t("common.loading")}</div>
               ) : (() => {
-                const filtered = requests.filter(r => statusFilter === "All" || (r.status || "Pending") === statusFilter);
+                const filtered = requests.filter(r => statusFilter === "All" || prStatus(r) === statusFilter);
                 if (filtered.length === 0) {
                   return (
                     <div style={{ padding: "60px 20px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
@@ -316,7 +322,7 @@ export default function PaymentRequestDrawer({
                         </svg>
                       </div>
                       <div style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>
-                        {statusFilter === "All" ? t("payment_request.no_payment_requests_yet") : `No ${statusFilter.toLowerCase()} requests`}
+                        {statusFilter === "All" ? t("payment_request.no_payment_requests_yet") : t("payment_request.no_status_requests", { status: String(STATUS_META[statusFilter]?.label || statusFilter).toLowerCase() })}
                       </div>
                       <div style={{ fontSize: 11.5, color: T.t3, maxWidth: 320, lineHeight: 1.5 }}>
                        {t("common.click")} <b>{t("payment_request.new_request_2")}</b> {t("payment_request.at_top_right_to_raise_a")}
@@ -352,7 +358,8 @@ export default function PaymentRequestDrawer({
                     || (TYPES.find(t => (r.purpose || "").toLowerCase().includes(`[${t.label.toLowerCase()}]`))?.id)
                     || "other";
                   const tMeta = TYPE_BY_ID[detectedType] || TYPE_BY_ID.other;
-                  const sMeta = STATUS_META[r.status || "Pending"] || STATUS_META.Pending;
+                  const sKey = prStatus(r);
+                  const sMeta = STATUS_META[sKey];
                   const isExp = expandedId === r.id;
                   const cleanPurpose = String(r.purpose || "").replace(/^\[[^\]]+\]\s*/, "");
                   const partyDisplay = r.party_name || r.party || "—";
@@ -383,7 +390,7 @@ export default function PaymentRequestDrawer({
                         {/* Amount + status */}
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
                           <span style={{ fontSize: 13.5, fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{fmtAmount(r.amount)}</span>
-                          <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 12, background: sMeta.bg, color: sMeta.c, border: `1px solid ${sMeta.brd}`, letterSpacing: ".4px" }}>{sMeta.label}</span>
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 12, background: sMeta.bg, color: sMeta.c, border: `1px solid ${sMeta.brd}`, letterSpacing: ".4px", textTransform: "uppercase" }}>{sMeta.label}</span>
                         </div>
                       </div>
                       {/* Expanded details */}
@@ -398,7 +405,7 @@ export default function PaymentRequestDrawer({
                             {(r.requested_by_name || r.requested_by || r.created_by_name) && (
                               <Credit label={t("common.requested_by")} name={r.requested_by_name || r.requested_by || r.created_by_name} time={r.created_at || r.requested_at} />
                             )}
-                            {(r.approved_by_name || r.approved_by) && (r.status === "Approved" || r.status === "Paid") && (
+                            {(r.approved_by_name || r.approved_by) && (sKey === "approved" || sKey === "paid") && (
                               <Credit label={t("payment_request.approved_by")} name={r.approved_by_name || r.approved_by} time={r.approved_at || r.updated_at} />
                             )}
                             {r.priority && r.priority !== "Medium" && (

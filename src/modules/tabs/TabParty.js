@@ -5,6 +5,7 @@ import TransactionDetailDrawer from "../../components/TransactionDetailDrawer";
 import { T, fmt, fmtN } from "../shared/tokens";
 import { Pill, Panel, PHead, THead, AddBtn, SecBtn } from "../shared/ui";
 import { t } from "../../i18n";
+import { txnIsCleared, partyRowSign, balanceLabel, isVendorType, round2 } from "../../utils/moneyRules";
 
 function AddPartyModal({ open, onClose, onSaved }) {
   // Sirf name + type compulsory; baki sabhi optional. Backend
@@ -220,13 +221,16 @@ function TabParty({ projectId, projectName }) {
 
   useEffect(() => { reload(); }, [reload]);
 
-  // Classify txn impact on party balance — vendor side (we owe them
-  // when bill is raised, owe less when we pay) vs client side (they
-  // owe us when we invoice, owe less when they pay).
-  const isVendorType = (t) => {
-    const x = String(t||"").toLowerCase();
-    return x.includes("vendor") || x.includes("supplier") || x.includes("sub-con") || x.includes("subcon") || x.includes("staff");
-  };
+  // FIN-21: party ka bakaya WAHI niyam jo Finance ka party card, uska ledger aur
+  // bot lagate hain — har row ka sign party ki nazar se (utils/moneyRules
+  // partyRowSign = backend GET /finance/parties/:id/ledger ka ledger_sign):
+  //   +1 = party hum par aur udhaar hui (DR), −1 = hum party ko aur dene wale (CR)
+  // Balance = Σ sign·rakam (>0 party hume degi, <0 hum party ko denge), label
+  // balanceLabel se. Pehle yahan apna isVendorType (vendor|supplier|sub-con|staff)
+  // tha aur har "non-vendor" party ki bill ko "unhe hume dena" maan leta tha —
+  // 'other' / 'client' type ki material bill ulti (Hitech Solution: "To Receive
+  // ₹4,30,300" jabki hum ₹3,78,300 dene wale), staff "To Pay" jabki Finance me
+  // "Advance Received".
 
   // Per-party project-scoped data
   const partyRows = useMemo(() => {
@@ -239,7 +243,9 @@ function TabParty({ projectId, projectName }) {
         Number(t.party_id) === Number(p.id) ||
         (p.is_staff === 1 && Number(t.paid_via_staff_id) === Number(p.id) && Number(t.party_id) !== Number(p.id)));
       if (myTxns.length === 0) return null; // skip parties with no activity on this project
-      const isVendor = isVendorType(p.type);
+      // Type ka fallback Finance ke party card (mapParty) jaisa — label wahan se mile
+      const pType = p.type || p.party_type || p.category || "Other Vendor";
+      const isVendor = isVendorType(pType);
       // Sort chronologically OLDEST first so running balance accumulates
       // naturally top-down (proper ledger view).
       const sortedTxns = [...myTxns].sort((a,b) => {
@@ -248,59 +254,20 @@ function TabParty({ projectId, projectName }) {
         if (da !== db) return da - db;
         return (a.id||0) - (b.id||0);
       });
-      // Direction convention:
-      //   Vendor side  → CR = bill / purchase (we owe more)
-      //                  DR = payment (we paid)
-      //                  running balance = Σ CR − Σ DR  (positive = To Pay)
-      //   Client side  → DR = invoice raised (they owe)
-      //                  CR = receipt received (they paid)
-      //                  running balance = Σ DR − Σ CR  (positive = To Receive)
-      let credit = 0, debit = 0;
+      // Signed running balance (backend convention): >0 = party hume degi (Dr),
+      // <0 = hum party ko denge (Cr). Project-scoped ledger 0 se shuru hota hai.
       let running = 0;
       const txnRows = [];
       for (const t of sortedTxns) {
-        const amt = parseFloat(t.amount) || 0;
-        const type = t.type || "";
-        // P2P settlement legs behave exactly like their cash cousins in the
-        // ledger: settle_out = party_payment (payee got paid), settle_in =
-        // receipt (payer paid on our behalf). Normalise before the DR/CR test.
-        const eff = type === "settle_out" ? "party_payment"
-                  : type === "settle_in"  ? "receipt" : type;
-        // Money that left THIS staff's wallet for the project — we owe them for it,
-        // so CR regardless of the underlying expense type.
         // Rejected / pending / cancelled row balance me nahi ginti — wahi
         // niyam jo utils/partyBalance aur party-ledger endpoint chalate hain.
-        const ap = t.approval_status;
-        const cleared = Number(t.is_active) !== 0
-          && String(t.status || "") !== "cancelled"
-          && (!ap || ap === "approved" || ap === "auto")
-          && (Number(t.requires_receiver_confirmation) !== 1 || !!t.receiver_confirmed_at)
-          && !t.receiver_rejected_at;
-        if (!cleared) continue;
-        // Staff ke wallet se gaya paisa — kisi ko bhi, KHUD ko bhi (petrol /
-        // salary self-draw). Pehle 'party_id <> khud' ki shart self-draw ko
-        // DR bana deti thi aur card se mel nahi khata tha.
-        const walletSpend = p.is_staff === 1
-          && Number(t.paid_via_staff_id) === Number(p.id);
-        let isCR;
-        if (walletSpend) isCR = true; else
-        if (isVendor) {
-          // payment / party_payment = DR (we paid); bills = CR (we owe).
-          // material_return = vendor credit note → reduces our payable, DR-side.
-          if (eff === "payment" || eff === "party_payment" || eff === "material_return") isCR = false;
-          else if (eff === "material_purchase" || eff === "subcon_expense" || eff === "site_expense") isCR = true;
-          else if (eff === "receipt") isCR = true; // money in from staff/vendor reimbursement
-          else isCR = true; // default bill-like
-        } else {
-          // Client: receipt = CR, sales_invoice = DR
-          if (eff === "receipt") isCR = true;
-          else if (eff === "sales_invoice") isCR = false;
-          else isCR = false;
-        }
-        if (isCR) credit += amt; else debit += amt;
-        // Running balance — accumulates in the party's natural direction
-        if (isVendor) running += isCR ? amt : -amt;
-        else          running += isCR ? -amt : amt;
+        if (!txnIsCleared(t)) continue;
+        const amt = parseFloat(t.amount) || 0;
+        const type = t.type || "";
+        // Staff ke wallet se gaya paisa (kisi ko bhi, khud ko bhi) −1; baaki
+        // type ke hisaab se — partyRowSign dekho.
+        const sgn = partyRowSign(t, p);
+        running = round2(running + sgn * amt);
         txnRows.push({
           id: t.id,
           // Poori raw txn — isi se wahi detail drawer khulta hai jo Finance
@@ -314,16 +281,15 @@ function TabParty({ projectId, projectName }) {
           note: (t.note || "").trim(),
           type: (type === "settle_in" || type === "settle_out") ? "Settlement" : type.replace(/_/g," ").replace(/\b\w/g, c=>c.toUpperCase()),
           amount: amt,
-          cr: isCR,
-          runBal: running,    // signed: positive = To Pay (vendor) / To Receive (client)
+          sgn,                // +1 DR column, −1 CR column, 0 dono "—"
+          cr: sgn < 0,
+          runBal: running,    // signed: >0 = party hume degi (Dr), <0 = hum denge (Cr)
         });
       }
       const net = running;
       const balance = Math.abs(net);
-      const balPositive = isVendor ? net <= 0 : net >= 0;
-      const balLabel = isVendor
-        ? (net > 0 ? "To Pay" : net < 0 ? "Advance Paid" : "Settled")
-        : (net > 0 ? "To Receive" : net < 0 ? "Advance Received" : "Settled");
+      const balPositive = net >= 0;   // hara = party par baaki / barabar; laal = hum par
+      const balLabel = net === 0 ? "Settled" : balanceLabel(pType, net);
       return {
         id: p.id,
         name: p.name,
@@ -369,14 +335,12 @@ function TabParty({ projectId, projectName }) {
   const exportPartyLedgerPDF = (party, project) => {
     if (!party) return;
     const today = new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
-    const isVendor = !!party.isVendor;
-    // Per-row CR / DR / Running Balance — sign convention matches the UI.
+    // Per-row CR / DR / Running Balance — sign convention matches the UI
+    // (FIN-21: backend jaisa — runBal >0 Dr / hara, <0 Cr / laal).
     const rows = party.txnRows.map(t => {
       const balAbs = Math.abs(t.runBal||0);
-      const balGood= isVendor ? (t.runBal<=0) : (t.runBal>=0);
-      const balSfx = (t.runBal||0)===0 ? "" :
-                     isVendor ? (t.runBal>0 ? "Cr" : "Dr")
-                              : (t.runBal>0 ? "Dr" : "Cr");
+      const balGood= (t.runBal||0) >= 0;
+      const balSfx = (t.runBal||0)===0 ? "" : (t.runBal>0 ? "Dr" : "Cr");
       const proj   = t.project || project || "";
       const hasNote= !!(t.note && t.note.trim());
       return `
@@ -385,25 +349,23 @@ function TabParty({ projectId, projectName }) {
         <td style="color:#6B7280">${escapeHTML(proj) || "—"}</td>
         <td style="${hasNote ? "" : "color:#9CA3AF;font-style:italic"}">${hasNote ? escapeHTML(t.note) : "—"}</td>
         <td><span style="font-size:9.5px;padding:2px 7px;border-radius:10px;background:#F8F9FB;color:#4B5563">${escapeHTML(t.type)}</span></td>
-        <td style="text-align:right;font-weight:600;color:${t.cr ? "#059669" : "#CBD5E1"};font-variant-numeric:tabular-nums">
-          ${t.cr ? `₹${(t.amount||0).toLocaleString("en-IN")}` : "—"}
+        <td style="text-align:right;font-weight:600;color:${t.sgn<0 ? "#059669" : "#CBD5E1"};font-variant-numeric:tabular-nums">
+          ${t.sgn<0 ? `₹${(t.amount||0).toLocaleString("en-IN")}` : "—"}
         </td>
-        <td style="text-align:right;font-weight:600;color:${!t.cr ? "#DC2626" : "#CBD5E1"};font-variant-numeric:tabular-nums">
-          ${!t.cr ? `₹${(t.amount||0).toLocaleString("en-IN")}` : "—"}
+        <td style="text-align:right;font-weight:600;color:${t.sgn>0 ? "#DC2626" : "#CBD5E1"};font-variant-numeric:tabular-nums">
+          ${t.sgn>0 ? `₹${(t.amount||0).toLocaleString("en-IN")}` : "—"}
         </td>
         <td style="text-align:right;font-weight:700;color:${balAbs===0?"#9CA3AF":(balGood?"#059669":"#DC2626")};font-variant-numeric:tabular-nums">
           ${balAbs===0 ? "₹0.00" : `₹${balAbs.toLocaleString("en-IN")} ${balSfx}`}
         </td>
       </tr>`;
     }).join("");
-    const totalCR = party.txnRows.filter(t=>t.cr).reduce((s,t)=>s+(t.amount||0),0);
-    const totalDR = party.txnRows.filter(t=>!t.cr).reduce((s,t)=>s+(t.amount||0),0);
+    const totalCR = party.txnRows.filter(t=>t.sgn<0).reduce((s,t)=>s+(t.amount||0),0);
+    const totalDR = party.txnRows.filter(t=>t.sgn>0).reduce((s,t)=>s+(t.amount||0),0);
     const lastBal = party.txnRows.length ? (party.txnRows[party.txnRows.length-1].runBal||0) : 0;
     const closeAbs= Math.abs(lastBal);
-    const closeGood= isVendor ? (lastBal<=0) : (lastBal>=0);
-    const closeSfx = lastBal===0 ? "" :
-                     isVendor ? (lastBal>0 ? "Cr" : "Dr")
-                              : (lastBal>0 ? "Dr" : "Cr");
+    const closeGood= lastBal >= 0;
+    const closeSfx = lastBal===0 ? "" : (lastBal>0 ? "Dr" : "Cr");
     const w = window.open("", "_blank");
     if (!w) { window.alert(t("party.print_window_blocked_allow_pop_ups")); return; }
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"/>
@@ -590,17 +552,12 @@ function TabParty({ projectId, projectName }) {
                         </div>
                       )}
                       {selP.txnRows.map((txn,i)=>{
-                        // Ledger sign convention (party-side):
-                        //   vendor: runBal > 0 → "Cr" (we owe them)        → red
-                        //   vendor: runBal < 0 → "Dr" (advance paid)        → green
-                        //   client: runBal > 0 → "Dr" (they owe us)         → green
-                        //   client: runBal < 0 → "Cr" (advance received)    → red
+                        // Ledger sign convention (FIN-21, Finance ledger jaisa, har party ke liye):
+                        //   runBal > 0 → "Dr" (party hume degi)   → green
+                        //   runBal < 0 → "Cr" (hum party ko denge) → red
                         const balAbs = Math.abs(txn.runBal||0);
-                        const balGood = selP.isVendor ? (txn.runBal<=0) : (txn.runBal>=0);
-                        const balSfx  = txn.runBal===0 ? "" :
-                                        selP.isVendor
-                                          ? (txn.runBal>0 ? "Cr" : "Dr")
-                                          : (txn.runBal>0 ? "Dr" : "Cr");
+                        const balGood = (txn.runBal||0) >= 0;
+                        const balSfx  = txn.runBal===0 ? "" : (txn.runBal>0 ? "Dr" : "Cr");
                         const proj = txn.project || projectName || "";
                         const hasNote = !!txn.note;
                         return (
@@ -612,11 +569,11 @@ function TabParty({ projectId, projectName }) {
                               {hasNote ? txn.note : "—"}
                             </span>
                             <Pill label={txn.type} c={T.slt} bg={T.sltL}/>
-                            <span style={{fontSize:12.5, fontWeight:600, color:txn.cr?T.grn:T.b2, fontVariantNumeric:"tabular-nums", textAlign:"right"}}>
-                              {txn.cr ? `₹${fmtN(txn.amount)}` : "—"}
+                            <span style={{fontSize:12.5, fontWeight:600, color:txn.sgn<0?T.grn:T.b2, fontVariantNumeric:"tabular-nums", textAlign:"right"}}>
+                              {txn.sgn<0 ? `₹${fmtN(txn.amount)}` : "—"}
                             </span>
-                            <span style={{fontSize:12.5, fontWeight:600, color:!txn.cr?T.red:T.b2, fontVariantNumeric:"tabular-nums", textAlign:"right"}}>
-                              {!txn.cr ? `₹${fmtN(txn.amount)}` : "—"}
+                            <span style={{fontSize:12.5, fontWeight:600, color:txn.sgn>0?T.red:T.b2, fontVariantNumeric:"tabular-nums", textAlign:"right"}}>
+                              {txn.sgn>0 ? `₹${fmtN(txn.amount)}` : "—"}
                             </span>
                             <span style={{fontSize:12.5, fontWeight:700, color:balAbs===0?T.t4:(balGood?T.grn:T.red), fontVariantNumeric:"tabular-nums", textAlign:"right"}}>
                               {balAbs===0 ? "₹0.00" : `₹${fmtN(balAbs)} ${balSfx}`}
@@ -627,14 +584,11 @@ function TabParty({ projectId, projectName }) {
                       {/* Closing total row */}
                       {selP.txnRows.length>0 && (()=>{
                         const lastBal = selP.txnRows[selP.txnRows.length-1].runBal||0;
-                        const totalCR = selP.txnRows.filter(t=>t.cr).reduce((s,t)=>s+(t.amount||0),0);
-                        const totalDR = selP.txnRows.filter(t=>!t.cr).reduce((s,t)=>s+(t.amount||0),0);
+                        const totalCR = selP.txnRows.filter(t=>t.sgn<0).reduce((s,t)=>s+(t.amount||0),0);
+                        const totalDR = selP.txnRows.filter(t=>t.sgn>0).reduce((s,t)=>s+(t.amount||0),0);
                         const closeAbs = Math.abs(lastBal);
-                        const closeGood = selP.isVendor ? (lastBal<=0) : (lastBal>=0);
-                        const closeSfx  = lastBal===0 ? "" :
-                                          selP.isVendor
-                                            ? (lastBal>0 ? "Cr" : "Dr")
-                                            : (lastBal>0 ? "Dr" : "Cr");
+                        const closeGood = lastBal >= 0;
+                        const closeSfx  = lastBal===0 ? "" : (lastBal>0 ? "Dr" : "Cr");
                         return (
                           <div style={{display:"grid", gridTemplateColumns:COLS, padding:"10px 15px", borderTop:`2px solid ${T.b2}`, alignItems:"center", background:T.surfaceB, fontWeight:700}}>
                             <span/>
