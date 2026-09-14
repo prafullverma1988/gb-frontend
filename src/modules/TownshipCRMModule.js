@@ -2773,8 +2773,12 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
 // BOOKING FORM MODAL — convert HOLD/AVAILABLE → BOOKED
 // ════════════════════════════════════════════════════════════════
 function BookingFormModal({ unit, interestedProspects, onClose, onSaved }) {
+  // HOLD unit sirf token dene wale prospect ke naam book hoti hai (server 409
+  // deta hai) — isliye wahi pehle se chuna hua aaye.
+  const holderId = unit.status === "HOLD" && interestedProspects.some(p => p.id === unit.current_followup_prospect_id)
+    ? unit.current_followup_prospect_id : null;
   const [form, setForm] = useState({
-    prospect_id: interestedProspects[0]?.id || "",
+    prospect_id: holderId || interestedProspects[0]?.id || "",
     agreement_value: unit.final_offered_price || "",
     booked_date: todayISO(),
     note: "Agreement signed",
