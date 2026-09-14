@@ -194,9 +194,11 @@ function TabSuryaGhar({ projectId }) {
         xhr.open("POST", "https://api.cloudinary.com/v1_1/dd632nqfm/auto/upload");
         xhr.send(fd);
       });
-      await api.put(`/solar/projects/${projectId}/stage-docs/${docId}`, { file_url: cld.secure_url });
+      // api client throw nahi karta — fail par wajah dikhao, chupchaap reload nahi (CRM-09)
+      const r = await api.put(`/solar/projects/${projectId}/stage-docs/${docId}`, { file_url: cld.secure_url });
+      if (!r?.success) throw new Error(r?.message || t("solar.document_replace_nahi_hua"));
       load();
-    } catch(e) { setErr(e.message || "Replace failed"); }
+    } catch(e) { setErr(e.message || t("solar.document_replace_nahi_hua")); }
     setUploading(false);
   };
 

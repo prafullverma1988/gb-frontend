@@ -6090,6 +6090,7 @@ const dict = {
   "solar.disbursed_30":                                        "30% डिस्बर्स किया गया",
   "solar.disbursed_70":                                        "70% डिस्बर्स किया गया",
   "solar.document_name_e_g_discom_feasibility":                "डॉक्यूमेंट का नाम (जैसे DISCOM Feasibility)",
+  "solar.document_replace_nahi_hua":                           "डॉक्यूमेंट रिप्लेस नहीं हुआ — दोबारा कोशिश करो",
   "solar.documents_uploaded_in_surya_ghar_stages":             "सूर्य घर स्टेज में अपलोड हुए डॉक्यूमेंट्स यहाँ दिखेंगे",
   "solar.download_agreement":                                  "📄 एग्रीमेंट डाउनलोड करो",
   "solar.e_g_dc_2024_001":                                     "जैसे DC-2024-001",

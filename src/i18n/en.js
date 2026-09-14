@@ -6091,6 +6091,7 @@ const dict = {
   "solar.disbursed_30":                                        "Disbursed 30%",
   "solar.disbursed_70":                                        "Disbursed 70%",
   "solar.document_name_e_g_discom_feasibility":                "Document name (e.g. DISCOM Feasibility)",
+  "solar.document_replace_nahi_hua":                           "Document could not be replaced — please try again",
   "solar.documents_uploaded_in_surya_ghar_stages":             "Documents uploaded in Surya Ghar stages will appear here",
   "solar.download_agreement":                                  "Download Agreement",
   "solar.e_g_dc_2024_001":                                     "e.g. DC-2024-001",
