@@ -3079,34 +3079,39 @@ function btnSolid(c){return{padding:"8px 16px",borderRadius:7,border:"none",back
 
 // ── Send-to-staff modal — 3-bucket allocation (B4) ─────────────────
 // salary → salary-ledger settlement, NO wallet credit (imprest untouched)
-// imprest → wallet credit (existing behaviour) · petrol → credit tagged petrol
-function SendToStaffModal({staff,onClose,onDone}){
+// imprest → company khaate se staff ko payment (wallet credit) · petrol → wahi, petrol tag
+function SendToStaffModal({staff,accounts,onClose,onDone}){
   const due=Number(staff.salaryDue)||0;
   const [bucket,setBucket]=useState(due>0?"salary":"imprest"); // salary pre-selected when dues exist
   const [amount,setAmount]=useState(due>0?String(due):"");
   const [method,setMethod]=useState("bank_transfer");
+  // WAL-15: imprest/petrol company ke kisi khaate se nikalta hai — kaunsa, ye
+  // chunna zaroori (pehle koi khaata nahi likha jaata tha, bank kabhi nahi ghatta).
+  const accts=accounts||[];
+  const [accountId,setAccountId]=useState(accts.length===1?String(accts[0].id):"");
   const [txRef,setTxRef]=useState("");
   const [note,setNote]=useState("");
   const [busy,setBusy]=useState(false);
   const BUCKETS=[
-    {id:"salary", l:t("finance.salary"), sub:due>0?`Due ₹${fmtN(due)}`:"Koi due nahi", c:T.red},
+    {id:"salary", l:t("finance.salary"), sub:due>0?t("finance.due_rs_amt",{amt:fmtN(due)}):t("finance.koi_due_nahi"), c:T.red},
     {id:"imprest",l:t("finance.imprest"),sub:t("finance.wallet_credit_kharche_ke_liye"), c:T.blu},
     {id:"petrol", l:t("finance.petrol"), sub:t("finance.petrol_allowance_credit"), c:T.amb},
   ];
   const doSend=async()=>{
     const amt=Number(amount);
     if(!amt||amt<=0){window.alert(t("finance.amount_sahi_bharo"));return;}
-    if(bucket==="salary"&&amt>due){window.alert(`Salary due ₹${fmtN(due)} hi hai — usse zyada salary bucket me nahi ja sakta`);return;}
+    if(bucket==="salary"&&amt>due){window.alert(t("finance.salary_due_itna_hi_hai",{amt:fmtN(due)}));return;}
+    if(bucket!=="salary"&&!accountId){window.alert(t("finance.send_account_select_karo"));return;}
     setBusy(true);
     try{
-      const r=await api.post("/wallets/send-to-staff",{staff_party_id:staff.id,amount:amt,bucket,payment_method:method,tx_ref:txRef||undefined,note:note||undefined});
-      if(r&&r.success){ window.alert(bucket==="salary"?"Salary settle ho gayi ✓":"Wallet credit ho gaya ✓"); onDone(); }
-      else window.alert((r&&r.message)||"Send failed");
+      const r=await api.post("/wallets/send-to-staff",{staff_party_id:staff.id,amount:amt,bucket,payment_method:method,tx_ref:txRef||undefined,note:note||undefined,account_id:bucket!=="salary"?Number(accountId):undefined});
+      if(r&&r.success){ window.alert(bucket==="salary"?t("finance.salary_settle_ho_gayi"):t("finance.wallet_credit_ho_gaya")); onDone(); }
+      else window.alert((r&&r.message)||t("finance.send_failed"));
     }catch(e){ window.alert(t("finance.send_failed")); }
     setBusy(false);
   };
   return(
-    <ModalW title={`Send to ${staff.name}`} onClose={onClose}>
+    <ModalW title={t("finance.send_to_name",{name:staff.name})} onClose={onClose}>
       <div style={{display:"flex",gap:6,marginBottom:12}}>
         {BUCKETS.map(b=>(
           <button key={b.id} onClick={()=>{setBucket(b.id); if(b.id==="salary"&&due>0&&!Number(amount)) setAmount(String(due));}}
@@ -3121,6 +3126,14 @@ function SendToStaffModal({staff,onClose,onDone}){
       <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("common.amount_2")}</label>
       <input type="number" value={amount} onChange={e=>setAmount(e.target.value)}
         style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:13,fontWeight:700,boxSizing:"border-box",margin:"4px 0 10px"}}/>
+      {bucket!=="salary"&&<>
+        <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("finance.pay_from_account")}</label>
+        <select value={accountId} onChange={e=>setAccountId(e.target.value)}
+          style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${accountId?T.b2:T.amb}`,fontSize:12,boxSizing:"border-box",margin:"4px 0 10px",background:T.surface}}>
+          <option value="">{t("finance.select_account")}</option>
+          {accts.map(a=><option key={a.id} value={String(a.id)}>{a.name}{a.no?` ${a.no}`:""} · {fmtS(a.balance)}</option>)}
+        </select>
+      </>}
       <div style={{display:"flex",gap:8}}>
         <div style={{flex:1}}>
           <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("finance.method")}</label>
@@ -3139,7 +3152,7 @@ function SendToStaffModal({staff,onClose,onDone}){
         style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b1}`,fontSize:12,boxSizing:"border-box",marginBottom:12}}/>
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
         <button onClick={onClose} style={btnGhost()}>{t("common.cancel")}</button>
-        <button disabled={busy} onClick={doSend} style={btnSolid(bucket==="salary"?T.red:T.blu)}>{busy?t("common.sending"):`Send ₹${fmtN(Number(amount)||0)}`}</button>
+        <button disabled={busy} onClick={doSend} style={btnSolid(bucket==="salary"?T.red:T.blu)}>{busy?t("common.sending"):t("finance.send_rs_amt",{amt:fmtN(Number(amount)||0)})}</button>
       </div>
     </ModalW>
   );
@@ -4771,7 +4784,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 </div>
               </>)}
             </div>
-            {sendStaff&&<SendToStaffModal staff={sendStaff} onClose={()=>setSendStaff(null)} onDone={()=>{setSendStaff(null);loadWallets();}}/>}
+            {sendStaff&&<SendToStaffModal staff={sendStaff} accounts={apiAccounts} onClose={()=>setSendStaff(null)} onDone={()=>{setSendStaff(null);loadWallets();refreshAccounts();refreshTxns();}}/>}
             {/* Create Transaction dropdown */}
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowCreateTxn(!showCreateTxn)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
