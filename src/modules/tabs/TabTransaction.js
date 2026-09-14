@@ -5,6 +5,7 @@ import TransactionDetailDrawer from "../../components/TransactionDetailDrawer";
 import { T, fmtN } from "../shared/tokens";
 import { Pill, Panel, AddBtn } from "../shared/ui";
 import { t } from "../../i18n";
+import { txnIsCleared, isTransferIn, round2 } from "../../utils/moneyRules";
 
 const D = { invoices:[] };
 // Shared grid template so the header and every row column stay aligned.
@@ -21,6 +22,17 @@ const TXN_TYPE_MAP={
 };
 const BACK_DEBIT=["payment","material_purchase","site_expense","party_payment",
   "subcon_expense","wallet_payment","wallet_topup","bank_transfer","settle_out"];
+// FIN-11: upar ke KPI tiles paise ke ASLI aane-jaane par — bill, settlement,
+// transfer nahi (list ka +/− BACK_DEBIT se hi rehta hai):
+//   Total Inflow  = clear receipt jo company khaate me aayi
+//   Total Outflow = is project par sach me diya gaya paisa — payment /
+//                   party_payment / site_expense / wallet_payment, khaate se ho
+//                   ya staff wallet se (top-up project par nahi hota)
+//   Unpaid Bills  = project ke bills ka BAAKI (Pending Payments ki server rakam)
+// Clear = utils/moneyRules.txnIsCleared (cancel / reject / approval-baaki nahi).
+// Pehle BACK_DEBIT ki har row Outflow thi — bill + usi ka payment + settle_out:
+// project 345 "Total Outflow" ₹21,07,550 jabki diya ₹13,77,858.
+const PROJ_OUT_TYPES=["payment","party_payment","site_expense","wallet_payment"];
 // Line items ko chhota sa summary bana deta hai — "Panii" / "PVC PIPE 5\" +3".
 // Wallet ke site-expense me user note nahi likhta, isliye Note column khaali
 // reh jata tha; ab kam se kam kya khareeda gaya wo dikh jata hai.
@@ -50,7 +62,8 @@ const mapTxn=t=>{
     wallet,
     paidBy:t.paid_via_staff_name||t.created_by_name||"",
     amount:parseFloat(t.amount)||0,
-    dr:BACK_DEBIT.includes(t.type)||t.dr===true,
+    // Bank transfer ka IN leg (jis khaate me aaya) + hai
+    dr:(BACK_DEBIT.includes(t.type)&&!(t.type==="bank_transfer"&&isTransferIn(t)))||t.dr===true,
     status:t.status||"paid",
     // Poori raw txn — isi se wahi detail drawer khulta hai jo Finance
     // module me khulta hai (line items, edit, delete, PDF download).
@@ -80,6 +93,9 @@ function TabTransaction({projectId, projectName}) {
   const [txnProjects,   setTxnProjects]   = useState([]);
   // Row par click — Finance module wala detail drawer.
   const [selTxn, setSelTxn] = useState(null);
+  // FIN-11: bill id → server ka BAAKI (Pending Payments). null = pata nahi
+  // (Finance VIEW nahi / error) — tab tile "—" dikhata hai, galat rakam nahi.
+  const [billDue, setBillDue] = useState(null);
 
   const reload = useCallback(()=>{
     if(!projectId) return;
@@ -88,7 +104,10 @@ function TabTransaction({projectId, projectName}) {
       api.get("/finance/accounts"),
       api.get("/projects"),
       api.get("/finance/transactions?project_id=" + projectId + "&limit=2000"),
-    ]).then(([pRes,aRes,prRes,tRes])=>{
+      api.get("/finance/pending-payments"),
+    ]).then(([pRes,aRes,prRes,tRes,pdRes])=>{
+      const pend = (pdRes?.success&&Array.isArray(pdRes.data)) ? pdRes.data : null;
+      setBillDue(pend ? Object.fromEntries(pend.filter(p=>p.type==="bill").map(p=>[String(p.id), Number(p.amount)||0])) : null);
       const allP = (pRes?.success&&Array.isArray(pRes.data)) ? pRes.data : [];
       const projTxns = (tRes?.success&&Array.isArray(tRes.data)) ? tRes.data : [];
       // Store the real project transactions for the table (this was the bug —
@@ -138,10 +157,11 @@ function TabTransaction({projectId, projectName}) {
     return true;
   });
 
-  const tIn    = filtered.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
-  const tOut   = filtered.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
-  const tUnpaid= filtered.filter(t=>(t.status||"paid")==="unpaid").reduce((s,t)=>s+t.amount,0);
-  const tNet   = tIn - tOut;
+  // FIN-11 niyam upar PROJ_OUT_TYPES ke paas likha hai
+  const tIn    = round2(filtered.reduce((s,t)=>s+(t.raw&&t.raw.type==="receipt"&&t.raw.account_id!=null&&txnIsCleared(t.raw)?t.amount:0),0));
+  const tOut   = round2(filtered.reduce((s,t)=>s+(t.raw&&PROJ_OUT_TYPES.includes(t.raw.type)&&txnIsCleared(t.raw)?t.amount:0),0));
+  const tUnpaid= billDue ? round2(filtered.reduce((s,t)=>s+(billDue[String(t.id)]||0),0)) : null;
+  const tNet   = round2(tIn - tOut);
 
   const clearAll=()=>{setFType("All");setFParty("All");setSelParty("All");setFAcct("All");setFStatus("All");setFPayout("All");setFInvoice("All");setAmtMin("");setAmtMax("");setSearch("");};
 
@@ -164,8 +184,8 @@ function TabTransaction({projectId, projectName}) {
         {[
           {l:t("transaction.total_inflow"),  v:`₹${fmtN(tIn)}`,   c:T.grn},
           {l:t("transaction.total_outflow"), v:`₹${fmtN(tOut)}`,   c:T.red},
-          {l:t("common.net"),           v:`₹${fmtN(tNet)}`,   c:tNet>=0?T.grn:T.red},
-          {l:t("finance.unpaid_bills"),  v:`₹${fmtN(tUnpaid)}`,c:T.amb},
+          {l:t("common.net"),           v:`${tNet<0?"-₹":"₹"}${fmtN(tNet)}`,   c:tNet>=0?T.grn:T.red},
+          {l:t("finance.unpaid_bills"),  v:tUnpaid==null?"—":`₹${fmtN(tUnpaid)}`,c:T.amb},
         ].map((s,i)=>(
           <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{s.l}</div>

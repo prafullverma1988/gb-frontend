@@ -9,6 +9,7 @@ import { t, Rich } from "../i18n";
 import { canSeeFinancials } from "../utils/perms";
 import TabAccounts from "./tabs/TabAccounts";
 import { isoDate, todayISO } from "../utils/today";
+import { cashMoveOf, isTransferIn, round2 } from "../utils/moneyRules";
 
 // A party holds multiple roles: `roles` is the canonical comma list and
 // `type` is only the primary one. Matching on `type` alone dropped equipment
@@ -3306,34 +3307,14 @@ function ProjectPnlView(){
   );
 }
 
-// ── Khaate (bank/cash) par asli asar — MIRRORS backend utils/accountBalance ──
+// ── Khaate (bank/cash) par asli asar — cashMoveOf (utils/moneyRules) ──
 // FIN-10: Cash Book, Day Book aur unke tiles wahi niyam lagate hain jo Accounts
-// screen ka live_balance, Khaata Ledger aur bot lagate hain:
-//   +amount  receipt; bank_transfer ka IN leg (description "Bank Transfer IN…")
-//   −amount  bank_transfer ka OUT leg; payment, party_payment, site_expense,
-//            wallet_payment, wallet_topup, emd_forfeit
-//   0        bills / invoices / settle_* / contra — khaata nahi hilta
-// Sirf wahi row jiska company account_id hai aur jo "clear" hai (utils/txnCleared:
-// cancel/reject/approval-baaki/receiver-baaki nahi). Pehle Cash Book staff wallet
-// wali har row (paid_via_staff_id) hata deta tha — account wali jama bhi — aur
-// transfer ka IN leg bhi payment ginta tha; balance 0 se shuru hota tha.
-const CASH_OUT_TYPES = new Set(["payment","party_payment","site_expense","wallet_payment","wallet_topup","emd_forfeit"]);
-const txnIsCleared = (r) => {
-  const ap = r.approval_status;
-  return Number(r.is_active ?? 1) === 1
-    && !["cancelled","rejected"].includes(String(r.status||""))
-    && (ap == null || ap === "approved" || ap === "auto")
-    && (Number(r.requires_receiver_confirmation||0) === 0 || !!r.receiver_confirmed_at)
-    && !r.receiver_rejected_at;
-};
-const cashMoveOf = (r) => {   // r = raw GET /finance/transactions row
-  if (r.account_id == null || !txnIsCleared(r)) return 0;
-  const amt = parseFloat(r.amount) || 0, ty = String(r.type||"");
-  if (ty === "receipt") return amt;
-  if (ty === "bank_transfer") return /^bank transfer in/i.test(String(r.description||"")) ? amt : -amt;
-  return CASH_OUT_TYPES.has(ty) ? -amt : 0;
-};
-const r2c = (n) => Math.round((Number(n)||0)*100)/100;
+// screen ka live_balance, Khaata Ledger aur bot lagate hain (backend
+// utils/accountBalance + utils/txnCleared ki copy utils/moneyRules me). Pehle
+// Cash Book staff wallet wali har row (paid_via_staff_id) hata deta tha — account
+// wali jama bhi — aur transfer ka IN leg bhi payment ginta tha; balance 0 se
+// shuru hota tha.
+const r2c = round2;
 
 // ══════════════════════════════════════════════════════════════
 // CASH BOOK + DAY BOOK  (self-contained — Finance module owns its
@@ -3878,7 +3859,7 @@ function FinanceModule(){
     // (in-like +) — only for the list's +/− display; no cash is actually moved.
     // FIN-10: bank transfer ka IN leg ("Bank Transfer IN…", jis khaate me paisa
     // aaya) + hai — pehle dono leg − (payment) dikhte the.
-    const isDebit=(BACK_DEBIT.includes(t.type)&&!(t.type==="bank_transfer"&&/^bank transfer in/i.test(String(t.description||""))))||t.type==="settle_out"||t.dr===true||(!t.type&&t.dr);
+    const isDebit=(BACK_DEBIT.includes(t.type)&&!(t.type==="bank_transfer"&&isTransferIn(t)))||t.type==="settle_out"||t.dr===true||(!t.type&&t.dr);
     return {
       id:t.id,
       date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
@@ -4253,10 +4234,19 @@ function FinanceModule(){
   const partyTotalDR=allPartyTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
   const toReceive=partiesWithBalance.filter(p=>p.balType==="To Receive").reduce((s,p)=>s+p.balance,0);
   const toPay=partiesWithBalance.filter(p=>p.balType==="To Pay").reduce((s,p)=>s+p.balance,0);
-  const allTxnIn=activeTxns.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
-  const allTxnOut=activeTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
-  const unpaidBills=activeTxns.filter(t=>t.status==="unpaid").reduce((s,t)=>s+t.amount,0);
-  const netFlow=allTxnIn-allTxnOut;
+  // FIN-11: Fin Activity ke tiles paise ke ASLI aane-jaane par — Cash Book wala
+  // niyam (cashMove, utils/accountBalance): Cash In = khaaton me aayi clear
+  // receipt, Cash Out = khaaton se gaya clear payment (transfer nahi — wo apne hi
+  // khaaton ke beech hai). Pehle har "dr" row judti thi: bill + usi bill ka
+  // payment + dono transfer leg + settlement, cancel/reject samet (greenbox
+  // bhilai "Total Expense" ₹8.1 Cr, "Net" −₹3.7 Cr jabki khaaton me ₹62 L).
+  const allTxnIn=round2(activeTxns.reduce((s,t)=>s+(t.txnType==="receipt"&&t.cashMove>0?t.cashMove:0),0));
+  const allTxnOut=round2(activeTxns.reduce((s,t)=>s+(t.txnType!=="bank_transfer"&&t.cashMove<0?-t.cashMove:0),0));
+  // Unpaid = bills ka BAAKI (partial samet) — wahi server list jo Pending Payments
+  // dikhata hai. Pehle sirf status "unpaid" ki POORI rakam (partial chhoot, site
+  // expense jud jaata).
+  const unpaidBills=round2(pendBills.filter(p=>p.type==="bill").reduce((s,p)=>s+(Number(p.amount)||0),0));
+  const netFlow=round2(allTxnIn-allTxnOut);
   const prPendAmt=payReqs.filter(r=>r.status==="pending").reduce((s,r)=>s+r.amount,0);
   const prApprovedAmt=payReqs.filter(r=>r.status==="approved").reduce((s,r)=>s+r.amount,0);
   const prRejected=payReqs.filter(r=>r.status==="rejected").length;
@@ -4293,9 +4283,9 @@ function FinanceModule(){
       {l:t("finance.to_pay"),v:`₹${fmt(toPay)}`,sub:t("finance.against_bills_received"),Icon:IcBillDue,c:T.amb,bg:T.ambL,brd:T.ambM},
     ],
     transaction:[
-      {l:t("finance.total_income"),v:`₹${fmt(allTxnIn)}`,sub:t("finance.all_payment_in"),Icon:IcTrendUp,c:T.grn,bg:T.grnL,brd:T.grnM},
-      {l:t("finance.total_expense"),v:`₹${fmt(allTxnOut)}`,sub:t("finance.all_payment_out"),Icon:IcTrendDn,c:T.red,bg:T.redL,brd:T.redM},
-      {l:t("finance.unpaid_bills"),v:`₹${fmt(unpaidBills)}`,sub:t("finance.pending_payment"),Icon:IcCalDue,c:T.amb,bg:T.ambL,brd:T.ambM},
+      {l:t("finance.cash_in"),v:`₹${fmt(allTxnIn)}`,sub:t("finance.cash_in_sub"),Icon:IcTrendUp,c:T.grn,bg:T.grnL,brd:T.grnM},
+      {l:t("finance.cash_out"),v:`₹${fmt(allTxnOut)}`,sub:t("finance.cash_out_sub"),Icon:IcTrendDn,c:T.red,bg:T.redL,brd:T.redM},
+      {l:t("finance.unpaid_bills"),v:`₹${fmt(unpaidBills)}`,sub:t("finance.unpaid_bills_sub"),Icon:IcCalDue,c:T.amb,bg:T.ambL,brd:T.ambM},
       {l:t("finance.net_cash_flow"),v:`₹${fmt(Math.abs(netFlow))}`,sub:netFlow>=0?"Surplus":"Deficit",Icon:IcPulse,c:netFlow>=0?T.grn:T.red,bg:netFlow>=0?T.grnL:T.redL,brd:netFlow>=0?T.grnM:T.redM},
     ],
     cashbook:(()=>{
