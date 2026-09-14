@@ -3059,8 +3059,12 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                   onVendorAdded={(v)=>setVendorList(prev=>[...prev, v].sort((a,b)=>(a.name||"").localeCompare(b.name||"")))}
                   onMarkReceived={async(id)=>{
                     setActing(p=>({...p,[id]:"receiving"}));
-                    await api.patch("/procurement/mrs/"+id+"/mark-received",{received_qty:mr.approved_qty||mr.quantity}).catch(()=>{});
-                    setData(p=>({...p,mrs:p.mrs.map(m=>m.id===id?{...m,stage:"Received",mat_status:"Received"}:m)}));
+                    // Qty nahi bhejte — server MR ka BAAKI maal leta hai. Jawab padh kar hi
+                    // screen badalti hai: pehle error par bhi card "Received" ho jaata tha (MAT-08).
+                    const res=await api.patch("/procurement/mrs/"+id+"/mark-received",{}).catch(e=>({success:false,message:e?.message}));
+                    if(res?.success===false){ alert(res.message||t("common.something_went_wrong")); setActing(p=>({...p,[id]:null})); return; }
+                    const matStatus=res?.mat_status||"Received";
+                    setData(p=>({...p,mrs:p.mrs.map(m=>m.id===id?{...m,stage:"Received",mat_status:matStatus}:m)}));
                     setActing(p=>({...p,[id]:null}));
                   }}
                 />)

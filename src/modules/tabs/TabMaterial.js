@@ -24,17 +24,24 @@ function DualUnitToggle({ units, primaryUnit, itemName, qty, value, onChange }) 
   const [learned, setLearned] = React.useState(null);   // {unit, alt_unit, ratio}
   const on = !!value?.altOn;
   const nameKey = (itemName || "").trim();
+  const sameUnit = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 
   React.useEffect(() => {
     if (!nameKey) { setLearned(null); return; }
     let alive = true;
-    api.get("/procurement/grns/last-alt?name=" + encodeURIComponent(nameKey))
+    // Aaj ki receiving unit bhi bhejo — ratio sirf usi unit ki pichhli line ka (MAT-28)
+    api.get("/procurement/grns/last-alt?name=" + encodeURIComponent(nameKey) + "&unit=" + encodeURIComponent(primaryUnit || ""))
       .then(r => { if (alive && r && r.success) setLearned(r.data || null); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [nameKey]);
+  }, [nameKey, primaryUnit]);
 
-  const ratio = value?.ratio ?? learned?.ratio ?? null;
+  const altUnitOptions = units.filter(u => u !== primaryUnit);
+  // Pichhli line alag unit ki ho (Bundle→Kg) ya billing unit hi aaj ki unit ho
+  // (Kg→Kg) to ratio ka koi matlab nahi — 5 Kg par "506 Kg" bhar deta tha (MAT-28).
+  const learnedOk = !!learned && sameUnit(learned.unit, primaryUnit) && !sameUnit(learned.alt_unit, primaryUnit);
+  const learnedRatio = learnedOk ? learned.ratio : null;
+  const ratio = value?.ratio ?? learnedRatio ?? null;
   const suggestQty = (on && ratio && Number(qty) > 0)
     ? Math.round(Number(qty) * ratio * 100) / 100 : null;
 
@@ -42,16 +49,14 @@ function DualUnitToggle({ units, primaryUnit, itemName, qty, value, onChange }) 
     if (on) { onChange({ altOn: false, alt_unit: "", alt_qty: "", ratio: null }); return; }
     // Turning ON: default the billing unit to the learned one (else kg), carry
     // the learned ratio so the qty box can prefill, but leave alt_qty editable.
-    const defUnit = learned?.alt_unit || (units.includes("Kg") ? "Kg" : units[0]);
+    const defUnit = (learnedOk && learned.alt_unit) || (altUnitOptions.includes("Kg") ? "Kg" : altUnitOptions[0]);
     onChange({
       altOn: true,
       alt_unit: value?.alt_unit || defUnit,
-      alt_qty: value?.alt_qty || (learned?.ratio && Number(qty) > 0 ? String(Math.round(Number(qty) * learned.ratio * 100) / 100) : ""),
-      ratio: learned?.ratio || null,
+      alt_qty: value?.alt_qty || (learnedRatio && Number(qty) > 0 ? String(Math.round(Number(qty) * learnedRatio * 100) / 100) : ""),
+      ratio: learnedRatio || null,
     });
   };
-
-  const altUnitOptions = units.filter(u => u !== primaryUnit);
 
   return (
     <div style={{ gridColumn: "1 / -1", paddingTop: on ? 6 : 2 }}>
@@ -93,6 +98,16 @@ function DualUnitToggle({ units, primaryUnit, itemName, qty, value, onChange }) 
 // quantity under a plain "Received" pill — so an MR ordered 100 with only 40
 // arrived showed "100 CFT · Received". A partially received MR now shows
 // "received / ordered" plus a Partial % badge, the same way Procurement does.
+// MR par abhi kitna aana baaki — server ka pending_qty (MR qty − godown wala
+// hissa − isi MR ke GRN), wahi jo "Maal aa gaya" server par maanta hai. Pehle
+// ye poore project ke usi naam ke GRN ghata kar banta tha (MAT-22).
+function mrPendingQty(m) {
+  const n = m && m.pending_qty != null
+    ? Number(m.pending_qty)
+    : Math.max(0, (parseFloat(m && m.quantity) || 0) - (parseFloat(m && m.received_qty) || 0));
+  return Math.round((Number.isFinite(n) ? n : 0) * 1000) / 1000;
+}
+
 function toMrCard(m) {
   const ordered   = parseFloat(m.quantity) || 0;
   const received  = parseFloat(m.received_qty) || 0;
@@ -298,7 +313,8 @@ function TabMaterial({ project }) {
     // Fetch both MRs and direct GRNs (no linked MR) in parallel
     Promise.all([
       api.get("/procurement/mrs?project_id=" + projectId),
-      api.get("/procurement/grns?project_id=" + projectId),
+      // fields=list: sirf card ke khaane (photo/bill/alt nahi) — PERF-12
+      api.get("/procurement/grns?project_id=" + projectId + "&fields=list"),
     ]).then(([mrRes, grnRes]) => {
       const mrEntries = (mrRes.success && Array.isArray(mrRes.data))
         ? mrRes.data.map(toMrCard)
@@ -451,7 +467,12 @@ function TabMaterial({ project }) {
       const m1 = r1?.success  ? (r1.data||[]) : [];
       const m2 = r2?.success  ? (r2.data||[]) : [];
       const seen = new Set();
-      setOrderedMRs([...m1, ...m2].filter(m => { if(seen.has(m.id)) return false; seen.add(m.id); return true; }));
+      // Jis MR ka poora baaki maal godown se aa raha hai wo yahan nahi — wo upar
+      // "Issues from Warehouse" me receive hota hai (server bhi yahan se rokta hai).
+      setOrderedMRs([...m1, ...m2].filter(m => {
+        if(seen.has(m.id)) return false; seen.add(m.id);
+        return !(Number(m.warehouse_routed_qty) > 0 && mrPendingQty(m) <= 0);
+      }));
     }).catch(()=>{});
     loadPendingTransfers();
     loadPendingIssues();
@@ -510,10 +531,11 @@ function TabMaterial({ project }) {
     if (photoBlocked("grn", "Maal receive (GRN)")) return;
     setGrnSaving(true);
     try {
-      const mr = orderedMRs.find(m => m.id === mrId);
+      // Qty na bhari ho to server khud MR ka BAAKI maal leta hai — poori MR
+      // qty bhejna har dobara dabane par stock phir jodta tha (MAT-08).
       const res = await api.patch("/procurement/mrs/" + mrId + "/mark-received", {
         challan_no: row.challan,
-        received_qty: parseFloat(row.received_qty) || parseFloat(mr?.quantity) || 0,
+        received_qty: parseFloat(row.received_qty) || undefined,
         photo_urls: grnPhotos.length ? grnPhotos : null,
       });
       if (res.success) {
@@ -548,16 +570,26 @@ function TabMaterial({ project }) {
       Number((grnRows[mr.id] || {}).received_qty || 0) > 0
     );
     if (targetMRs.length === 0) { alert(t("material.kam_se_kam_ek_material_ka")); return; }
+    // Pending se zyada qty sirf "Zyada maal aaya" tick + wajah ke saath —
+    // server bhi yahi maangta hai (MAT-08).
+    const overNoReason = targetMRs.find(mr => {
+      const gr = grnRows[mr.id] || {};
+      return (parseFloat(gr.received_qty) || 0) > mrPendingQty(mr) + 0.0005 && !(gr.excess && String(gr.excessReason || "").trim());
+    });
+    if (overNoReason) { alert(t("material.zyada_maal_tick_ya_qty_theek_karo", { item: overNoReason.item_name })); return; }
     setGrnSaving(true);
     let okCount = 0, failures = [];
     for (const mr of targetMRs) {
       const gr = grnRows[mr.id] || {};
       const recvQty = parseFloat(gr.received_qty) || 0;
       const dual = gr.dual;
+      const isOver = recvQty > mrPendingQty(mr) + 0.0005;
       try {
         const res = await api.patch("/procurement/mrs/" + mr.id + "/mark-received", {
           challan_no: meta.challan,
           received_qty: recvQty,
+          allow_excess: isOver || undefined,
+          excess_reason: isOver ? String(gr.excessReason || "").trim() : undefined,
           received_date: meta.date || new Date().toLocaleDateString('en-CA'),
           received_by: meta.received_by || meUser?.name || undefined,
           photo_urls: grnPhotos.length ? grnPhotos : null,
@@ -1367,10 +1399,10 @@ function TabMaterial({ project }) {
                                   const row = grnRows[mr.id] || {};
                                   const alreadyReceived = Number(mr.received_qty || 0);
                                   const orderedQty     = Number(mr.quantity || 0);
-                                  const pendingQty     = Math.max(0, orderedQty - alreadyReceived);
+                                  const pendingQty     = mrPendingQty(mr);
                                   const isPartial      = mr.mat_status === "PartialReceived";
                                   const recv = Number(row.received_qty||0);
-                                  const over = recv > pendingQty;
+                                  const over = recv > pendingQty + 0.0005;
                                   return (
                                     <div key={mr.id} style={{display:"grid",gridTemplateColumns:"100px 1fr 90px 110px 70px",gap:7,padding:"7px 0",borderTop:"1px dashed "+T.b1,alignItems:"center"}}>
                                       <div>
@@ -1390,6 +1422,22 @@ function TabMaterial({ project }) {
                                         placeholder={String(pendingQty)}
                                         style={{padding:"6px 8px",borderRadius:5,border:"1.5px solid "+(over?T.red:T.b1),fontSize:11.5,textAlign:"right",fontFamily:"inherit",outline:"none",background:over?T.redL:T.surface,color:over?T.red:T.t1}}/>
                                       <span style={{fontSize:10.5,color:T.t4}}>{mr.unit}</span>
+                                      {/* Pending se zyada: sirf jaan-boojh kar — tick + wajah (server bhi maangta hai) */}
+                                      {over&&(
+                                        <div style={{gridColumn:"1 / -1",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"6px 8px",background:T.redL,border:"1px solid "+T.redM,borderRadius:6}}>
+                                          <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:T.red,cursor:"pointer"}}>
+                                            <input type="checkbox" checked={!!row.excess}
+                                              onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],excess:e.target.checked}}))}/>
+                                            {t("material.zyada_maal_aaya")}
+                                          </label>
+                                          {row.excess&&(
+                                            <input value={row.excessReason||""}
+                                              onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],excessReason:e.target.value}}))}
+                                              placeholder={t("material.zyada_maal_wajah_placeholder")}
+                                              style={{flex:"1 1 180px",padding:"5px 8px",borderRadius:5,border:"1.5px solid "+T.redM,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+                                          )}
+                                        </div>
+                                      )}
                                       {recv>0&&(
                                         <DualUnitToggle units={UNITS_MR} primaryUnit={mr.unit} itemName={mr.item_name} qty={row.received_qty}
                                           value={row.dual} onChange={d=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],dual:d}}))}/>

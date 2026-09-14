@@ -114,7 +114,8 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
     ];
     entries.sort((a, b) => ts(a.date) - ts(b.date));   // oldest-first for running bal
     let bal = 0;
-    entries.forEach(e => { bal += e._t === "grn" ? e.qty : -e.qty; e.bal = bal; });
+    // 3 decimal par round — float jod "1003.0999999999999" dikhata tha (MAT-04)
+    entries.forEach(e => { bal = Math.round((bal + (e._t === "grn" ? e.qty : -e.qty)) * 1000) / 1000; e.bal = bal; });
     return sortNew ? entries.reverse() : entries;
   }, [material, sortNew]);
 

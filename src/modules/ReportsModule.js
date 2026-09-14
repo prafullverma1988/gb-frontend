@@ -542,11 +542,20 @@ function ChallanModule(){
   const [rows,setRows]=useState([]);
   const [loading,setLoading]=useState(true);
   const [matLibMap,setMatLibMap]=useState({}); // name(lower) → {category_name, base_rate, last_rate, unit}
+  // Date filter yahan upar — GRN server se isi range ke aate hain (PERF-12)
+  const [fFrom,setFFrom]=useState(() => daysAgoISO(90));
+  const [fTo,setFTo]=useState(TODAY);
 
   useEffect(()=>{
     setLoading(true);
+    // Poori company ke saare GRN (1,031 GRN ≈ 940 KB) ki jagah sirf chuni date
+    // range aur list ke khaane. Range ek-ek din chaudi — neeche ka apna date
+    // filter (received_date / created_at) phir bhi wahi rows chhaant deta hai.
+    const shiftDay = (iso, n) => { const d = new Date(iso + "T00:00:00Z"); if (isNaN(d)) return ""; d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+    const qFrom = /^\d{4}-\d{2}-\d{2}$/.test(fFrom||"") ? "&from=" + shiftDay(fFrom, -1) : "";
+    const qTo   = /^\d{4}-\d{2}-\d{2}$/.test(fTo||"")   ? "&to="   + shiftDay(fTo, 1)    : "";
     Promise.all([
-      api.get("/procurement/grns?exclude_auto=1"),
+      api.get("/procurement/grns?exclude_auto=1&fields=list" + qFrom + qTo),
       api.get("/library/materials").catch(()=>({data:[]})),
     ]).then(([grnRes, libRes])=>{
       const lib = {};
@@ -645,7 +654,7 @@ function ChallanModule(){
       }
       setRows(flat);
     }).catch(()=>setRows([])).finally(()=>setLoading(false));
-  }, []);
+  }, [fFrom, fTo]);
 
   // ── Filter state ──
   // view: which aggregation rule to apply
@@ -659,8 +668,7 @@ function ChallanModule(){
   const [fParty,setFParty]=useState("All");
   const [fHead,setFHead]=useState("All");
   const [fStatus,setFStatus]=useState("All");
-  const [fFrom,setFFrom]=useState(() => daysAgoISO(90));
-  const [fTo,setFTo]=useState(TODAY);
+  // (fFrom / fTo upar data-load ke saath hain — PERF-12)
   const [search,setSearch]=useState("");
 
   // Map view → set of flowTypes that view should include

@@ -184,6 +184,9 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
   const grn = data?.grn;
   const items = data?.items || [];
   const mr = data?.mr;
+  // Purane GRN ke liye server ka andaaza (naam + vendor se) — sirf batane ke
+  // liye; ye MR is GRN se JUDI nahi hai, isliye timeline/Edit MR me nahi (MAT-09).
+  const mrGuess = !mr ? data?.mr_guess : null;
   const po = data?.po;
   const audit = data?.audit || [];
   const bills = data?.bills || [];
@@ -382,7 +385,9 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                 <Section
                   color={T.amb} bg={T.ambL} icon="📝" title={t("material_flow.material_request")}
                   empty={!mr}
-                  emptyText={t("material_flow.no_mr_linked_direct_grn_entry")}
+                  emptyText={mrGuess
+                    ? t("material_flow.possible_mr_not_linked", { mr: mrGuess.mr_number || `MR-${mrGuess.id}`, item: mrGuess.item_name, qty: Number(mrGuess.quantity), unit: mrGuess.unit || "", date: fmtDate(mrGuess.created_at) })
+                    : t("material_flow.no_mr_linked_direct_grn_entry")}
                   rows={mr ? [
                     ["MR #",       `MR-${mr.id}`],
                     ["Material",   `${mr.item_name} · ${mr.quantity} ${mr.unit}`],
