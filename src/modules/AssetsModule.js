@@ -2573,7 +2573,14 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
               </Row>
               {(v.items || []).map((ln) => {
                 const c = cellOf(ln);
-                const sg = N(ln.system_good), sd = N(ln.system_damaged);
+                // System: save ho chuki line par wahi jo save ke waqt ledger me tha; bina
+                // gini ya abhi badli line par ledger ka abhi ka stock — save hote hi server
+                // wahi likhta hai. Isliye ginti ke beech hua issue/return farq nahi banata.
+                const hasCur = draft && ln.current_good != null;
+                const saved = ln.counted_good != null, edited = !!edit[ln.id];
+                const useCur = hasCur && (edited || !saved);
+                const sg = useCur ? N(ln.current_good) : N(ln.system_good), sd = useCur ? N(ln.current_damaged) : N(ln.system_damaged);
+                const movedAfter = hasCur && saved && !edited && (N(ln.current_good) !== N(ln.system_good) || N(ln.current_damaged) !== N(ln.system_damaged));
                 const counted = c.g !== "";
                 const cg = counted ? Number(c.g) : 0, cd = counted ? (c.d === "" ? 0 : Number(c.d)) : 0;
                 const net = counted ? (cg + cd) - (sg + sd) : null;
@@ -2589,6 +2596,7 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
                     <div>
                       <div style={{ fontWeight: 600 }}>{fmtN(sg)}</div>
                       {sd > 0 && <div style={{ fontSize: 10.5, color: T.amb }}>{fmtN(sd)} {t("assets.damaged").toLowerCase()}</div>}
+                      {movedAfter && <div style={{ fontSize: 10, color: T.amb }}>{t("assets.verify_moved_after_count", { n: fmtN(N(ln.current_good) + N(ln.current_damaged)) })}</div>}
                     </div>
                     <div>
                       <div style={{ display: "flex", gap: 4 }}>
