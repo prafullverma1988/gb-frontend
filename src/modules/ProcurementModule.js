@@ -2813,7 +2813,9 @@ function ProcurementModule(){
           const res = await api.put("/procurement/pos/"+newPO.editPoId,{
             vendor_name: newPO.vendor,
             vendor_party_id: vendorPartyId,
-            project_id: newPO.projectId || 1,
+            // Bina project (godown restock MR) = 0, "koi project nahi" — pehle 1 jaata tha,
+            // jo kisi aur company ka project bhi ho sakta hai; server ab use rokta hai (MAT-02).
+            project_id: newPO.projectId || 0,
             project_name: newPO.project,
             delivery_site: newPO.deliverySite,
             expected_delivery: validDate(newPO.delivery),
@@ -2855,7 +2857,8 @@ function ProcurementModule(){
         const res = await api.post("/procurement/pos",{
           vendor_name: newPO.vendor,
           vendor_party_id: vendorPartyId,
-          project_id: newPO.projectId || (createPOPrefill||[])[0]?.project_id || 1,
+          // Bina project (godown restock MR) = 0 — 1 nahi (MAT-02).
+          project_id: newPO.projectId || (createPOPrefill||[])[0]?.project_id || 0,
           project_name: newPO.project,
           delivery_site: newPO.deliverySite,
           expected_delivery: validDate(newPO.delivery),
