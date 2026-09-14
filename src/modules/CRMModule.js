@@ -4513,7 +4513,9 @@ function CRMModule(){
   // Merge all leads for KPI counts
   const allLeads = [...(canConstruction?leads:[]),...(canSolar?solarLeads:[])];
   const todayDueCount=allLeads.filter(l=>l.contactDate&&daysDiff(l.contactDate)<=0&&!dismissedReminders.includes(l.id)&&l.stage!=="converted"&&l.stage!=="project"&&l.stage!=="lost").length;
-  const pipelineValue=leads.filter(l=>l.stage!=="lost"&&l.stage!=="project").reduce((s,l)=>s+(Number(l.budget)||0),0);
+  // Pipeline = sirf khule lead (Soft Lead…Proposal). Converted deal pehle isme bhi judta tha
+  // aur Converted tile me bhi — double count (CRM-17).
+  const pipelineValue=leads.filter(l=>["soft_lead","lead","followup","proposal"].includes(l.stage)).reduce((s,l)=>s+(Number(l.budget)||0),0);
   const convertedValue=leads.filter(l=>l.stage==="converted"||l.stage==="project").reduce((s,l)=>s+(Number(l.convertedValue)||Number(l.budget)||0),0);
   const conversionRate=allLeads.length?Math.round((allLeads.filter(l=>l.stage==="converted"||l.stage==="project").length/allLeads.length)*100):0;
 
