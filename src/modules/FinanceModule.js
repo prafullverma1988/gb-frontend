@@ -3306,6 +3306,35 @@ function ProjectPnlView(){
   );
 }
 
+// ── Khaate (bank/cash) par asli asar — MIRRORS backend utils/accountBalance ──
+// FIN-10: Cash Book, Day Book aur unke tiles wahi niyam lagate hain jo Accounts
+// screen ka live_balance, Khaata Ledger aur bot lagate hain:
+//   +amount  receipt; bank_transfer ka IN leg (description "Bank Transfer IN…")
+//   −amount  bank_transfer ka OUT leg; payment, party_payment, site_expense,
+//            wallet_payment, wallet_topup, emd_forfeit
+//   0        bills / invoices / settle_* / contra — khaata nahi hilta
+// Sirf wahi row jiska company account_id hai aur jo "clear" hai (utils/txnCleared:
+// cancel/reject/approval-baaki/receiver-baaki nahi). Pehle Cash Book staff wallet
+// wali har row (paid_via_staff_id) hata deta tha — account wali jama bhi — aur
+// transfer ka IN leg bhi payment ginta tha; balance 0 se shuru hota tha.
+const CASH_OUT_TYPES = new Set(["payment","party_payment","site_expense","wallet_payment","wallet_topup","emd_forfeit"]);
+const txnIsCleared = (r) => {
+  const ap = r.approval_status;
+  return Number(r.is_active ?? 1) === 1
+    && !["cancelled","rejected"].includes(String(r.status||""))
+    && (ap == null || ap === "approved" || ap === "auto")
+    && (Number(r.requires_receiver_confirmation||0) === 0 || !!r.receiver_confirmed_at)
+    && !r.receiver_rejected_at;
+};
+const cashMoveOf = (r) => {   // r = raw GET /finance/transactions row
+  if (r.account_id == null || !txnIsCleared(r)) return 0;
+  const amt = parseFloat(r.amount) || 0, ty = String(r.type||"");
+  if (ty === "receipt") return amt;
+  if (ty === "bank_transfer") return /^bank transfer in/i.test(String(r.description||"")) ? amt : -amt;
+  return CASH_OUT_TYPES.has(ty) ? -amt : 0;
+};
+const r2c = (n) => Math.round((Number(n)||0)*100)/100;
+
 // ══════════════════════════════════════════════════════════════
 // CASH BOOK + DAY BOOK  (self-contained — Finance module owns its
 // own copy; nothing imported from Reports, per module-independence)
@@ -3313,7 +3342,10 @@ function ProjectPnlView(){
 // running ledger balance, plus a per-day "Day Balance" (net in−out).
 // Negative balances render in red WITH a leading minus sign (fmtS).
 // ══════════════════════════════════════════════════════════════
-function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by parent sub-tab (cashbook | daybook)
+function CashDayBook({ txns: bookTxns, accounts=[], view="cashbook" }){ // view driven by parent sub-tab (cashbook | daybook)
+  // FIN-10: har row ka Receipt/Payment aur rakam uske khaate par asli asar
+  // (cashMove) se — list wala `dr` nahi (usme transfer ka IN leg bhi payment tha).
+  const txns = useMemo(()=>bookTxns.map(t=>({...t, dr:t.cashMove<0, amount:Math.abs(t.cashMove||0)})),[bookTxns]);
   const [chip,setChip]   = useState("All");      // All | Receipts | Payments
   const [fSite,setFSite] = useState("All");
   const [fHead,setFHead] = useState("All");
@@ -3354,8 +3386,23 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
   [txns,fSite,fHead,fMOP,fAcc,fParty,chip,fromN,toN,search]);
 
   // Cash Book — running ledger balance row-by-row
-  let rb=0;
-  const withBal=filtered.map(t=>{rb+=t.dr?-t.amount:t.amount;return{...t,runBal:rb};});
+  // FIN-10: balance khaate (ya sab khaaton) ki OPENING se shuru hota hai, aur
+  // "Se" tareekh se pehle ki entries opening me jud jaati hain — Khaata Ledger
+  // jaisa. Party/site/head/MOP/search/chip sirf row chhupate hain, Balance
+  // column hamesha us khaate ka asli balance rehta hai (chhupi row samet).
+  const book=useMemo(()=>{
+    const rows=txns.filter(t=>fAcc==="All"||t.account===fAcc).sort((a,b)=>(a.ds-b.ds)||((a.id||0)-(b.id||0)));
+    const bookAccts=fAcc==="All"?accounts:accounts.filter(a=>a.name===fAcc);
+    let b=r2c(bookAccts.reduce((s,a)=>s+(Number(a.opening)||0),0));
+    rows.forEach(t=>{ if(fromN&&t.ds<fromN) b=r2c(b+t.cashMove); });
+    const opening=b, after=new Map(), dayEnd={};
+    rows.forEach(t=>{
+      if((fromN&&t.ds<fromN)||(toN&&t.ds>toN)) return;
+      b=r2c(b+t.cashMove); after.set(t,b); dayEnd[t.ds]=b;
+    });
+    return {opening, closing:b, after, dayEnd};
+  },[txns,accounts,fAcc,fromN,toN]);
+  const withBal=filtered.map(t=>({...t,runBal:book.after.get(t)??book.opening}));
 
   // Day Book — group by day; per-day net + cumulative ledger
   const daybook=useMemo(()=>{
@@ -3365,13 +3412,14 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
       map[t.ds].entries.push(t);
       if(t.dr) map[t.ds].pay+=t.amount; else map[t.ds].rec+=t.amount;
     });
-    let r=0;
-    return Object.values(map).sort((a,b)=>a.ds-b.ds).map(d=>{r+=d.rec-d.pay;return{...d,runBal:r};});
-  },[filtered]);
+    // din ke aakhir ka asli balance (us din ki chhupi row samet)
+    return Object.values(map).sort((a,b)=>a.ds-b.ds).map(d=>({...d,runBal:book.dayEnd[d.ds]??book.opening}));
+  },[filtered,book]);
 
   const totalRec=filtered.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
   const totalPay=filtered.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
   const balance=totalRec-totalPay;
+  const closing=book.closing;   // FIN-10: khaate ka asli closing (opening + saari entries)
 
   // ── Exports ──────────────────────────────────────────────────
   const dlExcel=()=>{
@@ -3379,25 +3427,27 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
       downloadCSV(`CashBook_${fFrom||"all"}_${fTo||"all"}.csv`,[
         ["Company — Cash Book"],[`Generated: ${new Date().toLocaleDateString("en-IN")}`],[],
         ["Date","Party","Description","Account","Head","MOP","Receipt","Payment","Balance"],
+        ["","",t("common.opening_balance"),"","","","","",book.opening],
         ...withBal.map(e=>[e.date,e.party||"",e.sub,e.account,e.type,e.mop,!e.dr?e.amount:"",e.dr?e.amount:"",e.runBal]),
-        [],["","","","","","","TOTAL",totalRec,totalPay,balance],
+        [],["","","","","","TOTAL",totalRec,totalPay,closing],
       ]);
     }else{
       downloadCSV(`DayBook_${fFrom||"all"}_${fTo||"all"}.csv`,[
         ["Company — Day Book"],[`Generated: ${new Date().toLocaleDateString("en-IN")}`],[],
         ["Date","Receipts","Payments","Day Balance","Ledger Balance","Entries"],
+        [t("common.opening_balance"),"","","",book.opening,""],
         ...daybook.map(d=>[d.date,d.rec,d.pay,d.rec-d.pay,d.runBal,d.entries.map(e=>e.sub).join(" | ")]),
-        [],["TOTAL",totalRec,totalPay,balance,balance,""],
+        [],["TOTAL",totalRec,totalPay,balance,closing,""],
       ]);
     }
   };
   const printOut=()=>{
     if(view==="cashbook"){
       const rows=withBal.map(e=>`<tr><td>${e.date}</td><td style="font-weight:600">${e.party||"—"}</td><td>${e.sub||""}</td><td>${e.account||""}</td><td>${e.type||""}</td><td>${e.mop||""}</td><td class="r" style="color:#059669">${!e.dr?"₹"+fmtN(e.amount):""}</td><td class="r" style="color:#DC2626">${e.dr?"₹"+fmtN(e.amount):""}</td><td class="r" style="font-weight:700;color:${e.runBal>=0?"#2563EB":"#DC2626"}">${fmtS(e.runBal)}</td></tr>`).join("");
-      printHTML("Cash Book — Company",`<h2>Cash Book</h2><table><tr><th>Date</th><th>Party</th><th>Description</th><th>Account</th><th>Head</th><th>MOP</th><th class="r">Receipt ₹</th><th class="r">Payment ₹</th><th class="r">Balance ₹</th></tr>${rows}<tr style="font-weight:800;background:#F1F5F9"><td colspan="6" style="text-align:right">TOTAL</td><td class="r" style="color:#059669">₹${fmtN(totalRec)}</td><td class="r" style="color:#DC2626">₹${fmtN(totalPay)}</td><td class="r" style="color:${balance>=0?"#2563EB":"#DC2626"}">${fmtS(balance)}</td></tr></table>`);
+      printHTML("Cash Book — Company",`<h2>Cash Book</h2><table><tr><th>Date</th><th>Party</th><th>Description</th><th>Account</th><th>Head</th><th>MOP</th><th class="r">Receipt ₹</th><th class="r">Payment ₹</th><th class="r">Balance ₹</th></tr><tr style="background:#F8F9FB"><td colspan="8" style="font-style:italic;color:#6B7280">${t("common.opening_balance")}</td><td class="r" style="font-weight:700;color:${book.opening>=0?"#2563EB":"#DC2626"}">${fmtS(book.opening)}</td></tr>${rows}<tr style="font-weight:800;background:#F1F5F9"><td colspan="6" style="text-align:right">TOTAL</td><td class="r" style="color:#059669">₹${fmtN(totalRec)}</td><td class="r" style="color:#DC2626">₹${fmtN(totalPay)}</td><td class="r" style="color:${closing>=0?"#2563EB":"#DC2626"}">${fmtS(closing)}</td></tr></table>`);
     }else{
       const rows=daybook.map(d=>`<tr style="background:#F0F4FF;font-weight:700"><td>${d.date}</td><td>${d.entries.length} entr${d.entries.length>1?"ies":"y"}</td><td class="r" style="color:#059669">${d.rec>0?"₹"+fmtN(d.rec):"—"}</td><td class="r" style="color:#DC2626">${d.pay>0?"₹"+fmtN(d.pay):"—"}</td><td class="r" style="color:${(d.rec-d.pay)>=0?"#059669":"#DC2626"}">${fmtS(d.rec-d.pay)}</td><td class="r" style="color:${d.runBal>=0?"#2563EB":"#DC2626"}">${fmtS(d.runBal)}</td></tr>`+d.entries.map(e=>`<tr><td></td><td style="padding-left:20px">${e.sub||""}</td><td class="r" style="color:#059669">${!e.dr?"₹"+fmtN(e.amount):""}</td><td class="r" style="color:#DC2626">${e.dr?"₹"+fmtN(e.amount):""}</td><td></td><td></td></tr>`).join("")).join("");
-      printHTML("Day Book — Company",`<h2>Day Book</h2><table><tr><th>Date</th><th>Summary</th><th class="r">Receipt ₹</th><th class="r">Payment ₹</th><th class="r">Day Bal ₹</th><th class="r">Ledger Bal ₹</th></tr>${rows}<tr style="font-weight:800;background:#F1F5F9"><td colspan="2" style="text-align:right">TOTAL</td><td class="r" style="color:#059669">₹${fmtN(totalRec)}</td><td class="r" style="color:#DC2626">₹${fmtN(totalPay)}</td><td class="r" style="color:${balance>=0?"#059669":"#DC2626"}">${fmtS(balance)}</td><td class="r" style="color:${balance>=0?"#2563EB":"#DC2626"}">${fmtS(balance)}</td></tr></table>`);
+      printHTML("Day Book — Company",`<h2>Day Book</h2><table><tr><th>Date</th><th>Summary</th><th class="r">Receipt ₹</th><th class="r">Payment ₹</th><th class="r">Day Bal ₹</th><th class="r">Ledger Bal ₹</th></tr><tr style="background:#F8F9FB"><td colspan="5" style="font-style:italic;color:#6B7280">${t("common.opening_balance")}</td><td class="r" style="font-weight:700;color:${book.opening>=0?"#2563EB":"#DC2626"}">${fmtS(book.opening)}</td></tr>${rows}<tr style="font-weight:800;background:#F1F5F9"><td colspan="2" style="text-align:right">TOTAL</td><td class="r" style="color:#059669">₹${fmtN(totalRec)}</td><td class="r" style="color:#DC2626">₹${fmtN(totalPay)}</td><td class="r" style="color:${balance>=0?"#059669":"#DC2626"}">${fmtS(balance)}</td><td class="r" style="color:${closing>=0?"#2563EB":"#DC2626"}">${fmtS(closing)}</td></tr></table>`);
     }
   };
 
@@ -3454,6 +3504,13 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
             ))}
           </div>
           <div style={{flex:1,overflowY:"auto"}}>
+            {/* FIN-10: shuruaati balance — khaate ka opening (+ "Se" tareekh se pehle ki entries) */}
+            {(withBal.length>0||book.opening!==0)&&(
+              <div style={{display:"grid",gridTemplateColumns:CB_COLS,padding:"8px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:T.surfaceB}}>
+                <span style={{gridColumn:"1/9",fontSize:12,fontStyle:"italic",fontWeight:600,color:T.t3}}>{t("common.opening_balance")}</span>
+                <span style={{fontSize:12,fontWeight:700,color:book.opening>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(book.opening)}</span>
+              </div>
+            )}
             {withBal.map((e,i)=>(
               <div key={e.id||i} style={{display:"grid",gridTemplateColumns:CB_COLS,padding:"8px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:T.surfaceB,borderLeft:`3px solid ${!e.dr?T.grn:T.red}55`}}>
                 <span style={{fontSize:11,color:T.t4,fontWeight:500,whiteSpace:"nowrap"}}>{e.date}</span>
@@ -3474,7 +3531,7 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
             <span/>
             <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(totalPay)}</span>
-            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(balance)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:closing>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(closing)}</span>
           </div>
         </div>
       )}
@@ -3488,6 +3545,12 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
             ))}
           </div>
           <div style={{flex:1,overflowY:"auto"}}>
+            {(daybook.length>0||book.opening!==0)&&(
+              <div style={{display:"grid",gridTemplateColumns:DB_COLS,padding:"8px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:T.surfaceB}}>
+                <span style={{gridColumn:"1/8",fontSize:12,fontStyle:"italic",fontWeight:600,color:T.t3}}>{t("common.opening_balance")}</span>
+                <span style={{fontSize:12.5,fontWeight:800,color:book.opening>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(book.opening)}</span>
+              </div>
+            )}
             {daybook.map((day,di)=>(
               <div key={day.ds}>
                 <div style={{display:"grid",gridTemplateColumns:DB_COLS,padding:"8px 14px",gap:6,background:di%2===0?"#F0F4FF":"#E8F5E9",borderBottom:`1px solid ${T.b1}`,borderLeft:`4px solid ${T.blu}`}}>
@@ -3524,7 +3587,7 @@ function CashDayBook({ txns, accounts=[], view="cashbook" }){ // view driven by 
             <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(totalPay)}</span>
             <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.grn:T.red,textAlign:"right"}}>{fmtS(balance)}</span>
-            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(balance)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:closing>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(closing)}</span>
           </div>
         </div>
       )}
@@ -3813,7 +3876,9 @@ function FinanceModule(){
       "subcon_expense","wallet_payment","wallet_topup","bank_transfer"];
     // settle_out mirrors party_payment (out-like −), settle_in mirrors receipt
     // (in-like +) — only for the list's +/− display; no cash is actually moved.
-    const isDebit=BACK_DEBIT.includes(t.type)||t.type==="settle_out"||t.dr===true||(!t.type&&t.dr);
+    // FIN-10: bank transfer ka IN leg ("Bank Transfer IN…", jis khaate me paisa
+    // aaya) + hai — pehle dono leg − (payment) dikhte the.
+    const isDebit=(BACK_DEBIT.includes(t.type)&&!(t.type==="bank_transfer"&&/^bank transfer in/i.test(String(t.description||""))))||t.type==="settle_out"||t.dr===true||(!t.type&&t.dr);
     return {
       id:t.id,
       date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
@@ -3856,6 +3921,10 @@ function FinanceModule(){
       // already left the company at TOP-UP time, so these rows must NOT hit
       // the company Cash Book / Day Book again (double-count).
       walletSpend:!!t.paid_via_staff_id,
+      // FIN-10: company khaate par asli asar (utils/accountBalance ka niyam) —
+      // Cash Book / Day Book / unke tiles isi se. 0 = koi khaata nahi hila.
+      account_id:t.account_id??null,
+      cashMove:cashMoveOf(t),
     };
   };
 
@@ -3938,6 +4007,8 @@ function FinanceModule(){
     // live_balance is backend-computed from transactions (drift-proof).
     // ?? not || so a genuine 0 / negative balance isn't discarded.
     balance:parseFloat(a.live_balance ?? a.current_balance ?? a.balance ?? 0)||0,
+    // FIN-10: khaate ka asli opening (Settings → Bank) — Cash Book yahin se shuru
+    opening:parseFloat(a.opening_balance)||0,
     color:a.type==="bank"||a.account_type==="bank"?C.p:
           a.type==="cash"||a.account_type==="cash"?C.g:C.teal,
   });
@@ -4199,20 +4270,20 @@ function FinanceModule(){
   // subcon_expense, sales_invoice, material_return) are liabilities /
   // invoices, not cash events — they live in Pending Payments / Billed
   // Material until a Payment Out / Receipt is posted against them.
-  const CASH_TXN_TYPES_RAW = ["receipt","payment","party_payment","site_expense","bank_transfer","wallet_payment","wallet_topup"];
   // Company Cash Book = COMPANY account movements only. Wallet-origin spends
-  // (walletSpend — staff paying from their imprest) are excluded: that cash
-  // already left the company when the wallet was topped up, so counting the
-  // spend again double-debits the company balance. Wallet spends stay visible
-  // in Fin Activity and in the staff-wallet ledger.
-  const isCashEvent = (t) => !t.walletSpend && (CASH_TXN_TYPES_RAW.includes(t.txnType||"") ||
-    ["Payment In","Payment Out","Party Payment","Site Expense","Bank Transfer","Wallet Payment","Wallet Top-up"].includes(t.type));
+  // (staff paying from their imprest, koi khaata nahi) aate hi nahi: that cash
+  // already left the company when the wallet was topped up. Wallet spends stay
+  // visible in Fin Activity and in the staff-wallet ledger.
+  // FIN-10: pehchan paid_via_staff_id se nahi, khaate par asli asar (cashMove,
+  // utils/accountBalance) se — staff ki jama ki hui "Bank Transfer IN" (khaata
+  // bhi, staff bhi) pehle gayab thi aur transfer ka IN leg payment ginta tha.
+  const isCashEvent = (t) => t.account_id!=null && (t.cashMove||0)!==0;
   const cbTxnsBase=activeTxns.length>0
     ? activeTxns.filter(isCashEvent)
     : TRANSACTIONS_DATA.filter(isCashEvent);
   const cbTxns=cbTxnsBase;
-  const cbIn=cbTxns.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
-  const cbOut=cbTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+  const cbIn=cbTxns.reduce((s,t)=>s+(t.cashMove>0?t.cashMove:0),0);
+  const cbOut=cbTxns.reduce((s,t)=>s+(t.cashMove<0?-t.cashMove:0),0);
 
   const TILE_SETS={
     party:[
@@ -4228,17 +4299,18 @@ function FinanceModule(){
       {l:t("finance.net_cash_flow"),v:`₹${fmt(Math.abs(netFlow))}`,sub:netFlow>=0?"Surplus":"Deficit",Icon:IcPulse,c:netFlow>=0?T.grn:T.red,bg:netFlow>=0?T.grnL:T.redL,brd:netFlow>=0?T.grnM:T.redM},
     ],
     cashbook:(()=>{
-      // Closing Balance = THE actual cash-in-hand right now = live sum of
-      // every account + every staff wallet. Opening is back-calculated
-      // (Closing − Receipts + Payments) so the row stays internally
-      // consistent (Opening + In − Out = Closing) without double-counting.
+      // Cash in hand = THE actual cash right now = live sum of every account +
+      // every staff wallet. FIN-10: Opening = khaaton ka asli opening_balance
+      // (pehle Closing − Receipts + Payments se ulta nikalte the, jo wallets aur
+      // galat Cash Book dono ki galti utha leta tha). Ab
+      // Opening + Receipts − Payments = khaaton ka jod (totalBal) — exact.
       const cashInHand=totalBal+totalWalletBal;        // bank + cash + wallets
-      const openingBal=cashInHand-cbIn+cbOut;
+      const openingBal=r2c(activeAccounts.reduce((s,a)=>s+(Number(a.opening)||0),0));
       const sgn=(n)=>`${n<0?"-₹":"₹"}${fmt(Math.abs(n))}`;
       return [
         {l:t("common.opening_balance"),v:sgn(openingBal),sub:t("finance.before_period_all_accounts"),Icon:IcBank,c:openingBal>=0?T.blu:T.red,bg:openingBal>=0?T.bluL:T.redL,brd:openingBal>=0?T.bluM:T.redM},
-        {l:t("finance.total_receipts"),v:`₹${fmt(cbIn)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>!t.dr).length }),Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
-        {l:t("finance.total_payments"),v:`₹${fmt(cbOut)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>t.dr).length }),Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
+        {l:t("finance.total_receipts"),v:`₹${fmt(cbIn)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>t.cashMove>0).length }),Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
+        {l:t("finance.total_payments"),v:`₹${fmt(cbOut)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>t.cashMove<0).length }),Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
         // Split shown so it's obvious how much is COMPANY money (bank+cash)
         // vs money sitting in staff wallets — avoids "balance kyu kam hai"
         // confusion now that wallet spends don't touch the company book.
