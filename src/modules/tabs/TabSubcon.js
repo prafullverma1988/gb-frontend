@@ -2227,8 +2227,9 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
       subcon_name:     form.subcon_name,
       subcon_category: form.subcon_category,
       description:     form.description,
-      retention_pct:   parseFloat(form.retention_pct||5),
-      tds_pct:         parseFloat(form.tds_pct||2),
+      // 0% bhi sachchi value (SUB-04) — khaali chhoda to server default (5% / 2%)
+      retention_pct:   form.retention_pct === "" ? undefined : parseFloat(form.retention_pct),
+      tds_pct:         form.tds_pct === "" ? undefined : parseFloat(form.tds_pct),
       start_date:      form.start_date||null,
       end_date:        form.end_date||null,
       sections: finalSections.map(s=>({
@@ -3573,8 +3574,8 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
     subcon_name: wo.subcon_name||"",
     subcon_category: wo.subcon_category||"Civil",
     description: wo.description||"",
-    retention_pct: wo.retention_pct||5,
-    tds_pct: wo.tds_pct||2,
+    retention_pct: wo.retention_pct ?? 5, // 0% ko 5% nahi banana (SUB-04)
+    tds_pct: wo.tds_pct ?? 2,
     start_date: wo.start_date ? wo.start_date.split("T")[0] : "",
     end_date: wo.end_date ? wo.end_date.split("T")[0] : "",
     status: wo.status||"Active",
@@ -4043,8 +4044,10 @@ function WoItemOptions({ woId, fmtC }) {
 function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onClose, onSave }) {
   const woId   = wo?.id;
   const method = wo?.billing_method || "manual";
-  const retPct = parseFloat(wo?.retention_pct || 5);
-  const tdsPct = parseFloat(wo?.tds_pct || 2);
+  // WO ka 0% bhi 0 hi rahe (SUB-04) — pehle `|| 5` 0 ko 5% bana deta tha
+  const pctOf = (v, d) => { const n = parseFloat(v); return Number.isFinite(n) ? n : d; };
+  const retPct = pctOf(wo?.retention_pct, 5);
+  const tdsPct = pctOf(wo?.tds_pct, 2);
 
   // ── Form state ─────────────────────────────────────────────────────────
   const [billDate,      setBillDate]      = useState(localYMD());
