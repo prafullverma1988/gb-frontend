@@ -2064,7 +2064,9 @@ function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems, b
       unit: form.unit.trim() || null,
       qty: form.qty, rate: form.rate,
       item_type: form.item_type,
-      quoted_rate: form.quoted_rate === "" ? null : form.quoted_rate,
+      // Apna rate sirf item-rate tender me — field bhi wahi dikhta hai. Pehle
+      // percentage tender ka form bhi null bhejta tha aur item ka rate mit jaata (TND-01).
+      ...(isItemRate ? {quoted_rate: form.quoted_rate === "" ? null : form.quoted_rate} : {}),
       substitutes_item_id: form.item_type === "substituted" && form.substitutes_item_id
         ? Number(form.substitutes_item_id) : null,
       approval_ref: form.approval_ref.trim() || null,
