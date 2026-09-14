@@ -539,6 +539,8 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{to.main}</div>
                   <div style={{ fontSize: 10.5, color: T.t4 }}>{to.sub}{v.to_custodian_name ? ` · ${v.to_custodian_name}` : ""}</div>
+                  {/* Isi voucher ka jo abhi wapas nahi aaya — server voucher history se ginta hai */}
+                  {v.outstanding_qty != null && <div style={{ fontSize: 10.5, color: T.red }}>{t("assets.overdue_left", { n: fmtN(v.outstanding_qty) })}</div>}
                 </div>
                 <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(v.expected_return_date)}</span>
                 <span><Pill label={t("assets.days_overdue", { n: N(v.days_overdue) })} c={T.red} bg={T.redL} /></span>
@@ -1217,7 +1219,7 @@ function ImportModal({ open, onClose, onDone }) {
 // ══════════════════════════════════════════════════════════════════
 const newGrnLine = () => ({ mode: "existing", asset_item_id: "", name: "", spec: "", unit: "Nos", tracking_mode: "bulk", category_id: "", code: "", qty: "", rate: "" });
 
-function GrnForm({ open, meta, pickers, cats, onClose, onSaved }) {
+function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
   const toast = useToast();
   const [f, setF] = useState({});
   const [lines, setLines] = useState([newGrnLine()]);
@@ -1226,13 +1228,20 @@ function GrnForm({ open, meta, pickers, cats, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // GRN sirf apne store me — server bhi yahi rokta hai (asset incharge /
+  // storekeeper, ya admin/approve ko sab). Issue form jaisa hi filter.
+  const allWh = (meta && meta.warehouses) || [];
+  const myWhIds = (meta && meta.my_warehouse_ids) || [];
+  const whOptions = canAll ? allWh : allWh.filter((w) => myWhIds.includes(w.id));
+
   useEffect(() => {
     if (!open) return;
-    const def = ((meta && meta.warehouses) || []).find((w) => w.is_default) || ((meta && meta.warehouses) || [])[0];
+    const def = whOptions.find((w) => w.is_default) || whOptions[0];
     setF({ warehouse_id: def ? String(def.id) : "", date: todayStr(), party_id: "", vendor_name: "", invoice_no: "", invoice_date: "", remarks: "" });
     setLines([newGrnLine()]); setError(""); setVendorMode("party");
     api.get("/assets/items?tracking=bulk").then((r) => setBulkItems(r && r.success ? r.data || [] : [])).catch(() => setBulkItems([]));
-  }, [open, meta]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, meta, canAll]);
 
   const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const updLine = (i, v) => setLines((p) => p.map((l, j) => (j === i ? v : l)));
@@ -1274,12 +1283,13 @@ function GrnForm({ open, meta, pickers, cats, onClose, onSaved }) {
 
   return (
     <Modal open={open} onClose={onClose} width={920} title={t("assets.grn_new")} sub={t("assets.grn_new_sub")}
-      footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy}>{busy ? t("assets.saving") : t("assets.grn_save")}</Btn></>}>
+      footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy || !whOptions.length}>{busy ? t("assets.saving") : t("assets.grn_save")}</Btn></>}>
+      {!whOptions.length && <Notice tone="warn">{t("assets.issue_no_warehouse")}</Notice>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
         <Field label={t("assets.warehouse")}>
           <select value={f.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
             <option value="">{t("assets.select")}</option>
-            {((meta && meta.warehouses) || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            {whOptions.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
         </Field>
         <Field label={t("assets.date")}><input type="date" value={f.date || ""} onChange={(e) => upd("date", e.target.value)} style={inp} /></Field>
@@ -2573,7 +2583,14 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
               </Row>
               {(v.items || []).map((ln) => {
                 const c = cellOf(ln);
-                const sg = N(ln.system_good), sd = N(ln.system_damaged);
+                // System: save ho chuki line par wahi jo save ke waqt ledger me tha; bina
+                // gini ya abhi badli line par ledger ka abhi ka stock — save hote hi server
+                // wahi likhta hai. Isliye ginti ke beech hua issue/return farq nahi banata.
+                const hasCur = draft && ln.current_good != null;
+                const saved = ln.counted_good != null, edited = !!edit[ln.id];
+                const useCur = hasCur && (edited || !saved);
+                const sg = useCur ? N(ln.current_good) : N(ln.system_good), sd = useCur ? N(ln.current_damaged) : N(ln.system_damaged);
+                const movedAfter = hasCur && saved && !edited && (N(ln.current_good) !== N(ln.system_good) || N(ln.current_damaged) !== N(ln.system_damaged));
                 const counted = c.g !== "";
                 const cg = counted ? Number(c.g) : 0, cd = counted ? (c.d === "" ? 0 : Number(c.d)) : 0;
                 const net = counted ? (cg + cd) - (sg + sd) : null;
@@ -2589,6 +2606,7 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
                     <div>
                       <div style={{ fontWeight: 600 }}>{fmtN(sg)}</div>
                       {sd > 0 && <div style={{ fontSize: 10.5, color: T.amb }}>{fmtN(sd)} {t("assets.damaged").toLowerCase()}</div>}
+                      {movedAfter && <div style={{ fontSize: 10, color: T.amb }}>{t("assets.verify_moved_after_count", { n: fmtN(N(ln.current_good) + N(ln.current_damaged)) })}</div>}
                     </div>
                     <div>
                       <div style={{ display: "flex", gap: 4 }}>
@@ -2761,7 +2779,11 @@ function RentTab({ refreshKey }) {
                 <span style={{ fontWeight: 700, color: T.t1 }}>{rupee(l.amount)}</span>
                 <span style={{ fontSize: 11.5, color: T.t3 }}>{l.project_name || "—"}</span>
                 <span style={{ fontSize: 11.5, color: T.t3 }}>{l.custodian_name || "—"}</span>
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(l.since_date)}</span>
+                <div style={{ fontSize: 11.5, color: T.t3 }}>
+                  {fmtD(l.since_date)}
+                  {/* Rent ab har lot ka alag — period me wapas/aage gaya ho to kab tak raha */}
+                  {l.out_date && <div style={{ fontSize: 10.5, color: T.t4 }}>{t("assets.rent_left_on", { date: fmtD(l.out_date) })}</div>}
+                </div>
               </Row>
             ))}
           </Scroll>
@@ -3017,7 +3039,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
       )}
       {itemFull && <ItemDrawer item={itemFull} cats={cats} canEdit={canEdit} onClose={() => setOpenItem(null)} onChanged={refresh} onOpenVoucher={setVoucherId} />}
 
-      <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} onClose={() => setGrnOpen(false)} onSaved={refresh} />
+      <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} canAll={isAdmin || canApprove} onClose={() => setGrnOpen(false)} onSaved={refresh} />
       <IssueForm open={issueOpen} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setIssueOpen(false)} onSaved={refresh} />
       <MoveForm open={!!moveKind} kind={moveKind || "transfer"} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setMoveKind(null)} onSaved={refresh} />
       <AddAssetForm open={addOpen} meta={meta} pickers={pickers} cats={cats} me={me} onClose={() => setAddOpen(false)} onSaved={refresh} />
