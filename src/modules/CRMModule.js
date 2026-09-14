@@ -76,6 +76,9 @@ const STAGES=[
   {id:"lost",     get label() { return t("crm.lost"); },       color:"#6B7280", bg:"#F1F5F9", get desc() { return t("crm.not_interested"); }},
   {id:"project",  get label() { return t("crm.converted_to_project"); }, color:"#1565C0", bg:"#E3F2FD", get desc() { return t("crm.active_project"); }},
 ];
+// Kanban ke ← → sirf is seedhi pipeline me chalte hain. Lost aur "project"
+// (convert ho chuka) is line me nahi — wahan arrow nahi (CRM-07).
+const PIPELINE_IDS=["soft_lead","lead","followup","proposal","converted"];
 
 const SOURCES=["Direct Call","Reference","Site Visit","Facebook Ad","Instagram","Google","Newspaper","Banner","Just Dial","Builder Fair","Other"];
 const PROJ_TYPES=["Residential","Commercial","Industrial","Interior","Renovation","Bungalow","Apartment","Villa","Township","Other"];
@@ -308,6 +311,8 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
   const isOverdue=diff!==null&&diff<0;
   const isToday=diff===0;
   const isDueSoon=diff!==null&&diff>0&&diff<=2;
+  // Solar lead ki apni stage-flow (drawer me) hai — Kanban arrow sirf construction lead par.
+  const pipeIdx=lead._type==="solar"?-1:PIPELINE_IDS.indexOf(lead.stage);
   const stage=STAGES.find(s=>s.id===lead.stage);
   const ps=PRIO_S[lead.priority]||PRIO_S["Medium"];
 
@@ -385,14 +390,18 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
             style={{width:24,height:24,borderRadius:5,background:"#DCFCE7",border:"1px solid #A7F3D0",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <IcWA size={11} color={T.wa}/>
           </button>
+          {pipeIdx>0&&(
           <button onClick={()=>onMove(lead,-1)}
             style={{width:24,height:24,borderRadius:5,background:T.surfaceB,border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}}>
             ←
           </button>
+          )}
+          {pipeIdx>=0&&pipeIdx<PIPELINE_IDS.length-1&&(
           <button onClick={()=>onMove(lead,1)}
             style={{width:24,height:24,borderRadius:5,background:T.surfaceB,border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}}>
             →
           </button>
+          )}
         </div>
       </div>
     </div>
@@ -606,11 +615,12 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
     if (!moveCityId || !moveTypeId) return;
     setMoveSaving(true);
     try {
-      await onUpdate(lead.id, {
+      const saved = await onUpdate(lead.id, {
         stage:                pendingMove.stage,
         cityId:               Number(moveCityId),
         constructionTypeId:   Number(moveTypeId),
       });
+      if (saved === false) return;
       setPendingMove(null);
       // If user was actually trying to move to "converted", surface the
       // project-creation panel now that rates are set.
@@ -3064,7 +3074,7 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
     {l:t("crm.apx_buildup_area_sq_ft"),k:"apxBuildupArea",type:"number",ph:"e.g. 2400",col:1},
     {l:t("crm.lead_source"),k:"source",type:"select",opts:SOURCES,col:1},
     {l:t("common.assigned_to"),k:"assignedTo",type:"select",opts:ASSIGNED_TO,col:1},
-    {l:t("crm.initial_stage"),k:"stage",type:"select",opts:STAGES.map(s=>s.id),col:1},
+    {l:t("crm.initial_stage"),k:"stage",type:"select",opts:STAGES.filter(s=>s.id!=="project").map(s=>s.id),col:1},
     {l:t("common.priority"),k:"priority",type:"select",opts:["High","Medium","Low"],col:1},
   ];
 
@@ -4393,20 +4403,37 @@ function CRMModule(){
     if(today&&!reminderLead) setReminderLead(today);
   },[leads,dismissedReminders]);
 
+  // Pehle STAGES ki poori list (… Converted, Lost, project) me ±1 hota tha:
+  // Converted par → Lost bana deta, Lost par → 'project' bhejta jo DB stage hi
+  // nahi (CRM-07). Ab sirf PIPELINE_IDS ke andar, solar lead par kuch nahi.
   const moveLead=(lead,dir)=>{
-    const idx=STAGES.findIndex(s=>s.id===lead.stage);
-    const newIdx=Math.min(Math.max(0,idx+dir),STAGES.length-1);
-    updateLead(lead.id,{stage:STAGES[newIdx].id});
+    if(lead._type==="solar") return;
+    const idx=PIPELINE_IDS.indexOf(lead.stage);
+    const next=idx<0?null:PIPELINE_IDS[idx+dir];
+    if(!next) return;
+    updateLead(lead.id,{stage:next});
   };
 
   const updateLead=async(id,update)=>{
+    const prev=leads.find(l=>l.id===id);
     // Optimistic update — note camelCase keys (cityId, constructionTypeId)
     // will live alongside the snake_case ones in state until the re-fetch
     // below replaces them with authoritative server values + joined names.
     setLeads(p=>p.map(l=>l.id===id?{...l,...update}:l));
     if(selLead?.id===id) setSelLead(p=>({...p,...update}));
     try{
-      await api.patch("/crm/leads/"+id,update);
+      const r=await api.patch("/crm/leads/"+id,update);
+      // api client throw nahi karta — {success:false} par badlav wapas lo aur
+      // wajah dikhao. Pehle card chupchaap laut jaata tha, koi sandesh nahi (CRM-07).
+      if(!r?.success){
+        if(prev){
+          const back=Object.fromEntries(Object.keys(update).map(k=>[k,prev[k]]));
+          setLeads(p=>p.map(l=>l.id===id?{...l,...back}:l));
+          if(selLead?.id===id) setSelLead(p=>({...p,...back}));
+        }
+        alert(r?.message||t("crm.error_saving_lead"));
+        return false;
+      }
       // Re-fetch authoritative state (with joined city_name +
       // construction_type_name + snake_case FK columns). This is what
       // makes city_id / construction_type_id propagate correctly into
@@ -4428,7 +4455,8 @@ function CRMModule(){
         const lead=leads.find(l=>l.id===id);
         if(lead) setSelectFinalLead({...lead,...update});
       }
-    }catch(e){console.error("Update lead error:",e);loadLeads();}
+      return true;
+    }catch(e){console.error("Update lead error:",e);loadLeads();return false;}
   };
 
   const addLead=async(form)=>{
