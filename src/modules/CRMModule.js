@@ -3069,8 +3069,11 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
   ];
 
   // Required gates — only name + phone are mandatory at fresh-lead time.
-  // City + Construction Type are enforced when moving to Follow Up or beyond.
-  const canSave = form.name.trim() && form.phone.trim();
+  // City + Construction Type are enforced when moving to Follow Up or beyond —
+  // aur seedha Follow Up / Proposal / Converted me banate waqt bhi (server
+  // POST par wahi niyam, CRM-05).
+  const stageNeedsCityType = ["followup","proposal","converted"].includes(form.stage);
+  const canSave = form.name.trim() && form.phone.trim() && (!stageNeedsCityType || (form.cityId && form.constructionTypeId));
   return(<>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(560px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
@@ -3122,11 +3125,15 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
         </div>
 
         {/* Soft hint — these become required at Follow-Up stage */}
-        {(!form.cityId || !form.constructionTypeId) && (
+        {(!form.cityId || !form.constructionTypeId) && (stageNeedsCityType ? (
+          <div style={{padding:"7px 10px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,fontSize:11,color:T.red,marginBottom:10}}>
+           {t("common.city")} + {t("common.construction_type")} · {t("crm.required_to_move_to")} <strong>{STAGES.find(s=>s.id===form.stage)?.label}</strong> {t("crm.so_we_can_match_the_right")}
+          </div>
+        ) : (
           <div style={{padding:"7px 10px",background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:6,fontSize:11,color:"#92400E",marginBottom:10}}>
            {t("crm.you_can_skip_city_construction_type")} <strong>{t("crm.follow_up")}</strong> {t("crm.so_the_quotation_builder_can_match")}
           </div>
-        )}
+        ))}
 
         {/* Contact date */}
         <div style={{marginBottom:10}}>
@@ -4426,17 +4433,24 @@ function CRMModule(){
 
   const addLead=async(form)=>{
     try{
+      // Form Library ki City/Construction Type chunta tha par ids bhejta hi nahi
+      // tha — lead sirf naam ke saath banta aur baad me Follow Up par atak
+      // jaata (CRM-05). Ab ids bhi jaati hain.
       const res=await api.post("/crm/leads",{
         name:form.name,phone:form.phone,email:form.email,city:form.city,
         projType:form.projType,budget:Number(form.budget)||0,source:form.source,
+        cityId:form.cityId?Number(form.cityId):null,
+        constructionTypeId:form.constructionTypeId?Number(form.constructionTypeId):null,
         plotArea:Number(form.plotArea)||0,apxBuildupArea:Number(form.apxBuildupArea)||0,
         assignedTo:teamMembers.find(m=>m.name===form.assignedTo)?.id||null,
         stage:form.stage,priority:form.priority,
         contactDate:form.contactDate||null,notes:form.notes||null,
-        tags:form.tags?form.tags.split(",").map(t=>t.trim()).filter(Boolean):[],
+        tags:form.tags?form.tags.split(",").map(x=>x.trim()).filter(Boolean):[],
       });
       if(res.success){
         loadLeads(); // Reload from API
+      }else{
+        alert(res.message||t("crm.error_saving_lead"));
       }
     }catch(e){console.error("Add lead error:",e);}
   };
