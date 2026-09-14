@@ -5691,6 +5691,7 @@ const dict = {
   "projects.hide_invoice_detail":                              "Hide invoice detail",
   "projects.in_progress":                                      "In Progress",
   "projects.inter_site_material_transfers_yahaan_dikhenge":    "Inter-site material transfers yahaan dikhenge",
+  "projects.is_category_me_photo_zaroori_nahi_lagi":           "Is category me photo zaroori hai aur entry par photo nahi — \"Ask info\" se photo mangwao, ya reject karo.",
   "projects.is_category_me_photo_zaroori_sync":                "Is category me photo zaroori — sync hone tak approve disabled.",
   "projects.is_project_ka_progress_site_photos":               "is project ka progress, site photos aur apni billing dekh sakte hain. Cost, budget, staff, procurement — kuch bhi unhe nahi dikhta. Ek hi client ko kai projects se joda ja sakta hai.",
   "projects.is_project_pe_koi_item_assigned":                  "Is project pe koi {item} assigned nahi — Admin ko bheja gaya",

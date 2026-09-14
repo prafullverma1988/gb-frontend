@@ -2765,6 +2765,11 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // ── Wallet approval actions (Option A: act via /wallets/* directly) ──
   const walletPhotoBlocked=(it)=>it.photo_pending && data.walletPhotoPolicy &&
     data.walletPhotoPolicy[it.is_transfer?"transfer":(it.wallet_category||"generic")]==="required";
+  // Zaroori category + koi photo hi nahi (na entry par, na upload me, na "Ask for
+  // info" ke jawab me) — server bhi approve nahi karta (WAL-06), button yahin band.
+  const walletPhotoMissing=(it,clar)=>!it.photo_url && !it.photo_pending && data.walletPhotoPolicy &&
+    data.walletPhotoPolicy[it.is_transfer?"transfer":(it.wallet_category||"generic")]==="required" &&
+    !(clar||[]).some(c=>c.photo_url);
   const removeWallet=(id)=>setData(p=>({...p,wallet:(p.wallet||[]).filter(w=>w.txn_id!==id)}));
   const walApprove=async(it)=>{
     if(walletPhotoBlocked(it)){setSaveErr("Is category me photo zaroori — sync hone tak approve disabled.");return;}
@@ -2800,10 +2805,11 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   const WCAT_LBL={site_exp:"Site Expense",party_pay:"Party Payment",salary:"Salary",petrol:"Petrol",fuel:"Diesel",service:"Service",generic:"Other"};
   const WalletApprovalCard=({item:it})=>{
     const act=acting["w"+it.txn_id];
-    const blocked=walletPhotoBlocked(it);
     // Clarification thread — admin's "Ask info" question + staff's reply.
     // Re-fetches when walletAsked[txn_id] bumps (after the admin asks).
     const [clar,setClar]=useState([]);
+    const noPhoto=walletPhotoMissing(it,clar);
+    const blocked=walletPhotoBlocked(it)||noPhoto;
     const [senderUid,setSenderUid]=useState(null); // submitter's user_id → green; approvers → blue
     const [showClar,setShowClar]=useState(false);   // conversation collapsed by default (clean)
     const askKey=walletAsked[it.txn_id]||0;
@@ -2830,7 +2836,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             {it.photo_pending&&<span style={{fontSize:9,fontWeight:700,color:T.amb,background:T.ambL,padding:"1px 7px",borderRadius:10}}>{t("projects.photo_pending")}</span>}
           </div>
         )}
-        {blocked&&<div style={{marginTop:7,fontSize:10,color:T.amb,background:T.ambL,padding:"5px 9px",borderRadius:6}}>{t("projects.is_category_me_photo_zaroori_sync")}</div>}
+        {blocked&&<div style={{marginTop:7,fontSize:10,color:T.amb,background:T.ambL,padding:"5px 9px",borderRadius:6}}>{noPhoto?t("projects.is_category_me_photo_zaroori_nahi_lagi"):t("projects.is_category_me_photo_zaroori_sync")}</div>}
         {clar.length>0&&(
           <div style={{marginTop:8,borderTop:"1px solid "+T.b1,paddingTop:7}}>
             {/* Collapsed by default — one compact row; click to expand the thread */}

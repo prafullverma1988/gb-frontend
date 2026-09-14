@@ -5689,6 +5689,7 @@ const dict = {
   "projects.hide_invoice_detail":                              "Hide invoice detail",
   "projects.in_progress":                                      "In Progress",
   "projects.inter_site_material_transfers_yahaan_dikhenge":    "Inter-site material transfers will be shown here",
+  "projects.is_category_me_photo_zaroori_nahi_lagi":           "Photo is mandatory in this category and this entry has none — ask for one with \"Ask info\", or reject.",
   "projects.is_category_me_photo_zaroori_sync":                "Photo is mandatory in this category — approval disabled until synced.",
   "projects.is_project_ka_progress_site_photos":               "Can view this project's progress, site photos, and their billing. Cost, budget, staff, procurement — nothing is visible to them. A single client can be linked to multiple projects.",
   "projects.is_project_pe_koi_item_assigned":                  "No {item} assigned to this project — sent to Admin",

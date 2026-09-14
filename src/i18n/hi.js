@@ -5688,6 +5688,7 @@ const dict = {
   "projects.hide_invoice_detail":                              "इनवॉइस डिटेल हाइड करो",
   "projects.in_progress":                                      "प्रोग्रेस में",
   "projects.inter_site_material_transfers_yahaan_dikhenge":    "इंटर-साइट मटेरियल ट्रांसफर यहां दिखेंगे",
+  "projects.is_category_me_photo_zaroori_nahi_lagi":           "इस कैटेगरी में फोटो ज़रूरी है और एंट्री पर फोटो नहीं — \"इन्फो पूछो\" से फोटो मँगवाओ, या रिजेक्ट करो।",
   "projects.is_category_me_photo_zaroori_sync":                "इस कैटेगरी में फोटो ज़रूरी — सिंक होने तक अप्रूव डिसेबल्ड है।",
   "projects.is_project_ka_progress_site_photos":               "इस प्रोजेक्ट का प्रोग्रेस, साइट फोटो और अपनी बिलिंग देख सकते हैं। कॉस्ट, बजट, स्टाफ, प्रोक्योरमेंट — कुछ भी उन्हें नहीं दिखता। एक ही क्लाइंट को कई प्रोजेक्ट्स से जोड़ा जा सकता है।",
   "projects.is_project_pe_koi_item_assigned":                  "इस प्रोजेक्ट पर कोई {item} असाइन नहीं — एडमिन को भेजा गया",
