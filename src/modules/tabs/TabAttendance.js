@@ -6,6 +6,10 @@ import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, THead } from "../shared/ui";
 import { t, Rich } from "../../i18n";
 
+// Name-wise entry ka rate. Web `dailyRate` likhta hai, mobile app `rate` —
+// sirf dailyRate padhne se app se bhari hazri web history me ₹0 dikhti thi.
+const entryRate = (e) => Number(e && (e.dailyRate || e.rate || e.daily_rate)) || 0;
+
 function TabAttendance({ project, onRequestPayment }) {
   const projectId = project?.id || 1;
 
@@ -393,7 +397,7 @@ function TabAttendance({ project, onRequestPayment }) {
   const halfCount   = mode==="name" ? todayEntries.filter(e=>e.status==="H").length : 0;
   const totalCount  = mode==="name" ? todayEntries.length : todayCountRows.reduce((s,r)=>s+(Number(r.count)||0),0);
   const totalWages  = mode==="name"
-    ? todayEntries.reduce((s,e)=>s+(e.status==="P"?Number(e.dailyRate)||0:e.status==="H"?(Number(e.dailyRate)||0)/2:0),0)
+    ? todayEntries.reduce((s,e)=>s+(e.status==="P"?entryRate(e):e.status==="H"?entryRate(e)/2:0),0)
     : todayCountRows.reduce((s,r)=>s+(Number(r.present)||0)*(Number(r.rate)||0),0);
 
   // ── Rate badge sub-component ─────────────────────────────────────
@@ -1166,7 +1170,7 @@ function TabAttendance({ project, onRequestPayment }) {
               const rHalf   =recMode==="name"?(rec.entries||[]).filter(e=>e.status==="H").length:0;
               const rTotal  =recMode==="name"?(rec.entries||[]).length:(rec.entries||[]).reduce((s,r)=>s+(Number(r.count)||0),0);
               const rWages  =recMode==="name"
-                ?(rec.entries||[]).reduce((s,e)=>s+(e.status==="P"?Number(e.dailyRate)||0:e.status==="H"?(Number(e.dailyRate)||0)/2:0),0)
+                ?(rec.entries||[]).reduce((s,e)=>s+(e.status==="P"?entryRate(e):e.status==="H"?entryRate(e)/2:0),0)
                 :(rec.entries||[]).reduce((s,r)=>s+(Number(r.present)||0)*(Number(r.rate)||0),0);
               const isExpanded = expandedHistIdx === i;
               const recId = rec.id || rec.date || i;
@@ -1215,7 +1219,7 @@ function TabAttendance({ project, onRequestPayment }) {
                                   <Pill label={e.status==="P"?t("common.present"):e.status==="H"?t("attendance.half"):t("common.absent")} c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red} bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
                                   <span style={{textAlign:"center",color:e.status!=="A"?T.t1:T.t4}}>{e.hours>0?e.hours+"h":"—"}</span>
                                   <span style={{textAlign:"center",color:T.t4}}>{e.ot>0?e.ot+"h":"—"}</span>
-                                  <span style={{textAlign:"right",fontWeight:600,color:T.t1}}>₹{e.dailyRate||0}</span>
+                                  <span style={{textAlign:"right",fontWeight:600,color:T.t1}}>₹{entryRate(e)}</span>
                                 </div>
                                 {e.status==="A" && e.remark && (
                                   <div style={{padding:"3px 8px 7px",borderBottom:`1px dashed ${T.b1}`,fontSize:11,color:T.red,fontStyle:"italic",borderLeft:`3px solid ${T.red+"55"}`}}>📝 {e.remark}</div>

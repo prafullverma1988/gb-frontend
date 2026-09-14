@@ -1196,16 +1196,22 @@ function PunchReviewStrip({onActed}){
   const [acting,setActing]=useState(null);
   const [openId,setOpenId]=useState(null);          // session whose day-timeline is expanded
   const [tl,setTl]=useState({});                    // { [sessionId]: {loading,pings} }
+  const [outTimes,setOutTimes]=useState({});        // { [sessionId]: 'HH:MM' } — reviewer ka badla hua out time
   const load=useCallback(()=>{
     api.get("/attendance-sessions/pending-review").then(r=>{
       if(r.success) setRows(r.data||[]);
     }).catch(()=>{});
   },[]);
   useEffect(()=>{load();},[load]);
+  // IST HH:MM (bhula punch-out ka out time dikhane/badalne ke liye)
+  const istHM=(d)=>d?new Date(d).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Kolkata"}):"";
   const act=async(id,action)=>{
     setActing(id);
     try{
-      const r=await api.patch(`/attendance-sessions/sessions/${id}/review`,{action});
+      // Bhule punch-out (auto-closed) par reviewer ne out time badla ho to wahi
+      // bhejo — warna GPS na hone par shift end / 12 ghante wala waqt hi rehta.
+      const body=action==="approve"&&outTimes[id]?{action,out_time:outTimes[id]}:{action};
+      const r=await api.patch(`/attendance-sessions/sessions/${id}/review`,body);
       if(r.success){ setRows(p=>p.filter(x=>x.id!==id)); onActed&&onActed(); }
       else alert(r.message||"Failed");
     }catch(e){ alert(e.message); }
@@ -1244,6 +1250,16 @@ function PunchReviewStrip({onActed}){
                   <button onClick={()=>toggleTimeline(s.id)} style={{background:"none",border:"none",color:"#0D9488",fontWeight:600,fontSize:10.5,cursor:"pointer",padding:0}}>🗺️ {openId===s.id?t("payroll.hide_timeline"):t("payroll.din_ka_timeline")}</button>
                 </div>
                 {s.out_reason&&<div style={{fontSize:10.5,color:T.t2,marginTop:2}}>📝 <b>{t("common.reason_2")}</b> {s.out_reason}</div>}
+                {!!s.auto_closed&&s.punch_out_at&&(
+                  <div style={{fontSize:10.5,color:T.t2,marginTop:3,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                    <span>{t("payroll.auto_punch_out_at",{ time: istHM(s.punch_out_at) })}</span>
+                    <label style={{display:"inline-flex",alignItems:"center",gap:4,color:T.t3}}>
+                      {t("payroll.auto_punch_out_sahi_waqt")}
+                      <input type="time" value={outTimes[s.id]??istHM(s.punch_out_at)} onChange={e=>{ const v=e.target.value; setOutTimes(p=>({...p,[s.id]:v})); }}
+                        style={{padding:"2px 5px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,fontFamily:"inherit"}}/>
+                    </label>
+                  </div>
+                )}
               </div>
               <button disabled={acting===s.id} onClick={()=>act(s.id,"reject")}
                 style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.reject")}</button>
@@ -2524,6 +2540,7 @@ function EditStaffModal({emp,onClose,onSaved}){
     bank_acc:         emp.bankAcc||"",
     ifsc:             emp.ifsc||"",
     pan:              emp.pan||"",
+    ...(emp.gender!==undefined ? { gender: emp.gender||"" } : {}),
   });
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
@@ -2559,6 +2576,17 @@ function EditStaffModal({emp,onClose,onSaved}){
             <F label={t("payroll.mobile")}><input style={inp} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder={t("payroll.10_digit")}/></F>
             <F label={t("common.email")}><input style={inp} value={form.email} onChange={e=>set("email",e.target.value)}/></F>
             <F label={t("payroll.aadhaar")}><input style={inp} value={form.aadhaar} onChange={e=>set("aadhaar",e.target.value)} placeholder={t("payroll.12_digit")}/></F>
+            {/* Gender sirf Maternity (female) / Paternity (male) leave baantne
+                ke kaam aata hai — bina bhare ye type kisi ko allocate nahi hote. */}
+            {"gender" in form && (
+              <F label={t("payroll.gender")}>
+                <select style={inp} value={form.gender} onChange={e=>set("gender",e.target.value)} title={t("payroll.gender_leave_hint")}>
+                  <option value="">{t("payroll.gender_not_set")}</option>
+                  <option value="female">{t("payroll.gender_female")}</option>
+                  <option value="male">{t("payroll.gender_male")}</option>
+                </select>
+              </F>
+            )}
             {/* Pehle yahan "Role / Designation" naam ka free-text tha jo
                 payroll_staff.role likhta tha — yaani Team & HR se kisi ka
                 designation badla hi nahi ja sakta tha, aur wo naam kahin aur
@@ -6147,6 +6175,9 @@ function PayrollModule(){
     mobile:s.phone||"",                          // contact mobile (DB column `phone`)
     email:s.email||"",
     aadhaar:s.aadhaar||"",
+    // Sirf ML/PL leave allocation ke liye. undefined = server par column abhi
+    // nahi (migration baaki) — tab form gender bhejta hi nahi.
+    gender:s.gender,
     // Phase 2 — PF configuration
     pfApplicable:s.pf_applicable===undefined?true:!!s.pf_applicable,
     pfMethod:s.pf_method||"capped_15k",
