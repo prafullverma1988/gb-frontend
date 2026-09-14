@@ -968,10 +968,16 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   const remItem=(i)=>setItems(p=>p.filter((_,j)=>j!==i));
   const addItem=()=>setItems(p=>[...p,{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
 
+  // (MAT-15) Ek material do line me ho to dono ka JOD stock se milao — pehle
+  // har line akeli milti thi, 60 + 60 (stock 60) pass ho jaata tha.
+  const wantByMat=items.reduce((acc,it)=>{
+    if(it.material_id&&Number(it.qty)>0) acc[it.material_id]=(acc[it.material_id]||0)+Number(it.qty);
+    return acc;
+  },{});
   const stockErr=items.find(it=>{
     if(!it.material_id||!it.qty)return false;
     const m=stock.find(s=>s.id===it.material_id);
-    return m&&Number(it.qty)>Number(m.qty);
+    return m&&wantByMat[it.material_id]>Number(m.qty);
   });
   const valid=!stockErr&&f.project_id&&items.some(it=>it.material_id&&Number(it.qty)>0);
   const total=items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
