@@ -2576,6 +2576,7 @@ const dict = {
   "finance.split_payment":                                     "Split payment",
   "finance.staff_wallets":                                     "Staff Wallets",
   "finance.staff_wallets_me_jaayein":                          "Go to Staff Wallets →",
+  "finance.staff_wallet_company_owes":                         "Company owes staff",
   "finance.subcon_against":                                    "Subcon Against",
   "finance.suggest_suggested_ratio":                           "~{suggest} suggested (×{ratio})",
   "finance.suggests_labelr":                                   "Suggests: {label}{r}",

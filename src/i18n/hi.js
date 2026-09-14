@@ -2575,6 +2575,7 @@ const dict = {
   "finance.split_payment":                                     "स्प्लिट पेमेंट",
   "finance.staff_wallets":                                     "स्टाफ वॉलेट्स",
   "finance.staff_wallets_me_jaayein":                          "स्टाफ वॉलेट्स में जाओ →",
+  "finance.staff_wallet_company_owes":                         "कंपनी को देना है",
   "finance.subcon_against":                                    "सब-कॉन के अगेंस्ट",
   "finance.suggest_suggested_ratio":                           "~{suggest} सजेस्टेड (×{ratio})",
   "finance.suggests_labelr":                                   "सजेस्ट करता है: {label}{r}",
