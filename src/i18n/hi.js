@@ -4584,6 +4584,7 @@ const dict = {
   "payment_request.new_request":                               "नई रिक्वेस्ट",
   "payment_request.new_request_2":                             "+ नई रिक्वेस्ट",
   "payment_request.no_payment_requests_yet":                   "अभी तक कोई पेमेंट रिक्वेस्ट नहीं है",
+  "payment_request.no_status_requests":                        "कोई {status} रिक्वेस्ट नहीं",
   "payment_request.other_payment_need":                        "अन्य पेमेंट की ज़रूरत",
   "payment_request.pay_a_subcon_for_completed_work":           "पूरे किए गए काम के लिए सब-कॉन को पेमेंट करो",
   "payment_request.payment_needed_by":                         "पेमेंट कब तक चाहिए",

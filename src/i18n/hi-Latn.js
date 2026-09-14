@@ -4587,6 +4587,7 @@ const dict = {
   "payment_request.new_request":                               "New request",
   "payment_request.new_request_2":                             "+ New Request",
   "payment_request.no_payment_requests_yet":                   "No payment requests yet",
+  "payment_request.no_status_requests":                        "Koi {status} request nahi",
   "payment_request.other_payment_need":                        "Other payment need",
   "payment_request.pay_a_subcon_for_completed_work":           "Pay a subcon for completed work",
   "payment_request.payment_needed_by":                         "Payment Needed By",
