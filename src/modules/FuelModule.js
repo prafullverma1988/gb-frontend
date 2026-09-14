@@ -893,13 +893,18 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
               <span style={{ fontSize: 11.5, color: T.t3 }}>₹{fmtN(r._k === "purchase" ? r.rate : r.rate_used)}</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(r.amount)}</span>
               <span>
+                {/* Paid/Baaki server ke EK niyam se (payable_status — bill, purana
+                    settlement, ya bill bana hi nahi). Pehle sirf settlement dekhte the:
+                    naye raaste ka pay ho chuka bill bhi "Baaki" dikhta tha. */}
                 {r._k === "issue"
                   ? <Pill label={t("fuel.stock_se")} c={T.slt} bg={T.sltL} />
                   : r.payment_mode === "cash"
                     ? <Pill label={t("common.cash")} c={T.grn} bg={T.grnL} />
-                    : r.settlement_status === "paid"
-                      ? <Pill label={t("common.paid")} c={T.grn} bg={T.grnL} />
-                      : <Pill label={t("common.baaki")} c={T.amb} bg={T.ambL} />}
+                    : r.payable_status === "paid"
+                      ? <Pill label={t("fuel.payable_paid")} c={T.grn} bg={T.grnL} />
+                      : r.payable_status === "unbilled"
+                        ? <Pill label={t("fuel.payable_unbilled")} c={T.amb} bg={T.ambL} />
+                        : <Pill label={r.payable_status === "partial" ? t("fuel.payable_partial") : t("fuel.payable_unpaid")} c={T.amb} bg={T.ambL} />}
               </span>
               <button type="button" title={t("common.delete")}
                 onClick={() => (r._k === "purchase" ? onDeletePurchase(r) : onDeleteIssue(r))}
@@ -2104,6 +2109,13 @@ function BarrelLedgerPanel({ storeId, onClose }) {
 // Sirf KHARID yahan aati hai — barrel se nikaasi ka pump se lena-dena nahi.
 const EMPTY_PF = { project_id: "", payment_mode: "", flagged: "" };
 
+// Fill ka paisa kis haal me — server ka payable_status (utils/fuelPayable.js).
+const payableLabel = (s) => (s === "cash" ? t("common.cash")
+  : s === "unbilled" ? t("fuel.payable_unbilled")
+  : s === "partial" ? t("fuel.payable_partial")
+  : s === "unpaid" ? t("fuel.payable_unpaid")
+  : t("fuel.payable_paid"));
+
 function PumpRegister({ projects, from, to, onRange }) {
   const [f, setF] = useState(EMPTY_PF);
   const [data, setData] = useState(null);
@@ -2264,7 +2276,7 @@ function PumpLedgerPanel({ vendorId, from, to, onClose }) {
     { key: "rate", label: t("common.rate"), w: 9 },
     { key: "amount", label: t("common.amount_2"), w: 12, excel: (r) => Math.round(r.amount) },
     { key: "payment", label: t("common.payment"), w: 10 },
-    { key: "status", label: t("common.status"), w: 9 },
+    { key: "status", label: t("common.status"), w: 12, excel: (r) => payableLabel(r.payable_status) },
     { key: "run_litres", label: t("fuel.ab_tak_l"), w: 11 },
     { key: "run_amount", label: t("fuel.ab_tak_rs"), w: 13, excel: (r) => Math.round(r.run_amount) },
     { key: "flag", label: t("fuel.parchi_se_farq_2"), w: 16,
@@ -2323,8 +2335,8 @@ function PumpLedgerPanel({ vendorId, from, to, onClose }) {
                   <span style={{ fontSize: 11 }}>
                     <Pill label={r.payment} c={r.payment === "Cash" ? T.grn : T.slt}
                       bg={r.payment === "Cash" ? T.grnL : T.sltL} />
-                    {r.status === "Baaki" && (
-                      <span style={{ fontSize: 9.5, color: T.amb, fontWeight: 700, marginLeft: 4 }}>BAAKI</span>
+                    {["unbilled", "unpaid", "partial"].includes(r.payable_status) && (
+                      <span style={{ fontSize: 9.5, color: T.amb, fontWeight: 700, marginLeft: 4 }}>{payableLabel(r.payable_status)}</span>
                     )}
                   </span>
                   {/* Chalta hua jod — bill milaate waqt sawaal "ab tak kitna
@@ -2694,7 +2706,11 @@ function FuelModule() {
   const stockValue = stores.reduce((a, s) => a + Number(s.value || 0), 0);
   const spendInRange = byProject.reduce((a, p) => a + Number(p.amount || 0), 0);
   const litresInRange = byProject.reduce((a, p) => a + Number(p.litres || 0), 0);
+  // Baaki = pump ko abhi dena — bill bana par pay nahi hua + bill bana hi nahi
+  // (server ka EK niyam, utils/fuelPayable.js). Bill na bana hissa Pending
+  // Payments me hota hi nahi, isliye tile par alag se likha jaata hai.
   const unpaid = byVendor.reduce((a, v) => a + Number(v.unpaid_amount || 0), 0);
+  const unbilledAmt = byVendor.reduce((a, v) => a + Number(v.unbilled_amount || 0), 0);
   // Badge ke liye alag call ki zaroorat nahi — purchases me billed_at,
   // settlement_id aur transaction_id pehle se aate hain (mit chuki cheez ki
   // link server khaali bhejta hai). Unbilled wahi jiska paisa kahin nahi laga.
@@ -2717,7 +2733,10 @@ function FuelModule() {
   const TILES = [
     { l: t("fuel.barrel_stock_2"),  v: fmtL(totalStock), sub: `${stores.length} barrel · ${fmtC(stockValue)}`, c: T.ind, I: IcDrum },
     { l: t("fuel.diesel_kharcha"), v: fmtC(spendInRange), sub: `${fmtL(litresInRange)} is duration me`, c: T.blu, I: IcDrop },
-    { l: t("fuel.vendor_baaki"),  v: fmtC(unpaid), sub: unpaid > 0 ? "Pending Payments me" : "Sab settle", c: unpaid > 0 ? T.amb : T.grn, I: IcTruck },
+    { l: t("fuel.vendor_baaki"),  v: fmtC(unpaid),
+      sub: unbilledAmt > 0 ? t("fuel.vendor_baaki_unbilled_sub", { amt: fmtC(unbilledAmt) })
+        : unpaid > 0 ? t("fuel.vendor_baaki_pending_sub") : t("fuel.sab_settle"),
+      c: unpaid > 0 ? T.amb : T.grn, I: IcTruck },
     { l: t("fuel.norm_se_zyada"), v: byEquipment.filter((e) => e.variance_pct != null && e.variance_pct > 15).length, sub: t("fuel.length_machine_ka_norm_set_nahi", { length: normMissing.length }), c: T.red, I: IcAlert },
   ];
 
