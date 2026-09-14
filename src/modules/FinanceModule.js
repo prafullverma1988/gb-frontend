@@ -3714,7 +3714,7 @@ function FinanceModule(){
   const pendPmts = (()=>{
     const today = new Date(); today.setHours(0,0,0,0);
     const fromPRs = payReqs
-      .filter(r=>r.status==="Approved" && !r.paid)
+      .filter(r=>r.status==="approved" && !r.paid)
       .map(r=>({
         id:`pr-${r.id}`,
         type:"pr",
@@ -3857,6 +3857,13 @@ function FinanceModule(){
     };
   };
 
+  // FIN-08: PR ka status DB wali English key hi rehta hai (pending / approved /
+  // rejected / paid / cancelled) — button, Pending Payments, tiles, chips sab
+  // isi se chalte hain. Tarjuma sirf dikhane ke liye (statusLabel). Pehle status
+  // me hi t() ka label rakha tha: Hindi me "पेंडिंग" !== "Pending", to ✓/✗ button,
+  // approved PR aur tiles sab gayab ho jaate the.
+  const prStatusLabel=(st)=>{const s=String(st||"").toLowerCase();
+    return s==="approved"?t("common.approved"):s==="rejected"?t("common.rejected"):s==="paid"?t("common.paid"):s==="cancelled"?t("common.cancelled"):t("common.pending");};
   const mapPayReq=r=>{
     const rawDate=r.created_at||r.date||"";
     const d=rawDate?new Date(rawDate):new Date();
@@ -3873,7 +3880,8 @@ function FinanceModule(){
       // 'paid'/'cancelled', so a paid PR reappeared as "Pending" in the list +
       // pending-approval count (the "regenerated request" bug).
       status:(()=>{const s=String(r.status||"").toLowerCase();
-        return s==="approved"?t("common.approved"):s==="rejected"?t("common.rejected"):s==="paid"?t("common.paid"):s==="cancelled"?t("common.cancelled"):t("common.pending");})(),
+        return ["approved","rejected","paid","cancelled"].includes(s)?s:"pending";})(),
+      statusLabel:prStatusLabel(r.status),
       paid:String(r.status||"").toLowerCase()==="paid",
       by:r.requested_by_name||r.requested_by||r.created_by_name||"",
       purpose:r.purpose||r.description||r.note||"",
@@ -4159,7 +4167,7 @@ function FinanceModule(){
   const tOut=txnFiltered.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
   const totalBal=activeAccounts.reduce((s,a)=>s+a.balance,0);
   const totalWalletBal=walletList.reduce((s,w)=>s+w.balance,0);
-  const pendPR=payReqs.filter(r=>r.status==="Pending").length;
+  const pendPR=payReqs.filter(r=>r.status==="pending").length;
   const pendTotal=pendPmts.reduce((s,p)=>s+p.amount,0);
 
   const allPartyTxns=activeTxns.length>0?activeTxns:Object.values(PARTY_TXNS).flat();
@@ -4171,10 +4179,10 @@ function FinanceModule(){
   const allTxnOut=activeTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
   const unpaidBills=activeTxns.filter(t=>t.status==="unpaid").reduce((s,t)=>s+t.amount,0);
   const netFlow=allTxnIn-allTxnOut;
-  const prPendAmt=payReqs.filter(r=>r.status==="Pending").reduce((s,r)=>s+r.amount,0);
-  const prApprovedAmt=payReqs.filter(r=>r.status==="Approved").reduce((s,r)=>s+r.amount,0);
-  const prRejected=payReqs.filter(r=>r.status==="Rejected").length;
-  const prRejectedAmt=payReqs.filter(r=>r.status==="Rejected").reduce((s,r)=>s+r.amount,0);
+  const prPendAmt=payReqs.filter(r=>r.status==="pending").reduce((s,r)=>s+r.amount,0);
+  const prApprovedAmt=payReqs.filter(r=>r.status==="approved").reduce((s,r)=>s+r.amount,0);
+  const prRejected=payReqs.filter(r=>r.status==="rejected").length;
+  const prRejectedAmt=payReqs.filter(r=>r.status==="rejected").reduce((s,r)=>s+r.amount,0);
   const pendPRTotal=pendPmts.filter(p=>p.type==="pr").reduce((s,p)=>s+p.amount,0);
   const pendBillDue=pendPmts.filter(p=>p.type==="bill"&&!p.overdue).reduce((s,p)=>s+p.amount,0);
   const pendOverdue=pendPmts.filter(p=>p.overdue).reduce((s,p)=>s+p.amount,0);
@@ -4483,11 +4491,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
   const dlPRcsv=()=>{
     downloadCSV("Payment_Requests.csv",[
       ["Company — Payment Requests"],["PR No.","Date","Party","Project","Amount","Status","Requested By"],
-      ...payReqs.map(r=>[r.no,r.date,r.party,r.project,r.amount,r.status,r.by]),
+      ...payReqs.map(r=>[r.no,r.date,r.party,r.project,r.amount,r.statusLabel,r.by]),
     ]);
   };
   const dlPRpdf=()=>{
-    const rowsHTML=payReqs.map(r=>`<tr><td><strong>${r.no}</strong></td><td>${r.date}</td><td>${r.party}</td><td>${r.project}</td><td style="font-weight:700">₹${fmtN(r.amount)}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:${r.status==="Approved"?"#ECFDF5":r.status==="Rejected"?"#FEF2F2":"#FFFBEB"};color:${r.status==="Approved"?"#059669":r.status==="Rejected"?"#DC2626":"#D97706"}">${r.status}</span></td><td>${r.by}</td></tr>`).join("");
+    const rowsHTML=payReqs.map(r=>`<tr><td><strong>${r.no}</strong></td><td>${r.date}</td><td>${r.party}</td><td>${r.project}</td><td style="font-weight:700">₹${fmtN(r.amount)}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:${r.status==="approved"?"#ECFDF5":r.status==="paid"?"#EFF6FF":r.status==="rejected"?"#FEF2F2":r.status==="cancelled"?"#F1F5F9":"#FFFBEB"};color:${r.status==="approved"?"#059669":r.status==="paid"?"#2563EB":r.status==="rejected"?"#DC2626":r.status==="cancelled"?"#64748B":"#D97706"}">${r.statusLabel}</span></td><td>${r.by}</td></tr>`).join("");
     printHTML("Payment Requests — Company",`<h2>Payment Requests — Company</h2><p>Total ${payReqs.length} requests</p><table><tr><th>PR No.</th><th>Date</th><th>Party</th><th>Project</th><th>Amount</th><th>Status</th><th>Requested By</th></tr>${rowsHTML}</table><p class="footer">Generated by Company</p>`);
   };
 
@@ -4508,7 +4516,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
   const approveReq=async(id)=>{
     const req=payReqs.find(r=>r.id===id);
     // Optimistic update — pendPmts derives from payReqs automatically
-    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Approved",approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}:r));
+    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"approved",statusLabel:prStatusLabel("approved"),approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}:r));
     try{
       await api.put(`/finance/payment-requests/${id}/approve`,{
         approved_amount:req?.amount||0,
@@ -4521,7 +4529,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
   };
   const rejectReq=async(id)=>{
     // Optimistic update
-    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Rejected"}:r));
+    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"rejected",statusLabel:prStatusLabel("rejected")}:r));
     try{
       await api.put(`/finance/payment-requests/${id}/approve`,{
         approved_amount:0,
@@ -5431,16 +5439,16 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 if(col==="by") return ((a.by||"")>(b.by||"")? 1:-1)*mul;
                 if(col==="priority"){const pw={High:3,Medium:2,Low:1};return((pw[a.priority||"Medium"]||2)-(pw[b.priority||"Medium"]||2))*mul;}
                 return (b.ds||0)-(a.ds||0);
-              }).filter(r=>chipPR==="All"||r.status===chipPR).filter(r=>{
+              }).filter(r=>chipPR==="All"||r.status===chipPR.toLowerCase()).filter(r=>{
                 const q=searchPR.trim().toLowerCase();
                 if(!q) return true;
                 const pi=masterParties.find(p=>p.name===r.party);
                 const pt=pi?.type||"Vendor";
-                const hay=[r.no,r.date,r.party,pt,r.project,r.purpose,r.note,r.by,r.priority,r.amount,r.status].join(" ").toLowerCase();
+                const hay=[r.no,r.date,r.party,pt,r.project,r.purpose,r.note,r.by,r.priority,r.amount,r.status,r.statusLabel].join(" ").toLowerCase();
                 return hay.includes(q);
               }).map((req,i)=>{
                 const isEditing=editReqId===req.id;
-                const sc=req.status==="Approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="Paid"?{c:T.blu,bg:T.bluL,brd:T.bluM}:req.status==="Rejected"?{c:T.red,bg:T.redL,brd:T.redM}:req.status==="Cancelled"?{c:T.t3,bg:T.sltL,brd:T.b1}:{c:T.amb,bg:T.ambL,brd:T.ambM};
+                const sc=req.status==="approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="paid"?{c:T.blu,bg:T.bluL,brd:T.bluM}:req.status==="rejected"?{c:T.red,bg:T.redL,brd:T.redM}:req.status==="cancelled"?{c:T.t3,bg:T.sltL,brd:T.b1}:{c:T.amb,bg:T.ambL,brd:T.ambM};
                 const pri=req.priority||"Medium";
                 const pm=pri==="High"?{c:T.red,bg:T.redL}:pri==="Low"?{c:T.grn,bg:T.grnL}:{c:T.amb,bg:T.ambL};
                 return(
@@ -5481,10 +5489,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         {req.originalAmt&&<div style={{fontSize:10,color:T.t4,textDecoration:"line-through"}}>₹{fmtN(req.originalAmt)}</div>}
                       </div>
                       {/* Status — soft subtle pill (no border) */}
-                      <span><span style={{fontSize:10,fontWeight:600,padding:"3px 9px",borderRadius:20,background:sc.bg,color:sc.c,whiteSpace:"nowrap"}}>{req.status}</span></span>
+                      <span><span style={{fontSize:10,fontWeight:600,padding:"3px 9px",borderRadius:20,background:sc.bg,color:sc.c,whiteSpace:"nowrap"}}>{req.statusLabel}</span></span>
                       {/* Action */}
                       <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
-                        {req.status==="Pending"&&(<>
+                        {req.status==="pending"&&(<>
                           <button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));}}}
                             style={{padding:"4px 7px",borderRadius:5,background:isEditing?T.bluL:T.sltL,color:isEditing?T.blu:T.t3,border:`1px solid ${isEditing?T.blu:T.b1}`,fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
                             <IcEdit size={10} color="currentColor"/> {t("common.edit_2")}
@@ -5492,19 +5500,19 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           <button onClick={()=>approveReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✓</button>
                           <button onClick={()=>rejectReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✗</button>
                         </>)}
-                        {req.status==="Approved"&&(
+                        {req.status==="approved"&&(
                           <div style={{display:"flex",flexDirection:"column",gap:1}}>
                             <span style={{fontSize:10,color:T.grn,fontWeight:600}}>✓ {req.approvedBy||APPROVER_NAME}</span>
                             {req.approvedDate&&<span style={{fontSize:9.5,color:T.t4}}>{req.approvedDate}</span>}
                           </div>
                         )}
-                        {req.status==="Rejected"&&(
+                        {req.status==="rejected"&&(
                           <span style={{fontSize:10.5,color:T.red,fontWeight:600}}>{t("common.rejected_2")}</span>
                         )}
                       </div>
                     </div>
                     {/* Edit panel */}
-                    {isEditing&&req.status==="Pending"&&(
+                    {isEditing&&req.status==="pending"&&(
                       <div style={{borderTop:`1px solid ${T.bluM}`,background:T.bluL,padding:"12px 14px"}}>
                         <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:10}}>{t("finance.modify_payment_before_approving")}</div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>

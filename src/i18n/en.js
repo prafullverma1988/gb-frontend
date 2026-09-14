@@ -1180,7 +1180,7 @@ const dict = {
   "common.overview":                                           "Overview",
   "common.owner_name":                                         "Owner Name",
   "common.ownership":                                          "Ownership",
-  "common.paid":                                               "→ Paid",
+  "common.paid":                                               "Paid",
   "common.partial":                                            "Partial",
   "common.party":                                              "Party",
   "common.payment":                                            "Payment",

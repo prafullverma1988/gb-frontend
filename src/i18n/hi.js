@@ -1179,7 +1179,7 @@ const dict = {
   "common.overview":                                           "ओवरव्यू",
   "common.owner_name":                                         "ओनर का नाम",
   "common.ownership":                                          "ओनरशिप",
-  "common.paid":                                               "→ पेड",
+  "common.paid":                                               "पेड",
   "common.partial":                                            "पार्शियल",
   "common.party":                                              "पार्टी",
   "common.payment":                                            "पेमेंट",
