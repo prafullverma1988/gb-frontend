@@ -636,8 +636,8 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                 )}
 
                 {/* Activity Log — full kisne kya kab kiya trail */}
-                {mr?.id && <ActivityLog entity_type="material_request" entity_id={mr.id}/>}
-                {grn?.id && <ActivityLog entity_type="grn" entity_id={grn.id}/>}
+                {mr?.id && <ActivityLog entity_type="material_request" entity_id={mr.id} suffix={mr.mr_number || "MR"}/>}
+                {grn?.id && <ActivityLog entity_type="grn" entity_id={grn.id} suffix={grn.grn_number || "GRN"}/>}
               </div>
             );
           })()}

@@ -1400,7 +1400,11 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:4}}>
           <div style={{fontSize:13.5,fontWeight:700,color:T.t1,lineHeight:1.3}}>{mr.item_name}</div>
           <div style={{textAlign:"right",flexShrink:0}}>
-            <div style={{fontSize:13,fontWeight:800,color:T.t1}}>{mr.quantity} {mr.unit}</div>
+            {/* Partial receipt: show what arrived against what was ordered —
+                a plain "100 CFT · Delivered" read as fully delivered. */}
+            <div style={{fontSize:13,fontWeight:800,color:T.t1}}>
+              {mr.mat_status==="PartialReceived" ? `${parseFloat(mr.received_qty)||0} / ${mr.quantity}` : mr.quantity} {mr.unit}
+            </div>
             <span style={{fontSize:9.5,fontWeight:700,color:sc.c,background:sc.bg,padding:"2px 7px",borderRadius:10,border:"1px solid "+sc.bdr}}>{sc.label}</span>
           </div>
         </div>
@@ -1523,9 +1527,16 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
             {acting[mr.id]==="receiving"?t("projects.marking"):t("projects.mark_as_delivered_received")}
           </button>
         )}
-        {stage==="Received"&&(
+        {stage==="Received"&&(mr.mat_status==="PartialReceived" ? (
+          <div style={{textAlign:"center",fontSize:12,color:T.amb,fontWeight:600}}>
+            {t("procurement.partial_mr_unit_still_pending", {
+              mr: Math.max(0, (parseFloat(mr.quantity)||0) - (parseFloat(mr.received_qty)||0)),
+              unit: mr.unit || "",
+            })}
+          </div>
+        ) : (
           <div style={{textAlign:"center",fontSize:12,color:T.grn,fontWeight:600}}>{t("projects.material_delivered_successfully")}</div>
-        )}
+        ))}
         {stage==="Rejected"&&(
           <div style={{textAlign:"center",fontSize:12,color:T.red,fontWeight:600}}>{t("projects.request_rejected")}</div>
         )}

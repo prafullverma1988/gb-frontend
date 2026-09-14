@@ -88,6 +88,28 @@ function DualUnitToggle({ units, primaryUnit, itemName, qty, value, onChange }) 
   );
 }
 
+// One MR → Requests-card mapper. This used to be copy-pasted in three places
+// (initial load + two post-save reloads), and all three put the ORDERED
+// quantity under a plain "Received" pill — so an MR ordered 100 with only 40
+// arrived showed "100 CFT · Received". A partially received MR now shows
+// "received / ordered" plus a Partial % badge, the same way Procurement does.
+function toMrCard(m) {
+  const ordered   = parseFloat(m.quantity) || 0;
+  const received  = parseFloat(m.received_qty) || 0;
+  const unit      = m.unit || "";
+  const isPartial = m.mat_status === "PartialReceived";
+  return {
+    id: m.id, name: m.item_name,
+    qty: isPartial ? `${received} / ${ordered} ${unit}` : `${ordered} ${unit}`,
+    partialPct: isPartial && ordered > 0 ? Math.round((received / ordered) * 100) : null,
+    stage: m.stage || "Requested",
+    by: m.requested_by || "Site Team",
+    date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
+    vendor: m.linked_vendor || null,
+    amt: parseFloat(m.approx_amount) || 0,
+  };
+}
+
 function TabMaterial({ project }) {
   const projectId   = project?.id || 1;
   const projectName = project?.name || "Project";
@@ -279,15 +301,7 @@ function TabMaterial({ project }) {
       api.get("/procurement/grns?project_id=" + projectId),
     ]).then(([mrRes, grnRes]) => {
       const mrEntries = (mrRes.success && Array.isArray(mrRes.data))
-        ? mrRes.data.map(m => ({
-            id: m.id, name: m.item_name,
-            qty: (parseFloat(m.quantity)||0) + " " + (m.unit||""),
-            stage: m.stage || "Requested",
-            by: m.requested_by || "Site Team",
-            date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
-            vendor: m.linked_vendor || null,
-            amt: parseFloat(m.approx_amount) || 0,
-          }))
+        ? mrRes.data.map(toMrCard)
         : [];
 
       // Build a set of all MR material names BEFORE building direct entries.
@@ -510,14 +524,7 @@ function TabMaterial({ project }) {
         }).catch(() => {});
         api.get("/procurement/mrs?project_id=" + projectId).then(res2 => {
           if (res2.success && Array.isArray(res2.data)) {
-            setMaterials(res2.data.map(m => ({
-              id: m.id, name: m.item_name,
-              qty: (parseFloat(m.quantity)||0) + " " + (m.unit||""),
-              stage: m.stage || "Requested",
-              by: m.requested_by || "Site Team",
-              date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
-              vendor: m.linked_vendor || null, amt: parseFloat(m.approx_amount) || 0,
-            })));
+            setMaterials(res2.data.map(toMrCard));
           }
         }).catch(() => {});
       }
@@ -573,14 +580,7 @@ function TabMaterial({ project }) {
     }).catch(() => {});
     api.get("/procurement/mrs?project_id=" + projectId).then(res2 => {
       if (res2.success && Array.isArray(res2.data)) {
-        setMaterials(res2.data.map(m => ({
-          id: m.id, name: m.item_name,
-          qty: (parseFloat(m.quantity)||0) + " " + (m.unit||""),
-          stage: m.stage || "Requested",
-          by: m.requested_by || "Site Team",
-          date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—",
-          vendor: m.linked_vendor || null, amt: parseFloat(m.approx_amount) || 0,
-        })));
+        setMaterials(res2.data.map(toMrCard));
       }
     }).catch(() => {});
     setGrnSaving(false);
@@ -1636,6 +1636,7 @@ function TabMaterial({ project }) {
                     </div>
                     <div style={{fontSize:20,fontWeight:800,color:T.t1,marginBottom:2}}>{m.qty}</div>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
+                      {m.partialPct!=null&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"#FEF3C7",color:"#B45309",border:"1px solid #FDE68A"}}>{t("procurement.partial_pct", { pct: m.partialPct })}</span>}
                       {m.vendor&&<span style={{fontSize:11,color:T.blu}}>🏪 {m.vendor}</span>}
                       {m.isDirect&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"#DCFCE7",color:"#16A34A",border:"1px solid #BBF7D0"}}>{t("projects.direct")}</span>}
                       {m.isViaBill&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"#FEF3C7",color:"#92400E",border:"1px solid #FDE68A"}}>{t("material.via_bill")}</span>}
@@ -1665,7 +1666,9 @@ function TabMaterial({ project }) {
                   onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                   onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                   <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{m.name}</span>
-                  <span style={{fontSize:12,color:T.t2}}>{m.qty}</span>
+                  <span style={{fontSize:12,color:T.t2}}>{m.qty}
+                    {m.partialPct!=null&&<div style={{fontSize:9,fontWeight:700,color:"#B45309"}}>{t("procurement.partial_pct", { pct: m.partialPct })}</div>}
+                  </span>
                   <Pill label={m.stage} c={ss.c} bg={ss.bg}/>
                   <span style={{fontSize:12,color:T.t2}}>{m.vendor||"—"}
                     {m.isDirect&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:"#DCFCE7",color:"#16A34A"}}>{t("projects.direct")}</span>}

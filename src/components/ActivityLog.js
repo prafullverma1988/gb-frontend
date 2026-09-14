@@ -77,7 +77,9 @@ const summariseDetails = (action, details) => {
   return bits.length ? bits.join(" · ") : null;
 };
 
-export default function ActivityLog({ entity_type, entity_id, compact = false, defaultOpen = false }) {
+// `suffix` tells two logs on one screen apart — the material-flow drawer shows
+// one for the MR and one for its GRN, and both used to read just "Activity Log".
+export default function ActivityLog({ entity_type, entity_id, compact = false, defaultOpen = false, suffix = "" }) {
   const [open, setOpen] = useState(defaultOpen);
   const [rows, setRows] = useState(null);
   const [err, setErr]   = useState("");
@@ -102,7 +104,7 @@ export default function ActivityLog({ entity_type, entity_id, compact = false, d
       <button onClick={() => setOpen(o => !o)}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 7, padding: compact ? "8px 11px" : "10px 13px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
         <span style={{ width: 22, height: 22, borderRadius: "50%", background: T.b1, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>📜</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: T.t2 }}>{t("activity_log.activity_log")}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: T.t2 }}>{t("activity_log.activity_log")}{suffix ? ` — ${suffix}` : ""}</span>
         {rows != null && (
           <span style={{ fontSize: 9.5, fontWeight: 700, color: T.t3, background: T.b1, padding: "1px 6px", borderRadius: 8 }}>
             {rows.length}
