@@ -93,6 +93,13 @@ function DualUnitToggle({ units, primaryUnit, itemName, qty, value, onChange }) 
   );
 }
 
+// Godown issue ki line par abhi kitna aana baaki (MAT-18): bheja − pehle aa
+// chuka. Partial issue dobara kholne par default yahi, bheja hua poora nahi.
+function issueLeftQty(it) {
+  const n = (parseFloat(it && it.qty) || 0) - (parseFloat(it && it.received_qty) || 0);
+  return Math.max(0, Math.round(n * 1000) / 1000);
+}
+
 // One MR → Requests-card mapper. This used to be copy-pasted in three places
 // (initial load + two post-save reloads), and all three put the ORDERED
 // quantity under a plain "Received" pill — so an MR ordered 100 with only 40
@@ -509,7 +516,7 @@ function TabMaterial({ project }) {
     try {
       const items = (iss.items || []).map(it => ({
         id: it.id,
-        received_qty: Number(issueReceiveQty[`${iss.id}_${it.id}`] ?? it.qty) || 0,
+        received_qty: Number(issueReceiveQty[`${iss.id}_${it.id}`] ?? issueLeftQty(it)) || 0,
       }));
       const res = await api.post(`/warehouse/issues/${iss.id}/receive`, { items, photo_urls: grnPhotos.length ? grnPhotos : null });
       if (res.success) {
@@ -1236,18 +1243,21 @@ function TabMaterial({ project }) {
                                   <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>{t("material.items_received")}</div>
                                   {(iss.items||[]).map(it=>{
                                     const key=`${iss.id}_${it.id}`;
-                                    const recvVal=issueReceiveQty[key]??it.qty;
                                     const sent=Number(it.qty||0);
+                                    // (MAT-18) Partial issue par sirf BAAKI aata hai — server bhi baaki se zyada nahi leta
+                                    const got=Number(it.received_qty||0);
+                                    const left=issueLeftQty(it);
+                                    const recvVal=issueReceiveQty[key]??left;
                                     const recv=Number(recvVal||0);
-                                    const short=recv<sent;
+                                    const short=recv<left;
                                     return(
                                       <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 70px",gap:7,alignItems:"center",marginBottom:5}}>
                                         <div>
                                           <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.name||it.material_name}</div>
-                                          <div style={{fontSize:10,color:T.t4}}>{t("material.sent_sent_unit", { sent: sent.toFixed(2), unit: it.unit })}</div>
+                                          <div style={{fontSize:10,color:T.t4}}>{t("material.sent_sent_unit", { sent: sent.toFixed(2), unit: it.unit })}{got>0?` · ${t("material.issue_already_received", { got: got.toFixed(2), unit: it.unit })}`:""}</div>
                                         </div>
                                         <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>@ ₹{Number(it.rate||0).toLocaleString("en-IN")}</div>
-                                        <input type="number" value={recvVal} max={sent}
+                                        <input type="number" value={recvVal} max={left}
                                           onChange={e=>setIssueReceiveQty(p=>({...p,[key]:e.target.value}))}
                                           style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+(short?T.amb:T.b1),fontSize:12,textAlign:"right",fontFamily:"inherit",outline:"none",background:short?T.ambL:T.surface,color:short?T.amb:T.t1}}/>
                                         <div style={{fontSize:10.5,color:T.t4,textAlign:"right"}}>{it.unit}</div>

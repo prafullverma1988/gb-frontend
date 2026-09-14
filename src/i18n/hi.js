@@ -4185,6 +4185,7 @@ const dict = {
   "material.save_used":                                        "✓ सेव यूज़्ड",
   "material.select_items_first":                               "पहले आइटम सेलेक्ट करो",
   "material.sent_sent_unit":                                   "भेजे गए: {sent} {unit}",
+  "material.issue_already_received":                           "{got} {unit} आ चुका",
   "material.site_person":                                      "साइट पर्सन",
   "material.special_requirements":                             "स्पेशल रिक्वायरमेंट्स…",
   "material.submit_grn":                                       "✅ GRN सबमिट करो",
