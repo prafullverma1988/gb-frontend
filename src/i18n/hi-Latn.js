@@ -6641,6 +6641,7 @@ const dict = {
   "tasks.end_date_nikal_gayi_abhi_bhi":                        "End date nikal gayi, abhi bhi incomplete",
   "tasks.enter_name":                                          "Enter name...",
   "tasks.entries_aa_rahi_hain":                                "Entries aa rahi hain…",
+  "tasks.entries_load_nahi_hui":                               "Entries load nahi hui — upar ka total task ka pichhla darj aankda hai. Thodi der baad dobara kholo.",
   "tasks.entry_hatao":                                         "Entry hatao",
   "tasks.entry_kal_ki_jayegi":                                 "(entry KAL ki jayegi)",
   "tasks.export_to_csv":                                       "Export to CSV",
@@ -8166,7 +8167,8 @@ const dict = {
   // ── transaction_detail ──────────────────────────────────────
   "transaction_detail.account":                                "Account",
   "transaction_detail.amount":                                 "Amount *",
-  "transaction_detail.amount_rows_se_auto_calculate_hota":     "Amount rows se auto-calculate hota hai.",
+  "transaction_detail.amount_rows_se_auto_calculate_hota":     "Amount = har line ka total (bill par likha, GST samet) + bill-level extra. Qty ya rate badloge tabhi us line ka total qty × rate se dobara banega.",
+  "transaction_detail.bill_level_extra":                       "Bill-level extra (freight / tax jo kisi line me nahi)",
   "transaction_detail.bank_transfer":                          "Bank Transfer",
   "transaction_detail.delete":                                 "🗑 Delete",
   "transaction_detail.fuel_entries":                          "Fuel entries ({n})",

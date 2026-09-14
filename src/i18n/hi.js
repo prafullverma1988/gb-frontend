@@ -6638,6 +6638,7 @@ const dict = {
   "tasks.end_date_nikal_gayi_abhi_bhi":                        "एंड डेट निकल गई, अभी भी इनकम्प्लीट",
   "tasks.enter_name":                                          "नाम एंटर करो...",
   "tasks.entries_aa_rahi_hain":                                "एंट्रीज़ आ रही हैं…",
+  "tasks.entries_load_nahi_hui":                               "एंट्रीज़ लोड नहीं हुईं — ऊपर का कुल टास्क का पिछला दर्ज आंकड़ा है। थोड़ी देर बाद दोबारा खोलो।",
   "tasks.entry_hatao":                                         "एंट्री हटाओ",
   "tasks.entry_kal_ki_jayegi":                                 "(एंट्री कल की जाएगी)",
   "tasks.export_to_csv":                                       "सीएसवी में एक्सपोर्ट करो",
@@ -8163,7 +8164,8 @@ const dict = {
   // ── transaction_detail ──────────────────────────────────────
   "transaction_detail.account":                                "अकाउंट",
   "transaction_detail.amount":                                 "अमाउंट *",
-  "transaction_detail.amount_rows_se_auto_calculate_hota":     "अमाउंट रोज़ से ऑटो-कैलकुलेट होता है।",
+  "transaction_detail.amount_rows_se_auto_calculate_hota":     "अमाउंट = हर लाइन का टोटल (बिल पर लिखा, GST समेत) + बिल-लेवल एक्स्ट्रा। Qty या रेट बदलोगे तभी उस लाइन का टोटल qty × रेट से दोबारा बनेगा।",
+  "transaction_detail.bill_level_extra":                       "बिल-लेवल एक्स्ट्रा (फ्रेट / टैक्स जो किसी लाइन में नहीं)",
   "transaction_detail.bank_transfer":                          "बैंक ट्रांसफर",
   "transaction_detail.delete":                                 "🗑 डिलीट",
   "transaction_detail.fuel_entries":                          "फ्यूल एंट्री ({n})",

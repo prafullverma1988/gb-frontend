@@ -260,6 +260,13 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         description: it.description || "",
         _fromGRN: grnLocked,
         _locked: grnLocked,
+        // Bill par likha line total (GST jodkar bhi ho sakta hai) — qty/rate
+        // na badle to yahi rehta hai, qty×rate se dobara nahi banta (FIN-26).
+        _amt0: it.amount != null && it.amount !== "" && Number.isFinite(Number(it.amount)) ? Number(it.amount) : null,
+        _qty0: it.qty ?? it.quantity ?? "",
+        _rate0: it.rate ?? "",
+        _item0: it.item_name || it.item || it.name || it.description || "",
+        _unit0: it.unit || "",
       })));
     }
   }, [txn]);
@@ -284,10 +291,22 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   // Fuel → Unbilled se bana bill: lines fuel entries se bani hain, yahan badli
   // nahi ja sakti (server bhi rokta hai) — isliye material wala items editor nahi.
   const isFuelBill = Array.isArray(txn.fuel_entries) && txn.fuel_entries.length > 0;
-  const isMaterialBill = backendType === "material_purchase" && !isFuelBill;
-  const editItemsTotal = editItems.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0), 0);
+  // Bina line wale bill (purana import / migration) par items editor nahi —
+  // khaali list save karne se bill ki rakam 0 ho jaati thi. Wahan seedha Amount.
+  const isMaterialBill = backendType === "material_purchase" && !isFuelBill && items.length > 0;
+  // Line ki rakam: qty/rate wahi hain to bill par likha total, warna qty×rate.
+  const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const lineAmt = (it) => (it._amt0 != null && String(it.qty) === String(it._qty0) && String(it.rate) === String(it._rate0))
+    ? it._amt0 : r2((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0));
+  // Bill amount − lines ka jod = header ka farq (freight/GST jo kisi line me nahi) — waisa hi rehta hai.
+  const seedLines = items.map(it => (it.amount != null && Number.isFinite(Number(it.amount)) ? Number(it.amount) : 0));
+  const headerExtra = isMaterialBill ? r2((parseFloat(txn.amount) || 0) - seedLines.reduce((s, a) => s + a, 0)) : 0;
+  const itemsChanged = editItems.length !== items.length || editItems.some(it =>
+    it._new || String(it.item) !== String(it._item0) || String(it.qty) !== String(it._qty0)
+    || String(it.rate) !== String(it._rate0) || String(it.unit) !== String(it._unit0));
+  const editItemsTotal = r2(editItems.reduce((s, it) => s + lineAmt(it), 0) + headerExtra);
   const updItem = (i, k, v) => setEditItems(p => p.map((it, idx) => idx === i ? { ...it, [k]: v } : it));
-  const addItem = () => setEditItems(p => [...p, { item: "", qty: "", unit: "", rate: "", head: "", description: "", _fromGRN: false, _locked: false }]);
+  const addItem = () => setEditItems(p => [...p, { item: "", qty: "", unit: "", rate: "", head: "", description: "", _fromGRN: false, _locked: false, _amt0: null, _new: true }]);
   const delItem = (i) => setEditItems(p => p.filter((_, idx) => idx !== i));
   const miniInp = (align = "left") => ({ width: "100%", padding: "4px 6px", borderRadius: 4, border: `1px solid ${T.b1}`, fontSize: 11.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", textAlign: align, background: "#fff" });
 
@@ -296,7 +315,9 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
     setSaving(true); setErr("");
     try {
       const payload = {
-        amount: isMaterialBill ? editItemsTotal : (parseFloat(form.amount) || 0),
+        // Material bill: lines na badli hon to bill ki apni rakam hi jaaye —
+        // note/date badalne par rakam kabhi nahi badalti (FIN-26).
+        amount: isMaterialBill ? (itemsChanged ? editItemsTotal : (parseFloat(txn.amount) || 0)) : (parseFloat(form.amount) || 0),
         date: form.date || undefined,
         // due_date only relevant for bills/invoices — clear it for
         // cash-event types so the column doesn't carry stale values.
@@ -317,12 +338,15 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
       // Material bill → send the edited rows; backend rebuilds transaction_items,
       // recomputes amount and reconciles inventory. fromGRN rows re-use the
       // real GRN's stock (not re-added); direct rows re-enter inventory.
-      if (isMaterialBill) {
+      // Lines tabhi bhejo jab sach me badli hon, aur har line ka apna amount
+      // saath — server wahi rakhta hai (qty×rate se dobara nahi banata).
+      if (isMaterialBill && itemsChanged) {
         payload.line_items = editItems
           .filter(it => (it.item || "").trim())
           .map(it => ({
             item: (it.item || "").trim(), qty: parseFloat(it.qty) || 0,
             unit: it.unit || "", rate: parseFloat(it.rate) || 0,
+            amount: lineAmt(it),
             head: it.head || "", description: it.description || "",
             fromGRN: !!it._fromGRN,
           }));
@@ -374,7 +398,9 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
       // Bill / expense hatne par jo wapas khula (fuel entry Unbilled me,
       // settlement Pending me) wo backend sandesh me batata hai — dikhao.
       const released = res?.released;
-      if (released && (released.fuel || released.settlement) && window.toast) window.toast.success(res.message);
+      if (released && (released.fuel || released.settlement || released.pr) && window.toast) window.toast.success(res.message);
+      // Transfer / settlement ki jodi: dono leg saath hate — batao, warna doosre account ki entry "gayab" lagti hai.
+      else if (Number(res?.legs_deleted) > 1 && window.toast) window.toast.success(res.message);
       onChanged && onChanged();
       onClose && onClose();
     } catch (e) {
@@ -502,9 +528,15 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                             : <button onClick={() => delItem(i)} title={t("common.remove")} style={{ background: "none", border: "none", color: T.red, cursor: "pointer", fontSize: 15, padding: 0, lineHeight: 1 }}>×</button>}
                         </div>
                       ))}
+                      {Math.abs(headerExtra) > 0.005 && (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 9px", borderBottom: `1px solid ${T.b1}`, fontSize: 11.5, color: T.t2 }}>
+                          <span>{t("transaction_detail.bill_level_extra")}</span>
+                          <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{headerExtra < 0 ? "−" : "+"} ₹{Math.abs(headerExtra).toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 9px", background: T.bluL }}>
                         <button onClick={addItem} style={{ background: "none", border: `1px dashed ${T.b2}`, color: T.blu, borderRadius: 5, fontSize: 11, fontWeight: 700, padding: "3px 10px", cursor: "pointer" }}>{t("common.add_item")}</button>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: T.blu }}>{t("transaction_detail.total_math", { Math: Math.round(editItemsTotal).toLocaleString("en-IN") })}</span>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: T.blu }}>{t("transaction_detail.total_math", { Math: editItemsTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 }) })}</span>
                       </div>
                     </div>
                     <div style={{ fontSize: 10, color: T.t4, marginTop: 4 }}>{t("transaction_detail.amount_rows_se_auto_calculate_hota")}</div>

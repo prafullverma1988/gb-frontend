@@ -6639,6 +6639,7 @@ const dict = {
   "tasks.end_date_nikal_gayi_abhi_bhi":                        "End date passed, still incomplete",
   "tasks.enter_name":                                          "Enter name...",
   "tasks.entries_aa_rahi_hain":                                "Entries loading…",
+  "tasks.entries_load_nahi_hui":                               "Could not load the entries — the total above is the task's last saved figure. Try opening it again shortly.",
   "tasks.entry_hatao":                                         "Remove entry",
   "tasks.entry_kal_ki_jayegi":                                 "(entry will be for TOMORROW)",
   "tasks.export_to_csv":                                       "Export to CSV",
@@ -8164,7 +8165,8 @@ const dict = {
   // ── transaction_detail ──────────────────────────────────────
   "transaction_detail.account":                                "Account",
   "transaction_detail.amount":                                 "Amount *",
-  "transaction_detail.amount_rows_se_auto_calculate_hota":     "Amount is auto-calculated from rows.",
+  "transaction_detail.amount_rows_se_auto_calculate_hota":     "Amount = each line's total (as written on the bill, GST included) + bill-level extra. A line's total is recalculated as qty × rate only when you change its qty or rate.",
+  "transaction_detail.bill_level_extra":                       "Bill-level extra (freight / tax not in any line)",
   "transaction_detail.bank_transfer":                          "Bank Transfer",
   "transaction_detail.delete":                                 "🗑 Delete",
   "transaction_detail.fuel_entries":                          "Fuel entries ({n})",

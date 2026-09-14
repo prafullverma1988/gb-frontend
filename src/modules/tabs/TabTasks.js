@@ -3475,13 +3475,17 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
     setLines(r.data?.scoped&&l.length>=2?l:[]);
   })(); return()=>{dead=true;}; },[projectId,task.id]);
   const recRef=useRef(null);
+  // Entries load na hon to "0 hua, koi entry nahi" jhooth hai — tab task ka
+  // apna darj done_qty dikhao aur saaf batao ki entries nahi aayi.
+  const [loadErr,setLoadErr]=useState(false);
   const load=useCallback(async()=>{
     const r=await api.get("/budget/task/"+task.id);
-    setEntries(r?.success?(r.data?.progress||[]):[]);
+    setLoadErr(!r?.success);
+    setEntries(r?.success?(r.data?.progress||[]):null);
   },[task.id]);
   useEffect(()=>{load();},[load]);
 
-  const done=(entries||[]).reduce((s,e)=>s+Number(e.done_qty||0),0);
+  const done=entries?entries.reduce((s,e)=>s+Number(e.done_qty||0),0):Number(task.done_qty||0);
   const pct=scope>0?Math.min(100,Math.round(done/scope*100)):0;
   const push=(nd)=>{const p=scope>0?Math.min(100,Math.round(nd/scope*100)):0;
     onProgress(p,{done_qty:nd,progress:p,status:p>=100?"Completed":p>0?"Ongoing":"Not Started"});};
@@ -3624,7 +3628,8 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
     </div>
 
     {/* Entries */}
-    {entries===null&&<div style={{fontSize:11.5,color:"#94A3B8",padding:"8px 0"}}>{t("tasks.entries_aa_rahi_hain")}</div>}
+    {entries===null&&!loadErr&&<div style={{fontSize:11.5,color:"#94A3B8",padding:"8px 0"}}>{t("tasks.entries_aa_rahi_hain")}</div>}
+    {loadErr&&<div style={{fontSize:11.5,color:"#DC2626",padding:"8px 0"}}>{t("tasks.entries_load_nahi_hui")}</div>}
     {entries!==null&&!entries.length&&<div style={{fontSize:11.5,color:"#94A3B8",padding:"8px 0"}}>{t("tasks.abhi_koi_entry_nahi_pehli_aaj")}</div>}
     {(entries||[]).map(e=>{
       const g=GEO[e.geo_flag]||null;
