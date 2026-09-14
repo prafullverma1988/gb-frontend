@@ -7,6 +7,7 @@ import CompanyTransfersTab from "../components/CompanyTransfersTab";
 import GrnIssueBlock from "../components/GrnIssueBlock";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 import { t, Rich } from "../i18n";
+import { todayISO } from "../utils/today";
 
 // Vendor ko jaane wale message ka contacts wala hissa — WhatsApp / Email /
 // PO share, sab ek hi shakl me bhejein. Backend ka contactsWaBlock isi ka
@@ -2121,7 +2122,8 @@ function ProcurementModule(){
         project_id:  po?.project_id|| po?._raw?.project_id || null,
         project_name:po?.project   || "",
         challan_no:  challan,
-        received_date: new Date().toISOString().split("T")[0],
+        // (MAT-30) Apni (IST) tareekh — UTC se raat 00:00–05:30 ki GRN pichhle din ki banti thi
+        received_date: todayISO(),
         items: rows.map((r,i)=>({
           po_item_id:   po?.items?.[i]?.id       || null,
           description:  r.desc || po?.items?.[i]?.desc || r.material || ("Item "+(i+1)),
