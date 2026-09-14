@@ -1391,7 +1391,8 @@ function TabEstimate({ project }) {
           const isSel = selEst?.id === e.id;
           const stC = e.status === "Active" ? T.grn : T.t4;
           const isDelOpen = delEstId === e.id;
-          const delEnabled = delEstText.trim() === (e.estimate_no || "") && !delEstBusy;
+          // Invoice wala estimate server delete nahi karta (409) — button bhi band.
+          const delEnabled = delEstText.trim() === (e.estimate_no || "") && !delEstBusy && !(e.invoice_count > 0);
           return (
             <div key={e.id} style={{borderBottom:"1px solid "+T.b1,background:isSel?"#EFF6FF":T.surfaceB,borderLeft:isSel?"3px solid "+T.blu:"3px solid transparent"}}>
               <div onClick={()=>selectEst(e)}
@@ -1417,7 +1418,7 @@ function TabEstimate({ project }) {
               {isDelOpen && (
                 <div onClick={(ev)=>ev.stopPropagation()}
                   style={{padding:"9px 12px 11px",background:"#FEF2F2",borderTop:"1px solid #FCA5A5"}}>
-                  <div style={{fontSize:10.5,color:"#7F1D1D",lineHeight:1.45,marginBottom:6}}><Rich k="estimate.permanently_delete_estimate_no" params={{ estimate_no: e.estimate_no }} />{e.invoice_count > 0 && <><br/><b style={{color:"#991B1B"}}>{t("estimate.invoice_count_invoicee_linked", { invoice_count: e.invoice_count, e: e.invoice_count>1?"s":"" })}</b> {t("estimate.they_ll_lose_their_estimate_reference")}</>}
+                  <div style={{fontSize:10.5,color:"#7F1D1D",lineHeight:1.45,marginBottom:6}}><Rich k="estimate.permanently_delete_estimate_no" params={{ estimate_no: e.estimate_no }} />{e.invoice_count > 0 && <><br/><b style={{color:"#991B1B"}}>{t("estimate.invoice_count_invoicee_linked", { invoice_count: e.invoice_count, e: e.invoice_count>1?"s":"" })}</b> {t("estimate.delete_invoices_first_estimate_blocked")}</>}
                     <br/><Rich k="estimate.type_estimate_no_below_to_confirm" params={{ estimate_no: e.estimate_no }} /></div>
                   <input value={delEstText} onChange={(ev)=>setDelEstText(ev.target.value)}
                     placeholder={e.estimate_no}
