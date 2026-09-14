@@ -1545,10 +1545,16 @@ function ReportsTab({ salesVelocity, typeDemand, revenueForecast, onStuckUnits }
       <SectionH>{t("township_crm.revenue_forecast")}</SectionH>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:8 }}>
         <KPI label={t("township_crm.total_potential")} value={inr(rf.total_potential)} sub={t("township_crm.all_units")} color={T.t1}/>
+        {/* Booked value = BOOKED + SOLD; HOLD (sirf token) alag KPI me (CRM-15) */}
         <KPI label={t("township_crm.booked_value")}    value={inr(rf.booked_value)}
-          sub={rf.total_potential ? `${Math.round((rf.booked_value/rf.total_potential)*100)}% absorbed` : "—"} color={T.kBlu}/>
+          sub={rf.total_potential ? t("township_crm.absorbpct_absorbed", { absorbPct: Math.round((rf.booked_value/rf.total_potential)*100) }) : "—"} color={T.kBlu}/>
+        <KPI label={t("township_crm.on_hold_value")}   value={inr(rf.hold_value)}
+          sub={t("township_crm.n_hold_units_token", { n: rf.hold_units || 0, token: inr(rf.hold_tokens) })} color={T.kAmb}/>
         <KPI label={t("township_crm.collected")}       value={inr(rf.collected)}
-          sub={rf.booked_value ? `${Math.round((rf.collected/rf.booked_value)*100)}% of booked` : "—"} color={T.kGrn}/>
+          sub={rf.booked_value
+            ? t("township_crm.pct_of_booked", { pct: Math.round((rf.collected/rf.booked_value)*100) })
+              + (Number(rf.collected_on_cancelled) > 0 ? " · " + t("township_crm.incl_cancelled_amount", { amount: inr(rf.collected_on_cancelled) }) : "")
+            : "—"} color={T.kGrn}/>
       </div>
 
       <SectionH>{t("township_crm.available_reports")}</SectionH>
