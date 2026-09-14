@@ -7,6 +7,11 @@ import { Pill, Panel, PHead, THead, AddBtn, SecBtn } from "../shared/ui";
 import { t } from "../../i18n";
 import { txnIsCleared, partyRowSign, balanceLabel, isVendorType, round2 } from "../../utils/moneyRules";
 
+// balLabel ek CODE hai ("To Pay" | "To Receive" | "Advance Paid" | "Advance Received"
+// | "Settled" — utils/moneyRules.balanceLabel); screen par label t() se (FIN-31).
+const balLabelText = (l) => (l === "To Pay" ? t("finance.to_pay") : l === "To Receive" ? t("finance.to_receive")
+  : l === "Advance Paid" ? t("finance.advance_paid") : l === "Advance Received" ? t("finance.advance_received") : t("finance.settled"));
+
 function AddPartyModal({ open, onClose, onSaved }) {
   // Sirf name + type compulsory; baki sabhi optional. Backend
   // /finance/parties POST handles full payload (phone, email, gstin,
@@ -510,7 +515,7 @@ function TabParty({ projectId, projectName }) {
                 </div>
                 <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
                   <Pill label={p.type} c={ts.c} bg={ts.bg}/>
-                  <span style={{fontSize:10.5, color:T.t4}}>{p.balLabel}</span>
+                  <span style={{fontSize:10.5, color:T.t4}}>{balLabelText(p.balLabel)}</span>
                 </div>
               </div>
             );
@@ -524,7 +529,7 @@ function TabParty({ projectId, projectName }) {
             <>
               <PHead title={`${selP.name}  ·  ${projectName||"Project"}`} action={<SecBtn label={t("mom.export_pdf")} onClick={()=>exportPartyLedgerPDF(selP, projectName)}/>}/>
               <div style={{padding:"8px 15px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", gap:20}}>
-                {[["Type",selP.type],["Balance",`₹${fmtN(selP.balance)}`],["Status",selP.balLabel]].map(([l,v])=>(
+                {[[t("common.type"),selP.type],[t("common.balance"),`₹${fmtN(selP.balance)}`],[t("common.status"),balLabelText(selP.balLabel)]].map(([l,v])=>(
                   <div key={l} style={{display:"flex", gap:6, alignItems:"center"}}>
                     <span style={{fontSize:11, color:T.t4}}>{l}:</span>
                     <span style={{fontSize:12.5, fontWeight:600, color:T.t1}}>{v}</span>
