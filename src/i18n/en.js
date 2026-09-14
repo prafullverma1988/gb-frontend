@@ -4202,6 +4202,9 @@ const dict = {
   "material.via_bill":                                         "Via Bill",
   "material.weighbridge_parchi_ka_actual_weight_editable":     "Actual weight from Weighbridge slip — editable",
   "material.weighbridge_weight":                               "weighbridge weight",
+  "material.zyada_maal_aaya":                                  "Extra material arrived",
+  "material.zyada_maal_tick_ya_qty_theek_karo":                "{item}: qty is more than pending — tick \"Extra material arrived\" and write the reason, or correct the qty.",
+  "material.zyada_maal_wajah_placeholder":                     "Write the reason (e.g. vendor sent 2 extra bags)",
 
   // ── material_flow ───────────────────────────────────────────
   "material_flow.bill_raised":                                 "Bill raised",
@@ -4462,6 +4465,7 @@ const dict = {
   "mrdetail.quantity":                                         "Quantity *",
   "mrdetail.reason_is_required_to_close_log":                  "Reason is required to close — log viewer will know why it was closed",
   "mrdetail.received_qty":                                     "Received Qty",
+  "mrdetail.received_qty_name_match":                          "Received Qty (old MR — from same-name GRNs in the project)",
   "mrdetail.reject_reason":                                    "Reject Reason",
   "mrdetail.requested_by":                                     "Requested By",
   "mrdetail.save_changes":                                     "✓ Save Changes",

@@ -585,8 +585,13 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
 // ── MARK RECEIVED MODAL ───────────────────────────────────────────────
 function MarkReceivedModal({mr,onSave,onClose}){
   const [challan,setChallan]=useState("");
-  const [rQty,setRQty]=useState(String(mr.approvedQty||mr.qty));
+  // Default = MR par abhi BAAKI (server ka pending_qty) — poori MR qty nahi (MAT-08/22).
+  const pendingQty=mr.pending_qty!=null ? Math.round(Number(mr.pending_qty)*1000)/1000 : (mr.approvedQty||mr.qty);
+  const [rQty,setRQty]=useState(String(pendingQty));
+  const [excess,setExcess]=useState(false);
+  const [excessReason,setExcessReason]=useState("");
   const isPartial=parseFloat(rQty)<(mr.approvedQty||mr.qty);
+  const isOver=parseFloat(rQty)>pendingQty+0.0005;
   return(
     <Modal onClose={onClose} width={400}>
       <MHead title={t("procurement.mark_as_received")} sub={`${mr.id} · ${mr.item}`} onClose={onClose}/>
@@ -600,6 +605,15 @@ function MarkReceivedModal({mr,onSave,onClose}){
             {isPartial&&parseFloat(rQty)>0&&(
               <div style={{marginTop:4,fontSize:10.5,color:T.amb,padding:"3px 8px",background:T.ambL,borderRadius:5,border:`1px solid ${T.ambM}`}}>{t("procurement.partial_mr_unit_still_pending", { mr: (mr.approvedQty||mr.qty)-parseFloat(rQty), unit: mr.unit })}</div>
             )}
+            {isOver&&(
+              <div style={{marginTop:6,padding:"6px 8px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,display:"flex",flexDirection:"column",gap:6}}>
+                <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:T.red,cursor:"pointer"}}>
+                  <input type="checkbox" checked={excess} onChange={e=>setExcess(e.target.checked)}/>
+                  {t("material.zyada_maal_aaya")}
+                </label>
+                {excess&&<Inp value={excessReason} onChange={e=>setExcessReason(e.target.value)} placeholder={t("material.zyada_maal_wajah_placeholder")}/>}
+              </div>
+            )}
           </Fld>
           <Fld label={t("procurement.challan_dc_no")} required>
             <Inp value={challan} onChange={e=>setChallan(e.target.value)} placeholder={t("procurement.supplier_delivery_challan_number")}/>
@@ -608,7 +622,7 @@ function MarkReceivedModal({mr,onSave,onClose}){
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
-        <Btn onClick={()=>onSave(mr.id,parseFloat(rQty),challan)} disabled={!rQty||!challan} color={T.grn} full icon={<IcChk size={14} color="white"/>}>
+        <Btn onClick={()=>onSave(mr.id,parseFloat(rQty),challan,isOver?{allow_excess:true,excess_reason:excessReason.trim()}:null)} disabled={!rQty||!challan||(isOver&&!(excess&&excessReason.trim()))} color={T.grn} full icon={<IcChk size={14} color="white"/>}>
           {isPartial?t("procurement.mark_partial_received"):t("procurement.mark_fully_received")}
         </Btn>
       </MFoot>
@@ -2075,8 +2089,8 @@ function ProcurementModule(){
     setMRs(p=>p.map(m=>m.id===id?{...m,mrStatus:"Rejected",rejectedReason:reason}:m));
     setRejectTgt(null);
   };
-  const saveMarkReceived=async(id,rQty,challan)=>{
-    const res=await api.patch("/procurement/mrs/"+id+"/mark-received",{challan_no:challan,received_qty:rQty})
+  const saveMarkReceived=async(id,rQty,challan,excess)=>{
+    const res=await api.patch("/procurement/mrs/"+id+"/mark-received",{challan_no:challan,received_qty:rQty,...(excess||{})})
       .catch(e=>({success:false,message:e?.message||"Receive fail"}));
     if(_apiFail(res,"Received mark nahi hua")) return;
     const newStatus=res.is_partial?"PartialReceived":"Received";

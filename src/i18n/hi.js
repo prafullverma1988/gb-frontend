@@ -4201,6 +4201,9 @@ const dict = {
   "material.via_bill":                                         "वाया बिल",
   "material.weighbridge_parchi_ka_actual_weight_editable":     "वेब्रिज स्लिप का एक्चुअल वेट — एडिटेबल",
   "material.weighbridge_weight":                               "वेब्रिज वेट",
+  "material.zyada_maal_aaya":                                  "ज़्यादा मटेरियल आया",
+  "material.zyada_maal_tick_ya_qty_theek_karo":                "{item}: qty पेंडिंग से ज़्यादा है — \"ज़्यादा मटेरियल आया\" टिक करके वजह लिखो, या qty ठीक करो।",
+  "material.zyada_maal_wajah_placeholder":                     "वजह लिखो (जैसे वेंडर ने 2 बैग ज़्यादा भेजे)",
 
   // ── material_flow ───────────────────────────────────────────
   "material_flow.bill_raised":                                 "बिल रेज़ हो गया",
@@ -4461,6 +4464,7 @@ const dict = {
   "mrdetail.quantity":                                         "क्वांटिटी *",
   "mrdetail.reason_is_required_to_close_log":                  "क्लोज करने के लिए रीज़न ज़रूरी है — लॉग देखने वाले को पता चलेगा क्यों क्लोज हुआ",
   "mrdetail.received_qty":                                     "रिसीव्ड क्वांटिटी",
+  "mrdetail.received_qty_name_match":                          "रिसीव्ड Qty (पुरानी MR — प्रोजेक्ट में इसी नाम के GRN से)",
   "mrdetail.reject_reason":                                    "रिजेक्ट रीज़न",
   "mrdetail.requested_by":                                     "रिक्वेस्टेड बाय",
   "mrdetail.save_changes":                                     "✓ चेंजेस सेव करो",
