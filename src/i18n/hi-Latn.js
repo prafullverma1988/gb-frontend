@@ -4472,6 +4472,7 @@ const dict = {
   "mrdetail.reject_reason":                                    "Reject Reason",
   "mrdetail.requested_by":                                     "Requested By",
   "mrdetail.save_changes":                                     "✓ Save Changes",
+  "mrdetail.status_edit_se_nahi_badalta":                      "Status yahan se nahi badalta: Approve/Reject approver karta hai (Material Approvals), aur material ka status Order / Receive (GRN) / Mark Used se apne aap badalta hai. MR band karni ho to Close use karo.",
   "mrdetail.unit":                                             "Unit *",
   "mrdetail.used":                                             "Used",
   "mrdetail.vendor_material_supplier":                         "Vendor (Material Supplier)",

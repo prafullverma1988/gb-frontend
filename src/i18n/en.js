@@ -4470,6 +4470,7 @@ const dict = {
   "mrdetail.reject_reason":                                    "Reject Reason",
   "mrdetail.requested_by":                                     "Requested By",
   "mrdetail.save_changes":                                     "✓ Save Changes",
+  "mrdetail.status_edit_se_nahi_badalta":                      "Status is not changed here: the approver does Approve/Reject (Material Approvals), and material status changes on its own through Order / Receive (GRN) / Mark Used. To stop an MR, use Close.",
   "mrdetail.unit":                                             "Unit *",
   "mrdetail.used":                                             "Used",
   "mrdetail.vendor_material_supplier":                         "Vendor (Material Supplier)",

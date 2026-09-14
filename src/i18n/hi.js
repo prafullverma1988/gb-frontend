@@ -4469,6 +4469,7 @@ const dict = {
   "mrdetail.reject_reason":                                    "रिजेक्ट रीज़न",
   "mrdetail.requested_by":                                     "रिक्वेस्टेड बाय",
   "mrdetail.save_changes":                                     "✓ चेंजेस सेव करो",
+  "mrdetail.status_edit_se_nahi_badalta":                      "स्टेटस यहाँ से नहीं बदलता: Approve/Reject अप्रूवर करता है (Material Approvals), और मटेरियल का स्टेटस Order / Receive (GRN) / Mark Used से अपने आप बदलता है। MR बंद करनी हो तो Close इस्तेमाल करो।",
   "mrdetail.unit":                                             "यूनिट *",
   "mrdetail.used":                                             "यूज़्ड",
   "mrdetail.vendor_material_supplier":                         "वेंडर (मटेरियल सप्लायर)",

@@ -78,8 +78,6 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
         linked_vendor:     mr.linked_vendor || mr.vendor || "",
         expected_delivery: isoDate(mr.expected_delivery),
         challan_no:        mr.challan_no || mr.challan || "",
-        mr_status:         mr.mr_status || "Pending",
-        mat_status:        mr.mat_status || "Pending",
       });
     }
   }, [mr]);
@@ -114,8 +112,9 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
         linked_vendor: form.linked_vendor || null,
         expected_delivery: form.expected_delivery || null,
         challan_no: form.challan_no || null,
-        mr_status: form.mr_status || undefined,
-        mat_status: form.mat_status || undefined,
+        // mr_status / mat_status yahan se nahi jaate: approve/reject approval
+        // engine se, material status order/receive se; server bhi rokta hai
+        // (MAT-10). Band karna neeche ke "Close" se.
         edit_note: editNote.trim(),
       };
       const res = await api.put("/procurement/mrs/" + mr.id, payload);
@@ -271,25 +270,9 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
                 <Field label={t("common.expected_delivery")} type="date" value={form.expected_delivery} onChange={v => setForm(p => ({ ...p, expected_delivery: v }))}/>
                 <Field label={t("material_flow.challan_no")} value={form.challan_no} onChange={v => setForm(p => ({ ...p, challan_no: v }))}/>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div>
-                  <label style={lblStyle}>{t("mrdetail.mr_status")}</label>
-                  <select value={form.mr_status} onChange={e => setForm(p => ({ ...p, mr_status: e.target.value }))} style={inpStyle}>
-                    <option value="Pending">{t("common.pending")}</option>
-                    <option value="Approved">{t("common.approved")}</option>
-                    <option value="Rejected">{t("common.rejected")}</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={lblStyle}>{t("mrdetail.material_status")}</label>
-                  <select value={form.mat_status} onChange={e => setForm(p => ({ ...p, mat_status: e.target.value }))} style={inpStyle}>
-                    <option value="Pending">{t("common.pending")}</option>
-                    <option value="Ordered">{t("common.ordered")}</option>
-                    <option value="PartialReceived">{t("material_transfer.partial_received")}</option>
-                    <option value="Received">{t("common.received")}</option>
-                    <option value="Used">{t("common.used")}</option>
-                  </select>
-                </div>
+              {/* Status ke select yahan nahi — approval bypass ho jaata tha (MAT-10) */}
+              <div style={{ padding: "8px 10px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 6, fontSize: 11, color: T.t3, lineHeight: 1.5 }}>
+                {t("mrdetail.status_edit_se_nahi_badalta")}
               </div>
               <div>
                 <label style={lblStyle}>{t("common.notes")}</label>
