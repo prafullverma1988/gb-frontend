@@ -4,6 +4,7 @@ import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import { T, localYMD } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
+import { can, currentUser } from "../../utils/perms";
 
 function TabSubcon({ projectId, project }) {
   const [wos, setWos] = useState([]);
@@ -26,8 +27,10 @@ function TabSubcon({ projectId, project }) {
   const [editBill, setEditBill] = useState(null);
   const [editBillSaving, setEditBillSaving] = useState(false);
   const [billItems, setBillItems] = useState({});
-  const [billForm, setBillForm] = useState({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
-  const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: new Date().toISOString().split("T")[0], payment_mode:"Bank Transfer", reference_no:"", remark:"" });
+  const [billForm, setBillForm] = useState({ bill_date: localYMD(), remark:"", items:[] });
+  const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: localYMD(), /* IST din — UTC nahi (SUB-15) */ payment_mode:"Bank Transfer", reference_no:"", remark:"", account_id:"" });
+  // Finance me gaye RA bill (fin_txn_id) ka payment Finance entry banta hai — account zaroori (SUB-08)
+  const [payAccounts, setPayAccounts] = useState([]);
   const [showManualRaBill, setShowManualRaBill] = useState(false);
   const [manualBillForm, setManualBillForm] = useState({ bill_date: localYMD(), remark:"", items:[{description:"",qty:"",rate:""}] });
   const [manualBillSaving, setManualBillSaving] = useState(false);
@@ -168,6 +171,15 @@ function TabSubcon({ projectId, project }) {
   };
 
   const reloadWo = async () => { if (selWo) await selectWo(selWo); };
+
+  // Finance me gaye bill ka payment modal khule to account list (ek baar) — SUB-08
+  const payBillPosted = !!(showPayModal && bills.find(x => x.id === showPayModal)?.fin_txn_id);
+  useEffect(() => {
+    if (!payBillPosted || payAccounts.length) return;
+    api.get("/finance/accounts").then(r => { if (r?.success) setPayAccounts(r.data || []); }).catch(() => {});
+  }, [payBillPosted, payAccounts.length]);
+  // Finance entry banane ka haq — server bhi yahi maangta hai (admin / accountant + Finance create)
+  const canFinancePay = (() => { const u = currentUser(); return ["admin", "super_admin", "accountant"].includes(u?.role) && can("Finance", "create", u); })();
 
   // ── BILLING-METHOD SWITCH ──
   const switchBillingMethod = async (method) => {
@@ -311,7 +323,7 @@ function TabSubcon({ projectId, project }) {
       onSuccess(res.data);
       if (res.data?.warnings?.length) alert("Saved with warnings:\n" + res.data.warnings.join("\n"));
       setShowNewBill(false);
-      setBillForm({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
+      setBillForm({ bill_date: localYMD(), remark:"", items:[] });
       selectWo(selWo);
     }
     else alert(res.message||"Failed");
@@ -349,6 +361,8 @@ function TabSubcon({ projectId, project }) {
   // ── RECORD PAYMENT ──
   const submitPayment = async (billId) => {
     if(!payForm.amount_paid) return alert(t("estimate.amount_required"));
+    const payBill = bills.find(x => x.id === billId);
+    if (payBill?.fin_txn_id && !payForm.account_id) return alert(t("subcon.payment_account_select_karo"));
     setSaving(true);
     const res = await api.post("/subcon/payments",{
       bill_id: billId, wo_id: selWo.id,
@@ -357,9 +371,10 @@ function TabSubcon({ projectId, project }) {
       payment_mode: payForm.payment_mode,
       reference_no: payForm.reference_no,
       remark: payForm.remark,
+      account_id: payBill?.fin_txn_id ? Number(payForm.account_id) : undefined,
     }).catch(()=>({success:false}));
     setSaving(false);
-    if(res.success){ setShowPayModal(false); selectWo(selWo); setPayForm({amount_paid:"",payment_date:new Date().toISOString().split("T")[0],payment_mode:"Bank Transfer",reference_no:"",remark:""}); }
+    if(res.success){ setShowPayModal(false); selectWo(selWo); setPayForm({amount_paid:"",payment_date:localYMD(),payment_mode:"Bank Transfer",reference_no:"",remark:"",account_id:""}); }
     else alert(res.message||"Failed");
   };
 
@@ -433,7 +448,9 @@ function TabSubcon({ projectId, project }) {
                   {l:t("common.billed"),v:fmtC(summary.total_billed),c:"#60A5FA"},
                   {l:t("common.paid"),v:fmtC(summary.total_paid),c:"#4ADE80"},
                   {l:t("common.retention_2"),v:fmtC(summary.retention_held),c:"#FCD34D"},
-                  {l:t("common.balance"),v:fmtC(summary.balance),c:"#F87171"},
+                  // Dena baaki = approved bills ka NET − payment; bina bill ka kaam alag (SUB-12)
+                  {l:t("subcon.payable_net"),v:fmtC(summary.payable ?? summary.balance),c:"#F87171"},
+                  {l:t("common.unbilled"),v:fmtC(summary.unbilled),c:"#CBD5E1"},
                 ].map(s=>(
                   <div key={s.l} style={{textAlign:"right"}}>
                     <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",textTransform:"uppercase"}}>{s.l}</div>
@@ -872,9 +889,9 @@ function TabSubcon({ projectId, project }) {
                         ))}
                       </div>
                       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
-                        {b.status==="Draft"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
-                        {b.status==="Submitted"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
-                        {(b.status==="Approved"||b.status==="Submitted")&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.record_payment")}</button>}
+                        {b.status==="Draft"&&<button onClick={async()=>{const r=await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"});if(r&&r.success===false)alert(r.message||t("common.something_went_wrong"));selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
+                        {b.status==="Submitted"&&<button onClick={async()=>{const r=await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});if(r&&r.success===false)alert(r.message||t("common.something_went_wrong"));selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
+                        {b.status==="Approved"&&(!b.fin_txn_id||canFinancePay)&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.record_payment")}</button>}
                         {/* Edit + Delete (not for Paid) */}
                         {b.status!=="Paid"&&(
                           <button onClick={async()=>{
@@ -1538,11 +1555,15 @@ function TabSubcon({ projectId, project }) {
       {/* EDIT RA BILL MODAL */}
       {showEditBillModal && editBill && (() => {
         // ── helpers to recompute net from current retention/TDS ──
+        // TDS bhi gross par — server (recalcBillTotals) yahi karta hai; pehle
+        // yahan (gross − retention) par tha to preview server se alag aata.
         const recalcNet = (g, retPct, tdsPct) => {
           const retAmt = Math.round(g * retPct) / 100;
-          const tdsAmt = Math.round((g - retAmt) * tdsPct) / 100;
+          const tdsAmt = Math.round(g * tdsPct) / 100;
           return { retention_amt: retAmt, tds_amt: tdsAmt, net_payable: Math.round((g - retAmt - tdsAmt) * 100) / 100 };
         };
+        // Approved bill approve hui rakam par tiki hai — sirf remark badalta hai (SUB-09).
+        const locked = editBill.status === "Approved";
         // Recompute gross from edited item cumulative qtys
         const recalcGross = (items) => {
           return items.reduce((s, it) => {
@@ -1564,19 +1585,23 @@ function TabSubcon({ projectId, project }) {
                 <button onClick={()=>{setShowEditBillModal(false);setEditBill(null);}} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:18}}>×</button>
               </div>
 
-              {/* Date + Status */}
+              {/* Date + Status (status sirf dikhta hai — Submit / Approve button se badalta hai) */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                 <div>
                   <label style={lblStyle}>{t("common.bill_date")}</label>
-                  <input type="date" value={(editBill.bill_date||"").split("T")[0]}
-                    onChange={e=>setEditBill(p=>({...p,bill_date:e.target.value}))} style={inpStyle}/>
+                  <input type="date" value={(editBill.bill_date||"").split("T")[0]} disabled={locked}
+                    onChange={e=>setEditBill(p=>({...p,bill_date:e.target.value}))} style={locked?{...inpStyle,background:T.surfaceB,color:T.t3}:inpStyle}/>
                 </div>
                 <div>
                   <label style={lblStyle}>{t("common.status")}</label>
-                  <SearchSelect value={editBill.status||"Submitted"} options={["Draft","Submitted","Approved","Rejected"]}
-                    onChange={v=>setEditBill(p=>({...p,status:v}))} placeholder={t("common.select_status")}/>
+                  <input value={editBill.status||""} disabled style={{...inpStyle,background:T.surfaceB,color:T.t3,fontWeight:700}}/>
                 </div>
               </div>
+              {locked && (
+                <div style={{padding:"7px 10px",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:6,marginBottom:12,fontSize:11,color:"#92400E",lineHeight:1.45}}>
+                  {t("subcon.approved_bill_sirf_remark")}
+                </div>
+              )}
 
               {/* ── Item Quantities ── */}
               {showItems && (
@@ -1602,7 +1627,7 @@ function TabSubcon({ projectId, project }) {
                           <span style={{fontSize:11.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description||("Item #"+it.wo_item_id)}</span>
                           <span style={{fontSize:11,color:T.t4,textAlign:"right"}}>{it.unit||""}</span>
                           <span style={{fontSize:11,color:T.t3,textAlign:"right"}}>{prev}</span>
-                          <input type="number" value={it._editCum ?? it.cumulative_qty ?? ""}
+                          <input type="number" value={it._editCum ?? it.cumulative_qty ?? ""} disabled={locked}
                             onChange={e => {
                               const newItems = editItems.map((x,i) => i===idx ? {...x, _editCum: e.target.value} : x);
                               const newGross = Math.round(recalcGross(newItems) * 100) / 100;
@@ -1630,13 +1655,9 @@ function TabSubcon({ projectId, project }) {
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                 <div>
                   <label style={lblStyle}>{t("subcon.gross_amount")}</label>
-                  <input type="number" value={editBill.gross_amount ?? 0}
-                    onChange={e=>{
-                      const g = parseFloat(e.target.value) || 0;
-                      const retPct = parseFloat(editBill.retention_pct ?? 0);
-                      const tdsPct = parseFloat(editBill.tds_pct ?? 0);
-                      setEditBill(p=>({...p, gross_amount:g, ...recalcNet(g, retPct, tdsPct)}));
-                    }} style={inpStyle}/>
+                  {/* Gross items se banta hai — seedha likhne ka khaana nahi (server ise maanta bhi nahi) */}
+                  <input type="number" value={editBill.gross_amount ?? 0} disabled
+                    style={{...inpStyle,background:T.surfaceB,color:T.t3,fontWeight:700}}/>
                 </div>
                 <div>
                   <label style={lblStyle}>{t("subcon.net_payable_auto")}</label>
@@ -1645,7 +1666,7 @@ function TabSubcon({ projectId, project }) {
                 </div>
                 <div>
                   <label style={lblStyle}>{t("common.retention")}</label>
-                  <input type="number" min={0} max={100}
+                  <input type="number" min={0} max={100} disabled={locked}
                     value={editBill.retention_pct ?? ""}
                     onChange={e=>{
                       const r = parseFloat(e.target.value) || 0;
@@ -1658,13 +1679,13 @@ function TabSubcon({ projectId, project }) {
                 </div>
                 <div>
                   <label style={lblStyle}>{t("common.tds")}</label>
-                  <input type="number" min={0} max={100}
+                  <input type="number" min={0} max={100} disabled={locked}
                     value={editBill.tds_pct ?? ""}
                     onChange={e=>{
-                      const t = parseFloat(e.target.value) || 0;
+                      const tp = parseFloat(e.target.value) || 0;
                       const g = parseFloat(editBill.gross_amount) || 0;
                       const retPct = parseFloat(editBill.retention_pct ?? 0);
-                      setEditBill(p=>({...p, tds_pct:t, ...recalcNet(g, retPct, t)}));
+                      setEditBill(p=>({...p, tds_pct:tp, ...recalcNet(g, retPct, tp)}));
                     }}
                     placeholder="0"
                     style={inpStyle}/>
@@ -1701,20 +1722,18 @@ function TabSubcon({ projectId, project }) {
                 <button onClick={async()=>{
                     setEditBillSaving(true);
                     try {
-                      const payload = {
-                        bill_date:      editBill.bill_date,
-                        gross_amount:   parseFloat(editBill.gross_amount)   || 0,
-                        retention_pct:  parseFloat(editBill.retention_pct)  ?? 0,
-                        retention_amt:  parseFloat(editBill.retention_amt)  || 0,
-                        tds_pct:        parseFloat(editBill.tds_pct)        ?? 0,
-                        tds_amt:        parseFloat(editBill.tds_amt)        || 0,
-                        net_payable:    parseFloat(editBill.net_payable)    || 0,
-                        status:         editBill.status,
-                        remark:         editBill.remark,
-                      };
+                      // Status aur rakam (gross/retention/TDS/net) server khud banata hai —
+                      // bhejte sirf wahi hain jo user badal sakta hai (SUB-09).
+                      const pctVal = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+                      const payload = { remark: editBill.remark };
+                      if (!locked) {
+                        payload.bill_date = editBill.bill_date;
+                        payload.retention_pct = pctVal(editBill.retention_pct);
+                        payload.tds_pct = pctVal(editBill.tds_pct);
+                      }
                       // Send edited items only if quantities were changed
                       const editedItems = editItems.filter(it => it._editCum !== undefined);
-                      if (editedItems.length > 0) {
+                      if (!locked && editedItems.length > 0) {
                         payload.items = editItems.map(it => ({
                           milestone_id:    it.milestone_id || null,
                           wo_item_id:      it.wo_item_id   || null,
@@ -1763,6 +1782,15 @@ function TabSubcon({ projectId, project }) {
               </div>
             </div>
             <input value={payForm.remark} onChange={e=>setPayForm(p=>({...p,remark:e.target.value}))} placeholder={t("common.remark_optional")} style={{...inpStyle,marginBottom:12}}/>
+            {payBillPosted && (
+              <div style={{marginBottom:12}}>
+                <label style={lblStyle}>{t("subcon.payment_account")}</label>
+                <SearchSelect value={payForm.account_id ? String(payForm.account_id) : ""}
+                  options={payAccounts.map(a => ({ value: String(a.id), label: a.name }))}
+                  onChange={v=>setPayForm(p=>({...p,account_id:v}))} placeholder={t("finance.select_account")}/>
+                <div style={{fontSize:10.5,color:T.t3,marginTop:5,lineHeight:1.45}}>{t("subcon.payment_finance_note")}</div>
+              </div>
+            )}
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setShowPayModal(false)} style={{flex:1,padding:"8px",borderRadius:6,border:"1px solid "+T.b1,background:T.surface,cursor:"pointer",fontSize:12}}>{t("common.cancel")}</button>
               <button onClick={()=>submitPayment(showPayModal)} disabled={saving} style={{flex:2,padding:"8px",borderRadius:6,background:saving?T.t4:T.grn,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>{saving?t("common.saving"):t("subcon.save_payment")}</button>
@@ -2201,8 +2229,9 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
       subcon_name:     form.subcon_name,
       subcon_category: form.subcon_category,
       description:     form.description,
-      retention_pct:   parseFloat(form.retention_pct||5),
-      tds_pct:         parseFloat(form.tds_pct||2),
+      // 0% bhi sachchi value (SUB-04) — khaali chhoda to server default (5% / 2%)
+      retention_pct:   form.retention_pct === "" ? undefined : parseFloat(form.retention_pct),
+      tds_pct:         form.tds_pct === "" ? undefined : parseFloat(form.tds_pct),
       start_date:      form.start_date||null,
       end_date:        form.end_date||null,
       sections: finalSections.map(s=>({
@@ -3547,8 +3576,8 @@ function EditWOModal({ wo, subcons, projectId, fmtC, inpStyle, lblStyle, onClose
     subcon_name: wo.subcon_name||"",
     subcon_category: wo.subcon_category||"Civil",
     description: wo.description||"",
-    retention_pct: wo.retention_pct||5,
-    tds_pct: wo.tds_pct||2,
+    retention_pct: wo.retention_pct ?? 5, // 0% ko 5% nahi banana (SUB-04)
+    tds_pct: wo.tds_pct ?? 2,
     start_date: wo.start_date ? wo.start_date.split("T")[0] : "",
     end_date: wo.end_date ? wo.end_date.split("T")[0] : "",
     status: wo.status||"Active",
@@ -4017,8 +4046,10 @@ function WoItemOptions({ woId, fmtC }) {
 function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onClose, onSave }) {
   const woId   = wo?.id;
   const method = wo?.billing_method || "manual";
-  const retPct = parseFloat(wo?.retention_pct || 5);
-  const tdsPct = parseFloat(wo?.tds_pct || 2);
+  // WO ka 0% bhi 0 hi rahe (SUB-04) — pehle `|| 5` 0 ko 5% bana deta tha
+  const pctOf = (v, d) => { const n = parseFloat(v); return Number.isFinite(n) ? n : d; };
+  const retPct = pctOf(wo?.retention_pct, 5);
+  const tdsPct = pctOf(wo?.tds_pct, 2);
 
   // ── Form state ─────────────────────────────────────────────────────────
   const [billDate,      setBillDate]      = useState(localYMD());
@@ -4097,12 +4128,21 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
       return;
     }
     if (method === "manual") {
+      // WO qty se zyada = over-bill: pehle "exceeds WO" sirf laal rang tha aur
+      // Submit phir bhi chala jaata; ab Over-Billing Mode + reason chahiye (server bhi rokta hai — SUB-11)
+      const over = sections.some(sec => sec.items.some(it => {
+        const q = parseFloat(it.qty || 0);
+        return q > 0 && parseFloat(cumQtys[it.id] || 0) > q;
+      }));
+      if (over && !overBillMode) {
+        alert(t("subcon.manual_exceeds_wo_turn_on_overbill"));
+        return;
+      }
       const items = sections.flatMap(sec => sec.items.map(it => ({
         wo_item_id: it.id,
         cumulative_qty: parseFloat(cumQtys[it.id]||0),
-        rate: parseFloat(it.rate),
       })));
-      onSave({ bill_date: billDate, remark, items, over_bill_mode: 0, over_bill_reason: "" });
+      onSave({ bill_date: billDate, remark, items, over_bill_mode: over ? 1 : 0, over_bill_reason: over ? overBillReason.trim() : "" });
       return;
     }
     if (method === "milestone_percent") {
