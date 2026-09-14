@@ -1840,8 +1840,12 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
 
 // ── Report 3: PROJECT-WISE ────────────────────────────────────────
 function ProjectSpend({ byProject }) {
+  // Kharcha rows (pump → machine + drum → machine) aur neeche drum bharne ki
+  // alag 'stock' row — wo kharcha nahi, sirf dikhane ko (13 Sep 2026 niyam).
+  const nameOf = (r) => (r.kind === "stock" ? t("fuel.drum_me_stock_row")
+    : r.project_id ? (r.project_name || `#${r.project_id}`) : t("fuel.company_level_koi_project_nahi"));
   const COLS = [
-    { key: "project_name", label: t("common.project"), w: 26 },
+    { key: "project_name", label: t("common.project"), w: 26, excel: nameOf },
     { key: "entries", label: t("fuel.fills"), w: 9 },
     { key: "litres", label: t("fuel.litres"), w: 11 },
     { key: "amount", label: t("common.amount_2"), w: 13, excel: (r) => Math.round(r.amount) },
@@ -1857,11 +1861,11 @@ function ProjectSpend({ byProject }) {
             <span>{t("common.project")}</span><span>{t("fuel.fills")}</span><span>{t("fuel.litres")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span>
           </Row>
           {byProject.map((p) => (
-            <Row key={p.project_id || "none"} cols="2fr 100px 110px 120px">
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{p.project_name}</span>
+            <Row key={(p.kind || "cost") + (p.project_id || "none")} cols="2fr 100px 110px 120px">
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: p.kind === "stock" ? T.t4 : T.t1 }}>{nameOf(p)}</span>
               <span style={{ fontSize: 11.5, color: T.t3 }}>{p.entries}</span>
               <span style={{ fontSize: 12, color: T.t2 }}>{fmtL(p.litres)}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(p.amount)}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: p.kind === "stock" ? T.t4 : T.t1, textAlign: "right" }}>{fmtC(p.amount)}</span>
             </Row>
           ))}
           <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
@@ -2704,8 +2708,12 @@ function FuelModule() {
 
   const totalStock = stores.reduce((a, s) => a + Number(s.litres || 0), 0);
   const stockValue = stores.reduce((a, s) => a + Number(s.value || 0), 0);
-  const spendInRange = byProject.reduce((a, p) => a + Number(p.amount || 0), 0);
-  const litresInRange = byProject.reduce((a, p) => a + Number(p.litres || 0), 0);
+  // Diesel ka kharcha = jo machine me gaya (pump → machine + drum → machine).
+  // Drum bharna stock hai — server use `kind:'stock'` row me alag bhejta hai,
+  // wo is jod me nahi aata (13 Sep 2026 niyam).
+  const costRows = byProject.filter((p) => p.kind !== "stock");
+  const spendInRange = costRows.reduce((a, p) => a + Number(p.amount || 0), 0);
+  const litresInRange = costRows.reduce((a, p) => a + Number(p.litres || 0), 0);
   // Baaki = pump ko abhi dena — bill bana par pay nahi hua + bill bana hi nahi
   // (server ka EK niyam, utils/fuelPayable.js). Bill na bana hissa Pending
   // Payments me hota hi nahi, isliye tile par alag se likha jaata hai.
@@ -2732,7 +2740,7 @@ function FuelModule() {
 
   const TILES = [
     { l: t("fuel.barrel_stock_2"),  v: fmtL(totalStock), sub: `${stores.length} barrel · ${fmtC(stockValue)}`, c: T.ind, I: IcDrum },
-    { l: t("fuel.diesel_kharcha"), v: fmtC(spendInRange), sub: `${fmtL(litresInRange)} is duration me`, c: T.blu, I: IcDrop },
+    { l: t("fuel.diesel_kharcha"), v: fmtC(spendInRange), sub: t("fuel.l_is_duration_me", { l: fmtL(litresInRange) }), c: T.blu, I: IcDrop },
     { l: t("fuel.vendor_baaki"),  v: fmtC(unpaid),
       sub: unbilledAmt > 0 ? t("fuel.vendor_baaki_unbilled_sub", { amt: fmtC(unbilledAmt) })
         : unpaid > 0 ? t("fuel.vendor_baaki_pending_sub") : t("fuel.sab_settle"),
