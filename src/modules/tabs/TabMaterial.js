@@ -313,7 +313,8 @@ function TabMaterial({ project }) {
     // Fetch both MRs and direct GRNs (no linked MR) in parallel
     Promise.all([
       api.get("/procurement/mrs?project_id=" + projectId),
-      api.get("/procurement/grns?project_id=" + projectId),
+      // fields=list: sirf card ke khaane (photo/bill/alt nahi) — PERF-12
+      api.get("/procurement/grns?project_id=" + projectId + "&fields=list"),
     ]).then(([mrRes, grnRes]) => {
       const mrEntries = (mrRes.success && Array.isArray(mrRes.data))
         ? mrRes.data.map(toMrCard)
