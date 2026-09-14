@@ -4,6 +4,7 @@ import { T, fmt, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead } from "../shared/ui";
 import { t } from "../../i18n";
 import { canSeeFinancials } from "../../utils/perms";
+import { todayISO } from "../../utils/today";
 
 /* ────────────────────────────────────────────────────────────────────
    Project Overview — mirrors the company dashboard's depth at the
@@ -17,6 +18,23 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 const IN_TYPES  = ["receipt","sales_invoice","material_return"];
 const OUT_TYPES = ["payment","material_purchase","site_expense","party_payment","subcon_expense","wallet_payment"];
 const num = (v)=>Number(v)||0;
+// Site photo ke dabbe — pehchaan sthir id, t() sirf button ke label par.
+// Pehle t() ka jawab hi object ki key thi: Hindi me "पिछले हफ़्ते" wali key thi
+// hi nahi, .push undefined par girta aur poora Projects module error screen
+// ban jaata (PRJ-01).
+const MEDIA_BUCKETS = ["week","month","older"];
+// MR ka stage (English id) jab server `stage` na bheje — routes/procurement.js
+// ke CASE ka hi kram, pehli sachchi shart jeetti hai (ms = mat_status, rs =
+// mr_status, dono lowercase). Rejected / Closed pipeline me nahi ginte.
+const MR_STAGE_RULES = [
+  ["Rejected",  (ms,rs)=>rs.includes("reject")],
+  ["Closed",    (ms,rs)=>rs.includes("clos")||rs.includes("cancel")],
+  ["Used",      (ms)=>ms.includes("used")],
+  ["Received",  (ms)=>ms.includes("received")],
+  ["Ordered",   (ms)=>ms.includes("ordered")],
+  ["Approved",  (ms,rs)=>rs.includes("approve")],
+  ["Requested", ()=>true],
+];
 
 /* ── Self-contained charts (no shared chart deps — keeps the tab portable) ── */
 function DonutChart({slices, size=118, r=40, inner=24}){
@@ -93,7 +111,7 @@ function TabOverview({proj, onRequestPayment}) {
   // backend. Office needs the same picture the site sees, without hunting
   // through the Pulse feed.
   const [media, setMedia] = useState(null);      // null = loading
-  const [mBucket, setMBucket] = useState("Last week");
+  const [mBucket, setMBucket] = useState("week");  // MEDIA_BUCKETS ki id
   const [mView, setMView] = useState(-1);        // index into the visible list
   // Hatane ka haq server tay karta hai (admin/PM, ya apni daali hui cheez).
   // Client sirf button chhupata hai — asli rok backend par hai.
@@ -163,15 +181,16 @@ function TabOverview({proj, onRequestPayment}) {
 
   const isVid = (m) => m.kind==="video" || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(m.url||"");
   const bucketOf = (d)=>{
-    const dt=new Date(d); if(isNaN(dt)) return t("overview.older");
+    const dt=new Date(d); if(isNaN(dt)) return "older";
     const days=(Date.now()-dt.getTime())/86400000;
-    return days<=7 ? t("overview.last_week") : days<=30 ? t("overview.last_month") : t("overview.older");
+    return days<=7 ? "week" : days<=30 ? "month" : "older";
   };
   const mediaBuckets = useMemo(()=>{
-    const g={"Last week":[],"Last month":[],"Older":[]};
+    const g={week:[],month:[],older:[]};
     (media||[]).forEach(m=>{ g[bucketOf(m.created_at)].push(m); });
     return g;
   },[media]);
+  const mBucketLabels = { week:t("overview.last_week"), month:t("overview.last_month"), older:t("overview.older") };
   const mediaShown = mediaBuckets[mBucket]||[];
 
   /* ── FINANCE derivations ── */
@@ -203,31 +222,58 @@ function TabOverview({proj, onRequestPayment}) {
   /* ── OPERATIONS derivations ── */
   const ops = useMemo(()=>{
     const done=s=>/done|complete/i.test(s||"");
-    const open=tasks.filter(t=>!done(t.status));
-    const ongoing=tasks.filter(t=>/progress/i.test(t.status||""));
-    const overdue=open.filter(t=>{ const e=t.base_end||t.actual_end||t.end_date; return e && new Date(e) < new Date(); });
+    // Ginti sirf PATTE (leaf) task ki — maa-baap (phase/summary) row ka status
+    // aur progress uske bachchon ka roll-up hai; unhe ginne se KEWAL SAHU par
+    // Open 297 dikhta tha jabki asli task 251 (46 summary). Status ki asli value
+    // 'Ongoing' hai — /progress/ kabhi milta hi nahi tha, to "in progress"
+    // hamesha 0 (PRJ-04). 'In Progress'/'in_progress' purani value, woh bhi.
+    const parentIds=new Set(tasks.map(x=>x.parent_id).filter(x=>x!=null).map(String));
+    const leaves=tasks.filter(x=>!parentIds.has(String(x.id)));
+    const open=leaves.filter(x=>!done(x.status));
+    const ongoing=leaves.filter(x=>["Ongoing","In Progress","in_progress"].includes(x.status));
+    // Overdue = end date BEET chuki (aaj ki local tareekh se pehle) — "aaj" khatam
+    // hone wala task aaj overdue nahi.
+    const today=todayISO();
+    const overdue=open.filter(x=>{ const e=x.base_end||x.actual_end||x.end_date; return e && String(e).slice(0,10) < today; });
+    // Stage = English id (STAGES/STAGE_S ki key); label t() se sirf dikhate
+    // waqt. Pehle yahan t() ka jawab hi id tha — Hindi me "रिक्वेस्टेड" kisi key
+    // se nahi milta, to "Material due" 0 aur pills gayab. Aur Rejected / Closed
+    // MR bhi "Requested"/"Ordered" gin kar pipeline me aa jaati thi (PRJ-02).
+    // Server (GET /procurement/mrs) har MR ka `stage` Procurement screen wale
+    // niyam se bhejta hai — wahi pehle; purane jawab ke liye wahi niyam yahan.
     const stageOf=(m)=>{
+      if(m.stage) return m.stage;
       const ms=(m.mat_status||"").toLowerCase(); const rs=(m.mr_status||"").toLowerCase();
-      if(ms.includes("used")) return t("common.used");
-      if(ms.includes("received")) return t("common.received");
-      if(ms.includes("ordered")) return t("common.ordered");
-      if(rs.includes("approve")) return t("common.approved");
-      return t("overview.requested");
+      return MR_STAGE_RULES.find(([,ok])=>ok(ms,rs))[0];
     };
     const byStage={}; STAGES.forEach(s=>byStage[s]=0);
-    mrs.forEach(m=>{ const s=stageOf(m); byStage[s]=(byStage[s]||0)+1; });
+    mrs.forEach(m=>{ const s=stageOf(m); if(byStage[s]!==undefined) byStage[s]+=1; });
     const matPending=mrs.filter(m=>["Requested","Approved","Ordered"].includes(stageOf(m))).length;
-    return {open, ongoing, overdue, byStage, matPending};
+    return {leaves, open, ongoing, overdue, byStage, matPending, stageOf};
   },[tasks, mrs]);
+  const stageLabel = { Requested:t("overview.requested"), Approved:t("common.approved"), Ordered:t("common.ordered"),
+    Received:t("common.received"), Used:t("common.used"), Rejected:t("common.rejected"), Closed:t("common.closed") };
 
-  const margin = num(proj?.boq) - num(proj?.expense);
+  // Spent = project ki laagat (projectPnl ka cost) — Projects list/card aur
+  // Dashboard wala hi aankda (PRJ-14). pnl sabse taaza; list se aaya
+  // proj.expense bhi wahi hai, aur 0 ho to 0 hi dikhe (pehle `||` se txn ka
+  // jod aa jaata tha). Pulse/Approvals se khule project me expense hota hi
+  // nahi — sirf tab txn ka jod.
+  const spentAmt = pnl ? num(pnl.cost) : (proj?.expense != null ? num(proj.expense) : fin.spent);
+  const margin = num(proj?.boq) - spentAmt;
   const signed = (n)=>`${n<0?"−":""}₹${fmt(Math.abs(n))}`; // clean ±₹ display
-  const endDate = proj?.end_date || proj?.endDate || proj?.end;
-  let daysLeft="—", daysNote="No end date set";
-  if(endDate){
-    const dl=Math.ceil((new Date(endDate)-new Date())/86400000);
-    daysLeft = dl<0 ? `${Math.abs(dl)}d over` : String(dl);
-    daysNote = "Till "+new Date(endDate).toLocaleDateString("en-IN",{month:"short",year:"numeric"});
+  // Asli end_date ("YYYY-MM-DD") se — pehle card ka "May 2027" (proj.end) padha
+  // jaata tha, jo Chrome me 1 May ban jaata (KEWAL SAHU 254 ki jagah 230 din,
+  // Safari me NaN). Din = aaj ki local aadhi-raat se end_date ki aadhi-raat tak
+  // (PRJ-03).
+  const endYmd = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(proj?.end_date || proj?._raw?.end_date || ""));
+  let daysLeft="—", daysNote=t("overview.no_end_date_set");
+  if(endYmd){
+    const end=new Date(+endYmd[1], +endYmd[2]-1, +endYmd[3]);
+    const now=new Date(), today0=new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dl=Math.round((end-today0)/86400000);
+    daysLeft = dl<0 ? t("overview.days_over", { n: Math.abs(dl) }) : String(dl);
+    daysNote = t("overview.till_date", { date: end.toLocaleDateString("en-IN",{month:"short",year:"numeric"}) });
   }
   const expTotal = fin.slices.reduce((s,e)=>s+e.value,0);
 
@@ -268,7 +314,7 @@ function TabOverview({proj, onRequestPayment}) {
             note={`${pipe.done_m>=1000?(pipe.done_m/1000).toFixed(2)+" km":Math.round(pipe.done_m)+" m"} / ${pipe.length_m>=1000?(pipe.length_m/1000).toFixed(2)+" km":Math.round(pipe.length_m)+" m"}`}
             color={T.ind}/>}
           <Stat label={t("overview.days_left")}     value={daysLeft}                  note={daysNote}            color={T.pur}/>
-          <Stat label={t("overview.open_tasks")}    value={String(ops.open.length)}   note={`${ops.ongoing.length} in progress`} color={T.amb}/>
+          <Stat label={t("overview.open_tasks")}    value={String(ops.open.length)}   note={t("overview.n_in_progress", { n: ops.ongoing.length })} color={T.amb}/>
           <Stat label={t("overview.team_on_site")}  value={String(team.length)}       note="Workforce assigned"  color={T.grn}/>
           <Stat label={t("overview.material_due")}  value={String(ops.matPending)}    note="Requests in pipeline" color={T.slt}/>
           <Stat label={t("common.overdue")}       value={String(ops.overdue.length)} note="Tasks need action"  color={ops.overdue.length?T.red:T.grn}/>
@@ -290,13 +336,13 @@ function TabOverview({proj, onRequestPayment}) {
               <div style={{flex:1, minWidth:0}}>
                 <div style={{display:"flex", justifyContent:"space-between", marginBottom:8}}>
                   <span style={{fontSize:11, color:T.t4}}>{t("overview.tasks_done")}</span>
-                  <span style={{fontSize:12, fontWeight:700, color:T.t1}}>{tasks.length-ops.open.length}/{tasks.length}</span>
+                  <span style={{fontSize:12, fontWeight:700, color:T.t1}}>{ops.leaves.length-ops.open.length}/{ops.leaves.length}</span>
                 </div>
-                <PBar pct={tasks.length?Math.round((tasks.length-ops.open.length)/tasks.length*100):0} color={T.grn} h={6}/>
+                <PBar pct={ops.leaves.length?Math.round((ops.leaves.length-ops.open.length)/ops.leaves.length*100):0} color={T.grn} h={6}/>
                 <div style={{display:"flex", gap:14, marginTop:12}}>
                   <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("overview.in_progress")}</div><div style={{fontSize:15, fontWeight:700, color:T.blu}}>{ops.ongoing.length}</div></div>
                   <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.overdue")}</div><div style={{fontSize:15, fontWeight:700, color:ops.overdue.length?T.red:T.t3}}>{ops.overdue.length}</div></div>
-                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.total")}</div><div style={{fontSize:15, fontWeight:700, color:T.t1}}>{tasks.length}</div></div>
+                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.total")}</div><div style={{fontSize:15, fontWeight:700, color:T.t1}}>{ops.leaves.length}</div></div>
                 </div>
               </div>
             </div>
@@ -304,7 +350,7 @@ function TabOverview({proj, onRequestPayment}) {
 
           {/* Ongoing tasks list */}
           <Panel>
-            <PHead title={t("overview.ongoing_tasks")} action={<Pill label={`${ops.ongoing.length} active`} c={T.blu} bg={T.bluL}/>}/>
+            <PHead title={t("overview.ongoing_tasks")} action={<Pill label={t("overview.n_active", { n: ops.ongoing.length })} c={T.blu} bg={T.bluL}/>}/>
             <div style={{maxHeight:230, overflowY:"auto"}}>
               {ops.ongoing.length===0
                 ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?t("common.loading_2"):t("overview.no_tasks_in_progress")}</div>
@@ -339,23 +385,22 @@ function TabOverview({proj, onRequestPayment}) {
             <div style={{padding:"12px 15px"}}>
               <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:mrs.length?12:0}}>
                 {STAGES.map(s=>{ const ss=STAGE_S[s]; const c=ops.byStage[s]||0; if(!c) return null;
-                  return <Pill key={s} label={`${s} · ${c}`} c={ss.c} bg={ss.bg}/>; })}
+                  return <Pill key={s} label={`${stageLabel[s]} · ${c}`} c={ss.c} bg={ss.bg}/>; })}
               </div>
               {mrs.length===0
                 ? <div style={{padding:"18px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?t("common.loading_2"):t("overview.no_material_requests_yet")}</div>
                 : (
                   <div style={{display:"flex", flexDirection:"column", gap:7}}>
                     {mrs.slice(0,5).map((m,i)=>{
-                      const stage=(()=>{ const ms=(m.mat_status||"").toLowerCase(),rs=(m.mr_status||"").toLowerCase();
-                        if(ms.includes("used"))return t("common.used"); if(ms.includes("received"))return t("common.received"); if(ms.includes("ordered"))return t("common.ordered"); if(rs.includes("approve"))return t("common.approved"); return t("overview.requested"); })();
-                      const ss=STAGE_S[stage]||STAGE_S.Requested;
+                      const stage=ops.stageOf(m);
+                      const ss=STAGE_S[stage]||(stage==="Rejected"?{c:T.red,bg:T.redL}:STAGE_S.Requested);
                       return (
                         <div key={m.id||i} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 10px", background:T.surfaceB, borderRadius:7, borderLeft:`3px solid ${ss.c}`}}>
                           <div style={{minWidth:0}}>
                             <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.item_name||m.material_name||t("common.material")}</div>
                             <div style={{fontSize:10.5, color:T.t4}}>{m.quantity?`${m.quantity} ${m.unit||""}`:""}{m.requested_by?` · ${m.requested_by}`:""}</div>
                           </div>
-                          <Pill label={stage} c={ss.c} bg={ss.bg}/>
+                          <Pill label={stageLabel[stage]||stage} c={ss.c} bg={ss.bg}/>
                         </div>
                       );
                     })}
@@ -394,12 +439,12 @@ function TabOverview({proj, onRequestPayment}) {
         <Panel>
           <PHead title={t("overview.site_photos_videos")} action={
             <div style={{display:"flex", gap:6}}>
-              {["Last week","Last month","Older"].map(b=>(
+              {MEDIA_BUCKETS.map(b=>(
                 <button key={b} onClick={()=>setMBucket(b)}
                   style={{padding:"4px 10px", borderRadius:14, border:`1px solid ${mBucket===b?T.pur:T.b1}`,
                     background:mBucket===b?T.purL:T.surface, color:mBucket===b?T.pur:T.t3,
                     fontSize:10.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit"}}>
-                  {b}{mediaBuckets[b]?.length ? ` · ${mediaBuckets[b].length}` : ""}
+                  {mBucketLabels[b]}{mediaBuckets[b]?.length ? ` · ${mediaBuckets[b].length}` : ""}
                 </button>
               ))}
             </div>
@@ -407,7 +452,7 @@ function TabOverview({proj, onRequestPayment}) {
           <div style={{padding:"10px 15px 14px"}}>
             {media===null && <div style={{padding:"24px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>{t("common.loading_2")}</div>}
             {media!==null && mediaShown.length===0 && (
-              <div style={{padding:"24px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>{t("overview.mbucket_me_koi_site_photo_nahi", { mBucket })}</div>
+              <div style={{padding:"24px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>{t("overview.mbucket_me_koi_site_photo_nahi", { mBucket: mBucketLabels[mBucket] })}</div>
             )}
             {mediaShown.length>0 && (
               <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))", gap:8}}>
@@ -450,7 +495,7 @@ function TabOverview({proj, onRequestPayment}) {
         <div style={{display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10}}>
           <Stat label={t("app.boq_value")}   value={`₹${fmt(num(proj?.boq))}`}        note="Total contract"      color={T.slt}/>
           <Stat label={t("common.received")}    value={`₹${fmt(fin.received)}`}          note={num(proj?.boq)?`${Math.round(fin.received/num(proj.boq)*100)}% of BOQ`:"Money in"} color={T.grn}/>
-          <Stat label={t("app.spent")}       value={`₹${fmt(num(proj?.expense)||fin.spent)}`} note={num(proj?.boq)?`${Math.round((num(proj?.expense)||fin.spent)/num(proj.boq)*100)}% utilised`:"Money out"} color={T.amb}/>
+          <Stat label={t("app.spent")}       value={signed(spentAmt)} note={num(proj?.boq)?`${Math.round(spentAmt/num(proj.boq)*100)}% utilised`:"Money out"} color={T.amb}/>
           <Stat label={t("common.margin")}      value={signed(margin)}                  note={num(proj?.boq)?`${Math.round(margin/num(proj.boq)*100)}% buffer`:""} color={margin>=0?T.grn:T.red}/>
           <Stat label={t("overview.receivable")}  value={`₹${fmt(Math.max(0,num(proj?.boq)-fin.received))}`} note="Yet to collect" color={T.blu}/>
           <Stat label={t("payroll.payable")}     value={`₹${fmt(fin.payable)}`}           note={`${fin.pendingPay.length} request${fin.pendingPay.length===1?"":"s"}`} color={fin.payable?T.red:T.grn}/>
@@ -498,8 +543,8 @@ function TabOverview({proj, onRequestPayment}) {
               <CashBars data={fin.bars}/>
               <div style={{display:"flex", justifyContent:"space-around", marginTop:10, paddingTop:10, borderTop:`1px solid ${T.b1}`}}>
                 <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.received")}</div><div style={{fontSize:15, fontWeight:700, color:T.grn}}>₹{fmt(fin.received)}</div></div>
-                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("app.spent")}</div><div style={{fontSize:15, fontWeight:700, color:T.red}}>₹{fmt(num(proj?.expense)||fin.spent)}</div></div>
-                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.net")}</div><div style={{fontSize:15, fontWeight:700, color:fin.received-(num(proj?.expense)||fin.spent)>=0?T.blu:T.red}}>{signed(fin.received-(num(proj?.expense)||fin.spent))}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("app.spent")}</div><div style={{fontSize:15, fontWeight:700, color:T.red}}>{signed(spentAmt)}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.net")}</div><div style={{fontSize:15, fontWeight:700, color:fin.received-spentAmt>=0?T.blu:T.red}}>{signed(fin.received-spentAmt)}</div></div>
               </div>
             </div>
           </Panel>

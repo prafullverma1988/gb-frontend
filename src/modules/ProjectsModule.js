@@ -861,10 +861,15 @@ const mapProject=(p)=>({
   tender_label:[p.tender_no,p.tender_title].filter(Boolean).join(" · "),
   status:STATUS_MAP[p.status]||p.status||"Not Started",
   boq:parseFloat(p.boq_value)||0,
-  expense:parseFloat(p.total_expense)||0,
+  // spent = server ki live laagat (projectPnl) — Finance P&L wala hi aankda.
+  // total_expense ka purana counter bigda hua tha (PRJ-14); purane jawab me
+  // spent na ho tabhi wo.
+  expense:parseFloat(p.spent ?? p.total_expense)||0,
   pm:p.pm_name||"",
   start:fmtDate(p.start_date),
   end:fmtDate(p.end_date),
+  // Overview ka "Days left" asli tareekh se ginta hai — "May 2027" se nahi (PRJ-03).
+  end_date:p.end_date||null,
   project_type:p.project_type||"construction",
   _raw:p,
 });
