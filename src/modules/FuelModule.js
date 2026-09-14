@@ -1757,7 +1757,9 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
 
   const withNorm = rows.filter((e) => e.variance_amount != null);
   const totalVar = withNorm.reduce((a, e) => a + e.variance_amount, 0);
-  const noDiesel = rows.filter((e) => e.hours > 0 && e.litres === 0);
+  // Din / trip wali machine ke "ghante" nahi hote (MCH-09) — chali hui ka pata active_days se.
+  const ran = (e) => e.hours > 0 || e.active_days > 0;
+  const noDiesel = rows.filter((e) => ran(e) && e.litres === 0);
 
   const COLS = [
     { key: "equipment_name", label: t("fuel.machine"), w: 22 },
@@ -1773,7 +1775,7 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
     { key: "variance_amount", label: t("fuel.farq_rs"), w: 11, excel: (r) => (r.variance_amount == null ? "" : Math.round(r.variance_amount)) },
     { key: "amount", label: t("fuel.diesel_rs"), w: 12, excel: (r) => Math.round(r.amount) },
     { key: "note", label: t("common.note"), w: 30, excel: (r) => (r.norm_missing ? "Norm set nahi — farq nikal hi nahi sakta"
-      : (r.hours > 0 && r.litres === 0 ? "Chali par diesel darj nahi" : "")) },
+      : (ran(r) && r.litres === 0 ? "Chali par diesel darj nahi" : "")) },
   ];
   const cols = "1.5fr 74px 68px 50px 72px 72px 98px 72px 74px 100px";
 
@@ -1835,7 +1837,7 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
                       <div style={{ fontSize: 10.5, color: T.t4 }}>
                         {fmtC(e.amount)}
                         {e.norm_missing && <span style={{ color: T.amb }}> {t("fuel.norm_set_nahi")}</span>}
-                        {e.hours > 0 && e.litres === 0 && <span style={{ color: T.amb }}> {t("fuel.chali_par_diesel_darj_nahi_2")}</span>}
+                        {ran(e) && e.litres === 0 && <span style={{ color: T.amb }}> {t("fuel.chali_par_diesel_darj_nahi_2")}</span>}
                       </div>
                     </div>
                     <span style={{ fontSize: 11, color: T.t3 }}>{e.ownership || "—"}</span>
