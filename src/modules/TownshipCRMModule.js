@@ -488,10 +488,12 @@ export default function TownshipCRMModule() {
 
   // ── Seed Demo Data ──────────────────────────────────────────
   const handleSeed = async () => {
-    if (!await window.confirmAsync(t("township_crm.existing_units_prospects_delete_ho_jayenge"))) return;
+    if (!await window.confirmAsync(t("township_crm.seed_demo_confirm_empty"))) return;
     setSeeding(true);
     try {
-      const res = await api.post("/township-crm/seed-demo", { wipe_existing: true });
+      // Pehle wipe_existing:true — server project ka saara data hard-delete
+      // karta tha. Ab sirf khula (empty) project, delete kabhi nahi (CRM-13).
+      const res = await api.post("/township-crm/seed-demo", { project_id: PROJECT_ID });
       if (res?.success) {
         const d = res.data;
         alert(t("township_crm.seeded_units_created_units_prospects_created", { units_created: d.units_created, prospects_created: d.prospects_created, customers_created: d.customers_created, bookings_created: d.bookings_created, payments_created: d.payments_created, customizations_created: d.customizations_created }));
@@ -569,7 +571,8 @@ export default function TownshipCRMModule() {
         {activeTab === "Construction"   && <ConstructionTab constructionSync={constructionSync} onOpenProject={handleOpenProject}/>}
         {activeTab === "Reports"        && <ReportsTab salesVelocity={salesVelocity} typeDemand={typeDemand}
           revenueForecast={revenueForecast} onStuckUnits={() => setShowStuckUnits(true)}/>}
-        {activeTab === "Settings"       && <SettingsTab project={project} unitTypes={unitTypes} seeding={seeding} onSeed={handleSeed} projectId={PROJECT_ID} onChanged={loadAll}/>}
+        {activeTab === "Settings"       && <SettingsTab project={project} unitTypes={unitTypes} seeding={seeding} onSeed={handleSeed} projectId={PROJECT_ID} onChanged={loadAll}
+          canSeed={units.length === 0 && prospects.length === 0}/>}
       </div>
 
       {/* ── MODALS ─────────────────────────────────────────────── */}
@@ -1567,7 +1570,7 @@ function ReportsTab({ salesVelocity, typeDemand, revenueForecast, onStuckUnits }
 // ════════════════════════════════════════════════════════════════
 // TAB 9 — SETTINGS (live project + unit types + Seed Demo button)
 // ════════════════════════════════════════════════════════════════
-function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged }) {
+function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged, canSeed }) {
   const [showAddType, setShowAddType] = useState(false);
   const [editType, setEditType]       = useState(null);
   const [busyTypeId, setBusyTypeId]   = useState(null);
@@ -1597,7 +1600,9 @@ function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged
 
   return (
     <div style={{ display:"grid", gap:14 }}>
-      {/* Demo Data section */}
+      {/* Demo Data section — sirf empty project par (server bhi yahi rokta hai,
+          aur kabhi kuch delete nahi karta — CRM-13) */}
+      {canSeed && (
       <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:14 }}>
         <div style={{ fontSize:14, fontWeight:600, color:T.t1, marginBottom:8 }}>{t("township_crm.demo_data")}</div>
         <div style={{ fontSize:12, color:T.t2, marginBottom:10 }}>
@@ -1606,9 +1611,10 @@ function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged
         <Btn primary small onClick={onSeed} disabled={seeding}
           label={seeding ? t("township_crm.seeding") : t("township_crm.seed_demo_data")}/>
         <div style={{ fontSize:11, color:T.t3, marginTop:8 }}>
-         {t("township_crm.yeh_existing_units_prospects_aur_followup")}
+         {t("township_crm.seed_demo_empty_only_note")}
         </div>
       </div>
+      )}
 
       <Frame title={t("township_crm.project_configuration")} sub={t("township_crm.anadi_ananta_setup_details")}>
         {/* Section 1 — Project info */}
