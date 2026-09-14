@@ -18,7 +18,9 @@ export function can(moduleName, action = "view", user) {
   const u = user || currentUser();
   if (["admin", "super_admin"].includes(u?.role)) return true;
   const row = u?.module_permissions?.[moduleName];
-  if (row === undefined) return true;          // unconfigured = khula
+  // unconfigured = khula — par Viewer ka matlab hi dekhne wala hai, wahan
+  // bina row ke sirf view (server ka requirePerm bhi yahi maanta hai).
+  if (row === undefined) return u?.role !== "viewer" || action === "view";
   return !!row[action];
 }
 

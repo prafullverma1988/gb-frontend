@@ -119,15 +119,19 @@ function ToggleRow({ icon, label, desc, value, onChange }) {
 // hain. Approve ka bit bhi server padhta hai (poori company ki library kise
 // dikhe). Export ka koi server route nahi — file browser/phone me banti hai,
 // isliye wahan sirf button chhupta hai ("app").
+// View: har module me screen/tab chhupta hai ("app"); jin me server data bhi
+// rokta hai wo "server" — wahan VIEW hataane par API se bhi kuch nahi milta
+// (14 Sep 2026). Party/godown/machine jaise dropdown khule rehte hain.
 const PERM_LIVE = {
-  view:    { "*": "server" },
-  create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "server", "Mapping": "server" },
-  edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server" },
-  delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server" },
-  approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server", "Mapping": "server" },
+  view:    { "*": "app", "CRM": "server", "Township CRM": "server", "Tenders": "server", "Team & HR": "server", "Machinery": "server", "Equipment": "server", "Subcon": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Procurement": "server", "Warehouse": "server", "Material": "server", "Assets": "server", "Financial Reports": "server", "Users & Roles": "server", "Attendance": "server", "Overview": "server", "Transaction": "server", "Party": "server", "Mapping": "server", "Pulse": "server", "Reports": "server" },
+  create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Files": "server", "Budget": "server", "Site / DPR": "server" },
+  edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Budget": "server" },
+  delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Tasks": "server", "To Do": "server" },
+  approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Projects": "server", "Site / DPR": "server" },
   export:  { "Mapping": "app" },
 };
-const permLive = (mod, act) => (PERM_LIVE[act] || {})["*"] || (PERM_LIVE[act] || {})[mod] || null;
+// Module ka apna naam pehle, "*" sirf tab jab uske liye kuch likha na ho.
+const permLive = (mod, act) => (PERM_LIVE[act] || {})[mod] || (PERM_LIVE[act] || {})["*"] || null;
 
 const PERM_HELP = {
   "Projects": {
