@@ -220,7 +220,13 @@ function TabOverview({proj, onRequestPayment}) {
     return {open, ongoing, overdue, byStage, matPending};
   },[tasks, mrs]);
 
-  const margin = num(proj?.boq) - num(proj?.expense);
+  // Spent = project ki laagat (projectPnl ka cost) — Projects list/card aur
+  // Dashboard wala hi aankda (PRJ-14). pnl sabse taaza; list se aaya
+  // proj.expense bhi wahi hai, aur 0 ho to 0 hi dikhe (pehle `||` se txn ka
+  // jod aa jaata tha). Pulse/Approvals se khule project me expense hota hi
+  // nahi — sirf tab txn ka jod.
+  const spentAmt = pnl ? num(pnl.cost) : (proj?.expense != null ? num(proj.expense) : fin.spent);
+  const margin = num(proj?.boq) - spentAmt;
   const signed = (n)=>`${n<0?"−":""}₹${fmt(Math.abs(n))}`; // clean ±₹ display
   const endDate = proj?.end_date || proj?.endDate || proj?.end;
   let daysLeft="—", daysNote="No end date set";
@@ -450,7 +456,7 @@ function TabOverview({proj, onRequestPayment}) {
         <div style={{display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10}}>
           <Stat label={t("app.boq_value")}   value={`₹${fmt(num(proj?.boq))}`}        note="Total contract"      color={T.slt}/>
           <Stat label={t("common.received")}    value={`₹${fmt(fin.received)}`}          note={num(proj?.boq)?`${Math.round(fin.received/num(proj.boq)*100)}% of BOQ`:"Money in"} color={T.grn}/>
-          <Stat label={t("app.spent")}       value={`₹${fmt(num(proj?.expense)||fin.spent)}`} note={num(proj?.boq)?`${Math.round((num(proj?.expense)||fin.spent)/num(proj.boq)*100)}% utilised`:"Money out"} color={T.amb}/>
+          <Stat label={t("app.spent")}       value={signed(spentAmt)} note={num(proj?.boq)?`${Math.round(spentAmt/num(proj.boq)*100)}% utilised`:"Money out"} color={T.amb}/>
           <Stat label={t("common.margin")}      value={signed(margin)}                  note={num(proj?.boq)?`${Math.round(margin/num(proj.boq)*100)}% buffer`:""} color={margin>=0?T.grn:T.red}/>
           <Stat label={t("overview.receivable")}  value={`₹${fmt(Math.max(0,num(proj?.boq)-fin.received))}`} note="Yet to collect" color={T.blu}/>
           <Stat label={t("payroll.payable")}     value={`₹${fmt(fin.payable)}`}           note={`${fin.pendingPay.length} request${fin.pendingPay.length===1?"":"s"}`} color={fin.payable?T.red:T.grn}/>
@@ -498,8 +504,8 @@ function TabOverview({proj, onRequestPayment}) {
               <CashBars data={fin.bars}/>
               <div style={{display:"flex", justifyContent:"space-around", marginTop:10, paddingTop:10, borderTop:`1px solid ${T.b1}`}}>
                 <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.received")}</div><div style={{fontSize:15, fontWeight:700, color:T.grn}}>₹{fmt(fin.received)}</div></div>
-                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("app.spent")}</div><div style={{fontSize:15, fontWeight:700, color:T.red}}>₹{fmt(num(proj?.expense)||fin.spent)}</div></div>
-                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.net")}</div><div style={{fontSize:15, fontWeight:700, color:fin.received-(num(proj?.expense)||fin.spent)>=0?T.blu:T.red}}>{signed(fin.received-(num(proj?.expense)||fin.spent))}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("app.spent")}</div><div style={{fontSize:15, fontWeight:700, color:T.red}}>{signed(spentAmt)}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>{t("common.net")}</div><div style={{fontSize:15, fontWeight:700, color:fin.received-spentAmt>=0?T.blu:T.red}}>{signed(fin.received-spentAmt)}</div></div>
               </div>
             </div>
           </Panel>
