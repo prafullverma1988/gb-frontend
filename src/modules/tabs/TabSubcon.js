@@ -872,9 +872,9 @@ function TabSubcon({ projectId, project }) {
                         ))}
                       </div>
                       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
-                        {b.status==="Draft"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
-                        {b.status==="Submitted"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
-                        {(b.status==="Approved"||b.status==="Submitted")&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.record_payment")}</button>}
+                        {b.status==="Draft"&&<button onClick={async()=>{const r=await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"});if(r&&r.success===false)alert(r.message||t("common.something_went_wrong"));selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
+                        {b.status==="Submitted"&&<button onClick={async()=>{const r=await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});if(r&&r.success===false)alert(r.message||t("common.something_went_wrong"));selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
+                        {b.status==="Approved"&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.record_payment")}</button>}
                         {/* Edit + Delete (not for Paid) */}
                         {b.status!=="Paid"&&(
                           <button onClick={async()=>{
@@ -1538,11 +1538,15 @@ function TabSubcon({ projectId, project }) {
       {/* EDIT RA BILL MODAL */}
       {showEditBillModal && editBill && (() => {
         // ── helpers to recompute net from current retention/TDS ──
+        // TDS bhi gross par — server (recalcBillTotals) yahi karta hai; pehle
+        // yahan (gross − retention) par tha to preview server se alag aata.
         const recalcNet = (g, retPct, tdsPct) => {
           const retAmt = Math.round(g * retPct) / 100;
-          const tdsAmt = Math.round((g - retAmt) * tdsPct) / 100;
+          const tdsAmt = Math.round(g * tdsPct) / 100;
           return { retention_amt: retAmt, tds_amt: tdsAmt, net_payable: Math.round((g - retAmt - tdsAmt) * 100) / 100 };
         };
+        // Approved bill approve hui rakam par tiki hai — sirf remark badalta hai (SUB-09).
+        const locked = editBill.status === "Approved";
         // Recompute gross from edited item cumulative qtys
         const recalcGross = (items) => {
           return items.reduce((s, it) => {
@@ -1564,19 +1568,23 @@ function TabSubcon({ projectId, project }) {
                 <button onClick={()=>{setShowEditBillModal(false);setEditBill(null);}} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:18}}>×</button>
               </div>
 
-              {/* Date + Status */}
+              {/* Date + Status (status sirf dikhta hai — Submit / Approve button se badalta hai) */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                 <div>
                   <label style={lblStyle}>{t("common.bill_date")}</label>
-                  <input type="date" value={(editBill.bill_date||"").split("T")[0]}
-                    onChange={e=>setEditBill(p=>({...p,bill_date:e.target.value}))} style={inpStyle}/>
+                  <input type="date" value={(editBill.bill_date||"").split("T")[0]} disabled={locked}
+                    onChange={e=>setEditBill(p=>({...p,bill_date:e.target.value}))} style={locked?{...inpStyle,background:T.surfaceB,color:T.t3}:inpStyle}/>
                 </div>
                 <div>
                   <label style={lblStyle}>{t("common.status")}</label>
-                  <SearchSelect value={editBill.status||"Submitted"} options={["Draft","Submitted","Approved","Rejected"]}
-                    onChange={v=>setEditBill(p=>({...p,status:v}))} placeholder={t("common.select_status")}/>
+                  <input value={editBill.status||""} disabled style={{...inpStyle,background:T.surfaceB,color:T.t3,fontWeight:700}}/>
                 </div>
               </div>
+              {locked && (
+                <div style={{padding:"7px 10px",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:6,marginBottom:12,fontSize:11,color:"#92400E",lineHeight:1.45}}>
+                  {t("subcon.approved_bill_sirf_remark")}
+                </div>
+              )}
 
               {/* ── Item Quantities ── */}
               {showItems && (
@@ -1602,7 +1610,7 @@ function TabSubcon({ projectId, project }) {
                           <span style={{fontSize:11.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description||("Item #"+it.wo_item_id)}</span>
                           <span style={{fontSize:11,color:T.t4,textAlign:"right"}}>{it.unit||""}</span>
                           <span style={{fontSize:11,color:T.t3,textAlign:"right"}}>{prev}</span>
-                          <input type="number" value={it._editCum ?? it.cumulative_qty ?? ""}
+                          <input type="number" value={it._editCum ?? it.cumulative_qty ?? ""} disabled={locked}
                             onChange={e => {
                               const newItems = editItems.map((x,i) => i===idx ? {...x, _editCum: e.target.value} : x);
                               const newGross = Math.round(recalcGross(newItems) * 100) / 100;
@@ -1630,13 +1638,9 @@ function TabSubcon({ projectId, project }) {
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                 <div>
                   <label style={lblStyle}>{t("subcon.gross_amount")}</label>
-                  <input type="number" value={editBill.gross_amount ?? 0}
-                    onChange={e=>{
-                      const g = parseFloat(e.target.value) || 0;
-                      const retPct = parseFloat(editBill.retention_pct ?? 0);
-                      const tdsPct = parseFloat(editBill.tds_pct ?? 0);
-                      setEditBill(p=>({...p, gross_amount:g, ...recalcNet(g, retPct, tdsPct)}));
-                    }} style={inpStyle}/>
+                  {/* Gross items se banta hai — seedha likhne ka khaana nahi (server ise maanta bhi nahi) */}
+                  <input type="number" value={editBill.gross_amount ?? 0} disabled
+                    style={{...inpStyle,background:T.surfaceB,color:T.t3,fontWeight:700}}/>
                 </div>
                 <div>
                   <label style={lblStyle}>{t("subcon.net_payable_auto")}</label>
@@ -1645,7 +1649,7 @@ function TabSubcon({ projectId, project }) {
                 </div>
                 <div>
                   <label style={lblStyle}>{t("common.retention")}</label>
-                  <input type="number" min={0} max={100}
+                  <input type="number" min={0} max={100} disabled={locked}
                     value={editBill.retention_pct ?? ""}
                     onChange={e=>{
                       const r = parseFloat(e.target.value) || 0;
@@ -1658,13 +1662,13 @@ function TabSubcon({ projectId, project }) {
                 </div>
                 <div>
                   <label style={lblStyle}>{t("common.tds")}</label>
-                  <input type="number" min={0} max={100}
+                  <input type="number" min={0} max={100} disabled={locked}
                     value={editBill.tds_pct ?? ""}
                     onChange={e=>{
-                      const t = parseFloat(e.target.value) || 0;
+                      const tp = parseFloat(e.target.value) || 0;
                       const g = parseFloat(editBill.gross_amount) || 0;
                       const retPct = parseFloat(editBill.retention_pct ?? 0);
-                      setEditBill(p=>({...p, tds_pct:t, ...recalcNet(g, retPct, t)}));
+                      setEditBill(p=>({...p, tds_pct:tp, ...recalcNet(g, retPct, tp)}));
                     }}
                     placeholder="0"
                     style={inpStyle}/>
@@ -1701,20 +1705,18 @@ function TabSubcon({ projectId, project }) {
                 <button onClick={async()=>{
                     setEditBillSaving(true);
                     try {
-                      const payload = {
-                        bill_date:      editBill.bill_date,
-                        gross_amount:   parseFloat(editBill.gross_amount)   || 0,
-                        retention_pct:  parseFloat(editBill.retention_pct)  ?? 0,
-                        retention_amt:  parseFloat(editBill.retention_amt)  || 0,
-                        tds_pct:        parseFloat(editBill.tds_pct)        ?? 0,
-                        tds_amt:        parseFloat(editBill.tds_amt)        || 0,
-                        net_payable:    parseFloat(editBill.net_payable)    || 0,
-                        status:         editBill.status,
-                        remark:         editBill.remark,
-                      };
+                      // Status aur rakam (gross/retention/TDS/net) server khud banata hai —
+                      // bhejte sirf wahi hain jo user badal sakta hai (SUB-09).
+                      const pctVal = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+                      const payload = { remark: editBill.remark };
+                      if (!locked) {
+                        payload.bill_date = editBill.bill_date;
+                        payload.retention_pct = pctVal(editBill.retention_pct);
+                        payload.tds_pct = pctVal(editBill.tds_pct);
+                      }
                       // Send edited items only if quantities were changed
                       const editedItems = editItems.filter(it => it._editCum !== undefined);
-                      if (editedItems.length > 0) {
+                      if (!locked && editedItems.length > 0) {
                         payload.items = editItems.map(it => ({
                           milestone_id:    it.milestone_id || null,
                           wo_item_id:      it.wo_item_id   || null,

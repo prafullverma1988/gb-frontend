@@ -6293,6 +6293,7 @@ const dict = {
   "subcon.amendment_id":                                       "अमेंडमेंट #{id}",
   "subcon.apply_template":                                     "टेंपलेट अप्लाई करो…",
   "subcon.applying":                                           "अप्लाई हो रहा है...",
+  "subcon.approved_bill_sirf_remark":                          "ये बिल Approved है — रकम, तारीख और आइटम लॉक हैं, सिर्फ़ रिमार्क बदल सकते हो। गलती है और पेमेंट नहीं हुआ तो बिल डिलीट करके नया बनाओ।",
   "subcon.at_least_1_section_with_items":                      "कम से कम 1 सेक्शन आइटम्स के साथ ज़रूरी है",
   "subcon.attached":                                           "· 📎 अटैच किया गया",
   "subcon.auto_bill_selwo":                                    "🤖 ऑटो-बिल {selWo}",
