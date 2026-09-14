@@ -150,7 +150,7 @@ const PERM_HELP = {
     create: "Nayi transaction (bill, payment, receipt), nayi party, nayi payment request banana",
     edit: "Transaction ya party ki detail badalna, pending payment close/extend karna",
     delete: "Party ya payment request delete karna",
-    approve: "Payment request approve karna",
+    approve: "Payment request aur staff wallet ka kharcha approve / reject karna",
     export: "Ledger aur transaction CSV/PDF me nikalna",
   },
   "Financial Reports": {
@@ -3521,7 +3521,7 @@ function WarehouseSettings() {
 // ═══════════════════════════════════════════════════════════════════════
 // WALLET SETTINGS — staff-wallet photo policy (per category)
 // ═══════════════════════════════════════════════════════════════════════
-function WalletSettings() {
+function WalletSettings({ onGoto }) {
   const CATS = [
     { key: "site_exp",  label: "Site expense",  desc: "Site par hua kharch — receipt / material photo" },
     { key: "party_pay", label: "Party payment", desc: "Vendor / labour ko wallet se payment" },
@@ -3535,39 +3535,35 @@ function WalletSettings() {
   const [policy, setPolicy] = useState({ site_exp: "required", party_pay: "required", salary: "optional", petrol: "optional", fuel: "required", service: "required", transfer: "optional" });
   const [loading, setLoading] = useState(true);
 
-  // ── Per-role × per-category auto-approve limits (mobile wallet) ──
-  const LIMIT_ROLES = [
-    { key: "site_supervisor", label: "Site Supervisor" },
-    { key: "project_manager", label: "Project Manager" },
-    { key: "accountant",      label: "Accountant" },
-  ];
-  const LIMIT_CATS = [
-    { key: "site_exp",  label: "Site Exp" },
-    { key: "party_pay", label: "Party Pay" },
-    { key: "petrol",    label: "Petrol" },
-    { key: "fuel",      label: "Diesel" },
-    { key: "service",   label: "Service" },
-    { key: "generic",   label: "Other" },
-  ];
-  const [limits, setLimits] = useState(null);
-  const [limSaving, setLimSaving] = useState(false);
-  const [limTick, setLimTick] = useState(false);
+  // ── Wallet kharch kitne tak apne aap approve — sirf DIKHANA (WAL-07) ──
+  // Pehle yahan bharne wali matrix thi jo companies.wallet_auto_limits me save
+  // hoti thi, par kharche ka faisla (POST /wallets/expense) Multi-Level Approval
+  // ke levels se hota hai — matrix ka koi asar nahi tha, aur Site Supervisor
+  // ₹0 dikhta jabki ₹5,000 tak apne aap approve hota tha. Ab server wahi limit
+  // bhejta hai jo sach me lagti hai; badalna Multi-Level Approval se.
+  const [limits, setLimits] = useState(null);   // { workflows, roles, ceilings }
 
   useEffect(() => {
     Promise.all([
       api.get("/wallets/photo-policy").then(r => { if (r?.success && r.data) setPolicy(p => ({ ...p, ...r.data })); }).catch(() => {}),
-      api.get("/wallets/auto-limits").then(r => { if (r?.success && r.data?.limits) setLimits(r.data.limits); }).catch(() => {}),
+      api.get("/wallets/auto-limits").then(r => { if (r?.success && r.data?.ceilings) setLimits(r.data); }).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
 
-  const setLimit = (role, cat, val) => setLimits(p => ({ ...p, [role]: { ...(p?.[role] || {}), [cat]: val } }));
-  const saveLimits = async () => {
-    setLimSaving(true);
-    try {
-      await api.put("/wallets/auto-limits", { limits });
-      setLimTick(true); setTimeout(() => setLimTick(false), 1800);
-    } catch (e) { window.alert(e?.message || "Save failed"); }
-    setLimSaving(false);
+  const ROLE_LABEL = {
+    supervisor: t("settings.wallet_limits_role_supervisor"), project_manager: t("settings.wallet_limits_role_pm"),
+    accountant: t("settings.wallet_limits_role_accountant"), admin: t("settings.wallet_limits_role_admin"),
+  };
+  const WF_COLS = [
+    { module: "Staff Site Expense",  label: t("settings.wallet_limits_col_site") },
+    { module: "Staff Party Payment", label: t("settings.wallet_limits_col_party") },
+  ];
+  const limitText = (module, v) => {
+    const wf = (limits?.workflows || []).find(w => w.module === module);
+    if (!wf || !wf.enabled) return t("settings.wallet_limits_workflow_off");
+    if (v == null) return t("settings.wallet_limits_no_limit");
+    if (Number(v) <= 0) return t("settings.wallet_limits_always_approval");
+    return t("settings.wallet_limits_upto", { amt: Number(v).toLocaleString("en-IN") });
   };
 
   if (loading) return <div style={{ padding: 30, fontSize: 13, color: T.textLight }}>Loading…</div>;
@@ -3597,48 +3593,42 @@ function WalletSettings() {
         ))}
       </SectionCard>
 
-      {/* ── Auto-approve limits matrix ── */}
-      <SectionCard title="Wallet auto-approve limits"
-        desc="Har role + category ke liye limit set karein. Is amount tak mobile wallet expense AUTO-approve ho jaata hai; usse zyada par approval queue me jaata hai. Khali chhodo = default."
-        action={
-          <button onClick={saveLimits} disabled={limSaving}
-            style={{ padding: "8px 18px", borderRadius: 8, background: limTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: limSaving ? "wait" : "pointer", opacity: limSaving ? 0.7 : 1 }}>
-            {limTick ? "✓ Saved" : limSaving ? "Saving..." : "Save Limits"}
+      {/* ── Asli auto-approve limit (Multi-Level Approval se) — sirf dekhna ── */}
+      <SectionCard title={t("settings.wallet_limits_title")} desc={t("settings.wallet_limits_desc")}
+        action={onGoto ? (
+          <button onClick={() => onGoto("approval")}
+            style={{ padding: "8px 16px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer" }}>
+            {t("settings.wallet_limits_open_approval")}
           </button>
-        }>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left", padding: "8px 10px", color: T.textLight, fontWeight: 600, borderBottom: `1px solid ${T.borderLight}` }}>Role</th>
-                {LIMIT_CATS.map(c => (
-                  <th key={c.key} style={{ textAlign: "right", padding: "8px 10px", color: T.textLight, fontWeight: 600, borderBottom: `1px solid ${T.borderLight}` }}>{c.label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {LIMIT_ROLES.map(r => (
-                <tr key={r.key}>
-                  <td style={{ padding: "8px 10px", fontWeight: 600, color: T.text, borderBottom: `1px solid ${T.borderLight}` }}>{r.label}</td>
-                  {LIMIT_CATS.map(c => (
-                    <td key={c.key} style={{ padding: "6px 10px", textAlign: "right", borderBottom: `1px solid ${T.borderLight}` }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 3 }}>
-                        <span style={{ color: T.textLight, fontSize: 12 }}>₹</span>
-                        <input type="number" min="0" value={(limits?.[r.key]?.[c.key]) ?? ""}
-                          onChange={e => setLimit(r.key, c.key, e.target.value)}
-                          style={{ width: 90, padding: "6px 8px", borderRadius: 6, border: `1px solid ${T.border}`, fontSize: 13, textAlign: "right", fontFamily: "inherit" }} />
-                      </div>
-                    </td>
+        ) : null}>
+        {!limits ? (
+          <div style={{ fontSize: 12.5, color: T.textLight }}>{t("settings.wallet_limits_load_failed")}</div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "8px 10px", color: T.textLight, fontWeight: 600, borderBottom: `1px solid ${T.borderLight}` }}>{t("settings.wallet_limits_role")}</th>
+                  {WF_COLS.map(c => (
+                    <th key={c.module} style={{ textAlign: "right", padding: "8px 10px", color: T.textLight, fontWeight: 600, borderBottom: `1px solid ${T.borderLight}` }}>{c.label}</th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ marginTop: 12, fontSize: 12, color: T.textLight, display: "flex", alignItems: "center", gap: 6 }}>
-          <IcShield size={14} color={T.green} />
-          Admin / Super Admin hamesha unlimited (sab auto-approve) — inhe set karne ki zaroorat nahi.
-        </div>
+              </thead>
+              <tbody>
+                {(limits.roles || []).map(r => (
+                  <tr key={r}>
+                    <td style={{ padding: "8px 10px", fontWeight: 600, color: T.text, borderBottom: `1px solid ${T.borderLight}` }}>{ROLE_LABEL[r] || r}</td>
+                    {WF_COLS.map(c => (
+                      <td key={c.module} style={{ padding: "8px 10px", textAlign: "right", color: T.text, borderBottom: `1px solid ${T.borderLight}` }}>
+                        {limitText(c.module, limits.ceilings?.[r]?.[c.module])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </SectionCard>
     </div>
   );
@@ -4350,7 +4340,7 @@ export default function SettingsModule({ initialSection = "company" } = {}) {
           </div>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>
-          <ActiveComp />
+          <ActiveComp onGoto={setActiveSection} />
         </div>
       </div>
     </div>
