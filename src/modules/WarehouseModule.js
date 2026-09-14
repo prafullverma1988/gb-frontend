@@ -968,10 +968,16 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   const remItem=(i)=>setItems(p=>p.filter((_,j)=>j!==i));
   const addItem=()=>setItems(p=>[...p,{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
 
+  // (MAT-15) Ek material do line me ho to dono ka JOD stock se milao — pehle
+  // har line akeli milti thi, 60 + 60 (stock 60) pass ho jaata tha.
+  const wantByMat=items.reduce((acc,it)=>{
+    if(it.material_id&&Number(it.qty)>0) acc[it.material_id]=(acc[it.material_id]||0)+Number(it.qty);
+    return acc;
+  },{});
   const stockErr=items.find(it=>{
     if(!it.material_id||!it.qty)return false;
     const m=stock.find(s=>s.id===it.material_id);
-    return m&&Number(it.qty)>Number(m.qty);
+    return m&&wantByMat[it.material_id]>Number(m.qty);
   });
   const valid=!stockErr&&f.project_id&&items.some(it=>it.material_id&&Number(it.qty)>0);
   const total=items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
@@ -1960,7 +1966,7 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
             <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{t("warehouse.total_out")}</div>
               <div style={{fontSize:18,fontWeight:700,color:T.amb}}>{fmtN(totalOut)}</div></div>
             <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{t("fuel.value")}</div>
-              <div style={{fontSize:18,fontWeight:700,color:T.blu}}>₹{fmt(material.qty*material.rate)}</div></div>
+              <div style={{fontSize:18,fontWeight:700,color:T.blu}}>₹{fmt(material.value)}</div></div>
           </div>
         </div>
 
@@ -2121,7 +2127,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
     })
     .sort((a,b)=>{
       if(sort==="qty")   return a.qty-b.qty;
-      if(sort==="value") return (b.qty*b.rate)-(a.qty*a.rate);
+      if(sort==="value") return (b.value||0)-(a.value||0);
       if(sort==="low"){
         const [ah,bh]=[getHealth(a).pri,getHealth(b).pri];
         if(ah!==bh) return ah-bh;
@@ -2140,7 +2146,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
   const toggleGroup=k=>setCollapsed(p=>({...p,[k]:!p[k]}));
 
   // Summary totals
-  const totalVal=filtered.reduce((s,m)=>s+m.qty*m.rate,0);
+  const totalVal=filtered.reduce((s,m)=>s+(m.value||0),0);
   const lowCount=filtered.filter(m=>m.qty>0&&m.qty<m.minQty).length;
   const outCount=filtered.filter(m=>m.qty===0).length;
 
@@ -2212,7 +2218,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {Object.entries(groups).map(([gKey,items])=>{
             const isCol=collapsed[gKey];
-            const gVal=items.reduce((s,m)=>s+m.qty*m.rate,0);
+            const gVal=items.reduce((s,m)=>s+(m.value||0),0);
             const gLow=items.filter(m=>m.qty<m.minQty).length;
             const gOut=items.filter(m=>m.qty===0).length;
             return(
@@ -2235,7 +2241,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                 {!isCol&&items.map((m,idx)=>{
                   const h=getHealth(m);
                   const v=getVel(m);
-                  const val=m.qty*m.rate;
+                  const val=m.value||0;
                   return(
                     <div key={m.id}
                       style={{display:"grid",gridTemplateColumns:"4px 40px 1fr 96px 86px auto 112px",alignItems:"center",borderBottom:idx<items.length-1?`1px solid ${T.b1}`:"none",cursor:"pointer",minHeight:50,transition:"background .1s"}}
@@ -2316,7 +2322,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           {Object.entries(groups).map(([gKey,items])=>{
             const isCol=collapsed[gKey];
-            const gVal=items.reduce((s,m)=>s+m.qty*m.rate,0);
+            const gVal=items.reduce((s,m)=>s+(m.value||0),0);
             const gLow=items.filter(m=>m.qty<m.minQty).length;
             const gOut=items.filter(m=>m.qty===0).length;
             return(
@@ -2341,7 +2347,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                     {items.map(m=>{
                       const h=getHealth(m);
                       const v=getVel(m);
-                      const val=m.qty*m.rate;
+                      const val=m.value||0;
                       const {pct,minPct,color:barColor}=getBar(m);
                       return(
                         <div key={m.id} onClick={()=>onSelect(m)}
@@ -2432,7 +2438,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                   <span style={{fontSize:13,fontWeight:700,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1}}>{fmtN(m.qty)}</span>
                   <span style={{fontSize:10,color:T.t4,marginLeft:3}}>{m.unit}</span>
                 </div>
-                <span style={{fontSize:12.5,fontWeight:600,color:T.blu}}>₹{fmt(m.qty*m.rate)}</span>
+                <span style={{fontSize:12.5,fontWeight:600,color:T.blu}}>₹{fmt(m.value||0)}</span>
                 {h.label!=="OK"
                   ?<Pill label={h.label==="Out"?t("warehouse.out_of_stock_2"):t("fuel.low")} c={h.c} bg={h.bg} brd={h.brd}/>
                   :<span style={{fontSize:10,color:T.t4}}>—</span>
@@ -3310,7 +3316,8 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
   },[transfer?.dbId]);
 
   const handleDelete=async()=>{
-    if(!await window.confirmAsync(`${detail.id} ko delete karein?\n\nSource project ka debit reverse hoga.${detail.status!=="Pending"?" Dest project ka GRN bhi hatega.":""}\nYeh undo nahi ho sakta.`)) return;
+    // (MAT-17) Ab server store wale sire bhi ulte karta hai — text wahi bataye jo sach me hota hai.
+    if(!await window.confirmAsync(t("warehouse.transfer_delete_confirm", { id: detail.id }))) return;
     setDeleting(true);
     const r=await api.del(`/warehouse/transfers/${detail.dbId}`);
     setDeleting(false);
@@ -3674,7 +3681,7 @@ function WarehouseModule(){
         api.get("/settings/company").catch(()=>({success:false})),
       ]);
       if(settRes.success&&settRes.data) setProcMode(settRes.data.warehouse_procurement_mode||"direct");
-      if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0})));
+      if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,value:m.stock_value!=null?Number(m.stock_value)||0:(Number(m.qty)||0)*(Number(m.rate)||0),qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0})));
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
       if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
       if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":"Warehouse (internal)"),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
@@ -3713,7 +3720,8 @@ function WarehouseModule(){
 
   const lowStock=stock.filter(m=>m.qty<m.minQty);
   const outOfStock=stock.filter(m=>m.qty===0);
-  const totalValue=stock.reduce((s,m)=>s+m.qty*m.rate,0);
+  // (MAT-21) Value FIFO batch ki asli keemat se (server ka stock_value) — pehle qty×master rate (RATNA: ₹0).
+  const totalValue=stock.reduce((s,m)=>s+(m.value||0),0);
   const totalItems=stock.length;
   const pendingMRs=mrs.filter(m=>m.status==="Pending").length;
   // Per-tab pending counts so the badge sits on the right mother tab
