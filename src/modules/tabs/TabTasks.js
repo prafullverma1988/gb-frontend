@@ -3019,7 +3019,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
     unit: prefill?.unit||"Bag",
     vendor_name:"",
     challan_no:"",
-    received_date: new Date().toISOString().split("T")[0],
+    received_date: todayISO(),
     quality:"Good",
     remark:"",
   });
@@ -3495,7 +3495,7 @@ function QtyProgressBox({task,meIsPriv,onProgress,projectId,showMic=true,showNot
     if(!(q>0)||saving)return;
     setSaving(true);
     const r=await api.post("/budget/task/"+task.id+"/progress",
-      {report_date:repDate||new Date().toISOString().split("T")[0],done_qty:q,remarks:note.trim()||"Web se darj",
+      {report_date:repDate||todayISO(),done_qty:q,remarks:note.trim()||"Web se darj",
        alignment_id:lineId?Number(lineId):undefined});
     setSaving(false);
     if(!r?.success){window.alert(r?.message||"Save nahi hua");return;}
@@ -3709,7 +3709,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   const [usedLog,setUsedLog]=useState([]);
   const [usedLogLoading,setUsedLogLoading]=useState(true);
   const [showUsedLogForm,setShowUsedLogForm]=useState(false);
-  const [usedLogForm,setUsedLogForm]=useState({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:new Date().toISOString().split("T")[0]});
+  const [usedLogForm,setUsedLogForm]=useState({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:todayISO()});
   const [usedLogSaving,setUsedLogSaving]=useState(false);
   const [matLib,setMatLib]=useState([]);
   useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
@@ -3720,7 +3720,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   // poori company ki thi — is project ki nahi.
   const [dayAtt,setDayAtt]=useState([]);
   const [labLoading,setLabLoading]=useState(true);
-  const [labDate,setLabDate]=useState(new Date().toISOString().split("T")[0]);
+  const [labDate,setLabDate]=useState(todayISO());
 
   // Is screen par kya-kya dikhega — company ki apni setting
   // (Settings → Task Screen). Server na mile to
@@ -4032,7 +4032,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
             <button onClick={async()=>{
               setSaving(true);
               const res=await api.post("/budget/task/"+task.id+"/progress",{
-                report_date:new Date().toISOString().split("T")[0],
+                report_date:todayISO(),
                 done_qty:0, pct:prog, remarks:pctNote.trim()||"Web se darj",
               });
               setSaving(false);
@@ -4155,7 +4155,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 const res=await api.post("/tasks/"+task.id+"/used-log",usedLogForm);
                 if(res.success){
                   setUsedLog(p=>[res.data,...p]);
-                  setUsedLogForm({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:new Date().toISOString().split("T")[0]});
+                  setUsedLogForm({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:todayISO()});
                   setMatTab("none");
                 } else alert(res.message||"Failed");
                 setUsedLogSaving(false);
