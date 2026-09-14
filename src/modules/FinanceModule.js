@@ -3480,7 +3480,8 @@ function CashDayBook({ txns: bookTxns, accounts=[], view="cashbook" }){ // view 
       {view==="cashbook"&&(
         <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
           <div style={{display:"grid",gridTemplateColumns:CB_COLS,padding:"8px 14px",background:HEAD_BG,flexShrink:0,gap:6}}>
-            {["Date","Party","Description","Account","Head","MOP","Receipt ₹","Payment ₹","Balance ₹"].map((h,i)=>(
+            {/* FIN-31: column heads t() se — pehle Hindi / Hinglish me bhi English */}
+            {[t("common.date"),t("common.party"),t("common.description"),t("finance.cb_account"),t("finance.cb_head"),t("finance.cb_mop"),t("finance.cb_receipt_rs"),t("finance.cb_payment_rs"),t("finance.cb_balance_rs")].map((h,i)=>(
               <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".3px",textAlign:i>=6?"right":"left"}}>{h}</span>
             ))}
           </div>
@@ -3521,7 +3522,7 @@ function CashDayBook({ txns: bookTxns, accounts=[], view="cashbook" }){ // view 
       {view==="daybook"&&(
         <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
           <div style={{display:"grid",gridTemplateColumns:DB_COLS,padding:"8px 14px",background:HEAD_BG,flexShrink:0,gap:6}}>
-            {["Date","Party","Description","Account · MOP","Receipt ₹","Payment ₹","Day Bal ₹","Ledger Bal ₹"].map((h,i)=>(
+            {[t("common.date"),t("common.party"),t("common.description"),t("finance.cb_account_mop"),t("finance.cb_receipt_rs"),t("finance.cb_payment_rs"),t("finance.cb_day_bal_rs"),t("finance.cb_ledger_bal_rs")].map((h,i)=>(
               <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".3px",textAlign:i>=4?"right":"left"}}>{h}</span>
             ))}
           </div>
@@ -4286,7 +4287,7 @@ function FinanceModule(){
       {l:t("finance.cash_in"),v:`₹${fmt(allTxnIn)}`,sub:t("finance.cash_in_sub"),Icon:IcTrendUp,c:T.grn,bg:T.grnL,brd:T.grnM},
       {l:t("finance.cash_out"),v:`₹${fmt(allTxnOut)}`,sub:t("finance.cash_out_sub"),Icon:IcTrendDn,c:T.red,bg:T.redL,brd:T.redM},
       {l:t("finance.unpaid_bills"),v:`₹${fmt(unpaidBills)}`,sub:t("finance.unpaid_bills_sub"),Icon:IcCalDue,c:T.amb,bg:T.ambL,brd:T.ambM},
-      {l:t("finance.net_cash_flow"),v:`₹${fmt(Math.abs(netFlow))}`,sub:netFlow>=0?"Surplus":"Deficit",Icon:IcPulse,c:netFlow>=0?T.grn:T.red,bg:netFlow>=0?T.grnL:T.redL,brd:netFlow>=0?T.grnM:T.redM},
+      {l:t("finance.net_cash_flow"),v:`₹${fmt(Math.abs(netFlow))}`,sub:netFlow>=0?t("finance.surplus"):t("finance.deficit"),Icon:IcPulse,c:netFlow>=0?T.grn:T.red,bg:netFlow>=0?T.grnL:T.redL,brd:netFlow>=0?T.grnM:T.redM},
     ],
     cashbook:(()=>{
       // Cash in hand = THE actual cash right now = live sum of every account +
