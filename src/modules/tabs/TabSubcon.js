@@ -448,7 +448,9 @@ function TabSubcon({ projectId, project }) {
                   {l:t("common.billed"),v:fmtC(summary.total_billed),c:"#60A5FA"},
                   {l:t("common.paid"),v:fmtC(summary.total_paid),c:"#4ADE80"},
                   {l:t("common.retention_2"),v:fmtC(summary.retention_held),c:"#FCD34D"},
-                  {l:t("common.balance"),v:fmtC(summary.balance),c:"#F87171"},
+                  // Dena baaki = approved bills ka NET − payment; bina bill ka kaam alag (SUB-12)
+                  {l:t("subcon.payable_net"),v:fmtC(summary.payable ?? summary.balance),c:"#F87171"},
+                  {l:t("common.unbilled"),v:fmtC(summary.unbilled),c:"#CBD5E1"},
                 ].map(s=>(
                   <div key={s.l} style={{textAlign:"right"}}>
                     <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",textTransform:"uppercase"}}>{s.l}</div>

@@ -1472,6 +1472,8 @@ function TabEstimate({ project }) {
                   {l:t("app.invoiced"),v:fmtC(summary.total_invoiced),c:"#60A5FA"},
                   {l:t("common.received"),v:fmtC(summary.total_received),c:"#4ADE80"},
                   {l:t("estimate.manual"),v:fmtC(summary.manual_extras),c:"#A78BFA"},
+                  // Baaki NET se (TDS / retention client kaat-ta hai) — kaata hua alag tile (SUB-12)
+                  {l:t("estimate.ret_tds_kata"),v:fmtC((summary.retention_held||0)+(summary.tds_deducted||0)),c:"#FCD34D"},
                   {l:t("common.balance"),v:fmtC(summary.balance_receivable),c:"#F87171"},
                 ].map(s => (
                   <div key={s.l} style={{textAlign:"right"}}>
