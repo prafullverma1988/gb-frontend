@@ -314,7 +314,9 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
   useEffect(() => {
     if (!open) return;
     setPath("pump_machine");
-    setF({ filled_at: nowLocal(), payment_mode: "credit", fuel_type: "diesel" });
+    // Office se cash entry aksar company ke paise ki hoti hai — default "company";
+    // apne wallet se diya ho to wahi select karo (MCH-13).
+    setF({ filled_at: nowLocal(), payment_mode: "credit", cash_source: "company", fuel_type: "diesel" });
     setError("");
   }, [open]);
 
@@ -468,6 +470,9 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
           meter_reading: f.meter_reading ? parseFloat(f.meter_reading) : null,
           meter_missing_reason: f.meter_missing ? (f.meter_missing_reason || null) : null,
           payment_mode: f.payment_mode || "credit",
+          // Pehle bheja hi nahi jaata tha — server wallet maan kar entry karne
+          // wale admin/accountant ke wallet se kaat deta tha.
+          cash_source: f.payment_mode === "cash" ? (f.cash_source || "company") : null,
           fuel_type: path === "pump_machine" ? (f.fuel_type || "diesel") : "diesel",
           note: f.note || null,
         });
@@ -670,6 +675,19 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
                 })}
               </div>
             </Field>
+            {f.payment_mode === "cash" && (
+              <Field label={t("fuel.paisa_kisne_diya")} span={2} hint={t("fuel.paisa_kisne_diya_hint")}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[{ k: "company", l: t("fuel.company_ne_direct_diya") }, { k: "wallet", l: t("fuel.mere_wallet_se") }].map((o) => {
+                    const on = (f.cash_source || "company") === o.k;
+                    return (
+                      <button key={o.k} type="button" onClick={() => upd("cash_source", o.k)}
+                        style={{ flex: 1, padding: "9px", borderRadius: 7, border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface, color: on ? T.ind : T.t3, fontSize: 12, fontWeight: on ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>{o.l}</button>
+                    );
+                  })}
+                </div>
+              </Field>
+            )}
           </>
         )}
 
@@ -893,13 +911,18 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
               <span style={{ fontSize: 11.5, color: T.t3 }}>₹{fmtN(r._k === "purchase" ? r.rate : r.rate_used)}</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(r.amount)}</span>
               <span>
+                {/* Paid/Baaki server ke EK niyam se (payable_status — bill, purana
+                    settlement, ya bill bana hi nahi). Pehle sirf settlement dekhte the:
+                    naye raaste ka pay ho chuka bill bhi "Baaki" dikhta tha. */}
                 {r._k === "issue"
                   ? <Pill label={t("fuel.stock_se")} c={T.slt} bg={T.sltL} />
                   : r.payment_mode === "cash"
                     ? <Pill label={t("common.cash")} c={T.grn} bg={T.grnL} />
-                    : r.settlement_status === "paid"
-                      ? <Pill label={t("common.paid")} c={T.grn} bg={T.grnL} />
-                      : <Pill label={t("common.baaki")} c={T.amb} bg={T.ambL} />}
+                    : r.payable_status === "paid"
+                      ? <Pill label={t("fuel.payable_paid")} c={T.grn} bg={T.grnL} />
+                      : r.payable_status === "unbilled"
+                        ? <Pill label={t("fuel.payable_unbilled")} c={T.amb} bg={T.ambL} />
+                        : <Pill label={r.payable_status === "partial" ? t("fuel.payable_partial") : t("fuel.payable_unpaid")} c={T.amb} bg={T.ambL} />}
               </span>
               <button type="button" title={t("common.delete")}
                 onClick={() => (r._k === "purchase" ? onDeletePurchase(r) : onDeleteIssue(r))}
@@ -995,8 +1018,25 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
   };
 
   const measuring = dipFor || shiftFor;
+  // Kitaab ka stock US samay tak ka jo upar chuna hai (GET /stores/:id/stock?at=).
+  // Purani tareekh ki dipstick / shift par aaj ka stock dikhana jhootha farq
+  // (chori jaisa) dikhata tha — server bhi ab usi samay ki kitaab likhta hai.
+  const whenPicked = dipFor ? f.checked_at : shiftFor ? f.moved_at : null;
+  const [bookAt, setBookAt] = useState(null);
+  useEffect(() => {
+    setBookAt(null);
+    if (!measuring || !whenPicked) return undefined;
+    let alive = true;
+    const tm = setTimeout(() => {
+      api.get(`/fuel/stores/${measuring.id}/stock?at=${encodeURIComponent(toSqlDateTime(whenPicked))}`)
+        .then((r) => { if (alive && r?.success && r.data) setBookAt(Number(r.data.litres)); })
+        .catch(() => {});
+    }, 250);
+    return () => { alive = false; clearTimeout(tm); };
+  }, [measuring, whenPicked]);
+  const bookL = bookAt != null ? bookAt : Number(measuring ? measuring.litres : 0);
   const variance = measuring && f.physical_l !== undefined && f.physical_l !== ""
-    ? Math.round((parseFloat(f.physical_l) - Number(measuring.litres)) * 100) / 100 : null;
+    ? Math.round((parseFloat(f.physical_l) - bookL) * 100) / 100 : null;
   const varianceBox = variance != null && (
     <div style={{ padding: "10px 13px", borderRadius: 7, background: variance === 0 ? T.grnL : T.ambL, border: `1px solid ${variance === 0 ? T.grnM : T.ambM}`, fontSize: 12, fontWeight: 600, color: variance === 0 ? T.grn : T.amb }}>{t("fuel.variance_variancefmtn_l", { variance: variance > 0 ? "+" : "", fmtN: fmtN(variance) })}<div style={{ fontSize: 10.5, fontWeight: 500, marginTop: 3 }}>
        {t("fuel.stock_apne_aap_adjust_nahi_hoga")}
@@ -1107,7 +1147,7 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
       </Modal>
 
       <Modal open={!!dipFor} onClose={() => setDipFor(null)} title={t("fuel.dipstick_check")} width={520}
-        sub={dipFor ? `${dipFor.name} — kitaab ke hisaab se ${fmtL(dipFor.litres)}` : ""}
+        sub={dipFor ? `${dipFor.name} — ${t("fuel.kitaab_ke_hisaab_se_l", { l: fmtL(bookL) })}` : ""}
         footer={<><Btn ghost onClick={() => setDipFor(null)}>{t("common.cancel")}</Btn><Btn onClick={saveDip} disabled={busy}>{busy ? t("common.saving") : t("fuel.record_karein")}</Btn></>}>
         <div style={{ display: "grid", gap: 12 }}>
           <Field label={t("fuel.kab_naapa")}><input type="datetime-local" value={f.checked_at || ""} onChange={(e) => setF((p) => ({ ...p, checked_at: e.target.value }))} style={inp} /></Field>
@@ -1149,7 +1189,7 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
           <Field label={t("fuel.kab_shift_hua")}>
             <input type="datetime-local" value={f.moved_at || ""} onChange={(e) => setF((p) => ({ ...p, moved_at: e.target.value }))} style={inp} />
           </Field>
-          <Field label={t("fuel.dipstick_drum_me_kitna_diesel")} hint={t("fuel.kitaab_ke_hisaab_se_l", { l: fmtL(shiftFor.litres) })}>
+          <Field label={t("fuel.dipstick_drum_me_kitna_diesel")} hint={t("fuel.kitaab_ke_hisaab_se_l", { l: fmtL(bookL) })}>
             <input value={f.physical_l ?? ""} inputMode="decimal" onChange={(e) => setF((p) => ({ ...p, physical_l: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} />
           </Field>
           {varianceBox}
@@ -1717,7 +1757,9 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
 
   const withNorm = rows.filter((e) => e.variance_amount != null);
   const totalVar = withNorm.reduce((a, e) => a + e.variance_amount, 0);
-  const noDiesel = rows.filter((e) => e.hours > 0 && e.litres === 0);
+  // Din / trip wali machine ke "ghante" nahi hote (MCH-09) — chali hui ka pata active_days se.
+  const ran = (e) => e.hours > 0 || e.active_days > 0;
+  const noDiesel = rows.filter((e) => ran(e) && e.litres === 0);
 
   const COLS = [
     { key: "equipment_name", label: t("fuel.machine"), w: 22 },
@@ -1733,7 +1775,7 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
     { key: "variance_amount", label: t("fuel.farq_rs"), w: 11, excel: (r) => (r.variance_amount == null ? "" : Math.round(r.variance_amount)) },
     { key: "amount", label: t("fuel.diesel_rs"), w: 12, excel: (r) => Math.round(r.amount) },
     { key: "note", label: t("common.note"), w: 30, excel: (r) => (r.norm_missing ? "Norm set nahi — farq nikal hi nahi sakta"
-      : (r.hours > 0 && r.litres === 0 ? "Chali par diesel darj nahi" : "")) },
+      : (ran(r) && r.litres === 0 ? "Chali par diesel darj nahi" : "")) },
   ];
   const cols = "1.5fr 74px 68px 50px 72px 72px 98px 72px 74px 100px";
 
@@ -1795,7 +1837,7 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
                       <div style={{ fontSize: 10.5, color: T.t4 }}>
                         {fmtC(e.amount)}
                         {e.norm_missing && <span style={{ color: T.amb }}> {t("fuel.norm_set_nahi")}</span>}
-                        {e.hours > 0 && e.litres === 0 && <span style={{ color: T.amb }}> {t("fuel.chali_par_diesel_darj_nahi_2")}</span>}
+                        {ran(e) && e.litres === 0 && <span style={{ color: T.amb }}> {t("fuel.chali_par_diesel_darj_nahi_2")}</span>}
                       </div>
                     </div>
                     <span style={{ fontSize: 11, color: T.t3 }}>{e.ownership || "—"}</span>
@@ -1835,8 +1877,12 @@ function EfficiencyReport({ byEquipment, from, to, onRange, projects }) {
 
 // ── Report 3: PROJECT-WISE ────────────────────────────────────────
 function ProjectSpend({ byProject }) {
+  // Kharcha rows (pump → machine + drum → machine) aur neeche drum bharne ki
+  // alag 'stock' row — wo kharcha nahi, sirf dikhane ko (13 Sep 2026 niyam).
+  const nameOf = (r) => (r.kind === "stock" ? t("fuel.drum_me_stock_row")
+    : r.project_id ? (r.project_name || `#${r.project_id}`) : t("fuel.company_level_koi_project_nahi"));
   const COLS = [
-    { key: "project_name", label: t("common.project"), w: 26 },
+    { key: "project_name", label: t("common.project"), w: 26, excel: nameOf },
     { key: "entries", label: t("fuel.fills"), w: 9 },
     { key: "litres", label: t("fuel.litres"), w: 11 },
     { key: "amount", label: t("common.amount_2"), w: 13, excel: (r) => Math.round(r.amount) },
@@ -1852,11 +1898,11 @@ function ProjectSpend({ byProject }) {
             <span>{t("common.project")}</span><span>{t("fuel.fills")}</span><span>{t("fuel.litres")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span>
           </Row>
           {byProject.map((p) => (
-            <Row key={p.project_id || "none"} cols="2fr 100px 110px 120px">
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{p.project_name}</span>
+            <Row key={(p.kind || "cost") + (p.project_id || "none")} cols="2fr 100px 110px 120px">
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: p.kind === "stock" ? T.t4 : T.t1 }}>{nameOf(p)}</span>
               <span style={{ fontSize: 11.5, color: T.t3 }}>{p.entries}</span>
               <span style={{ fontSize: 12, color: T.t2 }}>{fmtL(p.litres)}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtC(p.amount)}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: p.kind === "stock" ? T.t4 : T.t1, textAlign: "right" }}>{fmtC(p.amount)}</span>
             </Row>
           ))}
           <div style={{ padding: "9px 15px", fontSize: 10.5, color: T.t4 }}>
@@ -2104,6 +2150,13 @@ function BarrelLedgerPanel({ storeId, onClose }) {
 // Sirf KHARID yahan aati hai — barrel se nikaasi ka pump se lena-dena nahi.
 const EMPTY_PF = { project_id: "", payment_mode: "", flagged: "" };
 
+// Fill ka paisa kis haal me — server ka payable_status (utils/fuelPayable.js).
+const payableLabel = (s) => (s === "cash" ? t("common.cash")
+  : s === "unbilled" ? t("fuel.payable_unbilled")
+  : s === "partial" ? t("fuel.payable_partial")
+  : s === "unpaid" ? t("fuel.payable_unpaid")
+  : t("fuel.payable_paid"));
+
 function PumpRegister({ projects, from, to, onRange }) {
   const [f, setF] = useState(EMPTY_PF);
   const [data, setData] = useState(null);
@@ -2264,7 +2317,7 @@ function PumpLedgerPanel({ vendorId, from, to, onClose }) {
     { key: "rate", label: t("common.rate"), w: 9 },
     { key: "amount", label: t("common.amount_2"), w: 12, excel: (r) => Math.round(r.amount) },
     { key: "payment", label: t("common.payment"), w: 10 },
-    { key: "status", label: t("common.status"), w: 9 },
+    { key: "status", label: t("common.status"), w: 12, excel: (r) => payableLabel(r.payable_status) },
     { key: "run_litres", label: t("fuel.ab_tak_l"), w: 11 },
     { key: "run_amount", label: t("fuel.ab_tak_rs"), w: 13, excel: (r) => Math.round(r.run_amount) },
     { key: "flag", label: t("fuel.parchi_se_farq_2"), w: 16,
@@ -2323,8 +2376,8 @@ function PumpLedgerPanel({ vendorId, from, to, onClose }) {
                   <span style={{ fontSize: 11 }}>
                     <Pill label={r.payment} c={r.payment === "Cash" ? T.grn : T.slt}
                       bg={r.payment === "Cash" ? T.grnL : T.sltL} />
-                    {r.status === "Baaki" && (
-                      <span style={{ fontSize: 9.5, color: T.amb, fontWeight: 700, marginLeft: 4 }}>BAAKI</span>
+                    {["unbilled", "unpaid", "partial"].includes(r.payable_status) && (
+                      <span style={{ fontSize: 9.5, color: T.amb, fontWeight: 700, marginLeft: 4 }}>{payableLabel(r.payable_status)}</span>
                     )}
                   </span>
                   {/* Chalta hua jod — bill milaate waqt sawaal "ab tak kitna
@@ -2692,9 +2745,17 @@ function FuelModule() {
 
   const totalStock = stores.reduce((a, s) => a + Number(s.litres || 0), 0);
   const stockValue = stores.reduce((a, s) => a + Number(s.value || 0), 0);
-  const spendInRange = byProject.reduce((a, p) => a + Number(p.amount || 0), 0);
-  const litresInRange = byProject.reduce((a, p) => a + Number(p.litres || 0), 0);
+  // Diesel ka kharcha = jo machine me gaya (pump → machine + drum → machine).
+  // Drum bharna stock hai — server use `kind:'stock'` row me alag bhejta hai,
+  // wo is jod me nahi aata (13 Sep 2026 niyam).
+  const costRows = byProject.filter((p) => p.kind !== "stock");
+  const spendInRange = costRows.reduce((a, p) => a + Number(p.amount || 0), 0);
+  const litresInRange = costRows.reduce((a, p) => a + Number(p.litres || 0), 0);
+  // Baaki = pump ko abhi dena — bill bana par pay nahi hua + bill bana hi nahi
+  // (server ka EK niyam, utils/fuelPayable.js). Bill na bana hissa Pending
+  // Payments me hota hi nahi, isliye tile par alag se likha jaata hai.
   const unpaid = byVendor.reduce((a, v) => a + Number(v.unpaid_amount || 0), 0);
+  const unbilledAmt = byVendor.reduce((a, v) => a + Number(v.unbilled_amount || 0), 0);
   // Badge ke liye alag call ki zaroorat nahi — purchases me billed_at,
   // settlement_id aur transaction_id pehle se aate hain (mit chuki cheez ki
   // link server khaali bhejta hai). Unbilled wahi jiska paisa kahin nahi laga.
@@ -2716,8 +2777,11 @@ function FuelModule() {
 
   const TILES = [
     { l: t("fuel.barrel_stock_2"),  v: fmtL(totalStock), sub: `${stores.length} barrel · ${fmtC(stockValue)}`, c: T.ind, I: IcDrum },
-    { l: t("fuel.diesel_kharcha"), v: fmtC(spendInRange), sub: `${fmtL(litresInRange)} is duration me`, c: T.blu, I: IcDrop },
-    { l: t("fuel.vendor_baaki"),  v: fmtC(unpaid), sub: unpaid > 0 ? "Pending Payments me" : "Sab settle", c: unpaid > 0 ? T.amb : T.grn, I: IcTruck },
+    { l: t("fuel.diesel_kharcha"), v: fmtC(spendInRange), sub: t("fuel.l_is_duration_me", { l: fmtL(litresInRange) }), c: T.blu, I: IcDrop },
+    { l: t("fuel.vendor_baaki"),  v: fmtC(unpaid),
+      sub: unbilledAmt > 0 ? t("fuel.vendor_baaki_unbilled_sub", { amt: fmtC(unbilledAmt) })
+        : unpaid > 0 ? t("fuel.vendor_baaki_pending_sub") : t("fuel.sab_settle"),
+      c: unpaid > 0 ? T.amb : T.grn, I: IcTruck },
     { l: t("fuel.norm_se_zyada"), v: byEquipment.filter((e) => e.variance_pct != null && e.variance_pct > 15).length, sub: t("fuel.length_machine_ka_norm_set_nahi", { length: normMissing.length }), c: T.red, I: IcAlert },
   ];
 
