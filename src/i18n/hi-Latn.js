@@ -533,6 +533,7 @@ const dict = {
   "assets.rent":                                               "Rent",
   "assets.rent_days":                                          "Din",
   "assets.rent_empty":                                         "Is period me kisi ke paas rent wala asset nahi tha",
+  "assets.rent_left_on":                                       "{date} ko wapas/aage gaya",
   "assets.rent_note":                                          "Ye sirf report hai — isse kisi ledger me entry nahi jaati aur kisi ke paise apne aap nahi kate. Kaatna ho to Finance me haath se karna padega.",
   "assets.rent_period":                                        "{from} se {to} tak",
   "assets.rent_title":                                         "Rent — worker aur subcon ke paas jo rent par pada hai",

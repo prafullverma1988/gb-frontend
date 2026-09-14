@@ -531,6 +531,7 @@ const dict = {
   "assets.rent":                                               "Rent",
   "assets.rent_days":                                          "Days",
   "assets.rent_empty":                                         "Nothing was on rent in this period",
+  "assets.rent_left_on":                                       "left on {date}",
   "assets.rent_note":                                          "This is a report only — nothing is posted to any ledger and nothing is deducted automatically. Any deduction has to be made by hand in Finance.",
   "assets.rent_period":                                        "{from} to {to}",
   "assets.rent_title":                                         "Rent — what workers and subcons hold on rent",

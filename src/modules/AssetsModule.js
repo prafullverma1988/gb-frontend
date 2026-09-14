@@ -2777,7 +2777,11 @@ function RentTab({ refreshKey }) {
                 <span style={{ fontWeight: 700, color: T.t1 }}>{rupee(l.amount)}</span>
                 <span style={{ fontSize: 11.5, color: T.t3 }}>{l.project_name || "—"}</span>
                 <span style={{ fontSize: 11.5, color: T.t3 }}>{l.custodian_name || "—"}</span>
-                <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(l.since_date)}</span>
+                <div style={{ fontSize: 11.5, color: T.t3 }}>
+                  {fmtD(l.since_date)}
+                  {/* Rent ab har lot ka alag — period me wapas/aage gaya ho to kab tak raha */}
+                  {l.out_date && <div style={{ fontSize: 10.5, color: T.t4 }}>{t("assets.rent_left_on", { date: fmtD(l.out_date) })}</div>}
+                </div>
               </Row>
             ))}
           </Scroll>

@@ -530,6 +530,7 @@ const dict = {
   "assets.rent":                                               "रेंट",
   "assets.rent_days":                                          "दिन",
   "assets.rent_empty":                                         "इस पीरियड में किसी के पास रेंट वाला एसेट नहीं था",
+  "assets.rent_left_on":                                       "{date} को वापस/आगे गया",
   "assets.rent_note":                                          "ये सिर्फ़ रिपोर्ट है — इससे किसी लेजर में एंट्री नहीं जाती और किसी के पैसे अपने आप नहीं कटते। काटना हो तो Finance में हाथ से करना पड़ेगा।",
   "assets.rent_period":                                        "{from} से {to} तक",
   "assets.rent_title":                                         "रेंट — वर्कर और सबकॉन के पास जो रेंट पर पड़ा है",
