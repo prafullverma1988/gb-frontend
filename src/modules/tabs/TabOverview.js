@@ -251,12 +251,18 @@ function TabOverview({proj, onRequestPayment}) {
   const spentAmt = pnl ? num(pnl.cost) : (proj?.expense != null ? num(proj.expense) : fin.spent);
   const margin = num(proj?.boq) - spentAmt;
   const signed = (n)=>`${n<0?"−":""}₹${fmt(Math.abs(n))}`; // clean ±₹ display
-  const endDate = proj?.end_date || proj?.endDate || proj?.end;
-  let daysLeft="—", daysNote="No end date set";
-  if(endDate){
-    const dl=Math.ceil((new Date(endDate)-new Date())/86400000);
-    daysLeft = dl<0 ? `${Math.abs(dl)}d over` : String(dl);
-    daysNote = "Till "+new Date(endDate).toLocaleDateString("en-IN",{month:"short",year:"numeric"});
+  // Asli end_date ("YYYY-MM-DD") se — pehle card ka "May 2027" (proj.end) padha
+  // jaata tha, jo Chrome me 1 May ban jaata (KEWAL SAHU 254 ki jagah 230 din,
+  // Safari me NaN). Din = aaj ki local aadhi-raat se end_date ki aadhi-raat tak
+  // (PRJ-03).
+  const endYmd = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(proj?.end_date || proj?._raw?.end_date || ""));
+  let daysLeft="—", daysNote=t("overview.no_end_date_set");
+  if(endYmd){
+    const end=new Date(+endYmd[1], +endYmd[2]-1, +endYmd[3]);
+    const now=new Date(), today0=new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dl=Math.round((end-today0)/86400000);
+    daysLeft = dl<0 ? t("overview.days_over", { n: Math.abs(dl) }) : String(dl);
+    daysNote = t("overview.till_date", { date: end.toLocaleDateString("en-IN",{month:"short",year:"numeric"}) });
   }
   const expTotal = fin.slices.reduce((s,e)=>s+e.value,0);
 

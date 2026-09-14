@@ -868,6 +868,8 @@ const mapProject=(p)=>({
   pm:p.pm_name||"",
   start:fmtDate(p.start_date),
   end:fmtDate(p.end_date),
+  // Overview ka "Days left" asli tareekh se ginta hai — "May 2027" se nahi (PRJ-03).
+  end_date:p.end_date||null,
   project_type:p.project_type||"construction",
   _raw:p,
 });
