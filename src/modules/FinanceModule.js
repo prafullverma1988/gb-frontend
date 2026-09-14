@@ -3707,6 +3707,8 @@ function FinanceModule(){
   const [sortCB,setSortCB]=useState({col:"date",dir:"desc"});
   // PR / Pending
   const [editReqId,setEditReqId]=useState(null);const [editAmt,setEditAmt]=useState("");
+  // FIN-09: modify panel ka Reason / Note bhi ab server tak jaata hai
+  const [editReason,setEditReason]=useState("");const [editNote,setEditNote]=useState("");const [editBusy,setEditBusy]=useState(false);
   const [payReqs,setPayReqs]=useState(PAY_REQS_DATA);
   // pendBills holds only non-PR bills (from backend). Approved PRs are derived from payReqs.
   const [pendBills,setPendBills]=useState(PEND_PMTS_DATA);
@@ -3867,6 +3869,11 @@ function FinanceModule(){
   const mapPayReq=r=>{
     const rawDate=r.created_at||r.date||"";
     const d=rawDate?new Date(rawDate):new Date();
+    // FIN-09: approver ne rakam badal kar approve kiya (approved_amount) to wahi
+    // rakam chalti hai — server ka /pending-payments bhi wahi deta hai; maangi
+    // hui rakam kati hui (originalAmt) dikhti hai. Reject/cancel par maangi hui.
+    const reqAmt=parseFloat(r.amount)||0, apprAmt=parseFloat(r.approved_amount)||0;
+    const amtChanged=apprAmt>0&&Math.abs(apprAmt-reqAmt)>=0.005&&!["rejected","cancelled"].includes(String(r.status||"").toLowerCase());
     return {
       id:r.id,
       no:r.pr_number||`PR-${r.id}`,
@@ -3875,7 +3882,7 @@ function FinanceModule(){
         (d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate()),
       party:r.party_name||r.party||"",
       project:r.project_name||r.project||"",
-      amount:parseFloat(r.amount)||0,
+      amount:amtChanged?apprAmt:reqAmt,
       // Map EVERY backend status — earlier this fell through to "Pending" for
       // 'paid'/'cancelled', so a paid PR reappeared as "Pending" in the list +
       // pending-approval count (the "regenerated request" bug).
@@ -3891,8 +3898,8 @@ function FinanceModule(){
       prType:(()=>{const m=String(r.purpose||r.description||"").match(/^\[([^\]]+)\]/);return m?m[1].trim():"";})(),
       approvedBy:r.approved_by_name||r.approved_by||"",
       approvedDate:r.approved_at?new Date(r.approved_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"",
-      originalAmt:r.original_amount?parseFloat(r.original_amount):undefined,
-      modified:!!r.original_amount,
+      originalAmt:amtChanged?reqAmt:undefined,
+      modified:amtChanged,
     };
   };
 
@@ -4513,28 +4520,38 @@ Status: ${ledgerRow.status||"unpaid"}`;
   };
 
   const APPROVER_NAME=localStorage.getItem("gb_user_name")||"Admin"; // logged-in admin
-  const approveReq=async(id)=>{
+  const approveReq=async(id,opts={})=>{
     const req=payReqs.find(r=>r.id===id);
+    // FIN-09: "Modify Payment Before Approving" ki badli rakam + reason/note bhi
+    // isi asli API se jaate hain (opts). Pehle us panel ka "Approve ₹X" sirf
+    // screen ki state badalta tha — refresh par request phir Pending, purani rakam.
+    const amt=opts.amount!=null?Number(opts.amount):(req?.amount||0);
+    const orig=req?(req.originalAmt??req.amount):amt;
     // Optimistic update — pendPmts derives from payReqs automatically
-    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"approved",statusLabel:prStatusLabel("approved"),approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}:r));
+    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"approved",statusLabel:prStatusLabel("approved"),amount:amt,originalAmt:amt!==orig?orig:undefined,modified:amt!==orig,approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}:r));
     try{
-      await api.put(`/finance/payment-requests/${id}/approve`,{
-        approved_amount:req?.amount||0,
+      const res=await api.put(`/finance/payment-requests/${id}/approve`,{
+        approved_amount:amt,
         approved_by:APPROVER_NAME,
         status:"approved",
+        ...(opts.remarks?{remarks:opts.remarks}:{}),
       });
-      // Refresh from server after API success
+      // Server ne mana kiya (permission / engine) to chupchaap "Approved" na dikhe
+      if(!res?.success) window.alert(res?.message||t("finance.pr_approve_failed"));
+      // Refresh from server — multi-level me request abhi Pending hi reh sakti hai
       await Promise.allSettled([refreshPayReqs(),refreshPendPmts()]);
-    }catch(e){console.error("Approve PR error:",e);}
+      return !!res?.success;
+    }catch(e){console.error("Approve PR error:",e);await refreshPayReqs();return false;}
   };
   const rejectReq=async(id)=>{
     // Optimistic update
     setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"rejected",statusLabel:prStatusLabel("rejected")}:r));
     try{
-      await api.put(`/finance/payment-requests/${id}/approve`,{
+      const res=await api.put(`/finance/payment-requests/${id}/approve`,{
         approved_amount:0,
         status:"rejected",
       });
+      if(!res?.success) window.alert(res?.message||t("finance.pr_reject_failed"));
       await refreshPayReqs();
     }catch(e){console.error("Reject PR error:",e);}
   };
@@ -5493,7 +5510,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {/* Action */}
                       <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
                         {req.status==="pending"&&(<>
-                          <button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));}}}
+                          <button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));setEditReason("");setEditNote("");}}}
                             style={{padding:"4px 7px",borderRadius:5,background:isEditing?T.bluL:T.sltL,color:isEditing?T.blu:T.t3,border:`1px solid ${isEditing?T.blu:T.b1}`,fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
                             <IcEdit size={10} color="currentColor"/> {t("common.edit_2")}
                           </button>
@@ -5518,7 +5535,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                           <div>
                             <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("finance.requested_amount")}</label>
-                            <input readOnly value={"₹"+fmtN(req.amount)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t4,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                            <input readOnly value={"₹"+fmtN(req.originalAmt??req.amount)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t4,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                           </div>
                           <div>
                             <label style={{fontSize:10,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("finance.approve_amount")}</label>
@@ -5529,23 +5546,26 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                           <div>
                             <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.reason")}</label>
-                            <select style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                              <option>{t("finance.partial_stock_available")}</option><option>{t("finance.budget_limit")}</option><option>{t("finance.price_negotiated")}</option><option>{t("finance.split_payment")}</option><option>{t("common.other")}</option>
+                            <select value={editReason} onChange={e=>setEditReason(e.target.value)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                              <option value="">{t("finance.pr_reason_select")}</option><option>{t("finance.partial_stock_available")}</option><option>{t("finance.budget_limit")}</option><option>{t("finance.price_negotiated")}</option><option>{t("finance.split_payment")}</option><option>{t("common.other")}</option>
                             </select>
                           </div>
                           <div>
                             <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.note")}</label>
-                            <input type="text" placeholder={t("finance.optional_note")} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                            <input type="text" value={editNote} onChange={e=>setEditNote(e.target.value)} placeholder={t("finance.optional_note")} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                           </div>
                         </div>
                         <div style={{display:"flex",gap:7,justifyContent:"flex-end"}}>
                           <button onClick={()=>setEditReqId(null)} style={{padding:"6px 14px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
-                          <button onClick={()=>{
-                            const newAmt=Number(editAmt);if(!newAmt||newAmt<=0) return;const orig=req.amount;
-                            // pendPmts derives from payReqs automatically — no separate push needed
-                            setPayReqs(prev=>prev.map(r=>r.id===req.id?{...r,status:"Approved",amount:newAmt,originalAmt:newAmt!==orig?orig:undefined,modified:newAmt!==orig,approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}:r));
-                            setEditReqId(null);
-                          }} style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+                          <button disabled={editBusy} onClick={async()=>{
+                            const newAmt=Number(editAmt);if(!newAmt||newAmt<=0) return;
+                            // FIN-09: asli approve API — badli rakam + reason/note server tak (approveReq)
+                            const remarks=[editReason,editNote.trim()].filter(Boolean).join(" — ");
+                            setEditBusy(true);
+                            const ok=await approveReq(req.id,{amount:newAmt,remarks});
+                            setEditBusy(false);
+                            if(ok) setEditReqId(null);
+                          }} style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:editBusy?"wait":"pointer",opacity:editBusy?0.7:1,display:"flex",alignItems:"center",gap:5}}>
                             <IcThumbUp size={13} color="white"/>{t("finance.approve_number", { Number: Number(editAmt)?"₹"+fmtN(Number(editAmt)):"..." })}</button>
                         </div>
                       </div>
