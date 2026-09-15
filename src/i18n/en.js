@@ -875,6 +875,8 @@ const dict = {
   "boq_import_wizard.import_ho_gaya_ai_plan_banayein":         "BOQ imported ✓\n\nCreate the AI site/task plan from this same file? (AI Plan tab will open)",
   "boq_import_wizard.import_ho_raha":                          "Importing…",
   "boq_import_wizard.n_tasks_import_karein":                   "Import {n} tasks",
+  "boq_import_wizard.duplicate_banner":                        "Note: this BOQ ({file}) is already imported into this project (import #{id}, {date}). Committing creates every item's task again and doubles the budget scope.",
+  "boq_import_wizard.duplicate_confirm":                       "This BOQ ({file}) is already imported into this project (import #{id}, {date}).\n\nCommitting again creates every item's task twice and doubles the scope in the Budget tab.\n\nImport it again anyway?",
   "boq_import_wizard.import_revert_ho_gaya":                   "Import reverted",
   "boq_import_wizard.in_fields_ki_mapping_zaroori_hai":        "Mapping for these fields is required:",
   "boq_import_wizard.is_import_ko_revert_karein":              "Revert this import",

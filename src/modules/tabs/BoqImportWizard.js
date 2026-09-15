@@ -289,7 +289,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
   useEffect(() => () => { if (parseTimer.current) clearTimeout(parseTimer.current); }, []);
 
   // ── Commit (Step 3 → 4) ───────────────────────────────────────────────
-  const commit = async () => {
+  const commit = async (allowDuplicate = false) => {
     setBusy(true);
     try {
       const body = {
@@ -299,7 +299,17 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
       };
       if (parentMode === "new") body.parent_name = parentName?.trim() || "BOQ-1";
       if (parentMode === "existing") body.parent_task_id = Number(parentTaskId) || null;
+      if (allowDuplicate === true) body.allow_duplicate = true;
       const r = await api.post("/boq/imports/" + importId + "/commit", body);
+      // TSK-13: wahi BOQ is project me pehle se commit hai — saaf poochho, tabhi dobara
+      if (!r?.success && r?.code === "boq_duplicate" && allowDuplicate !== true) {
+        const d = r.data?.duplicate_of || {};
+        const ok = await window.confirmAsync(t("boq_import_wizard.duplicate_confirm", {
+          file: d.file_name || fileName, id: d.import_id,
+          date: d.committed_at ? new Date(d.committed_at).toLocaleDateString("en-IN") : "—" }));
+        if (ok) await commit(true);
+        return;
+      }
       if (!r?.success) { flash(r?.message || "Commit fail", "error"); return; }
       setResult(r.data);
       setStep(4);
@@ -465,6 +475,13 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
           {/* ───────── STEP 3 ───────── */}
           {step === 3 && staged && (
             <div>
+              {/* TSK-13: wahi BOQ is project me pehle se commit hai */}
+              {staged.duplicate_of && (
+                <div style={{ marginBottom: 12, fontSize: 12.5, color: "#92400E", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 8, padding: "9px 12px", lineHeight: 1.45 }}>
+                  {t("boq_import_wizard.duplicate_banner", { file: staged.duplicate_of.file_name || fileName, id: staged.duplicate_of.import_id,
+                    date: staged.duplicate_of.committed_at ? new Date(staged.duplicate_of.committed_at).toLocaleDateString("en-IN") : "—" })}
+                </div>
+              )}
               {/* Target card */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 14, background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, padding: 14 }}>
                 <div>
@@ -634,7 +651,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
             {step === 3 && staged && (
               <button disabled={!staged.matched || busy || (parentMode === "existing" && !parentTaskId)}
                 title={!staged.matched ? t("boq_import_wizard.total_match_nahi_ho_raha") : ""}
-                onClick={commit}
+                onClick={() => commit()}
                 style={{ ...btn("primary"), opacity: (!staged.matched || (parentMode === "existing" && !parentTaskId)) ? .5 : 1, cursor: (!staged.matched || (parentMode === "existing" && !parentTaskId)) ? "not-allowed" : "pointer" }}>
                 {busy ? t("boq_import_wizard.import_ho_raha") : t("boq_import_wizard.n_tasks_import_karein", { n: taskItems(staged.items).length })}
               </button>

@@ -877,6 +877,8 @@ const dict = {
   "boq_import_wizard.import_ho_gaya_ai_plan_banayein":         "BOQ import ho gaya ✓\n\nAb isi file se AI ka site/task plan banayein? (AI Plan tab khulega)",
   "boq_import_wizard.import_ho_raha":                          "Import ho raha…",
   "boq_import_wizard.n_tasks_import_karein":                   "{n} task import karein",
+  "boq_import_wizard.duplicate_banner":                        "Dhyan do: ye BOQ ({file}) is project me pehle se import ho chuki hai (import #{id}, {date}). Commit karne par har item ka task dobara banega aur budget ka scope double hoga.",
+  "boq_import_wizard.duplicate_confirm":                       "Ye BOQ ({file}) is project me pehle se import hai (import #{id}, {date}).\n\nDobara commit karne par har item ka task do baar banega aur Budget tab ka scope double ho jaayega.\n\nSach me dobara import karein?",
   "boq_import_wizard.import_revert_ho_gaya":                   "Import revert ho gaya",
   "boq_import_wizard.in_fields_ki_mapping_zaroori_hai":        "In fields ki mapping zaroori hai:",
   "boq_import_wizard.is_import_ko_revert_karein":              "Is import ko revert karo",

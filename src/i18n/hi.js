@@ -874,6 +874,8 @@ const dict = {
   "boq_import_wizard.import_ho_gaya_ai_plan_banayein":         "BOQ इम्पोर्ट हो गया ✓\n\nअब इसी फाइल से AI का साइट/टास्क प्लान बनाएं? (AI Plan टैब खुलेगा)",
   "boq_import_wizard.import_ho_raha":                          "इम्पोर्ट हो रहा…",
   "boq_import_wizard.n_tasks_import_karein":                   "{n} काम इम्पोर्ट करें",
+  "boq_import_wizard.duplicate_banner":                        "ध्यान दें: यह BOQ ({file}) इस प्रोजेक्ट में पहले से इम्पोर्ट हो चुकी है (इम्पोर्ट #{id}, {date})। कमिट करने पर हर आइटम का काम दोबारा बनेगा और बजट का स्कोप दोगुना होगा।",
+  "boq_import_wizard.duplicate_confirm":                       "यह BOQ ({file}) इस प्रोजेक्ट में पहले से इम्पोर्ट है (इम्पोर्ट #{id}, {date})।\n\nदोबारा कमिट करने पर हर आइटम का काम दो बार बनेगा और Budget टैब का स्कोप दोगुना हो जाएगा।\n\nसच में दोबारा इम्पोर्ट करें?",
   "boq_import_wizard.import_revert_ho_gaya":                   "इम्पोर्ट रिवर्ट हो गया",
   "boq_import_wizard.in_fields_ki_mapping_zaroori_hai":        "इन फील्ड्स की मैपिंग ज़रूरी है:",
   "boq_import_wizard.is_import_ko_revert_karein":              "इस इम्पोर्ट को रिवर्ट करो",
