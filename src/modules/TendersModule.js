@@ -6930,7 +6930,10 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
   };
 
   const st = d ? (RA_STATUS_STYLE[d.status] || RA_STATUS_STYLE.draft) : null;
-  const bal = d ? Number(d.balance ?? d.net_payable) : 0;
+  // Balance sirf submitted bill ka hota hai — draft/cancelled par server null
+  // bhejta hai, tab "--" (pehle draft par poora net "baaki" dikhta tha, TND-16).
+  const balKnown = !!d && d.balance !== null && d.balance !== undefined;
+  const bal = balKnown ? Number(d.balance) : 0;
 
   return (<>
     <div onClick={onClose} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:998}}/>
@@ -6957,7 +6960,7 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
           <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:9, marginBottom:12}}>
             <Stat label={t("subcon.net_payable")} value={money(d.net_payable)} color={T.t1}  Icon={IcRupee}/>
             <Stat label={t("common.received")}    value={money(d.received ?? 0)} color={T.grn} Icon={IcRupee}/>
-            <Stat label={t("common.balance")}     value={money(bal)} color={bal>0?T.amb:T.grn} Icon={IcClock}/>
+            <Stat label={t("common.balance")}     value={balKnown ? money(bal) : "--"} color={!balKnown?T.t4:bal>0?T.amb:T.grn} Icon={IcClock}/>
           </div>
 
           <Panel style={{marginBottom:11}}>
@@ -7075,11 +7078,19 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
 
   const totals = useMemo(()=>{
     const live = (bills||[]).filter(b=>b.status!=="cancelled");
+    // Billed / Received / Balance sirf SUBMITTED bill ka — draft department ko
+    // gaya hi nahi, finance/party ledger me bhi submit par hi aata hai. Pehle
+    // draft ka poora net "Total Billed" aur "abhi aana baaki" dono me judta tha.
+    // Draft ka jod alag tile me (TND-16).
+    const sub    = live.filter(b=>b.status==="submitted");
+    const drafts = live.filter(b=>b.status==="draft");
     return {
       count:    live.length,
-      billed:   live.reduce((s,b)=>s+num(b.net_payable), 0),
-      received: live.reduce((s,b)=>s+num(b.received), 0),
-      balance:  live.reduce((s,b)=>s+num(b.balance), 0),
+      billed:   sub.reduce((s,b)=>s+num(b.net_payable), 0),
+      received: sub.reduce((s,b)=>s+num(b.received), 0),
+      balance:  sub.reduce((s,b)=>s+num(b.balance), 0),
+      draftCount: drafts.length,
+      draftNet:   drafts.reduce((s,b)=>s+num(b.net_payable), 0),
     };
   }, [bills]);
 
@@ -7093,6 +7104,10 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
         <Stat label={t("common.received")}     value={money(totals.received)} note={moneyF(totals.received)} color={T.grn} Icon={IcRupee}/>
         <Stat label={t("common.balance")}      value={money(totals.balance)}  note="abhi aana baaki"
           color={totals.balance>0?T.amb:T.grn} Icon={IcClock}/>
+        {totals.draftCount > 0 && (
+          <Stat label={t("tenders.draft_submit_baaki")} value={money(totals.draftNet)}
+            note={t("tenders.n_draft_bill_total_billed_me_nahi", { n: totals.draftCount })} color={T.slt} Icon={IcDoc}/>
+        )}
       </div>
     )}
 
@@ -7121,6 +7136,7 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
         {bills.map((b,i)=>{
           const st  = RA_STATUS_STYLE[b.status] || RA_STATUS_STYLE.draft;
           const bal = num(b.balance);
+          const balKnown = b.balance !== null && b.balance !== undefined;   // draft/cancelled: null
           return (
             <div key={b.id} onClick={()=>setOpenBill(b.id)}
               style={{display:"grid", gridTemplateColumns:COLS, padding:"10px 14px", gap:9,
@@ -7135,7 +7151,7 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
               <span style={{fontSize:12.5, fontWeight:700, color:T.t1, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{moneyF(b.net_payable)}</span>
               <span style={{fontSize:11.5, color:num(b.received)>0?T.grn:T.t4, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{moneyF(b.received)}</span>
               <span style={{fontSize:12, fontWeight:600, textAlign:"right", fontVariantNumeric:"tabular-nums",
-                color:bal>0?T.amb:T.grn}}>{moneyF(bal)}</span>
+                color:!balKnown?T.t4:bal>0?T.amb:T.grn}}>{balKnown ? moneyF(bal) : "--"}</span>
               <div style={{display:"flex"}}><Pill label={st.label} c={st.c} bg={st.bg}/></div>
             </div>
           );
