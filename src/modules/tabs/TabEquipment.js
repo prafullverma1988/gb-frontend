@@ -51,7 +51,7 @@ function TabEquipment({ projectId }) {
     usage_date: localYMD(), start_time: "", end_time: "",
     hours_or_days: "", rate_used: "", trip_charge: "", lump_amount: "",
     settlement_side: "company", vendor_id: "", subcon_id: "",
-    fuel_qty: "", fuel_cost: "", fuel_vendor_id: "", operator_name: "", meter_start: "", meter_end: "",
+    operator_name: "", meter_start: "", meter_end: "",
     sector: "", remark: "",
   };
   const [logForm, setLogForm] = useState(emptyLog);
@@ -152,9 +152,7 @@ function TabEquipment({ projectId }) {
     if (logForm.lump_amount !== "") body.lump_amount = parseFloat(logForm.lump_amount) || 0;
     if (logForm.vendor_id) body.vendor_id = parseInt(logForm.vendor_id, 10);
     if (logForm.subcon_id) body.subcon_id = parseInt(logForm.subcon_id, 10);
-    if (logForm.fuel_qty !== "") body.fuel_qty = parseFloat(logForm.fuel_qty) || 0;
-    if (logForm.fuel_cost !== "") body.fuel_cost = parseFloat(logForm.fuel_cost) || 0;
-    if (logForm.fuel_vendor_id) body.fuel_vendor_id = parseInt(logForm.fuel_vendor_id, 10);
+    // Fuel yahan se nahi jaata — server usage ke saath fuel par 400 'fuel_moved' deta hai (MCH-22).
     if (logForm.operator_name) body.operator_name = logForm.operator_name;
     if (logForm.sector) body.sector = logForm.sector;
     if (logForm.remark) body.remark = logForm.remark;
@@ -674,23 +672,10 @@ function TabEquipment({ projectId }) {
                     {subconParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
-                <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.fuel_qty_l")}</div>
-                  <input value={logForm.fuel_qty} onChange={e => updLog("fuel_qty", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.fuel_cost")}</div>
-                  <input value={logForm.fuel_cost} onChange={e => updLog("fuel_cost", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
-                </div>
-                <div style={{ gridColumn: "1 / 3" }}>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.fuel_paid_to_pump_vendor")}</div>
-                  <select value={logForm.fuel_vendor_id} onChange={e => updLog("fuel_vendor_id", e.target.value)} style={inp}>
-                    <option value="">{t("equipment.site_cash_no_separate_payee")}</option>
-                    {vendorParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                  <div style={{ fontSize: 10, color: T.t4, marginTop: 4 }}>
-                   {t("equipment.diesel_ka_kharcha_rent_se_alag")}
-                  </div>
+                {/* Diesel ab sirf Fuel module me (Fuel qty / cost / pump ke khaane
+                    hata diye). Bharte hi server 400 'fuel_moved' deta tha (MCH-22). */}
+                <div style={{ gridColumn: "1 / 3", fontSize: 11, color: T.t3, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 7, padding: "8px 11px" }}>
+                  {t("equipment.diesel_fuel_module_me_darj_karo")}
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.operator_name")}</div>

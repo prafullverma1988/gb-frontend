@@ -1842,6 +1842,7 @@ const dict = {
   "equipment.confirmed":                                       "कंफर्मड",
   "equipment.day_rate_optional":                               "डे रेट (ऑप्शनल)",
   "equipment.diesel_ka_kharcha_rent_se_alag":                  "डीज़ल का एक्सपेंस रेंट से अलग बुक होता है। पंप सेलेक्ट करो तो वो पेंडिंग पेमेंट्स में जाएगा, वरना साइट एक्सपेंस।",
+  "equipment.diesel_fuel_module_me_darj_karo":                 "डीज़ल यहाँ नहीं भरते — फ्यूल मॉड्यूल (Fuel → Refueling) में दर्ज करो। यूसेज के साथ डीज़ल की एंट्री नहीं होती।",
   "equipment.e_g_15_15_12_kosa":                               "जैसे 15, \"15 & 12\", कोसा रोड",
   "equipment.e_g_1_cum":                                       "जैसे 1 क्यूम",
   "equipment.e_g_borrowed_jcb":                                "जैसे बरोड जेसीबी",

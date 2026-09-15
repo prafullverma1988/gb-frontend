@@ -1845,6 +1845,7 @@ const dict = {
   "equipment.confirmed":                                       "Confirmed",
   "equipment.day_rate_optional":                               "Day Rate (optional)",
   "equipment.diesel_ka_kharcha_rent_se_alag":                  "Diesel ka expense rent se alag book hota hai. Pump select karo to wo Pending Payments me jayega, warna site expense.",
+  "equipment.diesel_fuel_module_me_darj_karo":                 "Diesel yahan nahi bharte — Fuel module (Fuel → Refueling) me darj karo. Usage ke saath diesel ki entry nahi hoti.",
   "equipment.e_g_15_15_12_kosa":                               "e.g. 15, \"15 & 12\", Kosa Road",
   "equipment.e_g_1_cum":                                       "e.g. 1 cum",
   "equipment.e_g_borrowed_jcb":                                "e.g. Borrowed JCB",

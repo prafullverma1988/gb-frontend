@@ -1843,6 +1843,7 @@ const dict = {
   "equipment.confirmed":                                       "Confirmed",
   "equipment.day_rate_optional":                               "Day Rate (optional)",
   "equipment.diesel_ka_kharcha_rent_se_alag":                  "Diesel expense is booked separately from rent. If a pump is selected, it will go to Pending Payments; otherwise, it's a site expense.",
+  "equipment.diesel_fuel_module_me_darj_karo":                 "Diesel is not entered here — record it in the Fuel module (Fuel → Refueling). Usage entries do not carry diesel.",
   "equipment.e_g_15_15_12_kosa":                               "e.g. 15, \"15 & 12\", Kosa Road",
   "equipment.e_g_1_cum":                                       "e.g. 1 cum",
   "equipment.e_g_borrowed_jcb":                                "e.g. Borrowed JCB",
