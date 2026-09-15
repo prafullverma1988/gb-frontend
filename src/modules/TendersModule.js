@@ -1508,7 +1508,9 @@ function AddInstrumentModal({tenderId, tenderStatus, onClose, onSaved}) {
     onClose();
   };
 
-  const needsValidity = form.type === "bg" || form.type === "fdr";
+  // BG ke roop me jama Security Deposit / EMD (mode BG/FDR) ki validity bhi
+  // alert chalati hai — backend har active validity date ginta hai (TND-10).
+  const needsValidity = ["bg","fdr"].includes(form.type) || ["bg","fdr"].includes(form.mode);
   // Bid ke saath sirf EMD jati hai — baaki won ke baad.
   const typeOpts = instrumentTypesFor(tenderStatus);
   const bidOnly  = tenderStatus === "bidding";

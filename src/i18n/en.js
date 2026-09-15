@@ -7514,7 +7514,7 @@ const dict = {
   "tenders.existing_project_jodo":                             "Add Existing Project",
   "tenders.expense_entry_ban_jayegi_galti_ho":                 "An expense entry will be created. If there's an error, admin can Undo — then that entry will also be removed.",
   "tenders.expired":                                           "Expired",
-  "tenders.expiring_30d":                                      "Expiring \b≤30d",
+  "tenders.expiring_30d":                                      "Expiring ≤30d",
   "tenders.extra":                                             "Extra",
   "tenders.extra_added":                                       "Extra Added",
   "tenders.extra_boq_me_tha_hi_nahi":                          "Extra — Not in BOQ",
