@@ -3082,7 +3082,8 @@ function btnSolid(c){return{padding:"8px 16px",borderRadius:7,border:"none",back
 // imprest → company khaate se staff ko payment (wallet credit) · petrol → wahi, petrol tag
 function SendToStaffModal({staff,accounts,onClose,onDone}){
   const due=Number(staff.salaryDue)||0;
-  const [bucket,setBucket]=useState(due>0?"salary":"imprest"); // salary pre-selected when dues exist
+  const canTopup=staff.canTopup!==false; // WAL-18: viewer / band / hata login → sirf Salary
+  const [bucket,setBucket]=useState(due>0||!canTopup?"salary":"imprest"); // salary pre-selected when dues exist
   const [amount,setAmount]=useState(due>0?String(due):"");
   const [method,setMethod]=useState("bank_transfer");
   // WAL-15: imprest/petrol company ke kisi khaate se nikalta hai — kaunsa, ye
@@ -3114,13 +3115,14 @@ function SendToStaffModal({staff,accounts,onClose,onDone}){
     <ModalW title={t("finance.send_to_name",{name:staff.name})} onClose={onClose}>
       <div style={{display:"flex",gap:6,marginBottom:12}}>
         {BUCKETS.map(b=>(
-          <button key={b.id} onClick={()=>{setBucket(b.id); if(b.id==="salary"&&due>0&&!Number(amount)) setAmount(String(due));}}
-            style={{flex:1,padding:"9px 6px",borderRadius:8,border:`1.5px solid ${bucket===b.id?b.c:T.b1}`,background:bucket===b.id?b.c+"11":T.surface,cursor:"pointer",textAlign:"left"}}>
+          <button key={b.id} disabled={b.id!=="salary"&&!canTopup} onClick={()=>{setBucket(b.id); if(b.id==="salary"&&due>0&&!Number(amount)) setAmount(String(due));}}
+            style={{flex:1,padding:"9px 6px",borderRadius:8,border:`1.5px solid ${bucket===b.id?b.c:T.b1}`,background:bucket===b.id?b.c+"11":T.surface,cursor:b.id!=="salary"&&!canTopup?"not-allowed":"pointer",opacity:b.id!=="salary"&&!canTopup?.45:1,textAlign:"left"}}>
             <div style={{fontSize:11.5,fontWeight:800,color:bucket===b.id?b.c:T.t2}}>{b.l}</div>
             <div style={{fontSize:9,color:T.t4,marginTop:2}}>{b.sub}</div>
           </button>
         ))}
       </div>
+      {!canTopup&&<div style={{fontSize:11,color:T.amb,background:T.ambL,padding:"7px 10px",borderRadius:7,marginBottom:10}}>{t("finance.wallet_topup_band_sirf_salary")}</div>}
       {bucket==="salary"&&due<=0&&<div style={{fontSize:11,color:T.amb,background:T.ambL,padding:"7px 10px",borderRadius:7,marginBottom:10}}>{t("finance.is_staff_ka_koi_salary_due")}</div>}
       {bucket==="salary"&&due>0&&<div style={{fontSize:11,color:T.t3,background:T.surfaceB,padding:"7px 10px",borderRadius:7,marginBottom:10}}>{t("finance.salary_bucket_paisa")} <b>{t("finance.salary_ledger")}</b> {t("finance.me_settle_hoga_wallet_balance_nahi")} <b style={{color:T.red}}>₹{fmtN(due)}</b>.</div>}
       <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("common.amount_2")}</label>
@@ -3657,6 +3659,9 @@ function FinanceModule(){
       if(res&&res.success){
         setWalletList((res.data||[]).map(w=>({
           id:w.party_id, name:w.name, role:"Staff",
+          // WAL-18: server sirf asli staff bhejta hai; viewer / band / hata hua login
+          // tabhi aata hai jab wallet me paisa ya salary baaki ho — use sirf Salary.
+          userState:w.user_state||"staff", canTopup:w.can_topup!==false,
           balance:Number(w.posted_balance)||0,
           pending:Number(w.pending_amount)||0,
           limit:Number(w.wallet_limit)||0,
@@ -4811,7 +4816,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         <div key={w.id} style={{padding:"8px 10px",borderRadius:7,marginBottom:4,background:T.surfaceB,border:`1px solid ${T.b1}`}}>
                           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                             <div style={{width:26,height:26,borderRadius:"50%",background:w.color+"22",border:`1px solid ${w.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:w.color,flexShrink:0}}>{w.initials}</div>
-                            <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.pending>0?`₹${fmtN(w.pending)} pending`:w.role}</div></div>
+                            <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.pending>0?t("finance.rs_amt_pending",{amt:fmtN(w.pending)}):t("finance.staff_label")}</div>{!w.canTopup&&<div style={{fontSize:9,fontWeight:600,color:T.amb}}>{t("finance.wallet_state_"+w.userState)}</div>}</div>
                             {/* WAL-10: minus balance = staff ne apne paise se kharcha kiya, company ko dena hai.
                                 Pehle fmtN (Math.abs) se −₹3,69,237 bhi "₹3,69,237" dikhta tha — jaise paisa staff ke paas ho. */}
                             <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:w.balance<0?T.red:T.t1}}>{fmtS(w.balance)}</div>{w.balance<0&&<div style={{fontSize:9,fontWeight:600,color:T.red}}>{t("finance.staff_wallet_company_owes")}</div>}<div style={{fontSize:9,color:T.t4}}>{w.limit>0?`/ ₹${fmtN(w.limit)}`:t("finance.no_limit")}</div></div>
