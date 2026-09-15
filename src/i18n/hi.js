@@ -6707,6 +6707,7 @@ const dict = {
   "tasks.edit_each_task_individually":                         "हर टास्क को अलग-अलग एडिट करो",
   "tasks.edit_kar_sakte_ho":                                   "· एडिट कर सकते हो",
   "tasks.edit_task":                                           "एडिट टास्क",
+  "tasks.edit_pct_qty_se_banta":                               "इस टास्क का % रोज़ की क्वांटिटी से बनता है — यहां नहीं बदलता। टास्क खोलो और आज कितना काम हुआ (क्वांटिटी) लिखो। स्टेटस में सिर्फ़ Hold लगा सकते हो।",
   "tasks.end":                                                 "एंड",
   "tasks.end_date_nikal_gayi_abhi_bhi":                        "एंड डेट निकल गई, अभी भी इनकम्प्लीट",
   "tasks.enter_name":                                          "नाम एंटर करो...",

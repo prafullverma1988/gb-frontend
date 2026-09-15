@@ -6710,6 +6710,7 @@ const dict = {
   "tasks.edit_each_task_individually":                         "Edit each task individually",
   "tasks.edit_kar_sakte_ho":                                   "· edit kar sakte ho",
   "tasks.edit_task":                                           "Edit Task",
+  "tasks.edit_pct_qty_se_banta":                               "Is task ka % roz ki qty se banta hai — yahan nahi badalta. Task kholo aur aaj kitna kaam hua (qty) likho. Status me sirf Hold laga sakte ho.",
   "tasks.end":                                                 "End",
   "tasks.end_date_nikal_gayi_abhi_bhi":                        "End date nikal gayi, abhi bhi incomplete",
   "tasks.enter_name":                                          "Enter name...",

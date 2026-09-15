@@ -99,6 +99,9 @@ const PT_OVERRIDE_REASONS={
 };
 const PT_OVERRIDE_MIN_NOTE=10;
 function ptIsOverridden(t){return t&&t.progress_override!==null&&t.progress_override!==undefined&&t.progress_override!=="";}
+// Roz ka kaam qty me (%) nahi — server ka faisla `qty_mode` (planning ka
+// progress_mode / company setting); purana backend na bheje to scope se.
+function ptIsQtyTask(t){if(!t) return false; if(t.qty_mode!==undefined&&t.qty_mode!==null) return Number(t.qty_mode)===1; return Number(t.scope_qty)>0;}
 // How far the pinned value has drifted from what the children now say. Past
 // 10 points the badge turns amber — the override has gone stale.
 function ptOverrideDrift(t){
@@ -608,19 +611,13 @@ function TabTasks({ projectId, isAdmin }) {
     else setOpenTask(t);
   };
 
-  // Move task up/down within siblings
+  // Move task up/down within siblings — server hi isi parent ke bhai-behen me
+  // jagah badalta hai (POST /tasks/:id/move). Pehle yahan chapti list ka agla
+  // row (kisi aur parent ka bhi) chun kar PUT {sort_order} jaata tha, jise PUT
+  // leta hi nahi tha — order kabhi nahi badla (TSK-23).
   const moveTask = async (taskId, dir) => {
-    const flat = ptFlatten(tasks);
-    const idx = flat.findIndex(t => t.id === taskId);
-    if (idx === -1) return;
-    const swapIdx = dir === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= flat.length) return;
-    const a = flat[idx], b = flat[swapIdx];
-    // Swap sort_order
-    await Promise.all([
-      api.put("/tasks/" + a.id, {sort_order: b.sort_order ?? swapIdx}),
-      api.put("/tasks/" + b.id, {sort_order: a.sort_order ?? idx}),
-    ]);
+    const mv = await api.post("/tasks/" + taskId + "/move", { dir });
+    if (!mv || mv.success === false) { window.toast?.error?.((mv && mv.message) || t("tasks.save_nahi_hua")); return; }
     // Reload
     const r = await api.get("/tasks?project_id=" + projectId);
     if (r.success) {
@@ -1496,8 +1493,10 @@ function TabTasks({ projectId, isAdmin }) {
               {icon:"M12 5v14M5 12h14",label:t("tasks.add_subtask"),action:()=>{setAddParent(contextMenu.task);setShowAdd(true);setContextMenu(null);},color:"#10B981",admin:true},
               {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:t("tasks.edit_task"),action:()=>{setEditTask(contextMenu.task);setContextMenu(null);},admin:true},
               // Leaf only — a parent's 100% has to come from its children (or a
-              // reasoned override), never from a one-click shortcut.
-              {icon:"M20 6L9 17l-5-5",label:t("tasks.mark_complete"),hide:contextMenu.task.children?.length>0,
+              // reasoned override), never from a one-click shortcut. Qty wale
+              // task ka % bhi haath se nahi — wo roz ki qty se banta hai; pehle
+              // yahan 200 aata tha aur kuch nahi hota tha (TSK-23).
+              {icon:"M20 6L9 17l-5-5",label:t("tasks.mark_complete"),hide:contextMenu.task.children?.length>0||ptIsQtyTask(contextMenu.task),
                 action:async()=>{const r=await api.put("/tasks/"+contextMenu.task.id,{progress:100});setContextMenu(null);if(r.success)await refetchTasks();else alert(r.message||"Update failed");}},
               {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:t("tasks.override_progress"),
                 hide:!(contextMenu.task.children?.length>0),admin:true,color:"#4B45C4",
@@ -1626,12 +1625,16 @@ function TabTasks({ projectId, isAdmin }) {
           if (rp.affected_count > 0) window.toast?.success?.(t("tasks.replan_toast", { n: rp.affected_count }));
           if (rp.pinned_count > 0)  window.toast?.info?.(t("tasks.replan_pinned_toast", { n: rp.pinned_count }));
         }
-        else if (u.progress !== undefined || u.duration !== orig.duration || scopeChanged) await refetchTasks();
+        // Status badla to server ne % bhi badla ho sakta hai (Completed → 100,
+        // Not Started → 0) — list server se hi.
+        else if (u.progress !== undefined || u.status !== orig.status || u.duration !== orig.duration || scopeChanged) await refetchTasks();
         else {
           // Poori list dobara nahi aa rahi — to yahin naam bitha do, warna
-          // "Assigned" khaane me user ki id dikhne lagti hai.
+          // "Assigned" khaane me user ki id dikhne lagti hai. Jo khaana form ne
+          // bheja hi nahi (qty / parent task ka %), wo row par se mite nahi.
           const who = team.find(m => String(m.id) === String(u.assignedTo));
-          setTasks(updateInTree(tasks,id,{...u, assignee: who ? who.name : "",
+          const sent = Object.fromEntries(Object.entries(u).filter(([, v]) => v !== undefined));
+          setTasks(updateInTree(tasks,id,{...sent, assignee: who ? who.name : "",
             assigned_to: u.assignedTo || null, assignee_name: who ? who.name : null,
             delay_reason:u.delayReason||null, delay_note:u.delayNote||null}));
         }
@@ -3696,8 +3699,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   // it read-only instead of offering a slider that the backend would reject.
   const childCount=(allTasks||[]).filter(t=>Number(t.parent_id)===Number(task.id)).length||(task.children?.length||0);
   const isSummary=childCount>0;
-  // Scope wala leaf: % ki jagah qty likhi jaati hai (mobile jaisa hi).
-  const hasScope=!isSummary&&Number(task.scope_qty)>0;
+  // Scope wala leaf: % ki jagah qty likhi jaati hai (mobile jaisa hi) — server
+  // ka qty_mode hi (planning me % tay ho to scope hote hue bhi % box).
+  const hasScope=!isSummary&&ptIsQtyTask(task);
 
   // Materials
   const [materials,setMaterials]=useState([]);
@@ -4818,6 +4822,9 @@ function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsCh
   // A row with children is a summary row: its progress/status are derived, so
   // this form must neither edit nor submit them.
   const isSummary=(task.children?.length>0)||allTasks.some(t=>Number(t.parent_id)===Number(task.id));
+  // Qty wala leaf: % roz ki qty se banta hai — yahan sirf dikhta hai, jaata
+  // nahi. Status (Hold) jaata hai; server jo badla wahi maanta hai (TSK-15).
+  const isQty=!isSummary&&ptIsQtyTask(task);
   const TEAM_PT=teamOpts(team);
   return(<>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:350,backdropFilter:"blur(1px)"}}/>
@@ -4858,6 +4865,11 @@ function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsCh
                   ? `Manually pinned at ${task.progress_override}%${task.progress_auto!=null?` (children ${task.progress_auto}%)`:""}. Right-click the row → Reset to Auto.`
                   : t("tasks.children_se_auto_calculated_duration_weighted_2")}
               </div>
+            </div>
+          ):isQty?(
+            <div style={{padding:"9px 11px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`}}>
+              <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginBottom:6}}><div style={{height:"100%",width:`${form.progress}%`,background:Number(form.progress)===100?T.grn:T.blu,borderRadius:2}}/></div>
+              <div style={{fontSize:10.5,color:T.t4}}>{t("tasks.edit_pct_qty_se_banta")}</div>
             </div>
           ):(<>
             <div style={{display:"flex",gap:9,alignItems:"center"}}>
@@ -4992,7 +5004,7 @@ function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsCh
         <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
         <button onClick={()=>onSave(task.id,{...form,dhyanRakhen:showDhyan?form.dhyanRakhen:null,
             boqItemId, alignId,
-            ...(isSummary?{progress:undefined,status:undefined}:{progress:Number(form.progress)})})}
+            ...(isSummary?{progress:undefined,status:undefined}:isQty?{progress:undefined}:{progress:Number(form.progress)})})}
           style={{flex:2,padding:"9px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>{t("common.save_changes")}</button>
       </div>
     </div>

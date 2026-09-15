@@ -6708,6 +6708,7 @@ const dict = {
   "tasks.edit_each_task_individually":                         "Edit each task individually",
   "tasks.edit_kar_sakte_ho":                                   "· you can edit",
   "tasks.edit_task":                                           "Edit Task",
+  "tasks.edit_pct_qty_se_banta":                               "This task's % comes from its daily quantity — it can't be changed here. Open the task and enter today's quantity. Only Hold can be set as status.",
   "tasks.end":                                                 "End",
   "tasks.end_date_nikal_gayi_abhi_bhi":                        "End date passed, still incomplete",
   "tasks.enter_name":                                          "Enter name...",
