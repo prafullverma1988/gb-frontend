@@ -1011,33 +1011,32 @@ function ProgressReportModule(){
   const [selProject,setSelProject]=useState(null);
   const [projects,setProjects]=useState([]);
   const [loading,setLoading]=useState(true);
+  const [portfolioFailed,setPortfolioFailed]=useState(false);
 
-  // ── Live data: /projects + /finance/transactions, aggregated per project ──
+  // ── Live data: /projects + /finance/project-portfolio ──
   // - contract = contract_value || boq_value
-  // - received = SUM(receipt amount) where project_id = p.id
-  // - billed   = SUM(sales_invoice amount) where project_id = p.id
-  // - expenses = projects.total_expense (already maintained server-side)
+  // - received / billed = server ka jod, POORI history par (LIB-06) — pehle
+  //   yahan GET /transactions?limit=2000 ki rows judti thin, server 1000 par
+  //   kaat deta, to purani saari receipt gayab (greenbox bhilai ₹77.98 L vs
+  //   asli ₹3.89 Cr). Niyam backend utils/projectPnl.fetchPortfolio me.
+  // - expenses = projects.total_expense (server: projectPnl ki live cost)
   // - progress = projects.progress_pct
   // Phases / milestones loaded lazily when a project card is expanded.
   useEffect(()=>{
     setLoading(true);
     Promise.all([
       api.get("/projects"),
-      api.get("/finance/transactions?limit=2000"),
-    ]).then(([projRes, txnRes])=>{
+      api.get("/finance/project-portfolio").catch(()=>null),
+    ]).then(([projRes, portRes])=>{
       if (!projRes?.success || !Array.isArray(projRes.data)) {
         setProjects([]); setLoading(false); return;
       }
-      const txns = (txnRes?.success && Array.isArray(txnRes.data)) ? txnRes.data : [];
-      // Aggregate received + billed per project_id
+      const items = (portRes?.success && Array.isArray(portRes.data?.items)) ? portRes.data.items : null;
+      // Jod na aaye to ₹0 chupchaap nahi — upar saaf chetavni (neeche)
+      setPortfolioFailed(!items);
       const aggr = {};
-      txns.forEach(t => {
-        if (!t.project_id) return;
-        if (t.status === "cancelled") return;
-        if (!aggr[t.project_id]) aggr[t.project_id] = { received: 0, billed: 0 };
-        const amt = parseFloat(t.amount) || 0;
-        if (t.type === "receipt") aggr[t.project_id].received += amt;
-        else if (t.type === "sales_invoice") aggr[t.project_id].billed += amt;
+      (items || []).forEach(i => {
+        aggr[i.project_id] = { received: Number(i.received) || 0, billed: Number(i.billed) || 0 };
       });
       const list = projRes.data.map(p => {
         const a = aggr[p.id] || { received: 0, billed: 0 };
@@ -1193,6 +1192,12 @@ function ProgressReportModule(){
           </div>
         ))}
       </div>
+
+      {portfolioFailed && !loading && (
+        <div style={{padding:"8px 12px",marginBottom:10,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:12,fontWeight:600}}>
+          {t("reports.portfolio_load_failed")}
+        </div>
+      )}
 
       {/* Actions */}
       <div style={{display:"flex",gap:7,marginBottom:12}}>

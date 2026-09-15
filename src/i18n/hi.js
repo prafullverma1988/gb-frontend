@@ -6002,6 +6002,7 @@ const dict = {
   "reports.phase_wise_progress":                               "फेज-वाइज प्रोग्रेस",
   "reports.portfolio":                                         "पोर्टफोलियो",
   "reports.portfolio_excel":                                   "पोर्टफोलियो एक्सेल",
+  "reports.portfolio_load_failed":                             "बिल्ड / रिसीव्ड का जोड़ लोड नहीं हुआ — ये ₹0 असली नहीं है. रिफ़्रेश करके दोबारा खोलो.",
   "reports.portfolio_pdf":                                     "पोर्टफोलियो पीडीएफ",
   "reports.progress_financial":                                "प्रोग्रेस + फाइनेंशियल",
   "reports.project_consumption_warehouse_issues_show_fifo":    "प्रोजेक्ट कंजम्पशन — वेयरहाउस इश्यूज में FIFO/मैन्युअल रेट दिखाओ",

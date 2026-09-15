@@ -6003,6 +6003,7 @@ const dict = {
   "reports.phase_wise_progress":                               "Phase-wise Progress",
   "reports.portfolio":                                         "Portfolio",
   "reports.portfolio_excel":                                   "Portfolio Excel",
+  "reports.portfolio_load_failed":                             "Billed / Received totals could not be loaded — the ₹0 shown is not real. Refresh and open again.",
   "reports.portfolio_pdf":                                     "Portfolio PDF",
   "reports.progress_financial":                                "Progress + Financial",
   "reports.project_consumption_warehouse_issues_show_fifo":    "Project consumption — warehouse issues show FIFO/manual rate",

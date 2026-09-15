@@ -6005,6 +6005,7 @@ const dict = {
   "reports.phase_wise_progress":                               "Phase-wise Progress",
   "reports.portfolio":                                         "Portfolio",
   "reports.portfolio_excel":                                   "Portfolio Excel",
+  "reports.portfolio_load_failed":                             "Billed / Received ka jod load nahi hua — ye ₹0 asli nahi hai. Refresh karke dobara kholo.",
   "reports.portfolio_pdf":                                     "Portfolio PDF",
   "reports.progress_financial":                                "Progress + Financial",
   "reports.project_consumption_warehouse_issues_show_fifo":    "Project consumption — warehouse issues show FIFO/manual rate",
