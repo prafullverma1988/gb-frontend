@@ -14,6 +14,8 @@ const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth
 
 // Indian-comma rupee formatter — Math.round + en-IN locale
 const inr = (n) => Math.round(Number(n) || 0).toLocaleString("en-IN");
+// Rate / qty ke liye paise tak (DECIMAL string "62.50" → "62.5", "560.00" → "560")
+const rate2 = (n) => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 // Construction-type accent colors — picker palette used in Edit Type modal.
 const COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16"];
 const IcBox       = (p) => <Icon {...p} d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />;
@@ -879,16 +881,15 @@ function MaterialMasterSection() {
     { key: "name", label: t("master_library.material_name"), minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
     { key: "category", label: t("common.category"), minW: 110, render: r => <Badge text={r.category_name || r.category} color={T.textMid} bg={T.borderLight} /> },
     { key: "unit", label: t("common.unit"), minW: 80 },
-    { key: "hsnCode", label: "HSN", minW: 60, render: r => <span style={{ fontFamily: "monospace", fontSize: 12 }}>{r.hsnCode}</span> },
-    { key: "gstRate", label: "GST", minW: 50, align: "center", render: r => <span style={{ fontWeight: 600, fontSize: 12 }}>{r.gstRate}%</span> },
-    { key: "baseRate", label: t("master_library.base_rate"), minW: 80, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>{t("master_library.rs_baserate", { baseRate: r.baseRate })}</span> },
-    { key: "lastRate", label: t("master_library.last_rate"), minW: 80, align: "right", render: r => <span style={{ fontWeight: 600, color: r.lastRate > r.baseRate ? T.red : T.green }}>{t("master_library.rs_lastrate", { lastRate: r.lastRate })}</span> },
-    { key: "currentStock", label: t("common.stock"), minW: 70, align: "right", render: r => (
-      <span style={{ fontWeight: 600, color: r.currentStock <= r.minStock ? T.red : T.text }}>
-        {(r.currentStock||0).toLocaleString()}
-        {r.currentStock <= r.minStock && <span style={{ fontSize: 10, color: T.red, marginLeft: 4 }}>LOW</span>}
-      </span>
-    )},
+    // GET /library/materials snake_case deta hai (hsn_code, gst_rate, base_rate…). Pehle
+    // camelCase padhne se HSN khaali, GST "%", rate "Rs.undefined" aur stock hamesha 0 (LIB-09).
+    { key: "hsn_code", label: "HSN", minW: 60, render: r => <span style={{ fontFamily: "monospace", fontSize: 12 }}>{r.hsn_code || "—"}</span> },
+    { key: "gst_rate", label: "GST", minW: 50, align: "center", render: r => <span style={{ fontWeight: 600, fontSize: 12 }}>{r.gst_rate == null || r.gst_rate === "" ? "—" : `${Number(r.gst_rate)}%`}</span> },
+    { key: "base_rate", label: t("master_library.base_rate"), minW: 80, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>{t("master_library.rs_baserate", { baseRate: rate2(r.base_rate) })}</span> },
+    { key: "last_rate", label: t("master_library.last_rate"), minW: 80, align: "right", render: r => <span style={{ fontWeight: 600, color: Number(r.last_rate) > Number(r.base_rate) ? T.red : T.green }}>{t("master_library.rs_lastrate", { lastRate: rate2(r.last_rate) })}</span> },
+    // Stock ka koi field is API me hai hi nahi — asli stock godown-wise Warehouse me dikhta hai.
+    // Yahan master ki apni "Minimum Stock Level" (form wala field).
+    { key: "min_stock", label: t("master_library.minimum_stock_level"), minW: 70, align: "right", render: r => <span style={{ fontWeight: 600 }}>{rate2(r.min_stock)}</span> },
   ];
 
   return (
@@ -1597,8 +1598,9 @@ function SubcontractorSection() {
     { key: "phone", label: t("common.phone"), minW: 120, style: { fontFamily: "monospace", fontSize: 12 } },
     { key: "description", label: t("master_library.city_area"), minW: 70, render: r => <span>{r.description||r.city||"—"}</span> },
     { key: "labour_strength", label: t("common.labour"), minW: 60, align: "center", render: r => <span style={{ fontWeight: 600 }}>{r.labour_strength}</span> },
-    { key: "rate", label: t("common.rate"), minW: 100, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>{t("master_library.rs_rate_ratetype", { rate: r.rate, rateType: r.rateType })}</span> },
-    { key: "activeProjects", label: t("common.projects"), minW: 60, align: "center", render: r => <Badge text={r.activeProjects} color={r.activeProjects > 0 ? T.green : T.textLight} bg={r.activeProjects > 0 ? T.greenSoft : T.borderLight} /> },
+    // API rate_type (snake_case) deta hai; rate 0 = set hi nahi → "—" (pehle "Rs.0.00/undefined", LIB-09).
+    // "Projects" column hataya — API me activeProjects field hai hi nahi (hamesha khaali badge tha).
+    { key: "rate", label: t("common.rate"), minW: 100, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>{Number(r.rate) > 0 ? (r.rate_type ? t("master_library.rs_rate_ratetype", { rate: rate2(r.rate), rateType: r.rate_type }) : t("master_library.rs_r", { r: rate2(r.rate) })) : "—"}</span> },
     { key: "rating", label: t("master_library.rating"), minW: 70, align: "center", render: r => r.rating > 0 ? <div style={{ display: "flex", gap: 1, justifyContent: "center" }}>{[1,2,3,4,5].map(i => <IcStar key={i} size={11} color={i <= r.rating ? T.amber : T.borderLight} fill={i <= r.rating ? T.amber : "none"} strokeWidth={0} />)}</div> : "—" },
     { key: "status", label: t("common.status"), minW: 70, render: r => <Badge text={r.status} color={r.status === "Active" ? T.green : T.red} bg={r.status === "Active" ? T.greenSoft : T.redSoft} /> },
   ];
@@ -6631,10 +6633,14 @@ export default function MasterLibraryModule() {
   const [summaryCounts, setSummaryCounts] = useState({});
   const [dbProjects, setDbProjects] = useState([]);
   useEffect(() => {
-    api.get("/library/summary").then(r => { if(r.success) setSummaryCounts(r.data); }).catch(()=>{});
     api.get("/projects").then(r => { if(r.success&&r.data) setDbProjects(r.data); }).catch(()=>{});
   }, []);
   const [activeSection, setActiveSection] = useState("materials");
+  // Sidebar ki ginti (LIB-10) — section badalne par dobara, taaki abhi jode/hataye
+  // item bhi ginti me aa jaayein.
+  useEffect(() => {
+    api.get("/library/summary").then(r => { if(r.success && r.data) setSummaryCounts(r.data); }).catch(()=>{});
+  }, [activeSection]);
   const ActiveComp = masterSections.find(s => s.id === activeSection)?.Comp || MaterialMasterSection;
   const active = masterSections.find(s => s.id === activeSection);
 
@@ -6667,7 +6673,10 @@ export default function MasterLibraryModule() {
                     <item.Icon size={15} color={isActive ? item.color : T.textLight} />
                   </div>
                   <span style={{ flex: 1, fontSize: 13, fontWeight: isActive ? 650 : 450, color: isActive ? T.blue : T.textMid, textAlign: "left" }}>{item.label}</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: T.textLight, background: T.borderLight, padding: "2px 7px", borderRadius: 10 }}>{item.count}</span>
+                  {/* Pehle `item.count` padhta tha jo kisi section me hai hi nahi — har jagah khaali pill (LIB-10) */}
+                  {item.countKey && summaryCounts[item.countKey] != null && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: T.textLight, background: T.borderLight, padding: "2px 7px", borderRadius: 10 }}>{summaryCounts[item.countKey]}</span>
+                  )}
                 </button>
               </div>
             );
