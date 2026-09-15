@@ -2768,16 +2768,19 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   };
 
   // ── Wallet approval actions (Option A: act via /wallets/* directly) ──
-  const walletPhotoBlocked=(it)=>it.photo_pending && data.walletPhotoPolicy &&
-    data.walletPhotoPolicy[it.is_transfer?"transfer":(it.wallet_category||"generic")]==="required";
+  // WAL-14: photo phone se upload hone me atki ho par staff ne "Ask for info" ke
+  // jawab me photo bhej di ho to approve khula (server bhi yahi maanta hai).
+  const walletPhotoBlocked=(it,clar)=>it.photo_pending && data.walletPhotoPolicy &&
+    data.walletPhotoPolicy[it.is_transfer?"transfer":(it.wallet_category||"generic")]==="required" &&
+    !(clar||[]).some(c=>c.photo_url);
   // Zaroori category + koi photo hi nahi (na entry par, na upload me, na "Ask for
   // info" ke jawab me) — server bhi approve nahi karta (WAL-06), button yahin band.
   const walletPhotoMissing=(it,clar)=>!it.photo_url && !it.photo_pending && data.walletPhotoPolicy &&
     data.walletPhotoPolicy[it.is_transfer?"transfer":(it.wallet_category||"generic")]==="required" &&
     !(clar||[]).some(c=>c.photo_url);
   const removeWallet=(id)=>setData(p=>({...p,wallet:(p.wallet||[]).filter(w=>w.txn_id!==id)}));
-  const walApprove=async(it)=>{
-    if(walletPhotoBlocked(it)){setSaveErr("Is category me photo zaroori — sync hone tak approve disabled.");return;}
+  const walApprove=async(it,clar)=>{
+    if(walletPhotoBlocked(it,clar)){setSaveErr(t("projects.is_category_me_photo_zaroori_sync"));return;}
     setSaveErr("");setActing(p=>({...p,["w"+it.txn_id]:"approving"}));
     try{const r=await api.post("/wallets/approve/"+it.txn_id,{});if(r&&r.success!==false)removeWallet(it.txn_id);else setSaveErr((r&&r.message)||"Approve failed");}
     catch(e){setSaveErr(e.message);}
@@ -2814,7 +2817,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     // Re-fetches when walletAsked[txn_id] bumps (after the admin asks).
     const [clar,setClar]=useState([]);
     const noPhoto=walletPhotoMissing(it,clar);
-    const blocked=walletPhotoBlocked(it)||noPhoto;
+    const blocked=walletPhotoBlocked(it,clar)||noPhoto;
     const [senderUid,setSenderUid]=useState(null); // submitter's user_id → green; approvers → blue
     const [showClar,setShowClar]=useState(false);   // conversation collapsed by default (clean)
     const askKey=walletAsked[it.txn_id]||0;
@@ -2872,7 +2875,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         <div style={{display:"flex",gap:6,marginTop:8}}>
           <button onClick={()=>walReject(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="rejecting"?"...":t("common.reject")}</button>
           <button onClick={()=>walAsk(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.bluL,border:"1px solid "+T.blu,color:T.blu,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="asking"?"...":t("projects.ask_info")}</button>
-          <button onClick={()=>walApprove(it)} disabled={!!act||blocked} style={{flex:1,padding:"6px",borderRadius:6,background:blocked?T.b1:T.grn,border:"none",color:blocked?T.t4:"white",fontSize:11,fontWeight:700,cursor:(act||blocked)?"not-allowed":"pointer"}}>{act==="approving"?"...":t("common.approve")}</button>
+          <button onClick={()=>walApprove(it,clar)} disabled={!!act||blocked} style={{flex:1,padding:"6px",borderRadius:6,background:blocked?T.b1:T.grn,border:"none",color:blocked?T.t4:"white",fontSize:11,fontWeight:700,cursor:(act||blocked)?"not-allowed":"pointer"}}>{act==="approving"?"...":t("common.approve")}</button>
         </div>
       </div>
     );
