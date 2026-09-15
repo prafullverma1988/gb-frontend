@@ -731,7 +731,8 @@ function CostReport({ econ, health }) {
               <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{m.name}</span>
               <span><Pill label={m.owned ? t("machinery.apni") : t("machinery.kiraye")} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
               <span style={{ fontSize: 11.5, color: T.t3 }}>kharcha {rupee(m.cost.total)}</span>
-              <span style={{ fontSize: 11, color: T.amb }}>{m.run.reason}</span>
+              {/* Meter theek ho par kharcha/kiraya darj na ho to wajah cost_reason me (MCH-19) */}
+              <span style={{ fontSize: 11, color: T.amb }}>{m.cost_reason || m.run.reason}</span>
             </Row>
           ))}
         </Panel>
@@ -3172,17 +3173,22 @@ function MachineryModule() {
   // khuli ho to wo unmount ho kar apna tab bhool jaata hai.
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
-    const [f, d, g, p, ec, he, pr, te] = await Promise.all([
+    const [f, d, g, p, ec, pr, te] = await Promise.all([
       api.get("/machinery/fleet").catch(() => null),
       api.get("/machinery/due").catch(() => null),
       api.get("/machinery/reports/gaps").catch(() => null),
       api.get("/finance/parties").catch(() => null),
       api.get("/machinery/reports/cost").catch(() => null),
-      api.get("/machinery/reports/health").catch(() => null),
       // Sirf Reports ke project filter ke liye — baaki tab ko iski zaroorat nahi.
       api.get("/projects").catch(() => null),
       api.get("/telematics/overview").catch(() => null),
     ]);
+    // Preventive vs breakdown ab cost ke jawab me hi aata hai (MCH-24) — pehle alag
+    // /reports/health call wahi hisaab dobara ginta tha. Purana backend ho (health
+    // nahi bheja) tabhi alag call.
+    const he = ec?.success && ec.data && ec.data.health
+      ? { success: true, data: ec.data.health }
+      : await api.get("/machinery/reports/health").catch(() => null);
     setFleet(f?.success ? f.data || [] : []);
     setDue(d?.success ? d.data || [] : []);
     setGaps(g?.success ? g.data || { gaps: [], counts: {} } : { gaps: [], counts: {} });

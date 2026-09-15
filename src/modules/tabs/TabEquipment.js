@@ -8,12 +8,14 @@ import { t } from "../../i18n";
 // Route keys as the backend stores them (routes/equipment.js PAYMENT_ROUTES).
 // "site_exp" used to fall through unlabelled and render as raw text.
 const ROUTE_LABEL = {
-  vendor: "Vendor",
-  site_exp: "Site expense",
-  subcon_against: "Sub-con",
-  owned: "Owned",
-  subcon_self_paid: "Contractor paid",
+  get vendor() { return t("equipment.route_vendor"); },
+  get site_exp() { return t("equipment.route_site_exp"); },
+  get subcon_against() { return t("equipment.route_subcon"); },
+  get owned() { return t("equipment.route_owned"); },
+  get subcon_self_paid() { return t("equipment.route_contractor_paid"); },
 };
+// Legacy machine ka status API value ("On Site" / "Returned") hai — sirf label translate.
+const STATUS_LABEL = { get "On Site"() { return t("equipment.on_site"); }, get "Returned"() { return t("equipment.returned"); } };
 
 function TabEquipment({ projectId }) {
   // Top-level view toggle: existing Equipment sections vs Trip Tracking.
@@ -51,7 +53,7 @@ function TabEquipment({ projectId }) {
     usage_date: localYMD(), start_time: "", end_time: "",
     hours_or_days: "", rate_used: "", trip_charge: "", lump_amount: "",
     settlement_side: "company", vendor_id: "", subcon_id: "",
-    fuel_qty: "", fuel_cost: "", fuel_vendor_id: "", operator_name: "", meter_start: "", meter_end: "",
+    operator_name: "", meter_start: "", meter_end: "",
     sector: "", remark: "",
   };
   const [logForm, setLogForm] = useState(emptyLog);
@@ -129,9 +131,9 @@ function TabEquipment({ projectId }) {
   const confirmedCount = confirmed.length;
 
   const saveUsage = async () => {
-    if (!projectId) { setLogErr("Project missing"); return; }
+    if (!projectId) { setLogErr(t("equipment.project_missing")); return; }
     if (!logForm.equipment_id && !logForm.equipment_name.trim()) {
-      setLogErr("Select equipment or enter a name");
+      setLogErr(t("equipment.select_equipment_or_name"));
       return;
     }
     setLogSaving(true); setLogErr("");
@@ -152,9 +154,7 @@ function TabEquipment({ projectId }) {
     if (logForm.lump_amount !== "") body.lump_amount = parseFloat(logForm.lump_amount) || 0;
     if (logForm.vendor_id) body.vendor_id = parseInt(logForm.vendor_id, 10);
     if (logForm.subcon_id) body.subcon_id = parseInt(logForm.subcon_id, 10);
-    if (logForm.fuel_qty !== "") body.fuel_qty = parseFloat(logForm.fuel_qty) || 0;
-    if (logForm.fuel_cost !== "") body.fuel_cost = parseFloat(logForm.fuel_cost) || 0;
-    if (logForm.fuel_vendor_id) body.fuel_vendor_id = parseInt(logForm.fuel_vendor_id, 10);
+    // Fuel yahan se nahi jaata — server usage ke saath fuel par 400 'fuel_moved' deta hai (MCH-22).
     if (logForm.operator_name) body.operator_name = logForm.operator_name;
     if (logForm.sector) body.sector = logForm.sector;
     if (logForm.remark) body.remark = logForm.remark;
@@ -168,10 +168,10 @@ function TabEquipment({ projectId }) {
         setLogForm(emptyLog);
         loadUsage();
       } else {
-        setLogErr((res && res.message) || "Save failed");
+        setLogErr((res && res.message) || t("equipment.save_failed"));
       }
     } catch (e) {
-      setLogErr(e.message || "Save failed");
+      setLogErr(e.message || t("equipment.save_failed"));
     }
     setLogSaving(false);
   };
@@ -195,9 +195,9 @@ function TabEquipment({ projectId }) {
         setReqForm(emptyReq);
         loadRequests();
       } else {
-        window.alert((res && res.message) || "Save failed");
+        window.alert((res && res.message) || t("equipment.save_failed"));
       }
-    } catch (e) { window.alert(e.message || "Save failed"); }
+    } catch (e) { window.alert(e.message || t("equipment.save_failed")); }
     setReqSaving(false);
   };
 
@@ -233,16 +233,17 @@ function TabEquipment({ projectId }) {
   const dispDuration = (u) => {
     if (u.measurement_mode === "fixed") return t("payroll.fixed");
     const n = Number(u.hours_or_days) || 0;
-    if (u.measurement_mode === "daily") return `${n} day${n !== 1 ? "s" : ""}`;
-    if (u.measurement_mode === "trip") return `${n} trip${n !== 1 ? "s" : ""}`;
+    if (u.measurement_mode === "daily") return t("equipment.dur_days", { n });
+    if (u.measurement_mode === "monthly") return t("equipment.dur_months", { n });
+    if (u.measurement_mode === "trip") return t("equipment.dur_trips", { n });
     // km wali machine (tipper/trailer) ka kiraya km par chalta hai — quantity
     // wahi field hai, sirf unit alag. "12 hr" likhna jhooth hota.
-    if (u.measurement_mode === "km") return `${n} km`;
-    return `${n} hr`;
+    if (u.measurement_mode === "km") return t("equipment.dur_km", { n });
+    return t("equipment.dur_hr", { n });
   };
 
   // Usage form ki quantity ka naam machine ke mode se aata hai.
-  const QTY_LABEL = { daily: "Days", km: "Km", trip: "Trips", fixed: "Quantity" };
+  const QTY_LABEL = { daily: t("equipment.qty_days"), monthly: t("equipment.qty_months"), km: t("equipment.qty_km"), trip: t("equipment.qty_trips"), fixed: t("common.quantity") };
   const qtyLabelFor = (eqId) => {
     const m = eqId ? masterList.find((x) => String(x.id) === String(eqId)) : null;
     return QTY_LABEL[m && m.measurement_mode] || t("equipment.hours_or_days");
@@ -272,12 +273,12 @@ function TabEquipment({ projectId }) {
     const next = eq.status === "Returned" ? "On Site" : "Returned";
     setRows(prev => prev.map(x => x.id === eq.id ? { ...x, status: next } : x));
     const r = await api.patch("/library/project-equipment/" + eq.id, { status: next });
-    if (!r || r.success === false) { window.alert((r && r.message) || "Update failed"); load(); }
+    if (!r || r.success === false) { window.alert((r && r.message) || t("equipment.update_failed")); load(); }
   };
   const removeEq = async (eq) => {
     if (!await window.confirmAsync(t("equipment.remove_name", { name: eq.name }))) return;
     const r = await api.del("/library/project-equipment/" + eq.id);
-    if (!r || r.success === false) { window.alert((r && r.message) || "Delete failed"); return; }
+    if (!r || r.success === false) { window.alert((r && r.message) || t("equipment.delete_failed")); return; }
     load();
   };
   const resetForm = () => { setName(""); setVendor("Self"); setFromD(""); setToD(""); setStat("On Site"); setRate(""); };
@@ -294,7 +295,7 @@ function TabEquipment({ projectId }) {
       rate_per_day: rate || null,
     });
     setSaving(false);
-    if (!r || r.success === false) { window.alert((r && r.message) || "Save failed"); return; }
+    if (!r || r.success === false) { window.alert((r && r.message) || t("equipment.save_failed")); return; }
     resetForm();
     setShowAdd(false);
     load();
@@ -319,14 +320,14 @@ function TabEquipment({ projectId }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
         <Stat label={t("equipment.total_equipment_cost")} value={`₹${fmtN(Math.round(totalCost))}`}
           note={fuelCost > 0
-            ? `Hire ₹${fmtN(Math.round(hireCost))} + diesel ₹${fmtN(Math.round(fuelCost))}`
-            : `${confirmedCount} confirmed entr${confirmedCount === 1 ? "y" : "ies"}`}
+            ? t("equipment.note_hire_diesel", { hire: fmtN(Math.round(hireCost)), diesel: fmtN(Math.round(fuelCost)) })
+            : t("equipment.note_n_confirmed", { n: confirmedCount })}
           color={T.blu} />
         <Stat label={t("equipment.usage_entries")} value={usageRows.length}
-          note={`${usageRows.filter(u => (u.finance_status || "suggested") === "suggested").length} awaiting review`}
+          note={t("equipment.note_n_awaiting_review", { n: usageRows.filter(u => (u.finance_status || "suggested") === "suggested").length })}
           color={T.amb} />
         <Stat label={t("equipment.active_requests")} value={reqList.filter(r => r.status === "pending").length}
-          note={`${reservations.length} reserved`}
+          note={t("equipment.note_n_reserved", { n: reservations.length })}
           color={T.pur} />
       </div>
 
@@ -344,7 +345,7 @@ function TabEquipment({ projectId }) {
             {!usageLoading && usageRows.length > 0 && (
               <>
                 <THead cols="100px 1.6fr 1fr 90px 80px 100px 1.1fr 1fr"
-                  headers={["Date", "Equipment", "Mode / Dur.", "Rate", "Trip", "Total", "Route", "Status"]} />
+                  headers={[t("common.date"), t("common.equipment"), t("equipment.mode_dur"), t("common.rate"), t("machinery.trip"), t("common.total"), t("equipment.route"), t("common.status")]} />
                 {usageRows.map(u => {
                   const route = u.finance_confirmed_route || u.suggested_route || "—";
                   const routeLabel = ROUTE_LABEL[route] || route;
@@ -419,7 +420,7 @@ function TabEquipment({ projectId }) {
             )}
             {reqList.length > 0 && (
               <>
-                <THead cols="1.4fr 1fr 1fr 1.4fr 110px" headers={["Type / Capacity", "From", "To", "Reason", "Status"]} />
+                <THead cols="1.4fr 1fr 1fr 1.4fr 110px" headers={[t("equipment.type_capacity"), t("common.from"), t("common.to"), t("common.reason"), t("common.status")]} />
                 {reqList.map(rq => (
                   <div key={rq.id} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1.4fr 110px",
                     padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
@@ -453,7 +454,7 @@ function TabEquipment({ projectId }) {
               return (
                 <div key={rv.id} style={{ padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{eq?.name || `Equipment #${rv.equipment_id}`}</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{eq?.name || t("equipment.equipment_n", { id: rv.equipment_id })}</div>
                     {rv.note && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 1 }}>{rv.note}</div>}
                   </div>
                   <span style={{ fontSize: 11.5, color: T.t2 }}>{t("equipment.reserved_fmtd_fmtd2", { fmtD: fmtD(rv.from_date), fmtD2: fmtD(rv.to_date) })}</span>
@@ -511,7 +512,7 @@ function TabEquipment({ projectId }) {
                         border: `1.5px solid ${on ? sm.c : T.b1}`,
                         background: on ? sm.bg : "transparent",
                         color: on ? sm.c : T.t3, fontSize: 12, fontWeight: on ? 700 : 500,
-                        cursor: "pointer", fontFamily: "inherit" }}>{s}</button>
+                        cursor: "pointer", fontFamily: "inherit" }}>{STATUS_LABEL[s] || s}</button>
                   );
                 })}
               </div>
@@ -546,7 +547,7 @@ function TabEquipment({ projectId }) {
 
       {!loading && rows.length > 0 && (
         <Panel style={{ overflow: "hidden" }}>
-          <THead cols="2fr 1.4fr 1.6fr 110px 110px 60px" headers={["Equipment", "Vendor", "Period", "Day Rate", "Status", ""]} />
+          <THead cols="2fr 1.4fr 1.6fr 110px 110px 60px" headers={[t("common.equipment"), t("common.vendor"), t("equipment.period"), t("equipment.day_rate"), t("common.status"), ""]} />
           {rows.map(eq => {
             const sm = SC[eq.status] || SC["On Site"];
             return (
@@ -569,7 +570,7 @@ function TabEquipment({ projectId }) {
                   style={{ fontSize: 10.5, fontWeight: 700, padding: "4px 10px", borderRadius: 8,
                     background: sm.bg, color: sm.c, border: "none", cursor: "pointer",
                     fontFamily: "inherit", justifySelf: "start" }}>
-                  {eq.status}
+                  {STATUS_LABEL[eq.status] || eq.status}
                 </button>
                 <button onClick={() => removeEq(eq)} type="button"
                   title={t("common.remove")}
@@ -674,23 +675,10 @@ function TabEquipment({ projectId }) {
                     {subconParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
-                <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.fuel_qty_l")}</div>
-                  <input value={logForm.fuel_qty} onChange={e => updLog("fuel_qty", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.fuel_cost")}</div>
-                  <input value={logForm.fuel_cost} onChange={e => updLog("fuel_cost", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} />
-                </div>
-                <div style={{ gridColumn: "1 / 3" }}>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.fuel_paid_to_pump_vendor")}</div>
-                  <select value={logForm.fuel_vendor_id} onChange={e => updLog("fuel_vendor_id", e.target.value)} style={inp}>
-                    <option value="">{t("equipment.site_cash_no_separate_payee")}</option>
-                    {vendorParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                  <div style={{ fontSize: 10, color: T.t4, marginTop: 4 }}>
-                   {t("equipment.diesel_ka_kharcha_rent_se_alag")}
-                  </div>
+                {/* Diesel ab sirf Fuel module me (Fuel qty / cost / pump ke khaane
+                    hata diye). Bharte hi server 400 'fuel_moved' deta tha (MCH-22). */}
+                <div style={{ gridColumn: "1 / 3", fontSize: 11, color: T.t3, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 7, padding: "8px 11px" }}>
+                  {t("equipment.diesel_fuel_module_me_darj_karo")}
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.operator_name")}</div>
@@ -699,8 +687,8 @@ function TabEquipment({ projectId }) {
                 <div>
                   <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.meter_start_end_optional")}</div>
                   <div style={{ display: "flex", gap: 6 }}>
-                    <input value={logForm.meter_start} onChange={e => updLog("meter_start", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="start" style={inp} />
-                    <input value={logForm.meter_end} onChange={e => updLog("meter_end", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="end" style={inp} />
+                    <input value={logForm.meter_start} onChange={e => updLog("meter_start", e.target.value.replace(/[^0-9.]/g, ""))} placeholder={t("equipment.meter_start_ph")} style={inp} />
+                    <input value={logForm.meter_end} onChange={e => updLog("meter_end", e.target.value.replace(/[^0-9.]/g, ""))} placeholder={t("equipment.meter_end_ph")} style={inp} />
                   </div>
                 </div>
                 {/* Sector aur Remark — kaagaz wali log sheet ke wahi do khaane.
