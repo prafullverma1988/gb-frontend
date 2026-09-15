@@ -3173,17 +3173,22 @@ function MachineryModule() {
   // khuli ho to wo unmount ho kar apna tab bhool jaata hai.
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
-    const [f, d, g, p, ec, he, pr, te] = await Promise.all([
+    const [f, d, g, p, ec, pr, te] = await Promise.all([
       api.get("/machinery/fleet").catch(() => null),
       api.get("/machinery/due").catch(() => null),
       api.get("/machinery/reports/gaps").catch(() => null),
       api.get("/finance/parties").catch(() => null),
       api.get("/machinery/reports/cost").catch(() => null),
-      api.get("/machinery/reports/health").catch(() => null),
       // Sirf Reports ke project filter ke liye — baaki tab ko iski zaroorat nahi.
       api.get("/projects").catch(() => null),
       api.get("/telematics/overview").catch(() => null),
     ]);
+    // Preventive vs breakdown ab cost ke jawab me hi aata hai (MCH-24) — pehle alag
+    // /reports/health call wahi hisaab dobara ginta tha. Purana backend ho (health
+    // nahi bheja) tabhi alag call.
+    const he = ec?.success && ec.data && ec.data.health
+      ? { success: true, data: ec.data.health }
+      : await api.get("/machinery/reports/health").catch(() => null);
     setFleet(f?.success ? f.data || [] : []);
     setDue(d?.success ? d.data || [] : []);
     setGaps(g?.success ? g.data || { gaps: [], counts: {} } : { gaps: [], counts: {} });
