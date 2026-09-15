@@ -40,6 +40,10 @@ const TARGETS = [
 const CATEGORIES = ["Civil", "Electrical", "Plumbing", "Finishing", "Structural", "Custom"];
 
 const colLabel = (i) => { let s = ""; i += 1; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+// Kaunsi staged line apna task banegi — server (routes/boq.js commit) ka hi niyam:
+// qty/rate wali line apna item; sirf-text continuation pichhle item ke description me.
+const taskItems = (items) => (items || []).filter((it, i, all) =>
+  !it.is_continuation || Number(it.qty) > 0 || Number(it.rate) > 0 || !all.slice(0, i).some((p) => !p.is_continuation || Number(p.qty) > 0 || Number(p.rate) > 0));
 
 export default function BoqImportWizard({ projectId, existingTasks = [], onClose, onCommitted }) {
   const [step, setStep] = useState(1);
@@ -182,7 +186,12 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
       // a row the user needed to see. Two tells: total-like wording, or money
       // in the amount column (a genuine continuation line carries none).
       const looksTotal = TOTAL_RE.test(desc) || amtCol !== 0;
-      const isCont = opts.contFromBlankSno && isBlank(sno) && lastPrimaryRowNo != null && !looksTotal;
+      // TSK-12: qty ya rate wali line apna item hai, continuation nahi — amount
+      // column khaali/formula ho tab bhi (Steel 28,186 KG × 54.50 RCC ke neeche
+      // child ban jaata tha). Continuation sirf text line — wahi niyam jo
+      // TendersModule parseBoqRows me hai.
+      const isCont = opts.contFromBlankSno && isBlank(sno) && lastPrimaryRowNo != null && !looksTotal
+        && !isBlank(desc) && qty === 0 && rate === 0;
       rowNo += 1;
       const amount = opts.calcAmount ? Math.round(qty * rate * 100) / 100 : amtCol;
       out.push({
@@ -409,7 +418,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                   );
                 })}
                 <div style={{ marginTop: 14, fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 8 }}>{t("boq_import_wizard.options")}</div>
-                {[["contFromBlankSno", "Blank S.No. = pichhle item ka hissa"], ["skipTotals", "Total / sub-total rows chhodo"], ["calcAmount", "Amount khud calculate karo (qty × rate)"], ["skipEmptyDesc", "Khaali description wali rows chhodo"]].map(([k, l]) => (
+                {[["contFromBlankSno", t("boq_import_wizard.opt_cont_text_line")], ["skipTotals", "Total / sub-total rows chhodo"], ["calcAmount", "Amount khud calculate karo (qty × rate)"], ["skipEmptyDesc", "Khaali description wali rows chhodo"]].map(([k, l]) => (
                   <label key={k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", cursor: "pointer", fontSize: 12, color: T.t2 }}>
                     <button type="button" onClick={() => setOpts((o) => ({ ...o, [k]: !o[k] }))}
                       style={{ width: 34, height: 19, borderRadius: 12, border: "none", cursor: "pointer", position: "relative", background: opts[k] ? T.ind : T.b2, transition: "background .15s" }}>
@@ -591,14 +600,14 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                 <div style={{ border: `1px solid ${T.b1}`, borderRadius: 10, background: T.surface, padding: "12px 14px", marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 8 }}>{t("boq_import_wizard.tree_preview")}</div>
                   {parentMode === "new" && <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginBottom: 4 }}>{parentName || t("boq_import_wizard.boq_1")}</div>}
-                  {staged.items.filter((i) => !i.is_continuation).slice(0, 8).map((it) => (
+                  {taskItems(staged.items).slice(0, 8).map((it) => (
                     <div key={it.id} style={{ fontSize: 12.5, color: T.t2, paddingLeft: parentMode === "new" ? 16 : 0, marginBottom: 3, display: "flex", justifyContent: "space-between" }}>
                       <span>{String(it.description).slice(0, 46)}</span>
                       <span style={{ color: T.t4, fontVariantNumeric: "tabular-nums" }}>{inr(it.amount)}</span>
                     </div>
                   ))}
-                  {staged.items.filter((i) => !i.is_continuation).length > 8 && (
-                    <div style={{ fontSize: 12, color: T.t4, paddingLeft: parentMode === "new" ? 16 : 0, marginTop: 4 }}>{t("boq_import_wizard.aur_staged_items", { staged: staged.items.filter((i) => !i.is_continuation).length - 8 })}</div>
+                  {taskItems(staged.items).length > 8 && (
+                    <div style={{ fontSize: 12, color: T.t4, paddingLeft: parentMode === "new" ? 16 : 0, marginTop: 4 }}>{t("boq_import_wizard.aur_staged_items", { staged: taskItems(staged.items).length - 8 })}</div>
                   )}
                 </div>
               )}
@@ -627,7 +636,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
                 title={!staged.matched ? t("boq_import_wizard.total_match_nahi_ho_raha") : ""}
                 onClick={commit}
                 style={{ ...btn("primary"), opacity: (!staged.matched || (parentMode === "existing" && !parentTaskId)) ? .5 : 1, cursor: (!staged.matched || (parentMode === "existing" && !parentTaskId)) ? "not-allowed" : "pointer" }}>
-                {busy ? t("boq_import_wizard.import_ho_raha") : `${staged.items.length} tasks import karein`}
+                {busy ? t("boq_import_wizard.import_ho_raha") : t("boq_import_wizard.n_tasks_import_karein", { n: taskItems(staged.items).length })}
               </button>
             )}
             {step === 4 && <button onClick={() => { onCommitted && onCommitted(); onClose(); }} style={btn("primary")}>{t("boq_import_wizard.tasks_tab_kholein")}</button>}
