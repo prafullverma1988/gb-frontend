@@ -6056,6 +6056,9 @@ const dict = {
 
   // ── share_drawing ───────────────────────────────────────────
   "share_drawing.client_phone_target":                         "Client Phone {target}",
+  "share_drawing.close_link":                                  "Link band karo",
+  "share_drawing.close_link_confirm":                          "Ye link band karna hai? Jiske paas ye link hai, wo drawing nahi khol payega.",
+  "share_drawing.close_link_failed":                           "Link band nahi hua — dobara try karo",
   "share_drawing.copy_public_link":                            "Public link copy karo",
   "share_drawing.copy_this_link":                              "Ye link copy karo:",
   "share_drawing.country_code_zaroori_e_g_91":                 "Country code zaroori hai (e.g. 91 for India). Khali rakho to WhatsApp web me contact pick kar sakte ho.",
@@ -6066,10 +6069,12 @@ const dict = {
   "share_drawing.first_viewed_vnew":                           "First viewed {vnew}",
   "share_drawing.generating_public_link":                      "Public link generate ho raha hai…",
   "share_drawing.link":                                        "🔗 Link",
+  "share_drawing.link_closed":                                 "Link band ho gaya",
   "share_drawing.link_message_me_already_hai_pdf":             "⚠️ Link message me already hai. PDF download karke WhatsApp window me drag-drop ya 📎 attach button se file bhi attach karo (WhatsApp Web auto-attach nahi karta).",
   "share_drawing.message_editable":                            "Message (editable)",
   "share_drawing.not_viewed":                                  "Viewed nahi",
   "share_drawing.open_whatsapp":                               "💬 WhatsApp open karo",
+  "share_drawing.opens_version":                               "Is link par {version} khulta hai",
   "share_drawing.pdf_link":                                    "📄 PDF + Link",
   "share_drawing.pdf_link_not_available":                      "PDF link available nahi hai",
   "share_drawing.public_link_in_message":                      "Public link message me",

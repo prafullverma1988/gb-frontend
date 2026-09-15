@@ -6054,6 +6054,9 @@ const dict = {
 
   // ── share_drawing ───────────────────────────────────────────
   "share_drawing.client_phone_target":                         "Client Phone {target}",
+  "share_drawing.close_link":                                  "Close link",
+  "share_drawing.close_link_confirm":                          "Close this link? Anyone who has it will no longer be able to open the drawing.",
+  "share_drawing.close_link_failed":                           "Could not close the link — try again",
   "share_drawing.copy_public_link":                            "Copy public link",
   "share_drawing.copy_this_link":                              "Copy this link:",
   "share_drawing.country_code_zaroori_e_g_91":                 "Country code is mandatory (e.g. 91 for India). Leave blank to pick contact in WhatsApp web.",
@@ -6064,10 +6067,12 @@ const dict = {
   "share_drawing.first_viewed_vnew":                           "First viewed {vnew}",
   "share_drawing.generating_public_link":                      "Generating public link…",
   "share_drawing.link":                                        "🔗 Link",
+  "share_drawing.link_closed":                                 "Link closed",
   "share_drawing.link_message_me_already_hai_pdf":             "⚠️ Link is already in the message. Download PDF and drag-drop into WhatsApp window or attach file using the 📎 attach button (WhatsApp Web does not auto-attach).",
   "share_drawing.message_editable":                            "Message (editable)",
   "share_drawing.not_viewed":                                  "Not viewed",
   "share_drawing.open_whatsapp":                               "💬 Open WhatsApp",
+  "share_drawing.opens_version":                               "This link opens {version}",
   "share_drawing.pdf_link":                                    "📄 PDF + Link",
   "share_drawing.pdf_link_not_available":                      "PDF link not available",
   "share_drawing.public_link_in_message":                      "Public link in message",
