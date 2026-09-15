@@ -4695,12 +4695,17 @@ function MapTab({tenderId, sites}) {
     // Server wahi jagah dobara nahi banata — kitni chhooti, wo saaf batao,
     // warna "import ho gaya" padh kar user samajhta hai sab chadh gaya.
     const dup = Number(res.data.skipped_duplicates) || 0;
-    if (!res.data.lines && !res.data.points && dup) {
-      toast.success(`Ye ${dup} jagah pehle se map par hai — dobara nahi banayi`);
+    // (TND-12) Rakba (Polygon) bhi aata hai — pehle toast sirf line/point ginta tha.
+    const areas = Number(res.data.areas) || 0;
+    if (!res.data.lines && !res.data.points && !areas && dup) {
+      toast.success(t("tenders.kml_sab_pehle_se_map_par", { n: dup }));
     } else {
-      toast.success(`${res.data.lines} line + ${res.data.points} point import huye · ${fmtKm(res.data.total_length_m)}`
-        + (dup ? ` · ${dup} pehle se thi` : ""));
+      const cnt = { lines: res.data.lines, points: res.data.points, areas, len: fmtKm(res.data.total_length_m), dup };
+      toast.success(dup ? t("tenders.kml_import_huye_dup", cnt) : t("tenders.kml_import_huye", cnt));
     }
+    // Jo Placemark na line bana, na point, na rakba — chupchaap nahi girna chahiye.
+    const skippedPm = Number(res.data.skipped_placemarks) || 0;
+    if (skippedPm) toast.warning(t("tenders.kml_placemark_padhe_nahi", { n: skippedPm, names: (res.data.skipped_names || []).slice(0, 3).join(", ") }));
     // Nayi lines ko seedha kaam se jodne ka raasta — Prafull ka KML flow.
     const newLines = (res.data.features || []).filter((f) => f.kind === "line");
     if (newLines.length && (mapTasks?.works || []).length) {
