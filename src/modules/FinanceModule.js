@@ -3702,14 +3702,9 @@ function FinanceModule(){
   };
   // Send-to-staff modal (3-bucket allocation: salary | imprest | petrol)
   const [sendStaff,setSendStaff]=useState(null); // wallet row being sent to
-  // Wallet approval queue + photo policy (Phase 2)
-  const [walletApprovals,setWalletApprovals]=useState([]);
-  const [walletPhotoPolicy,setWalletPhotoPolicy]=useState({});
-  const loadWalletApprovals=()=>{
-    api.get("/wallets/pending-approvals").then(res=>{ if(res&&res.success) setWalletApprovals(res.data||[]); }).catch(()=>{});
-    api.get("/wallets/photo-policy").then(res=>{ if(res&&res.success) setWalletPhotoPolicy(res.data||{}); }).catch(()=>{});
-  };
-  useEffect(()=>{ loadWalletApprovals(); },[]);
+  // Wallet approval queue + photo policy yahan load hote the par Finance me
+  // kahin dikhte nahi the — har Finance khulne par 3 bekaar query (WAL-19).
+  // Wallet approvals Projects ke approvals panel me hain.
 
   // ── EQUIPMENT REVIEW (new section) ────────────────────────────
   const [equipReview,setEquipReview]=useState([]);
