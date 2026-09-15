@@ -2064,7 +2064,9 @@ function BoqItemModal({tenderId, item, onClose, onSaved, isItemRate, boqItems, b
       unit: form.unit.trim() || null,
       qty: form.qty, rate: form.rate,
       item_type: form.item_type,
-      quoted_rate: form.quoted_rate === "" ? null : form.quoted_rate,
+      // Apna rate sirf item-rate tender me — field bhi wahi dikhta hai. Pehle
+      // percentage tender ka form bhi null bhejta tha aur item ka rate mit jaata (TND-01).
+      ...(isItemRate ? {quoted_rate: form.quoted_rate === "" ? null : form.quoted_rate} : {}),
       substitutes_item_id: form.item_type === "substituted" && form.substitutes_item_id
         ? Number(form.substitutes_item_id) : null,
       approval_ref: form.approval_ref.trim() || null,
@@ -6449,8 +6451,10 @@ function DeductionSetupModal({tenderId, onClose, onDone}) {
 }
 
 // ── NEW RA BILL WIZARD (3 step) ─────────────────────────────────────
-function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit, onClose, onDone}) {
+function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit, laterBillNo, onClose, onDone}) {
   // edit = draft bill ka detail object → wahi wizard PUT par chalta hai.
+  // laterBillNo = is draft ke baad bana bill (RA-2) — uske rehte upto date
+  // nahi badal sakti, server bhi rokta hai (TND-03).
   const toast = useToast();
   const [step, setStep]   = useState(1);
   // Apni ghadi ka din (UTC se raat me ek din peechhe chala jaata tha —
@@ -6458,6 +6462,11 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
   const [upto, setUpto]   = useState(edit?.upto_date ? String(edit.upto_date).slice(0,10)
     : new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10));
   const [prem, setPrem]   = useState(edit ? String(edit.premium_pct ?? "") : (defaultPremium === null || defaultPremium === undefined ? "" : String(defaultPremium)));
+  // Naye bill me % tabhi bhejo jab user ne khud likha ho. Bina chhue server
+  // tender ka locked % lagata hai (aur pehle bill par lock bhi karta hai);
+  // pehle yahan se har baar live BOQ % chala jaata tha (TND-05). Edit me bill
+  // ka apna % hi jaata hai.
+  const [premTouched, setPremTouched] = useState(false);
   const [manual, setManual] = useState(()=>{
     // Edit me manual heads ke snapshot amounts wapas bhar do.
     const m = {};
@@ -6474,17 +6483,25 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
 
   // Preview backend hi banata hai — koi ganit yahan dobara nahi likha,
   // warna screen aur bill alag-alag jawab de sakte hain.
+  // Aakhri kamyaab preview ki body yaad — wahi body dobara aaye (sirf step
+  // badla, ya "Lagao"/deduction box bina badlaav ke) to server ko dobara nahi
+  // bulate. Badli hui body (likha hua % bina "Lagao") par preview chalta hai,
+  // taaki Review wahi dikhaye jo save hoga (TND-06).
+  const lastOkRef = useRef("");
   const runPreview = useCallback(async () => {
     if (!upto) return;
-    setBusy(true); setErr(null);
     const body = {upto_date: upto, manual_deductions: manual};
-    if (prem !== "") body.premium_pct = Number(prem);
+    if (prem !== "" && (premTouched || edit)) body.premium_pct = Number(prem);
     if (gst !== "")  body.gst_pct = Number(gst);
     if (devReason.trim()) body.deviation_reason = devReason.trim();
     if (edit) body.exclude_bill_id = edit.id;   // apne items billed me na girein
+    const key = JSON.stringify(body);
+    if (key === lastOkRef.current) return;
+    setBusy(true); setErr(null);
     const res = await api.post(`/tenders/${tenderId}/ra-bills/preview`, body);
     setBusy(false);
     if (!res?.success) {
+      lastOkRef.current = "";
       setPrev(null);
       // Deviation ka 422 alag hai — ye "galti" nahi, sirf reason maangta hai.
       if (res?.code === "DEVIATION_EXCEEDED") {
@@ -6495,10 +6512,12 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
       }
       return;
     }
+    lastOkRef.current = key;
     setDevBlock(null);
     setPrev(res.data);
-    if (prem === "" && res.data?.premium_pct !== undefined) setPrem(String(res.data.premium_pct));
-  }, [tenderId, upto, prem, gst, devReason, manual]);
+    // Box me wahi % dikhe jo server ne sach me lagaya (locked / contract ÷ BOQ).
+    if (!premTouched && !edit && res.data?.premium_pct !== undefined) setPrem(String(res.data.premium_pct));
+  }, [tenderId, upto, prem, premTouched, gst, devReason, manual]);
 
   useEffect(()=>{ if (step>=1) runPreview(); /* eslint-disable-next-line */ }, [upto, step]);
 
@@ -6507,7 +6526,7 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
   const save = async () => {
     setBusy(true);
     const body = {upto_date: upto, manual_deductions: manual};
-    if (prem !== "") body.premium_pct = Number(prem);
+    if (prem !== "" && (premTouched || edit)) body.premium_pct = Number(prem);
     if (gst !== "")  body.gst_pct = Number(gst);
     if (devReason.trim()) body.deviation_reason = devReason.trim();
     const res = edit
@@ -6527,6 +6546,8 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
   );
 
   const STEPS = ["Qty & Premium", "Deductions", "Review"];
+  // Baad wala bill: list se (turant), warna preview ke jawab se.
+  const laterNo = edit ? (laterBillNo ?? prev?.later_bill_no ?? null) : null;
 
   return (
     <Modal title={edit ? `RA-${edit.bill_no} Edit` : t("tenders.naya_ra_bill")} Icon={IcRupee} width={860}
@@ -6555,13 +6576,20 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
       {/* ── STEP 1 ── */}
       {step === 1 && (<>
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13, marginBottom:14}}>
-          <Field label={t("tenders.upto_date")} hint={t("tenders.is_tarikh_tak_ki_saari_measurement")}>
-            <TxtIn type="date" value={upto} onChange={setUpto}/>
+          <Field label={t("tenders.upto_date")}
+            hint={laterNo ? t("tenders.ra_baad_wala_bill_upto_band", { later_no: laterNo }) : t("tenders.is_tarikh_tak_ki_saari_measurement")}>
+            {laterNo ? (
+              <div style={{...inputStyle, background:T.sltL, color:T.t2, display:"flex", alignItems:"center", gap:6}}>
+                <IcLock size={12} color={T.t4}/>{fmtDate(upto)}
+              </div>
+            ) : (
+              <TxtIn type="date" value={upto} onChange={setUpto}/>
+            )}
           </Field>
           {!isItemRate && (
             <Field label={t("tenders.premium_tender")} hint={t("tenders.award_par_lock_hua_premium_is")}>
               <div style={{display:"flex", gap:7}}>
-                <TxtIn type="number" value={prem} onChange={setPrem} ph="0"/>
+                <TxtIn type="number" value={prem} onChange={v=>{ setPrem(v); setPremTouched(v !== ""); }} ph="0"/>
                 <SecBtn label={t("tenders.lagao")} Icon={IcChk} onClick={runPreview}/>
               </div>
             </Field>
@@ -6902,7 +6930,10 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
   };
 
   const st = d ? (RA_STATUS_STYLE[d.status] || RA_STATUS_STYLE.draft) : null;
-  const bal = d ? Number(d.balance ?? d.net_payable) : 0;
+  // Balance sirf submitted bill ka hota hai — draft/cancelled par server null
+  // bhejta hai, tab "--" (pehle draft par poora net "baaki" dikhta tha, TND-16).
+  const balKnown = !!d && d.balance !== null && d.balance !== undefined;
+  const bal = balKnown ? Number(d.balance) : 0;
 
   return (<>
     <div onClick={onClose} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:998}}/>
@@ -6929,7 +6960,7 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
           <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:9, marginBottom:12}}>
             <Stat label={t("subcon.net_payable")} value={money(d.net_payable)} color={T.t1}  Icon={IcRupee}/>
             <Stat label={t("common.received")}    value={money(d.received ?? 0)} color={T.grn} Icon={IcRupee}/>
-            <Stat label={t("common.balance")}     value={money(bal)} color={bal>0?T.amb:T.grn} Icon={IcClock}/>
+            <Stat label={t("common.balance")}     value={balKnown ? money(bal) : "--"} color={!balKnown?T.t4:bal>0?T.amb:T.grn} Icon={IcClock}/>
           </div>
 
           <Panel style={{marginBottom:11}}>
@@ -7021,25 +7052,25 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
 }
 
 // ── RA BILLS TAB ────────────────────────────────────────────────────
-function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
+function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary, projectNames}) {
   const [showSetup, setSetup]   = useState(false);
   const [showNew, setNew]       = useState(false);
   const [editBill, setEditBill] = useState(null);
   const [openBill, setOpenBill] = useState(null);
   const [receiveOn, setRecv]    = useState(null);
-  const [fin, setFin] = useState({parties:[], accounts:[], projects:[]});
+  const [fin, setFin] = useState({parties:[], accounts:[]});
 
   // Receive shortcut Finance ka hi form kholta hai — usko parties /
-  // accounts / projects chahiye.
+  // accounts / projects chahiye. Projects TenderDetail pehle hi /projects se
+  // la chuka hai (projectNames) — yahan dobara nahi mangte (TND-17).
   useEffect(()=>{
     let dead = false;
-    Promise.all([api.get("/finance/parties"), api.get("/finance/accounts"), api.get("/projects")])
-      .then(([p,a,pr])=>{
+    Promise.all([api.get("/finance/parties"), api.get("/finance/accounts")])
+      .then(([p,a])=>{
         if (dead) return;
         setFin({
           parties:  p?.success && Array.isArray(p.data)  ? p.data : [],
           accounts: a?.success && Array.isArray(a.data)  ? a.data : [],
-          projects: pr?.success && Array.isArray(pr.data) ? pr.data.map(x=>x.name) : [],
         });
       }).catch(()=>{});
     return ()=>{ dead = true; };
@@ -7047,11 +7078,19 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
 
   const totals = useMemo(()=>{
     const live = (bills||[]).filter(b=>b.status!=="cancelled");
+    // Billed / Received / Balance sirf SUBMITTED bill ka — draft department ko
+    // gaya hi nahi, finance/party ledger me bhi submit par hi aata hai. Pehle
+    // draft ka poora net "Total Billed" aur "abhi aana baaki" dono me judta tha.
+    // Draft ka jod alag tile me (TND-16).
+    const sub    = live.filter(b=>b.status==="submitted");
+    const drafts = live.filter(b=>b.status==="draft");
     return {
       count:    live.length,
-      billed:   live.reduce((s,b)=>s+num(b.net_payable), 0),
-      received: live.reduce((s,b)=>s+num(b.received), 0),
-      balance:  live.reduce((s,b)=>s+num(b.balance), 0),
+      billed:   sub.reduce((s,b)=>s+num(b.net_payable), 0),
+      received: sub.reduce((s,b)=>s+num(b.received), 0),
+      balance:  sub.reduce((s,b)=>s+num(b.balance), 0),
+      draftCount: drafts.length,
+      draftNet:   drafts.reduce((s,b)=>s+num(b.net_payable), 0),
     };
   }, [bills]);
 
@@ -7065,6 +7104,10 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
         <Stat label={t("common.received")}     value={money(totals.received)} note={moneyF(totals.received)} color={T.grn} Icon={IcRupee}/>
         <Stat label={t("common.balance")}      value={money(totals.balance)}  note="abhi aana baaki"
           color={totals.balance>0?T.amb:T.grn} Icon={IcClock}/>
+        {totals.draftCount > 0 && (
+          <Stat label={t("tenders.draft_submit_baaki")} value={money(totals.draftNet)}
+            note={t("tenders.n_draft_bill_total_billed_me_nahi", { n: totals.draftCount })} color={T.slt} Icon={IcDoc}/>
+        )}
       </div>
     )}
 
@@ -7093,6 +7136,7 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
         {bills.map((b,i)=>{
           const st  = RA_STATUS_STYLE[b.status] || RA_STATUS_STYLE.draft;
           const bal = num(b.balance);
+          const balKnown = b.balance !== null && b.balance !== undefined;   // draft/cancelled: null
           return (
             <div key={b.id} onClick={()=>setOpenBill(b.id)}
               style={{display:"grid", gridTemplateColumns:COLS, padding:"10px 14px", gap:9,
@@ -7107,7 +7151,7 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
               <span style={{fontSize:12.5, fontWeight:700, color:T.t1, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{moneyF(b.net_payable)}</span>
               <span style={{fontSize:11.5, color:num(b.received)>0?T.grn:T.t4, textAlign:"right", fontVariantNumeric:"tabular-nums"}}>{moneyF(b.received)}</span>
               <span style={{fontSize:12, fontWeight:600, textAlign:"right", fontVariantNumeric:"tabular-nums",
-                color:bal>0?T.amb:T.grn}}>{moneyF(bal)}</span>
+                color:!balKnown?T.t4:bal>0?T.amb:T.grn}}>{balKnown ? moneyF(bal) : "--"}</span>
               <div style={{display:"flex"}}><Pill label={st.label} c={st.c} bg={st.bg}/></div>
             </div>
           );
@@ -7129,6 +7173,11 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
         defaultPremium={boqSummary?.premium_pct_locked ?? boqSummary?.premium_pct ?? null}
         defaultGst={tender?.gst_pct ?? null} isItemRate={tender?.rate_type === "item_rate"}
         edit={editBill}
+        laterBillNo={(bills||[])
+          .filter(x=>x.status!=="cancelled" && x.id!==editBill.id
+            && (Number(x.bill_no) > Number(editBill.bill_no)
+              || (Number(x.bill_no) === Number(editBill.bill_no) && x.id > editBill.id)))
+          .map(x=>Number(x.bill_no)).sort((a,b)=>a-b)[0] ?? null}
         onClose={()=>setEditBill(null)} onDone={()=>{ setEditBill(null); reload(); }}/>
     )}
     {openBill && (
@@ -7145,7 +7194,7 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
         preRaBillId={receiveOn.id}
         dbParties={fin.parties}
         dbAccounts={fin.accounts}
-        dbProjects={fin.projects}
+        dbProjects={projectNames || []}
         onClose={()=>setRecv(null)}
         onSaved={()=>{ setRecv(null); reload(); }}
       />
@@ -7205,6 +7254,8 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
   // Sites tab supervisor dikhane ke liye — detail API supervisor nahi
   // deta, isliye /projects list se enrich karte hain.
   const [projMeta, setProjMeta] = useState({});
+  // Wahi /projects list ke naam (usi kram me) — RA Bills tab ke Receive form ko.
+  const [projNames, setProjNames] = useState([]);
   // BOQ alag endpoint par hai. Tab kholne se pehle hi la lete hain taaki
   // tab par item_count ka badge dikh sake.
   const [boq, setBoq] = useState(null);
@@ -7252,6 +7303,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
       const m = {};
       for (const p of (r.data||[])) m[p.id] = p;
       setProjMeta(m);
+      setProjNames((r.data||[]).map(p=>p.name));
     }).catch(()=>{});
   },[]);
 
@@ -7605,7 +7657,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
       {/* ══ RA BILLS ══ */}
       {tab==="rabills" && (
         <RaBillsTab tenderId={tenderId} tender={data} bills={bills} loading={billsLoading}
-          boqSummary={(boq && boq.summary) || null}
+          boqSummary={(boq && boq.summary) || null} projectNames={projNames}
           reload={()=>{ loadBills(); load(); }}/>
       )}
 
