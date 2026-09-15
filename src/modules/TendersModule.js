@@ -6462,6 +6462,11 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
   const [upto, setUpto]   = useState(edit?.upto_date ? String(edit.upto_date).slice(0,10)
     : new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10));
   const [prem, setPrem]   = useState(edit ? String(edit.premium_pct ?? "") : (defaultPremium === null || defaultPremium === undefined ? "" : String(defaultPremium)));
+  // Naye bill me % tabhi bhejo jab user ne khud likha ho. Bina chhue server
+  // tender ka locked % lagata hai (aur pehle bill par lock bhi karta hai);
+  // pehle yahan se har baar live BOQ % chala jaata tha (TND-05). Edit me bill
+  // ka apna % hi jaata hai.
+  const [premTouched, setPremTouched] = useState(false);
   const [manual, setManual] = useState(()=>{
     // Edit me manual heads ke snapshot amounts wapas bhar do.
     const m = {};
@@ -6486,7 +6491,7 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
   const runPreview = useCallback(async () => {
     if (!upto) return;
     const body = {upto_date: upto, manual_deductions: manual};
-    if (prem !== "") body.premium_pct = Number(prem);
+    if (prem !== "" && (premTouched || edit)) body.premium_pct = Number(prem);
     if (gst !== "")  body.gst_pct = Number(gst);
     if (devReason.trim()) body.deviation_reason = devReason.trim();
     if (edit) body.exclude_bill_id = edit.id;   // apne items billed me na girein
@@ -6510,8 +6515,9 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
     lastOkRef.current = key;
     setDevBlock(null);
     setPrev(res.data);
-    if (prem === "" && res.data?.premium_pct !== undefined) setPrem(String(res.data.premium_pct));
-  }, [tenderId, upto, prem, gst, devReason, manual]);
+    // Box me wahi % dikhe jo server ne sach me lagaya (locked / contract ÷ BOQ).
+    if (!premTouched && !edit && res.data?.premium_pct !== undefined) setPrem(String(res.data.premium_pct));
+  }, [tenderId, upto, prem, premTouched, gst, devReason, manual]);
 
   useEffect(()=>{ if (step>=1) runPreview(); /* eslint-disable-next-line */ }, [upto, step]);
 
@@ -6520,7 +6526,7 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
   const save = async () => {
     setBusy(true);
     const body = {upto_date: upto, manual_deductions: manual};
-    if (prem !== "") body.premium_pct = Number(prem);
+    if (prem !== "" && (premTouched || edit)) body.premium_pct = Number(prem);
     if (gst !== "")  body.gst_pct = Number(gst);
     if (devReason.trim()) body.deviation_reason = devReason.trim();
     const res = edit
@@ -6583,7 +6589,7 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
           {!isItemRate && (
             <Field label={t("tenders.premium_tender")} hint={t("tenders.award_par_lock_hua_premium_is")}>
               <div style={{display:"flex", gap:7}}>
-                <TxtIn type="number" value={prem} onChange={setPrem} ph="0"/>
+                <TxtIn type="number" value={prem} onChange={v=>{ setPrem(v); setPremTouched(v !== ""); }} ph="0"/>
                 <SecBtn label={t("tenders.lagao")} Icon={IcChk} onClick={runPreview}/>
               </div>
             </Field>
