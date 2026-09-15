@@ -7315,6 +7315,7 @@ const dict = {
   "tenders.chaudai_daayra_m":                                  "विड्थ / दायरा (m)",
   "tenders.chaudai_row_m":                                     "विड्थ / ROW (m)",
 
+  "tenders.ra_baad_wala_bill_upto_band":                       "RA-{later_no} इस बिल के बाद बना हुआ है — अपटू डेट अब नहीं बदल सकती। प्रीमियम, GST और डिडक्शन बदल सकते हो।",
   "tenders.shuruaati_chainage": "शुरुआती चेनेज (m)",
   "tenders.chuno":                                             "सिलेक्ट करो...",
   "tenders.city_chuno":                                        "सिटी सिलेक्ट करो...",

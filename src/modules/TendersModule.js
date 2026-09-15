@@ -6451,8 +6451,10 @@ function DeductionSetupModal({tenderId, onClose, onDone}) {
 }
 
 // ── NEW RA BILL WIZARD (3 step) ─────────────────────────────────────
-function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit, onClose, onDone}) {
+function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit, laterBillNo, onClose, onDone}) {
   // edit = draft bill ka detail object → wahi wizard PUT par chalta hai.
+  // laterBillNo = is draft ke baad bana bill (RA-2) — uske rehte upto date
+  // nahi badal sakti, server bhi rokta hai (TND-03).
   const toast = useToast();
   const [step, setStep]   = useState(1);
   // Apni ghadi ka din (UTC se raat me ek din peechhe chala jaata tha —
@@ -6476,17 +6478,25 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
 
   // Preview backend hi banata hai — koi ganit yahan dobara nahi likha,
   // warna screen aur bill alag-alag jawab de sakte hain.
+  // Aakhri kamyaab preview ki body yaad — wahi body dobara aaye (sirf step
+  // badla, ya "Lagao"/deduction box bina badlaav ke) to server ko dobara nahi
+  // bulate. Badli hui body (likha hua % bina "Lagao") par preview chalta hai,
+  // taaki Review wahi dikhaye jo save hoga (TND-06).
+  const lastOkRef = useRef("");
   const runPreview = useCallback(async () => {
     if (!upto) return;
-    setBusy(true); setErr(null);
     const body = {upto_date: upto, manual_deductions: manual};
     if (prem !== "") body.premium_pct = Number(prem);
     if (gst !== "")  body.gst_pct = Number(gst);
     if (devReason.trim()) body.deviation_reason = devReason.trim();
     if (edit) body.exclude_bill_id = edit.id;   // apne items billed me na girein
+    const key = JSON.stringify(body);
+    if (key === lastOkRef.current) return;
+    setBusy(true); setErr(null);
     const res = await api.post(`/tenders/${tenderId}/ra-bills/preview`, body);
     setBusy(false);
     if (!res?.success) {
+      lastOkRef.current = "";
       setPrev(null);
       // Deviation ka 422 alag hai — ye "galti" nahi, sirf reason maangta hai.
       if (res?.code === "DEVIATION_EXCEEDED") {
@@ -6497,6 +6507,7 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
       }
       return;
     }
+    lastOkRef.current = key;
     setDevBlock(null);
     setPrev(res.data);
     if (prem === "" && res.data?.premium_pct !== undefined) setPrem(String(res.data.premium_pct));
@@ -6529,6 +6540,8 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
   );
 
   const STEPS = ["Qty & Premium", "Deductions", "Review"];
+  // Baad wala bill: list se (turant), warna preview ke jawab se.
+  const laterNo = edit ? (laterBillNo ?? prev?.later_bill_no ?? null) : null;
 
   return (
     <Modal title={edit ? `RA-${edit.bill_no} Edit` : t("tenders.naya_ra_bill")} Icon={IcRupee} width={860}
@@ -6557,8 +6570,15 @@ function NewRaBillWizard({tenderId, defaultPremium, defaultGst, isItemRate, edit
       {/* ── STEP 1 ── */}
       {step === 1 && (<>
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:13, marginBottom:14}}>
-          <Field label={t("tenders.upto_date")} hint={t("tenders.is_tarikh_tak_ki_saari_measurement")}>
-            <TxtIn type="date" value={upto} onChange={setUpto}/>
+          <Field label={t("tenders.upto_date")}
+            hint={laterNo ? t("tenders.ra_baad_wala_bill_upto_band", { later_no: laterNo }) : t("tenders.is_tarikh_tak_ki_saari_measurement")}>
+            {laterNo ? (
+              <div style={{...inputStyle, background:T.sltL, color:T.t2, display:"flex", alignItems:"center", gap:6}}>
+                <IcLock size={12} color={T.t4}/>{fmtDate(upto)}
+              </div>
+            ) : (
+              <TxtIn type="date" value={upto} onChange={setUpto}/>
+            )}
           </Field>
           {!isItemRate && (
             <Field label={t("tenders.premium_tender")} hint={t("tenders.award_par_lock_hua_premium_is")}>
@@ -7131,6 +7151,11 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
         defaultPremium={boqSummary?.premium_pct_locked ?? boqSummary?.premium_pct ?? null}
         defaultGst={tender?.gst_pct ?? null} isItemRate={tender?.rate_type === "item_rate"}
         edit={editBill}
+        laterBillNo={(bills||[])
+          .filter(x=>x.status!=="cancelled" && x.id!==editBill.id
+            && (Number(x.bill_no) > Number(editBill.bill_no)
+              || (Number(x.bill_no) === Number(editBill.bill_no) && x.id > editBill.id)))
+          .map(x=>Number(x.bill_no)).sort((a,b)=>a-b)[0] ?? null}
         onClose={()=>setEditBill(null)} onDone={()=>{ setEditBill(null); reload(); }}/>
     )}
     {openBill && (

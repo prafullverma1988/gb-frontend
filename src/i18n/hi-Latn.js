@@ -7318,6 +7318,7 @@ const dict = {
   "tenders.chaudai_daayra_m":                                  "Width / daayra (m)",
   "tenders.chaudai_row_m":                                     "Width / ROW (m)",
 
+  "tenders.ra_baad_wala_bill_upto_band":                       "RA-{later_no} is bill ke baad bana hua hai — upto date ab nahi badal sakti. Premium, GST aur deduction badal sakte ho.",
   "tenders.shuruaati_chainage": "Shuruaati chainage (m)",
   "tenders.chuno":                                             "Select karo...",
   "tenders.city_chuno":                                        "City select karo...",
