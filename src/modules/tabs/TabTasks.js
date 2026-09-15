@@ -541,7 +541,7 @@ function TabTasks({ projectId, isAdmin }) {
       // Today filter: task's planned range covers today
       let mToday=true;
       if(fToday){
-        const tod=new Date().toISOString().split("T")[0];
+        const tod=todayISO();   // apni ghadi ka din — UTC raat 12–5:30 IST me kal deta tha (TSK-22)
         const bs=t.baseStart, be=t.baseEnd;
         mToday=bs&&be?(bs<=tod&&tod<=be):(bs?bs===tod:false);
       }
@@ -630,7 +630,7 @@ function TabTasks({ projectId, isAdmin }) {
 
   function updateInTree(list,id,upd){
     return list.map(t=>{
-      if(t.id===id) return{...t,...upd,lastUpdate:new Date().toISOString().split("T")[0]};
+      if(t.id===id) return{...t,...upd,lastUpdate:todayISO()};
       return{...t,children:updateInTree(t.children||[],id,upd)};
     });
   }
