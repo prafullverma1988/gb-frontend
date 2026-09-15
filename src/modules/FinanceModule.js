@@ -3649,6 +3649,9 @@ function FinanceModule(){
   // Salary bucket: outstanding due per staff party (separate ledger — imprest
   // untouched). Drives the red "Salary due" chip + send-modal default bucket.
   const [salaryDues,setSalaryDues]=useState({});
+  // WAL-11: pending "Salary me settle karo" requests (inbox neeche wallets tab me)
+  const [settleReqs,setSettleReqs]=useState([]);
+  const [settleReqBusy,setSettleReqBusy]=useState(null);
   const loadWallets=()=>{
     api.get("/wallets/staff").then(res=>{
       if(res&&res.success){
@@ -3665,8 +3668,33 @@ function FinanceModule(){
     api.get("/wallets/salary/dues").then(res=>{
       if(res&&res.success) setSalaryDues(res.data||{});
     }).catch(()=>{});
+    api.get("/wallets/salary/settle-requests").then(res=>{
+      if(res&&res.success) setSettleReqs(res.data||[]);
+    }).catch(()=>{});
   };
   useEffect(()=>{ loadWallets(); },[]);
+  // WAL-11: staff ki "Salary me settle karo" requests (wallet ka paisa → salary).
+  // Pehle koi screen inhe dikhati hi nahi thi — request hamesha pending rehti.
+  const confirmSettleReq=async(r)=>{
+    const ok=await window.confirmAsync(t("finance.settle_req_confirm_q",{amt:fmtN(r.amount),name:r.staff_name}));
+    if(!ok) return;
+    setSettleReqBusy(r.id);
+    try{
+      const res=await api.post(`/wallets/salary/settle-request/${r.id}/confirm`,{});
+      window.alert(res&&res.success?t("finance.settle_req_confirmed"):((res&&res.message)||t("finance.settle_req_failed")));
+    }catch(e){ window.alert(t("finance.settle_req_failed")); }
+    setSettleReqBusy(null); loadWallets(); refreshTxns();
+  };
+  const rejectSettleReq=async(r)=>{
+    const reason=await window.promptAsync(t("finance.settle_req_reject_reason"));
+    if(reason===null||reason===undefined) return;
+    setSettleReqBusy(r.id);
+    try{
+      const res=await api.post(`/wallets/salary/settle-request/${r.id}/reject`,{reason:String(reason).trim()||undefined});
+      window.alert(res&&res.success?t("finance.settle_req_rejected"):((res&&res.message)||t("finance.settle_req_failed")));
+    }catch(e){ window.alert(t("finance.settle_req_failed")); }
+    setSettleReqBusy(null); loadWallets();
+  };
   // Send-to-staff modal (3-bucket allocation: salary | imprest | petrol)
   const [sendStaff,setSendStaff]=useState(null); // wallet row being sent to
   // Wallet approval queue + photo policy (Phase 2)
@@ -4726,13 +4754,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowAccPanel(!showAccPanel)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,border:`1px solid ${showAccPanel?"#1E40AF":"#CBD5E1"}`,background:"#FFFFFF",fontSize:11.5,fontWeight:600,color:"#475569",cursor:"pointer"}}>
                 <IcBank size={13} color="currentColor"/> {t("finance.accounts")} <IcDown size={10} color="currentColor"/>
+                {settleReqs.length>0&&<span title={t("finance.salary_settle_requests_n",{n:settleReqs.length})} style={{minWidth:15,height:15,padding:"0 4px",boxSizing:"border-box",borderRadius:8,background:T.red,color:"white",fontSize:9,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{settleReqs.length}</span>}
               </button>
               {showAccPanel&&(<>
                 <div onClick={()=>setShowAccPanel(false)} style={{position:"fixed",inset:0,zIndex:140}}/>
                 <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:T.surface,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:`1px solid ${T.b1}`,zIndex:150,width:320,overflow:"hidden"}}>
                   <div style={{display:"flex",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
-                    {[{id:"accounts",l:t("finance.company_accounts")},{id:"wallets",l:t("finance.staff_wallets")}].map(t=>(
-                      <button key={t.id} onClick={()=>setAccTab(t.id)} style={{flex:1,padding:"9px 8px",border:"none",background:"none",color:accTab===t.id?T.blu:T.t3,fontSize:11.5,fontWeight:accTab===t.id?700:400,cursor:"pointer",borderBottom:accTab===t.id?`2px solid ${T.blu}`:"2px solid transparent"}}>{t.l}</button>
+                    {[{id:"accounts",l:t("finance.company_accounts")},{id:"wallets",l:t("finance.staff_wallets"),n:settleReqs.length}].map(t=>(
+                      <button key={t.id} onClick={()=>setAccTab(t.id)} style={{flex:1,padding:"9px 8px",border:"none",background:"none",color:accTab===t.id?T.blu:T.t3,fontSize:11.5,fontWeight:accTab===t.id?700:400,cursor:"pointer",borderBottom:accTab===t.id?`2px solid ${T.blu}`:"2px solid transparent"}}>{t.l}{t.n>0&&<span style={{marginLeft:5,padding:"0 5px",borderRadius:8,background:T.red,color:"white",fontSize:9,fontWeight:800}}>{t.n}</span>}</button>
                     ))}
                   </div>
                   <div style={{padding:"8px 10px"}}>
@@ -4757,6 +4786,26 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       </>
                     ):(
                       <>
+                      {settleReqs.length>0&&<div style={{marginBottom:8,padding:"7px 9px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`}}>
+                        <div style={{fontSize:10,fontWeight:800,color:T.amb,textTransform:"uppercase",letterSpacing:.4,marginBottom:3}}>{t("finance.salary_settle_requests_n",{n:settleReqs.length})}</div>
+                        {settleReqs.map(r=>(
+                          <div key={r.id} style={{padding:"6px 0 2px",borderTop:`1px solid ${T.ambM}`}}>
+                            <div style={{display:"flex",justifyContent:"space-between",gap:6}}>
+                              <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{r.staff_name}</span>
+                              <span style={{fontSize:12,fontWeight:800,color:T.t1}}>₹{fmtN(r.amount)}</span>
+                            </div>
+                            <div style={{fontSize:10,color:T.t3,marginTop:1}}>{t("finance.settle_req_wallet_due",{wallet:fmtS(r.wallet_available),due:fmtS(r.salary_due)})}</div>
+                            {r.note&&<div style={{fontSize:10,color:T.t4,marginTop:1}}>{r.note}</div>}
+                            {!r.can_confirm&&<div style={{fontSize:9.5,fontWeight:600,color:T.red,marginTop:2}}>{t("finance.settle_req_cannot_confirm")}</div>}
+                            <div style={{display:"flex",gap:6,marginTop:5,justifyContent:"flex-end"}}>
+                              <button disabled={settleReqBusy===r.id} onClick={()=>rejectSettleReq(r)}
+                                style={{fontSize:10,fontWeight:700,color:T.red,background:T.surface,border:`1px solid ${T.redM}`,borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>{t("common.reject")}</button>
+                              <button disabled={settleReqBusy===r.id||!r.can_confirm} onClick={()=>confirmSettleReq(r)}
+                                style={{fontSize:10,fontWeight:700,color:"white",background:r.can_confirm?T.grn:T.t4,border:"none",borderRadius:6,padding:"3px 10px",cursor:r.can_confirm?"pointer":"not-allowed"}}>{t("common.confirm")}</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>}
                       {walletList.length===0&&<div style={{padding:"14px 8px",textAlign:"center",fontSize:11,color:T.t4}}>{t("finance.koi_staff_wallet_nahi")}</div>}
                       {walletList.map(w=>{const pct=w.limit>0?Math.max(0,Math.min(100,Math.round(w.balance/w.limit*100))):0;const due=Number(salaryDues[w.id])||0;return(
                         <div key={w.id} style={{padding:"8px 10px",borderRadius:7,marginBottom:4,background:T.surfaceB,border:`1px solid ${T.b1}`}}>
