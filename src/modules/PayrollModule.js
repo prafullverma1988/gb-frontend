@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { t, Rich } from "../i18n";
+import { companyNameHtml } from "../utils/companyName";
 import { todayISO } from "../utils/today";
 import { apiMonth, rowOf, slipOf, payStateOf, tilesOf } from "../utils/salarySheet";
 
@@ -5438,7 +5439,7 @@ function printRunPayslip(item,run){
   const mName=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(run?.month_num||1)-1];
   const row=(l,v,neg)=>`<tr><td style="padding:4px 0">${l}</td><td style="text-align:right;padding:4px 0;color:${neg?"#DC2626":"#111"}">${neg?"−":""}₹${Number(v||0).toLocaleString("en-IN")}</td></tr>`;
   const html=`<html><head><title>Payslip — ${item.staff_name}</title></head><body style="font-family:Segoe UI,sans-serif;max-width:540px;margin:24px auto;color:#111">
-    <h2 style="margin:0">GB Buildcon — Payslip</h2>
+    <h2 style="margin:0">${companyNameHtml()} — Payslip</h2>
     <div style="color:#666;font-size:13px;margin:2px 0 16px">${mName} ${run?.year_num||""} · ${item.staff_name} (${item.designation||""})</div>
     <div style="display:flex;gap:24px">
       <div style="flex:1"><b>Earnings</b><table style="width:100%;font-size:13px">

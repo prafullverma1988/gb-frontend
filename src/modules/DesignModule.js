@@ -7,6 +7,7 @@ import SearchSelect from "../components/SearchSelect";
 import { Avatar, Credit, fmtTimeAgo } from "../components/Credit";
 import RevisionNoteModal from "../components/RevisionNoteModal";
 import { t } from "../i18n";
+import { companyName } from "../utils/companyName";
 
 // ── ICONS ────────────────────────────────────────────────────────────
 const Ic = ({d,d2,size=18,color="currentColor",sw=1.8,fill="none"}) => (
@@ -902,7 +903,7 @@ export default function DesignModule() {
         setMsg(
           `Namaste${d.client_name?` ${d.client_name} ji`:""},\n\n`+
           `${proj} ke liye "${ttl}" (${ver}) drawing ready hai. Kripya review karke approval/changes batayein:\n\n`+
-          `${link}\n\nThanks,\nGB Buildcon team`
+          `${link}\n\nThanks,\n${companyName()} team`
         );
         setLoadingContact(false);
       }).catch(()=>setLoadingContact(false));

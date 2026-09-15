@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
 import { Credit } from "./Credit";
 import { t } from "../i18n";
+import { companyName } from "../utils/companyName";
 
 const T = {
   surface: "#FFFFFF",
@@ -87,7 +88,7 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
           setMsg(
             `Namaste${name},\n\n`+
             `${ttl} (${ver}) drawing ready hai. Kripya review karke approval/changes batayein:\n\n`+
-            `${url}\n\nThanks,\nGB Buildcon team`
+            `${url}\n\nThanks,\n${companyName()} team`
           );
         }
       } catch (_) {}

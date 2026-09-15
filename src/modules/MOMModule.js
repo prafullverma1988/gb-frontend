@@ -3,6 +3,7 @@ import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import ExportMenu from "../components/DataExport";
 import { t } from "../i18n";
+import { companyNameHtml } from "../utils/companyName";
 
 // ── ICONS ──────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -202,7 +203,7 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
     .attendee{display:inline-block;background:#EFF6FF;color:#2563EB;padding:2px 8px;border-radius:20px;margin:2px;font-size:11px;border:1px solid #BFDBFE}
     </style></head><body>
     <div class="header">
-      <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px">GB BUILDCON — MINUTES OF MEETING</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px;text-transform:uppercase">${companyNameHtml()} — MINUTES OF MEETING</div>
       <h1 style="margin:0;font-size:18px">${mom.title}</h1>
       <div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:4px">${mom.id} · ${mom.type}</div>
     </div>

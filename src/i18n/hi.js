@@ -1669,6 +1669,9 @@ const dict = {
   "danger_delete.ye_faisla_audit_me_darj_hoga":                ". (यह डिसीजन ऑडिट में रिकॉर्ड होगा।)",
   "danger_delete.ye_sab_hamesha_ke_liye_mit":                  "यह सब हमेशा के लिए डिलीट हो जाएगा",
 
+  // ── data_export ─────────────────────────────────────────────
+  "data_export.generated_on_records":                          "{date} को बनाया · {n} रिकॉर्ड",
+
   // ── design ──────────────────────────────────────────────────
   "design.add_pin":                                            "पिन ऐड करो",
   "design.add_revision_pin_comment":                           "📍 रिवीजन पिन / कमेंट ऐड करो",
@@ -5895,7 +5898,9 @@ const dict = {
   "public_drawing.download_file":                              "फाइल डाउनलोड करें",
   "public_drawing.invalid_link":                               "इनवैलिड लिंक",
   "public_drawing.link_not_available":                         "लिंक अवेलेबल नहीं है",
+  "public_drawing.shared_via_company":                          "{company} ने शेयर किया · Sanchalan",
   "public_drawing.shared_via_gb_buildcon_construction_manager": "GB बिल्डकॉन · कंस्ट्रक्शन मैनेजर के ज़रिए शेयर किया गया",
+  "public_drawing.shared_via_sanchalan":                       "Sanchalan से शेयर किया गया",
   "public_drawing.this_drawing_link_is_invalid_or":            "यह ड्राइंग लिंक इनवैलिड है या डीएक्टिवेट कर दिया गया है. भेजने वाले से संपर्क करें.",
 
   // ── receiving_contacts ──────────────────────────────────────

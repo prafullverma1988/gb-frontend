@@ -1670,6 +1670,9 @@ const dict = {
   "danger_delete.ye_faisla_audit_me_darj_hoga":                ". (This decision will be recorded in audit.)",
   "danger_delete.ye_sab_hamesha_ke_liye_mit":                  "All of this will be permanently deleted",
 
+  // ── data_export ─────────────────────────────────────────────
+  "data_export.generated_on_records":                          "Generated on {date} · {n} records",
+
   // ── design ──────────────────────────────────────────────────
   "design.add_pin":                                            "Add Pin",
   "design.add_revision_pin_comment":                           "📍 Add Revision Pin / Comment",
@@ -5896,7 +5899,9 @@ const dict = {
   "public_drawing.download_file":                              "Download File",
   "public_drawing.invalid_link":                               "Invalid link",
   "public_drawing.link_not_available":                         "Link not available",
+  "public_drawing.shared_via_company":                          "Shared by {company} · Sanchalan",
   "public_drawing.shared_via_gb_buildcon_construction_manager": "Shared via GB Buildcon · Construction Manager",
+  "public_drawing.shared_via_sanchalan":                       "Shared via Sanchalan",
   "public_drawing.this_drawing_link_is_invalid_or":            "This drawing link is invalid or has been deactivated. Please contact the sender.",
 
   // ── receiving_contacts ──────────────────────────────────────
