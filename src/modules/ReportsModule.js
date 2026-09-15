@@ -116,8 +116,6 @@ const TODAY=new Date().toISOString().split("T")[0];
 
 // ── MASTER DATA ───────────────────────────────────────────────
 const SITES=[];
-const HEADS=["Material","Labour","Contractor","Site Expense","Subcontractor","Office","Equipment","Loan","PA Bill","Other"];
-const MOPS=["Cash","Cheque","Bank Transfer","UPI","NEFT"];
 const ACCOUNTS=[];
 const PARTIES=[];
 
@@ -183,61 +181,26 @@ function printHTML(title, html){
 function CashBookModule(){
   // ── Live data — same source as Finance → Cash Book tab ──────
   // Reports is VIEW-ONLY: no Add/Edit/Delete here. Use the Finance
-  // module for mutations; this screen pulls the same /finance/
-  // transactions list (filtered for cash events) and renders Cash
-  // Book + Day Book + PDF/Excel export.
-  const [entries,setEntries]=useState([]);
+  // module for mutations. LIB-07: rows GET /finance/cashbook se — sirf chuni
+  // tareekh ki, server par (Finance Cash Book / Khaata Ledger wala hi niyam:
+  // company khaate ki clear aavak-jaavak, utils/accountLedger). Pehle yahan
+  // GET /transactions?limit=1000 (sabse nayi 1000) aati thi aur tareekh browser
+  // me chhanti jaati — purana daur chupchaap khaali (greenbox bhilai FY 2025-26
+  // "0 entries"), aur apna alag whitelist (wallet kharcha bhi payment) chalta tha.
+  const [book,setBook]=useState({rows:[],accounts:[],opening:null,closing:null,balances:false});
+  const entries=book.rows;
   const [loading,setLoading]=useState(true);
-  // Cash-event filter — receipts, payments, transfers (the same
-  // whitelist Finance uses for its Cash Book tab). Excludes bills
-  // (material_purchase / subcon_expense as bills / sales_invoice)
-  // because those are liabilities, not money movements.
-  const CASH_TYPES = new Set(["receipt", "payment", "party_payment",
-    "site_expense", "bank_transfer", "wallet_payment", "wallet_topup"]);
-  // map backend txn.type → cash-book "head" label.
+  // map backend txn.type → cash-book "head" label (jab entry ka apna head na ho).
   const TYPE_TO_HEAD = {
     receipt: "Other", payment: "Other", party_payment: "Other",
     site_expense: "Site Expense", subcon_expense: "Subcontractor",
     material_purchase: "Material", bank_transfer: "Other",
     wallet_payment: "Other", wallet_topup: "Other",
   };
-  useEffect(() => {
-    setLoading(true);
-    api.get("/finance/transactions?limit=1000")
-      .then(r => {
-        if (!r?.success || !Array.isArray(r.data)) return;
-        const rows = r.data
-          .filter(t => CASH_TYPES.has(t.type) && (t.status || "") !== "cancelled")
-          .map(t => {
-            const isCR = t.type === "receipt" ||
-              (t.type === "bank_transfer" && /Bank Transfer IN/i.test(t.description || ""));
-            const amt = parseFloat(t.amount) || 0;
-            const date = (t.date ? new Date(t.date) : new Date()).toISOString().slice(0, 10);
-            return {
-              id: t.id,
-              date,
-              party: t.party_display || t.party_name || "",
-              desc: t.description || t.note || t.type,
-              // Wallet-origin rows ka koi company account nahi hota —
-              // account_display "<Staff> (Wallet)" bhejta hai.
-              account: t.account_display || t.account_name || "",
-              head: t.head_name || TYPE_TO_HEAD[t.type] || "Other",
-              mop: (t.mop || "cash").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
-              site: t.project_name || "",
-              recAmt: isCR ? amt : 0,
-              payAmt: isCR ? 0 : amt,
-            };
-          });
-        setEntries(rows);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-  // Derive filter dropdown options from the live data so we never
-  // show "All Sites" with no sites under it.
-  const SITES_LIVE   = useMemo(() => Array.from(new Set(entries.map(e => e.site).filter(Boolean))).sort(), [entries]);
-  const ACCOUNTS_LIVE= useMemo(() => Array.from(new Set(entries.map(e => e.account).filter(Boolean))).sort(), [entries]);
-  const PARTIES_LIVE = useMemo(() => Array.from(new Set(entries.map(e => e.party).filter(Boolean))).sort(), [entries]);
+  // MOP: DB ka slug (cash / cheque / bank_transfer / upi / neft) hi filter ki
+  // value — pehle title-case "Upi"/"Neft" banta tha jo dropdown ke "UPI"/"NEFT"
+  // se kabhi nahi milta tha. Label sirf dikhane ke liye.
+  const mopLabel = (m) => ({ cash: t("common.cash"), cheque: t("common.cheque"), bank_transfer: t("common.bank_transfer") }[m] || String(m || "").replace(/_/g, " ").toUpperCase());
 
   const [view,setView]=useState("cashbook"); // cashbook | daybook
   const [fSite,setFSite]=useState("All");
@@ -251,20 +214,70 @@ function CashBookModule(){
   const [fTo,setFTo]=useState(TODAY);
   const [search,setSearch]=useState("");
 
+  useEffect(() => {
+    // Adhoori tareekh (picker me type ho rahi) par call nahi; khaali = us taraf koi seema nahi
+    const ok = (s) => !s || /^\d{4}-\d{2}-\d{2}$/.test(s);
+    if (!ok(fFrom) || !ok(fTo)) return;
+    setLoading(true);
+    const q = [fFrom && `from=${fFrom}`, fTo && `to=${fTo}`].filter(Boolean).join("&");
+    api.get("/finance/cashbook" + (q ? "?" + q : ""))
+      .then(r => {
+        const d = r?.success ? r.data : null;
+        if (!d || !Array.isArray(d.rows)) { setBook({rows:[],accounts:[],opening:null,closing:null,balances:false}); return; }
+        const rows = d.rows.map(x => {
+          const mv = Number(x.movement) || 0;
+          return {
+            id: x.id,
+            date: String(x.date || "").slice(0, 10),
+            party: x.party || "",
+            desc: x.description || x.note || x.type,
+            account: x.account_name || "",
+            head: x.head || TYPE_TO_HEAD[x.type] || "Other",
+            mop: String(x.mop || "cash").toLowerCase(),
+            site: x.project || "",
+            recAmt: mv > 0 ? mv : 0,
+            payAmt: mv < 0 ? -mv : 0,
+            // khaate ka asli balance is row ke baad — apna khaata / sab milakar
+            bal: x.balance, cbal: x.combined_balance,
+          };
+        });
+        setBook({ rows, accounts: Array.isArray(d.accounts) ? d.accounts : [], opening: d.opening, closing: d.closing, balances: !!d.balances });
+      })
+      .catch(() => setBook({rows:[],accounts:[],opening:null,closing:null,balances:false}))
+      .finally(() => setLoading(false));
+  }, [fFrom, fTo]);
+  // Derive filter dropdown options from the live data so we never
+  // show "All Sites" with no sites under it.
+  const SITES_LIVE   = useMemo(() => Array.from(new Set(entries.map(e => e.site).filter(Boolean))).sort(), [entries]);
+  // Khaate: company ke saare chalu khaate (server list) — sirf entries se banane
+  // par bina-entry wala khaata gayab rehta
+  const ACCOUNTS_LIVE= useMemo(() => Array.from(new Set([...book.accounts.map(a => a.name), ...entries.map(e => e.account)].filter(Boolean))).sort(), [book, entries]);
+  const PARTIES_LIVE = useMemo(() => Array.from(new Set(entries.map(e => e.party).filter(Boolean))).sort(), [entries]);
+  // Head aur MOP bhi asli entries se — pehle 10 naam ki pakki list thi jisme se 8 kabhi kisi row se nahi milte the
+  const HEADS_LIVE   = useMemo(() => Array.from(new Set(entries.map(e => e.head).filter(Boolean))).sort(), [entries]);
+  const MOPS_LIVE    = useMemo(() => Array.from(new Set(entries.map(e => e.mop).filter(Boolean))).sort(), [entries]);
+
   const filtered=useMemo(()=>entries.filter(e=>{
     if(fSite!=="All"&&e.site!==fSite) return false;
     if(fHead!=="All"&&e.head!==fHead) return false;
     if(fMOP!=="All"&&e.mop!==fMOP) return false;
     if(fAcc!=="All"&&e.account!==fAcc) return false;
     if(fParty!=="All"&&e.party!==fParty) return false;
-    if(e.date<fFrom||e.date>fTo) return false;
+    if((fFrom&&e.date<fFrom)||(fTo&&e.date>fTo)) return false;
     if(search&&!e.desc.toLowerCase().includes(search.toLowerCase())&&!e.party?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   }).sort((a,b)=>a.date.localeCompare(b.date)),[entries,fSite,fHead,fMOP,fAcc,fParty,fFrom,fTo,search]);
 
-  // Running balance for cashbook
+  // Balance: Finance Cash Book jaisa — khaate (ya sab khaaton) ka asli balance,
+  // "From" se pehle ka opening samet; site/head/MOP/party/search sirf row
+  // chhupate hain, balance nahi badalte. Finance VIEW na ho to server balance
+  // nahi bhejta (GET /accounts jaisa) — tab daur ka chalta jod 0 se.
+  const accSel = fAcc!=="All" ? book.accounts.find(a=>a.name===fAcc) : null;
+  const hasBal = book.balances && book.opening!=null;
+  const opening = hasBal ? Number((accSel ? accSel.opening : book.opening) || 0) : 0;
+  const balOf = (e) => fAcc==="All" ? e.cbal : e.bal;
   let runBal=0;
-  const withBal=filtered.map(e=>{runBal+=e.recAmt-e.payAmt;return{...e,runBal};});
+  const withBal=filtered.map(e=>{runBal+=e.recAmt-e.payAmt;return{...e,runBal:hasBal?Number(balOf(e)):runBal};});
 
   // Day-wise grouping for daybook
   const daybook=useMemo(()=>{
@@ -275,13 +288,18 @@ function CashBookModule(){
       map[e.date].rec+=e.recAmt;
       map[e.date].pay+=e.payAmt;
     });
+    // din ke aakhir ka asli balance — us din ki chhupi row samet
+    const dayEnd={};
+    if(hasBal) entries.forEach(e=>{ if(fAcc==="All"||e.account===fAcc) dayEnd[e.date]=Number(balOf(e)); });
     let rb=0;
-    return Object.values(map).sort((a,b)=>a.date.localeCompare(b.date)).map(d=>{rb+=d.rec-d.pay;return{...d,runBal:rb};});
-  },[filtered]);
+    return Object.values(map).sort((a,b)=>a.date.localeCompare(b.date)).map(d=>{rb+=d.rec-d.pay;return{...d,runBal:hasBal?dayEnd[d.date]:rb};});
+  },[filtered,entries,hasBal,fAcc]);
 
   const totalRec=filtered.reduce((s,e)=>s+e.recAmt,0);
   const totalPay=filtered.reduce((s,e)=>s+e.payAmt,0);
   const balance=totalRec-totalPay;
+  // Neeche ka aakhri Balance: khaate ka closing (balance ho to), warna daur ka jod
+  const closing = hasBal ? Number((accSel ? accSel.closing : book.closing) || 0) : balance;
 
   // Excel download — Cashbook
   const dlExcelCash=()=>{
@@ -290,9 +308,10 @@ function CashBookModule(){
       [`Period: ${fFrom} to ${fTo}  |  Site: ${fSite}  |  Generated: ${TODAY}`],
       [],
       ["#","Date","Party","Description","Account","Head","MOP","Site","Receipt (₹)","Payment (₹)","Balance (₹)"],
-      ...withBal.map(e=>[e.id,e.date,e.party||"",e.desc,e.account,e.head,e.mop,e.site,e.recAmt||"",e.payAmt||"",e.runBal]),
+      ...(hasBal?[["","",t("common.opening_balance"),"","","","","","","",opening]]:[]),
+      ...withBal.map(e=>[e.id,e.date,e.party||"",e.desc,e.account,e.head,mopLabel(e.mop),e.site,e.recAmt||"",e.payAmt||"",e.runBal]),
       [],
-      ["","","","","","","TOTAL",totalRec,totalPay,balance],
+      ["","","","","","","","TOTAL",totalRec,totalPay,closing],
     ];
     downloadCSV(`CashBook_${fFrom}_${fTo}.csv`,rows);
   };
@@ -304,9 +323,10 @@ function CashBookModule(){
       [`Period: ${fFrom} to ${fTo}  |  Generated: ${TODAY}`],
       [],
       ["Date","Day Receipts (₹)","Day Payments (₹)","Day Balance (₹)","Running Balance (₹)","Entries"],
+      ...(hasBal?[[t("common.opening_balance"),"","","",opening,""]]:[]),
       ...daybook.map(d=>[d.date,d.rec,d.pay,d.rec-d.pay,d.runBal,d.entries.map(e=>e.desc).join(" | ")]),
       [],
-      ["TOTAL",totalRec,totalPay,balance,"",""],
+      ["TOTAL",totalRec,totalPay,balance,closing,""],
     ];
     downloadCSV(`DayBook_${fFrom}_${fTo}.csv`,rows);
   };
@@ -319,11 +339,12 @@ function CashBookModule(){
         <td>${e.desc}</td>
         <td>${e.account}</td>
         <td><span style="font-size:9px;padding:2px 7px;border-radius:20px;background:${e.head==="Material"?"#EFF6FF":e.head==="Labour"?"#ECFDF5":e.head==="PA Bill"?"#F5F3FF":"#F8F9FB"};color:${e.head==="Material"?"#2563EB":e.head==="Labour"?"#059669":e.head==="PA Bill"?"#7C3AED":"#374151"}">${e.head}</span></td>
-        <td>${e.mop}</td>
+        <td>${mopLabel(e.mop)}</td>
         <td class="rec">${e.recAmt>0?fmtRs(e.recAmt):""}</td>
         <td class="pay">${e.payAmt>0?fmtRs(e.payAmt):""}</td>
-        <td style="font-weight:700;color:${e.runBal>=0?"#2563EB":"#DC2626"}">${fmtRs(e.runBal)}</td>
+        <td style="font-weight:700;color:${e.runBal>=0?"#2563EB":"#DC2626"}">${fmtBal(e.runBal)}</td>
       </tr>`).join("");
+    const openRow=hasBal?`<tr><td colspan="8" style="font-style:italic;color:#6B7280">${t("common.opening_balance")}</td><td style="font-weight:700;color:${opening>=0?"#2563EB":"#DC2626"}">${fmtBal(opening)}</td></tr>`:"";
     printHTML("Cash Book — "+companyNameHtml(),`
       <div class="header">
         <div><h1>${companyNameHtml()} — Cash Book</h1><div class="header-sub">Period: ${fFrom} to ${fTo}  &nbsp;|&nbsp;  Site: ${fSite}</div></div>
@@ -336,16 +357,17 @@ function CashBookModule(){
       </div>
       <table>
         <tr><th>Date</th><th>Party</th><th>Description</th><th>Account</th><th>Head</th><th>MOP</th><th>Receipt ₹</th><th>Payment ₹</th><th>Balance ₹</th></tr>
-        ${rows}
-        <tr class="total-row"><td colspan="6" style="text-align:right">TOTAL</td><td class="rec">${fmtRs(totalRec)}</td><td class="pay">${fmtRs(totalPay)}</td><td style="color:${balance>=0?"#2563EB":"#DC2626"};font-weight:800">${fmtRs(balance)}</td></tr>
+        ${openRow}${rows}
+        <tr class="total-row"><td colspan="6" style="text-align:right">TOTAL</td><td class="rec">${fmtRs(totalRec)}</td><td class="pay">${fmtRs(totalPay)}</td><td style="color:${closing>=0?"#2563EB":"#DC2626"};font-weight:800">${fmtBal(closing)}</td></tr>
       </table>`);
   };
 
   const printDay=()=>{
     const rows=daybook.map(d=>`
       <tr class="day-header"><td colspan="3"><strong>${fmtDate(d.date)}</strong></td><td class="rec">${fmtRs(d.rec)}</td><td class="pay">${fmtRs(d.pay)}</td><td style="font-weight:700;color:${(d.rec-d.pay)>=0?"#059669":"#DC2626"}">${fmtBal(d.rec-d.pay)}</td><td style="font-weight:700;color:${d.runBal>=0?"#2563EB":"#DC2626"}">${fmtBal(d.runBal)}</td></tr>
-      ${d.entries.map(e=>`<tr><td></td><td>${e.desc}</td><td>${e.account} · ${e.mop}</td><td class="rec" style="font-weight:400">${e.recAmt>0?fmtRs(e.recAmt):""}</td><td class="pay" style="font-weight:400">${e.payAmt>0?fmtRs(e.payAmt):""}</td><td></td><td></td></tr>`).join("")}
+      ${d.entries.map(e=>`<tr><td></td><td>${e.desc}</td><td>${e.account} · ${mopLabel(e.mop)}</td><td class="rec" style="font-weight:400">${e.recAmt>0?fmtRs(e.recAmt):""}</td><td class="pay" style="font-weight:400">${e.payAmt>0?fmtRs(e.payAmt):""}</td><td></td><td></td></tr>`).join("")}
     `).join("");
+    const openRow=hasBal?`<tr><td colspan="6" style="font-style:italic;color:#6B7280">${t("common.opening_balance")}</td><td style="font-weight:700;color:${opening>=0?"#2563EB":"#DC2626"}">${fmtBal(opening)}</td></tr>`:"";
     printHTML("Day Book — "+companyNameHtml(),`
       <div class="header"><div><h1>${companyNameHtml()} — Day Book</h1><div class="header-sub">Period: ${fFrom} to ${fTo}</div></div></div>
       <div class="summary-grid">
@@ -355,8 +377,8 @@ function CashBookModule(){
       </div>
       <table>
         <tr><th></th><th>Description / Summary</th><th>Account · MOP</th><th>Receipt ₹</th><th>Payment ₹</th><th>Day Bal ₹</th><th>Ledger Bal ₹</th></tr>
-        ${rows}
-        <tr class="total-row"><td colspan="3" style="text-align:right">TOTAL</td><td class="rec">${fmtRs(totalRec)}</td><td class="pay">${fmtRs(totalPay)}</td><td style="color:${balance>=0?"#059669":"#DC2626"};font-weight:800">${fmtBal(balance)}</td><td style="color:${balance>=0?"#2563EB":"#DC2626"};font-weight:800">${fmtBal(balance)}</td></tr>
+        ${openRow}${rows}
+        <tr class="total-row"><td colspan="3" style="text-align:right">TOTAL</td><td class="rec">${fmtRs(totalRec)}</td><td class="pay">${fmtRs(totalPay)}</td><td style="color:${balance>=0?"#059669":"#DC2626"};font-weight:800">${fmtBal(balance)}</td><td style="color:${closing>=0?"#2563EB":"#DC2626"};font-weight:800">${fmtBal(closing)}</td></tr>
       </table>`);
   };
 
@@ -402,10 +424,10 @@ function CashBookModule(){
             <option value="All">{t("common.all_sites")}</option>{SITES_LIVE.map(s=><option key={s}>{s}</option>)}
           </select>
           <select value={fHead} onChange={e=>setFHead(e.target.value)} style={{...selStyle,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}>
-            <option value="All">{t("finance.all_heads")}</option>{HEADS.map(h=><option key={h}>{h}</option>)}
+            <option value="All">{t("finance.all_heads")}</option>{HEADS_LIVE.map(h=><option key={h}>{h}</option>)}
           </select>
           <select value={fMOP} onChange={e=>setFMOP(e.target.value)} style={{...selStyle,borderColor:fMOP!=="All"?T.blu:T.b1,background:fMOP!=="All"?T.bluL:T.surface,color:fMOP!=="All"?T.blu:T.t2}}>
-            <option value="All">{t("finance.all_mop")}</option>{MOPS.map(m=><option key={m}>{m}</option>)}
+            <option value="All">{t("finance.all_mop")}</option>{MOPS_LIVE.map(m=><option key={m} value={m}>{mopLabel(m)}</option>)}
           </select>
           <select value={fAcc} onChange={e=>setFAcc(e.target.value)} style={{...selStyle,borderColor:fAcc!=="All"?T.blu:T.b1,background:fAcc!=="All"?T.bluL:T.surface,color:fAcc!=="All"?T.blu:T.t2}}>
             <option value="All">{t("finance.all_accounts")}</option>{ACCOUNTS_LIVE.map(a=><option key={a}>{a}</option>)}
@@ -447,6 +469,13 @@ function CashBookModule(){
             ))}
           </div>
           <div style={{maxHeight:420,overflowY:"auto"}}>
+            {/* LIB-07: khaate ka opening ("From" se pehle ki entries samet) — Finance Cash Book jaisa */}
+            {hasBal&&(
+              <div style={{display:"grid",gridTemplateColumns:"80px 130px 1fr 110px 110px 95px 90px 90px 100px",padding:"8px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:T.surfaceB}}>
+                <span style={{gridColumn:"1/9",fontSize:12,fontStyle:"italic",fontWeight:600,color:T.t3}}>{t("common.opening_balance")}</span>
+                <span style={{fontSize:12,fontWeight:700,color:opening>=0?T.blu:T.red}}>{fmtBal(opening)}</span>
+              </div>
+            )}
             {withBal.map((e,i)=>(
               <div key={e.id}
                 style={{display:"grid",gridTemplateColumns:"80px 130px 1fr 110px 110px 95px 90px 90px 100px",padding:"8px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?"transparent":T.surfaceB,borderLeft:`3px solid ${e.recAmt>0?T.grn:T.red}55`}}
@@ -456,7 +485,7 @@ function CashBookModule(){
                 <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.desc}</span>
                 <span style={{fontSize:11,color:T.t3}}>{e.account}</span>
                 <Pill label={e.head} c={T.slt} bg={T.sltL}/>
-                <span style={{fontSize:11,color:T.t3}}>{e.mop}</span>
+                <span style={{fontSize:11,color:T.t3}}>{mopLabel(e.mop)}</span>
                 <span style={{fontSize:12.5,fontWeight:e.recAmt>0?700:400,color:e.recAmt>0?T.grn:T.t4}}>{e.recAmt>0?fmtRs(e.recAmt):"—"}</span>
                 <span style={{fontSize:12.5,fontWeight:e.payAmt>0?700:400,color:e.payAmt>0?T.red:T.t4}}>{e.payAmt>0?fmtRs(e.payAmt):"—"}</span>
                 <span style={{fontSize:12,fontWeight:700,color:e.runBal>=0?T.blu:T.red}}>{fmtBal(e.runBal)}</span>
@@ -469,7 +498,7 @@ function CashBookModule(){
             <span/><span/><span/>
             <span style={{fontSize:13,fontWeight:800,color:T.grn}}>{fmtRs(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red}}>{fmtRs(totalPay)}</span>
-            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red}}>{fmtBal(balance)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:closing>=0?T.blu:T.red}}>{fmtBal(closing)}</span>
           </div>
         </div>
       )}
@@ -483,6 +512,12 @@ function CashBookModule(){
             ))}
           </div>
           <div style={{maxHeight:480,overflowY:"auto"}}>
+            {hasBal&&(
+              <div style={{display:"grid",gridTemplateColumns:"95px 110px 1fr 100px 85px 85px 95px 100px",padding:"8px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:T.surfaceB}}>
+                <span style={{gridColumn:"1/8",fontSize:12,fontStyle:"italic",fontWeight:600,color:T.t3}}>{t("common.opening_balance")}</span>
+                <span style={{fontSize:12.5,fontWeight:800,color:opening>=0?T.blu:T.red}}>{fmtBal(opening)}</span>
+              </div>
+            )}
             {daybook.map((day,di)=>(
               <div key={day.date}>
                 {/* Day header */}
@@ -502,7 +537,7 @@ function CashBookModule(){
                     <span style={{fontSize:10,color:T.t4}}>{e.head}</span>
                     <span style={{fontSize:11,color:T.pur,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.party||"—"}</span>
                     <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.desc}</span>
-                    <span style={{fontSize:10.5,color:T.t3}}>{e.account} · {e.mop}</span>
+                    <span style={{fontSize:10.5,color:T.t3}}>{e.account} · {mopLabel(e.mop)}</span>
                     <span style={{fontSize:11.5,color:e.recAmt>0?T.grn:T.t4}}>{e.recAmt>0?fmtRs(e.recAmt):"—"}</span>
                     <span style={{fontSize:11.5,color:e.payAmt>0?T.red:T.t4}}>{e.payAmt>0?fmtRs(e.payAmt):"—"}</span>
                     <span/>
@@ -521,7 +556,7 @@ function CashBookModule(){
             <span style={{fontSize:13,fontWeight:800,color:T.grn}}>{fmtRs(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red}}>{fmtRs(totalPay)}</span>
             <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.grn:T.red}}>{fmtBal(balance)}</span>
-            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red}}>{fmtBal(balance)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:closing>=0?T.blu:T.red}}>{fmtBal(closing)}</span>
           </div>
         </div>
       )}
