@@ -82,7 +82,9 @@ function fmtDate(d){
   const [y,m,dd]=s.split("-");
   return dd+"/"+m+"/"+y;
 }
-function ptDelayDays(t){if(t.status==="Completed"||!t.baseEnd) return 0;const d=Math.round((new Date()-new Date(t.baseEnd))/(1000*86400));return d>0?d:0;}
+// Late = aaj (IST din) End ke AAKHRI din se aage nikal gaya. Pehle ghante gine jaate
+// the: End ke din hi shaam 5:30 ke baad "+1d late" (TSK-17).
+function ptDelayDays(t){if(t.status==="Completed"||!t.baseEnd) return 0;const d=Math.round((new Date(todayISO()+"T00:00:00Z")-new Date(String(t.baseEnd).slice(0,10)+"T00:00:00Z"))/(1000*86400));return d>0?d:0;}
 
 // ── Parent (summary) task progress ───────────────────────────────────────
 // A task with children does NOT own its progress — the backend derives it as a
@@ -132,7 +134,8 @@ function ptFinishVar(t){
     if(d<0) return {kind:"early",days:-d};
     return {kind:"ontime",days:0};
   }
-  const d = Math.round((new Date()-new Date(pe))/86400000);
+  // aaj ka IST din vs planned AAKHRI din (ghante nahi — TSK-17)
+  const d = Math.round((new Date(todayISO()+"T00:00:00Z")-new Date(String(pe).slice(0,10)+"T00:00:00Z"))/86400000);
   if(d>0) return {kind:"running",days:d};
   return {kind:"ontime",days:0};
 }
@@ -2587,6 +2590,8 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
   const chartWidth = cx;
   const ROW_H=30, LBL_W=270, HDR_H=28, HDR2_H=18;
   const toX=(ds)=>{if(!ds)return null;const ms=new Date(ds).getTime()-pStart.getTime();if(isNaN(ms))return null;return LBL_W+ms*pxPerMs;};
+  // End tareekh kaam ka AAKHRI din hai — bar us din ke khatam hone tak (TSK-17)
+  const toXEnd=(ds)=>{const x=toX(ds);return x==null?null:x+PX_PER_DAY;};
   const todayX=toX(todayStr);
   const TOTAL_HEADER=HDR_H+HDR2_H;
   const TOTAL_W=LBL_W+chartWidth;
@@ -2617,7 +2622,7 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
 
   // bar positions for arrows
   const pos={};
-  allFlat.forEach((t,i)=>{ pos[t.id]={y:TOTAL_HEADER+i*ROW_H+ROW_H/2, bx1:toX(t.baseStart), bx2:toX(t.baseEnd)}; });
+  allFlat.forEach((t,i)=>{ pos[t.id]={y:TOTAL_HEADER+i*ROW_H+ROW_H/2, bx1:toX(t.baseStart), bx2:toXEnd(t.baseEnd)}; });
 
   const phaseColors=["#1E3A5F","#1A4731","#4A1942","#3D2900","#1A2E4A","#2D1B4E","#1F3A2F"];
 
@@ -2677,8 +2682,8 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
         const isPkg=t._depth===1;
         const hasKids=t.children?.length>0;
         const isOpen=!(collapsed&&collapsed[t.id]);
-        const bx1=toX(t.baseStart), bx2=toX(t.baseEnd);
-        const ax1=toX(t.actualStart), ax2=t.actualEnd?toX(t.actualEnd):todayX;
+        const bx1=toX(t.baseStart), bx2=toXEnd(t.baseEnd);
+        const ax1=toX(t.actualStart), ax2=t.actualEnd?toXEnd(t.actualEnd):todayX;
         // min 4px so 1-day tasks always visible
         const bw=bx1!=null&&bx2!=null?Math.max(4,bx2-bx1):0;
         const prog=Number(t.progress)||0;
@@ -4812,10 +4817,10 @@ const teamOpts=(team)=>[{id:"",name:t("tasks.kisi_ko_nahi")},
     name:m.name+(m.designation||m.role?" · "+String(m.designation||m.role).replace(/_/g," "):"")})))];
 
 function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsChanged,onClose,onSave}){
-  // Dependency wale schedule me duration EXCLUSIVE hai (end = start + din) —
-  // wahi ganit jo template apply karte waqt chala tha. Purane, haath se bane
-  // schedule me duration inclusive hai (2 tarikh ke beech ke din + 1).
-  const DSPAN = depsMode ? 0 : 1;
+  // End = kaam ka AAKHRI din, har project me (6 se 7 tarikh = 2 din). Pehle
+  // dependency wale project me yahan exclusive ganit tha (end = start + din) aur
+  // baaki me inclusive — ek hi task web par 1d, app par 2d dikhta (TSK-17).
+  const DSPAN = 1;
   const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignedTo:task.assigned_to??"",status:task.status,progress:task.progress,unit:task.unit||"",scopeQty:task.scope_qty??"",baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+DSPAN:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
   // Tender links. A task made by hand ("Pipe line laying") carries no BOQ item,
   // so its daily quantity has nowhere to go. Linking it once here is what puts
