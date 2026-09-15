@@ -3544,13 +3544,31 @@ function WalletSettings({ onGoto }) {
   // ₹0 dikhta jabki ₹5,000 tak apne aap approve hota tha. Ab server wahi limit
   // bhejta hai jo sach me lagti hai; badalna Multi-Level Approval se.
   const [limits, setLimits] = useState(null);   // { workflows, roles, ceilings }
+  // ── Wallet ke niyam (WAL-19): auto-cancel ke din + naye wallet ki negative
+  // limit — API (GET/PUT /wallets/settings) pehle se thi, par koi screen nahi.
+  const [rules, setRules] = useState({ days: "7", neg: "0" });
+  const [rulesSaving, setRulesSaving] = useState(false);
+  const [rulesTick, setRulesTick] = useState(false);
 
   useEffect(() => {
     Promise.all([
       api.get("/wallets/photo-policy").then(r => { if (r?.success && r.data) setPolicy(p => ({ ...p, ...r.data })); }).catch(() => {}),
       api.get("/wallets/auto-limits").then(r => { if (r?.success && r.data?.ceilings) setLimits(r.data); }).catch(() => {}),
+      api.get("/wallets/settings").then(r => { if (r?.success && r.data) setRules({ days: String(r.data.wallet_auto_cancel_days ?? 7), neg: String(r.data.wallet_default_negative_limit ?? 0) }); }).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
+  const saveRules = async () => {
+    const days = parseInt(rules.days, 10), neg = Number(rules.neg);
+    if (!(days >= 1 && days <= 60)) { window.alert(t("settings.wallet_rules_days_1_60")); return; }
+    if (!(neg >= 0)) { window.alert(t("settings.wallet_rules_neg_zero")); return; }
+    setRulesSaving(true);
+    try {
+      const r = await api.put("/wallets/settings", { wallet_auto_cancel_days: days, wallet_default_negative_limit: neg });
+      if (r && r.success === false) window.alert(r.message || t("settings.wallet_rules_save_failed"));
+      else { setRulesTick(true); setTimeout(() => setRulesTick(false), 1800); }
+    } catch (e) { window.alert(t("settings.wallet_rules_save_failed")); }
+    setRulesSaving(false);
+  };
 
   const ROLE_LABEL = {
     supervisor: t("settings.wallet_limits_role_supervisor"), project_manager: t("settings.wallet_limits_role_pm"),
@@ -3593,6 +3611,22 @@ function WalletSettings({ onGoto }) {
             </span>
           </div>
         ))}
+      </SectionCard>
+
+      <SectionCard title={t("settings.wallet_rules_title")} desc={t("settings.wallet_rules_desc")}
+        action={
+          <button onClick={saveRules} disabled={rulesSaving}
+            style={{ padding: "8px 18px", borderRadius: 8, background: rulesTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: rulesSaving ? "wait" : "pointer", opacity: rulesSaving ? 0.7 : 1 }}>
+            {rulesTick ? t("settings.wallet_rules_saved") : rulesSaving ? t("common.saving") : t("common.save")}
+          </button>
+        }>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", paddingTop: 6 }}>
+          <FormField label={t("settings.wallet_rules_days_label")} value={rules.days} half
+            onChange={v => setRules(s => ({ ...s, days: v.replace(/[^0-9]/g, "") }))} placeholder="7" />
+          <FormField label={t("settings.wallet_rules_neg_label")} value={rules.neg} half
+            onChange={v => setRules(s => ({ ...s, neg: v.replace(/[^0-9.]/g, "") }))} placeholder="0" />
+        </div>
+        <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 8 }}>{t("settings.wallet_rules_hint")}</div>
       </SectionCard>
 
       {/* ── Asli auto-approve limit (Multi-Level Approval se) — sirf dekhna ── */}

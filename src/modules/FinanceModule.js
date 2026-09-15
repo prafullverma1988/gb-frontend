@@ -3080,48 +3080,63 @@ function btnSolid(c){return{padding:"8px 16px",borderRadius:7,border:"none",back
 
 // ── Send-to-staff modal — 3-bucket allocation (B4) ─────────────────
 // salary → salary-ledger settlement, NO wallet credit (imprest untouched)
-// imprest → wallet credit (existing behaviour) · petrol → credit tagged petrol
-function SendToStaffModal({staff,onClose,onDone}){
+// imprest → company khaate se staff ko payment (wallet credit) · petrol → wahi, petrol tag
+function SendToStaffModal({staff,accounts,onClose,onDone}){
   const due=Number(staff.salaryDue)||0;
-  const [bucket,setBucket]=useState(due>0?"salary":"imprest"); // salary pre-selected when dues exist
+  const canTopup=staff.canTopup!==false; // WAL-18: viewer / band / hata login → sirf Salary
+  const [bucket,setBucket]=useState(due>0||!canTopup?"salary":"imprest"); // salary pre-selected when dues exist
   const [amount,setAmount]=useState(due>0?String(due):"");
   const [method,setMethod]=useState("bank_transfer");
+  // WAL-15: imprest/petrol company ke kisi khaate se nikalta hai — kaunsa, ye
+  // chunna zaroori (pehle koi khaata nahi likha jaata tha, bank kabhi nahi ghatta).
+  const accts=accounts||[];
+  const [accountId,setAccountId]=useState(accts.length===1?String(accts[0].id):"");
   const [txRef,setTxRef]=useState("");
   const [note,setNote]=useState("");
   const [busy,setBusy]=useState(false);
   const BUCKETS=[
-    {id:"salary", l:t("finance.salary"), sub:due>0?`Due ₹${fmtN(due)}`:"Koi due nahi", c:T.red},
+    {id:"salary", l:t("finance.salary"), sub:due>0?t("finance.due_rs_amt",{amt:fmtN(due)}):t("finance.koi_due_nahi"), c:T.red},
     {id:"imprest",l:t("finance.imprest"),sub:t("finance.wallet_credit_kharche_ke_liye"), c:T.blu},
     {id:"petrol", l:t("finance.petrol"), sub:t("finance.petrol_allowance_credit"), c:T.amb},
   ];
   const doSend=async()=>{
     const amt=Number(amount);
     if(!amt||amt<=0){window.alert(t("finance.amount_sahi_bharo"));return;}
-    if(bucket==="salary"&&amt>due){window.alert(`Salary due ₹${fmtN(due)} hi hai — usse zyada salary bucket me nahi ja sakta`);return;}
+    if(bucket==="salary"&&amt>due){window.alert(t("finance.salary_due_itna_hi_hai",{amt:fmtN(due)}));return;}
+    if(bucket!=="salary"&&!accountId){window.alert(t("finance.send_account_select_karo"));return;}
     setBusy(true);
     try{
-      const r=await api.post("/wallets/send-to-staff",{staff_party_id:staff.id,amount:amt,bucket,payment_method:method,tx_ref:txRef||undefined,note:note||undefined});
-      if(r&&r.success){ window.alert(bucket==="salary"?"Salary settle ho gayi ✓":"Wallet credit ho gaya ✓"); onDone(); }
-      else window.alert((r&&r.message)||"Send failed");
+      const r=await api.post("/wallets/send-to-staff",{staff_party_id:staff.id,amount:amt,bucket,payment_method:method,tx_ref:txRef||undefined,note:note||undefined,account_id:bucket!=="salary"?Number(accountId):undefined});
+      if(r&&r.success){ window.alert(bucket==="salary"?t("finance.salary_settle_ho_gayi"):t("finance.wallet_credit_ho_gaya")); onDone(); }
+      else window.alert((r&&r.message)||t("finance.send_failed"));
     }catch(e){ window.alert(t("finance.send_failed")); }
     setBusy(false);
   };
   return(
-    <ModalW title={`Send to ${staff.name}`} onClose={onClose}>
+    <ModalW title={t("finance.send_to_name",{name:staff.name})} onClose={onClose}>
       <div style={{display:"flex",gap:6,marginBottom:12}}>
         {BUCKETS.map(b=>(
-          <button key={b.id} onClick={()=>{setBucket(b.id); if(b.id==="salary"&&due>0&&!Number(amount)) setAmount(String(due));}}
-            style={{flex:1,padding:"9px 6px",borderRadius:8,border:`1.5px solid ${bucket===b.id?b.c:T.b1}`,background:bucket===b.id?b.c+"11":T.surface,cursor:"pointer",textAlign:"left"}}>
+          <button key={b.id} disabled={b.id!=="salary"&&!canTopup} onClick={()=>{setBucket(b.id); if(b.id==="salary"&&due>0&&!Number(amount)) setAmount(String(due));}}
+            style={{flex:1,padding:"9px 6px",borderRadius:8,border:`1.5px solid ${bucket===b.id?b.c:T.b1}`,background:bucket===b.id?b.c+"11":T.surface,cursor:b.id!=="salary"&&!canTopup?"not-allowed":"pointer",opacity:b.id!=="salary"&&!canTopup?.45:1,textAlign:"left"}}>
             <div style={{fontSize:11.5,fontWeight:800,color:bucket===b.id?b.c:T.t2}}>{b.l}</div>
             <div style={{fontSize:9,color:T.t4,marginTop:2}}>{b.sub}</div>
           </button>
         ))}
       </div>
+      {!canTopup&&<div style={{fontSize:11,color:T.amb,background:T.ambL,padding:"7px 10px",borderRadius:7,marginBottom:10}}>{t("finance.wallet_topup_band_sirf_salary")}</div>}
       {bucket==="salary"&&due<=0&&<div style={{fontSize:11,color:T.amb,background:T.ambL,padding:"7px 10px",borderRadius:7,marginBottom:10}}>{t("finance.is_staff_ka_koi_salary_due")}</div>}
       {bucket==="salary"&&due>0&&<div style={{fontSize:11,color:T.t3,background:T.surfaceB,padding:"7px 10px",borderRadius:7,marginBottom:10}}>{t("finance.salary_bucket_paisa")} <b>{t("finance.salary_ledger")}</b> {t("finance.me_settle_hoga_wallet_balance_nahi")} <b style={{color:T.red}}>₹{fmtN(due)}</b>.</div>}
       <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("common.amount_2")}</label>
       <input type="number" value={amount} onChange={e=>setAmount(e.target.value)}
         style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:13,fontWeight:700,boxSizing:"border-box",margin:"4px 0 10px"}}/>
+      {bucket!=="salary"&&<>
+        <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("finance.pay_from_account")}</label>
+        <select value={accountId} onChange={e=>setAccountId(e.target.value)}
+          style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${accountId?T.b2:T.amb}`,fontSize:12,boxSizing:"border-box",margin:"4px 0 10px",background:T.surface}}>
+          <option value="">{t("finance.select_account")}</option>
+          {accts.map(a=><option key={a.id} value={String(a.id)}>{a.name}{a.no?` ${a.no}`:""} · {fmtS(a.balance)}</option>)}
+        </select>
+      </>}
       <div style={{display:"flex",gap:8}}>
         <div style={{flex:1}}>
           <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("finance.method")}</label>
@@ -3140,7 +3155,7 @@ function SendToStaffModal({staff,onClose,onDone}){
         style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b1}`,fontSize:12,boxSizing:"border-box",marginBottom:12}}/>
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
         <button onClick={onClose} style={btnGhost()}>{t("common.cancel")}</button>
-        <button disabled={busy} onClick={doSend} style={btnSolid(bucket==="salary"?T.red:T.blu)}>{busy?t("common.sending"):`Send ₹${fmtN(Number(amount)||0)}`}</button>
+        <button disabled={busy} onClick={doSend} style={btnSolid(bucket==="salary"?T.red:T.blu)}>{busy?t("common.sending"):t("finance.send_rs_amt",{amt:fmtN(Number(amount)||0)})}</button>
       </div>
     </ModalW>
   );
@@ -3637,11 +3652,17 @@ function FinanceModule(){
   // Salary bucket: outstanding due per staff party (separate ledger — imprest
   // untouched). Drives the red "Salary due" chip + send-modal default bucket.
   const [salaryDues,setSalaryDues]=useState({});
+  // WAL-11: pending "Salary me settle karo" requests (inbox neeche wallets tab me)
+  const [settleReqs,setSettleReqs]=useState([]);
+  const [settleReqBusy,setSettleReqBusy]=useState(null);
   const loadWallets=()=>{
     api.get("/wallets/staff").then(res=>{
       if(res&&res.success){
         setWalletList((res.data||[]).map(w=>({
           id:w.party_id, name:w.name, role:"Staff",
+          // WAL-18: server sirf asli staff bhejta hai; viewer / band / hata hua login
+          // tabhi aata hai jab wallet me paisa ya salary baaki ho — use sirf Salary.
+          userState:w.user_state||"staff", canTopup:w.can_topup!==false,
           balance:Number(w.posted_balance)||0,
           pending:Number(w.pending_amount)||0,
           limit:Number(w.wallet_limit)||0,
@@ -3653,18 +3674,38 @@ function FinanceModule(){
     api.get("/wallets/salary/dues").then(res=>{
       if(res&&res.success) setSalaryDues(res.data||{});
     }).catch(()=>{});
+    api.get("/wallets/salary/settle-requests").then(res=>{
+      if(res&&res.success) setSettleReqs(res.data||[]);
+    }).catch(()=>{});
   };
   useEffect(()=>{ loadWallets(); },[]);
+  // WAL-11: staff ki "Salary me settle karo" requests (wallet ka paisa → salary).
+  // Pehle koi screen inhe dikhati hi nahi thi — request hamesha pending rehti.
+  const confirmSettleReq=async(r)=>{
+    const ok=await window.confirmAsync(t("finance.settle_req_confirm_q",{amt:fmtN(r.amount),name:r.staff_name}));
+    if(!ok) return;
+    setSettleReqBusy(r.id);
+    try{
+      const res=await api.post(`/wallets/salary/settle-request/${r.id}/confirm`,{});
+      window.alert(res&&res.success?t("finance.settle_req_confirmed"):((res&&res.message)||t("finance.settle_req_failed")));
+    }catch(e){ window.alert(t("finance.settle_req_failed")); }
+    setSettleReqBusy(null); loadWallets(); refreshTxns();
+  };
+  const rejectSettleReq=async(r)=>{
+    const reason=await window.promptAsync(t("finance.settle_req_reject_reason"));
+    if(reason===null||reason===undefined) return;
+    setSettleReqBusy(r.id);
+    try{
+      const res=await api.post(`/wallets/salary/settle-request/${r.id}/reject`,{reason:String(reason).trim()||undefined});
+      window.alert(res&&res.success?t("finance.settle_req_rejected"):((res&&res.message)||t("finance.settle_req_failed")));
+    }catch(e){ window.alert(t("finance.settle_req_failed")); }
+    setSettleReqBusy(null); loadWallets();
+  };
   // Send-to-staff modal (3-bucket allocation: salary | imprest | petrol)
   const [sendStaff,setSendStaff]=useState(null); // wallet row being sent to
-  // Wallet approval queue + photo policy (Phase 2)
-  const [walletApprovals,setWalletApprovals]=useState([]);
-  const [walletPhotoPolicy,setWalletPhotoPolicy]=useState({});
-  const loadWalletApprovals=()=>{
-    api.get("/wallets/pending-approvals").then(res=>{ if(res&&res.success) setWalletApprovals(res.data||[]); }).catch(()=>{});
-    api.get("/wallets/photo-policy").then(res=>{ if(res&&res.success) setWalletPhotoPolicy(res.data||{}); }).catch(()=>{});
-  };
-  useEffect(()=>{ loadWalletApprovals(); },[]);
+  // Wallet approval queue + photo policy yahan load hote the par Finance me
+  // kahin dikhte nahi the — har Finance khulne par 3 bekaar query (WAL-19).
+  // Wallet approvals Projects ke approvals panel me hain.
 
   // ── EQUIPMENT REVIEW (new section) ────────────────────────────
   const [equipReview,setEquipReview]=useState([]);
@@ -4714,13 +4755,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowAccPanel(!showAccPanel)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,border:`1px solid ${showAccPanel?"#1E40AF":"#CBD5E1"}`,background:"#FFFFFF",fontSize:11.5,fontWeight:600,color:"#475569",cursor:"pointer"}}>
                 <IcBank size={13} color="currentColor"/> {t("finance.accounts")} <IcDown size={10} color="currentColor"/>
+                {settleReqs.length>0&&<span title={t("finance.salary_settle_requests_n",{n:settleReqs.length})} style={{minWidth:15,height:15,padding:"0 4px",boxSizing:"border-box",borderRadius:8,background:T.red,color:"white",fontSize:9,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{settleReqs.length}</span>}
               </button>
               {showAccPanel&&(<>
                 <div onClick={()=>setShowAccPanel(false)} style={{position:"fixed",inset:0,zIndex:140}}/>
                 <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:T.surface,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:`1px solid ${T.b1}`,zIndex:150,width:320,overflow:"hidden"}}>
                   <div style={{display:"flex",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
-                    {[{id:"accounts",l:t("finance.company_accounts")},{id:"wallets",l:t("finance.staff_wallets")}].map(t=>(
-                      <button key={t.id} onClick={()=>setAccTab(t.id)} style={{flex:1,padding:"9px 8px",border:"none",background:"none",color:accTab===t.id?T.blu:T.t3,fontSize:11.5,fontWeight:accTab===t.id?700:400,cursor:"pointer",borderBottom:accTab===t.id?`2px solid ${T.blu}`:"2px solid transparent"}}>{t.l}</button>
+                    {[{id:"accounts",l:t("finance.company_accounts")},{id:"wallets",l:t("finance.staff_wallets"),n:settleReqs.length}].map(t=>(
+                      <button key={t.id} onClick={()=>setAccTab(t.id)} style={{flex:1,padding:"9px 8px",border:"none",background:"none",color:accTab===t.id?T.blu:T.t3,fontSize:11.5,fontWeight:accTab===t.id?700:400,cursor:"pointer",borderBottom:accTab===t.id?`2px solid ${T.blu}`:"2px solid transparent"}}>{t.l}{t.n>0&&<span style={{marginLeft:5,padding:"0 5px",borderRadius:8,background:T.red,color:"white",fontSize:9,fontWeight:800}}>{t.n}</span>}</button>
                     ))}
                   </div>
                   <div style={{padding:"8px 10px"}}>
@@ -4745,12 +4787,32 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       </>
                     ):(
                       <>
+                      {settleReqs.length>0&&<div style={{marginBottom:8,padding:"7px 9px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`}}>
+                        <div style={{fontSize:10,fontWeight:800,color:T.amb,textTransform:"uppercase",letterSpacing:.4,marginBottom:3}}>{t("finance.salary_settle_requests_n",{n:settleReqs.length})}</div>
+                        {settleReqs.map(r=>(
+                          <div key={r.id} style={{padding:"6px 0 2px",borderTop:`1px solid ${T.ambM}`}}>
+                            <div style={{display:"flex",justifyContent:"space-between",gap:6}}>
+                              <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{r.staff_name}</span>
+                              <span style={{fontSize:12,fontWeight:800,color:T.t1}}>₹{fmtN(r.amount)}</span>
+                            </div>
+                            <div style={{fontSize:10,color:T.t3,marginTop:1}}>{t("finance.settle_req_wallet_due",{wallet:fmtS(r.wallet_available),due:fmtS(r.salary_due)})}</div>
+                            {r.note&&<div style={{fontSize:10,color:T.t4,marginTop:1}}>{r.note}</div>}
+                            {!r.can_confirm&&<div style={{fontSize:9.5,fontWeight:600,color:T.red,marginTop:2}}>{t("finance.settle_req_cannot_confirm")}</div>}
+                            <div style={{display:"flex",gap:6,marginTop:5,justifyContent:"flex-end"}}>
+                              <button disabled={settleReqBusy===r.id} onClick={()=>rejectSettleReq(r)}
+                                style={{fontSize:10,fontWeight:700,color:T.red,background:T.surface,border:`1px solid ${T.redM}`,borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>{t("common.reject")}</button>
+                              <button disabled={settleReqBusy===r.id||!r.can_confirm} onClick={()=>confirmSettleReq(r)}
+                                style={{fontSize:10,fontWeight:700,color:"white",background:r.can_confirm?T.grn:T.t4,border:"none",borderRadius:6,padding:"3px 10px",cursor:r.can_confirm?"pointer":"not-allowed"}}>{t("common.confirm")}</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>}
                       {walletList.length===0&&<div style={{padding:"14px 8px",textAlign:"center",fontSize:11,color:T.t4}}>{t("finance.koi_staff_wallet_nahi")}</div>}
                       {walletList.map(w=>{const pct=w.limit>0?Math.max(0,Math.min(100,Math.round(w.balance/w.limit*100))):0;const due=Number(salaryDues[w.id])||0;return(
                         <div key={w.id} style={{padding:"8px 10px",borderRadius:7,marginBottom:4,background:T.surfaceB,border:`1px solid ${T.b1}`}}>
                           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                             <div style={{width:26,height:26,borderRadius:"50%",background:w.color+"22",border:`1px solid ${w.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:w.color,flexShrink:0}}>{w.initials}</div>
-                            <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.pending>0?`₹${fmtN(w.pending)} pending`:w.role}</div></div>
+                            <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.pending>0?t("finance.rs_amt_pending",{amt:fmtN(w.pending)}):t("finance.staff_label")}</div>{!w.canTopup&&<div style={{fontSize:9,fontWeight:600,color:T.amb}}>{t("finance.wallet_state_"+w.userState)}</div>}</div>
                             {/* WAL-10: minus balance = staff ne apne paise se kharcha kiya, company ko dena hai.
                                 Pehle fmtN (Math.abs) se −₹3,69,237 bhi "₹3,69,237" dikhta tha — jaise paisa staff ke paas ho. */}
                             <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:w.balance<0?T.red:T.t1}}>{fmtS(w.balance)}</div>{w.balance<0&&<div style={{fontSize:9,fontWeight:600,color:T.red}}>{t("finance.staff_wallet_company_owes")}</div>}<div style={{fontSize:9,color:T.t4}}>{w.limit>0?`/ ₹${fmtN(w.limit)}`:t("finance.no_limit")}</div></div>
@@ -4772,7 +4834,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 </div>
               </>)}
             </div>
-            {sendStaff&&<SendToStaffModal staff={sendStaff} onClose={()=>setSendStaff(null)} onDone={()=>{setSendStaff(null);loadWallets();}}/>}
+            {sendStaff&&<SendToStaffModal staff={sendStaff} accounts={apiAccounts} onClose={()=>setSendStaff(null)} onDone={()=>{setSendStaff(null);loadWallets();refreshAccounts();refreshTxns();}}/>}
             {/* Create Transaction dropdown */}
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowCreateTxn(!showCreateTxn)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
