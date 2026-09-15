@@ -1030,9 +1030,9 @@ function TabCustomers({ onOpenCompany }) {
       {/* Billing KPIs */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, marginBottom:16 }}>
         <StatCard label="Active Subscriptions" value={fmtNum(kpi.active_subs)} sub={`${fmtNum(kpi.pending_subs)} pending activation`} color={T.grn} Icon={IcDollar}/>
-        <StatCard label="Annual Contract Value" value={"₹" + fmtMoney(kpi.active_acv)} sub="active subs, excl. GST" color={T.blu} Icon={IcTrend}/>
+        <StatCard label="Annual Contract Value" value={"₹" + fmtMoney(kpi.active_acv)} sub={"live contracts, excl. GST" + (kpi.suspended_acv > 0 ? ` · excl. ₹${fmtMoney(kpi.suspended_acv)} suspended` : "")} color={T.blu} Icon={IcTrend}/>
         <StatCard label="Collected" value={"₹" + fmtMoney(kpi.collected)} sub="all-time, incl. GST" color={T.cyn} Icon={IcChk}/>
-        <StatCard label="Outstanding" value={"₹" + fmtMoney(kpi.outstanding)} sub={kpi.overdue_count > 0 ? `${kpi.overdue_count} overdue · ₹${fmtMoney(kpi.overdue_amount)}` : "nothing overdue"} color={kpi.overdue_count > 0 ? T.red : T.amb} Icon={IcActivity}/>
+        <StatCard label="Outstanding" value={"₹" + fmtMoney(kpi.outstanding)} sub={(kpi.overdue_count > 0 ? `${kpi.overdue_count} overdue · ₹${fmtMoney(kpi.overdue_amount)}` : "nothing overdue") + (kpi.outstanding_suspended > 0 ? ` · ₹${fmtMoney(kpi.outstanding_suspended)} from suspended clients` : "")} color={kpi.overdue_count > 0 ? T.red : T.amb} Icon={IcActivity}/>
       </div>
 
       {/* Billing-gap strip — customer live but nothing to bill against.

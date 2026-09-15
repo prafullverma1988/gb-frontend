@@ -171,10 +171,14 @@ function TabStats() {
 
       {/* Money — all of it from real client contracts (utils/saasRevenue.js) */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:12 }}>
-        <StatCard label="MRR"          value={"₹" + fmtMoney(kpi.mrr || 0)}         sub={`ARR: ₹${fmtMoney(kpi.arr || 0)} · ${kpi.active_subs || 0} contracts`} color={T.grn} Icon={IcDollar}/>
+        {/* Suspended clients are outside MRR/ARR (SAAS-04) — their contract value and unpaid
+            invoices are called out separately instead of silently counting as live revenue. */}
+        <StatCard label="MRR"          value={"₹" + fmtMoney(kpi.mrr || 0)}
+          sub={`ARR: ₹${fmtMoney(kpi.arr || 0)} · ${kpi.active_subs || 0} contracts` + (kpi.suspended_acv > 0 ? ` · excl. ₹${fmtMoney(kpi.suspended_acv)} ACV of suspended clients` : "")}
+          color={T.grn} Icon={IcDollar}/>
         <StatCard label="Collected"    value={"₹" + fmtMoney(kpi.collected || 0)}   sub="paid invoices, incl. GST" color={T.cyn} Icon={IcChk}/>
         <StatCard label="Outstanding"  value={"₹" + fmtMoney(kpi.outstanding || 0)}
-          sub={kpi.overdue_count > 0 ? `${kpi.overdue_count} overdue · ₹${fmtMoney(kpi.overdue)}` : "nothing overdue"}
+          sub={(kpi.overdue_count > 0 ? `${kpi.overdue_count} overdue · ₹${fmtMoney(kpi.overdue)}` : "nothing overdue") + (kpi.outstanding_suspended > 0 ? ` · ₹${fmtMoney(kpi.outstanding_suspended)} from suspended clients` : "")}
           color={kpi.overdue_count > 0 ? T.red : T.amb} Icon={IcActivity}/>
         {/* Replaces the old "Free Trial" card. Trials were counted from the
             legacy plan table that nothing enforces; an unbilled live customer
@@ -347,7 +351,7 @@ function TabStats() {
                 </div>
                 <div style={{ fontSize:12, color:T.t2, textAlign:"center" }}>{c.users} <span style={{fontSize:9,color:T.t4}}>users</span></div>
                 <div style={{ fontSize:12, color:T.t2, textAlign:"center" }}>{c.projects} <span style={{fontSize:9,color:T.t4}}>proj</span></div>
-                <div style={{ fontSize:12, fontWeight:600, color:T.grn, textAlign:"right" }}>{fmtMoney(c.revenue)}</div>
+                <div title="Received from the company's clients (receipts)" style={{ fontSize:12, fontWeight:600, color:T.grn, textAlign:"right" }}>{fmtMoney(c.revenue)} <span style={{fontSize:9,color:T.t4,fontWeight:400}}>recd</span></div>
               </div>
             ))}
             {(!data.company_stats || data.company_stats.length === 0) && (
