@@ -1797,9 +1797,18 @@ const dict = {
   "design_overview.revision_requested":                        "Revision requested",
   "design_overview.search_lead_name_phone_or_title":           "Search lead name, phone, or title...",
   "design_overview.shared_awaiting_reply":                     "📤 SHARED, AWAITING REPLY",
+  "design_overview.short_for_approval":                        "For Approval",
+  "design_overview.short_pending_upload":                      "Pending Upload",
+  "design_overview.short_revision":                            "Revision",
+  "design_overview.stage_awaiting_reply":                      "Awaiting Reply",
+  "design_overview.stage_client_decided":                      "Client Decided",
+  "design_overview.stage_internal_review":                     "Internal Review",
+  "design_overview.stage_ready_to_share":                      "Ready to Share",
+  "design_overview.stage_requested":                           "Requested",
   "design_overview.unknown_lead":                              "Unknown lead",
   "design_overview.untitled":                                  "Untitled",
   "design_overview.view_lead":                                 "View Lead →",
+  "design_overview.with_client":                               "With Client",
 
   // ── din_ka_byora ────────────────────────────────────────────
   "din_ka_byora.ankde_entries_photos_grn_haaziri_se":          "From data entries/photos/GRN/attendance — AI only writes the paragraph",

@@ -1799,9 +1799,18 @@ const dict = {
   "design_overview.revision_requested":                        "Revision requested",
   "design_overview.search_lead_name_phone_or_title":           "Search lead name, phone, or title...",
   "design_overview.shared_awaiting_reply":                     "📤 SHARED, AWAITING REPLY",
+  "design_overview.short_for_approval":                        "Approval ke liye",
+  "design_overview.short_pending_upload":                      "Upload baaki",
+  "design_overview.short_revision":                            "Revision",
+  "design_overview.stage_awaiting_reply":                      "Client ke jawab ka intezaar",
+  "design_overview.stage_client_decided":                      "Client ne faisla kar diya",
+  "design_overview.stage_internal_review":                     "Internal review",
+  "design_overview.stage_ready_to_share":                      "Share ke liye ready",
+  "design_overview.stage_requested":                           "Request aayi",
   "design_overview.unknown_lead":                              "Unknown lead",
   "design_overview.untitled":                                  "Untitled",
   "design_overview.view_lead":                                 "View Lead →",
+  "design_overview.with_client":                               "Client ke paas",
 
   // ── din_ka_byora ────────────────────────────────────────────
   "din_ka_byora.ankde_entries_photos_grn_haaziri_se":          "Data entries/photos/GRN/attendance se — AI sirf paragraph likhta hai",

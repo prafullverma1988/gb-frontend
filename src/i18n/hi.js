@@ -1796,9 +1796,18 @@ const dict = {
   "design_overview.revision_requested":                        "रिवीजन रिक्वेस्ट की गई",
   "design_overview.search_lead_name_phone_or_title":           "लीड का नाम, फ़ोन या टाइटल सर्च करो...",
   "design_overview.shared_awaiting_reply":                     "📤 शेयर किया गया, जवाब का इंतज़ार है",
+  "design_overview.short_for_approval":                        "अप्रूवल के लिए",
+  "design_overview.short_pending_upload":                      "अपलोड बाकी",
+  "design_overview.short_revision":                            "रिवीजन",
+  "design_overview.stage_awaiting_reply":                      "क्लाइंट के जवाब का इंतज़ार",
+  "design_overview.stage_client_decided":                      "क्लाइंट ने फैसला कर दिया",
+  "design_overview.stage_internal_review":                     "इंटरनल रिव्यू",
+  "design_overview.stage_ready_to_share":                      "शेयर के लिए रेडी",
+  "design_overview.stage_requested":                           "रिक्वेस्ट आई",
   "design_overview.unknown_lead":                              "अनजान लीड",
   "design_overview.untitled":                                  "बिना टाइटल के",
   "design_overview.view_lead":                                 "लीड देखो →",
+  "design_overview.with_client":                               "क्लाइंट के पास",
 
   // ── din_ka_byora ────────────────────────────────────────────
   "din_ka_byora.ankde_entries_photos_grn_haaziri_se":          "डाटा एंट्रीज़/फ़ोटोज़/जीआरएन/अटेंडेंस से — AI सिर्फ़ पैराग्राफ़ लिखता है",
