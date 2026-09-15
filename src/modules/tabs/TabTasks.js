@@ -2196,10 +2196,28 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
   const apply = async () => {
     setError("");
     if (!selected) { setError(t("tasks.pick_a_template_first")); return; }
-    if (!await window.confirmAsync(`"${tpl?.name}" load karein?\n\nProject ke maujooda Gantt tasks REPLACE ho jaayenge — sirf yeh template rahega. (To-Do tab affect nahi hota.)\n\nContinue?`)) return;
+    // Confirm se pehle taaza ginti (dry_run): kitne purane task jaayenge, kis par
+    // site ka kaam juda hai. Pehle confirm bina ginti ke tha aur server kaam wale
+    // task bhi mita deta tha (TSK-10). Kaam juda ho to server unhe archive tabhi
+    // karta hai jab hum saaf `archive_touched` bhejein — warna 409, kuch nahi mitta.
+    let pv = null;
+    try {
+      const dry = { template_id: selected, dry_run: true };
+      if (startDate) dry.start_date = startDate;
+      if (isDbTpl) dry.selected_groups = groups;
+      const pr = await api.taskTemplates.apply(projectId, dry);
+      if (pr && pr.success) pv = pr.data;
+    } catch (_) { /* ginti na mili — server phir bhi kaam wale task nahi mitayega (409) */ }
+    const oldN = pv ? Number(pv.tasks_wiped) || 0 : 0;
+    const msg = pv && pv.touched
+      ? t("tasks.tpl_confirm_archive", { name: tpl?.name || "", n: oldN, reasons: (pv.touched_reasons || []).join(", ") })
+      : oldN > 0 ? t("tasks.tpl_confirm_replace", { name: tpl?.name || "", n: oldN })
+      : t("tasks.tpl_confirm_empty", { name: tpl?.name || "" });
+    if (!await window.confirmAsync(msg)) return;
     setApplying(true);
     try {
       const body = { template_id: selected, wipe_existing: true, include_boq: includeBOQ };
+      if (pv && pv.touched) body.archive_touched = true;
       if (startDate) body.start_date = startDate;
       if (isDbTpl) body.selected_groups = groups;
       const r = await api.taskTemplates.apply(projectId, body);
@@ -2228,7 +2246,8 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
         {/* Body */}
         <div style={{padding:"14px 20px",overflowY:"auto",flex:1}}>
           {error && <div style={{background:T.redL,color:"#991B1B",padding:"8px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:`1px solid ${T.redM}`}}>{error}</div>}
-          {result && <div style={{background:T.grnL,color:"#065F46",padding:"10px 14px",borderRadius:7,fontSize:12.5,marginBottom:12,border:`1px solid ${T.grnM}`,fontWeight:600}}>{t("tasks.template_applied_tasks_inserted_tasks_result", { tasks_inserted: result.task_count || result.tasks_inserted, result: result.boq_inserted || 0, total_duration_days: result.total_duration_days })}</div>}
+          {result && <div style={{background:T.grnL,color:"#065F46",padding:"10px 14px",borderRadius:7,fontSize:12.5,marginBottom:12,border:`1px solid ${T.grnM}`,fontWeight:600}}>{t("tasks.template_applied_tasks_inserted_tasks_result", { tasks_inserted: result.task_count || result.tasks_inserted, result: result.boq_inserted || 0, total_duration_days: result.total_duration_days })}
+            {Number(result.tasks_archived) > 0 && <div style={{fontWeight:400,marginTop:3}}>{t("tasks.tpl_result_archived", { n: result.tasks_archived })}</div>}</div>}
 
           {!list && !error && <div style={{padding:24,textAlign:"center",color:T.t4,fontSize:12}}>{t("tasks.loading_templates")}</div>}
           {list && list.length === 0 && <div style={{padding:24,textAlign:"center",color:T.t4,fontSize:12}}>{t("tasks.no_templates_available_yet")}</div>}
@@ -2302,6 +2321,14 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
                         <span style={{fontSize:12.5,fontWeight:700,color:IND}}>{t("tasks.tpl_preview_line", { count: preview.task_count, days: preview.total_duration_days, end: fmtD(preview.end_date) })}</span>
                         {preview.skipped_count > 0 && <span style={{fontSize:10.5,color:T.t3}}>{t("tasks.tpl_preview_skipped", { n: preview.skipped_count })}</span>}
                       </>}
+                </div>
+              )}
+              {/* Purane task ka kya hoga — asli ginti (dry_run), kaam juda ho to archive (TSK-10) */}
+              {isDbTpl && !previewing && preview && Number(preview.tasks_wiped) > 0 && (
+                <div style={{marginTop:6,padding:"7px 12px",borderRadius:6,fontSize:11.5,lineHeight:1.45,
+                  background:preview.touched?T.ambL:T.surfaceB,border:`1px solid ${preview.touched?T.ambM:T.b1}`,color:preview.touched?"#92400E":T.t3}}>
+                  {t("tasks.tpl_preview_replace", { n: preview.tasks_wiped })}
+                  {preview.touched && <> — {t("tasks.tpl_preview_touched", { reasons: (preview.touched_reasons || []).join(", ") })}</>}
                 </div>
               )}
 
