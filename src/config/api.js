@@ -109,6 +109,13 @@ const api = async (endpoint, options={}) => {
     },
     signal: ctrl.signal,
   };
+  // Kachcha api(url, { body: {…} }) — fetch object ko "[object Object]" bhej
+  // deta hai aur server JSON padh hi nahi paata (Feature Requests submit isi se
+  // 5 mahine 500 deta raha, CON-02). Saada object/array ho to yahin JSON banao;
+  // string, FormData, Blob, ArrayBuffer jaise ke waise jaate hain.
+  if (config.body != null && (Array.isArray(config.body) || Object.prototype.toString.call(config.body) === "[object Object]")) {
+    config.body = JSON.stringify(config.body);
+  }
   endpoint = withWarehouse(endpoint, config);
   let res;
   try {

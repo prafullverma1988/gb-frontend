@@ -8,6 +8,7 @@ import DesignOverviewDrawer from "../components/DesignOverviewDrawer";
 import ExportMenu from "../components/DataExport";
 import ImportFileModal from "../components/ImportFileModal";
 import { t } from "../i18n";
+import { companyName } from "../utils/companyName";
 import { todayISO, isoDate } from "../utils/today";
 
 // ── ICONS ──────────────────────────────────────────────────────────
@@ -1078,7 +1079,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
               ``,
               `PDF aapko alag se share karta hu. Kripya review karein aur apne vichar batayein.`,
               ``,
-              `— GB Buildcon`,
+              `— ${companyName()}`,
             ].join("\n");
             const intlPhone = phone.length === 10 ? "91" + phone : phone;
             window.open("https://wa.me/" + intlPhone + "?text=" + encodeURIComponent(msg), "_blank");
@@ -2564,7 +2565,7 @@ function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
                     `• Grand Total: *${total}*`,
                     `• Validity: ${validity || 30} days`, ``,
                     `PDF aapko alag se share karta hu. Kripya review karein aur apne vichar batayein.`, ``,
-                    `— GB Buildcon`,
+                    `— ${companyName()}`,
                   ].join("\n");
                   const intl = phone.length === 10 ? "91" + phone : phone;
                   window.open("https://wa.me/" + intl + "?text=" + encodeURIComponent(msg), "_blank");

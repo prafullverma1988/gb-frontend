@@ -7,6 +7,7 @@ import CompanyTransfersTab from "../components/CompanyTransfersTab";
 import GrnIssueBlock from "../components/GrnIssueBlock";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 import { t, Rich } from "../i18n";
+import { companyName } from "../utils/companyName";
 import { todayISO } from "../utils/today";
 
 // Vendor ko jaane wale message ka contacts wala hissa — WhatsApp / Email /
@@ -1600,8 +1601,8 @@ function SendToVendorModal({po,onClose,onSent}){
   const itemSummary = (po.items||[]).map(it=>`${it.desc||"Item"} - ${it.qty}${it.unit?` ${it.unit}`:""} @ ₹${it.rate}`).join("\n");
   // Receiving contacts message me isliye ki vendor ka driver site pahunch kar
   // seedha call kar sake — yahi is poore feature ka asli output hai.
-  const waMsg = `*Purchase Order ${po.poNum||"PO-"+po.id}*\nFrom: GB Buildcon\nProject: ${po.project}\nDelivery: ${po.deliverySite||po.project}\nExp Date: ${po.delivery||"TBD"}\n${contactsText(po.receivingContacts)}\nItems:\n${itemSummary}\n\nTotal: ₹${(po.amount||0).toLocaleString("en-IN")}\n\nView/confirm: ${poLink}`;
-  const emailSubj = `Purchase Order ${po.poNum||"PO-"+po.id} — GB Buildcon`;
+  const waMsg = `*Purchase Order ${po.poNum||"PO-"+po.id}*\nFrom: ${companyName()}\nProject: ${po.project}\nDelivery: ${po.deliverySite||po.project}\nExp Date: ${po.delivery||"TBD"}\n${contactsText(po.receivingContacts)}\nItems:\n${itemSummary}\n\nTotal: ₹${(po.amount||0).toLocaleString("en-IN")}\n\nView/confirm: ${poLink}`;
+  const emailSubj = `Purchase Order ${po.poNum||"PO-"+po.id} — ${companyName()}`;
   const emailBody = waMsg.replace(/\*/g,"");
 
   const open = (url, via) => { window.open(url, "_blank", "noopener"); setSentVia(via); };

@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
 import { Credit } from "./Credit";
 import { t } from "../i18n";
+import { companyName } from "../utils/companyName";
 
 const T = {
   surface: "#FFFFFF",
@@ -50,6 +51,7 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
   const [msg, setMsg] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [publicShareUrl, setPublicShareUrl] = useState("");
+  const [closing, setClosing] = useState(null); // share id jiska link band ho raha hai
 
   const drawingId = target?.drawing_id;
   const leadId = target?.lead_id;
@@ -86,7 +88,7 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
           setMsg(
             `Namaste${name},\n\n`+
             `${ttl} (${ver}) drawing ready hai. Kripya review karke approval/changes batayein:\n\n`+
-            `${url}\n\nThanks,\nGB Buildcon team`
+            `${url}\n\nThanks,\n${companyName()} team`
           );
         }
       } catch (_) {}
@@ -97,18 +99,57 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
 
   // Open WhatsApp with current phone + message
   const openWhatsApp = async () => {
-    // Re-log share record (for history view)
+    // Is number ka apna share record — aur message me USI record ka link jaata hai
+    // (LIB-12). Pehle message me hamesha upar wala "link" record ka URL jaata tha
+    // aur is record ka token kabhi bheja hi nahi jaata; to history me is number
+    // wale card par "Link band karo" dabane se bheja hua link band hi nahi hota.
+    let text = msg;
     try {
-      await api.post(`/design/drawings/${drawingId}/share`, {
+      const r = await api.post(`/design/drawings/${drawingId}/share`, {
         channel: "whatsapp", shared_to: phone || null, lead_id: leadId || null,
       });
+      if (r?.success && r.data?.share_token && publicShareUrl) {
+        text = msg.split(publicShareUrl).join(buildPublicUrl(r.data.share_token));
+      }
       loadShares();
     } catch (_) {}
     const cleaned = (phone || "").replace(/[^\d]/g, "");
     const url = cleaned
-      ? `https://wa.me/${cleaned.startsWith("91")||cleaned.length>10?cleaned:"91"+cleaned}?text=${encodeURIComponent(msg)}`
-      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+      ? `https://wa.me/${cleaned.startsWith("91")||cleaned.length>10?cleaned:"91"+cleaned}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(url, "_blank", "noopener");
+  };
+
+  // Bheja hua link band karo (galat number, purana link) — us URL par drawing
+  // khulni band. Message me pada link hi band hua ho to naya link bana kar badal do.
+  const closeLink = async (s) => {
+    if (!(await window.confirmAsync?.(t("share_drawing.close_link_confirm")))) return;
+    setClosing(s.id);
+    try {
+      const r = await api.patch(`/design/drawings/${drawingId}/shares/${s.id}/deactivate`, {});
+      if (r?.success) {
+        window.toast?.success(r.message || t("share_drawing.link_closed"));
+        const closedUrl = buildPublicUrl(s.share_token);
+        if (publicShareUrl && publicShareUrl === closedUrl) {
+          const n = await api.post(`/design/drawings/${drawingId}/share`, {
+            channel: "link", shared_to: null, lead_id: leadId || null,
+          });
+          if (n?.success && n.data?.share_token) {
+            const fresh = buildPublicUrl(n.data.share_token);
+            setMsg((m) => m.split(closedUrl).join(fresh));
+            setPublicShareUrl(fresh);
+          } else {
+            setPublicShareUrl("");
+          }
+        }
+        loadShares();
+      } else {
+        window.toast?.error(r?.message || t("share_drawing.close_link_failed"));
+      }
+    } catch (_) {
+      window.toast?.error(t("share_drawing.close_link_failed"));
+    }
+    setClosing(null);
   };
 
   // Copy link to clipboard
@@ -285,6 +326,14 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
                       </span>
                     </div>
                     <div style={{ fontSize: 10.5, color: T.t4, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{url}</div>
+                    {/* Link par share ke waqt wala version hi khulta hai (LIB-12) + band karne ka button */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}>
+                      {s.shared_version && <span style={{ fontSize: 10.5, color: T.t3 }}>{t("share_drawing.opens_version", { version: s.shared_version })}</span>}
+                      <button onClick={() => closeLink(s)} disabled={closing === s.id}
+                        style={{ marginLeft: "auto", padding: "3px 9px", borderRadius: 5, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 10.5, fontWeight: 700, cursor: closing === s.id ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+                        {closing === s.id ? "…" : t("share_drawing.close_link")}
+                      </button>
+                    </div>
                     {(s.shared_by_name || s.shared_at) && (
                       <div style={{ marginTop: 5, paddingTop: 5, borderTop: `1px dashed ${T.b1}` }}>
                         {s.shared_by_name && <Credit label={t("share_drawing.shared_by")} name={s.shared_by_name} time={s.shared_at} />}

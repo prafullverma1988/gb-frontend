@@ -1669,6 +1669,9 @@ const dict = {
   "danger_delete.ye_faisla_audit_me_darj_hoga":                ". (यह डिसीजन ऑडिट में रिकॉर्ड होगा।)",
   "danger_delete.ye_sab_hamesha_ke_liye_mit":                  "यह सब हमेशा के लिए डिलीट हो जाएगा",
 
+  // ── data_export ─────────────────────────────────────────────
+  "data_export.generated_on_records":                          "{date} को बनाया · {n} रिकॉर्ड",
+
   // ── design ──────────────────────────────────────────────────
   "design.add_pin":                                            "पिन ऐड करो",
   "design.add_revision_pin_comment":                           "📍 रिवीजन पिन / कमेंट ऐड करो",
@@ -1796,9 +1799,18 @@ const dict = {
   "design_overview.revision_requested":                        "रिवीजन रिक्वेस्ट की गई",
   "design_overview.search_lead_name_phone_or_title":           "लीड का नाम, फ़ोन या टाइटल सर्च करो...",
   "design_overview.shared_awaiting_reply":                     "📤 शेयर किया गया, जवाब का इंतज़ार है",
+  "design_overview.short_for_approval":                        "अप्रूवल के लिए",
+  "design_overview.short_pending_upload":                      "अपलोड बाकी",
+  "design_overview.short_revision":                            "रिवीजन",
+  "design_overview.stage_awaiting_reply":                      "क्लाइंट के जवाब का इंतज़ार",
+  "design_overview.stage_client_decided":                      "क्लाइंट ने फैसला कर दिया",
+  "design_overview.stage_internal_review":                     "इंटरनल रिव्यू",
+  "design_overview.stage_ready_to_share":                      "शेयर के लिए रेडी",
+  "design_overview.stage_requested":                           "रिक्वेस्ट आई",
   "design_overview.unknown_lead":                              "अनजान लीड",
   "design_overview.untitled":                                  "बिना टाइटल के",
   "design_overview.view_lead":                                 "लीड देखो →",
+  "design_overview.with_client":                               "क्लाइंट के पास",
 
   // ── din_ka_byora ────────────────────────────────────────────
   "din_ka_byora.ankde_entries_photos_grn_haaziri_se":          "डाटा एंट्रीज़/फ़ोटोज़/जीआरएन/अटेंडेंस से — AI सिर्फ़ पैराग्राफ़ लिखता है",
@@ -5918,7 +5930,9 @@ const dict = {
   "public_drawing.download_file":                              "फाइल डाउनलोड करें",
   "public_drawing.invalid_link":                               "इनवैलिड लिंक",
   "public_drawing.link_not_available":                         "लिंक अवेलेबल नहीं है",
+  "public_drawing.shared_via_company":                          "{company} ने शेयर किया · Sanchalan",
   "public_drawing.shared_via_gb_buildcon_construction_manager": "GB बिल्डकॉन · कंस्ट्रक्शन मैनेजर के ज़रिए शेयर किया गया",
+  "public_drawing.shared_via_sanchalan":                       "Sanchalan से शेयर किया गया",
   "public_drawing.this_drawing_link_is_invalid_or":            "यह ड्राइंग लिंक इनवैलिड है या डीएक्टिवेट कर दिया गया है. भेजने वाले से संपर्क करें.",
 
   // ── receiving_contacts ──────────────────────────────────────
@@ -6085,6 +6099,9 @@ const dict = {
 
   // ── share_drawing ───────────────────────────────────────────
   "share_drawing.client_phone_target":                         "क्लाइंट फ़ोन {target}",
+  "share_drawing.close_link":                                  "लिंक बंद करो",
+  "share_drawing.close_link_confirm":                          "ये लिंक बंद करना है? जिसके पास ये लिंक है, वो ड्रॉइंग नहीं खोल पाएगा।",
+  "share_drawing.close_link_failed":                           "लिंक बंद नहीं हुआ — दोबारा try करो",
   "share_drawing.copy_public_link":                            "पब्लिक लिंक कॉपी करो",
   "share_drawing.copy_this_link":                              "ये लिंक कॉपी करो:",
   "share_drawing.country_code_zaroori_e_g_91":                 "कंट्री कोड ज़रूरी है (उदा. ९१ इंडिया के लिए)। खाली रखो तो वॉट्सऐप वेब में कॉन्टैक्ट पिक कर सकते हो।",
@@ -6095,10 +6112,12 @@ const dict = {
   "share_drawing.first_viewed_vnew":                           "फर्स्ट व्यूड {vnew}",
   "share_drawing.generating_public_link":                      "पब्लिक लिंक जनरेट हो रहा है…",
   "share_drawing.link":                                        "🔗 लिंक",
+  "share_drawing.link_closed":                                 "लिंक बंद हो गया",
   "share_drawing.link_message_me_already_hai_pdf":             "⚠️ लिंक मैसेज में ऑलरेडी है। PDF डाउनलोड करके वॉट्सऐप विंडो में ड्रैग-ड्रॉप या 📎 अटैच बटन से फाइल भी अटैच करो (वॉट्सऐप वेब ऑटो-अटैच नहीं करता)।",
   "share_drawing.message_editable":                            "मैसेज (एडिटेबल)",
   "share_drawing.not_viewed":                                  "व्यूड नहीं",
   "share_drawing.open_whatsapp":                               "💬 वॉट्सऐप ओपन करो",
+  "share_drawing.opens_version":                               "इस लिंक पर {version} खुलता है",
   "share_drawing.pdf_link":                                    "📄 PDF + लिंक",
   "share_drawing.pdf_link_not_available":                      "PDF लिंक अवेलेबल नहीं है",
   "share_drawing.public_link_in_message":                      "पब्लिक लिंक मैसेज में",

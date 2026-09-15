@@ -1670,6 +1670,9 @@ const dict = {
   "danger_delete.ye_faisla_audit_me_darj_hoga":                ". (This decision will be recorded in audit.)",
   "danger_delete.ye_sab_hamesha_ke_liye_mit":                  "All of this will be permanently deleted",
 
+  // ── data_export ─────────────────────────────────────────────
+  "data_export.generated_on_records":                          "Generated on {date} · {n} records",
+
   // ── design ──────────────────────────────────────────────────
   "design.add_pin":                                            "Add Pin",
   "design.add_revision_pin_comment":                           "📍 Add Revision Pin / Comment",
@@ -1797,9 +1800,18 @@ const dict = {
   "design_overview.revision_requested":                        "Revision requested",
   "design_overview.search_lead_name_phone_or_title":           "Search lead name, phone, or title...",
   "design_overview.shared_awaiting_reply":                     "📤 SHARED, AWAITING REPLY",
+  "design_overview.short_for_approval":                        "For Approval",
+  "design_overview.short_pending_upload":                      "Pending Upload",
+  "design_overview.short_revision":                            "Revision",
+  "design_overview.stage_awaiting_reply":                      "Awaiting Reply",
+  "design_overview.stage_client_decided":                      "Client Decided",
+  "design_overview.stage_internal_review":                     "Internal Review",
+  "design_overview.stage_ready_to_share":                      "Ready to Share",
+  "design_overview.stage_requested":                           "Requested",
   "design_overview.unknown_lead":                              "Unknown lead",
   "design_overview.untitled":                                  "Untitled",
   "design_overview.view_lead":                                 "View Lead →",
+  "design_overview.with_client":                               "With Client",
 
   // ── din_ka_byora ────────────────────────────────────────────
   "din_ka_byora.ankde_entries_photos_grn_haaziri_se":          "From data entries/photos/GRN/attendance — AI only writes the paragraph",
@@ -5919,7 +5931,9 @@ const dict = {
   "public_drawing.download_file":                              "Download File",
   "public_drawing.invalid_link":                               "Invalid link",
   "public_drawing.link_not_available":                         "Link not available",
+  "public_drawing.shared_via_company":                          "Shared by {company} · Sanchalan",
   "public_drawing.shared_via_gb_buildcon_construction_manager": "Shared via GB Buildcon · Construction Manager",
+  "public_drawing.shared_via_sanchalan":                       "Shared via Sanchalan",
   "public_drawing.this_drawing_link_is_invalid_or":            "This drawing link is invalid or has been deactivated. Please contact the sender.",
 
   // ── receiving_contacts ──────────────────────────────────────
@@ -6086,6 +6100,9 @@ const dict = {
 
   // ── share_drawing ───────────────────────────────────────────
   "share_drawing.client_phone_target":                         "Client Phone {target}",
+  "share_drawing.close_link":                                  "Close link",
+  "share_drawing.close_link_confirm":                          "Close this link? Anyone who has it will no longer be able to open the drawing.",
+  "share_drawing.close_link_failed":                           "Could not close the link — try again",
   "share_drawing.copy_public_link":                            "Copy public link",
   "share_drawing.copy_this_link":                              "Copy this link:",
   "share_drawing.country_code_zaroori_e_g_91":                 "Country code is mandatory (e.g. 91 for India). Leave blank to pick contact in WhatsApp web.",
@@ -6096,10 +6113,12 @@ const dict = {
   "share_drawing.first_viewed_vnew":                           "First viewed {vnew}",
   "share_drawing.generating_public_link":                      "Generating public link…",
   "share_drawing.link":                                        "🔗 Link",
+  "share_drawing.link_closed":                                 "Link closed",
   "share_drawing.link_message_me_already_hai_pdf":             "⚠️ Link is already in the message. Download PDF and drag-drop into WhatsApp window or attach file using the 📎 attach button (WhatsApp Web does not auto-attach).",
   "share_drawing.message_editable":                            "Message (editable)",
   "share_drawing.not_viewed":                                  "Not viewed",
   "share_drawing.open_whatsapp":                               "💬 Open WhatsApp",
+  "share_drawing.opens_version":                               "This link opens {version}",
   "share_drawing.pdf_link":                                    "📄 PDF + Link",
   "share_drawing.pdf_link_not_available":                      "PDF link not available",
   "share_drawing.public_link_in_message":                      "Public link in message",

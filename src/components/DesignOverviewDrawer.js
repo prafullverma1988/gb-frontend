@@ -1,7 +1,7 @@
 // ── DESIGN OVERVIEW DRAWER ──────────────────────────────────────────
 // Company-wide view of ALL lead-linked design requests across CRM.
-// Shows status buckets: Awaiting Drawing | Awaiting Approval | Approved
-//                       | Needs Revision | Rejected
+// Shows status buckets: Awaiting Drawing | Awaiting Approval | With Client
+//                       | Approved | Needs Revision | Rejected
 // Filterable via top chips + searchable by lead name / title.
 //
 // Usage:
@@ -26,12 +26,16 @@ const T = {
   pur: "#7C3AED", purL: "#F5F3FF", purM: "#DDD6FE",
 };
 
+// with_client (LIB-11): andar approve ho chuki, client ko bhejni hai ya client ke
+// jawab ka intezaar — server (/design/leads-overview) yahi bucket deta hai. Pehle
+// aisi drawing "Approved" me ginti thi. Chip ke chhote naam bhi ab t() se.
 const BUCKETS = [
-  { id: "awaiting_drawing",  get label() { return t("design_overview.awaiting_drawing"); },  short: "Pending Upload",  c: T.amb, bg: T.ambL, brd: T.ambM, ic: "⏳" },
-  { id: "awaiting_approval", get label() { return t("design_overview.awaiting_approval"); }, short: "For Approval",    c: T.blu, bg: T.bluL, brd: T.bluM, ic: "👀" },
-  { id: "approved",          get label() { return t("common.approved"); },          short: "Approved",        c: T.grn, bg: T.grnL, brd: T.grnM, ic: "✓" },
-  { id: "revision",          get label() { return t("design_overview.needs_revision"); },    short: "Revision",        c: T.pur, bg: T.purL, brd: T.purM, ic: "↻" },
-  { id: "rejected",          get label() { return t("common.rejected"); },          short: "Rejected",        c: T.red, bg: T.redL, brd: T.redM, ic: "✕" },
+  { id: "awaiting_drawing",  get label() { return t("design_overview.awaiting_drawing"); },  get short() { return t("design_overview.short_pending_upload"); }, c: T.amb, bg: T.ambL, brd: T.ambM, ic: "⏳" },
+  { id: "awaiting_approval", get label() { return t("design_overview.awaiting_approval"); }, get short() { return t("design_overview.short_for_approval"); },   c: T.blu, bg: T.bluL, brd: T.bluM, ic: "👀" },
+  { id: "with_client",       get label() { return t("design_overview.with_client"); },       get short() { return t("design_overview.with_client"); },          c: "#0891B2", bg: "#ECFEFF", brd: "#A5F3FC", ic: "📤" },
+  { id: "approved",          get label() { return t("common.approved"); },          get short() { return t("common.approved"); },                      c: T.grn, bg: T.grnL, brd: T.grnM, ic: "✓" },
+  { id: "revision",          get label() { return t("design_overview.needs_revision"); },    get short() { return t("design_overview.short_revision"); },       c: T.pur, bg: T.purL, brd: T.purM, ic: "↻" },
+  { id: "rejected",          get label() { return t("common.rejected"); },          get short() { return t("common.rejected"); },                      c: T.red, bg: T.redL, brd: T.redM, ic: "✕" },
 ];
 
 export default function DesignOverviewDrawer({ open, onClose, onOpenLead, onShareClick }) {
@@ -195,7 +199,9 @@ function RequestCard({ r: initial, onOpenLead, onShareClick, onClose }) {
           client_status: status === "Revision" ? null : status,
           client_note: payload.note || p.client_note,
           drawing_status: status === "Revision" ? "Revision" : p.drawing_status,
-          bucket: status === "Revision" ? "revision" : (status === "Rejected" ? "rejected" : p.bucket),
+          // server ke bucket jaisa: client ki haan + andar approve = approved, andar baaki = awaiting_approval
+          bucket: status === "Revision" ? "revision" : status === "Rejected" ? "rejected"
+            : status === "Approved" ? (p.drawing_status === "Approved" ? "approved" : "awaiting_approval") : p.bucket,
         }));
       }
     } catch (_) {}
@@ -227,7 +233,7 @@ function RequestCard({ r: initial, onOpenLead, onShareClick, onClose }) {
     if (cs === "SharedWithClient") stage = 4;
     if (cs === "Approved" || cs === "Rejected") stage = 5;
   }
-  const stageLbl = ["", "Requested", "Internal Review", "Ready to Share", "Awaiting Reply", "Client Decided"][stage] || "";
+  const stageLbl = ["", t("design_overview.stage_requested"), t("design_overview.stage_internal_review"), t("design_overview.stage_ready_to_share"), t("design_overview.stage_awaiting_reply"), t("design_overview.stage_client_decided")][stage] || "";
   const isAdminApproved = ds === "Approved";
   const isApproved  = cs === "Approved";
   const isRejected  = cs === "Rejected";
@@ -283,7 +289,7 @@ function RequestCard({ r: initial, onOpenLead, onShareClick, onClose }) {
               {r.drawing_title || r.title}
             </div>
             <div style={{ fontSize: 10.5, color: T.t4, marginTop: 1 }}>
-              v{r.current_version || 1} · {r.drawing_size || "—"}
+              {String(r.current_version || 1).replace(/^v?/i, "v")} · {r.drawing_size || "—"}
             </div>
           </div>
           {r.drawing_url && (

@@ -99,7 +99,10 @@ export default function PublicDrawingPage() {
 
       {/* Footer */}
       <div style={{ padding: "12px 18px", textAlign: "center", color: "rgba(255,255,255,0.35)", fontSize: 11, borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-       {t("public_drawing.shared_via_gb_buildcon_construction_manager")}
+       {/* Link bhejne wali company ka naam (API company_name) — pehle har company ke link par "GB Buildcon" (LIB-16) */}
+       {data.company_name
+         ? t("public_drawing.shared_via_company", { company: data.company_name })
+         : t("public_drawing.shared_via_sanchalan")}
       </div>
     </div>
   );
