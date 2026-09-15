@@ -6352,7 +6352,7 @@ const dict = {
   "stmt.nothing_here":                                        "Nothing here — that is good news",
   "stmt.out_already":                                         "already imported",
   "stmt.out_created":                                         "created",
-  "stmt.out_dup":                                             "suspect — same day, same amount exists",
+  "stmt.out_dup":                                             "suspect — same amount already on a nearby date",
   "stmt.out_invalid":                                         "failed",
   "stmt.outside_window":                                      "{n} book entries fell outside the statement period and were left out.",
   "stmt.party_all":                                           "All parties",

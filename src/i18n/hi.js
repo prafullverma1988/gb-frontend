@@ -6351,7 +6351,7 @@ const dict = {
   "stmt.nothing_here":                                        "यहाँ कुछ नहीं — अच्छी बात है",
   "stmt.out_already":                                         "पहले से बनी है",
   "stmt.out_created":                                         "बन गई",
-  "stmt.out_dup":                                             "शक़ — उसी दिन वही रक़म पहले से",
+  "stmt.out_dup":                                             "शक़ — आस-पास की तारीख़ पर वही रक़म पहले से",
   "stmt.out_invalid":                                         "नहीं बनी",
   "stmt.outside_window":                                      "किताब की {n} entry statement के दौर से बाहर थी, उन्हें छोड़ दिया गया।",
   "stmt.party_all":                                           "सारी parties",

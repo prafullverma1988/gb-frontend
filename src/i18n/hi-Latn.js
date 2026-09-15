@@ -6354,7 +6354,7 @@ const dict = {
   "stmt.nothing_here":                                        "Yahan kuch nahi — achhi baat hai",
   "stmt.out_already":                                         "pehle se bani hai",
   "stmt.out_created":                                         "ban gayi",
-  "stmt.out_dup":                                             "shaq — usi din wahi rakam pehle se",
+  "stmt.out_dup":                                             "shaq — aas-paas ki tareekh par wahi rakam pehle se",
   "stmt.out_invalid":                                         "nahi bani",
   "stmt.outside_window":                                      "Kitaab ki {n} entry statement ke daur se bahar thi, unhe chhod diya gaya.",
   "stmt.party_all":                                           "Saari parties",
