@@ -2810,7 +2810,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     catch(e){setSaveErr(e.message);}
     setActing(p=>({...p,["w"+it.txn_id]:null}));
   };
-  const WCAT_LBL={site_exp:"Site Expense",party_pay:"Party Payment",salary:"Salary",petrol:"Petrol",fuel:"Diesel",service:"Service",generic:"Other"};
+  // WAL-16: category chip user ki bhasha me (pehle English map seedha likha tha)
+  const WCAT_LBL={site_exp:t("projects.wcat_site_exp"),party_pay:t("projects.wcat_party_pay"),salary:t("projects.wcat_salary"),petrol:t("projects.wcat_petrol"),fuel:t("projects.wcat_fuel"),service:t("projects.wcat_service"),generic:t("projects.wcat_generic")};
   const WalletApprovalCard=({item:it})=>{
     const act=acting["w"+it.txn_id];
     // Clarification thread — admin's "Ask info" question + staff's reply.
@@ -2831,7 +2832,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     return(
       <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.blu}}>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3,flexWrap:"wrap"}}>
-          <span style={{fontSize:9.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>{t("projects.wallet_wcat_lbl", { WCAT_LBL: WCAT_LBL[it.wallet_category]||"Other" })}</span>
+          <span style={{fontSize:9.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>{t("projects.wallet_wcat_lbl", { WCAT_LBL: WCAT_LBL[it.wallet_category]||WCAT_LBL.generic })}</span>
           {it.is_transfer&&<span style={{fontSize:9,fontWeight:700,color:"#7C3AED",background:"#F5F3FF",padding:"1px 7px",borderRadius:10}}>{t("projects.transfer")}</span>}
           {it.limit_exceeded&&<span style={{fontSize:9,fontWeight:700,color:T.red,background:T.redL,padding:"1px 7px",borderRadius:10}}>{t("projects.limit_breach")}</span>}
         </div>

@@ -5954,7 +5954,7 @@ function OverviewTab({isAdmin,setTab,onOpenSalary}){
     actions.pendingLeaves>0&&{c:T.amb,l:`${actions.pendingLeaves} leave approval${actions.pendingLeaves>1?"s":""} pending`,btn:"Review",go:()=>setTab("office-leave")},
     actions.pendingAttEdits>0&&{c:T.blu,l:`${actions.pendingAttEdits} attendance edit request${actions.pendingAttEdits>1?"s":""}`,btn:"Review",go:()=>setTab("office-att")},
     actions.pendingReviews>0&&{c:T.red,l:t("payroll.pendingreviews_outside_geofence_punch_review_pending", { pendingReviews: actions.pendingReviews }),btn:"Review",go:()=>setTab("office-att")},
-    actions.settleRequests.count>0&&{c:T.grn,l:`${actions.settleRequests.count} salary settle request${actions.settleRequests.count>1?"s":""} — ₹${fmtN(actions.settleRequests.amount)}`,sub:t("payroll.finance_staff_wallets_me_confirm_hote")},
+    actions.settleRequests.count>0&&{c:T.grn,l:t("payroll.n_salary_settle_requests_amt",{n:actions.settleRequests.count,amt:fmtN(actions.settleRequests.amount)}),sub:t("payroll.finance_staff_wallets_me_confirm_hote")},
     !actions.run.finalized&&{c:T.pur,l:t("payroll.months_payroll_run_pending", { MONTHS: MONTHS[actions.run.month-1] }),btn:"Start Run",go:()=>onOpenSalary("run")},
     actions.run.finalized&&{c:T.grn,l:t("payroll.months_payroll_finalized", { MONTHS: MONTHS[actions.run.month-1] }),btn:"View",go:()=>onOpenSalary("run")},
   ].filter(Boolean):[];
