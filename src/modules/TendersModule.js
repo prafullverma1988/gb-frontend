@@ -7052,25 +7052,25 @@ function RaBillDrawer({tenderId, tender, billId, onClose, onChanged, onReceive, 
 }
 
 // ── RA BILLS TAB ────────────────────────────────────────────────────
-function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
+function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary, projectNames}) {
   const [showSetup, setSetup]   = useState(false);
   const [showNew, setNew]       = useState(false);
   const [editBill, setEditBill] = useState(null);
   const [openBill, setOpenBill] = useState(null);
   const [receiveOn, setRecv]    = useState(null);
-  const [fin, setFin] = useState({parties:[], accounts:[], projects:[]});
+  const [fin, setFin] = useState({parties:[], accounts:[]});
 
   // Receive shortcut Finance ka hi form kholta hai — usko parties /
-  // accounts / projects chahiye.
+  // accounts / projects chahiye. Projects TenderDetail pehle hi /projects se
+  // la chuka hai (projectNames) — yahan dobara nahi mangte (TND-17).
   useEffect(()=>{
     let dead = false;
-    Promise.all([api.get("/finance/parties"), api.get("/finance/accounts"), api.get("/projects")])
-      .then(([p,a,pr])=>{
+    Promise.all([api.get("/finance/parties"), api.get("/finance/accounts")])
+      .then(([p,a])=>{
         if (dead) return;
         setFin({
           parties:  p?.success && Array.isArray(p.data)  ? p.data : [],
           accounts: a?.success && Array.isArray(a.data)  ? a.data : [],
-          projects: pr?.success && Array.isArray(pr.data) ? pr.data.map(x=>x.name) : [],
         });
       }).catch(()=>{});
     return ()=>{ dead = true; };
@@ -7194,7 +7194,7 @@ function RaBillsTab({tenderId, tender, bills, loading, reload, boqSummary}) {
         preRaBillId={receiveOn.id}
         dbParties={fin.parties}
         dbAccounts={fin.accounts}
-        dbProjects={fin.projects}
+        dbProjects={projectNames || []}
         onClose={()=>setRecv(null)}
         onSaved={()=>{ setRecv(null); reload(); }}
       />
@@ -7254,6 +7254,8 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
   // Sites tab supervisor dikhane ke liye — detail API supervisor nahi
   // deta, isliye /projects list se enrich karte hain.
   const [projMeta, setProjMeta] = useState({});
+  // Wahi /projects list ke naam (usi kram me) — RA Bills tab ke Receive form ko.
+  const [projNames, setProjNames] = useState([]);
   // BOQ alag endpoint par hai. Tab kholne se pehle hi la lete hain taaki
   // tab par item_count ka badge dikh sake.
   const [boq, setBoq] = useState(null);
@@ -7301,6 +7303,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
       const m = {};
       for (const p of (r.data||[])) m[p.id] = p;
       setProjMeta(m);
+      setProjNames((r.data||[]).map(p=>p.name));
     }).catch(()=>{});
   },[]);
 
@@ -7654,7 +7657,7 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
       {/* ══ RA BILLS ══ */}
       {tab==="rabills" && (
         <RaBillsTab tenderId={tenderId} tender={data} bills={bills} loading={billsLoading}
-          boqSummary={(boq && boq.summary) || null}
+          boqSummary={(boq && boq.summary) || null} projectNames={projNames}
           reload={()=>{ loadBills(); load(); }}/>
       )}
 
