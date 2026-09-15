@@ -3159,7 +3159,7 @@ const dict = {
   "machinery.abhi_tay_nahi":                                   "— abhi tay nahi —",
   "machinery.account_level":                                   "account level",
   "machinery.action_needed":                                   "Action needed",
-  "machinery.agle_45_din_me_kuch_due":                         "Agle 45 din me kuch due nahi.",
+  "machinery.agle_45_din_me_kuch_due":                         "Agle 30 din me kuch due nahi.",
   "machinery.agli_service_kab":                                "Agli service kab",
   "machinery.api_base_url":                                    "API base URL",
   "machinery.api_key":                                         "API key",

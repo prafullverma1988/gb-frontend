@@ -3156,7 +3156,7 @@ const dict = {
   "machinery.abhi_tay_nahi":                                   "— अभी तय नहीं —",
   "machinery.account_level":                                   "अकाउंट लेवल",
   "machinery.action_needed":                                   "एक्शन चाहिए",
-  "machinery.agle_45_din_me_kuch_due":                         "अगले 45 दिन में कुछ ड्यू नहीं।",
+  "machinery.agle_45_din_me_kuch_due":                         "अगले 30 दिन में कुछ ड्यू नहीं।",
   "machinery.agli_service_kab":                                "अगली सर्विस कब",
   "machinery.api_base_url":                                    "एपीआई बेस यूआरएल",
   "machinery.api_key":                                         "एपीआई की",

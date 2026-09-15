@@ -3157,7 +3157,7 @@ const dict = {
   "machinery.abhi_tay_nahi":                                   "— not decided yet —",
   "machinery.account_level":                                   "account level",
   "machinery.action_needed":                                   "Action needed",
-  "machinery.agle_45_din_me_kuch_due":                         "Nothing due in the next 45 days.",
+  "machinery.agle_45_din_me_kuch_due":                         "Nothing due in the next 30 days.",
   "machinery.agli_service_kab":                                "Next service due",
   "machinery.api_base_url":                                    "API base URL",
   "machinery.api_key":                                         "API key",
