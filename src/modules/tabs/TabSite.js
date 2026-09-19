@@ -388,6 +388,16 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
                     <b>{t("site.client_visit")}:</b> {day.topup.client_visit}
                   </div>
                 )}
+                {/* Site ne is din ki DPR se kuch hisse hata diye hon to wo
+                    yahan dikhe — warna padhne wala samajhta hai ki hua hi nahi. */}
+                {day.share?.day && day.share.day.length < (day.share.sections || []).length && (
+                  <div style={{ fontSize: 11.5, color: T.amb, marginTop: 7 }}>
+                    {t("site.hisse_hataye", {
+                      x: (day.share.sections || []).filter(s => !day.share.day.includes(s))
+                        .map(s => t("dpr.sec_" + s)).join(", "),
+                    })}
+                  </div>
+                )}
                 <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${T.b1}`, fontSize: 11.5, color: T.t4 }}>
                   {t("site.submitted_by")} <strong style={{ color: T.t1 }}>{day.dpr?.submitted_by_name || "—"}</strong>
                   {day.dpr?.approved_by_name && <> · {t("site.approved_by")} <strong style={{ color: T.t1 }}>{day.dpr.approved_by_name}</strong></>}
@@ -469,6 +479,23 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
                 </tbody>
               </table>
             </div>
+
+            {(a.photos?.items || []).some(p => p.src === "equipment") && (
+              <div style={{ ...card, overflow: "hidden" }}>
+                <div style={{ padding: "9px 14px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}`,
+                  fontSize: 12, fontWeight: 700, color: T.t2 }}>
+                  {t("site.machine_photos")}
+                </div>
+                <div style={{ padding: "10px 14px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {a.photos.items.filter(p => p.src === "equipment").map((p, i) => (
+                    <a key={i} href={p.url} target="_blank" rel="noreferrer" title={p.caption || ""}>
+                      <img src={p.url} alt="" loading="lazy"
+                        style={{ width: 104, height: 78, objectFit: "cover", borderRadius: 7, border: `1px solid ${T.b1}` }} />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {(a.trips || []).length > 0 && (
               <div style={{ ...card, overflow: "hidden" }}>
