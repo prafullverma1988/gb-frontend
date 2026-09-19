@@ -3838,6 +3838,24 @@ const DONE_COLOUR = "#059669";   // laid — same green the rest of the app uses
 // in green over the part still to do. Walks the vertices, then interpolates
 // inside the segment where the distance runs out — otherwise the colour would
 // only ever change at a vertex, which on a 500 m stretch is a visible lie.
+// ── Tooti hui line ("Tod do") ────────────────────────────────────────
+// Ek hi line, beech me khaali jagah — pipeline road crossing chhod kar
+// aage badhti hai, ya line par T nikalta hai. `gaps` batata hai kis point
+// se naya tukda shuru hota hai. Naksha par gap par lakeer NAHI khinchti,
+// aur chainage/progress dono usi jagah ko chhod kar chalte hain — warna
+// green tip aur bill ka aankda alag-alag jagah dikhate.
+function partsOfLine(coords, gaps) {
+  const arr = Array.isArray(coords) ? coords : [];
+  const cuts = (Array.isArray(gaps) ? gaps : [])
+    .map(Number).filter((i) => Number.isInteger(i) && i > 0 && i < arr.length)
+    .filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
+  if (!cuts.length) return arr.length ? [arr] : [];
+  const out = []; let from = 0;
+  for (const c of cuts) { out.push(arr.slice(from, c)); from = c; }
+  out.push(arr.slice(from));
+  return out.filter((p) => p.length);
+}
+
 function splitPathAt(g, coords, metres) {
   const pts = (coords || []).map(c => new g.maps.LatLng(c.lat, c.lng));
   if (pts.length < 2 || !(metres > 0)) return { done: [], rest: pts };
@@ -4302,59 +4320,88 @@ function MapTab({tenderId, sites}) {
         // ki ROW ka ehsaas nahi deti, aur naali kahan padegi ye bhi tabhi
         // samajh aata hai. Zoom badalne par apne aap sahi naapti hai kyunki
         // ye asli lat/lng ki aakriti hai, pixel ki moti lakeer nahi.
+        // Tooti hui line ho to har tukda apna — footprint bhi, lakeer bhi.
+        const parts = partsOfLine(coords, it.gaps);
         if (Number(it.width_m) > 0) {
-          const foot = corridorJS(coords, Number(it.width_m));
-          if (foot.length >= 3) {
-            const poly = new g.maps.Polygon({ paths: foot, strokeColor: lineColour(it.atype),
-              strokeOpacity: 0.35, strokeWeight: 1, fillColor: lineColour(it.atype),
-              fillOpacity: 0.14, clickable: false, map: mapRef.current });
-            shapesRef.current.push(poly);
-          }
+          parts.forEach((part) => {
+            const foot = corridorJS(part, Number(it.width_m));
+            if (foot.length >= 3) {
+              const poly = new g.maps.Polygon({ paths: foot, strokeColor: lineColour(it.atype),
+                strokeOpacity: 0.35, strokeWeight: 1, fillColor: lineColour(it.atype),
+                fillOpacity: 0.14, clickable: false, map: mapRef.current });
+              shapesRef.current.push(poly);
+            }
+          });
         }
-        const pl = new g.maps.Polyline({ path: coords, strokeColor: lineColour(it.atype),
-          strokeWeight: 4, strokeOpacity: 0.9, map: mapRef.current });
-        // Click = stretch ka dashboard. (Pehle sirf ek toast tha.)
-        pl.addListener("click", ()=>openStretch(it.id));
-        shapesRef.current.push(pl);
+        parts.forEach((part) => {
+          const pl = new g.maps.Polyline({ path: part, strokeColor: lineColour(it.atype),
+            strokeWeight: 4, strokeOpacity: 0.9, map: mapRef.current });
+          // Click = stretch ka dashboard. (Pehle sirf ek toast tha.)
+          pl.addListener("click", ()=>openStretch(it.id));
+          shapesRef.current.push(pl);
+        });
         // Chainage ke nishaan — sirf un lines par jinka shuruaati chainage
         // pata hai. Step lambai ke hisaab se, warna 20 km ki line par
         // hazaar label ban kar naksha dhak jaata.
         if (it.start_chainage_m != null) {
           const L = Number(it.length_m || 0);
           const step = L >= 5000 ? 1000 : L >= 2000 ? 500 : L >= 400 ? 100 : L >= 100 ? 50 : 0;
-          chainageMarks(coords, step, Number(it.start_chainage_m), (a,b)=>pathLenM([a,b])).forEach((c)=>{
-            shapesRef.current.push(new g.maps.Marker({
-              map: mapRef.current, position: { lat:c.lat, lng:c.lng }, clickable:false, zIndex:6,
-              label: { text: c.label, color:"#0369A1", fontSize:"10px", fontWeight:"700" },
-              icon: { path: g.maps.SymbolPath.CIRCLE, scale:2.5, fillColor:"#7DD3FC", fillOpacity:0.95,
-                strokeColor:"#0369A1", strokeWeight:1 },
-            }));
+          // Chainage gap ke aar-paar lagataar chalti hai, par chhodi hui
+          // jagah usme judti nahi — isliye har tukde par alag, pichhle
+          // tukde ke ant se aage.
+          let chAt = Number(it.start_chainage_m);
+          parts.forEach((part) => {
+            chainageMarks(part, step, chAt, (a,b)=>pathLenM([a,b])).forEach((c)=>{
+              shapesRef.current.push(new g.maps.Marker({
+                map: mapRef.current, position: { lat:c.lat, lng:c.lng }, clickable:false, zIndex:6,
+                label: { text: c.label, color:"#0369A1", fontSize:"10px", fontWeight:"700" },
+                icon: { path: g.maps.SymbolPath.CIRCLE, scale:2.5, fillColor:"#7DD3FC", fillOpacity:0.95,
+                  strokeColor:"#0369A1", strokeWeight:1 },
+              }));
+            });
+            chAt += pathLenM(part);
           });
         }
         if (g.maps.geometry?.spherical) {
+          // Kitna ho chuka, ye lambai me naapa jaata hai — aur tooti line
+          // par lambai gap chhod kar hi ginti hai. Isliye tukdon par CHAL
+          // kar rang bharte hain: fromM se toM tak, gap ko bina gine.
+          const walkRange = (fromM, toM, draw) => {
+            let acc = 0;
+            for (const part of parts) {
+              const L = pathLenM(part);
+              if (L <= 0) continue;
+              const a = Math.max(0, fromM - acc), b = Math.min(L, toM - acc);
+              if (b > a + 0.01) {
+                const { done: uptoB } = splitPathAt(g, part, b);
+                const ll = uptoB.map((p) => ({ lat: p.lat(), lng: p.lng() }));
+                const seg = a > 0.01 ? splitPathAt(g, ll, a).rest : uptoB;
+                if (seg.length >= 2) draw(seg);
+              }
+              acc += L;
+              if (acc >= toM) break;
+            }
+          };
           // Pakka (MB) — solid green.
           if (doneM > 0) {
-            const { done } = splitPathAt(g, coords, doneM);
-            if (done.length >= 2) {
-              const dl = new g.maps.Polyline({ path: done, strokeColor: DONE_COLOUR,
+            walkRange(0, doneM, (seg) => {
+              const dl = new g.maps.Polyline({ path: seg, strokeColor: DONE_COLOUR,
                 strokeWeight: 6, strokeOpacity: 0.95, zIndex: 2, map: mapRef.current });
               dl.addListener("click", ()=>openStretch(it.id));
               shapesRef.current.push(dl);
-            }
+            });
           }
           // Kachcha (task par likha, MB se aage) — dotted green. Do sach
           // alag-alag: bill jitna solid, site ki taaza khabar jitni dotted.
           if (taskM > doneM) {
-            const { done: uptoTask } = splitPathAt(g, coords, taskM);
-            const { rest: kachchaSeg } = splitPathAt(g, uptoTask.map(p=>({lat:p.lat(), lng:p.lng()})), doneM);
-            if (kachchaSeg.length >= 2) {
-              const kl = new g.maps.Polyline({ path: kachchaSeg, strokeOpacity: 0, zIndex: 2,
+            walkRange(doneM, taskM, (seg) => {
+              const kl = new g.maps.Polyline({ path: seg, strokeOpacity: 0, zIndex: 2,
                 icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 0.9, strokeColor: DONE_COLOUR, scale: 3 },
                   offset: "0", repeat: "14px" }],
                 map: mapRef.current });
               kl.addListener("click", ()=>openStretch(it.id));
               shapesRef.current.push(kl);
-            }
+            });
           }
         }
         coords.forEach(c=>bounds.extend(c));

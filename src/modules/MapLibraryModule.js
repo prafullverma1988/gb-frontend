@@ -86,6 +86,22 @@ const yes = (v) => v === true || v === 1 || v === "1";
 const cleanPts = (it) => (Array.isArray(it && it.pts) ? it.pts : [])
   .map((p) => ({ lat: Number(p && p.lat), lng: Number(p && p.lng) }))
   .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+// Tooti hui line ("Tod do"): ek hi marking, beech me khaali jagah — jaise
+// pipeline road crossing chhod kar aage badhti hai, ya line par T nikalta
+// hai. `gaps` batata hai kis point se naya tukda shuru hota hai; naksha aur
+// har file (KML/GeoJSON/CSV) ise tukdon me hi dikhate hain, warna gap par
+// ek jhoothi seedhi lakeer khinch jaati hai.
+const partsOfLine = (pts, gaps) => {
+  const arr = Array.isArray(pts) ? pts : [];
+  const cuts = (Array.isArray(gaps) ? gaps : [])
+    .map(Number).filter((i) => Number.isInteger(i) && i > 0 && i < arr.length)
+    .filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
+  if (!cuts.length) return arr.length ? [arr] : [];
+  const out = []; let from = 0;
+  for (const c of cuts) { out.push(arr.slice(from, c)); from = c; }
+  out.push(arr.slice(from));
+  return out.filter((p) => p.length);
+};
 // Kitne point hain us hisaab se asli shakl: 1 point ki "line" pin hai,
 // 2 point ka "rakba" line hai. Map aur export dono isi se chalte hain.
 const shapeOf = (kind, n) => {
@@ -132,7 +148,11 @@ function kmlPlacemark(it, folderName) {
     const a = ring[0], z = ring[ring.length - 1];
     if (a.lat !== z.lat || a.lng !== z.lng) ring.push(a);
     geom = `<Polygon><outerBoundaryIs><LinearRing><coordinates>${cs(ring)}</coordinates></LinearRing></outerBoundaryIs></Polygon>`;
-  } else geom = `<LineString><tessellate>1</tessellate><coordinates>${cs(pts)}</coordinates></LineString>`;
+  } else {
+    const parts = partsOfLine(pts, it.gaps);
+    const ls = (p) => `<LineString><tessellate>1</tessellate><coordinates>${cs(p)}</coordinates></LineString>`;
+    geom = parts.length > 1 ? `<MultiGeometry>${parts.map(ls).join("")}</MultiGeometry>` : ls(pts);
+  }
   const len = Number(it.lenM);
   const desc = [
     `Kind: ${it.kind || "line"}`,
@@ -143,6 +163,7 @@ function kmlPlacemark(it, folderName) {
     folderName ? `Folder: ${folderName}` : "",
     it.file ? `File: ${it.file}` : "",
     it.by ? `By: ${it.by}` : "",
+    partsOfLine(pts, it.gaps).length > 1 ? `Parts: ${partsOfLine(pts, it.gaps).length} (broken line)` : "",
   ].filter(Boolean).join(" | ");
   return `<Placemark><name>${xmlEsc(it.name)}</name><description>${xmlEsc(desc)}</description>${geom}</Placemark>`;
 }
@@ -170,7 +191,12 @@ function buildGeoJson(items, folderName) {
         const a = ring[0], z = ring[ring.length - 1];
         if (a[0] !== z[0] || a[1] !== z[1]) ring.push(a);
         geometry = { type: "Polygon", coordinates: [ring] };
-      } else if (pts.length >= 2) geometry = { type: "LineString", coordinates: pts.map(ll) };
+      } else if (pts.length >= 2) {
+        const parts = partsOfLine(pts, it.gaps);
+        geometry = parts.length > 1
+          ? { type: "MultiLineString", coordinates: parts.map((p) => p.map(ll)) }
+          : { type: "LineString", coordinates: pts.map(ll) };
+      }
       return {
         type: "Feature",
         properties: {
@@ -189,11 +215,15 @@ function buildCsv(items, folderName) {
     const s = String(v == null ? "" : v);
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const head = ["folder", "file", "name", "kind", "length_m", "area_sqm", "start_chainage_m", "points", "by", "created_at"];
+  const head = ["folder", "file", "name", "kind", "length_m", "area_sqm", "start_chainage_m", "parts", "points", "by", "created_at"];
   const rows = items.map((it) => [
     folderName || "", it.file || "", it.name || "", it.kind || "line",
     round2(it.lenM) ?? "", round2(it.areaSqm) ?? "", round2(it.startCh) ?? "",
-    cleanPts(it).map((p) => `${p.lat.toFixed(7)} ${p.lng.toFixed(7)}`).join(";"),
+    // Tooti line: har tukda " | " se alag, taaki GIS wala saaf dekh sake
+    // ki beech me jagah chhodi gayi thi.
+    partsOfLine(cleanPts(it), it.gaps).length,
+    partsOfLine(cleanPts(it), it.gaps)
+      .map((part) => part.map((p) => `${p.lat.toFixed(7)} ${p.lng.toFixed(7)}`).join(";")).join(" | "),
     it.by || "", it.at || "",
   ]);
   // BOM: Excel UTF-8 pehchaan leta hai — Hindi naam ghich-pich nahi hote.
@@ -379,7 +409,13 @@ function MapPreview({ items, onPick, height = 380 }) {
       } else if (shape === "area") {
         ov = new g.maps.Polygon({ map, paths: pts, strokeColor: T.ind, strokeOpacity: 0.9, strokeWeight: 2, fillColor: T.ind, fillOpacity: 0.15 });
       } else {
-        ov = new g.maps.Polyline({ map, path: pts, strokeColor: T.ind, strokeOpacity: 0.9, strokeWeight: 4 });
+        // Tooti hui line: har tukde ki apni lakeer, aur click sab par ek jaisa.
+        partsOfLine(pts, it.gaps).forEach((part) => {
+          const ln = new g.maps.Polyline({ map, path: part, strokeColor: T.ind, strokeOpacity: 0.9, strokeWeight: 4 });
+          ln.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
+          layersRef.current.push(ln);
+        });
+        return;
       }
       ov.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
       layersRef.current.push(ov);
