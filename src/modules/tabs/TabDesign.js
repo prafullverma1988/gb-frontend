@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import { Avatar, Credit } from "../../components/Credit";
@@ -6,7 +6,12 @@ import SearchSelect from "../../components/SearchSelect";
 import { T } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
 import { canApproveAction } from "../../utils/approvalAuthority";
+import { useRoadAccess } from "../road/roadShared";
 import { t } from "../../i18n";
+
+// Road Levels apna poora section hai (charts + xlsx parsing) — lazy rakha
+// hai taaki Design tab kholne par uska code kheencha na jaye.
+const RoadLevels = lazy(() => import("../road/RoadLevels"));
 
 // Wahi jaanch jo server lagata hai — PATCH /design/drawings/:id/status par
 // requireRole(admin/super_admin/manager/project_manager) + requirePerm("Design","edit").
@@ -161,7 +166,16 @@ function TabDesign({ project, isAdmin }) {
   const CATS_DEFAULT = ["Architectural","Structural","Electrical","Plumbing","Interior","HVAC","Landscape","Approval"];
   const TYPES_DEFAULT = ["Plan","Elevation","Section","Detail","Schedule","Diagram","3D"];
 
-  const [mainTab,  setMainTab]      = useState("drawings"); // "drawings" | "requests"
+  const [mainTab,  setMainTab]      = useState("drawings"); // "drawings" | "requests" | "road"
+  // Road Levels do rok ke peeche hai: company ne module liya hai ya nahi
+  // (SaaS Admin → Modules) aur is role ke paas view ka bit hai ya nahi
+  // (Settings → Roles & Access, module ka naam "Road Levels").
+  const road = useRoadAccess();
+  // Module beech me band ho jaye (ya doosri company par switch ho) to khuli
+  // hui Road Levels par mat atko — warna screen khaali reh jaati hai.
+  useEffect(() => {
+    if (mainTab === "road" && road.ready && !road.show) setMainTab("drawings");
+  }, [mainTab, road.ready, road.show]);
   const [drawings, setDrawings]     = useState([]);
   const [requests, setRequests]     = useState([]);
   const [loading,  setLoading]      = useState(true);
@@ -864,13 +878,17 @@ function TabDesign({ project, isAdmin }) {
 
       {/* Main tab switcher — segmented pill */}
       <div style={{display:"inline-flex",padding:3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:10,marginBottom:14,gap:0}}>
+        {/* NOTE: callback ka naam `tab` hai, `t` nahi — warna i18n ka t()
+            is block ke andar chhup jaata hai aur label kabhi translate
+            nahi hote (gate bhi ise nahi pakadti). */}
         {[
           {id:"drawings", label:t("design.drawings"), count:drawings.length},
           {id:"requests", label:t("lead_design.design_requests"), count:requests.filter(r=>r.status==="Pending").length},
-        ].map(t=>{
-          const active = mainTab===t.id;
+          ...(road.show ? [{id:"road", label:t("road.tab_title"), count:0}] : []),
+        ].map(tab=>{
+          const active = mainTab===tab.id;
           return(
-            <button key={t.id} onClick={()=>setMainTab(t.id)}
+            <button key={tab.id} onClick={()=>setMainTab(tab.id)}
               style={{padding:"6px 16px",border:"none",borderRadius:7,
                 background:active?T.surface:"transparent",
                 color:active?T.t1:T.t3,
@@ -878,12 +896,19 @@ function TabDesign({ project, isAdmin }) {
                 cursor:"pointer",display:"flex",alignItems:"center",gap:7,
                 boxShadow:active?"0 1px 3px rgba(0,0,0,.08)":"none",
                 transition:"all .12s"}}>
-              {t.label}
-              {t.count>0&&<span style={{background:active?T.blu:T.b1,color:active?"white":T.t3,fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:10,fontVariantNumeric:"tabular-nums"}}>{t.count}</span>}
+              {tab.label}
+              {tab.count>0&&<span style={{background:active?T.blu:T.b1,color:active?"white":T.t3,fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:10,fontVariantNumeric:"tabular-nums"}}>{tab.count}</span>}
             </button>
           );
         })}
       </div>
+
+      {/* ── ROAD LEVELS TAB ── */}
+      {mainTab==="road" && road.show && (
+        <Suspense fallback={<div style={{padding:26,fontSize:12.5,color:T.t4}}>{t("common.loading")}</div>}>
+          <RoadLevels project={project}/>
+        </Suspense>
+      )}
 
       {/* ── DRAWINGS TAB ── */}
       {mainTab==="drawings"&&<>
