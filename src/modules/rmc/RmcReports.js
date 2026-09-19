@@ -8,6 +8,8 @@ import {
   Spinner, SubTabs, RangeBar, KV, Notice, todayStr, monthStartStr, supplyLabel, ownerLabel,
 } from "./rmcShared";
 import { ReconReport, VendorStockReport, CostPerCumReport } from "./RmcRecon";
+import RmcBatchSheet from "./RmcBatchSheet";
+import RmcTurnaround from "./RmcTurnaround";
 
 const GROUPS = ["day", "plant", "project", "grade"];
 const groupLabel = (g) => ({ day: t("rmc.g_day"), plant: t("rmc.g_plant"), project: t("rmc.g_project"), grade: t("rmc.g_grade") }[g] || g);
@@ -226,7 +228,7 @@ function StockReport({ meta }) {
   );
 }
 
-function RmcReports({ meta, sub, onSub }) {
+function RmcReports({ meta, sub, onSub, canCreate }) {
   const tabs = [
     { id: "production", l: t("rmc.rep_production") },
     { id: "vehicles", l: t("rmc.rep_vehicles") },
@@ -234,6 +236,8 @@ function RmcReports({ meta, sub, onSub }) {
     { id: "recon", l: t("rmc.rep_recon") },
     { id: "vendor_stock", l: t("rmc.rep_vendor_stock") },
     { id: "cost_cum", l: t("rmc.rep_cost_cum") },
+    { id: "turnaround", l: t("rmc.rep_turnaround") },
+    { id: "batch", l: t("rmc.rep_batch") },
   ];
   return (
     <div>
@@ -244,6 +248,8 @@ function RmcReports({ meta, sub, onSub }) {
       {sub === "recon" && <ReconReport meta={meta} />}
       {sub === "vendor_stock" && <VendorStockReport meta={meta} />}
       {sub === "cost_cum" && <CostPerCumReport meta={meta} />}
+      {sub === "turnaround" && <RmcTurnaround />}
+      {sub === "batch" && <RmcBatchSheet meta={meta} canCreate={canCreate} />}
     </div>
   );
 }
