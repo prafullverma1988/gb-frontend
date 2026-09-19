@@ -19,10 +19,12 @@ import EChart, { ECHART_FONT } from "../../components/EChart";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import RoadLevelsImport from "./RoadLevelsImport";
+import RoadDesignSetup from "./RoadDesignSetup";
+import RoadTaskPlan from "./RoadTaskPlan";
 import {
   rget, rpost, rput, dataOf, num, n2, n3, nInt, fmtD, S, btn, Empty,
   SOIL_CASES, caseLabel, caseHint, warnMsg, calcErrMsg, canRoad,
-  fetchBlob, saveBlob,
+  fetchBlob, saveBlob, AiNote, aiUnavailable,
 } from "./roadShared";
 
 const chartBase = { textStyle: { fontFamily: ECHART_FONT } };
@@ -43,6 +45,22 @@ export default function RoadDesignDetail({ designId, onBack, onChanged }) {
   const [compare, setCompare] = useState(null);
   const [runs, setRuns] = useState([]);
   const [showImport, setShowImport] = useState(false);
+
+  // ── AI ki tippani (Result tab) ──
+  // Sirf padhne ke liye. Ye kuch badalta nahi aur kahin save nahi hota —
+  // wahi numbers use karta hai jo calculation ne diye.
+  const [review, setReview] = useState(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiOff, setAiOff] = useState(false);
+
+  const askReview = async () => {
+    setAiBusy(true);
+    const r = await rpost(`/designs/${designId}/ai/review`, {});
+    setAiBusy(false);
+    if (aiUnavailable(r)) { setAiOff(true); toast.info(r.message); return; }
+    if (!r || !r.success) { toast.error(calcErrMsg(r && r.message) || t("road.ai_failed")); return; }
+    setReview((r.data && r.data.review) || null);
+  };
 
   const loadHead = useCallback(async () => {
     setLoading(true);
@@ -204,6 +222,8 @@ export default function RoadDesignDetail({ designId, onBack, onChanged }) {
     { id: "levels", label: t("road.tab_levels") },
     { id: "zones",  label: t("road.tab_zones") },
     { id: "result", label: t("road.tab_result") },
+    { id: "tasks",  label: t("road.tab_tasks") },
+    { id: "setup",  label: t("road.tab_setup") },
   ];
 
   return (
@@ -504,6 +524,51 @@ export default function RoadDesignDetail({ designId, onBack, onChanged }) {
             </div>
           )}
 
+          {/* Sahayak ki tippani — padhne ke liye, aur kuch nahi */}
+          {totals && (
+            <div style={S.card}>
+              <div style={{ padding: "11px 14px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("road.ai_review_title")}</span>
+                  <span style={{ fontSize: 11, color: T.t4, marginLeft: 8 }}>{t("road.ai_review_hint")}</span>
+                </div>
+                {aiOff ? (
+                  <span style={{ fontSize: 11.5, color: T.t4, maxWidth: 280, lineHeight: 1.5 }}>{t("road.ai_abhi_uplabdh_nahi")}</span>
+                ) : (
+                  <button onClick={askReview} disabled={aiBusy}
+                    style={btn("ghost", { height: 28, fontSize: 11.5, color: T.ind, borderColor: T.bluM, opacity: aiBusy ? .6 : 1 })}>
+                    {aiBusy ? t("road.ai_reading") : review ? t("road.ai_review_again") : t("road.ai_review_btn")}
+                  </button>
+                )}
+              </div>
+              <div style={{ padding: 14 }}>
+                {!review ? (
+                  <div style={{ fontSize: 12, color: T.t4, lineHeight: 1.6 }}>{t("road.ai_review_empty")}</div>
+                ) : (
+                  <>
+                    {review.summary && (
+                      <div style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.65, marginBottom: 11 }}>{review.summary}</div>
+                    )}
+                    {(review.points || []).map((p, i) => {
+                      const sev = String(p.severity || "").toLowerCase();
+                      const c = sev === "high" ? T.red : sev === "medium" ? T.amb : T.slt;
+                      return (
+                        <div key={i} style={{ display: "flex", gap: 9, padding: "8px 0", borderTop: i ? `1px solid ${T.b1}` : "none" }}>
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, marginTop: 7, flexShrink: 0 }} />
+                          <div>
+                            <div style={{ fontSize: 12, color: T.t2, lineHeight: 1.6 }}>{p.text}</div>
+                            {p.kind && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{p.kind}</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+                <AiNote style={{ marginTop: 12 }} />
+              </div>
+            </div>
+          )}
+
           {/* Revision */}
           <div style={S.card}>
             <div style={{ padding: "11px 14px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB }}>
@@ -536,6 +601,16 @@ export default function RoadDesignDetail({ designId, onBack, onChanged }) {
             )}
           </div>
         </div>
+      )}
+
+      {/* ───────── TASK + BUDGET ───────── */}
+      {sub === "tasks" && (
+        <RoadTaskPlan design={d} onApplied={() => { loadHead(); loadRuns(); onChanged && onChanged(); }} />
+      )}
+
+      {/* ───────── SETUP ───────── */}
+      {sub === "setup" && (
+        <RoadDesignSetup design={d} onSaved={() => { loadHead(); setCalc(null); }} />
       )}
     </div>
   );

@@ -19,6 +19,7 @@ import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
   rpost, rget, rpatch, rdelete, num, S, btn, Chip, impMsg, codeList,
+  AiNote, aiUnavailable,
 } from "./roadShared";
 
 const colLabel = (i) => { let s = ""; i += 1; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
@@ -66,6 +67,29 @@ export default function RoadLevelsImport({ design, onClose, onCommitted }) {
 
   // ── Step 4 ──
   const [result, setResult] = useState(null);
+
+  // ── AI: column ka sujhaav ──
+  // Sirf SUJHAAV — dropdown bharta hai, bas. Data AI nahi padhta, code
+  // padhta hai, isliye galat sujhaav se ek dropdown galat hota hai,
+  // ankda nahi. Upar wala detectOffsetRow() bina-AI ka default rehta hai.
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiOff, setAiOff] = useState(false);
+  const [aiWhy, setAiWhy] = useState(null);   // { reason, confidence }
+
+  const askAi = async () => {
+    setAiBusy(true);
+    const r = await rpost("/ai/map-columns", { grid: aoa.slice(0, 12).map((row) => (row || []).slice(0, 25)) });
+    setAiBusy(false);
+    if (aiUnavailable(r)) { setAiOff(true); toast.info(r.message); return; }
+    if (!r || !r.success) { toast.error((r && r.message) || t("road.ai_failed")); return; }
+    const s = (r.data && r.data.suggestion) || {};
+    if (s.offset_row != null && s.offset_row >= 0 && s.offset_row < aoa.length) setOffsetRow(Number(s.offset_row));
+    if (s.chainage_col != null && s.chainage_col >= 0) setChCol(Number(s.chainage_col));
+    // null ka matlab "FRL ka column hai hi nahi" — usse bhi maano.
+    if ("frl_col" in s) setFrlCol(s.frl_col == null ? null : Number(s.frl_col));
+    setAiWhy({ reason: s.reason || "", confidence: s.confidence || "" });
+    toast.success(t("road.ai_columns_filled"));
+  };
 
   const timers = useRef({});
   const pending = useRef({});
@@ -251,6 +275,27 @@ export default function RoadLevelsImport({ design, onClose, onCommitted }) {
           {step === 2 && (
             <div>
               <div style={{ ...S.card, padding: 14, marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.55, maxWidth: 480 }}>{t("road.imp_map_hint")}</div>
+                  {aiOff ? (
+                    <span style={{ fontSize: 11.5, color: T.t4, maxWidth: 260, lineHeight: 1.5 }}>{t("road.ai_abhi_uplabdh_nahi")}</span>
+                  ) : (
+                    <button onClick={askAi} disabled={aiBusy || !aoa.length}
+                      style={btn("ghost", { height: 30, fontSize: 11.5, color: T.ind, borderColor: T.bluM, opacity: aiBusy ? .6 : 1 })}>
+                      {aiBusy ? t("road.ai_reading") : t("road.ai_columns_btn")}
+                    </button>
+                  )}
+                </div>
+
+                {aiWhy && (
+                  <div style={{ marginBottom: 12, padding: "9px 11px", background: T.indL, border: `1px solid ${T.bluM}`, borderRadius: 7 }}>
+                    <div style={{ fontSize: 11.5, color: T.t2, lineHeight: 1.55 }}>{aiWhy.reason}</div>
+                    <div style={{ fontSize: 11, color: T.t3, marginTop: 4 }}>
+                      {aiWhy.confidence ? t("road.ai_confidence", { v: aiWhy.confidence }) : ""} {t("road.ai_override_hint")}
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12 }}>
                   <div>
                     <label style={S.lbl}>{t("road.imp_offset_row")}</label>
@@ -281,6 +326,7 @@ export default function RoadLevelsImport({ design, onClose, onCommitted }) {
                     {parsed.offsets.length ? `${parsed.offsets[0]} … ${parsed.offsets[parsed.offsets.length - 1]}` : "—"}
                   </div><div style={S.lbl}>{t("road.imp_offset_range")}</div></div>
                 </div>
+                {!aiOff && <AiNote style={{ marginTop: 12 }} />}
               </div>
 
               <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 7 }}>{t("road.imp_preview")}</div>

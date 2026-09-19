@@ -73,6 +73,42 @@ export const extentLabel = (e) => ({
   median:      t("road.extent_median"),
 }[e] || e || "—");
 
+// Task plan ka faisla — server SIRF code bhejta hai (create / update /
+// unchanged / now_zero), vaakya yahan banta hai. Wahi niyam jo err/warn par.
+export const actionLabel = (a) => ({
+  create:    t("road.act_create"),
+  update:    t("road.act_update"),
+  unchanged: t("road.act_unchanged"),
+  now_zero:  t("road.act_now_zero"),
+}[a] || a || "—");
+
+export const actionTone = (a) => ({
+  create:    { c: T.grn, bg: T.grnL, b: T.grnM },
+  update:    { c: T.ind, bg: T.indL, b: T.bluM },
+  unchanged: { c: T.t4,  bg: T.sltL, b: T.b1 },
+  now_zero:  { c: T.amb, bg: T.ambL, b: T.ambM },
+}[a] || { c: T.t4, bg: T.sltL, b: T.b1 });
+
+// note bhi code hai — abhi sirf ek: kaam_shuru_sirf_scope
+const NOTE_CODES = ["kaam_shuru_sirf_scope"];
+export const noteLabel = (n) => (n && NOTE_CODES.includes(n) ? t("road.note_" + n) : "");
+
+// blocked[].reason do tarah ka aata hai aur dono sambhalne padte hain:
+//   • roadTasks.js khud "task_nahi_mila" jaisa CODE bhejta hai — uska
+//     vaakya yahan banta hai
+//   • budgetNode.js (Budget module ke saath saanjha) abhi poora HINGLISH
+//     vaakya bhejta hai ("is task par pehle se qty darj hai"). Usse code
+//     me badalna backend ka kaam hai; tab tak wo jaisa hai waisa dikhta
+//     hai — warna English/Hindi user ko kuch bhi nahi dikhega.
+const BLOCK_CODES = ["task_nahi_mila", "kaam_shuru"];
+export const blockReason = (r) => {
+  const s = String(r || "").trim();
+  if (!s) return t("road.block_unknown");
+  return BLOCK_CODES.includes(s) ? t("road.block_" + s) : s;
+};
+
+export const rupee = (n) => (num(n) == null ? "—" : "₹" + Math.round(Number(n)).toLocaleString("en-IN"));
+
 export const SOIL_CASES = ["A", "B", "C"];
 export const caseLabel = (c) => ({
   A: t("road.case_a"), B: t("road.case_b"), C: t("road.case_c"),
@@ -84,14 +120,31 @@ export const caseHint = (c) => ({
 // ── CODE → BHASHA ─────────────────────────────────────────────────
 // Server se `[{"code":"ch_dup","ch":40}]` aata hai. Poora vaakya yahan
 // banta hai, placeholder wahi object bhar deta hai.
-export const impMsg  = (x) => t("road.imp_"  + (x && x.code ? x.code : "unknown"), x || {});
-export const warnMsg = (w) => t("road.warn_" + (w && w.kind ? w.kind : "unknown"), w || {});
+//
+// Code ki list jaan-boojh kar yahan likhi hai: backend kal koi naya code
+// jod de to `t("road.imp_<naya>")` par key hoti hi nahi, aur user ko
+// screen par KEY KA NAAM dikhta (yahi wo bug hai jiske liye leaks.js
+// banayi gayi thi — par computed key wo bhi nahi pakad sakti). Anjaan
+// code par ek saaf line dikhti hai, key nahi.
+const IMP_CODES = ["ch_missing", "ch_dup", "frl_missing", "no_level", "level_ajeeb", "outlier"];
+const WARN_KINDS = ["no_levels", "frl_missing", "no_points", "narrow", "outlier", "gap", "too_few_chainages"];
 
-// Calc rukne par server code hi bhejta hai ("too_few_chainages"), kyunki
-// wo roadCalc ka nateeja hai — vaakya nahi. Usi ko yahan bhasha milti hai.
+export const impMsg = (x) => {
+  const c = x && x.code;
+  return t("road.imp_" + (IMP_CODES.includes(c) ? c : "unknown"), x || {});
+};
+export const warnMsg = (w) => {
+  const k = w && w.kind;
+  return t("road.warn_" + (WARN_KINDS.includes(k) ? k : "unknown"), w || {});
+};
+
+// POST/GET /calc rukne par server roadCalc ka CODE hi bhejta hai
+// ("too_few_chainages") — wahan vaakya banta hi nahi. Naye task/review
+// route usi code ko pehle hi localize kar dete hain, isliye dono soorat
+// sambhalni hai: jaana-pehchana code ho to bhasha, warna jo aaya wahi.
 export const calcErrMsg = (msg) => {
-  const s = String(msg || "");
-  return /^[a-z][a-z0-9_]*$/.test(s) ? t("road.warn_" + s) : s;
+  const s = String(msg || "").trim();
+  return WARN_KINDS.includes(s) ? t("road.warn_" + s) : s;
 };
 
 // staged row ke err/warn kabhi string (JSON) bhi ho sakte hain — GET
@@ -118,6 +171,57 @@ export const fetchBlob = async (path) => {
   if (!res.ok) throw new Error("download failed");
   return await res.blob();
 };
+
+// ── FACTORS ───────────────────────────────────────────────────────
+// Company ki setting, design-wise bhi badal sakti hai. Default
+// GET /road/meta → default_factors se aate hain; yahan sirf naam aur
+// samjhaane wali line hai.
+//
+// Ye paanchon ankde abhi SHURUAATI hain — KB me har ek par
+// [BUSINESS-CHECK] laga hai, GB Buildcon ke asli anubhav se pakke hone
+// baaki hain. Screen par wahi baat likhi jaati hai.
+export const FACTOR_FIELDS = [
+  { key: "bank_to_compacted", step: "0.01", label: () => t("road.fx_bank_to_compacted"), hint: () => t("road.fx_bank_to_compacted_hint") },
+  { key: "compacted_to_loose", step: "0.01", label: () => t("road.fx_compacted_to_loose"), hint: () => t("road.fx_compacted_to_loose_hint") },
+  { key: "stripping_mm", step: "1", label: () => t("road.fx_stripping_mm"), hint: () => t("road.fx_stripping_mm_hint") },
+  { key: "side_slope_cut", step: "0.1", label: () => t("road.fx_side_slope_cut"), hint: () => t("road.fx_side_slope_cut_hint") },
+  { key: "side_slope_fill", step: "0.1", label: () => t("road.fx_side_slope_fill"), hint: () => t("road.fx_side_slope_fill_hint") },
+];
+
+// ── AI ────────────────────────────────────────────────────────────
+// Teen jagah, aur sirf teen. Har jawab SUJHAAV hai — `is_suggestion`
+// hamesha true aata hai aur kuch bhi apne aap save nahi hota. Qty, area,
+// volume aur paisa AI se KABHI nahi aate; wo poora ganit code karta hai.
+//
+// Key na lagi ho to server saaf mana karta hai (road.ai_abhi_uplabdh_nahi).
+// Us soorat me button tootta nahi — uski jagah wahi line likh dete hain,
+// taaki aadmi ko pata chale ki form haath se bharna hai.
+export const aiUnavailable = (r) =>
+  !!(r && !r.success && String(r.message || "") === t("road.ai_abhi_uplabdh_nahi"));
+
+// Drawing ki photo Cloudinary par jaati hai (wahi unsigned preset jo
+// Design tab ke drawings use karte hain) — server ko URL chahiye.
+// Sirf IMAGE: backend use vision model ko bhejta hai, aur PDF `raw` par
+// jaata hai jise model khol nahi paata.
+const CLOUD_NAME = "dd632nqfm";
+const UPLOAD_PRESET = "gb_buildcon_drawings";
+export const uploadDrawingImage = (file) => new Promise((resolve, reject) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("upload_preset", UPLOAD_PRESET);
+  fd.append("folder", "gb_buildcon/road_sections");
+  const xhr = new XMLHttpRequest();
+  xhr.onload = () => {
+    try {
+      const data = JSON.parse(xhr.responseText);
+      if (xhr.status === 200) resolve(data.secure_url);
+      else reject(new Error((data.error && data.error.message) || "upload failed"));
+    } catch (_) { reject(new Error("upload failed")); }
+  };
+  xhr.onerror = () => reject(new Error("network"));
+  xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
+  xhr.send(fd);
+});
 
 // ── GATING ────────────────────────────────────────────────────────
 // Do alag rok hain aur dono lagti hain:
@@ -195,4 +299,18 @@ export const Chip = ({ text, tone }) => (
 
 export const Empty = ({ text }) => (
   <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{text}</div>
+);
+
+// Har AI wali jagah par khadi rehne wali line. Teeno jagah ek hi vaakya
+// rehna chahiye — isliye ek hi component, teen copy nahi.
+export const AiNote = ({ style }) => (
+  <div style={{
+    display: "flex", gap: 7, alignItems: "flex-start", padding: "8px 11px",
+    background: T.sltL, border: `1px solid ${T.b1}`, borderRadius: 7,
+    fontSize: 11, color: T.t3, lineHeight: 1.5, ...style,
+  }}>
+    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2}
+      style={{ flexShrink: 0, marginTop: 1 }}><path d="M12 22a10 10 0 100-20 10 10 0 000 20zM12 16v-4M12 8h.01" /></svg>
+    <span>{t("road.ai_sirf_sujhaav")}</span>
+  </div>
 );

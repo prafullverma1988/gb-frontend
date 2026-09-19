@@ -5,14 +5,21 @@
 // COPY design me chipak jaati hai — library baad me badlo to purana
 // calculation nahi hilta (backend: road_designs.section snapshot).
 //
+// AI yahan SIRF form bharta hai. Drawing padh kar jo likha hai wahi
+// uthata hai — naap kar ankda nahi banata (drawing aksar N.T.S. hoti
+// hai). Jo bhara aata hai wo SUJHAAV hai: aadmi har khaana dekh kar
+// tabhi Save dabata hai, aur tab tak kuch bhi save nahi hota.
+//
 // API: GET/POST /road/templates · PATCH/DELETE /road/templates/:id
+//      POST /road/ai/read-drawing
 // ══════════════════════════════════════════════════════════════════════
 import React, { useState } from "react";
 import { T } from "../shared/tokens";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
-  rpost, rpatch, EXTENTS, extentLabel, num, S, btn,
+  rpost, rpatch, EXTENTS, extentLabel, num, S, btn, AiNote,
+  aiUnavailable, uploadDrawingImage,
 } from "./roadShared";
 
 // Neeche se upar — sub-grade neev hai, BC sabse upar ki chikni parat.
@@ -48,6 +55,63 @@ export default function RoadSectionTemplate({ editRow, onClose, onSaved }) {
   const toast = useToast();
   const [f, setF] = useState(() => (editRow ? fromRow(editRow) : blankForm()));
   const [busy, setBusy] = useState(false);
+
+  // ── AI: drawing se form ──
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiOff, setAiOff] = useState(false);     // key hi nahi lagi — button ki jagah line
+  const [aiFilled, setAiFilled] = useState(null); // { fields: Set, notes, confidence }
+
+  // Drawing padh kar form bhar do. Server sirf sujhaav bhejta hai —
+  // yahan wo form me utar jaata hai aur har bhara hua khaana nishaan
+  // se dikhta hai, taaki aadmi jaan sake kya usne likha aur kya AI ne.
+  const readDrawing = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setAiBusy(true);
+    try {
+      const url = await uploadDrawingImage(file);
+      const r = await rpost("/ai/read-drawing", { image_urls: [url] });
+      if (aiUnavailable(r)) { setAiOff(true); toast.info(r.message); return; }
+      if (!r || !r.success) { toast.error((r && r.message) || t("road.ai_failed")); return; }
+
+      const s = (r.data && r.data.suggestion) || {};
+      const touched = new Set();
+      setF((p) => {
+        const next = { ...p };
+        const put = (k, v) => { if (v != null && v !== "") { next[k] = v; touched.add(k); } };
+        if (typeof s.divided === "boolean") { next.divided = s.divided; touched.add("divided"); }
+        put("median_width_m", s.median_width_m);
+        put("carriageway_width_m", s.carriageway_width_m);
+        put("paved_shoulder_m", s.paved_shoulder_m);
+        put("earthen_shoulder_m", s.earthen_shoulder_m);
+        put("camber_pct", s.camber_pct);
+        if (Array.isArray(s.layers) && s.layers.length) {
+          touched.add("layers");
+          next.layers = s.layers.map((l, i) => ({
+            code: String(l.code || l.name || ("layer" + (i + 1))).toUpperCase().slice(0, 20),
+            name: String(l.name || l.code || ""),
+            thickness_mm: l.thickness_mm == null ? "" : l.thickness_mm,
+            extent: EXTENTS.includes(l.extent) ? l.extent : "carriageway",
+            density_t_cum: "",
+            // Sub-grade ka faisla AI par nahi chhodte — naam se andaza
+            // lagana hi aadhi galti hai. Aadmi khud tick karta hai.
+            is_subgrade: false,
+          }));
+        }
+        return next;
+      });
+      setAiFilled({ fields: touched, notes: s.notes || "", confidence: s.confidence || "" });
+      toast.success(r.message || t("road.form_bhar_diya_dekh_lo"));
+    } catch (_) {
+      toast.error(t("road.ai_upload_failed"));
+    } finally { setAiBusy(false); }
+  };
+
+  // Jo khaana AI ne bhara uspar halka nishaan — save se pehle dekh lo.
+  const aiMark = (k) => (aiFilled && aiFilled.fields.has(k)
+    ? { borderColor: T.ind, background: T.indL }
+    : null);
 
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const setLayer = (i, k, v) => setF((p) => ({
@@ -128,6 +192,37 @@ export default function RoadSectionTemplate({ editRow, onClose, onSaved }) {
 
         <div style={{ flex: 1, overflowY: "auto", padding: 18 }}>
 
+          {/* ── AI: drawing se form bharo ── */}
+          <div style={{ ...S.card, padding: 13, marginBottom: 14, borderLeft: `3px solid ${T.ind}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ maxWidth: 520 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("road.ai_drawing_title")}</div>
+                <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.55, marginTop: 2 }}>{t("road.ai_drawing_hint")}</div>
+              </div>
+              {aiOff ? (
+                <span style={{ fontSize: 11.5, color: T.t4, maxWidth: 260, lineHeight: 1.5 }}>{t("road.ai_abhi_uplabdh_nahi")}</span>
+              ) : (
+                <label style={{ ...btn("ghost", { color: T.ind, borderColor: T.bluM }), display: "inline-flex", alignItems: "center", gap: 6, opacity: aiBusy ? .6 : 1 }}>
+                  {aiBusy ? t("road.ai_reading") : t("road.ai_drawing_btn")}
+                  <input type="file" accept="image/*" disabled={aiBusy} style={{ display: "none" }} onChange={readDrawing} />
+                </label>
+              )}
+            </div>
+
+            {aiFilled && (
+              <div style={{ marginTop: 11, paddingTop: 10, borderTop: `1px solid ${T.b1}` }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: T.ind, lineHeight: 1.55 }}>{t("road.form_bhar_diya_dekh_lo")}</div>
+                {aiFilled.notes && (
+                  <div style={{ fontSize: 11.5, color: T.t3, marginTop: 5, lineHeight: 1.55 }}>{aiFilled.notes}</div>
+                )}
+                {aiFilled.confidence && (
+                  <div style={{ fontSize: 11, color: T.t4, marginTop: 4 }}>{t("road.ai_confidence", { v: aiFilled.confidence })}</div>
+                )}
+              </div>
+            )}
+            <AiNote style={{ marginTop: 11 }} />
+          </div>
+
           {/* ── Naam ── */}
           <div style={{ ...S.card, padding: 14, marginBottom: 14 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -161,13 +256,14 @@ export default function RoadSectionTemplate({ editRow, onClose, onSaved }) {
                 <div key={k} style={{ opacity: (k === "median_width_m" && !f.divided) ? .45 : 1 }}>
                   <label style={S.lbl}>{label}</label>
                   <input type="number" step="0.01" disabled={k === "median_width_m" && !f.divided}
-                    value={f[k] == null ? "" : f[k]} onChange={(e) => set(k, e.target.value)} style={S.inp} />
+                    value={f[k] == null ? "" : f[k]} onChange={(e) => set(k, e.target.value)}
+                    style={{ ...S.inp, ...aiMark(k) }} />
                 </div>
               ))}
               <div>
                 <label style={S.lbl}>{t("road.w_camber")}</label>
                 <input type="number" step="0.1" value={f.camber_pct == null ? "" : f.camber_pct}
-                  onChange={(e) => set("camber_pct", e.target.value)} style={S.inp} />
+                  onChange={(e) => set("camber_pct", e.target.value)} style={{ ...S.inp, ...aiMark("camber_pct") }} />
               </div>
               <div style={{ opacity: f.divided ? 1 : .45 }}>
                 <label style={S.lbl}>{t("road.w_median_camber")}</label>
@@ -189,7 +285,9 @@ export default function RoadSectionTemplate({ editRow, onClose, onSaved }) {
             <div style={{ padding: "11px 14px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("road.tpl_layers")}</span>
-                <span style={{ fontSize: 11, color: T.t4, marginLeft: 8 }}>{t("road.tpl_layers_hint")}</span>
+                <span style={{ fontSize: 11, color: T.t4, marginLeft: 8 }}>
+                  {aiFilled && aiFilled.fields.has("layers") ? t("road.tpl_layers_ai_hint") : t("road.tpl_layers_hint")}
+                </span>
               </div>
               <button onClick={addLayer} style={btn("ghost", { height: 28, fontSize: 11.5, color: T.ind, borderColor: T.indL })}>
                 + {t("road.tpl_add_layer")}
