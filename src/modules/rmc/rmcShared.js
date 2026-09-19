@@ -111,6 +111,26 @@ export const rejectReasonLabel = (r) => ({
 }[r] || r || "—");
 export const sideLabel = (s) => (s === "site" ? t("rmc.side_site") : t("rmc.side_plant"));
 
+// Phase 2 — ginti aur bill ke label. Status ke naam ek hi jagah rahen, warna
+// list aur drawer alag-alag shabd bolne lagte hain.
+export const countStatusLabel = (s) => ({
+  draft: t("rmc.cst_draft"), pending: t("rmc.cst_pending"), approved: t("rmc.cst_approved"),
+}[s] || s || "—");
+export const billKindLabel = (k) => ({
+  concrete: t("rmc.bk_concrete"), transport: t("rmc.bk_transport"), rent: t("rmc.bk_rent"),
+}[k] || k || "—");
+export const billStatusLabel = (s) => ({
+  draft: t("rmc.bst_draft"), approved: t("rmc.bst_approved"), cancelled: t("rmc.bst_cancelled"),
+}[s] || s || "—");
+export const lineKindLabel = (k) => ({
+  concrete: t("rmc.lk_concrete"), transport: t("rmc.lk_transport"), pump: t("rmc.lk_pump"),
+  waiting: t("rmc.lk_waiting"), short_load: t("rmc.lk_short_load"), rent: t("rmc.lk_rent"),
+  min_guarantee: t("rmc.lk_min_guarantee"), recovery: t("rmc.lk_recovery"),
+}[k] || k || "—");
+export const decisionLabel = (d) => ({
+  charge: t("rmc.dec_charge_done"), reduce: t("rmc.dec_reduce_done"), waive: t("rmc.dec_waive_done"),
+}[d] || "—");
+
 export const orderTone = (s) =>
   s === "requested" ? { c: T.amb, bg: T.ambL }
   : s === "approved" ? { c: T.blu, bg: T.bluL }
@@ -175,6 +195,14 @@ export const Pill = ({ label, c, bg }) => (
 );
 export const OrderPill = ({ s }) => { const k = orderTone(s); return <Pill label={orderStatusLabel(s)} c={k.c} bg={k.bg} />; };
 export const DispatchPill = ({ s }) => { const k = dispatchTone(s); return <Pill label={dispatchStatusLabel(s)} c={k.c} bg={k.bg} />; };
+export const countTone = (s) => (s === "pending" ? { c: T.amb, bg: T.ambL }
+  : s === "approved" ? { c: T.grn, bg: T.grnL } : { c: T.slt, bg: T.sltL });
+export const CountPill = ({ s }) => { const k = countTone(s); return <Pill label={countStatusLabel(s)} c={k.c} bg={k.bg} />; };
+export const billTone = (s) => (s === "approved" ? { c: T.grn, bg: T.grnL }
+  : s === "cancelled" ? { c: T.red, bg: T.redL } : { c: T.slt, bg: T.sltL });
+export const BillPill = ({ s }) => { const k = billTone(s); return <Pill label={billStatusLabel(s)} c={k.c} bg={k.bg} />; };
+// Antar ka rang: plus = maal kitaab se kam nikla (laal), minus = zyada nikla.
+export const diffColor = (n) => (N(n) > 0.0001 ? T.red : N(n) < -0.0001 ? T.blu : T.t3);
 export const GradePill = ({ g }) => <Pill label={g || "—"} c={T.ind} bg={T.indL} />;
 
 export const Btn = ({ children, onClick, c = T.ind, disabled, icon: Icon, size = "md", ghost, style = {}, title, type = "button" }) => (

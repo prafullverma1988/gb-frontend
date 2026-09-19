@@ -10,18 +10,21 @@
 //   supply_vehicle === "customer" → transport ka paisa nahi
 //   plant.owner === "vendor"   → challan site par darj hota hai
 //
-// Phase 1 me bill nahi banta — vendor ka rate aur transport challan par sirf
-// jama hote hain. API contract: gb-backend/docs/plans/rmc-api-phase1.md
+// Phase 2 me ginti (plant ka asli stock) aur bill jud gaye — stock sirf ginti
+// ke APPROVE par sudhrta hai aur Finance me entry bill ke APPROVE par banti
+// hai. API contract: gb-backend/docs/plans/rmc-api-phase1.md aur -phase2.md
 // ══════════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { getUser } from "../config/api";
 import { t } from "../i18n";
-import { T, rget, dataOf, IcChart, IcDoc, IcTruck, IcSet, IcList, IcRefresh } from "./rmc/rmcShared";
+import { T, rget, dataOf, IcChart, IcDoc, IcTruck, IcSet, IcList, IcRefresh, IcBox, IcRupee } from "./rmc/rmcShared";
 import RmcDashboard from "./rmc/RmcDashboard";
 import RmcOrders from "./rmc/RmcOrders";
 import RmcChallans from "./rmc/RmcChallans";
 import RmcSetup from "./rmc/RmcSetup";
 import RmcReports from "./rmc/RmcReports";
+import RmcCounts from "./rmc/RmcCounts";
+import RmcBills from "./rmc/RmcBills";
 
 function RMCModule() {
   const me = useMemo(() => getUser() || {}, []);
@@ -37,16 +40,23 @@ function RMCModule() {
   const [reportSub, setReportSub] = useState("production");
   const [meta, setMeta] = useState(null);
   const [dash, setDash] = useState(null);
+  const [todo, setTodo] = useState({ counts: 0, bills: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [openOrderId, setOpenOrderId] = useState(null);
   const [openChallanId, setOpenChallanId] = useState(null);
 
+  // Tab par jo ginti banaye baithi hai aur jo bill abhi Finance me nahi gaya —
+  // dono dashboard se nahi aate, isliye yahin do chhoti list gin lete hain.
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
-    const [m, d] = await Promise.all([rget("/meta"), rget("/dashboard")]);
+    const [m, d, c, b] = await Promise.all([
+      rget("/meta"), rget("/dashboard"),
+      rget("/stock-checks", { status: "pending" }), rget("/bills", { status: "draft" }),
+    ]);
     setMeta(dataOf(m, { plants: [], contracts: [], designs: [], vehicles: [], machines: [], materials: [], projects: [], parties: [], warehouses: [], options: {} }));
     setDash(dataOf(d, null));
+    setTodo({ counts: (dataOf(c, []) || []).length, bills: (dataOf(b, []) || []).length });
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -62,6 +72,8 @@ function RMCModule() {
     { id: "dashboard", l: t("rmc.tab_dashboard"), I: IcChart },
     { id: "orders", l: t("rmc.tab_orders"), I: IcDoc, badge: pendingOrders || null },
     { id: "challans", l: t("rmc.tab_challans"), I: IcTruck, badge: onRoad || null },
+    { id: "counts", l: t("rmc.tab_counts"), I: IcBox, badge: todo.counts || null },
+    { id: "bills", l: t("rmc.tab_bills"), I: IcRupee, badge: todo.bills || null },
     { id: "setup", l: t("rmc.tab_setup"), I: IcSet },
     { id: "reports", l: t("rmc.tab_reports"), I: IcList },
   ];
@@ -103,6 +115,14 @@ function RMCModule() {
         {tab === "challans" && (
           <RmcChallans meta={m} canCreate={canCreate} canDelete={canDelete} refreshKey={refreshKey}
             onRefresh={refresh} openId={openChallanId} onOpenDone={() => setOpenChallanId(null)} onGoSetup={goSetup} />
+        )}
+        {tab === "counts" && (
+          <RmcCounts meta={m} canCreate={canCreate} canApprove={canApprove}
+            refreshKey={refreshKey} onRefresh={refresh} />
+        )}
+        {tab === "bills" && (
+          <RmcBills meta={m} canCreate={canCreate} canEdit={canEdit} canApprove={canApprove}
+            canDelete={canDelete} refreshKey={refreshKey} onRefresh={refresh} />
         )}
         {tab === "setup" && (
           <RmcSetup meta={m} canCreate={canCreate} canEdit={canEdit} onChanged={refresh}

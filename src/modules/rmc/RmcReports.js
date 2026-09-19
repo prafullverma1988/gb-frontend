@@ -1,4 +1,5 @@
-// RMC › Reports — production register, vehicle-wise summary, plant ka store.
+// RMC › Reports — production register, vehicle-wise summary, plant ka store,
+// aur Phase 2 ke teen view (match, vendor ke paas hamara stock, cost per cum).
 // GET /rmc/reports/production · /rmc/reports/vehicles · /rmc/plants/:id/stock
 import { useState, useEffect, useCallback } from "react";
 import { t } from "../../i18n";
@@ -6,6 +7,7 @@ import {
   T, N, cum, fmtN, fmtD, rupee, rget, dataOf, inpSm, Field, Panel, Row, Scroll, Empty,
   Spinner, SubTabs, RangeBar, KV, Notice, todayStr, monthStartStr, supplyLabel, ownerLabel,
 } from "./rmcShared";
+import { ReconReport, VendorStockReport, CostPerCumReport } from "./RmcRecon";
 
 const GROUPS = ["day", "plant", "project", "grade"];
 const groupLabel = (g) => ({ day: t("rmc.g_day"), plant: t("rmc.g_plant"), project: t("rmc.g_project"), grade: t("rmc.g_grade") }[g] || g);
@@ -229,6 +231,9 @@ function RmcReports({ meta, sub, onSub }) {
     { id: "production", l: t("rmc.rep_production") },
     { id: "vehicles", l: t("rmc.rep_vehicles") },
     { id: "stock", l: t("rmc.rep_stock") },
+    { id: "recon", l: t("rmc.rep_recon") },
+    { id: "vendor_stock", l: t("rmc.rep_vendor_stock") },
+    { id: "cost_cum", l: t("rmc.rep_cost_cum") },
   ];
   return (
     <div>
@@ -236,6 +241,9 @@ function RmcReports({ meta, sub, onSub }) {
       {sub === "production" && <ProductionReport />}
       {sub === "vehicles" && <VehicleReport />}
       {sub === "stock" && <StockReport meta={meta} />}
+      {sub === "recon" && <ReconReport meta={meta} />}
+      {sub === "vendor_stock" && <VendorStockReport meta={meta} />}
+      {sub === "cost_cum" && <CostPerCumReport meta={meta} />}
     </div>
   );
 }
