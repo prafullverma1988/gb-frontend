@@ -127,6 +127,11 @@ export const lineKindLabel = (k) => ({
   waiting: t("rmc.lk_waiting"), short_load: t("rmc.lk_short_load"), rent: t("rmc.lk_rent"),
   min_guarantee: t("rmc.lk_min_guarantee"), recovery: t("rmc.lk_recovery"),
 }[k] || k || "—");
+// Phase 3 — cube sample ka status. "partial" ka matlab koi result aa gaya par
+// 28 din wala abhi baaki hai; asli faisla wahi karta hai.
+export const cubeStatusLabel = (s) => ({
+  open: t("rmc.qst_open"), partial: t("rmc.qst_partial"), done: t("rmc.qst_done"),
+}[s] || s || "—");
 export const decisionLabel = (d) => ({
   charge: t("rmc.dec_charge_done"), reduce: t("rmc.dec_reduce_done"), waive: t("rmc.dec_waive_done"),
 }[d] || "—");
@@ -201,6 +206,9 @@ export const CountPill = ({ s }) => { const k = countTone(s); return <Pill label
 export const billTone = (s) => (s === "approved" ? { c: T.grn, bg: T.grnL }
   : s === "cancelled" ? { c: T.red, bg: T.redL } : { c: T.slt, bg: T.sltL });
 export const BillPill = ({ s }) => { const k = billTone(s); return <Pill label={billStatusLabel(s)} c={k.c} bg={k.bg} />; };
+export const cubeTone = (s) => (s === "done" ? { c: T.grn, bg: T.grnL }
+  : s === "partial" ? { c: T.blu, bg: T.bluL } : { c: T.slt, bg: T.sltL });
+export const CubePill = ({ s }) => { const k = cubeTone(s); return <Pill label={cubeStatusLabel(s)} c={k.c} bg={k.bg} />; };
 // Antar ka rang: plus = maal kitaab se kam nikla (laal), minus = zyada nikla.
 export const diffColor = (n) => (N(n) > 0.0001 ? T.red : N(n) < -0.0001 ? T.blu : T.t3);
 export const GradePill = ({ g }) => <Pill label={g || "—"} c={T.ind} bg={T.indL} />;
