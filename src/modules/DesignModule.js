@@ -6,7 +6,17 @@ import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
 import { Avatar, Credit, fmtTimeAgo } from "../components/Credit";
 import RevisionNoteModal from "../components/RevisionNoteModal";
+import { canApproveAction } from "../utils/approvalAuthority";
 import { t } from "../i18n";
+
+// Drawing ka status badalna = approval ka faisla. Server ise
+// requireRole(admin/super_admin/manager/project_manager) + requirePerm("Design","edit")
+// se rokta hai (routes/design.js → PATCH /drawings/:id/status). Screen par
+// bhi theek wahi jaanch, taaki jiske paas haq nahi use button hi na mile.
+const canDecideDesign = () => canApproveAction({
+  roles: ["admin", "super_admin", "manager", "project_manager"],
+  perm: ["Design", "edit"],
+});
 
 // ── ICONS ────────────────────────────────────────────────────────────
 const Ic = ({d,d2,size=18,color="currentColor",sw=1.8,fill="none"}) => (
@@ -550,9 +560,9 @@ export default function DesignModule() {
                     {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("common.view")}</a>}
                     {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer" style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("design.download")}</a>}
                     <button onClick={()=>setShowVer(d)} style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}><IcHist size={12}/> {t("common.history")}</button>
-                    {d.status!=="Approved"&&<button onClick={()=>handleStatus(d.id,"Approved")} disabled={!!acting[d.id]} style={{padding:"5px 11px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
-                    {d.status!=="Revision"&&<button onClick={()=>{ const r=prompt(t("design.revision_reason")); if(r) handleStatus(d.id,"Revision",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("design.revision")}</button>}
-                    {d.status!=="Rejected"&&<button onClick={()=>{ const r=prompt(t("design.rejection_reason")); if(r) handleStatus(d.id,"Rejected",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("common.reject")}</button>}
+                    {canDecideDesign()&&d.status!=="Approved"&&<button onClick={()=>handleStatus(d.id,"Approved")} disabled={!!acting[d.id]} style={{padding:"5px 11px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
+                    {canDecideDesign()&&d.status!=="Revision"&&<button onClick={()=>{ const r=prompt(t("design.revision_reason")); if(r) handleStatus(d.id,"Revision",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("design.revision")}</button>}
+                    {canDecideDesign()&&d.status!=="Rejected"&&<button onClick={()=>{ const r=prompt(t("design.rejection_reason")); if(r) handleStatus(d.id,"Rejected",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("common.reject")}</button>}
                   </div>
                 </div>
               )}
@@ -1119,6 +1129,11 @@ export default function DesignModule() {
                   style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"}}>⬇</a>}
               </div>
             </div>
+            {!canDecideDesign()?(
+              <div style={{fontSize:11.5,color:T.t4,whiteSpace:"nowrap"}}>
+                ⏳ {t("projects.waiting_on")} Admin / Project Manager
+              </div>
+            ):(
             <div style={{display:"flex",gap:7}}>
               <button onClick={()=>approveDrawing(d.id)} disabled={!!aprvActing[d.id]}
                 style={{padding:"6px 18px",borderRadius:7,background:aprvActing[d.id]?T.b1:T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:aprvActing[d.id]?"not-allowed":"pointer"}}>
@@ -1132,7 +1147,7 @@ export default function DesignModule() {
                 style={{padding:"6px 16px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>
                {t("common.reject")}
               </button>
-            </div>
+            </div>)}
           </div>
         ))}
       </div>

@@ -1063,6 +1063,7 @@ const dict = {
   "common.approval":                                           "अप्रूवल",
   "common.approve":                                            "✓ अप्रूव करो",
   "common.approve_2":                                          "✓ अप्रूव करें",
+  "common.approver":                                           "अप्रूवर",
   "common.approve_apply":                                      "✓ अप्रूव करो और अप्लाई करो",
   "common.approved":                                           "अप्रूव्ड",
   "common.approving":                                          "अप्रूव हो रहा है…",

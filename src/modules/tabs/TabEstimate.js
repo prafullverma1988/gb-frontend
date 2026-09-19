@@ -5,6 +5,7 @@ import SearchSelect from "../../components/SearchSelect";
 import EstimateBuilderModal from "../EstimateBuilderModal";
 import { T, localYMD } from "../shared/tokens";
 import { PTAddTask } from "./TabTasks";
+import { canApproveAction, approverRolesFor } from "../../utils/approvalAuthority";
 import { t, Rich } from "../../i18n";
 
 function TabEstimate({ project }) {
@@ -2294,8 +2295,15 @@ function TabEstimate({ project }) {
                               {a.decided_by_name && <>{t("estimate.by_decided_by_name", { decided_by_name: a.decided_by_name })}</>}
                             </div>
                           )}
-                          {/* Approve / Reject — only when Pending */}
-                          {a.status === "Pending" && (
+                          {/* Approve / Reject — Pending ho AUR faisla mera ho.
+                              Server dono dekhta hai: requirePerm("Estimate","edit")
+                              + checkWorkflowRole("Customer Estimate Amendment"). */}
+                          {a.status === "Pending" && !canApproveAction({perm:["Estimate","edit"],workflow:"Customer Estimate Amendment"}) && (
+                            <div style={{fontSize:11,color:T.t4,textAlign:"right",marginTop:8}}>
+                              ⏳ {t("projects.waiting_on")} {approverRolesFor("Customer Estimate Amendment")||t("common.approver")}
+                            </div>
+                          )}
+                          {a.status === "Pending" && canApproveAction({perm:["Estimate","edit"],workflow:"Customer Estimate Amendment"}) && (
                             <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
                               <button onClick={()=>decideAmendment(a.id,"Rejected")}
                                 style={{background:"white",color:"#DC2626",border:"1.5px solid #FCA5A5",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>

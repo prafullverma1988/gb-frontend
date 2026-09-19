@@ -13,6 +13,7 @@ import { useState, useEffect, useRef } from "react";
 import api from "../config/api";
 import LibrarySelect from "./LibrarySelect";
 import ActivityLog from "./ActivityLog";
+import { canApproveAction } from "../utils/approvalAuthority";
 import { t } from "../i18n";
 
 const T = {
@@ -274,10 +275,17 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
                   <label style={lblStyle}>{t("mrdetail.mr_status")}</label>
+                  {/* Approved / Rejected yahan se nahi — wo approval ka faisla
+                      hai, edit ka nahi. Jiske paas MR approve ki authority nahi
+                      uske liye ye option hi nahi (server bhi ab yahi rokta hai,
+                      PUT /mrs/:id → MR_DECIDE_VIA_APPROVAL). Jo pehle se set
+                      hai wo dikhta rahe, warna save par status badal jaata. */}
                   <select value={form.mr_status} onChange={e => setForm(p => ({ ...p, mr_status: e.target.value }))} style={inpStyle}>
                     <option value="Pending">{t("common.pending")}</option>
-                    <option value="Approved">{t("common.approved")}</option>
-                    <option value="Rejected">{t("common.rejected")}</option>
+                    {(canApproveAction({ workflow: "Material Request" }) || form.mr_status === "Approved") &&
+                      <option value="Approved">{t("common.approved")}</option>}
+                    {(canApproveAction({ workflow: "Material Request" }) || form.mr_status === "Rejected") &&
+                      <option value="Rejected">{t("common.rejected")}</option>}
                   </select>
                 </div>
                 <div>

@@ -2,7 +2,12 @@ import React, { useState, useEffect, useCallback } from "react";
 import api from "../../config/api";
 import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
+import { canApproveAction } from "../../utils/approvalAuthority";
 import { t, Rich } from "../../i18n";
+
+// Flagged trip ka faisla server par admin / super_admin / PM tak hi seemit
+// hai (routes/trips.js → POST /:id/review, requireRole). Screen par bhi wahi.
+const canReviewTrip = () => canApproveAction({ roles: ["admin", "super_admin", "project_manager"] });
 
 // ════════════════════════════════════════════════════════════════
 // TabTripTracking — web management view for the Trip Tracking module
@@ -214,7 +219,7 @@ function MonitorTab({ projectId, onChange }) {
                             placeholder={item4.status === "in_transit" ? t("trip_tracking.remark_cancel_manual_close_ke_liye") : t("trip_tracking.note_reject_ke_liye_zaroori")}
                             style={{ ...inp, marginBottom: 8 }} />
                           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                            {item4.verify_status === "flagged" && item4.status !== "in_transit" && (
+                            {item4.verify_status === "flagged" && item4.status !== "in_transit" && canReviewTrip() && (
                               <>
                                 <BtnOutline label={t("common.reject_2")} color={T.red} busy={busyId === item4.id} onClick={() => act(item4, "reject")} />
                                 <BtnSolid label={t("common.approve_2")} color={T.grn} busy={busyId === item4.id} onClick={() => act(item4, "approve")} />

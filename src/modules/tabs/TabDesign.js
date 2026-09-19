@@ -5,7 +5,15 @@ import { Avatar, Credit } from "../../components/Credit";
 import SearchSelect from "../../components/SearchSelect";
 import { T } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
+import { canApproveAction } from "../../utils/approvalAuthority";
 import { t } from "../../i18n";
+
+// Wahi jaanch jo server lagata hai — PATCH /design/drawings/:id/status par
+// requireRole(admin/super_admin/manager/project_manager) + requirePerm("Design","edit").
+const canDecideDesign = () => canApproveAction({
+  roles: ["admin", "super_admin", "manager", "project_manager"],
+  perm: ["Design", "edit"],
+});
 
 function TitleDropdown({ value, titles, onSelect, onChange }) {
   const [open, setOpen] = useState(false);
@@ -762,7 +770,7 @@ function TabDesign({ project, isAdmin }) {
           </div>
         )}
 
-        {d.status!=="Approved" && d.client_status!=="PendingShare" && d.client_status!=="SharedWithClient" && (
+        {canDecideDesign() && d.status!=="Approved" && d.client_status!=="PendingShare" && d.client_status!=="SharedWithClient" && (
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {/* Approve */}
             <button onClick={()=>handleStatus(d.id,"Approved",null)} disabled={!!acting[d.id]}

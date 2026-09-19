@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, lazy, Suspense, Fragment } fr
 import api, { getUser, getToken, getCompanies, clearAuth, saveAuth, API_BASE } from "./config/api";
 import { initDiag, recordScreen } from "./utils/diag";
 import apiCache from "./utils/apiCache";
+import { loadApprovalAuthority, clearApprovalAuthority } from "./utils/approvalAuthority";
 import UploadToast from "./components/UploadToast";
 import { ToastProvider } from "./components/Toast";
 import { ConfirmProvider } from "./components/ConfirmDialog";
@@ -1957,6 +1958,9 @@ function App(){
           };
           setUser(updated);
           try{ localStorage.setItem("gb_user", JSON.stringify(updated)); }catch(_){}
+          // Role ya permission badli → "main kya approve kar sakta hoon" bhi
+          // badal gaya. Approve buttons isi jawab par dikhte/chhupte hain.
+          if(roleChanged||permsChanged) loadApprovalAuthority(true);
         }
         // Rolling refresh: backend re-issues the token once >7d old.
         if(res.refreshed_token){ try{ localStorage.setItem("gb_token", res.refreshed_token); }catch(_){} }
@@ -1985,6 +1989,9 @@ function App(){
     };
     const tick=()=>{ refreshPerms(); refreshTickets(); refreshSahayakNotif(); };
     tick();
+    // Page khulte hi approve-authority bhi taaza kar lo — Settings me
+    // Approval Flow ke level badle to button turant sahi ho jaye.
+    if(loggedIn) loadApprovalAuthority(true);
     window.addEventListener("focus", tick);
     // 60s poll (same cadence as the mobile app) — an admin's permission
     // change or a subscription lapse lands without waiting for a refocus.
@@ -2024,7 +2031,7 @@ function App(){
     window.addEventListener("keydown",handler);
     return()=>window.removeEventListener("keydown",handler);
   },[showSearch,showCheatsheet]);
-  const handleLogout=()=>{apiCache.clear();clearAuth();setUser(null);setCompanies([]);setEnabledModules(null);};
+  const handleLogout=()=>{apiCache.clear();clearApprovalAuthority();clearAuth();setUser(null);setCompanies([]);setEnabledModules(null);};
 
   // Notification / alert click → land the user where the thing actually is.
   // A project-scoped link also carries {projectId,tab} so ProjectsWrapper can
@@ -2048,9 +2055,13 @@ function App(){
       const res=await api.switchCompany(companyId);
       if(res.success){
         apiCache.clear();
+        // Doosri company = doosra workflow aur doosra role. Purana
+        // approve-authority jawab yahan se kaam ka nahi raha.
+        clearApprovalAuthority();
         setUser(res.user);
         setCompanies(res.companies||[]);
         setEnabledModules(null); // re-fetch
+        loadApprovalAuthority(true);
         setNav("dashboard");
         // Re-fetch modules for new company
         const modRes=await api.get("/settings/modules");
@@ -2061,7 +2072,7 @@ function App(){
     setSwitching(false);
   };
 
-  if(!loggedIn) return <ToastProvider><ConfirmProvider><PromptProvider><LoginScreen onLogin={(u,cos)=>{setUser(u);setCompanies(cos||getCompanies());}}/></PromptProvider></ConfirmProvider></ToastProvider>;
+  if(!loggedIn) return <ToastProvider><ConfirmProvider><PromptProvider><LoginScreen onLogin={(u,cos)=>{setUser(u);setCompanies(cos||getCompanies());clearApprovalAuthority();loadApprovalAuthority(true);}}/></PromptProvider></ConfirmProvider></ToastProvider>;
 
   const PAGES={
     dashboard:{title:t("common.dashboard"),sub:t("app.company_overview")},

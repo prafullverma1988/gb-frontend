@@ -7,6 +7,7 @@ import apiCache from "../utils/apiCache";
 import useDebounce from "../utils/useDebounce";
 import { t, Rich } from "../i18n";
 import { canSeeFinancials } from "../utils/perms";
+import { canApproveAction } from "../utils/approvalAuthority";
 import TabAccounts from "./tabs/TabAccounts";
 import { isoDate, todayISO } from "../utils/today";
 
@@ -5483,8 +5484,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                             style={{padding:"4px 7px",borderRadius:5,background:isEditing?T.bluL:T.sltL,color:isEditing?T.blu:T.t3,border:`1px solid ${isEditing?T.blu:T.b1}`,fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
                             <IcEdit size={10} color="currentColor"/> {t("common.edit_2")}
                           </button>
-                          <button onClick={()=>approveReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✓</button>
-                          <button onClick={()=>rejectReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✗</button>
+                          {/* ✓/✗ sirf usko jiske paas Finance ka approve hai —
+                              server bhi isi ko maanta hai (requirePerm). */}
+                          {canApproveAction({perm:["Finance","approve"]})&&<>
+                            <button onClick={()=>approveReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✓</button>
+                            <button onClick={()=>rejectReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✗</button>
+                          </>}
                         </>)}
                         {req.status==="Approved"&&(
                           <div style={{display:"flex",flexDirection:"column",gap:1}}>
@@ -5942,7 +5947,15 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   {/* Actions */}
                   {!isEditingRoute && (
                     <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:12,flexWrap:"wrap"}}>
-                      {isRateBlocking ? (
+                      {/* Rate ka faisla server par admin / super_admin / PM
+                          tak seemit hai (requireRole) — baaki ke liye button
+                          hi nahi (dabane par 403 milta tha), sirf batate hain
+                          ki kiska intezaar hai. */}
+                      {isRateBlocking && !canApproveAction({roles:["admin","super_admin","project_manager"]}) ? (
+                        <span style={{fontSize:11.5,color:T.t4}}>
+                          ⏳ {t("projects.waiting_on")} Admin / Project Manager
+                        </span>
+                      ) : isRateBlocking ? (
                         <>
                           <button onClick={doRejectRate} disabled={acting}
                             style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.red}`,background:T.redL,color:T.red,fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:acting?0.6:1}}>

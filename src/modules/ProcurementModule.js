@@ -6,6 +6,7 @@ import MRDetailDrawer from "../components/MRDetailDrawer";
 import CompanyTransfersTab from "../components/CompanyTransfersTab";
 import GrnIssueBlock from "../components/GrnIssueBlock";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
+import { canApproveAction, approverRolesFor, useApprovalAuthority } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
 
 // Vendor ko jaane wale message ka contacts wala hissa — WhatsApp / Email /
@@ -875,7 +876,9 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
 
       {/* Action footer — context-aware: Approve / Edit / SendToVendor / GRN / Close */}
       <div style={{padding:"10px 14px",borderTop:"1px solid "+T.b1,background:T.surface,display:"flex",gap:6,flexShrink:0,flexWrap:"wrap"}}>
-        {d.approval==="Draft"&&<button onClick={()=>onApprove(d.id)} style={{flex:"1 1 100px",padding:"8px",borderRadius:7,background:T.grnL,color:T.grn,border:"1px solid "+T.grnM,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><IcApprv size={12} color={T.grn}/> {t("common.approve_2")}</button>}
+        {/* onApprove null aata hai jab is user ke paas PO approve ki authority
+            nahi (ya abhi uska turn nahi) — button hi nahi banta. */}
+        {d.approval==="Draft"&&onApprove&&<button onClick={()=>onApprove(d.id)} style={{flex:"1 1 100px",padding:"8px",borderRadius:7,background:T.grnL,color:T.grn,border:"1px solid "+T.grnM,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><IcApprv size={12} color={T.grn}/> {t("common.approve_2")}</button>}
         {/* Edit — for Draft / Revision / Rejected (not after sent) */}
         {d.poStatus!=="Cancelled"&&d.orderStatus!=="Ordered"&&d.orderStatus!=="Received"&&onEdit&&(
           <button onClick={()=>onEdit(d)} title={t("procurement.edit_po_change_vendor_items_rates")}
@@ -1844,21 +1847,53 @@ function ProcurementModule(){
     }).catch(()=>{});
   },[]);
 
+  // ── Approve/Reject button kab dikhe ────────────────────────────
+  // Ye screen approval engine se judi hi nahi thi — Pending tab me har MR
+  // par ✓/✗ SABKO dikhte the, aur asli rok sirf server par thi (403
+  // "approve karne ki permission nahi"). Do sawal ab yahin pooch lete hain:
+  //   1. is module me mera role approver hai bhi? → /approvals/my-authority
+  //   2. is record par ABHI mera turn hai?        → engine ka _canActNow
+  // Engine ka jawab na mile to sirf pehla sawal lagta hai (button chhupega
+  // to sirf uska jiska naam kisi level par hai hi nahi).
+  const [apprMy,setApprMy]=useState(null);   // {mr:Set,po:Set} | null = pata nahi
+  const [wfOn,setWfOn]=useState(null);       // {module:bool} | null = pata nahi
+  useApprovalAuthority();                    // jawab aate hi dobara render
   // ── Load all data from backend ─────────────────────────────────
   const loadAll=async()=>{
     setLoading(true); setApiError("");
     try{
-      const [mRes,pRes,rRes]=await Promise.all([
+      const [mRes,pRes,rRes,apRes,wfRes]=await Promise.all([
         api.get("/procurement/mrs"),
         api.get("/procurement/pos"),
         api.get("/procurement/rfqs"),
+        api.get("/approvals/pending?scope=my").catch(()=>({success:false})),
+        api.get("/approvals/workflows").catch(()=>({success:false})),
       ]);
       if(mRes.success)setMRs(mRes.data.map(mapMR));
       if(pRes.success)setPOs(pRes.data.map(mapPO));
       if(rRes.success)setRFQs(rRes.data.map(mapRFQ));
+      if(apRes.success&&Array.isArray(apRes.data)){
+        const pick=(src)=>new Set(apRes.data
+          .filter(i=>i._source===src&&i._canActNow!==false)
+          .map(i=>String(i._source_id)));
+        setApprMy({mr:pick("material_request"),po:pick("purchase_order")});
+      }
+      if(wfRes.success&&Array.isArray(wfRes.data)){
+        const on={}; wfRes.data.forEach(w=>{on[w.module]=!!w.enabled;}); setWfOn(on);
+      }
     }catch(e){setApiError("Load failed: "+e.message);}
     finally{setLoading(false);}
   };
+  // scope=my ki list me sirf wahi item aate hain jinpar ABHI mera turn hai.
+  // Workflow band ho (legacy raasta) to turn ka sawal hi nahi — authority hi
+  // faisla hai, wahi backend ka checkWorkflowRole bhi dekhta hai.
+  const _myTurn=(kind,wfModule,id)=>{
+    if(!apprMy||!wfOn) return true;          // engine ka jawab nahi aaya
+    if(!wfOn[wfModule]) return true;         // workflow band → legacy path
+    return apprMy[kind].has(String(id));
+  };
+  const canApproveMR=(id)=>canApproveAction({workflow:"Material Request"})&&_myTurn("mr","Material Request",id);
+  const canApprovePO=(id)=>canApproveAction({workflow:"Purchase Order (PO)"})&&_myTurn("po","Purchase Order (PO)",id);
   // Projects from API (for dropdowns)
   const [dbProjects, setDbProjects] = useState([]);
   const projLoaded = useRef(false);
@@ -2378,14 +2413,18 @@ function ProcurementModule(){
                           :<span style={{fontSize:10.5,color:T.t4}}>{t("procurement.no_stock")}</span>}
                       </div>
                       <div style={{display:"flex",gap:5,justifyContent:"flex-end"}}>
-                        <button onClick={()=>setApproveTgt(m)} title={t("common.approve_2")}
-                          style={{width:28,height:28,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                          <IcChk size={13} color={T.grn}/>
-                        </button>
-                        <button onClick={()=>setRejectTgt(m)} title={t("common.reject_2")}
-                          style={{width:28,height:28,borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                          <IcX size={13} color={T.red}/>
-                        </button>
+                        {canApproveMR(m.id)?<>
+                          <button onClick={()=>setApproveTgt(m)} title={t("common.approve_2")}
+                            style={{width:28,height:28,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                            <IcChk size={13} color={T.grn}/>
+                          </button>
+                          <button onClick={()=>setRejectTgt(m)} title={t("common.reject_2")}
+                            style={{width:28,height:28,borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                            <IcX size={13} color={T.red}/>
+                          </button>
+                        </>:<span style={{fontSize:10,color:T.t4,whiteSpace:"nowrap"}}>
+                          ⏳ {t("projects.waiting_on")} {approverRolesFor("Material Request")||t("common.approver")}
+                        </span>}
                       </div>
                       <div/>
                     </div>
@@ -2667,7 +2706,7 @@ function ProcurementModule(){
                     <Pill label={PO_PILL_LABEL[dispLbl]||dispLbl} c={as.c} bg={as.bg} brd={as.brd}/>
                     <span style={{fontSize:13,fontWeight:600,color:T.t1}}>₹{fmtN(po.amount)}</span>
                     <div style={{display:"flex",gap:4}}>
-                      {po.approval==="Draft"&&<button onClick={e=>{e.stopPropagation();approvePO(po.id);}} title={t("procurement.approve_po")} style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
+                      {po.approval==="Draft"&&canApprovePO(po.id)&&<button onClick={e=>{e.stopPropagation();approvePO(po.id);}} title={t("procurement.approve_po")} style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
                       {po.approval==="Revision"&&<button onClick={e=>{e.stopPropagation();setEditPo(po);setShowCreatePO(true);}} title={t("procurement.edit_po_and_resubmit_for_approval")} style={{height:26,padding:"0 9px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:3,color:"#1D4ED8",fontSize:10.5,fontWeight:700}}>{t("procurement.edit_resubmit_2")}</button>}
                       {po.poStatus==="Open"&&po.approval==="Approved"&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title="GRN" style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
                     </div>
@@ -2724,7 +2763,7 @@ function ProcurementModule(){
       </div>
 
       {/* ═══ MODALS ═══ */}
-      {selPO&&<PODetailDrawer po={selPO} onClose={()=>setSelPO(null)} onApprove={(id)=>{approvePO(id);setSelPO(p=>p?{...p,approval:"Approved"}:p);}} onShare={(po)=>{setShareTarget(po);setSelPO(null);}} onGRN={(po)=>{setGrnTarget(po);setSelPO(null);}}
+      {selPO&&<PODetailDrawer po={selPO} onClose={()=>setSelPO(null)} onApprove={canApprovePO(selPO.id)?(id)=>{approvePO(id);setSelPO(p=>p?{...p,approval:"Approved"}:p);}:null} onShare={(po)=>{setShareTarget(po);setSelPO(null);}} onGRN={(po)=>{setGrnTarget(po);setSelPO(null);}}
         onSendToVendor={(po)=>{setSendToVendorTarget(po);}}
         onEdit={(po)=>{setEditPo(po);setShowCreatePO(true);setSelPO(null);}}
         onCancel={async(po)=>{

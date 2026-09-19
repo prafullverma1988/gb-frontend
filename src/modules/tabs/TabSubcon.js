@@ -3,6 +3,7 @@ import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import { T, localYMD } from "../shared/tokens";
+import { canApproveAction, approverRolesFor } from "../../utils/approvalAuthority";
 import { t, Rich } from "../../i18n";
 
 function TabSubcon({ projectId, project }) {
@@ -873,7 +874,8 @@ function TabSubcon({ projectId, project }) {
                       </div>
                       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
                         {b.status==="Draft"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
-                        {b.status==="Submitted"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
+                        {/* RA bill approve — server par requirePerm("Subcon","edit") */}
+                        {b.status==="Submitted"&&canApproveAction({perm:["Subcon","edit"]})&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
                         {(b.status==="Approved"||b.status==="Submitted")&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.record_payment")}</button>}
                         {/* Edit + Delete (not for Paid) */}
                         {b.status!=="Paid"&&(
@@ -3908,8 +3910,14 @@ function AmendmentsTab({ amendments, fmtC, onRefresh }) {
                     })}
                   </div>
                 )}
-                {/* Approve/Reject buttons */}
-                {a.status==="Pending"&&(
+                {/* Approve/Reject — sirf jiska faisla hai. Server:
+                    requirePerm("Subcon","edit") + checkWorkflowRole("Subcon WO Amendment") */}
+                {a.status==="Pending"&&!canApproveAction({perm:["Subcon","edit"],workflow:"Subcon WO Amendment"})&&(
+                  <div style={{fontSize:11,color:T.t4}}>
+                    ⏳ {t("projects.waiting_on")} {approverRolesFor("Subcon WO Amendment")||t("common.approver")}
+                  </div>
+                )}
+                {a.status==="Pending"&&canApproveAction({perm:["Subcon","edit"],workflow:"Subcon WO Amendment"})&&(
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={()=>action(a.id,"Rejected")} disabled={!!actioning}
                       style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+T.red,background:"white",color:T.red,fontSize:12,fontWeight:700,cursor:"pointer"}}>

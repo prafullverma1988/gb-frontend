@@ -1064,6 +1064,7 @@ const dict = {
   "common.approval":                                           "Approval",
   "common.approve":                                            "✓ Approve",
   "common.approve_2":                                          "✓ Approve",
+  "common.approver":                                           "approver",
   "common.approve_apply":                                      "✓ Approve & Apply",
   "common.approved":                                           "Approved",
   "common.approving":                                          "Approving…",
