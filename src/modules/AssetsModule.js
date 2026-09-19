@@ -480,11 +480,51 @@ const repairLoc = (partyId) => ({ holder_type: "repair", holder_id: Number(party
 // ══════════════════════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════════════════════
-function DashboardTab({ dash, onOpenVoucher, onGo }) {
-  if (!dash) return <Empty>{t("assets.dash_empty")}</Empty>;
-  const k = dash.tiles || {};
+function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
+  // Ek store chuna to server usi store ka dashboard bhejta hai
+  // (GET /assets/dashboard?warehouse_id=). Site/subcon wale tile wahan aate hi
+  // nahi — ledger sirf ye jaanta hai cheez ABHI kahan hai, "is store se gayi
+  // thi" kahin darj nahi hota.
+  const [whId, setWhId] = useState("");
+  const [whDash, setWhDash] = useState(null);
+  const [whBusy, setWhBusy] = useState(false);
+  useEffect(() => {
+    if (!whId) { setWhDash(null); return; }
+    let alive = true;
+    setWhBusy(true); setWhDash(null);
+    api.get(`/assets/dashboard?warehouse_id=${whId}`)
+      .then((r) => { if (alive) setWhDash(r && r.success ? r.data : null); })
+      .catch(() => { if (alive) setWhDash(null); })
+      .finally(() => { if (alive) setWhBusy(false); });
+    return () => { alive = false; };
+  }, [whId]);
+
+  const scoped = !!whId && !!whDash;
+  const view = whId ? whDash : companyDash;
+  const picker = (warehouses || []).length > 1 ? (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+      <select value={whId} onChange={(e) => setWhId(e.target.value)} style={{ ...inp, width: 240 }}>
+        <option value="">{t("assets.all_warehouses")}</option>
+        {(warehouses || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+      </select>
+      {scoped && <span style={{ fontSize: 11.5, color: T.t3 }}>{t("assets.wh_scope_hint")}</span>}
+    </div>
+  ) : null;
+
+  if (!view) return <>{picker}{whBusy ? <Spinner /> : <Empty>{t("assets.dash_empty")}</Empty>}</>;
+  const k = view.tiles || {};
   const totalItems = N(k.serialized_items) + N(k.bulk_items);
-  const tiles = [
+  const tiles = scoped ? [
+    { l: t("assets.items"), v: fmtN(totalItems), sub: t("assets.tile_total_sub", { s: N(k.serialized_items), b: N(k.bulk_items) }), c: T.ind, I: IcBox, go: "register" },
+    { l: t("assets.tile_wh_qty"), v: fmtN(k.in_store_qty), sub: t("assets.tile_wh_qty_sub"), c: T.blu, I: IcStore },
+    { l: t("assets.good"), v: fmtN(k.good_qty), sub: t("assets.tile_wh_good_sub"), c: T.grn, I: IcChk },
+    { l: t("assets.tile_damaged"), v: fmtN(k.damaged_qty), sub: t("assets.tile_wh_damaged_sub"), c: N(k.damaged_qty) ? T.amb : T.grn, I: IcAlert },
+    { l: t("assets.tile_pending"), v: fmtN(k.awaiting_accept), sub: t("assets.tile_wh_pending_sub"), c: N(k.awaiting_accept) ? T.amb : T.grn, I: IcClock, go: "movements" },
+    { l: t("assets.tile_overdue"), v: fmtN(k.overdue), sub: t("assets.tile_wh_overdue_sub"), c: N(k.overdue) ? T.red : T.grn, I: IcAlert },
+    { l: t("assets.tile_verify"), v: fmtN(k.open_verifications), c: N(k.open_verifications) ? T.ind : T.grn, I: IcCount, go: "verify",
+      sub: k.last_count_date ? t("assets.tile_wh_last_count", { d: fmtD(k.last_count_date) }) : t("assets.tile_wh_never_counted") },
+    { l: t("assets.tile_lost"), v: fmtN(k.lost_qty_fy), sub: t("assets.tile_wh_lost_sub"), c: N(k.lost_qty_fy) ? T.red : T.grn, I: IcTag },
+  ] : [
     { l: t("assets.tile_total"), v: fmtN(totalItems), sub: t("assets.tile_total_sub", { s: N(k.serialized_items), b: N(k.bulk_items) }), c: T.ind, I: IcBox, go: "register" },
     { l: t("assets.tile_in_store"), v: fmtN(k.in_store_qty), sub: t("assets.tile_in_store_sub"), c: T.blu, I: IcStore, go: "custody" },
     { l: t("assets.tile_deployed"), v: fmtN(k.deployed_qty), sub: t("assets.tile_deployed_sub"), c: T.grn, I: IcHome, go: "custody" },
@@ -498,9 +538,11 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
     { l: t("assets.tile_verify"), v: fmtN(k.open_verifications), sub: t("assets.tile_verify_sub"), c: N(k.open_verifications) ? T.ind : T.grn, I: IcCount, go: "verify" },
   ];
   const two = { display: "grid", gridTemplateColumns: isMobileWidth() ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 };
+  const dash = view;   // neeche ki list dono view me ek jaisi shakl me aati hai
 
   return (
     <>
+      {picker}
       <div style={{ display: "grid", gridTemplateColumns: isMobileWidth() ? "1fr 1fr" : "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
         {tiles.map((s, i) => <StatCard key={i} label={s.l} value={s.v} sub={s.sub} color={s.c} icon={s.I} onClick={s.go && onGo ? () => onGo(s.go) : undefined} />)}
       </div>
@@ -548,6 +590,84 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
         </Panel>
       </div>
 
+      {scoped ? (
+        <div style={two}>
+          <Panel title={t("assets.wh_items_title")}>
+            {(dash.by_item || []).length === 0 && <Empty>{t("assets.wh_items_empty")}</Empty>}
+            {(dash.by_item || []).length > 0 && (
+              <Scroll minWidth={560}>
+                <Row head cols="96px 1.5fr 70px 70px 76px">
+                  <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.good")}</span><span>{t("assets.damaged")}</span><span>{t("assets.total")}</span>
+                </Row>
+                {(dash.by_item || []).map((r) => (
+                  <Row key={r.id} cols="96px 1.5fr 70px 70px 76px">
+                    <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>{r.code || "—"}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4 }}>{[r.spec, r.unit, r.category].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    <span style={{ fontWeight: 600 }}>{fmtN(r.qty_good)}</span>
+                    <span style={{ color: N(r.qty_damaged) ? T.amb : T.t4 }}>{fmtN(r.qty_damaged)}</span>
+                    <span style={{ color: T.t3 }}>{fmtN(r.total_qty)}</span>
+                  </Row>
+                ))}
+              </Scroll>
+            )}
+          </Panel>
+          <Panel title={t("assets.wh_cats_title")}>
+            {(dash.by_category || []).length === 0 && <Empty>{t("assets.wh_items_empty")}</Empty>}
+            {(dash.by_category || []).length > 0 && (
+              <Row head cols="1.6fr 60px 70px 70px"><span>{t("assets.category")}</span><span>{t("assets.items")}</span><span>{t("assets.qty")}</span><span>{t("assets.damaged")}</span></Row>
+            )}
+            {(dash.by_category || []).map((r, i) => (
+              <Row key={r.category_id || "x" + i} cols="1.6fr 60px 70px 70px">
+                <span style={{ fontWeight: 600, color: T.t1 }}>{r.category || "—"}</span>
+                <span>{fmtN(r.items)}</span><span>{fmtN(r.qty)}</span>
+                <span style={{ color: N(r.damaged_qty) ? T.amb : T.t4 }}>{fmtN(r.damaged_qty)}</span>
+              </Row>
+            ))}
+          </Panel>
+        </div>
+      ) : (<>
+      {scoped ? (
+        <div style={two}>
+          <Panel title={t("assets.wh_items_title")}>
+            {(dash.by_item || []).length === 0 && <Empty>{t("assets.wh_items_empty")}</Empty>}
+            {(dash.by_item || []).length > 0 && (
+              <Scroll minWidth={560}>
+                <Row head cols="96px 1.5fr 70px 70px 76px">
+                  <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.good")}</span><span>{t("assets.damaged")}</span><span>{t("assets.total")}</span>
+                </Row>
+                {(dash.by_item || []).map((r) => (
+                  <Row key={r.id} cols="96px 1.5fr 70px 70px 76px">
+                    <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>{r.code || "—"}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4 }}>{[r.spec, r.unit, r.category].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    <span style={{ fontWeight: 600 }}>{fmtN(r.qty_good)}</span>
+                    <span style={{ color: N(r.qty_damaged) ? T.amb : T.t4 }}>{fmtN(r.qty_damaged)}</span>
+                    <span style={{ color: T.t3 }}>{fmtN(r.total_qty)}</span>
+                  </Row>
+                ))}
+              </Scroll>
+            )}
+          </Panel>
+          <Panel title={t("assets.wh_cats_title")}>
+            {(dash.by_category || []).length === 0 && <Empty>{t("assets.wh_items_empty")}</Empty>}
+            {(dash.by_category || []).length > 0 && (
+              <Row head cols="1.6fr 60px 70px 70px"><span>{t("assets.category")}</span><span>{t("assets.items")}</span><span>{t("assets.qty")}</span><span>{t("assets.damaged")}</span></Row>
+            )}
+            {(dash.by_category || []).map((r, i) => (
+              <Row key={r.category_id || "x" + i} cols="1.6fr 60px 70px 70px">
+                <span style={{ fontWeight: 600, color: T.t1 }}>{r.category || "—"}</span>
+                <span>{fmtN(r.items)}</span><span>{fmtN(r.qty)}</span>
+                <span style={{ color: N(r.damaged_qty) ? T.amb : T.t4 }}>{fmtN(r.damaged_qty)}</span>
+              </Row>
+            ))}
+          </Panel>
+        </div>
+      ) : (<>
       <div style={two}>
         <Panel title={t("assets.by_project")}>
           {(dash.by_project || []).length === 0 && <Empty>{t("assets.nothing_on_site")}</Empty>}
@@ -600,7 +720,7 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
             <Row head cols="1.6fr 60px 70px 70px"><span>{t("assets.warehouse")}</span><span>{t("assets.items")}</span><span>{t("assets.qty")}</span><span>{t("assets.damaged")}</span></Row>
           )}
           {(dash.by_warehouse || []).map((r) => (
-            <Row key={r.warehouse_id} cols="1.6fr 60px 70px 70px">
+            <Row key={r.warehouse_id} cols="1.6fr 60px 70px 70px" onClick={() => setWhId(String(r.warehouse_id))}>
               <span style={{ fontWeight: 600, color: T.t1 }}>{r.warehouse_name}</span>
               <span>{fmtN(r.items)}</span><span>{fmtN(r.qty)}</span>
               <span style={{ color: N(r.damaged_qty) ? T.amb : T.t4 }}>{fmtN(r.damaged_qty)}</span>
@@ -608,6 +728,10 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
           ))}
         </Panel>
       </div>
+
+      </>)}
+
+      </>)}
 
       <Panel title={t("assets.recent_title")}>
         {(dash.recent || []).length === 0 && <Empty>{t("assets.recent_empty")}</Empty>}
@@ -638,20 +762,36 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
 // ══════════════════════════════════════════════════════════════════
 // REGISTER
 // ══════════════════════════════════════════════════════════════════
-function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIncharge, onImport, onExport, exportErr, onAddAsset }) {
+function RegisterTab({ items, cats, warehouses, canEdit, canCreate, onOpenItem, onCats, onIncharge, onImport, onExport, exportErr, onAddAsset }) {
   const [q, setQ] = useState("");
   const [tracking, setTracking] = useState("");
   const [cat, setCat] = useState("");
+  // Ek store chuna to server se usi store wali list aati hai — aur qty bhi usi
+  // store ki (here_good / here_damaged). Do godown wali company me "220 pada
+  // hai" dekh kar aadmi ye maan leta tha ki 220 isi store me hai.
+  const [whId, setWhId] = useState("");
+  const [whRows, setWhRows] = useState(null);
+  useEffect(() => {
+    if (!whId) { setWhRows(null); return; }
+    let alive = true;
+    setWhRows(null);
+    api.get(`/assets/items?in_warehouse_id=${whId}`)
+      .then((r) => { if (alive) setWhRows(r && r.success ? r.data || [] : []); })
+      .catch(() => { if (alive) setWhRows([]); });
+    return () => { alive = false; };
+  }, [whId]);
+  const scoped = !!whId;
+  const base = scoped ? whRows : items;
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return (items || []).filter((i) =>
+    return (base || []).filter((i) =>
       (!tracking || i.tracking_mode === tracking) &&
       (!cat || String(i.category_id) === String(cat)) &&
       (!s || [i.code, i.name, i.spec, i.category].some((x) => String(x || "").toLowerCase().includes(s))));
-  }, [items, q, tracking, cat]);
+  }, [base, q, tracking, cat]);
 
-  const cols = "100px 1.6fr 1fr 60px 84px 96px 64px 64px 64px 64px";
+  const cols = scoped ? "100px 1.6fr 1fr 60px 84px 96px 64px 64px 64px" : "100px 1.6fr 1fr 60px 84px 96px 64px 64px 64px 64px";
   return (
     <Panel title={t("assets.register_title", { n: rows.length })}
       action={
@@ -669,19 +809,31 @@ function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIn
           <option value="">{t("assets.all_categories")}</option>
           {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+        {(warehouses || []).length > 1 && (
+          <select value={whId} onChange={(e) => setWhId(e.target.value)} style={{ ...inp, width: 200 }}>
+            <option value="">{t("assets.all_warehouses")}</option>
+            {(warehouses || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        )}
+        {scoped && <span style={{ fontSize: 11.5, color: T.t3 }}>{t("assets.reg_wh_hint")}</span>}
       </div>
       {exportErr && <div style={{ padding: "8px 14px" }}><Notice tone="warn">{exportErr}</Notice></div>}
-      {rows.length === 0 && (
+      {scoped && whRows == null && <Spinner />}
+      {rows.length === 0 && !(scoped && whRows == null) && (
         <Empty>
-          {(items || []).length === 0 ? t("assets.register_empty") : t("assets.no_match")}<br />
-          {(items || []).length === 0 && <span style={{ fontSize: 11.5 }}>{t("assets.register_empty_hint")}</span>}
+          {scoped ? t("assets.wh_items_empty")
+            : (items || []).length === 0 ? t("assets.register_empty") : t("assets.no_match")}<br />
+          {!scoped && (items || []).length === 0 && <span style={{ fontSize: 11.5 }}>{t("assets.register_empty_hint")}</span>}
         </Empty>
       )}
       {rows.length > 0 && (
         <Scroll minWidth={900}>
           <Row head cols={cols}>
             <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.spec")}</span><span>{t("assets.unit")}</span>
-            <span>{t("assets.type")}</span><span>{t("assets.status")}</span><span>{t("assets.total")}</span><span>{t("assets.in_store")}</span><span>{t("assets.deployed")}</span><span>{t("assets.damaged")}</span>
+            <span>{t("assets.type")}</span><span>{t("assets.status")}</span>
+            {scoped
+              ? <><span>{t("assets.good")}</span><span>{t("assets.damaged")}</span><span>{t("assets.total")}</span></>
+              : <><span>{t("assets.total")}</span><span>{t("assets.in_store")}</span><span>{t("assets.deployed")}</span><span>{t("assets.damaged")}</span></>}
           </Row>
           {rows.map((i) => (
             <Row key={i.id} cols={cols} onClick={() => onOpenItem(i)}>
@@ -694,10 +846,20 @@ function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIn
                 ? <Pill label={itemStatusLabel(i.status)} c={["damaged", "lost", "scrapped"].includes(i.status) ? T.red : i.status === "repair" ? T.amb : i.status === "issued" ? T.blu : T.grn}
                     bg={["damaged", "lost", "scrapped"].includes(i.status) ? T.redL : i.status === "repair" ? T.ambL : i.status === "issued" ? T.bluL : T.grnL} />
                 : <span style={{ color: T.t4 }}>—</span>}</span>
-              <span style={{ fontWeight: 600 }}>{fmtN(i.total_qty)}</span>
-              <span>{fmtN(i.in_store_qty)}</span>
-              <span>{fmtN(i.deployed_qty)}</span>
-              <span style={{ color: N(i.damaged_qty) ? T.amb : T.t4 }}>{fmtN(i.damaged_qty)}</span>
+              {scoped ? (
+                <>
+                  <span style={{ fontWeight: 600 }}>{fmtN(i.here_good)}</span>
+                  <span style={{ color: N(i.here_damaged) ? T.amb : T.t4 }}>{fmtN(i.here_damaged)}</span>
+                  <span style={{ color: T.t3 }}>{fmtN(i.total_qty)}</span>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontWeight: 600 }}>{fmtN(i.total_qty)}</span>
+                  <span>{fmtN(i.in_store_qty)}</span>
+                  <span>{fmtN(i.deployed_qty)}</span>
+                  <span style={{ color: N(i.damaged_qty) ? T.amb : T.t4 }}>{fmtN(i.damaged_qty)}</span>
+                </>
+              )}
             </Row>
           ))}
         </Scroll>
@@ -2989,9 +3151,9 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
           </button>
         </div>
 
-        {tab === "dashboard" && <DashboardTab dash={dash} onOpenVoucher={setVoucherId} onGo={setTab} />}
+        {tab === "dashboard" && <DashboardTab dash={dash} warehouses={(meta && meta.warehouses) || []} onOpenVoucher={setVoucherId} onGo={setTab} />}
         {tab === "register" && (
-          <RegisterTab items={items} cats={cats} canEdit={canEdit} canCreate={canCreate} onOpenItem={setOpenItem}
+          <RegisterTab items={items} cats={cats} warehouses={(meta && meta.warehouses) || []} canEdit={canEdit} canCreate={canCreate} onOpenItem={setOpenItem}
             onCats={() => setCatsOpen(true)} onIncharge={() => setInchOpen(true)} onImport={() => setImportOpen(true)} onAddAsset={() => setAddOpen(true)}
             onExport={doExport} exportErr={exportErr} />
         )}
