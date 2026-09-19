@@ -3,6 +3,7 @@ import api, { getWarehouseId, setWarehouseId } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
 import GrnIssueBlock from "../components/GrnIssueBlock";
+import { canApproveAction } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
@@ -3543,7 +3544,12 @@ function WarehouseModule(){
   const meUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   const isAdmin = ["admin","super_admin","project_manager"].includes((meUser?.role || "").toLowerCase());
   // Only super_admin / admin can approve MRs (PM excluded from approval-grant authority)
-  const canApproveMR = ["admin","super_admin"].includes((meUser?.role || "").toLowerCase());
+  // Warehouse MR approve/reject andar se PATCH /warehouse/mr/:id hai, jo
+  // requirePerm("Warehouse","edit") maangta hai. Pehle yahan sirf role ka naam
+  // dekha jaata tha (admin/super_admin), isliye jis store keeper ko Warehouse
+  // ka edit diya gaya hai usko apne hi warehouse ki MR par button nahi milta
+  // tha — jabki server use haan kehta.
+  const canApproveMR = canApproveAction({ perm: ["Warehouse", "edit"] }, meUser);
 
   // Approve / Reject — inline buttons on Pending MR rows (shown when canApproveMR).
   // BOTH warehouse-internal (project_id=NULL) AND procurement-linked (project_id

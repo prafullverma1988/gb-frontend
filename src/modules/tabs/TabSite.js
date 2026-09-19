@@ -3,8 +3,14 @@ import api, { API_BASE, getToken } from "../../config/api";
 import { T } from "../shared/tokens";
 import { Pill } from "../shared/ui";
 import DinKaByoraModal from "./DinKaByoraModal";
+import { canApproveAction } from "../../utils/approvalAuthority";
 import { t, getLang } from "../../i18n";
 import { todayISO, isoDate } from "../../utils/today";
+
+// DPR approve server par PATCH /dpr/:id/approve hai —
+// requirePerm(["Site / DPR","Projects"], "approve", {strict:true}). Yahan
+// pehle sirf role ka naam (admin/super_admin/PM) dekha jaata tha.
+const canApproveDpr = () => canApproveAction({ perm: [["Site / DPR", "Projects"], "approve", { strict: true }] });
 
 // ── Site / DPR tab ──────────────────────────────────────────────
 // DPR ab bharne wala form nahi hai. Server din jod kar deta hai
@@ -66,7 +72,7 @@ const STATUS = {
   none:      () => ({ c: T.t4,  bg: T.bg,   l: t("site.st_none") }),
 };
 
-function TabSite({ project, isAdmin }) {
+function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role ke naam se nahi
   const projectId = project?.id;
   const [date, setDate]       = useState(todayISO());
   const [day, setDay]         = useState(null);
@@ -242,7 +248,7 @@ function TabSite({ project, isAdmin }) {
               </div>
             )}
           </div>
-          {day?.status === "submitted" && isAdmin && (
+          {day?.status === "submitted" && canApproveDpr() && (
             <button onClick={approveDPR} disabled={busy}
               style={{ padding: "6px 15px", borderRadius: 7, background: T.grn, color: "white", border: "none",
                 fontSize: 11.5, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit" }}>

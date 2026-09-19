@@ -2,7 +2,19 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { t, Rich } from "../i18n";
+import { canApproveAction } from "../utils/approvalAuthority";
 import { todayISO } from "../utils/today";
+
+// Approve/Reject ka haq — theek wahi jaanch jo server us route par lagata hai.
+// Pehle ye sab ek hi `isAdmin = ["admin","super_admin","project_manager"]` par
+// chalte the, jo role ke NAAM par tha. Dono taraf galat: jis custom role ko
+// Roles & Access se approve mila hai (Ratna ke site account, computer operator)
+// usse button chhupa rehta tha, aur jis PM ke paas bit nahi tha use dikhta tha
+// aur dabane par "is kaam ki ijazat nahi" milta tha.
+const canApproveHR  = () => canApproveAction({ perm: ["Team & HR", "approve"] });      // salary/attendance edit, leave
+const canApproveAtt = () => canApproveAction({ perm: ["Attendance", "approve"] });     // day-lock
+// Attendance session review par server requireRole("admin","manager") BHI lagata hai.
+const canReviewAtt  = () => canApproveAction({ roles: ["admin", "super_admin", "manager"], perm: ["Attendance", "approve"] });
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -434,7 +446,7 @@ function PendingReviewQueue({onChanged}){
             </div>
             <div style={{fontSize:10,color:T.t4,marginTop:2,fontFamily:"monospace"}}>{t("payroll.gps_s_s2", { s: s.punch_in_lat?Number(s.punch_in_lat).toFixed(5):"—", s2: s.punch_in_lng?Number(s.punch_in_lng).toFixed(5):"—" })}</div>
           </div>
-          <div style={{display:"flex",gap:6}}>
+          {canReviewAtt()&&<div style={{display:"flex",gap:6}}>
             <button onClick={()=>review(s.id,"reject")} disabled={acting===s.id}
               style={{padding:"6px 12px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
              {t("common.reject")}
@@ -443,7 +455,7 @@ function PendingReviewQueue({onChanged}){
               style={{padding:"6px 14px",borderRadius:6,background:T.grn,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
              {t("common.approve")}
             </button>
-          </div>
+          </div>}
         </div>
       ))}
     </div>
@@ -728,8 +740,8 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
         </div>
       )}
 
-      {/* ─── PENDING APPROVALS (admin) ─── */}
-      {!loading && subTab==="pending" && isAdmin && (
+      {/* ─── PENDING APPROVALS (jiske paas Team & HR ka approve hai) ─── */}
+      {!loading && subTab==="pending" && canApproveHR() && (
         <div>
           {pendingApps.length===0?(
             <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:9,padding:30,textAlign:"center"}}>
@@ -1245,10 +1257,12 @@ function PunchReviewStrip({onActed}){
                 </div>
                 {s.out_reason&&<div style={{fontSize:10.5,color:T.t2,marginTop:2}}>📝 <b>{t("common.reason_2")}</b> {s.out_reason}</div>}
               </div>
-              <button disabled={acting===s.id} onClick={()=>act(s.id,"reject")}
-                style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.reject")}</button>
-              <button disabled={acting===s.id} onClick={()=>act(s.id,"approve")}
-                style={{padding:"5px 13px",borderRadius:6,background:"#0D9488",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===s.id?"…":t("common.approve")}</button>
+              {canReviewAtt()&&<>
+                <button disabled={acting===s.id} onClick={()=>act(s.id,"reject")}
+                  style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.reject")}</button>
+                <button disabled={acting===s.id} onClick={()=>act(s.id,"approve")}
+                  style={{padding:"5px 13px",borderRadius:6,background:"#0D9488",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===s.id?"…":t("common.approve")}</button>
+              </>}
             </div>
             {openId===s.id&&(
               <div style={{marginTop:8,paddingTop:8,borderTop:"1px dashed #99F6E4"}}>
@@ -1419,7 +1433,7 @@ function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],
             </button>
           ):(
             <div style={{display:"flex",gap:6}}>
-              {lock.status==="locked"&&isAdmin&&(
+              {lock.status==="locked"&&canApproveAtt()&&(
                 <button disabled={locking} onClick={approveDay}
                   style={{fontSize:11,fontWeight:700,color:"#fff",background:T.grn,border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer"}}>
                  {t("payroll.approve_day")}
@@ -1647,10 +1661,12 @@ function StaffEditRequestsStrip({staff,onActed}){
                 </div>
                 <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>📝 {r.reason||"—"} <span style={{color:T.t4}}>{t("payroll.by_r", { r: r.requester_name||"?" })}</span></div>
               </div>
-              <button disabled={acting===r.id} onClick={()=>act(r.id,"rejected")}
-                style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.reject")}</button>
-              <button disabled={acting===r.id} onClick={()=>act(r.id,"approved")}
-                style={{padding:"5px 13px",borderRadius:6,background:T.blu,border:"none",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===r.id?"…":t("common.approve_apply")}</button>
+              {canApproveHR()?<>
+                <button disabled={acting===r.id} onClick={()=>act(r.id,"rejected")}
+                  style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.reject")}</button>
+                <button disabled={acting===r.id} onClick={()=>act(r.id,"approved")}
+                  style={{padding:"5px 13px",borderRadius:6,background:T.blu,border:"none",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===r.id?"…":t("common.approve_apply")}</button>
+              </>:<span style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>{t("common.awaiting_admin_approval")}</span>}
             </div>
           );
         })}
@@ -2203,7 +2219,7 @@ function ApprovalQueueModal({onClose,onProcessed,isAdmin}){
                 </tbody>
               </table>
             </div>
-            {isAdmin&&(<>
+            {canApproveHR()&&(<>
               <input value={notes[req.id]||""} onChange={e=>setNotes(p=>({...p,[req.id]:e.target.value}))} placeholder={t("common.note_optional")}
                 style={{width:"100%",padding:"6px 10px",border:`1px solid ${T.b1}`,borderRadius:5,fontSize:11.5,marginBottom:6,fontFamily:"inherit"}}/>
               <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
@@ -2211,7 +2227,7 @@ function ApprovalQueueModal({onClose,onProcessed,isAdmin}){
                 <button disabled={actingId===req.id} onClick={()=>act(req.id,"approved")} style={{padding:"6px 14px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{actingId===req.id?"…":t("common.approve")}</button>
               </div>
             </>)}
-            {!isAdmin&&<div style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>{t("common.awaiting_admin_approval")}</div>}
+            {!canApproveHR()&&<div style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>{t("common.awaiting_admin_approval")}</div>}
           </div>
         ))}
       </div>
@@ -3147,8 +3163,8 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
         </div>
       </div>
 
-      {/* Pending Edit Approvals Banner (admin-only) */}
-      {isAdmin && editReqs.filter(r=>r.status==="pending").length>0 && (
+      {/* Pending Edit Approvals Banner — sirf Team & HR ke approver ko */}
+      {canApproveHR() && editReqs.filter(r=>r.status==="pending").length>0 && (
         <div style={{background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:9,padding:"10px 14px",marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:700,color:T.amb,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
             <IcAlert size={14} color={T.amb}/>{t("payroll.editreqs_salary_edit_request_s_pending", { editReqs: editReqs.filter(r=>r.status==="pending").length })}</div>

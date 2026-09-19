@@ -17,7 +17,7 @@
 // jaate hain, unke liye intezaar hai hi nahi.
 import { useState, useEffect } from "react";
 import api from "../config/api";
-import { currentUser, can } from "./perms";
+import { currentUser, canAny } from "./perms";
 
 const LS_KEY = "gb_appr_authority";
 let cache = readLS();
@@ -77,16 +77,18 @@ export function canApproveModule(workflowModule, user) {
  * na zyada. Zyada lagayenge to jo sach me approve kar sakta hai uska button
  * gayab ho jayega; kam lagayenge to wahi 403 wala bug wapas aa jayega.
  *
- *   workflow — approval_workflows ka module   (backend: checkWorkflowRole / engine)
- *   perm     — [moduleName, action]           (backend: requirePerm)
- *   roles    — role slugs ki list             (backend: requireRole)
+ *   workflow — approval_workflows ka module            (backend: checkWorkflowRole / engine)
+ *   perm     — [module(s), action, opts?]              (backend: requirePerm)
+ *              module ek naam ya list; list = "kisi ek me bit ho to chalega".
+ *              opts.strict wahi hai jo requirePerm ka strict.
+ *   roles    — role slugs ki list                      (backend: requireRole)
  */
 export function canApproveAction({ workflow, perm, roles } = {}, user) {
   const u = user || currentUser();
   if (isAdmin(u)) return true;
   const mine = normRole(u?.role);
   if (roles && !roles.map(normRole).includes(mine)) return false;
-  if (perm && !can(perm[0], perm[1] || "approve", u)) return false;
+  if (perm && !canAny(perm[0], perm[1] || "approve", perm[2] || {}, u)) return false;
   if (workflow && !canApproveModule(workflow, u)) return false;
   return true;
 }
