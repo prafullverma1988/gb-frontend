@@ -1131,7 +1131,7 @@ export default function DesignModule() {
             </div>
             {!canDecideDesign()?(
               <div style={{fontSize:11.5,color:T.t4,whiteSpace:"nowrap"}}>
-                ⏳ {t("projects.waiting_on")} Admin / Project Manager
+                ⏳ {t("projects.waiting_on")} {t("projects.admin_or_pm")}
               </div>
             ):(
             <div style={{display:"flex",gap:7}}>

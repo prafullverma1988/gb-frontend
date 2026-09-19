@@ -5822,6 +5822,7 @@ const dict = {
   "projects.view_invoice_detail":                              "इनवॉइस डिटेल देखें",
   "projects.view_rates":                                       "रेट्स देखें",
   "projects.waiting_on":                                       "वेटिंग है",
+  "projects.admin_or_pm":                                     "एडमिन / प्रोजेक्ट मैनेजर",
   "projects.wallet_approvals":                                 "वॉलेट अप्रूवल्स",
   "projects.wallet_wcat_lbl":                                  "वॉलेट · {WCAT_LBL}",
   "projects.whatsapp_par_bhejo":                               "व्हाट्सएप पर भेजो",

@@ -5953,7 +5953,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           ki kiska intezaar hai. */}
                       {isRateBlocking && !canApproveAction({roles:["admin","super_admin","project_manager"]}) ? (
                         <span style={{fontSize:11.5,color:T.t4}}>
-                          ⏳ {t("projects.waiting_on")} Admin / Project Manager
+                          ⏳ {t("projects.waiting_on")} {t("projects.admin_or_pm")}
                         </span>
                       ) : isRateBlocking ? (
                         <>

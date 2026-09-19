@@ -5825,6 +5825,7 @@ const dict = {
   "projects.view_invoice_detail":                              "View invoice detail",
   "projects.view_rates":                                       "View rates",
   "projects.waiting_on":                                       "Waiting on",
+  "projects.admin_or_pm":                                      "Admin / Project Manager",
   "projects.wallet_approvals":                                 "Wallet Approvals",
   "projects.wallet_wcat_lbl":                                  "Wallet · {WCAT_LBL}",
   "projects.whatsapp_par_bhejo":                               "WhatsApp par bhejo",
