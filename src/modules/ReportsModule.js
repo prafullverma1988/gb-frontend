@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
-import { canSeeFinancials } from "../utils/perms";
+import { canSeeFinancials, currentUser } from "../utils/perms";
+import CompanyDay from "./reports/CompanyDay";
 import { daysAgoISO } from "../utils/today";
 
 const COMPANY_NAME = "Company";
@@ -1300,6 +1301,10 @@ export default function ReportsModule(){
     {id:"challan", l:t("reports.material_register"),      desc:t("reports.grn_level_material_movement_vendor_project"), icon:IcSheet},
     // Progress & Financial me paisa hota hai — "Financial Reports" ke peeche.
     ...(canSeeFinancials() ? [{id:"progress",l:t("reports.progress_financial"),  desc:t("reports.site_progress_finance_report"),icon:IcBar}] : []),
+    // Company ka din sirf admin/super_admin ko — isme wo paisa bhi hai jo kisi
+    // site ka nahi (server bhi wahi rok lagata hai, GET /dpr/company/day).
+    ...(["admin","super_admin"].includes(currentUser()?.role)
+      ? [{id:"coday",l:t("coday.title"),desc:t("coday.desc"),icon:IcCalc}] : []),
   ];
 
   return(
@@ -1332,6 +1337,7 @@ export default function ReportsModule(){
         {tab==="cash"     && <CashBookModule/>}
         {tab==="challan"  && <ChallanModule/>}
         {tab==="progress" && <ProgressReportModule/>}
+        {tab==="coday"    && <CompanyDay/>}
       </div>
 
       <style>{`
