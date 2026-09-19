@@ -162,6 +162,7 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
   const VIEWS = [
     { id: "overview", l: t("common.overview") },
     { id: "work",     l: t("site.work_done"),      n: tasks.length },
+    { id: "machine",  l: t("site.machine"),        n: (a?.machines || []).length + (a?.trips || []).length },
     { id: "material", l: t("common.materials"),    n: materialUsed.length + grn.length },
     { id: "photos",   l: t("common.photos"),       n: photos.length },
   ];
@@ -268,10 +269,11 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
 
       {a && !loading && (<>
         {/* ── KPI ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 10, marginBottom: 12 }}>
           {[
             { l: t("common.labour"),        v: fq(a.labour.total), c: T.blu },
             { l: t("site.work_items"),      v: tasks.length, c: T.slt },
+            { l: t("site.diesel"),          v: a.fuel?.total_l ? fq(a.fuel.total_l) : "—", c: T.slt },
             { l: t("common.photos"),        v: a.photos.total, c: T.grn },
             { l: t("site.hindrance_hours"), v: a.hindrance_hours ? fq(a.hindrance_hours) : "—", c: a.hindrance_hours ? T.amb : T.grn },
             { l: t("site.weather"),         v: day.topup.weather_code ? t("dpr.weather_" + day.topup.weather_code) : (day.topup.weather || "—"), c: T.amb },
@@ -381,6 +383,11 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
                     <b>{t("site.kal_ka_plan")}:</b> {day.topup.next_day_plan}
                   </div>
                 )}
+                {day.topup.client_visit && (
+                  <div style={{ fontSize: 12, color: T.t2, marginTop: 7 }}>
+                    <b>{t("site.client_visit")}:</b> {day.topup.client_visit}
+                  </div>
+                )}
                 <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${T.b1}`, fontSize: 11.5, color: T.t4 }}>
                   {t("site.submitted_by")} <strong style={{ color: T.t1 }}>{day.dpr?.submitted_by_name || "—"}</strong>
                   {day.dpr?.approved_by_name && <> · {t("site.approved_by")} <strong style={{ color: T.t1 }}>{day.dpr.approved_by_name}</strong></>}
@@ -412,6 +419,78 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
         )}
 
         {/* ── MATERIAL ── */}
+        {/* ── MACHINE — diary jaisa: kitni der chali, kya kaam kiya, kitna
+             diesel, aur khadi/kharab rahi to wajah. Neeche gaadi ke phere. ── */}
+        {view === "machine" && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ ...card, overflow: "hidden" }}>
+              <div style={{ padding: "9px 14px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}`,
+                fontSize: 12, fontWeight: 700, color: T.t2, display: "flex" }}>
+                <span style={{ flex: 1 }}>{t("site.machine")}</span>
+                {a.fuel?.total_l ? <span style={{ color: T.t3 }}>{t("site.diesel_n", { n: fq(a.fuel.total_l) })}</span> : null}
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    {[t("site.machine"), t("site.operator"), t("site.ghante"), t("site.meter"), t("site.kya_kaam"), t("site.diesel")].map((h, i) => (
+                      <th key={i} style={{ textAlign: i === 2 || i === 3 || i === 5 ? "right" : "left", padding: "7px 14px",
+                        fontSize: 10.5, color: T.t3, fontWeight: 700, borderBottom: `1px solid ${T.b1}` }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(a.machines || []).length === 0 && (
+                    <tr><td colSpan={6} style={{ padding: "10px 14px", color: T.t4 }}>{t("site.koi_machine_nahi")}</td></tr>
+                  )}
+                  {(a.machines || []).map(m => (
+                    <tr key={m.usage_id} style={{ borderBottom: `1px solid ${T.b1}` }}>
+                      <td style={{ padding: "7px 14px" }}>
+                        <b style={{ color: T.t1 }}>{m.name}</b>
+                        {m.reg_no ? <div style={{ fontSize: 11, color: T.t4 }}>{m.reg_no}</div> : null}
+                        {m.run_status && m.run_status !== "ran" ? (
+                          <div style={{ fontSize: 11, color: T.amb }}>
+                            {m.run_status === "breakdown" ? t("site.machine_kharab") : t("site.machine_khadi")}
+                            {m.idle_reason ? " — " + m.idle_reason : ""}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td style={{ padding: "7px 14px", color: T.t2 }}>{m.operator || "—"}</td>
+                      <td style={{ padding: "7px 14px", textAlign: "right", color: T.t2 }}>{m.hours != null ? fq(m.hours) : "—"}</td>
+                      <td style={{ padding: "7px 14px", textAlign: "right", color: T.t2 }}>
+                        {m.meter_start != null || m.meter_end != null ? `${fq(m.meter_start)} → ${fq(m.meter_end)}` : "—"}
+                      </td>
+                      <td style={{ padding: "7px 14px", color: T.t2 }}>
+                        {[m.task, m.work_qty != null ? fq(m.work_qty) + (m.work_unit ? " " + m.work_unit : "") : null, m.sector]
+                          .filter(Boolean).join("  ·  ") || "—"}
+                      </td>
+                      <td style={{ padding: "7px 14px", textAlign: "right", color: T.t2 }}>{m.fuel_qty != null ? fq(m.fuel_qty) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {(a.trips || []).length > 0 && (
+              <div style={{ ...card, overflow: "hidden" }}>
+                <div style={{ padding: "9px 14px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}`,
+                  fontSize: 12, fontWeight: 700, color: T.t2 }}>
+                  {t("site.gaadi_ke_phere")}
+                </div>
+                <div style={{ padding: "10px 14px" }}>
+                  {a.trips.map(tp => (
+                    <div key={tp.id} style={{ fontSize: 12, color: T.t2, marginBottom: 5 }}>
+                      <b style={{ color: T.t1 }}>{tp.reg_no || tp.truck}</b>
+                      {tp.qty != null ? "  ·  " + fq(tp.qty) + (tp.qty_unit ? " " + tp.qty_unit : "") : ""}
+                      {tp.challan_no ? "  ·  " + t("site.challan_x", { x: tp.challan_no }) : ""}
+                      {tp.route || tp.task ? <span style={{ color: T.t4 }}>{"  ·  " + (tp.route || tp.task)}</span> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {view === "material" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div style={{ ...card, overflow: "hidden" }}>
