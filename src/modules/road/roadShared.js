@@ -93,18 +93,18 @@ export const actionTone = (a) => ({
 const NOTE_CODES = ["kaam_shuru_sirf_scope"];
 export const noteLabel = (n) => (n && NOTE_CODES.includes(n) ? t("road.note_" + n) : "");
 
-// blocked[].reason do tarah ka aata hai aur dono sambhalne padte hain:
-//   • roadTasks.js khud "task_nahi_mila" jaisa CODE bhejta hai — uska
-//     vaakya yahan banta hai
-//   • budgetNode.js (Budget module ke saath saanjha) abhi poora HINGLISH
-//     vaakya bhejta hai ("is task par pehle se qty darj hai"). Usse code
-//     me badalna backend ka kaam hai; tab tak wo jaisa hai waisa dikhta
-//     hai — warna English/Hindi user ko kuch bhi nahi dikhega.
-const BLOCK_CODES = ["task_nahi_mila", "kaam_shuru"];
+// blocked[].reason aur parent.block_reason ab SIRF code hote hain
+// (backend d29ce86 — budgetNode.js ka `reason_code`). Teen hi aate hain,
+// aur inka text backend pack se verbatim hai: wahi shabd apply ke error
+// me bhi chhapte hain, isliye dono jagah ek hi baat likhi honi chahiye.
+//
+// Vaakya ke TUKDE hain (chhota akshar, bina poorn-viraam) kyunki backend
+// inhe "Task nahi ban sakte — {reason}." me jodta hai. Screen par ye
+// bullet ke peeche lagte hain, wahan bhi thik baithte hain.
+const BLOCK_CODES = ["qty_darj", "entries_hain", "task_nahi_mila"];
 export const blockReason = (r) => {
   const s = String(r || "").trim();
-  if (!s) return t("road.block_unknown");
-  return BLOCK_CODES.includes(s) ? t("road.block_" + s) : s;
+  return BLOCK_CODES.includes(s) ? t("road.block_" + s) : t("road.block_anya");
 };
 
 export const rupee = (n) => (num(n) == null ? "—" : "₹" + Math.round(Number(n)).toLocaleString("en-IN"));
@@ -193,11 +193,19 @@ export const FACTOR_FIELDS = [
 // hamesha true aata hai aur kuch bhi apne aap save nahi hota. Qty, area,
 // volume aur paisa AI se KABHI nahi aate; wo poora ganit code karta hai.
 //
-// Key na lagi ho to server saaf mana karta hai (road.ai_abhi_uplabdh_nahi).
-// Us soorat me button tootta nahi — uski jagah wahi line likh dete hain,
-// taaki aadmi ko pata chale ki form haath se bharna hai.
-export const aiUnavailable = (r) =>
-  !!(r && !r.success && String(r.message || "") === t("road.ai_abhi_uplabdh_nahi"));
+// Key na lagi ho to server saaf mana karta hai. Us soorat me button
+// tootta nahi — uski jagah wahi line likh dete hain, taaki aadmi ko pata
+// chale ki form haath se bharna hai.
+//
+// Asli pehchan `code` se hoti hai. Jab tak wo har jawab me nahi aata,
+// message ka milan hi sahara hai — par wo kamzor hai: pack ka ek shabd
+// badla aur ye chup ho jaayega. Isliye code pehle dekha jaata hai, aur
+// jis jawab me code hai uspar message wala raasta chalta hi nahi.
+export const aiUnavailable = (r) => {
+  if (!r || r.success) return false;
+  if (r.code) return r.code === "ai_unavailable";
+  return String(r.message || "") === t("road.ai_abhi_uplabdh_nahi");
+};
 
 // Drawing ki photo Cloudinary par jaati hai (wahi unsigned preset jo
 // Design tab ke drawings use karte hain) — server ko URL chahiye.

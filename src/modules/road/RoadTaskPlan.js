@@ -179,18 +179,27 @@ export default function RoadTaskPlan({ design, onApplied }) {
             </div>
           )}
 
-          {/* ── Jod ── */}
+          {/* ── Jod ──
+              "Scope ka amount" tabhi dikhta hai jab sach me kuch bana ho.
+              Abhi kisi kaam se BOQ item jodne ka raasta screen par hai hi
+              nahi, isliye ye hamesha khaali rehta — aur khaali column ye
+              jhooth bolta ki revenue gina ja raha hai. Uski jagah ek line
+              likhi jaati hai ki gina kyun nahi ja raha. */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 11 }}>
-            {[[t("road.plan_tot_tasks"), items.filter((x) => x.action !== "unchanged").length, "", T.ind],
-              [t("road.plan_tot_estimate"), rupee(plan.total_estimate), "", T.t1],
-              [t("road.plan_tot_scope_amt"), plan.total_scope_amt ? rupee(plan.total_scope_amt) : "—", "", T.grn]].map(([l, v, u, c]) => (
+            {[
+              [t("road.plan_tot_tasks"), items.filter((x) => x.action !== "unchanged").length, T.ind],
+              [t("road.plan_tot_estimate"), rupee(plan.total_estimate), T.t1],
+              ...(plan.total_scope_amt ? [[t("road.plan_tot_scope_amt"), rupee(plan.total_scope_amt), T.grn]] : []),
+            ].map(([l, v, c]) => (
               <div key={l} style={{ ...S.card, borderTop: `3px solid ${c}`, padding: "11px 13px" }}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: T.t1, ...S.num }}>{v}{u}</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: T.t1, ...S.num }}>{v}</div>
                 <div style={S.lbl}>{l}</div>
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.6 }}>{t("road.plan_revenue_note")}</div>
+          <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.6 }}>
+            {plan.total_scope_amt ? t("road.plan_revenue_note") : t("road.plan_no_boq_note")}
+          </div>
 
           {/* ── Item-wise naksha ── */}
           <div style={{ ...S.card, overflow: "hidden" }}>
