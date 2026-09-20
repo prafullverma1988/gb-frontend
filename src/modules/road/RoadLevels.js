@@ -22,6 +22,7 @@ import { useConfirm } from "../../components/ConfirmDialog";
 import { t } from "../../i18n";
 import RoadSectionTemplate from "./RoadSectionTemplate";
 import RoadDesignDetail from "./RoadDesignDetail";
+import RoadNorms from "./RoadNorms";
 import { rget, rpost, rdelete, dataOf, num, fmtD, S, btn, Empty, canRoad } from "./roadShared";
 
 export default function RoadLevels({ project, tender, pick, defaultName }) {
@@ -42,6 +43,7 @@ export default function RoadLevels({ project, tender, pick, defaultName }) {
   const [showTpl, setShowTpl] = useState(false);
   const [editTpl, setEditTpl] = useState(null);
   const [showLib, setShowLib] = useState(false);
+  const [showNorms, setShowNorms] = useState(false);
 
   const [newOpen, setNewOpen] = useState(false);
   const [form, setForm] = useState({ name: defaultName || "", template_id: "", start_chainage_m: 0, notes: "" });
@@ -127,6 +129,7 @@ export default function RoadLevels({ project, tender, pick, defaultName }) {
           <button onClick={() => setShowLib((v) => !v)} style={btn("ghost")}>
             {t("road.lib_btn", { n: templates.length })}
           </button>
+          <button onClick={() => setShowNorms((v) => !v)} style={btn("ghost")}>{t("road.norm_btn")}</button>
           {mayCreate && (
             <button onClick={() => setNewOpen((v) => !v)} style={btn("primary")}>{t("road.new_design")}</button>
           )}
@@ -184,6 +187,9 @@ export default function RoadLevels({ project, tender, pick, defaultName }) {
           )}
         </div>
       )}
+
+      {/* ── Norms — budget ke ankde. Sujhaav sirf project me (machine log wahin hai). ── */}
+      {showNorms && <RoadNorms projectId={projectId || null} />}
 
       {/* ── Naya design ── */}
       {newOpen && mayCreate && (
