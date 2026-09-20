@@ -32,6 +32,7 @@ export default function TabBudget({ project }) {
   const [hdr, setHdr]       = useState(null);
   const [lines, setLines]   = useState([]);
   const [byCat, setByCat]   = useState({});
+  const [actSrc, setActSrc] = useState(null);   // asli kharch kahan se aaya: { dpr, machine_log, trips } + ginti
   const [progress, setProgress] = useState([]);
   const [selRoll, setSelRoll] = useState(0);
   const [selKids, setSelKids] = useState(false);
@@ -213,6 +214,7 @@ export default function TabBudget({ project }) {
     setHdr({ ...r.data.task });
     setLines((r.data.lines || []).map((l) => ({ ...l })));
     setByCat(r.data.byCat || {});
+    setActSrc(r.data.actual_sources ? { ...r.data.actual_sources, counts: r.data.actual_counts || {} } : null);
     setProgress(r.data.progress || []);
     setCat("material"); setMode("plan");
     setPDate(today()); setPDone(""); setPLines([]);
@@ -510,6 +512,18 @@ export default function TabBudget({ project }) {
                       </tr>
                     </tbody>
                   </table>
+
+                  {/* Actual kahan se aaya — machine ka kharch ab apne aap judta hai (machine log + phere),
+                      isliye saaf dikhe ki kaunsa ankda haath ka hai aur kaunsa log se. */}
+                  {actSrc && (Number(actSrc.machine_log) > 0 || Number(actSrc.trips) > 0) && (
+                    <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", margin: "-8px 0 14px", fontSize: 11, color: T.t3 }}>
+                      <span>{t("budget.actual_src_label")}</span>
+                      {Number(actSrc.machine_log) > 0 && <span style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "2px 9px", fontWeight: 600, color: T.t2 }}>{t("budget.actual_src_machine", { amt: inr(actSrc.machine_log), n: actSrc.counts?.machine_log || 0 })}</span>}
+                      {Number(actSrc.trips) > 0 && <span style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "2px 9px", fontWeight: 600, color: T.t2 }}>{t("budget.actual_src_trips", { amt: inr(actSrc.trips), n: actSrc.counts?.trips || 0 })}</span>}
+                      {Number(actSrc.dpr) > 0 && <span style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "2px 9px", fontWeight: 600, color: T.t2 }}>{t("budget.actual_src_dpr", { amt: inr(actSrc.dpr) })}</span>}
+                      <span style={{ color: T.t4 }}>{t("budget.actual_src_note")}</span>
+                    </div>
+                  )}
 
                   <div style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 10 }}>{t("budget.record_actuals_dpr")}</div>

@@ -939,6 +939,11 @@ const dict = {
   "boq_import_wizard.xlsx_xls_csv":                            ".xlsx, .xls, .csv",
 
   // ── budget ──────────────────────────────────────────────────
+  "budget.actual_src_dpr":                                    "Manual lines {amt}",
+  "budget.actual_src_label":                                  "Actual comes from:",
+  "budget.actual_src_machine":                                "Machine log {amt} · {n} entries",
+  "budget.actual_src_note":                                   "Machine cost is added automatically — do not enter the same cost again by hand below.",
+  "budget.actual_src_trips":                                  "Trips {amt} · {n}",
   "budget.all_levels_tasks":                                   "All Levels ({tasks})",
   "budget.billing_rate_unit":                                  "Billing rate ₹/unit",
   "budget.budget":                                             "+ Budget",
