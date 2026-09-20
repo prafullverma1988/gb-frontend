@@ -21,7 +21,7 @@ import { t } from "../../i18n";
 import RoadLevelsImport from "./RoadLevelsImport";
 import RoadDesignSetup from "./RoadDesignSetup";
 import RoadTaskPlan from "./RoadTaskPlan";
-import { RoadWhatIf, RoadMrSuggest } from "./RoadExtras";
+import { RoadWhatIf, RoadMrSuggest, RoadActualCut } from "./RoadExtras";
 import {
   rget, rpost, rput, dataOf, num, n2, n3, nInt, fmtD, S, btn, Empty,
   SOIL_CASES, caseLabel, caseHint, warnMsg, calcErrMsg, canRoad,
@@ -46,6 +46,10 @@ export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMo
   const [compare, setCompare] = useState(null);
   const [runs, setRuns] = useState([]);
   const [showImport, setShowImport] = useState(false);
+  // Import kaunse level ka: "ogl" (zameen) ya "post_cut" (khudai ke baad ka survey)
+  const [importKind, setImportKind] = useState("ogl");
+  const [postCut, setPostCut] = useState(null);      // asli khudai ka nateeja — L-section ki teesri line bhi isi se
+  const [postKey, setPostKey] = useState(0);
 
   // ── AI ki tippani (Result tab) ──
   // Sirf padhne ke liye. Ye kuch badalta nahi aur kahin save nahi hota —
@@ -164,11 +168,17 @@ export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMo
     const filB = sections.map((s) => Math.max(0, Number(s.frl) - Number(s.ogl_cl)));
     const lOgl = t("road.chart_ogl"), lFrl = t("road.chart_frl");
     const lCut = t("road.chart_cutting"), lFil = t("road.chart_filling");
+    // Teesri line — khudai ke baad ka level (sirf jahan naapa gaya; baaki jagah khaali)
+    const lPost = t("road.chart_post");
+    const pcBy = {};
+    ((postCut && postCut.sections) || []).forEach((s) => { pcBy[Number(s.ch)] = s.pc_cl; });
+    const hasPc = Object.keys(pcBy).length > 0;
+    const pc = chs.map((c) => (pcBy[Number(c)] == null ? null : pcBy[Number(c)]));
     return {
       ...chartBase,
       grid: { left: 58, right: 18, top: 30, bottom: 36 },
       tooltip: { trigger: "axis", valueFormatter: (v) => n3(v) },
-      legend: { data: [lCut, lFil, lOgl, lFrl], top: 0, itemWidth: 12, itemHeight: 8, textStyle: { fontSize: 11, color: T.t3 } },
+      legend: { data: hasPc ? [lCut, lFil, lOgl, lFrl, lPost] : [lCut, lFil, lOgl, lFrl], top: 0, itemWidth: 12, itemHeight: 8, textStyle: { fontSize: 11, color: T.t3 } },
       xAxis: { type: "category", data: chs, axisLabel: { fontSize: 10, color: T.t4 }, axisLine: { lineStyle: { color: T.b1 } } },
       yAxis: { type: "value", scale: true, axisLabel: { fontSize: 10, color: T.t4 }, splitLine: { lineStyle: { color: T.b1 } } },
       series: [
@@ -177,9 +187,10 @@ export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMo
         { name: lFil, type: "line", stack: "band", data: filB, symbol: "none", lineStyle: { opacity: 0 }, areaStyle: { color: T.blu, opacity: .16 }, z: 2 },
         { name: lOgl, type: "line", data: ogl, symbol: "none", lineStyle: { color: T.grn, width: 1.6 }, z: 3 },
         { name: lFrl, type: "line", data: frl, symbol: "none", lineStyle: { color: T.t1, width: 1.6 }, z: 3 },
+        ...(hasPc ? [{ name: lPost, type: "line", data: pc, symbol: "circle", symbolSize: 4, connectNulls: false, lineStyle: { color: T.amb, width: 1.6, type: "dashed" }, itemStyle: { color: T.amb }, z: 4 }] : []),
       ],
     };
-  }, [sections]);
+  }, [sections, postCut]);
 
   const cutFill = useMemo(() => {
     if (!sections.length) return null;
@@ -232,7 +243,7 @@ export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMo
   return (
     <div>
       {showImport && (
-        <RoadLevelsImport design={d} onClose={() => setShowImport(false)}
+        <RoadLevelsImport design={d} kind={importKind} onClose={() => { setShowImport(false); setImportKind("ogl"); setPostKey((k) => k + 1); }}
           onCommitted={() => { loadHead(); loadLevels(); setCalc(null); }} />
       )}
 
@@ -577,6 +588,12 @@ export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMo
                 <AiNote style={{ marginTop: 12 }} />
               </div>
             </div>
+          )}
+
+          {/* Asli khudai — khudai ke baad ke survey se */}
+          {totals && (
+            <RoadActualCut design={d} reloadKey={postKey} onData={setPostCut}
+              onImport={() => { setImportKind("post_cut"); setShowImport(true); }} />
           )}
 
           {/* Murum ka MR + "Agar…" — dono ganit ke nateeje par tike hain, isliye yahin */}

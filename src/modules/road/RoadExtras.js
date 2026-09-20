@@ -17,7 +17,8 @@ import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
-import { rget, rpost, dataOf, n2, rupee, S, btn, aiUnavailable, canRoad } from "./roadShared";
+import { useConfirm } from "../../components/ConfirmDialog";
+import { rget, rpost, rdelete, dataOf, n2, rupee, S, btn, aiUnavailable, canRoad, warnMsg } from "./roadShared";
 
 // Label render ke waqt — module load par t() chalta to bhasha badalne par purana label atka rehta.
 const ROWS = [
@@ -198,6 +199,111 @@ export function RoadMrSuggest({ design }) {
           </div>
         ))}
         <div style={{ fontSize: 11, color: T.t4, lineHeight: 1.6 }}>{t("road.mr_footer")}</div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ASLI KHUDAI — cutting ke BAAD surveyor dobara level leta hai. OGL aur in
+// level ke beech ka area = jitna sach me khuda. Design batata hai kahan tak
+// khodna tha — to: plan, asli, design se ZYADA khuda (bharna padega, paisa
+// nahi milta), aur abhi BAAKI. Sirf naape hue hisse par; plan ka ganit
+// isse nahi hilta.
+//
+// API: GET /road/designs/:id/actual-cut · DELETE …/levels/post-cut
+// ══════════════════════════════════════════════════════════════════════
+export function RoadActualCut({ design, reloadKey, onImport, onData }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    const r = await rget(`/designs/${design.id}/actual-cut`);
+    const d = dataOf(r, null);
+    setData(d);
+    onData && onData(d && d.has_post ? d : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [design.id]);
+  useEffect(() => { load(); }, [load, reloadKey]);
+
+  const remove = async () => {
+    if (!await confirm({ title: t("road.ac_remove_q"), desc: t("road.ac_remove_desc"), variant: "danger", confirmLabel: t("common.delete") })) return;
+    const r = await rdelete(`/designs/${design.id}/levels/post-cut`);
+    if (!r || !r.success) { toast.error((r && r.message) || t("road.save_failed")); return; }
+    toast.success(r.message || t("road.ac_removed"));
+    load();
+  };
+
+  if (!data) return null;
+  const T0 = data.totals || {};
+  const tiles = data.has_post ? [
+    [t("road.ac_plan"), n2(T0.planned_cum), T.t1], [t("road.ac_actual"), n2(T0.actual_cum), T.ind],
+    [t("road.ac_over"), n2(T0.over_cum), T0.over_cum > 0 ? T.red : T.t1], [t("road.ac_baaki"), n2(T0.baaki_cum), T0.baaki_cum > 0 ? T.amb : T.grn],
+  ] : [];
+
+  return (
+    <div style={{ ...S.card, overflow: "hidden" }}>
+      <div style={{ padding: "11px 14px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("road.ac_title")}</span>
+          <span style={{ fontSize: 11, color: T.t4, marginLeft: 8 }}>{t("road.ac_hint")}</span>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {canRoad("edit") && <button onClick={onImport} style={btn("ghost", { height: 28, fontSize: 11.5, color: T.ind, borderColor: T.indL })}>{data.has_post ? t("road.ac_import_again") : t("road.ac_import")}</button>}
+          {data.has_post && canRoad("delete") && <button onClick={remove} style={btn("ghost", { height: 28, fontSize: 11.5 })}>{t("common.delete")}</button>}
+        </div>
+      </div>
+      <div style={{ padding: 14 }}>
+        {!data.has_post ? (
+          <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.65, maxWidth: 680 }}>{t("road.ac_empty")}</div>
+        ) : (
+          <>
+            {data.error === "post_too_few" && <div style={{ fontSize: 12, color: T.amb, marginBottom: 10 }}>{t("road.ac_too_few")}</div>}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 11 }}>
+              {tiles.map(([l, v, c]) => (
+                <div key={l} style={{ border: `1px solid ${T.b1}`, borderTop: `3px solid ${c}`, borderRadius: 8, padding: "10px 12px" }}>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: T.t1, ...S.num }}>{v}</div>
+                  <div style={S.lbl}>{l}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.65, marginTop: 10 }}>
+              {t("road.ac_span", { from: T0.from_ch, to: T0.to_ch, len: n2(T0.length_m), n: T0.chainages })}
+              {T0.diff_pct != null ? " · " + t("road.ac_diff", { pct: T0.diff_pct }) : ""}
+              {" "}{t("road.ac_note")}
+            </div>
+            {(data.warnings || []).length > 0 && (
+              <div style={{ marginTop: 10, padding: "8px 11px", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 7, fontSize: 11.5, color: "#92400E", lineHeight: 1.6 }}>
+                {data.warnings.slice(0, 8).map((w, i) => <div key={i}>• {warnMsg(w)}</div>)}
+              </div>
+            )}
+            <button onClick={() => setOpen((v) => !v)} style={{ marginTop: 10, border: "none", background: "none", padding: 0, color: T.ind, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+              {open ? t("road.ac_hide_rows") : t("road.ac_show_rows", { n: (data.sections || []).length })}
+            </button>
+            {open && (
+              <div style={{ overflowX: "auto", marginTop: 8 }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 560 }}>
+                  <thead><tr>{[t("road.ac_c_ch"), t("road.ac_c_width"), t("road.ac_c_plan"), t("road.ac_c_actual"), t("road.ac_c_over"), t("road.ac_c_baaki")].map((h, i) => (
+                    <th key={i} style={{ ...S.th, textAlign: "right" }}>{h}</th>))}</tr></thead>
+                  <tbody>
+                    {(data.sections || []).map((s) => (
+                      <tr key={s.ch}>
+                        <td style={{ ...S.td, textAlign: "right", fontWeight: 600, ...S.num }}>{s.ch}</td>
+                        <td style={{ ...S.td, textAlign: "right", color: T.t3, ...S.num }}>{n2(s.width_m)}</td>
+                        <td style={{ ...S.td, textAlign: "right", ...S.num }}>{n2(s.planned_area)}</td>
+                        <td style={{ ...S.td, textAlign: "right", fontWeight: 700, ...S.num }}>{n2(s.actual_area)}</td>
+                        <td style={{ ...S.td, textAlign: "right", color: s.over_area > 0.01 ? T.red : T.t4, ...S.num }}>{n2(s.over_area)}</td>
+                        <td style={{ ...S.td, textAlign: "right", color: s.baaki_area > 0.01 ? T.amb : T.t4, ...S.num }}>{n2(s.baaki_area)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

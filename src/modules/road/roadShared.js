@@ -127,7 +127,9 @@ export const caseHint = (c) => ({
 // banayi gayi thi — par computed key wo bhi nahi pakad sakti). Anjaan
 // code par ek saaf line dikhti hai, key nahi.
 const IMP_CODES = ["ch_missing", "ch_dup", "frl_missing", "no_level", "level_ajeeb", "outlier"];
-const WARN_KINDS = ["no_levels", "frl_missing", "no_points", "narrow", "outlier", "gap", "too_few_chainages"];
+const WARN_KINDS = ["no_levels", "frl_missing", "no_points", "narrow", "outlier", "gap", "too_few_chainages",
+  // khudai ke baad ke survey ki chetavni (roadCalc.actualCut)
+  "post_no_ogl", "post_no_frl", "post_ek_hi_bindu", "post_formation_ke_bahar", "post_ogl_se_upar"];
 
 export const impMsg = (x) => {
   const c = x && x.code;

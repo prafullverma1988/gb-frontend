@@ -44,7 +44,10 @@ function detectOffsetRow(rows) {
   return best >= 0 ? best : 0;
 }
 
-export default function RoadLevelsImport({ design, onClose, onCommitted }) {
+// `kind`: "ogl" (zameen + FRL, default) ya "post_cut" (khudai ke BAAD ka survey — FRL nahi hota,
+// aur ye OGL ko nahi chhuta; server dono ko alag rakhta hai).
+export default function RoadLevelsImport({ design, onClose, onCommitted, kind }) {
+  const isPost = kind === "post_cut";
   const toast = useToast();
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -160,6 +163,7 @@ export default function RoadLevelsImport({ design, onClose, onCommitted }) {
     const r = await rpost(`/designs/${design.id}/levels/import`, {
       file_name: fileName, sheet_name: sheetName,
       offsets: parsed.offsets, rows: parsed.rows,
+      ...(isPost ? { kind: "post_cut" } : {}),
     });
     setBusy(false);
     if (!r || !r.success) { toast.error((r && r.message) || t("road.imp_stage_failed")); return; }
@@ -250,6 +254,11 @@ export default function RoadLevelsImport({ design, onClose, onCommitted }) {
           {/* ───────── STEP 1 ───────── */}
           {step === 1 && (
             <div>
+              {isPost && (
+                <div style={{ marginBottom: 14, padding: "10px 13px", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 8, fontSize: 12, color: "#92400E", lineHeight: 1.6 }}>
+                  {t("road.imp_post_banner")}
+                </div>
+              )}
               <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 7, padding: "28px 20px", border: `1.5px dashed ${T.b2}`, borderRadius: 12, background: T.surface, cursor: "pointer" }}>
                 <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke={T.ind} strokeWidth={1.8}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
                 <span style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>{fileName || t("road.imp_pick_file")}</span>
