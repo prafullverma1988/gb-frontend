@@ -29,6 +29,7 @@ import {
   rpost, n2, rupee, S, btn, Empty,
   actionLabel, actionTone, noteLabel, blockReason, canRoad,
 } from "./roadShared";
+import RoadBoqMap from "./RoadBoqMap";
 
 export default function RoadTaskPlan({ design, onApplied }) {
   const toast = useToast();
@@ -101,6 +102,9 @@ export default function RoadTaskPlan({ design, onApplied }) {
         </div>
       </div>
 
+      {/* ── BOQ ka jod — revenue isi se. Jod badle to naksha purana ho jaata hai. ── */}
+      <RoadBoqMap design={design} onSaved={() => { setPlan(null); setResult(null); }} />
+
       {/* ── Lagne ke baad ── */}
       {result && (
         <div style={{ ...S.card, borderLeft: `3px solid ${T.grn}`, padding: 14 }}>
@@ -145,6 +149,13 @@ export default function RoadTaskPlan({ design, onApplied }) {
               <div style={{ fontSize: 12, color: T.t2, lineHeight: 1.6 }}>
                 {t("road.parent_demote_note", { n: parent.estimate_lines })}
               </div>
+              {/* Stretch ka paisa: BOQ juda ho to item-wise, warna pehle stage par — dono kabhi nahi */}
+              {parent.amt_replaced_by_boq && (
+                <div style={{ fontSize: 12, color: T.t2, lineHeight: 1.6, marginTop: 4 }}>{t("road.boq_parent_replaced", { amt: rupee(parent.scope_amt) })}</div>
+              )}
+              {parent.amt_moves_to_first && (
+                <div style={{ fontSize: 12, color: T.t2, lineHeight: 1.6, marginTop: 4 }}>{t("road.boq_parent_moves", { amt: rupee(parent.scope_amt) })}</div>
+              )}
             </div>
           )}
 
@@ -227,6 +238,21 @@ export default function RoadTaskPlan({ design, onApplied }) {
                             {it.note && (
                               <div style={{ fontSize: 10.5, color: T.amb, marginTop: 3, lineHeight: 1.45, maxWidth: 300 }}>
                                 {noteLabel(it.note)}
+                              </div>
+                            )}
+                            {it.boq_item_id && !it.boq_unit_mismatch && it.billing_rate != null && (
+                              <div style={{ fontSize: 10.5, color: T.grn, marginTop: 3, fontWeight: 600 }}>
+                                {t("road.boq_row_info", { no: it.boq_item_no || "—", rate: rupee(it.billing_rate), unit: it.unit })}
+                              </div>
+                            )}
+                            {it.boq_unit_mismatch && (
+                              <div style={{ fontSize: 10.5, color: T.red, marginTop: 3, lineHeight: 1.45, maxWidth: 320 }}>
+                                {t("road.boq_row_unit", { boq_unit: it.boq_unit, unit: it.engine_unit })}
+                              </div>
+                            )}
+                            {it.boq_antar_pct != null && Math.abs(it.boq_antar_pct) >= 10 && (
+                              <div style={{ fontSize: 10.5, color: T.amb, marginTop: 3, lineHeight: 1.45, maxWidth: 320 }}>
+                                {t("road.boq_row_antar", { boq: n2(it.boq_qty), levels: n2(it.scope_qty), unit: it.unit, pct: it.boq_antar_pct })}
                               </div>
                             )}
                           </td>
