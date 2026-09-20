@@ -54,7 +54,7 @@ export default function RoadPlanLevels({ tenderId, siteIdx, workIdx, work, onApp
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(13,27,42,.45)", display: "flex", justifyContent: "center", alignItems: "flex-start", overflowY: "auto", padding: "28px 14px" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 510, background: "rgba(13,27,42,.45)", display: "flex", justifyContent: "center", alignItems: "flex-start", overflowY: "auto", padding: "28px 14px" }}>
       <div style={{ width: "100%", maxWidth: 1080, background: T.bg || T.surface, borderRadius: 12, border: `1px solid ${T.b1}`, boxShadow: "0 18px 48px rgba(0,0,0,.22)" }}>
         <div style={{ padding: "13px 16px", borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, background: T.surface, borderRadius: "12px 12px 0 0" }}>
           <div style={{ minWidth: 0 }}>
