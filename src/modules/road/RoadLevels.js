@@ -8,7 +8,12 @@
 // Levels design data hain, isliye ye Design tab me hai. Task aur Budget
 // iske BAAD aate hain — wo iske nateeje hain.
 //
-// API: GET /road/designs?project_id= · POST /road/designs · GET /road/templates
+// Tender ke AI Plan me bhi yahi screen khulti hai (RoadPlanLevels.js): tab
+// `tender` aata hai, design tender ke naam par bante hain, aur har design par
+// "Is kaam par lagao" (`pick`) dikhta hai. Task + budget wala tab tab nahi
+// hota — wo kaam Execute karta hai.
+//
+// API: GET /road/designs?project_id=|tender_id= · POST /road/designs · GET /road/templates
 // ══════════════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback } from "react";
 import { T } from "../shared/tokens";
@@ -19,10 +24,13 @@ import RoadSectionTemplate from "./RoadSectionTemplate";
 import RoadDesignDetail from "./RoadDesignDetail";
 import { rget, rpost, rdelete, dataOf, num, fmtD, S, btn, Empty, canRoad } from "./roadShared";
 
-export default function RoadLevels({ project }) {
+export default function RoadLevels({ project, tender, pick, defaultName }) {
   const toast = useToast();
   const confirm = useConfirm();
   const projectId = project && project.id;
+  const tenderId = tender && tender.id;
+  const scopeKey = tenderId ? "tender_id" : "project_id";
+  const scopeId = tenderId || projectId;
   const mayCreate = canRoad("create");
   const mayDelete = canRoad("delete");
 
@@ -36,16 +44,16 @@ export default function RoadLevels({ project }) {
   const [showLib, setShowLib] = useState(false);
 
   const [newOpen, setNewOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", template_id: "", start_chainage_m: 0, notes: "" });
+  const [form, setForm] = useState({ name: defaultName || "", template_id: "", start_chainage_m: 0, notes: "" });
   const [saving, setSaving] = useState(false);
 
   const loadDesigns = useCallback(async () => {
-    if (!projectId) return;
+    if (!scopeId) return;
     setLoading(true);
-    const r = await rget("/designs", { project_id: projectId });
+    const r = await rget("/designs", { [scopeKey]: scopeId });
     setLoading(false);
     setDesigns(dataOf(r, []) || []);
-  }, [projectId]);
+  }, [scopeKey, scopeId]);
 
   const loadTemplates = useCallback(async () => {
     const r = await rget("/templates");
@@ -59,7 +67,7 @@ export default function RoadLevels({ project }) {
     if (!form.template_id) { toast.error(t("road.design_section_required")); return; }
     setSaving(true);
     const r = await rpost("/designs", {
-      project_id: projectId,
+      [scopeKey]: scopeId,
       name: String(form.name).trim(),
       template_id: Number(form.template_id),
       start_chainage_m: num(form.start_chainage_m) || 0,
@@ -100,7 +108,8 @@ export default function RoadLevels({ project }) {
   if (openId) {
     return (
       <RoadDesignDetail designId={openId} onBack={() => { setOpenId(null); loadDesigns(); }}
-        onChanged={loadDesigns} />
+        onChanged={loadDesigns} tenderMode={!!tenderId}
+        pick={pick ? { label: pick.label, busy: pick.busy, onPick: () => pick.onPick({ id: openId }) } : null} />
     );
   }
 
@@ -113,7 +122,7 @@ export default function RoadLevels({ project }) {
 
       {/* ── Intro + actions ── */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 13, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.6, maxWidth: 620 }}>{t("road.intro")}</div>
+        <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.6, maxWidth: 620 }}>{tenderId ? t("road.intro_tender") : t("road.intro")}</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={() => setShowLib((v) => !v)} style={btn("ghost")}>
             {t("road.lib_btn", { n: templates.length })}
@@ -224,7 +233,7 @@ export default function RoadLevels({ project }) {
         {loading ? (
           <div style={{ padding: 26, fontSize: 12.5, color: T.t4 }}>{t("common.loading")}</div>
         ) : !designs.length ? (
-          <Empty text={t("road.designs_empty")} />
+          <Empty text={tenderId ? t("road.designs_empty_tender") : t("road.designs_empty")} />
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 620 }}>
@@ -243,6 +252,14 @@ export default function RoadLevels({ project }) {
                     <td style={{ ...S.td, textAlign: "right", ...S.num, color: row.rev ? T.ind : T.t4 }}>{row.rev ? t("road.rev_n", { n: row.rev }) : "—"}</td>
                     <td style={{ ...S.td, color: T.t3 }}>{fmtD(row.created_at)}</td>
                     <td style={{ ...S.td, textAlign: "right", whiteSpace: "nowrap" }}>
+                      {pick && (Number(pick.pickedId) === Number(row.id)
+                        ? <span style={{ fontSize: 11, fontWeight: 700, color: T.grn, marginRight: 12 }}>✓ {pick.pickedLabel}</span>
+                        : (
+                          <button disabled={pick.busy} onClick={(e) => { e.stopPropagation(); pick.onPick(row); }}
+                            style={{ ...btn("primary", { height: 26, fontSize: 11 }), marginRight: 12, opacity: pick.busy ? .6 : 1 }}>
+                            {pick.label}
+                          </button>
+                        ))}
                       {mayDelete && (
                         <button onClick={(e) => { e.stopPropagation(); removeDesign(row); }}
                           style={{ border: "none", background: "none", color: T.t4, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>

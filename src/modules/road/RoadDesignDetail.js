@@ -29,7 +29,7 @@ import {
 
 const chartBase = { textStyle: { fontFamily: ECHART_FONT } };
 
-export default function RoadDesignDetail({ designId, onBack, onChanged }) {
+export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMode, pick }) {
   const toast = useToast();
   const mayEdit = canRoad("edit");
 
@@ -222,7 +222,8 @@ export default function RoadDesignDetail({ designId, onBack, onChanged }) {
     { id: "levels", label: t("road.tab_levels") },
     { id: "zones",  label: t("road.tab_zones") },
     { id: "result", label: t("road.tab_result") },
-    { id: "tasks",  label: t("road.tab_tasks") },
+    // Tender ke AI Plan me task + budget Execute banata hai — yahan ye tab nahi
+    ...(tenderMode ? [] : [{ id: "tasks",  label: t("road.tab_tasks") }]),
     { id: "setup",  label: t("road.tab_setup") },
   ];
 
@@ -253,6 +254,12 @@ export default function RoadDesignDetail({ designId, onBack, onChanged }) {
               </button>
             )}
             <button onClick={downloadSheet} disabled={busy} style={btn("ghost")}>{t("road.download_sheet")}</button>
+            {pick && (
+              <button onClick={pick.onPick} disabled={busy || pick.busy}
+                style={{ ...btn("primary"), background: T.grn, borderColor: T.grn, opacity: busy || pick.busy ? .6 : 1 }}>
+                {pick.label}
+              </button>
+            )}
           </div>
         </div>
 
