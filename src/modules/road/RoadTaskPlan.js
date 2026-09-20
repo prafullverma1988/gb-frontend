@@ -111,6 +111,7 @@ export default function RoadTaskPlan({ design, onApplied }) {
           <div style={{ fontSize: 13, fontWeight: 800, color: T.t1, marginBottom: 10 }}>{t("road.applied_title")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 11 }}>
             {[[t("road.applied_created"), result.created],
+              ...(result.adopted ? [[t("road.applied_adopted"), result.adopted]] : []),
               [t("road.applied_updated"), result.updated],
               [t("road.applied_unchanged"), result.unchanged],
               [t("road.applied_lines"), result.lines],
@@ -156,6 +157,22 @@ export default function RoadTaskPlan({ design, onApplied }) {
               {parent.amt_moves_to_first && (
                 <div style={{ fontSize: 12, color: T.t2, lineHeight: 1.6, marginTop: 4 }}>{t("road.boq_parent_moves", { amt: rupee(parent.scope_amt) })}</div>
               )}
+            </div>
+          )}
+
+          {/* ── Naam se shak: ye purane task bhi shayad yahi kaam hain ──
+              Inhe system chupchaap nahi chhuta (BOQ item ka jod nahi hai, aur
+              naam se andaza lagana galat qty likh deta). Aadmi khud tay kare:
+              purana hata de, ya us par BOQ item laga kar dobara chalaye. ── */}
+          {(plan.maybe_same || []).length > 0 && (
+            <div style={{ ...S.card, borderLeft: `3px solid ${T.blu}`, padding: "12px 14px" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 5 }}>{t("road.adopt_maybe_title")}</div>
+              <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.6, marginBottom: 8 }}>{t("road.adopt_maybe_hint")}</div>
+              {plan.maybe_same.map((m) => (
+                <div key={m.task_id} style={{ fontSize: 12, color: T.t2, lineHeight: 1.7 }}>
+                  · {t("road.adopt_maybe_line", { name: m.name, road_name: m.road_name })}
+                </div>
+              ))}
             </div>
           )}
 
@@ -238,6 +255,11 @@ export default function RoadTaskPlan({ design, onApplied }) {
                             {it.note && (
                               <div style={{ fontSize: 10.5, color: T.amb, marginTop: 3, lineHeight: 1.45, maxWidth: 300 }}>
                                 {noteLabel(it.note)}
+                              </div>
+                            )}
+                            {it.adopted_name && (
+                              <div style={{ fontSize: 10.5, color: T.blu, marginTop: 3, lineHeight: 1.45, maxWidth: 320 }}>
+                                {t("road.adopt_row", { name: it.adopted_name })}
                               </div>
                             )}
                             {it.boq_item_id && !it.boq_unit_mismatch && it.billing_rate != null && (

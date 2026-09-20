@@ -78,6 +78,8 @@ export const extentLabel = (e) => ({
 export const actionLabel = (a) => ({
   create:    t("road.act_create"),
   update:    t("road.act_update"),
+  // "adopt" = pehle se bana task (AI Plan ka) isi kaam ka nikla — naya nahi banega
+  adopt:     t("road.act_adopt"),
   unchanged: t("road.act_unchanged"),
   now_zero:  t("road.act_now_zero"),
 }[a] || a || "—");
@@ -85,6 +87,7 @@ export const actionLabel = (a) => ({
 export const actionTone = (a) => ({
   create:    { c: T.grn, bg: T.grnL, b: T.grnM },
   update:    { c: T.ind, bg: T.indL, b: T.bluM },
+  adopt:     { c: T.blu, bg: T.bluL, b: T.bluM },
   unchanged: { c: T.t4,  bg: T.sltL, b: T.b1 },
   now_zero:  { c: T.amb, bg: T.ambL, b: T.ambM },
 }[a] || { c: T.t4, bg: T.sltL, b: T.b1 });
