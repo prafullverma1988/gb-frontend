@@ -21,6 +21,7 @@ import { t } from "../../i18n";
 import RoadLevelsImport from "./RoadLevelsImport";
 import RoadDesignSetup from "./RoadDesignSetup";
 import RoadTaskPlan from "./RoadTaskPlan";
+import { RoadWhatIf, RoadMrSuggest } from "./RoadExtras";
 import {
   rget, rpost, rput, dataOf, num, n2, n3, nInt, fmtD, S, btn, Empty,
   SOIL_CASES, caseLabel, caseHint, warnMsg, calcErrMsg, canRoad,
@@ -134,14 +135,15 @@ export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMo
     onChanged && onChanged();
   };
 
-  const downloadSheet = async () => {
+  const downloadSheet = async (ext) => {
+    const kind = ext === "pdf" ? "pdf" : "xlsx";
     setBusy(true);
     try {
-      const blob = await fetchBlob(`/designs/${designId}/sheet.xlsx`);
+      const blob = await fetchBlob(`/designs/${designId}/sheet.${kind}`);
       const name = ((head && head.design && head.design.name) || "earthwork").replace(/[^\w\- ]+/g, "").slice(0, 60);
-      saveBlob(blob, `${name} - earthwork.xlsx`);
+      saveBlob(blob, `${name} - earthwork.${kind}`);
     } catch (_) {
-      toast.error(t("road.sheet_failed"));
+      toast.error(kind === "pdf" ? t("road.sheet_pdf_failed") : t("road.sheet_failed"));
     }
     setBusy(false);
   };
@@ -253,7 +255,8 @@ export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMo
                 {busy ? t("road.btn_wait") : t("road.run_calc")}
               </button>
             )}
-            <button onClick={downloadSheet} disabled={busy} style={btn("ghost")}>{t("road.download_sheet")}</button>
+            <button onClick={() => downloadSheet("xlsx")} disabled={busy} style={btn("ghost")}>{t("road.download_sheet")}</button>
+            <button onClick={() => downloadSheet("pdf")} disabled={busy} style={btn("ghost")}>{t("road.download_pdf")}</button>
             {pick && (
               <button onClick={pick.onPick} disabled={busy || pick.busy}
                 style={{ ...btn("primary"), background: T.grn, borderColor: T.grn, opacity: busy || pick.busy ? .6 : 1 }}>
@@ -575,6 +578,10 @@ export default function RoadDesignDetail({ designId, onBack, onChanged, tenderMo
               </div>
             </div>
           )}
+
+          {/* Murum ka MR + "Agar…" — dono ganit ke nateeje par tike hain, isliye yahin */}
+          {totals && <RoadMrSuggest design={d} />}
+          {totals && <RoadWhatIf design={d} fromCh={lv.from_ch} toCh={lv.to_ch} />}
 
           {/* Revision */}
           <div style={S.card}>

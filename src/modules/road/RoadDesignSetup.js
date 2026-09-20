@@ -37,6 +37,25 @@ export default function RoadDesignSetup({ design, onSaved }) {
     return out;
   });
   const [busy, setBusy] = useState(false);
+  // Map ki line (project ke Map tab me khinchi hui) — design kis line ka hai.
+  // Phone par L-Section "map se qty" isi jod se chainage pakadta hai.
+  const [lines, setLines] = useState([]);
+  const [lineId, setLineId] = useState(design.alignment_id ? String(design.alignment_id) : "");
+
+  const loadLines = useCallback(async () => {
+    if (!design.project_id) return;
+    const r = await api.get("/tenders/by-project/" + design.project_id + "/alignments");
+    setLines((r && r.success && r.data && r.data.alignments) || []);
+  }, [design.project_id]);
+
+  const saveLine = async () => {
+    setBusy(true);
+    const r = await rpatch("/designs/" + design.id, { alignment_id: lineId === "" ? null : Number(lineId) });
+    setBusy(false);
+    if (!r || !r.success) { toast.error((r && r.message) || t("road.save_failed")); return; }
+    toast.success(r.message || t("road.line_saved"));
+    onSaved && onSaved();
+  };
 
   const loadTasks = useCallback(async () => {
     if (!design.project_id) return;
@@ -52,7 +71,7 @@ export default function RoadDesignSetup({ design, onSaved }) {
     setDefaults((dataOf(r, {}) || {}).default_factors || null);
   }, []);
 
-  useEffect(() => { loadTasks(); loadMeta(); }, [loadTasks, loadMeta]);
+  useEffect(() => { loadTasks(); loadMeta(); loadLines(); }, [loadTasks, loadMeta, loadLines]);
 
   const saveTask = async () => {
     setBusy(true);
@@ -115,6 +134,30 @@ export default function RoadDesignSetup({ design, onSaved }) {
           <div style={{ marginTop: 10, fontSize: 11.5, color: T.t4 }}>{t("road.stretch_no_tasks")}</div>
         )}
       </div>
+
+      {/* ── Map ki line ── */}
+      {design.project_id && (
+        <div style={{ ...S.card, padding: 14 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 4 }}>{t("road.line_title")}</div>
+          <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.6, marginBottom: 12, maxWidth: 640 }}>{t("road.line_intro")}</div>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 260 }}>
+              <label style={S.lbl}>{t("road.line_label")}</label>
+              <select value={lineId} disabled={!mayEdit} onChange={(e) => setLineId(e.target.value)} style={S.inp}>
+                <option value="">{t("road.line_none")}</option>
+                {lines.map((x) => <option key={x.id} value={x.id}>{String(x.name || "").slice(0, 60)}{x.length_m ? " · " + n2(x.length_m) + " m" : ""}</option>)}
+              </select>
+            </div>
+            {mayEdit && (
+              <button onClick={saveLine} disabled={busy || String(design.alignment_id || "") === String(lineId)}
+                style={{ ...btn("primary"), opacity: (busy || String(design.alignment_id || "") === String(lineId)) ? .5 : 1 }}>
+                {busy ? t("road.btn_wait") : t("common.save")}
+              </button>
+            )}
+          </div>
+          {!lines.length && <div style={{ marginTop: 10, fontSize: 11.5, color: T.t4 }}>{t("road.line_empty")}</div>}
+        </div>
+      )}
 
       {/* ── Factors ── */}
       <div style={{ ...S.card, overflow: "hidden" }}>
