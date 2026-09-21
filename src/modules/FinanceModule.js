@@ -10,6 +10,7 @@ import { canSeeFinancials } from "../utils/perms";
 import { canApproveAction } from "../utils/approvalAuthority";
 import TabAccounts from "./tabs/TabAccounts";
 import { isoDate, todayISO } from "../utils/today";
+import { BackClose } from "../utils/backNav";
 
 // A party holds multiple roles: `roles` is the canonical comma list and
 // `type` is only the primary one. Matching on `type` alone dropped equipment
@@ -791,6 +792,7 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
 
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <BackClose onClose={onClose}/>
       <div style={{background:T.surface,borderRadius:14,width:560,maxWidth:"96vw",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",overflow:"hidden"}}>
         {/* Header */}
         <div style={{padding:"14px 20px",background:T.ind,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
@@ -2928,6 +2930,7 @@ function AddPartyModal({onClose,onAdd}){
     setTimeout(()=>{setSaved(false);onClose();},800);
   };
   return(<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.48)",zIndex:400,backdropFilter:"blur(3px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
       background:T.bg,borderRadius:12,width:460,maxWidth:"95vw",zIndex:401,
@@ -3046,6 +3049,7 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
   const inp={height:34,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface,color:T.t1,width:"100%"};
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <BackClose onClose={onClose}/>
       <div style={{background:T.surface,borderRadius:14,width:520,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",overflow:"hidden"}}>
         {/* Header */}
         <div style={{padding:"14px 20px",background:T.blu,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -3191,6 +3195,7 @@ function SendToStaffModal({staff,onClose,onDone}){
 function ModalW({title,onClose,children}){
   return createPortal(
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <BackClose onClose={onClose}/>
       <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,padding:"16px 18px",width:380,maxWidth:"92vw",boxShadow:"0 12px 40px rgba(0,0,0,0.25)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <span style={{fontSize:14,fontWeight:700,color:T.t1}}>{title}</span>

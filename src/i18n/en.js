@@ -1178,6 +1178,7 @@ const dict = {
   "coday.unskilled":                                          "Unskilled",
   "coday.whatsapp":                                           "WhatsApp",
   "coday.workshop":                                           "Machines not on any site",
+  "common.back_discard_form":                                  "Close this form? What you have filled in will be lost.",
   "common.91_xxxxx_xxxxx":                                     "+91 XXXXX XXXXX",
   "common.absent":                                             "Absent",
   "common.actions":                                            "Actions",

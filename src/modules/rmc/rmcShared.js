@@ -12,6 +12,7 @@
 import { useState } from "react";
 import api from "../../config/api";
 import { t } from "../../i18n";
+import { BackClose } from "../../utils/backNav";
 
 // ── THEME ─────────────────────────────────────────────────────────
 export const T = {
@@ -398,6 +399,7 @@ export const Modal = ({ open, onClose, title, sub, width = 640, children, footer
   if (!open) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+      <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
       <div onClick={(e) => e.stopPropagation()}
         style={{ position: "relative", width, maxWidth: "94vw", maxHeight: "92vh", background: T.surface, borderRadius: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -421,6 +423,7 @@ export const Drawer = ({ open, onClose, title, sub, width = 660, children, foote
   if (!open) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9998, display: "flex", justifyContent: "flex-end" }} onClick={onClose}>
+      <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)" }} />
       <div onClick={(e) => e.stopPropagation()}
         style={{ position: "relative", width, maxWidth: "100vw", height: "100%", background: T.surface, boxShadow: "-8px 0 32px rgba(0,0,0,0.16)", display: "flex", flexDirection: "column", overflow: "hidden" }}>

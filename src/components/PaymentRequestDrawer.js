@@ -227,10 +227,10 @@ export default function PaymentRequestDrawer({
   return (
     <>
       <style>{`@keyframes gbPRSlide{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 200 }} />
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 220 }} />
       <div style={{
         position: "fixed", top: 0, right: 0, height: "100vh", width: 540, maxWidth: "95vw",
-        background: T.surface, boxShadow: "-8px 0 30px rgba(0,0,0,0.18)", zIndex: 201,
+        background: T.surface, boxShadow: "-8px 0 30px rgba(0,0,0,0.18)", zIndex: 221,
         display: "flex", flexDirection: "column", animation: "gbPRSlide .25s ease-out",
         fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
       }}>

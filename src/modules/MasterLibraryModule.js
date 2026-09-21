@@ -5,6 +5,7 @@ import CityPicker from "../components/CityPicker";
 import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { readSheet, sheetToRows } from "../utils/sheetRows";
 import { t, Rich } from "../i18n";
+import { BackClose } from "../utils/backNav";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -107,6 +108,7 @@ function Modal({ open, onClose, title, desc, width = 600, children }) {
   if (!open) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.font }}>
+      <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
       {/* backdrop — click-to-close removed so a stray outside click can't wipe a half-filled form; use the × / Cancel button */}
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }} />
       <div style={{ position: "relative", width, maxWidth: "94vw", maxHeight: "90vh", background: T.card, borderRadius: 14, boxShadow: T.shadowLg, display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={e => e.stopPropagation()}>

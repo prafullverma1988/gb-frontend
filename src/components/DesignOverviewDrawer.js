@@ -14,6 +14,7 @@ import api from "../config/api";
 import { Credit, fmtTimeAgo } from "./Credit";
 import RevisionNoteModal from "./RevisionNoteModal";
 import { t } from "../i18n";
+import { BackClose } from "../utils/backNav";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -74,6 +75,7 @@ export default function DesignOverviewDrawer({ open, onClose, onOpenLead, onShar
 
   return (
     <>
+      <BackClose onClose={onClose}/>
       <div 
         style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 600, backdropFilter: "blur(2px)" }}/>
       <div style={{ position: "fixed", top: 0, right: 0, height: "100vh", width: "min(560px, 100vw)",

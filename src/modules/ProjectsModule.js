@@ -10,6 +10,7 @@ import CityPicker from "../components/CityPicker";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 import { t, Rich } from "../i18n";
 import { isoDate } from "../utils/today";
+import { BackClose } from "../utils/backNav";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -276,6 +277,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
   };
 
   return(<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:220,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(420px,96vw)",background:C.bg,zIndex:221,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",fontFamily:"'Segoe UI',sans-serif",borderRadius:"16px 0 0 16px"}}>
       <div style={{background:C.w,padding:"12px 14px 10px",borderBottom:`1px solid ${C.b}`,flexShrink:0,borderRadius:"16px 0 0 0"}}>
@@ -621,6 +623,7 @@ function NewProjectModal({onClose,onCreated}){
     : {grad:`linear-gradient(135deg,${T.blu},#1D4ED8)`,  icon:"🏗️", title:t("projects.new_project"),           sub:t("projects.add_a_new_construction_project")};
 
   return (<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:998}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:500,background:T.surface,borderRadius:14,boxShadow:"0 20px 60px rgba(0,0,0,.25)",zIndex:999,overflow:"hidden"}}>
 
@@ -780,6 +783,7 @@ function DuplicateModal({project,onClose,onConfirm}){
     setSaving(false);
   };
   return(<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:300,backdropFilter:"blur(3px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:C.w,borderRadius:16,width:500,maxWidth:"95vw",zIndex:301,boxShadow:"0 24px 70px rgba(0,0,0,0.32)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:`linear-gradient(135deg,${C.p},${C.p2})`,padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
@@ -999,6 +1003,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   );
 
   return (<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:998,backdropFilter:"blur(2px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:999,width:640,maxHeight:"88vh",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
 
@@ -3946,6 +3951,7 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
   };
 
   return(<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
     {fullPhoto&&(
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
@@ -4159,6 +4165,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
   };
 
   return(<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(480px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",borderRadius:"16px 0 0 16px"}}>
       {/* Header */}

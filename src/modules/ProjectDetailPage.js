@@ -17,6 +17,7 @@ import MapPicker from "../components/MapPicker";
 import { T, fmt, fmtN, localYMD, PROJ, STATUS_S, STAGES, STAGE_S } from "./shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabIc } from "./shared/ui";
 import { t } from "../i18n";
+import { BackClose } from "../utils/backNav";
 
 // ── "Waiting on" label ─────────────────────────────────────────────────────
 // Backend /approvals/pending bhejta hai: _waitingOn (role label, escalation ke
@@ -1083,6 +1084,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
   // Reusable simple side drawer (right slide-in)
   const SimpleDrawer = ({title, subtitle, onClose, children}) => (
     <>
+      <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
       <style>{`@keyframes gbSlideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:220}}/>
       <div style={{position:"fixed",top:0,right:0,height:"100vh",width:520,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.15)",zIndex:221,display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif"}}>

@@ -32,6 +32,7 @@ import { createPortal } from "react-dom";
 import api from "../config/api";
 import { t, Rich } from "../i18n";
 import { todayISO } from "../utils/today";
+import { BackClose } from "../utils/backNav";
 
 // ── THEME TOKENS ──────────────────────────────────────────────
 const T = {
@@ -285,6 +286,7 @@ function Modal({ title, onClose, children, width=480 }) {
     <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)",
       zIndex:9000, display:"flex", alignItems:"flex-start", justifyContent:"center",
       overflowY:"auto", padding:"40px 16px" }}>
+      <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
       <div onClick={(e) => e.stopPropagation()} style={{ background:T.surface, borderRadius:12,
         width:"100%", maxWidth:width, boxShadow:"0 24px 60px rgba(0,0,0,0.28)", overflow:"hidden" }}>
         <div style={{ padding:"14px 18px", borderBottom:`1px solid ${T.b1}`,

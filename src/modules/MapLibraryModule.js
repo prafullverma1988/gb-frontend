@@ -21,6 +21,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
+import { useBackClose } from "../utils/backNav";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 16, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -302,6 +303,7 @@ const Btn = ({ children, onClick, disabled, icon: Icon, tone = "ghost", size = "
 };
 
 function Modal({ title, onClose, children, footer, width = 460 }) {
+  useBackClose(onClose);   // browser Back = band (form bhara ho to poochhe)
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {

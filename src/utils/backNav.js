@@ -12,6 +12,9 @@
 // uski history entry wahi padi reh jaati hai. Use "mara hua" maan lete hain:
 // agla browser Back us par pahunch kar chup-chaap ek aur peeche chala jaata
 // hai — taaki ek dabane par hamesha ek hi asli kadam ulte.
+import { useEffect, useRef } from "react";
+import { t } from "../i18n";
+
 const stack = [];            // [{ onBack, dead }]
 let wired = false;
 
@@ -44,4 +47,60 @@ export function pushBackStep(onBack) {
 /** Logout / company badalne par purane kadam bekaar — sab mare hue. */
 export function resetBackSteps() {
   stack.forEach((e) => { e.dead = true; });
+}
+
+// ── Modal / drawer bhi Back se band ─────────────────────────────────────
+// Khula modal = ek kadam; Back use band karta hai (sabse upar wala pehle —
+// drawer ke andar se khula modal pehle band, phir drawer).
+//
+// Par FORM par savdhaani: pehle bahar-click se form band hone par bhara data
+// chala jaata tha, isliye wo band kiya gaya tha. Back par wahi khatra hai. To:
+//   • modal me kuch type/badla NAHI gaya → Back seedha band kare
+//   • kuch bhara hai → pehle poochhe; "nahi" kaho to form khula hi rahe
+async function askDiscard() {
+  const msg = t("common.back_discard_form");
+  try {
+    if (typeof window.confirmAsync === "function") return await window.confirmAsync(msg);
+  } catch (_) {}
+  return window.confirm(msg);
+}
+
+export function useBackClose(onClose, open = true) {
+  const cb = useRef(onClose);
+  cb.current = onClose;
+  useEffect(() => {
+    if (!open || typeof window === "undefined") return undefined;
+    let dirty = false;
+    const mark = () => { dirty = true; };
+    // Modal khula ho to peeche ki screen tak haath nahi pahunchta — is dauran
+    // koi bhi input/change event isi modal (ya uske andar khule) ka hai.
+    document.addEventListener("input", mark, true);
+    document.addEventListener("change", mark, true);
+    let release = null;
+    const arm = () => {
+      release = pushBackStep(async () => {
+        if (!dirty) { if (cb.current) cb.current(); return; }
+        // Poochhne se PEHLE kadam wapas lagao — dialog khula ho aur Back phir
+        // dabe to wo isi form par ruke, peeche ki screen par na chala jaye.
+        arm();
+        if (await askDiscard()) {
+          if (release) release();
+          if (cb.current) cb.current();
+        }
+      });
+    };
+    arm();
+    return () => {
+      document.removeEventListener("input", mark, true);
+      document.removeEventListener("change", mark, true);
+      if (release) release();
+    };
+  }, [open]);
+}
+
+/** JSX me rakho: <BackClose onClose={onClose}/> — kuch dikhata nahi. Jin shells
+ *  ka body `=> (` hai unme hook seedha nahi daal sakte, ye wahan ka raasta hai. */
+export function BackClose({ onClose, open = true }) {
+  useBackClose(onClose, open);
+  return null;
 }

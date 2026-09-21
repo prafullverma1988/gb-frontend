@@ -17,6 +17,7 @@ import { useState, useEffect, useMemo } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
 import { todayISO } from "../utils/today";
+import { BackClose } from "../utils/backNav";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -163,6 +164,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
 
   return (
     <>
+      <BackClose onClose={onClose}/>
       <div 
         style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1400, backdropFilter: "blur(2px)" }}/>
       <div style={{

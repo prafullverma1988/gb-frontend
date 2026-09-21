@@ -93,7 +93,7 @@ export default function TenderPlanWizard({ projectId, onClose, onDone }) {
     onClose?.();
   };
 
-  const wrap = { position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 90,
+  const wrap = { position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 220,
     display: "flex", alignItems: "center", justifyContent: "center", padding: 20 };
   const card = { background: T.surface, borderRadius: 13, width: "min(980px, 96vw)",
     maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden" };

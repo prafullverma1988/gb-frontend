@@ -20,6 +20,7 @@ import { useState, useEffect } from "react";
 import api from "../config/api";
 import ActivityLog from "./ActivityLog";
 import { t } from "../i18n";
+import { BackClose } from "../utils/backNav";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -423,6 +424,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
 
   return (
     <>
+      <BackClose onClose={onClose}/>
       <div 
         style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1500, backdropFilter: "blur(2px)" }}/>
       <div style={{

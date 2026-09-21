@@ -5377,7 +5377,7 @@ function RunAttEditModal({emp,month,year,holidaySet,workingDays,onClose,onSave})
   };
 
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(13,27,42,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:90,padding:16}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(13,27,42,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:220,padding:16}}>
       <div style={{background:T.surface,borderRadius:14,width:"100%",maxWidth:460,maxHeight:"90vh",overflowY:"auto"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"15px 18px",borderBottom:`1px solid ${T.b1}`}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -5723,7 +5723,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
         const already=Number(settleIt.settled)||0;
         const remaining=Math.max(0,net-already);
         return(
-          <div onClick={()=>setSettleIt(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:120,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div onClick={()=>setSettleIt(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:225,display:"flex",alignItems:"center",justifyContent:"center"}}>
             <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,padding:"18px 20px",width:380,maxWidth:"92vw",boxShadow:"0 12px 40px rgba(0,0,0,0.25)"}}>
               <div style={{fontSize:14,fontWeight:800,color:T.t1,marginBottom:4}}>{t("payroll.settle_salary_staff_name", { staff_name: settleIt.staff_name })}</div>
               <div style={{fontSize:11.5,color:T.t3,marginBottom:12}}><Rich k="payroll.net_fmtnalready_remaining_fmtn2" params={{ fmtN: fmtN(net), already: already>0?` · ₹${fmtN(already)} settle ho chuka`:"", fmtN2: fmtN(remaining) }} /></div>
@@ -5760,7 +5760,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
       )}
 
       {editEmp&&<RunAttEditModal emp={editEmp} month={month} year={year} holidaySet={holidaySet} workingDays={workingDays} onClose={()=>setEditEmp(null)} onSave={onSaveEdit}/>}
-      {toast&&<div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#0D1B2A",color:"#fff",fontSize:12.5,fontWeight:600,padding:"11px 20px",borderRadius:10,boxShadow:"0 6px 24px rgba(0,0,0,0.25)",zIndex:95}}>{toast}</div>}
+      {toast&&<div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#0D1B2A",color:"#fff",fontSize:12.5,fontWeight:600,padding:"11px 20px",borderRadius:10,boxShadow:"0 6px 24px rgba(0,0,0,0.25)",zIndex:230}}>{toast}</div>}
     </div>
   );
 }

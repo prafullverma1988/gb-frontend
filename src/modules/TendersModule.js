@@ -24,6 +24,7 @@ import { useToast } from "../components/Toast";
 // TabTransaction bhi yahi karte hain, taaki receipt banane ke rules ek jagah rahein.
 import { CreateTransactionModal } from "./FinanceModule";
 import { t, Rich } from "../i18n";
+import { BackClose } from "../utils/backNav";
 
 // ── THEME TOKENS ────────────────────────────────────────────────────
 // Module self-contained rehta hai (Finance/CRM/Projects jaisa) — inhi
@@ -315,6 +316,7 @@ const SelIn = ({value, onChange, options, ph}) => (
 // Modal shell — backdrop + panel + header + scrollable body + footer
 const Modal = ({title, sub, onClose, children, footer, width=560, Icon}) => (
   <>
+    <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
     <div onClick={onClose} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:998}}/>
     <div style={{position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)",
       width:"min(94vw,"+width+"px)", background:T.surface, borderRadius:10,
