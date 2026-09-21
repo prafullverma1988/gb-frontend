@@ -2126,7 +2126,7 @@ function App(){
     fuel:      guard("fuel","Fuel",                <FuelModule/>),
     machinery: guard("machinery","Machinery",      <MachineryModule/>),
     assets:    guard("assets",   "Assets",         <AssetsModule deepLink={assetDeepLink} onDeepLinkDone={clearAssetDeepLink}/>),
-    rmc:       guard("rmc",      "RMC Plant",      <RMCModule/>),
+    rmc:       guard("rmc",      "Production Plant",      <RMCModule/>),
     mapping:   guard("mapping", "Site Mapping",   <MapLibraryModule/>),
     township:  guard("township", "Township CRM",   <TownshipCRMModule/>),
     reports:   guard("reports",  "Reports",        <ReportsModule/>),
