@@ -741,8 +741,8 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
   const totalAmt=d.items?.reduce((s,it)=>s+(it.amount||0),0)||d.amount||0;
 
   return(<>
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:520,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:220,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:520,background:T.bg,zIndex:221,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
 
       {/* Header */}
       <div style={{background:"#0D1B2A",padding:"16px 18px",flexShrink:0}}>
@@ -927,8 +927,8 @@ function RFQDetailDrawer({rfq,onClose,onPunch,onLock,onPublish,onCreatePO}){
   const minTotal=Math.min(...allTotals);const maxTotal=Math.max(...allTotals);
   const rs=RFQ_STATUS[rfq.status]||RFQ_STATUS.Draft;
   return(<>
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:680,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:220,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:680,background:T.bg,zIndex:221,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:"#0D1B2A",padding:"14px 18px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
           <div style={{fontSize:15,fontWeight:700,color:"white"}}>{rfq.id} · {rfq.project}</div>
@@ -1088,7 +1088,7 @@ function CreateRFQModal({onClose,onSave,dbProjects,dbVendors=[]}){
           {form.items.map((it,i)=>(
             <div key={i} style={{display:"grid",gridTemplateColumns:"2.2fr 80px 90px 28px",gap:7,alignItems:"center",marginBottom:6}}>
               <LibrarySelect type="material" value={it.desc} onChange={v=>updItem(i,"desc",v||"")} placeholder={t("procurement.pick_material")} compact hideAddNew/>
-              <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder={t("common.qty")}
+              <input type="number" min="0" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder={t("common.qty")}
                 style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
               <button onClick={()=>{if(form.items.length===1)return;setForm(p=>({...p,items:p.items.filter((_,j)=>j!==i)}));}} disabled={form.items.length===1}
@@ -1290,6 +1290,9 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
 
   const upd=(k,v)=>setForm(p=>({...p,[k]:v}));
   const updItem=(i,k,v)=>{
+    // Qty / rate / total kabhi minus nahi — spinner ka neeche wala teer ya
+    // mouse-wheel pehle 0 ke paar seedha -1, -2… me le jaata tha.
+    if((k==="qty"||k==="rate"||k==="total")&&String(v).trim().startsWith("-")) return;
     const its=[...form.items];
     its[i]={...its[i],[k]:v};
     if(k==="qty"||k==="rate"||k==="total"){
@@ -1476,7 +1479,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
                 <input value={it.hsn} onChange={e=>updItem(i,"hsn",e.target.value)} placeholder="HSN"
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder={t("common.qty")}
+                <input type="number" min="0" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder={t("common.qty")}
                   title={it._d==="qty"?t("finance.auto_total_rate_type_karke_fix"):(it._pick==="qty"?t("finance.selected_total_adjust_karoge_to_qty"):undefined)}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="qty"?"dashed":"solid"} ${T.b1}`,fontSize:12,color:it._d==="qty"?T.t2:T.t1,background:it._d==="qty"?T.surfaceB:(it._pick==="qty"?T.ambL:T.surface),boxShadow:it._pick==="qty"&&it._d!=="qty"?`inset 0 0 0 1.5px ${T.amb}`:"none",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>{e.target.style.borderColor=T.blu;pickItem(i,"qty");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
@@ -1487,11 +1490,11 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
                     </div>
                   : <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
                 }
-                <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder={t("common.rate")}
+                <input type="number" min="0" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder={t("common.rate")}
                   title={it._d==="rate"?t("finance.auto_total_qty"):(it._pick==="rate"?t("finance.selected_total_adjust_karoge_to_rate"):undefined)}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="rate"?"dashed":"solid"} ${T.b1}`,fontSize:12,color:it._d==="rate"?T.t2:T.t1,background:it._d==="rate"?T.surfaceB:(it._pick==="rate"?T.ambL:T.surface),boxShadow:it._pick==="rate"&&it._d!=="rate"?`inset 0 0 0 1.5px ${T.amb}`:"none",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>{e.target.style.borderColor=T.blu;pickItem(i,"rate");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                <input type="number" value={it.total} onChange={e=>updItem(i,"total",e.target.value)} placeholder={t("common.total")}
+                <input type="number" min="0" value={it.total} onChange={e=>updItem(i,"total",e.target.value)} placeholder={t("common.total")}
                   title={it._d==="total"?t("finance.auto_qty_rate_final_total_yahin"):t("procurement.entered_total")}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="total"?"dashed":"solid"} ${it._d==="total"?T.b1:T.bluM}`,fontSize:12,fontWeight:700,color:Number(it.total)>0?T.blu:T.t4,background:it._d==="total"?T.surfaceB:T.bluL,textAlign:"right",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=it._d==="total"?T.b1:T.bluM}/>
@@ -1539,6 +1542,10 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
         <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
         <Btn onClick={async()=>{
           if(!form.vendor||!form.project||!hasReceivingContact(contacts))return;
+          // Kharid ki line par qty 0/minus ya rate minus ho to PO ka total ulta
+          // ho jaata tha (server bhi ab yahi rokta hai).
+          const badLine=form.items.filter(it=>it.desc).find(it=>!(Number(it.qty)>0)||Number(it.rate)<0);
+          if(badLine){ window.alert(t("procurement.po_line_qty_positive",{item:badLine.desc})); return; }
           // Hard guard — prevents double-fire even before re-render
           if(submittingRef.current) return;
           submittingRef.current = true;
@@ -1858,6 +1865,18 @@ function ProcurementModule(){
   const [apprMy,setApprMy]=useState(null);   // {mr:Set,po:Set} | null = pata nahi
   const [wfOn,setWfOn]=useState(null);       // {module:bool} | null = pata nahi
   useApprovalAuthority();                    // jawab aate hi dobara render
+  const applyApprMy=(apRes)=>{
+    if(!(apRes&&apRes.success&&Array.isArray(apRes.data))) return;
+    const pick=(src)=>new Set(apRes.data
+      .filter(i=>i._source===src&&i._canActNow!==false)
+      .map(i=>String(i._source_id)));
+    setApprMy({mr:pick("material_request"),po:pick("purchase_order")});
+  };
+  // Naya PO / MR bante hi uska turn bhi taaza chahiye — pehle ye list sirf
+  // page khulte waqt aati thi, to naye PO par Approve ka faisla purani list
+  // se hota tha (reload tak galat).
+  const reloadApprMy=()=>api.get("/approvals/pending?scope=my")
+    .then(applyApprMy).catch(()=>{});
   // ── Load all data from backend ─────────────────────────────────
   const loadAll=async()=>{
     setLoading(true); setApiError("");
@@ -1872,12 +1891,7 @@ function ProcurementModule(){
       if(mRes.success)setMRs(mRes.data.map(mapMR));
       if(pRes.success)setPOs(pRes.data.map(mapPO));
       if(rRes.success)setRFQs(rRes.data.map(mapRFQ));
-      if(apRes.success&&Array.isArray(apRes.data)){
-        const pick=(src)=>new Set(apRes.data
-          .filter(i=>i._source===src&&i._canActNow!==false)
-          .map(i=>String(i._source_id)));
-        setApprMy({mr:pick("material_request"),po:pick("purchase_order")});
-      }
+      applyApprMy(apRes);
       if(wfRes.success&&Array.isArray(wfRes.data)){
         const on={}; wfRes.data.forEach(w=>{on[w.module]=!!w.enabled;}); setWfOn(on);
       }
@@ -2042,6 +2056,7 @@ function ProcurementModule(){
           project_name:po.project||"",
         });
       }catch(_){}
+      reloadApprMy();   // dobara bheja PO — turn phir L1 par, list taaza karo
     } else {
       alert(res.message||"Resubmit failed");
     }
@@ -2899,7 +2914,8 @@ function ProcurementModule(){
             amount: res.data.total_amount || newPO.items.reduce((s,it)=>(s+(it.qty||0)*(it.rate||0)),0),
             project_id: newPO.projectId || (createPOPrefill||[])[0]?.project_id || 1,
             project_name: newPO.project || "",
-          }).catch(e => console.error("Approval submit:", e));
+          }).catch(e => console.error("Approval submit:", e))
+            .finally(reloadApprMy);   // is naye PO par kiska turn hai — ab pata chale
           // PO created as Draft — MRs stay in Approved tab until admin approves PO
           setPOs(prev=>[mapPO(res.data),...prev]);
         } else {

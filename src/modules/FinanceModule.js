@@ -6425,8 +6425,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
 
       {/* Unbilled Drawer */}
       {showUB&&(<>
-        <div onClick={()=>{setShowUB(false);setSelUBParty(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
-        <div style={{position:"fixed",right:0,top:0,bottom:0,width:400,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.14)",display:"flex",flexDirection:"column"}}>
+        <div onClick={()=>{setShowUB(false);setSelUBParty(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:220,backdropFilter:"blur(1px)"}}/>
+        <div style={{position:"fixed",right:0,top:0,bottom:0,width:400,background:T.bg,zIndex:221,boxShadow:"-4px 0 24px rgba(0,0,0,0.14)",display:"flex",flexDirection:"column"}}>
           <div style={{background:T.surface,padding:"12px 14px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
             <div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>{t("finance.unbilled_materials")}</div><div style={{fontSize:10,color:T.t4}}>{t("finance.received_but_not_yet_billed")}</div></div>
             <span style={{background:T.purL,color:T.pur,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.pur}33`}}>₹{fmt(UNBILLED_PARTIES.flatMap(p=>p.billItems||[]).reduce((s,i)=>s+i.amt,0))}</span>

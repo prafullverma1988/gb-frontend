@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, lazy, Suspense, Fragment } fr
 import api, { getUser, getToken, getCompanies, clearAuth, saveAuth, API_BASE } from "./config/api";
 import { initDiag, recordScreen } from "./utils/diag";
 import apiCache from "./utils/apiCache";
+import { pushBackStep, resetBackSteps } from "./utils/backNav";
 import { loadApprovalAuthority, clearApprovalAuthority } from "./utils/approvalAuthority";
 import UploadToast from "./components/UploadToast";
 import { ToastProvider } from "./components/Toast";
@@ -1739,6 +1740,13 @@ function parseNotifLink(link){
 
 function ProjectsWrapper({deepLink,onDeepLinkDone}){
   const [selectedProject,setSelectedProject]=useState(null);
+  // Project khula = browser Back se wapas list par. Project badalna (switcher)
+  // naya kadam nahi — wahi page hai, isliye sirf khule/band par entry.
+  const projOpen=!!selectedProject;
+  useEffect(()=>{
+    if(!projOpen) return;
+    return pushBackStep(()=>setSelectedProject(null));
+  },[projOpen]);
   // Project switcher inside ProjectDetailPage calls this — we just swap the
   // project object. ProjectDetailPage's `tab` state survives the prop change
   // so the user lands on the same module of the new project.
@@ -1791,6 +1799,20 @@ function App(){
   const [companies,setCompanies]=useState(()=>getCompanies());
   const [switching,setSwitching]=useState(false);
   const [nav,setNav]=useState("projects");
+  // Module badalna = ek kadam; browser Back pichhle module par le aata hai.
+  // Back se aaya badlav khud naya kadam na bane, isliye navByBack.
+  const prevNavRef=useRef(nav);
+  const navByBack=useRef(false);
+  useEffect(()=>{
+    const prev=prevNavRef.current;
+    prevNavRef.current=nav;
+    if(navByBack.current){ navByBack.current=false; return; }
+    if(prev===nav) return;
+    pushBackStep(()=>{
+      if(prevNavRef.current===prev) return;   // pehle se wahi — re-render nahi hoga, flag latka reh jaata
+      navByBack.current=true; setNav(prev);
+    });
+  },[nav]);
   const [ticketCount,setTicketCount]=useState(0);   // sidebar Sahayak/SaaS badge
   const [sahayakNotifCount,setSahayakNotifCount]=useState(0); // advisory Sahayak-stream unread (separate from main bell)
   const [projDeepLink,setProjDeepLink]=useState(null);        // {projectId,tab} from a notification click
@@ -2031,7 +2053,7 @@ function App(){
     window.addEventListener("keydown",handler);
     return()=>window.removeEventListener("keydown",handler);
   },[showSearch,showCheatsheet]);
-  const handleLogout=()=>{apiCache.clear();clearApprovalAuthority();clearAuth();setUser(null);setCompanies([]);setEnabledModules(null);};
+  const handleLogout=()=>{apiCache.clear();clearApprovalAuthority();resetBackSteps();clearAuth();setUser(null);setCompanies([]);setEnabledModules(null);};
 
   // Notification / alert click → land the user where the thing actually is.
   // A project-scoped link also carries {projectId,tab} so ProjectsWrapper can
@@ -2055,6 +2077,7 @@ function App(){
       const res=await api.switchCompany(companyId);
       if(res.success){
         apiCache.clear();
+        resetBackSteps();   // doosri company — purane kadam bekaar
         // Doosri company = doosra workflow aur doosra role. Purana
         // approve-authority jawab yahan se kaam ka nahi raha.
         clearApprovalAuthority();

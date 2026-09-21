@@ -276,8 +276,8 @@ function SitePulseDrawer({onClose,onSelectProject}){
   };
 
   return(<>
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(420px,96vw)",background:C.bg,zIndex:201,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",fontFamily:"'Segoe UI',sans-serif",borderRadius:"16px 0 0 16px"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:220,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(420px,96vw)",background:C.bg,zIndex:221,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",fontFamily:"'Segoe UI',sans-serif",borderRadius:"16px 0 0 16px"}}>
       <div style={{background:C.w,padding:"12px 14px 10px",borderBottom:`1px solid ${C.b}`,flexShrink:0,borderRadius:"16px 0 0 0"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
           <div style={{display:"flex",alignItems:"center",gap:7}}>
