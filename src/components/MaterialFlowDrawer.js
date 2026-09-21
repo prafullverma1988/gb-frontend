@@ -449,6 +449,8 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                       ["Received On",    fmtDate(grn.received_date)],
                       ["Received By",    receivedByName],
                       ["Type",           grn.grn_type || "Full"],
+                      // Task ke andar se hua GRN — kis task ke liye material aaya
+                      ...(grn.task_name ? [[t("material.flow_task"), grn.task_name]] : []),
                       ...items.map(it => {
                         const q = Number(it.received_qty) || 0, r = Number(it.rate) || 0;
                         const val = Number(it.amount) || q * r;

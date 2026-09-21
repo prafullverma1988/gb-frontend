@@ -15,7 +15,7 @@ import { loadPhotoPolicy, policyFor } from "../../utils/photoPolicy";
 import { T } from "../../modules/shared/tokens";
 import { t } from "../../i18n";
 import { fmtKg, kgIn, loadWeighments } from "./weigh";
-import { loadOrderedLines } from "./grnData";
+import { loadOrderedLines, loadPoLines } from "./grnData";
 
 const inp = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1.5px solid " + T.b1, fontSize: 12.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
 const lbl = { fontSize: 9.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginBottom: 3 };
@@ -73,8 +73,10 @@ export default function WeighbridgePanel({ dest, onChanged }) {
 
   const reload = async () => {
     setLoading(true);
-    const [tr, ls] = await Promise.all([loadWeighments(dest, "all"), loadOrderedLines(dest)]);
-    setTrips(tr); setLines(ls); setLoading(false);
+    const [tr, ls, pl] = await Promise.all([loadWeighments(dest, "all"), loadOrderedLines(dest), loadPoLines(dest)]);
+    // PO ki jo line kisi dikh rahi MR se bani hai, wo MR ki row hi hai — dobara nahi.
+    const mrIds = new Set(ls.filter((l) => l.kind === "mr").map((l) => l.mrId));
+    setTrips(tr); setLines([...ls, ...pl.filter((l) => !(l.linkedMrId && mrIds.has(l.linkedMrId)))]); setLoading(false);
   };
   useEffect(() => { reload(); loadPhotoPolicy().then(setPol); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [dest?.type, dest?.projectId, dest?.warehouseId]);
 
@@ -118,6 +120,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     const payloadLines = [
       ...pickedLines.map(l => ({
         mr_id: l.kind === "mr" ? l.mrId : null,
+        po_item_id: l.kind === "po" ? l.poItemId : null,
         wh_mr_id: l.kind === "wh" ? l.whMrId : null,
         wh_mr_item_id: l.kind === "wh" ? l.whMrItemId : null,
         material_name: l.material, order_unit: l.unit,

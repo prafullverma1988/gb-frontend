@@ -10166,6 +10166,8 @@ const dict = {
   "weigh.settings_hint":                                       "Default 1% hai. Weighbridge me thoda difference normal hai — isse kam par koi flag nahi aayega. Issue apne aap nahi banta, site team ek tap me banati hai.",
   "weigh.saved":                                               "✓ Save ho gaya",
   "weigh.tol_range":                                           "Tolerance 0 se 50% ke beech daalo",
+  "procurement.grn_already_received":                          "Pehle aa chuka: {qty} {unit}",
+  "material.flow_task":                                        "Task",
 };
 
 export default dict;

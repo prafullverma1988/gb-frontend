@@ -10,6 +10,22 @@ const dedupe = (rows) => {
   return rows.filter((r) => { if (!r || seen.has(r.id)) return false; seen.add(r.id); return true; });
 };
 
+// Site ki PO wali pending line (jo kisi MR se nahi bani, ya jiska MR is list me
+// nahi) — sirf weighbridge ke "Is truck me kaunsa material hai?" ke liye. GRN
+// ka form inhe nahi dikhata; PO ka GRN Procurement → PO se hota hai.
+export async function loadPoLines(dest) {
+  if (dest?.type !== "project" || !dest.projectId) return [];
+  try {
+    const r = await api.get("/tasks/project/" + encodeURIComponent(dest.projectId) + "/inbound");
+    return ((r && r.success && r.data && r.data.po) || []).map((l) => ({
+      key: "po:" + l.item_id, kind: "po", poId: l.po_id, poItemId: l.item_id, linkedMrId: l.linked_mr_id || null,
+      label: l.po_number || "", material: l.material_name || "", unit: l.unit || "",
+      ordered: Number(l.ordered_qty) || 0, received: Number(l.received_qty) || 0,
+      pending: Math.max(0, Number(l.pending_qty) || 0), vendor: l.vendor_name || "",
+    }));
+  } catch (_) { return []; }
+}
+
 export async function loadOrderedLines(dest) {
   try {
     if (dest?.type === "warehouse") {

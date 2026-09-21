@@ -10164,6 +10164,8 @@ const dict = {
   "weigh.settings_hint":                                       "Default is 1%. Small weighbridge differences are normal — nothing is flagged below this. The issue is not raised automatically; the site team raises it with one tap.",
   "weigh.saved":                                               "✓ Saved",
   "weigh.tol_range":                                           "Enter a tolerance between 0 and 50%",
+  "procurement.grn_already_received":                          "Already received: {qty} {unit}",
+  "material.flow_task":                                        "Task",
 };
 
 export default dict;

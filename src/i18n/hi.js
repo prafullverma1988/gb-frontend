@@ -10163,6 +10163,8 @@ const dict = {
   "weigh.settings_hint":                                       "डिफ़ॉल्ट 1% है। धर्म काँटे में थोड़ा फ़र्क नॉर्मल है — इससे कम पर कोई फ़्लैग नहीं आएगा। इश्यू अपने आप नहीं बनता, साइट टीम एक टैप में बनाती है।",
   "weigh.saved":                                               "✓ सेव हो गया",
   "weigh.tol_range":                                           "टॉलरेंस 0 से 50% के बीच डालो",
+  "procurement.grn_already_received":                          "पहले आ चुका: {qty} {unit}",
+  "material.flow_task":                                        "टास्क",
 };
 
 export default dict;

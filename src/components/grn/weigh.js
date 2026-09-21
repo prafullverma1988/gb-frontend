@@ -36,13 +36,14 @@ export async function loadWeighments(dest, status = "all") {
 // GRN form ke liye: jo lines abhi kisi GRN se nahi judi, unka index —
 // MR se, godown MR ke item se, ya (bina order ke maal ke liye) naam se.
 export function indexOpenLines(trips) {
-  const byMr = {}, byWhItem = {}, byName = {};
+  const byMr = {}, byWhItem = {}, byName = {}, byPoItem = {};
   for (const w of trips || []) {
     if (w.status === "Cancelled") continue;
     for (const l of w.lines || []) {
       if (l.grn_item_id) continue;
       const hit = { line: l, trip: w };
       if (l.mr_id) byMr[l.mr_id] = hit;
+      else if (l.po_item_id) byPoItem[l.po_item_id] = hit;
       else if (l.wh_mr_item_id) byWhItem[l.wh_mr_item_id] = hit;
       else {
         const k = String(l.material_name || "").trim().toLowerCase();
@@ -50,5 +51,14 @@ export function indexOpenLines(trips) {
       }
     }
   }
-  return { byMr, byWhItem, byName };
+  return { byMr, byWhItem, byName, byPoItem };
+}
+
+// Ek PO ki tolai — PO wale GRN (Procurement) ke liye. Server line ko PO ki
+// line se ya us MR se milata hai jisse PO ki line bani thi.
+export async function loadWeighmentsForPo(poId) {
+  try {
+    const r = await api.get("/weighments?status=all&po_id=" + encodeURIComponent(poId));
+    return r && r.success ? (r.data || []) : [];
+  } catch (_) { return []; }
 }

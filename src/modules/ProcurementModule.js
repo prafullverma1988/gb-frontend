@@ -5,6 +5,8 @@ import LibrarySelect from "../components/LibrarySelect";
 import MRDetailDrawer from "../components/MRDetailDrawer";
 import CompanyTransfersTab from "../components/CompanyTransfersTab";
 import GrnIssueBlock from "../components/GrnIssueBlock";
+import WeighChip from "../components/grn/WeighChip";
+import { indexOpenLines, loadWeighmentsForPo } from "../components/grn/weigh";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 import { canApproveAction, approverRolesFor, useApprovalAuthority } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
@@ -623,11 +625,21 @@ function MarkReceivedModal({mr,onSave,onClose}){
 function GRNModal({po,onClose,onSave}){
   const [challan,setChallan]=useState("");
   const [vendorOverride,setVendorOverride]=useState(po.vendor||"");
-  const [rows,setRows]=useState(po.items.map(it=>({qty:String(it.qty),remark:""})));
+  // Qty pehle se PENDING bharti hai, poori order qty nahi — aadhi aa chuki PO
+  // par poori qty bhar dena zyada receive karwa deta tha.
+  const pendingOf=(it)=>Math.max(0,(Number(it.qty)||0)-(Number(it.receivedQty)||0));
+  const [rows,setRows]=useState(po.items.map(it=>({qty:String(pendingOf(it)),remark:""})));
+  // Dharam kante ki tolai (components/grn/WeighbridgePanel) — jo truck is PO
+  // ki line ke liye tula hai, uski row par ⚖️ chip; GRN ke saath tolai judti
+  // hai aur net (empty weight ke baad) bill ka wazan banta hai.
+  const [weigh,setWeigh]=useState({byMr:{},byWhItem:{},byName:{},byPoItem:{}});
+  useEffect(()=>{ let alive=true; loadWeighmentsForPo(po.id).then(tr=>{ if(alive) setWeigh(indexOpenLines(tr)); }); return ()=>{ alive=false; }; },[po.id]);
+  const hitOf=(it)=>weigh.byPoItem[it.id]||(it.linked_mr_id?weigh.byMr[it.linked_mr_id]:null)
+    ||weigh.byName[String(it.desc||"").trim().toLowerCase()]||null;
   // Problem seen while unloading — goes to grn_issues with the GRN, so the
   // material's flow drawer shows it afterwards.
   const [issues,setIssues]=useState([]);
-  const isPartial=rows.some((r,i)=>parseFloat(r.qty)<po.items[i].qty);
+  const isPartial=rows.some((r,i)=>parseFloat(r.qty)<pendingOf(po.items[i]));
   const effectiveVendor = (po.vendor && String(po.vendor).trim()) || vendorOverride.trim();
   const canSubmit = !!challan.trim() && !!effectiveVendor;
   return(
@@ -653,19 +665,21 @@ function GRNModal({po,onClose,onSave}){
         </div>
         {po.items.map((it,i)=>(
           <div key={i} style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:10}}>
-            <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:10}}>{it.desc} <span style={{fontSize:11,color:T.t4,fontWeight:400}}>{t("procurement.qty_unit_ordered", { qty: it.qty, unit: it.unit })}</span></div>
+            <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:10}}>{it.desc} <span style={{fontSize:11,color:T.t4,fontWeight:400}}>{t("procurement.qty_unit_ordered", { qty: it.qty, unit: it.unit })}</span>
+              {it.receivedQty>0&&<span style={{fontSize:11,color:T.amb,fontWeight:500}}> · {t("procurement.grn_already_received", { qty: it.receivedQty, unit: it.unit })}</span>}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10}}>
               <div>
                 <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("procurement.qty_received")}</label>
                 <input type="number" value={rows[i].qty} onChange={e=>{const r=[...rows];r[i]={...r[i],qty:e.target.value};setRows(r);}} max={it.qty}
                   style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                {parseFloat(rows[i].qty)<it.qty&&parseFloat(rows[i].qty)>0&&<div style={{fontSize:9.5,color:T.amb,marginTop:3}}>{t("procurement.partial_it_pending", { it: it.qty-parseFloat(rows[i].qty) })}</div>}
+                {parseFloat(rows[i].qty)<pendingOf(it)&&parseFloat(rows[i].qty)>0&&<div style={{fontSize:9.5,color:T.amb,marginTop:3}}>{t("procurement.partial_it_pending", { it: Math.round((pendingOf(it)-parseFloat(rows[i].qty))*1000)/1000 })}</div>}
               </div>
               <div>
                 <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.remark")}</label>
                 <input value={rows[i].remark} onChange={e=>{const r=[...rows];r[i]={...r[i],remark:e.target.value};setRows(r);}} placeholder={t("procurement.optional")}
                   style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
+              {hitOf(it)&&<WeighChip hit={hitOf(it)} unit={it.unit} onUseNet={q=>{const r=[...rows];r[i]={...r[i],qty:String(q)};setRows(r);}}/>}
             </div>
           </div>
         ))}
@@ -677,7 +691,7 @@ function GRNModal({po,onClose,onSave}){
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
-        <Btn onClick={()=>onSave(po.id,challan,rows,effectiveVendor,issues)} disabled={!canSubmit} color={T.grn} full icon={<IcGRN size={14} color="white"/>}>
+        <Btn onClick={()=>onSave(po.id,challan,rows.map((r,i)=>({...r,weighLineId:(hitOf(po.items[i])||{line:{}}).line.id||null})),effectiveVendor,issues)} disabled={!canSubmit} color={T.grn} full icon={<IcGRN size={14} color="white"/>}>
           {isPartial?t("procurement.confirm_partial_grn"):t("procurement.confirm_full_grn")}
         </Btn>
       </MFoot>
@@ -2178,12 +2192,13 @@ function ProcurementModule(){
           received_qty: parseFloat(r.qty)        || 0,
           unit:         r.unit || po?.items?.[i]?.unit || "",
           remark:       (r.remark||"").trim()    || null,
+          weighment_line_id: r.weighLineId || null,
         })).filter(it=>it.received_qty>0),
         issues: (issues||[]).length ? issues : null,
       };
       const res = await api.post("/procurement/grns", grnPayload);
       if(!res.success) { alert("GRN save failed: "+(res.message||"Unknown error")); return; }
-      const isPartial=rows.some((r,i)=>parseFloat(r.qty)<(po?.items?.[i]?.qty||0));
+      const isPartial=rows.some((r,i)=>parseFloat(r.qty)<Math.max(0,(po?.items?.[i]?.qty||0)-(po?.items?.[i]?.receivedQty||0)));
       if(!isPartial) setPOs(p=>p.map(x=>x.id===poId?{...x,poStatus:"Closed"}:x));
     }catch(e){ alert("GRN error: "+e.message); return; }
     setGrnTarget(null);
