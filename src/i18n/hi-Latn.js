@@ -5424,6 +5424,7 @@ const dict = {
   "photo_locate.ye_sabse_paas_wali_line_nahi":                 "⚠ Ye sabse paas wali line **nahi** hai — photo isse **{fmtD}** door hai. Sabse paas **{name}** ({fmtD2}) hai {res}",
 
   // ── procurement ─────────────────────────────────────────────
+  "procurement.order_btn":                                     "Order karo",
   "procurement.po_line_qty_positive":                          "\"{item}\" — qty 0 se zyada honi chahiye aur rate minus me nahi ho sakta.",
   "procurement.ab_mark_as_sent_click_karo":                    "— ab \"Mark as Sent\" click karo",
   "procurement.active_rfqs":                                   "Active RFQs",

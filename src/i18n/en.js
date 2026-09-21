@@ -5422,6 +5422,7 @@ const dict = {
   "photo_locate.ye_sabse_paas_wali_line_nahi":                 "⚠ This is **not** the closest line — the photo is **{fmtD}** away from it. The closest is **{name}** ({fmtD2}) {res}",
 
   // ── procurement ─────────────────────────────────────────────
+  "procurement.order_btn":                                     "Order",
   "procurement.po_line_qty_positive":                          "\"{item}\" — quantity must be more than 0 and rate cannot be negative.",
   "procurement.ab_mark_as_sent_click_karo":                    "— now click \"Mark as Sent\"",
   "procurement.active_rfqs":                                   "Active RFQs",

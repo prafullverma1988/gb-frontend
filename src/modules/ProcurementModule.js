@@ -686,6 +686,15 @@ function GRNModal({po,onClose,onSave}){
 }
 
 // ── PO DETAIL DRAWER ──────────────────────────────────────────────────
+// ── PO ka agla kadam — list ki row aur drawer DONO isi se ──────────────
+// Approve → Order (vendor ko bhejo) → Receive (GRN). Pehle list ki row
+// order_status dekhti hi nahi thi: Approved hote hi seedha GRN ka button,
+// jabki maal abhi manga hi nahi gaya. Aur drawer sirf "Ordered" par GRN
+// deta tha — aadha maal aane ke baad (PartiallyReceived) baaki receive
+// karne ka raasta hi band ho jaata tha. Server bhi yahi niyam maanta hai.
+const poCanOrder=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&(p.orderStatus||"NotOrdered")==="NotOrdered";
+const poCanReceive=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&["Ordered","PartiallyReceived"].includes(p.orderStatus);
+
 function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSendToVendor}){
   const [detail, setDetail] = useState(po);
   const [fetching, setFetching] = useState(true);
@@ -890,13 +899,13 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
           </button>
         )}
         {/* Send to Vendor — Approved & not yet ordered */}
-        {d.approval==="Approved"&&d.orderStatus==="NotOrdered"&&d.poStatus!=="Cancelled"&&onSendToVendor&&(
+        {poCanOrder(d)&&onSendToVendor&&(
           <button onClick={()=>onSendToVendor(d)} style={{flex:"1 1 130px",padding:"8px",borderRadius:7,background:T.bluL,color:T.blu,border:"1.5px solid "+T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
            {t("procurement.send_to_vendor")}
           </button>
         )}
-        {/* Record GRN — only after ordered */}
-        {d.poStatus==="Open"&&d.approval==="Approved"&&d.orderStatus==="Ordered"&&(
+        {/* Record GRN — order hone ke baad hi; aadha aaya ho (PartiallyReceived) to baaki bhi */}
+        {poCanReceive(d)&&(
           <button onClick={()=>onGRN(d)} style={{flex:"1 1 110px",padding:"8px",borderRadius:7,background:T.ambL,color:T.amb,border:"1.5px solid "+T.amb,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
             <IcGRN size={12} color={T.amb}/> {t("common.record_grn")}
           </button>
@@ -2727,7 +2736,9 @@ function ProcurementModule(){
                     <div style={{display:"flex",gap:4}}>
                       {po.approval==="Draft"&&canApprovePO(po.id)&&<button onClick={e=>{e.stopPropagation();approvePO(po.id);}} title={t("procurement.approve_po")} style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
                       {po.approval==="Revision"&&<button onClick={e=>{e.stopPropagation();setEditPo(po);setShowCreatePO(true);}} title={t("procurement.edit_po_and_resubmit_for_approval")} style={{height:26,padding:"0 9px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:3,color:"#1D4ED8",fontSize:10.5,fontWeight:700}}>{t("procurement.edit_resubmit_2")}</button>}
-                      {po.poStatus==="Open"&&po.approval==="Approved"&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title="GRN" style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
+                      {/* Approve ke baad agla kadam ORDER hai (vendor ko bhejo) — receive tab jab order ho chuka */}
+                      {poCanOrder(po)&&<button onClick={e=>{e.stopPropagation();setSendToVendorTarget(po);}} title={t("procurement.send_to_vendor")} style={{height:26,padding:"0 9px",borderRadius:6,background:T.bluL,border:`1px solid ${T.blu}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4,color:T.blu,fontSize:10.5,fontWeight:700,whiteSpace:"nowrap"}}><IcTruck size={12} color={T.blu}/>{t("procurement.order_btn")}</button>}
+                      {poCanReceive(po)&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title={t("common.record_grn")} style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
                     </div>
                   </div>
                   {po.reviewNote&&(po.approval==="Revision"||po.approval==="Rejected")&&(

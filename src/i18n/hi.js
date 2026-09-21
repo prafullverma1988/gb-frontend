@@ -5421,6 +5421,7 @@ const dict = {
   "photo_locate.ye_sabse_paas_wali_line_nahi":                 "⚠ ये सबसे पास वाली लाइन **नहीं** है — फोटो इससे **{fmtD}** दूर है। सबसे पास **{name}** ({fmtD2}) है {res}",
 
   // ── procurement ─────────────────────────────────────────────
+  "procurement.order_btn":                                     "ऑर्डर करो",
   "procurement.po_line_qty_positive":                          "\"{item}\" — मात्रा 0 से ज़्यादा होनी चाहिए और रेट माइनस में नहीं हो सकता।",
   "procurement.ab_mark_as_sent_click_karo":                    "— अब \"मार्क एस सेंट\" क्लिक करो",
   "procurement.active_rfqs":                                   "एक्टिव RFQs",
