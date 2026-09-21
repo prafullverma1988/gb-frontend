@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import api, { getWarehouseId, setWarehouseId } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
-import LibrarySelect from "../components/LibrarySelect";
-import GrnIssueBlock from "../components/GrnIssueBlock";
+import GrnReceive from "../components/grn/GrnReceive";
+import WeighbridgePanel from "../components/grn/WeighbridgePanel";
+import { loadPhotoPolicy, policyFor } from "../utils/photoPolicy";
 import { canApproveAction } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
 
@@ -358,65 +359,24 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMateria
 
 // ── NEW GRN MODAL ─────────────────────────────────────────────────
 // New GRN modal — TABBED:
-//   Tab 1: "Requested by Procurement" → list of warehouse Ordered MRs to receive
-//   Tab 2: "Return from Project"      → record material wapas aaya project se
-function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
+//   "Requested by Procurement" + "Direct GRN" → components/grn/GrnReceive.js
+//       — wahi form jo site ke GRN (Project → Material) me hai. Pehle godown
+//       ka apna alag form tha jisme na photo thi, na billing weight, na
+//       challan ki rok; ab dono ek hain, farq sirf godown ka Rate (FIFO).
+//   "⚖️ Dharam kata"         → gadi ki tolai (components/grn/WeighbridgePanel.js)
+//   "Return from Project"    → record material wapas aaya project se
+function NewGRNModal({stock,projects,users,library,warehouseId,warehouseName,onClose,onSaved,onPickMR}){
   const [tab,setTab]=useState("procurement");
-  // Tab 1: ordered warehouse MRs
-  const [orderedMRs,setOrderedMRs]=useState([]);
-  const [loadingMRs,setLoadingMRs]=useState(true);
-  // Inline GRN drafts per MR — { [mr.id]: { challan, date, items: { [item.id]: { received_qty, rate } } } }
-  const [drafts,setDrafts]=useState({});
-  const [savingMR,setSavingMR]=useState({}); // { [mr.id]: bool }
-  useEffect(()=>{
-    api.get("/warehouse/mr?type=warehouse&status=Ordered").then(r=>{
-      if(r.success) setOrderedMRs(r.data||[]);
-      setLoadingMRs(false);
-    }).catch(()=>setLoadingMRs(false));
-    // Also pull PartialReceived MRs (top up flow)
-    api.get("/warehouse/mr?type=warehouse&status=PartialReceived").then(r=>{
-      if(r.success) setOrderedMRs(prev=>{
-        const ids=new Set(prev.map(x=>x.id));
-        return [...prev,...(r.data||[]).filter(x=>!ids.has(x.id))];
-      });
-    }).catch(()=>{});
-  },[]);
-
-  // Get-or-init draft for an MR. Pending qty + existing rate pre-filled.
-  const getDraft=(mr)=>{
-    if(drafts[mr.id]) return drafts[mr.id];
-    const items={};
-    (mr.items||[]).forEach(it=>{
-      const pending=Math.max(0,Number(it.qty||0)-Number(it.received_qty||0));
-      items[it.id]={received_qty:pending,rate:Number(it.rate||0)};
-    });
-    return {challan:"",date:today(),items,issues:[]};
-  };
-  const updDraft=(mr,patch)=>setDrafts(p=>({...p,[mr.id]:{...getDraft(mr),...patch}}));
-  const updItem=(mr,itemId,patch)=>{
-    const d=getDraft(mr);
-    setDrafts(p=>({...p,[mr.id]:{...d,items:{...d.items,[itemId]:{...d.items[itemId],...patch}}}}));
-  };
-  const submitMR=async(mr)=>{
-    const d=getDraft(mr);
-    if(!d.challan.trim()){alert(t("common.challan_number_required"));return;}
-    const items=(mr.items||[]).map(it=>{
-      const dit=d.items[it.id]||{};
-      return {id:it.id,name:it.material_name,unit:it.unit,
-              received_qty:Number(dit.received_qty)||0,rate:Number(dit.rate)||0};
-    }).filter(x=>x.received_qty>0);
-    if(items.length===0){alert(t("warehouse.kam_se_kam_ek_item_ka"));return;}
-    setSavingMR(p=>({...p,[mr.id]:true}));
-    const res=await api.post(`/warehouse/mr/${mr.id}/grn`,{
-      challan:d.challan.trim(),vendor:mr.vendor||null,items,
-      issues:(d.issues||[]).length?d.issues:null,
-    });
-    setSavingMR(p=>({...p,[mr.id]:false}));
-    if(res.success){
-      setOrderedMRs(prev=>prev.filter(x=>x.id!==mr.id));
-      onSaved&&onSaved(res.data);
-    } else alert(res.message||"Failed");
-  };
+  // Vendor ka maal — site wala hi form (components/grn/GrnReceive.js).
+  const grnRef=useRef(null);
+  const dest={type:"warehouse",warehouseId,warehouseName};
+  const meUser=(()=>{ try { return JSON.parse(localStorage.getItem("gb_user"))||{}; } catch { return {}; } })();
+  const [orderedCount,setOrderedCount]=useState(0);
+  const [grnPhotos,setGrnPhotos]=useState([]);
+  const [grnSaving,setGrnSaving]=useState(false);
+  const [photoPol,setPhotoPol]=useState(null);
+  useEffect(()=>{ loadPhotoPolicy().then(setPhotoPol); },[]);
+  const grnPol=policyFor(photoPol,"grn");
 
   // Tab 2: return from project state
   const [retF,setRetF]=useState({date:today(),from_project_id:null,remark:""});
@@ -494,81 +454,17 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
     else alert(res.message||"Return save failed");
   };
 
-  // Tab 3: Direct GRN state (no prior MR) — material from Library, challan required
-  const [dirF,setDirF]=useState({date:today(),vendor:"",po_no:"",challan:"",remark:""});
-  const [dirItems,setDirItems]=useState([{lib_id:null,name:"",unit:"",qty:"",rate:""}]);
-  const [dirIssues,setDirIssues]=useState([]);
-  const [dirSaving,setDirSaving]=useState(false);
-  const dirLibOpts=library.map(m=>({id:m.id,name:`${m.name}${m.unit?` · ${m.unit}`:""}`}));
-  const findDirLib=(id)=>library.find(l=>String(l.id)===String(id));
-  const updDirItem=(i,patch)=>{
-    setDirItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
-    const pickedName=patch.name&&String(patch.name).trim();
-    if(pickedName&&!patch.rate){
-      api.get(`/warehouse/last-rate?name=${encodeURIComponent(pickedName)}`).then(r=>{
-        if(r.success&&Number(r.data?.rate)>0){
-          setDirItems(p=>p.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.rate}:row));
-        }
-      }).catch(()=>{});
-    }
-  };
-  const remDirItem=(i)=>setDirItems(p=>p.filter((_,j)=>j!==i));
-  // Auto-focus the SearchSelect on the newly-added row so the user can
-  // type the next material name immediately without grabbing the mouse.
-  const dirRowRefs=useRef([]);
-  const addDirItem=()=>{
-    setDirItems(p=>{
-      const next=[...p,{lib_id:null,name:"",unit:"",qty:"",rate:""}];
-      // Defer focus until React paints the new row
-      setTimeout(()=>{
-        const el=dirRowRefs.current[next.length-1];
-        if(el&&typeof el.focus==="function") el.focus();
-      },0);
-      return next;
-    });
-  };
-  const dirValid=dirF.vendor.trim()&&dirF.challan.trim()&&dirItems.some(it=>it.lib_id&&Number(it.qty)>0);
-  const dirTotal=dirItems.reduce((s,it)=>s+Number(it.qty||0)*Number(it.rate||0),0);
-  const submitDirectRef=useRef(false);
-  const submitDirect=async()=>{
-    if(submitDirectRef.current) return; // hard guard against double-fire
-    if(!dirF.challan.trim()){alert(t("warehouse.challan_no_required"));return;}
-    submitDirectRef.current=true;
-    setDirSaving(true);
-    const cleanItems=dirItems.filter(it=>it.lib_id&&Number(it.qty)>0).map(it=>{
-      const lib=findDirLib(it.lib_id);
-      return {
-        material_id:null, // Library entries are master_material — wh_materials auto-create on backend by name
-        name:lib?.name||"Material",
-        unit:lib?.unit||"Nos",
-        qty:Number(it.qty),
-        rate:Number(it.rate)||0,
-      };
-    });
-    const res=await api.post("/warehouse/grn-direct",{
-      date:dirF.date,
-      vendor:dirF.vendor.trim(),
-      po_no:dirF.po_no.trim()||null,
-      challan:dirF.challan.trim(),
-      remark:dirF.remark.trim()||null,
-      items:cleanItems,
-      issues:dirIssues.length?dirIssues:null,
-    });
-    setDirSaving(false);
-    submitDirectRef.current=false;
-    if(res.success){setDirIssues([]);onSaved&&onSaved(res.data);onClose();}
-    else alert(res.message||"Direct GRN save failed");
-  };
 
   const tabs=[
-    {id:"procurement",l:t("warehouse.requested_by_procurement"),c:T.pur,count:orderedMRs.length},
+    {id:"procurement",l:t("warehouse.requested_by_procurement"),c:T.pur,count:orderedCount},
     {id:"direct",     l:t("warehouse.direct_grn"),              c:T.blu,count:null},
+    {id:"weigh",      l:t("weigh.tab"),                          c:T.amb,count:null},
     {id:"return",     l:t("warehouse.return_from_project"),     c:T.cyn,count:null},
   ];
 
   return (
     <ModalShell title={t("warehouse.new_grn_material_in")}
-      sub={tab==="procurement"?t("warehouse.procurement_ordered_material_ko_receive_karein"):tab==="direct"?t("warehouse.vendor_walk_in_delivery_bina_prior"):t("warehouse.project_se_wapas_aaya_material_log")}
+      sub={tab==="procurement"?t("warehouse.procurement_ordered_material_ko_receive_karein"):tab==="direct"?t("warehouse.vendor_walk_in_delivery_bina_prior"):tab==="weigh"?t("weigh.modal_sub"):t("warehouse.project_se_wapas_aaya_material_log")}
       onClose={onClose} width={820}
       footer={
         tab==="return"?<>
@@ -576,9 +472,8 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
           <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
           <Btn onClick={submitReturn} disabled={!retValid||retSaving} c={T.cyn} icon={IcIn}>{retSaving?t("common.saving"):t("warehouse.save_return")}</Btn>
         </>:tab==="direct"?<>
-          <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>{t("common.total_2")} <b style={{color:T.blu}}>₹{fmtN(dirTotal)}</b></span>
           <GhostBtn onClick={onClose}>{t("common.cancel")}</GhostBtn>
-          <Btn onClick={submitDirect} disabled={!dirValid||dirSaving} c={T.grn} icon={IcChk}>{dirSaving?t("common.saving"):t("warehouse.save_direct_grn")}</Btn>
+          <Btn onClick={async()=>{ const ok=await (grnRef.current&&grnRef.current.submitDirect()); if(ok) onClose(); }} disabled={grnSaving} c={T.grn} icon={IcChk}>{grnSaving?t("common.saving"):t("warehouse.save_direct_grn")}</Btn>
         </>:<GhostBtn onClick={onClose}>{t("common.close")}</GhostBtn>
       }>
 
@@ -593,173 +488,18 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
         ))}
       </div>
 
-      {/* TAB 1: Requested by Procurement */}
-      {tab==="procurement"&&(
-        <div>
-          {loadingMRs&&<div style={{textAlign:"center",padding:"30px",color:T.t4,fontSize:12.5}}>{t("common.loading")}</div>}
-          {!loadingMRs&&orderedMRs.length===0&&(
-            <div style={{padding:"24px 14px",textAlign:"center",background:T.surfaceB,borderRadius:8,border:`1.5px dashed ${T.b1}`,color:T.t4,fontSize:12.5}}>
-              <div style={{fontSize:28,opacity:.4,marginBottom:6}}>📋</div>
-              <div style={{fontSize:13,fontWeight:600,color:T.t3,marginBottom:3}}>{t("warehouse.koi_ordered_mr_nahi")}</div>
-              <div>{t("warehouse.pehle_warehouse_mr_banao_admin_approve")}</div>
-            </div>
-          )}
-          {!loadingMRs&&orderedMRs.length>0&&(
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <div style={{padding:"8px 11px",background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7,fontSize:11.5,color:T.pur,fontWeight:600,marginBottom:4}}>
-               {t("warehouse.niche_dikhi_mr_ke_against_vendor")}
-              </div>
-              {orderedMRs.map(mr=>{
-                const totalQty=(mr.items||[]).reduce((s,it)=>s+Number(it.qty||0),0);
-                const alreadyRecv=(mr.items||[]).reduce((s,it)=>s+Number(it.received_qty||0),0);
-                const isPartial=mr.status==="PartialReceived";
-                const d=getDraft(mr);
-                const draftTotal=(mr.items||[]).reduce((s,it)=>{
-                  const dit=d.items[it.id]||{};
-                  return s+Number(dit.received_qty||0)*Number(dit.rate||0);
-                },0);
-                const isSaving=savingMR[mr.id];
-                return (
-                  <div key={mr.id} style={{background:T.surface,border:`1px solid ${T.purM}`,borderRadius:8,borderLeft:`3px solid ${isPartial?T.blu:T.pur}`,overflow:"hidden"}}>
-                    {/* Header */}
-                    <div style={{padding:"11px 13px"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
-                        <span style={{fontSize:12.5,fontWeight:700,color:T.pur,fontFamily:"monospace"}}>{mr.mr_no}</span>
-                        <Pill label={mr.status} c={isPartial?T.blu:T.pur} bg={isPartial?T.bluL:T.purL} brd={isPartial?T.bluM:T.purM}/>
-                        {mr.priority&&<Pill label={mr.priority} c={T.amb} bg={T.ambL}/>}
-                      </div>
-                      <div style={{fontSize:11.5,color:T.t3}}>
-                        {mr.vendor&&<span>{t("warehouse.vendor")} <b style={{color:T.t1}}>{mr.vendor}</b></span>}
-                        {mr.po_no&&<span style={{marginLeft:8,color:T.t4,fontFamily:"monospace"}}>{mr.po_no}</span>}
-                        {mr.expected_date&&<span style={{marginLeft:8,color:T.t4}}>{t("warehouse.exp_fmtdate", { fmtDate: fmtDate(mr.expected_date) })}</span>}
-                      </div>
-                      {alreadyRecv>0&&<div style={{fontSize:10.5,color:T.blu,fontWeight:600,marginTop:2}}>{t("warehouse.fmtn_of_fmtn2_already_received", { fmtN: fmtN(alreadyRecv), fmtN2: fmtN(totalQty) })}</div>}
-                    </div>
-                    {/* Inline GRN form — challan + date + per-item qty/rate */}
-                    <div style={{padding:"10px 13px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`}}>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 140px",gap:10,marginBottom:9}}>
-                        <Field label={t("tasks.challan_no")}>
-                          <Input value={d.challan} onChange={e=>updDraft(mr,{challan:e.target.value})} placeholder={t("warehouse.ch_2026")}/>
-                        </Field>
-                        <Field label={t("common.date")}>
-                          <Input type="date" value={d.date} onChange={e=>updDraft(mr,{date:e.target.value})}/>
-                        </Field>
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"2fr 50px 60px 60px 95px 85px 80px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 2px"}}>
-                        <span>{t("common.material")}</span><span>{t("common.unit")}</span><span style={{textAlign:"right"}}>{t("warehouse.ord")}</span><span style={{textAlign:"right"}}>{t("warehouse.already")}</span><span style={{textAlign:"center",color:T.grn,fontSize:10,fontWeight:800}}>{t("warehouse.receive_qty")}</span><span style={{textAlign:"right"}}>{t("warehouse.rate")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span>
-                      </div>
-                      {(mr.items||[]).map(it=>{
-                        const dit=d.items[it.id]||{received_qty:0,rate:0};
-                        const pending=Math.max(0,Number(it.qty||0)-Number(it.received_qty||0));
-                        const empty=!Number(dit.received_qty);
-                        const short=!empty&&Number(dit.received_qty)<pending;
-                        return (
-                          <div key={it.id} style={{display:"grid",gridTemplateColumns:"2fr 50px 60px 60px 95px 85px 80px",gap:6,alignItems:"center",marginBottom:5}}>
-                            <span style={{fontSize:11.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{it.material_name}</span>
-                            <span style={{fontSize:10.5,color:T.t3}}>{it.unit}</span>
-                            <span style={{fontSize:11,color:T.t3,textAlign:"right"}}>{fmtN(it.qty)}</span>
-                            <span style={{fontSize:11,color:Number(it.received_qty)>0?T.blu:T.t4,textAlign:"right",fontWeight:Number(it.received_qty)>0?700:400}}>{fmtN(it.received_qty||0)}</span>
-                            <input type="number" value={dit.received_qty} max={pending} placeholder={t("tenders.qty")}
-                              onChange={e=>updItem(mr,it.id,{received_qty:e.target.value})}
-                              style={{height:34,padding:"0 8px",borderRadius:6,border:`2px solid ${empty?T.amb:short?T.blu:T.grn}`,fontSize:13,fontWeight:700,outline:"none",fontFamily:"inherit",textAlign:"right",background:empty?T.ambL:short?T.bluL:T.grnL,color:empty?T.amb:T.t1}}/>
-                            <input type="number" value={dit.rate} placeholder={t("common.rate")}
-                              onChange={e=>updItem(mr,it.id,{rate:e.target.value})}
-                              style={{height:34,padding:"0 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",textAlign:"right"}}/>
-                            <span style={{fontSize:11.5,fontWeight:700,color:T.grn,textAlign:"right"}}>₹{fmt(Number(dit.received_qty||0)*Number(dit.rate||0))}</span>
-                          </div>
-                        );
-                      })}
-                      <div style={{fontSize:10.5,color:T.amb,fontWeight:600,marginTop:6,padding:"5px 8px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:5}}>
-                       {t("warehouse.receive_qty_mandatory_hai_vendor_ne")}
-                      </div>
-                      <div style={{marginTop:8}}>
-                        <GrnIssueBlock value={d.issues||[]} onChange={v=>updDraft(mr,{issues:v})}/>
-                      </div>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:9,borderTop:`1px dashed ${T.b1}`}}>
-                        <span style={{fontSize:12,color:T.t3}}>{t("common.total_2")} <b style={{color:T.grn,fontSize:13}}>₹{fmtN(draftTotal)}</b></span>
-                        <Btn onClick={()=>submitMR(mr)} disabled={isSaving} c={T.grn} icon={IcIn} size="sm">{isSaving?t("common.saving"):t("warehouse.record_grn_update_stock")}</Btn>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+      {/* Requested by Procurement + Direct GRN — site ke GRN wala hi form.
+          Ek hi jagah render taaki tab badalne par bhara hua na mite. */}
+      {(tab==="procurement"||tab==="direct")&&(
+        <GrnReceive ref={grnRef} mode={tab==="procurement"?"ordered":"direct"} dest={dest}
+          photos={grnPhotos} setPhotos={setGrnPhotos}
+          photoRequired={grnPol.mode==="required"} photoCameraOnly={grnPol.source==="camera"}
+          meUser={meUser}
+          onReceived={(info)=>{ onSaved&&onSaved(info); }}
+          onSavingChange={setGrnSaving}
+          onOrderedCount={setOrderedCount}/>
       )}
-
-      {/* TAB 3: Direct GRN — vendor walk-in, no prior MR */}
-      {tab==="direct"&&(
-        <div>
-          <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:13,lineHeight:1.5}}>
-            🚚 <b>{t("warehouse.direct_grn_2")}</b> {t("warehouse.bina_prior_mr_po_ke_vendor")}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"140px 2fr 1fr 1fr",gap:11,marginBottom:11}}>
-            <Field label={t("common.date")}><Input type="date" value={dirF.date} onChange={e=>setDirF(p=>({...p,date:e.target.value}))}/></Field>
-            <Field label={t("common.vendor_2")}>
-              <LibrarySelect type="supplier" value={dirF.vendor}
-                onChange={v=>setDirF(p=>({...p,vendor:v||""}))}
-                placeholder={t("warehouse.vendor_library_se_pick_karein")}/>
-            </Field>
-            <Field label={t("warehouse.po_no")}><Input value={dirF.po_no} onChange={e=>setDirF(p=>({...p,po_no:e.target.value}))} placeholder={t("common.optional")}/></Field>
-            <Field label={t("tasks.challan_no")}>
-              <Input value={dirF.challan} onChange={e=>setDirF(p=>({...p,challan:e.target.value}))} placeholder={t("warehouse.ch")}
-                style={{borderColor:dirF.challan.trim()?T.b1:T.amb}}/>
-            </Field>
-          </div>
-          <Field label={t("common.remark")} style={{marginBottom:13}}>
-            <Input value={dirF.remark} onChange={e=>setDirF(p=>({...p,remark:e.target.value}))} placeholder={t("common.optional_note")}/>
-          </Field>
-
-          {library.length===0&&(
-            <div style={{padding:"10px 13px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:12,color:T.amb,fontWeight:600,marginBottom:11}}>
-             {t("warehouse.material_library_khali_hai_pehle_library")}
-            </div>
-          )}
-
-          <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
-           {t("common.items")} <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("warehouse.library_se_pick_karein")}</span>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-            <span>{t("warehouse.material_from_library")}</span><span>{t("common.unit")}</span><span>{t("common.qty")}</span><span>{t("warehouse.rate_u")}</span><span style={{textAlign:"right"}}>{t("fuel.value")}</span><span/>
-          </div>
-          {dirItems.map((row,i)=>{
-            const lib=findDirLib(row.lib_id);
-            const value=Number(row.qty||0)*Number(row.rate||0);
-            return (
-              <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 100px 90px 24px",gap:6,alignItems:"center",marginBottom:6}}>
-                <SearchSelect compact value={row.lib_id} options={dirLibOpts}
-                  inputRef={el=>{ dirRowRefs.current[i]=el; }}
-                  onChange={v=>{const m=findDirLib(v);updDirItem(i,{lib_id:v,name:m?.name||"",unit:m?.unit||"",rate:m?.rate?Number(m.rate):row.rate});}}
-                  placeholder={t("warehouse.library_se_material_pick_karein")}/>
-                <UnitLock unit={lib?.unit||row.unit||"—"} locked={true} compact/>
-                <input type="number" value={row.qty||""} onChange={e=>updDirItem(i,{qty:e.target.value})} placeholder={t("common.qty")}
-                  style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
-                <input type="number" value={row.rate||""} onChange={e=>updDirItem(i,{rate:e.target.value})} placeholder={t("warehouse.rate_auto")}
-                  title={t("warehouse.last_purchase_rate_auto_fills_on")}
-                  style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",background:row.rate?T.bluL+"66":T.surface}}/>
-                <span style={{fontSize:11,color:T.blu,fontWeight:700,textAlign:"right"}}>₹{fmt(value)}</span>
-                {dirItems.length>1?(
-                  <button onClick={()=>remDirItem(i)}
-                    style={{width:24,height:24,border:"none",background:"none",cursor:"pointer",color:T.red,padding:0,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5}}>
-                    <IcTrash size={12}/>
-                  </button>
-                ):<span/>}
-              </div>
-            );
-          })}
-          <button onClick={addDirItem} disabled={library.length===0}
-            style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:library.length===0?T.t4:T.t3,fontSize:11.5,fontWeight:600,cursor:library.length===0?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
-            <IcAdd size={11}/> {t("procurement.add_row")}
-          </button>
-          <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
-           {t("warehouse.material_library_se_aata_hai_aur")}
-          </div>
-          <div style={{marginTop:12}}>
-            <GrnIssueBlock value={dirIssues} onChange={setDirIssues}/>
-          </div>
-        </div>
-      )}
+      {tab==="weigh"&&<WeighbridgePanel dest={dest} onChanged={()=>onSaved&&onSaved()}/>}
 
       {/* TAB 2: Return from Project */}
       {tab==="return"&&(
@@ -3904,6 +3644,7 @@ function WarehouseModule(){
       )}
       {grnNewOpen&&(
         <NewGRNModal stock={stock} projects={projects} users={users} library={library}
+          warehouseId={whId} warehouseName={activeWh?.name||""}
           onClose={()=>setGrnNewOpen(false)}
           onSaved={()=>loadAll()}
           onPickMR={(mr)=>setGrnMR(mr)}/>

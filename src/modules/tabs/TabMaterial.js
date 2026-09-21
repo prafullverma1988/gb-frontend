@@ -7,86 +7,15 @@ import MaterialFlowDrawer from "../../components/MaterialFlowDrawer";
 import MRDetailDrawer from "../../components/MRDetailDrawer";
 import MaterialTransferTab from "../../components/MaterialTransferTab";
 import MaterialLedgerDrawer from "../../components/MaterialLedgerDrawer";
-import GrnIssueBlock from "../../components/GrnIssueBlock";
-import { loadPhotoPolicy, policyFor, fileInputProps } from "../../utils/photoPolicy";
+import GrnReceive from "../../components/grn/GrnReceive";
+import WeighbridgePanel from "../../components/grn/WeighbridgePanel";
+import { loadPhotoPolicy, policyFor } from "../../utils/photoPolicy";
 import { T, fmtN, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
-import { t, Rich } from "../../i18n";
+import { t } from "../../i18n";
 
-// ── Dual-unit billing toggle (GRN item) ────────────────────────────────
-// Some materials are received by count (TMT = bundle) but billed by weight
-// from the weighbridge parchi (kg). This per-item switch captures that second
-// billing-basis measurement. Zero config: it learns the unit + conversion
-// ratio from this material's last GRN (tenant-scoped) and prefills a *~kg*
-// suggestion the site person can correct. Photo proof reuses the existing GRN
-// photo attachment. Switch OFF = normal single-unit GRN, no behaviour change.
-function DualUnitToggle({ units, primaryUnit, itemName, qty, value, onChange }) {
-  const [learned, setLearned] = React.useState(null);   // {unit, alt_unit, ratio}
-  const on = !!value?.altOn;
-  const nameKey = (itemName || "").trim();
-
-  React.useEffect(() => {
-    if (!nameKey) { setLearned(null); return; }
-    let alive = true;
-    api.get("/procurement/grns/last-alt?name=" + encodeURIComponent(nameKey))
-      .then(r => { if (alive && r && r.success) setLearned(r.data || null); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [nameKey]);
-
-  const ratio = value?.ratio ?? learned?.ratio ?? null;
-  const suggestQty = (on && ratio && Number(qty) > 0)
-    ? Math.round(Number(qty) * ratio * 100) / 100 : null;
-
-  const toggle = () => {
-    if (on) { onChange({ altOn: false, alt_unit: "", alt_qty: "", ratio: null }); return; }
-    // Turning ON: default the billing unit to the learned one (else kg), carry
-    // the learned ratio so the qty box can prefill, but leave alt_qty editable.
-    const defUnit = learned?.alt_unit || (units.includes("Kg") ? "Kg" : units[0]);
-    onChange({
-      altOn: true,
-      alt_unit: value?.alt_unit || defUnit,
-      alt_qty: value?.alt_qty || (learned?.ratio && Number(qty) > 0 ? String(Math.round(Number(qty) * learned.ratio * 100) / 100) : ""),
-      ratio: learned?.ratio || null,
-    });
-  };
-
-  const altUnitOptions = units.filter(u => u !== primaryUnit);
-
-  return (
-    <div style={{ gridColumn: "1 / -1", paddingTop: on ? 6 : 2 }}>
-      <button type="button" onClick={toggle}
-        style={{ display: "flex", alignItems: "center", gap: 7, background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "inherit" }}>
-        <span style={{ width: 30, height: 17, borderRadius: 9, background: on ? T.blu : T.b2, position: "relative", transition: "background .15s", flexShrink: 0 }}>
-          <span style={{ position: "absolute", top: 2, left: on ? 15 : 2, width: 13, height: 13, borderRadius: "50%", background: "#fff", transition: "left .15s", boxShadow: "0 1px 2px rgba(0,0,0,.25)" }} />
-        </span>
-        <span style={{ fontSize: 11, fontWeight: 600, color: on ? T.blu : T.t3 }}>{t("finance.billing_unit_alag")}</span>
-        {!on && learned?.alt_unit && (
-          <span style={{ fontSize: 10, color: T.t4 }}>{t("material.pichhli_baar_alt_unit_me_bill", { alt_unit: learned.alt_unit })}</span>
-        )}
-      </button>
-      {on && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 10.5, color: T.t3 }}>{t("material.billing_basis")}</span>
-          <input type="number" value={value?.alt_qty || ""}
-            onChange={e => onChange({ ...value, altOn: true, alt_qty: e.target.value })}
-            placeholder={suggestQty != null ? String(suggestQty) : t("material.weighbridge_weight")}
-            title={t("material.weighbridge_parchi_ka_actual_weight_editable")}
-            style={{ width: 110, padding: "6px 9px", borderRadius: 6, border: "1.5px solid " + T.bluM, fontSize: 12.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", background: T.bluL }} />
-          <select value={value?.alt_unit || ""}
-            onChange={e => onChange({ ...value, altOn: true, alt_unit: e.target.value })}
-            style={{ padding: "6px 9px", borderRadius: 6, border: "1.5px solid " + T.bluM, fontSize: 12.5, outline: "none", fontFamily: "inherit", cursor: "pointer", background: T.surface }}>
-            {altUnitOptions.map(u => <option key={u}>{u}</option>)}
-          </select>
-          {suggestQty != null && !value?.alt_qty && (
-            <span style={{ fontSize: 10.5, color: T.t4 }}>{t("material.suggestqty_alt_unit_suggested_ratio", { suggestQty, alt_unit: value?.alt_unit, ratio })}</span>
-          )}
-          <span style={{ fontSize: 10.5, color: T.t4 }}>{t("material.parchi_photo_neeche_attach_karein")}</span>
-        </div>
-      )}
-    </div>
-  );
-}
+// Dual-unit billing toggle ab components/grn/DualUnitToggle.js me hai —
+// site aur godown dono ke GRN me wahi switch chalta hai.
 
 // One MR → Requests-card mapper. This used to be copy-pasted in three places
 // (initial load + two post-save reloads), and all three put the ORDERED
@@ -202,21 +131,12 @@ function TabMaterial({ project }) {
     setLibSaving(false);
   };
   const [grnTab, setGrnTab] = useState("ordered");
-  const [orderedMRs, setOrderedMRs] = useState([]);
-  const [grnRows, setGrnRows] = useState({});
-  // Vendor-grouped receive — shared challan/date/received_by per vendor
-  // card so user enters them ONCE per delivery instead of per material.
-  // Shape: { [vendor_name]: { challan, date, received_by } }
-  const [vendorReceive, setVendorReceive] = useState({});
-  // Direct Receive — vendor + challan + date moved to global (one per
-  // submission) since a single delivery is always from ONE vendor.
-  const [directGlobal, setDirectGlobal] = useState({ vendor: "", challan: "", date: new Date().toLocaleDateString('en-CA'), received_by: "" });
-  const [directRows, setDirectRows] = useState([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
+  // GRN ka form (ordered + direct) ab components/grn/GrnReceive.js me hai —
+  // site aur godown ek hi form. Yahan sirf drawer ko jo chahiye wo bacha.
+  const grnRef = useRef(null);
+  const [orderedCount, setOrderedCount] = useState(0);
+  const [grnDoneCount, setGrnDoneCount] = useState(0);
   const [grnPhotos, setGrnPhotos] = useState([]);
-  // Problems spotted while unloading. Ordered tab = per material (each MR
-  // becomes its own GRN); Direct tab = one list for the whole delivery.
-  const [rowIssues, setRowIssues] = useState({});
-  const [directIssues, setDirectIssues] = useState([]);
   // Company ki photo policy (Settings → Photo Settings). Is tab me teen
   // alag jagah photo lagti hai aur teeno ki apni setting hai:
   //   grn               — vendor se maal receive
@@ -243,9 +163,7 @@ function TabMaterial({ project }) {
   };
   // (Add-new-vendor flow now handled inside <LibrarySelect type="supplier"/>)
   const [grnSaving, setGrnSaving] = useState(false);
-  const [grnDone, setGrnDone] = useState([]);
   const [directGrns, setDirectGrns] = useState([]); // Direct GRNs without MR
-  const [vendorList, setVendorList] = useState([]);
   const [usedLog, setUsedLog] = useState([]);
   const [usedLogLoading, setUsedLogLoading] = useState(false);
   const [showUsedLog, setShowUsedLog] = useState(false);
@@ -259,7 +177,6 @@ function TabMaterial({ project }) {
   const [invUsedSaving, setInvUsedSaving] = useState(false);
   const UNITS_MR = ["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT","Brass"];
   const [matLibReal, setMatLibReal] = useState([]);
-  const MAT_LIB = matLibReal.map(m => m.name);
 
   // ── Ledger tab state ────────────────────────────────────────
   const [ledger, setLedger] = useState([]);
@@ -288,9 +205,6 @@ function TabMaterial({ project }) {
   useEffect(() => {
     api.get("/library/materials").then(r => {
       if (r.success && r.data?.length > 0) setMatLibReal(r.data);
-    }).catch(() => {});
-    api.get("/procurement/vendors").then(r => {
-      if (r.success) setVendorList(r.data || []);
     }).catch(() => {});
   }, [projectId]);
 
@@ -443,16 +357,7 @@ function TabMaterial({ project }) {
 
   useEffect(() => {
     if (!showGRN || !projectId) return;
-    // Fetch both fully-Ordered AND PartialReceived MRs — both still need more material
-    Promise.all([
-      api.get("/procurement/mrs?project_id=" + projectId + "&stage=Ordered"),
-      api.get("/procurement/mrs?project_id=" + projectId + "&mat_status=PartialReceived"),
-    ]).then(([r1, r2]) => {
-      const m1 = r1?.success  ? (r1.data||[]) : [];
-      const m2 = r2?.success  ? (r2.data||[]) : [];
-      const seen = new Set();
-      setOrderedMRs([...m1, ...m2].filter(m => { if(seen.has(m.id)) return false; seen.add(m.id); return true; }));
-    }).catch(()=>{});
+    // Ordered MR ab GrnReceive khud laata hai (components/grn/grnData.js).
     loadPendingTransfers();
     loadPendingIssues();
     setTrReceiveDone([]);
@@ -503,149 +408,25 @@ function TabMaterial({ project }) {
     setIssueReceiving(false);
   };
 
-  // GRN handlers
-  const handleReceiveMR = async (mrId) => {
-    const row = grnRows[mrId] || {};
-    if (!row.challan) { alert(t("common.challan_number_required")); return; }
-    if (photoBlocked("grn", "Maal receive (GRN)")) return;
-    setGrnSaving(true);
-    try {
-      const mr = orderedMRs.find(m => m.id === mrId);
-      const res = await api.patch("/procurement/mrs/" + mrId + "/mark-received", {
-        challan_no: row.challan,
-        received_qty: parseFloat(row.received_qty) || parseFloat(mr?.quantity) || 0,
-        photo_urls: grnPhotos.length ? grnPhotos : null,
-      });
-      if (res.success) {
-        setGrnDone(p => [...p, mrId]);
-        // Reload ledger + requests directly
-        api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
-          if (r.success) { setLedger(r.data || []); setLedgerLoaded(true); }
-        }).catch(() => {});
-        api.get("/procurement/mrs?project_id=" + projectId).then(res2 => {
-          if (res2.success && Array.isArray(res2.data)) {
-            setMaterials(res2.data.map(toMrCard));
-          }
-        }).catch(() => {});
-      }
-      else alert(res.message || "Failed");
-    } catch(e) { alert(e.message); }
-    setGrnSaving(false);
-  };
-
-  // Vendor-grouped receive — one delivery from a vendor can carry multiple
-  // MRs (TMT 12mm + 8mm + 10mm in one truck). Loops mark-received per MR
-  // with the shared challan + date so the user only enters info once.
-  // Skips rows where received_qty is 0/blank → those stay pending for
-  // the next delivery.
-  const handleReceiveVendor = async (vendor) => {
-    const meta = vendorReceive[vendor] || {};
-    if (!meta.challan || !meta.challan.trim()) { alert(t("common.challan_number_required")); return; }
-    if (photoBlocked("grn", "Maal receive (GRN)")) return;
-    const targetMRs = orderedMRs.filter(mr =>
-      (mr.linked_vendor || "— Unassigned —") === vendor &&
-      !grnDone.includes(mr.id) &&
-      Number((grnRows[mr.id] || {}).received_qty || 0) > 0
-    );
-    if (targetMRs.length === 0) { alert(t("material.kam_se_kam_ek_material_ka")); return; }
-    setGrnSaving(true);
-    let okCount = 0, failures = [];
-    for (const mr of targetMRs) {
-      const gr = grnRows[mr.id] || {};
-      const recvQty = parseFloat(gr.received_qty) || 0;
-      const dual = gr.dual;
-      try {
-        const res = await api.patch("/procurement/mrs/" + mr.id + "/mark-received", {
-          challan_no: meta.challan,
-          received_qty: recvQty,
-          received_date: meta.date || new Date().toLocaleDateString('en-CA'),
-          received_by: meta.received_by || meUser?.name || undefined,
-          photo_urls: grnPhotos.length ? grnPhotos : null,
-          // Dual-unit billing basis (weighbridge weight), if the switch is on.
-          alt_qty:  dual?.altOn && Number(dual.alt_qty) > 0 ? parseFloat(dual.alt_qty) : null,
-          alt_unit: dual?.altOn && Number(dual.alt_qty) > 0 && dual.alt_unit ? dual.alt_unit : null,
-          // Problems seen on this material — land on the GRN this call creates.
-          issues: (rowIssues[mr.id] || []).length ? rowIssues[mr.id] : null,
-        });
-        if (res.success) {
-          setGrnDone(p => [...p, mr.id]); okCount += 1;
-          setRowIssues(p => { const n = { ...p }; delete n[mr.id]; return n; });
-        }
-        else failures.push(`${mr.item_name}: ${res.message||"failed"}`);
-      } catch (e) { failures.push(`${mr.item_name}: ${e.message}`); }
-    }
-    // Single reload after the whole vendor batch
+  // GRN save hone ke baad — ledger, requests, aur direct par inventory bhi.
+  // Receive ka kaam ab components/grn/GrnReceive.js karta hai.
+  const handleGrnReceived = (info) => {
     api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
       if (r.success) { setLedger(r.data || []); setLedgerLoaded(true); }
     }).catch(() => {});
     api.get("/procurement/mrs?project_id=" + projectId).then(res2 => {
-      if (res2.success && Array.isArray(res2.data)) {
-        setMaterials(res2.data.map(toMrCard));
-      }
+      if (res2.success && Array.isArray(res2.data)) setMaterials(res2.data.map(toMrCard));
     }).catch(() => {});
-    setGrnSaving(false);
-    if (failures.length > 0) {
-      alert(`Received ${okCount}/${targetMRs.length}. Errors:\n${failures.join("\n")}`);
+    if (info && info.mode === "direct") {
+      setShowGRN(false);
+      loadMRs();
+      setInvLoading(true);
+      api.get("/tasks/project/" + projectId + "/inventory").then(r => {
+        if (r.success) setInventory(r.data || []);
+        setInvLoaded(true);
+        setInvLoading(false);
+      }).catch(() => setInvLoading(false));
     }
-  };
-
-  const handleDirectReceive = async () => {
-    // Global vendor/challan/date — Direct Receive is single-vendor.
-    if (!directGlobal.vendor) { alert(t("material.vendor_select_karo")); return; }
-    if (!directGlobal.challan) { alert(t("material.challan_number_daalo")); return; }
-    const validRows = directRows.filter(r => r.item_name && Number(r.qty) > 0);
-    if (!validRows.length) { alert(t("material.kam_se_kam_ek_material_qty")); return; }
-    if (photoBlocked("grn", "Maal receive (GRN)")) return;
-    setGrnSaving(true);
-    try {
-      const res = await api.post("/procurement/grns", {
-        po_id: null,
-        vendor_name: directGlobal.vendor,
-        project_id: projectId,
-        project_name: projectName,
-        challan_no: directGlobal.challan,
-        received_by: directGlobal.received_by || meUser?.name || null,
-        received_date: directGlobal.date || new Date().toISOString().split("T")[0],
-        photo_urls: grnPhotos.length ? grnPhotos : null,
-        issues: directIssues.length ? directIssues : null,
-        items: validRows.map(r => ({
-          po_item_id: null,
-          description: r.item_name,
-          ordered_qty: parseFloat(r.qty),
-          received_qty: parseFloat(r.qty),
-          unit: r.unit || "Bags",
-          // Dual-unit: only send when switch is ON with a real weight + unit.
-          alt_qty:  r.dual?.altOn && Number(r.dual.alt_qty) > 0 ? parseFloat(r.dual.alt_qty) : null,
-          alt_unit: r.dual?.altOn && Number(r.dual.alt_qty) > 0 && r.dual.alt_unit ? r.dual.alt_unit : null,
-        })),
-      });
-      if (res.success) {
-        setShowGRN(false);
-        setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags"}]);
-        setDirectGlobal({vendor:"", challan:"", date: new Date().toLocaleDateString('en-CA'), received_by:""});
-        setGrnPhotos([]);
-        setDirectIssues([]);
-        // Reload MRs + direct GRNs + ledger + inventory
-        loadMRs();
-        // Reload ledger + inventory
-        setLedgerLoading(true);
-        api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
-          if (r.success) setLedger(r.data || []);
-          setLedgerLoaded(true);
-          setLedgerLoading(false);
-        }).catch(() => setLedgerLoading(false));
-        setInvLoading(true);
-        api.get("/tasks/project/" + projectId + "/inventory").then(r => {
-          if (r.success) setInventory(r.data || []);
-          setInvLoaded(true);
-          setInvLoading(false);
-        }).catch(() => setInvLoading(false));
-        alert("GRN created: " + res.grn_number);
-      } else {
-        alert(res.message || "GRN failed");
-      }
-    } catch(e) { alert(e.message); }
-    setGrnSaving(false);
   };
 
   const handleSubmitMR = async () => {
@@ -1156,9 +937,9 @@ function TabMaterial({ project }) {
 
             {/* Tab bar */}
             <div style={{display:"flex",background:"#111E2C",flexShrink:0}}>
-              {[{id:"ordered",label:t("material.ordered_materials")},{id:"direct",label:t("material.direct_receive")}].map(t=>{
+              {[{id:"ordered",label:t("material.ordered_materials")},{id:"direct",label:t("material.direct_receive")},{id:"weigh",label:t("weigh.tab")}].map(t=>{
                 const isActive=grnTab===t.id;
-                const badge=t.id==="ordered"?(orderedMRs.length+pendingTransfers.length+pendingIssues.length):0;
+                const badge=t.id==="ordered"?(orderedCount+pendingTransfers.length+pendingIssues.length):0;
                 return(
                   <button key={t.id} onClick={()=>setGrnTab(t.id)}
                     style={{flex:1,padding:"11px 14px",border:"none",background:isActive?"#1E3048":"none",color:isActive?"white":"rgba(255,255,255,0.45)",fontSize:12.5,fontWeight:isActive?700:400,cursor:"pointer",borderBottom:isActive?"2px solid "+T.blu:"2px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .15s"}}>
@@ -1234,7 +1015,7 @@ function TabMaterial({ project }) {
                           </div>
                         );
                       })}
-                      {(orderedMRs.length+pendingTransfers.length)>0&&<div style={{height:1,background:T.b1,margin:"14px 0 10px"}}/>}
+                      {(orderedCount+pendingTransfers.length)>0&&<div style={{height:1,background:T.b1,margin:"14px 0 10px"}}/>}
                     </div>
                   )}
                   {/* ── INCOMING TRANSFERS (project-to-project) ────────── */}
@@ -1298,273 +1079,30 @@ function TabMaterial({ project }) {
                           </div>
                         );
                       })}
-                      {orderedMRs.length>0&&<div style={{height:1,background:T.b1,margin:"14px 0 10px"}}/>}
+                      {orderedCount>0&&<div style={{height:1,background:T.b1,margin:"14px 0 10px"}}/>}
                     </div>
                   )}
-                  {orderedMRs.length===0&&pendingTransfers.length===0&&pendingIssues.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}><div style={{fontSize:13,fontWeight:600,color:T.t2,marginBottom:4}}>{t("material.koi_ordered_material_transfer_ya_warehouse")}</div></div>}
-                  {/* Vendor-grouped receive — one delivery from a vendor
-                      typically carries multiple materials (TMT 12mm + 8mm
-                      + 10mm in one truck). Group by linked_vendor, share
-                      challan + date inputs across all materials from same
-                      vendor, single "Receive" button processes the batch. */}
-                  {(() => {
-                    // Group active (not-yet-done) MRs by linked_vendor
-                    const groups = {};
-                    orderedMRs.forEach(mr => {
-                      if (grnDone.includes(mr.id)) return;
-                      const v = mr.linked_vendor || "— Unassigned —";
-                      if (!groups[v]) groups[v] = [];
-                      groups[v].push(mr);
-                    });
-                    const vendorList = Object.keys(groups).sort();
-                    const doneMRs = orderedMRs.filter(mr => grnDone.includes(mr.id));
-                    return (
-                      <>
-                        {vendorList.map(vendor => {
-                          const mrs = groups[vendor];
-                          const meta = vendorReceive[vendor] || {};
-                          const filledCount = mrs.filter(mr => Number((grnRows[mr.id]||{}).received_qty||0) > 0).length;
-                          return (
-                            <div key={vendor} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,marginBottom:10,borderLeft:"3px solid "+T.blu,overflow:"hidden"}}>
-                              {/* Vendor header */}
-                              <div style={{padding:"10px 14px",background:T.bluL+"66",borderBottom:"1px solid "+T.b1,display:"flex",alignItems:"center",gap:8}}>
-                                <span style={{fontSize:14}}>🏭</span>
-                                <div style={{flex:1}}>
-                                  <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{vendor}</div>
-                                  <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{t("material.mrs_pending_materialmrs2", { mrs: mrs.length, mrs2: mrs.length>1?"s":"" })}</div>
-                                </div>
-                                {filledCount>0&&<span style={{fontSize:10.5,fontWeight:700,color:T.grn,background:T.grnL,border:"1px solid "+T.grnM,padding:"2px 9px",borderRadius:20}}>{t("material.filledcount_qty_filled", { filledCount })}</span>}
-                              </div>
-                              {/* Shared challan + date + received_by */}
-                              <div style={{padding:"10px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                                <div>
-                                  <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>{t("material.challan_no")}</label>
-                                  <input value={meta.challan||""} onChange={e=>setVendorReceive(p=>({...p,[vendor]:{...p[vendor],challan:e.target.value}}))}
-                                    placeholder={t("material.e_g_ch_445")}
-                                    style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                                </div>
-                                <div>
-                                  <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>{t("material.delivery_date")}</label>
-                                  <input type="date" value={meta.date||new Date().toLocaleDateString('en-CA')} onChange={e=>setVendorReceive(p=>({...p,[vendor]:{...p[vendor],date:e.target.value}}))}
-                                    style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                                </div>
-                                <div>
-                                  <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>{t("common.received_by")}</label>
-                                  <input
-                                    value={meta.received_by !== undefined ? meta.received_by : (meUser?.name || "")}
-                                    onChange={e=>setVendorReceive(p=>({...p,[vendor]:{...p[vendor],received_by:e.target.value}}))}
-                                    placeholder={meUser?.name || t("material.site_person")}
-                                    title={t("material.default_logged_in_user_override_karne")}
-                                    style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                                </div>
-                              </div>
-                              {/* Per-material rows */}
-                              <div style={{padding:"4px 14px 10px"}}>
-                                <div style={{display:"grid",gridTemplateColumns:"100px 1fr 90px 110px 70px",gap:7,padding:"6px 0",fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>
-                                  <span>{t("material.mr_no")}</span><span>{t("common.material")}</span><span style={{textAlign:"right"}}>{t("common.pending")}</span><span style={{textAlign:"right"}}>{t("material.receive_qty")}</span><span></span>
-                                </div>
-                                {mrs.map(mr => {
-                                  const row = grnRows[mr.id] || {};
-                                  const alreadyReceived = Number(mr.received_qty || 0);
-                                  const orderedQty     = Number(mr.quantity || 0);
-                                  const pendingQty     = Math.max(0, orderedQty - alreadyReceived);
-                                  const isPartial      = mr.mat_status === "PartialReceived";
-                                  const recv = Number(row.received_qty||0);
-                                  const over = recv > pendingQty;
-                                  return (
-                                    <div key={mr.id} style={{display:"grid",gridTemplateColumns:"100px 1fr 90px 110px 70px",gap:7,padding:"7px 0",borderTop:"1px dashed "+T.b1,alignItems:"center"}}>
-                                      <div>
-                                        <span style={{fontSize:11,color:T.amb,fontWeight:700,fontFamily:"monospace"}}>{mr.mr_number||`MR-${mr.id}`}</span>
-                                        {isPartial&&<div style={{fontSize:9,color:T.amb,fontWeight:700,background:T.ambL,border:"1px solid "+T.ambM,borderRadius:4,padding:"1px 5px",marginTop:2,display:"inline-block"}}>{t("common.partial")}</div>}
-                                      </div>
-                                      <div style={{minWidth:0}}>
-                                        <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{mr.item_name}</div>
-                                        {isPartial
-                                          ? <div style={{fontSize:10,color:T.amb}}><Rich k="material.ordered_orderedqty_received_alreadyreceived_pending_pendingqty" params={{ orderedQty, alreadyReceived, pendingQty }} /></div>
-                                          : mr.approx_amount>0&&<div style={{fontSize:10,color:T.t4}}>@ ₹{Math.round(Number(mr.approx_amount)/Number(mr.quantity||1)).toLocaleString("en-IN")}/{mr.unit}</div>
-                                        }
-                                      </div>
-                                      <span style={{fontSize:11.5,color:isPartial?T.amb:T.t2,fontWeight:700,textAlign:"right"}}>{pendingQty} {mr.unit}</span>
-                                      <input type="number" value={row.received_qty||""}
-                                        onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],received_qty:e.target.value}}))}
-                                        placeholder={String(pendingQty)}
-                                        style={{padding:"6px 8px",borderRadius:5,border:"1.5px solid "+(over?T.red:T.b1),fontSize:11.5,textAlign:"right",fontFamily:"inherit",outline:"none",background:over?T.redL:T.surface,color:over?T.red:T.t1}}/>
-                                      <span style={{fontSize:10.5,color:T.t4}}>{mr.unit}</span>
-                                      {recv>0&&(
-                                        <DualUnitToggle units={UNITS_MR} primaryUnit={mr.unit} itemName={mr.item_name} qty={row.received_qty}
-                                          value={row.dual} onChange={d=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],dual:d}}))}/>
-                                      )}
-                                      {/* Har MR ka apna GRN banta hai, isliye issue bhi per-material */}
-                                      {recv>0&&(
-                                        <div style={{gridColumn:"1 / -1",marginTop:6}}>
-                                          <GrnIssueBlock compact title={(mr.item_name||"Is material")+" me problem?"}
-                                            value={rowIssues[mr.id]||[]}
-                                            onChange={v=>setRowIssues(p=>({...p,[mr.id]:v}))}/>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                                {/* Single Receive button — vendor batch */}
-                                <div style={{display:"flex",justifyContent:"flex-end",marginTop:10,paddingTop:8,borderTop:"1.5px solid "+T.b1}}>
-                                  <button onClick={()=>handleReceiveVendor(vendor)} disabled={grnSaving||!meta.challan||filledCount===0}
-                                    title={!meta.challan?t("material.challan_no_daalo"):filledCount===0?t("material.kam_se_kam_ek_material_ka_2"):""}
-                                    style={{padding:"8px 18px",borderRadius:6,background:(meta.challan&&filledCount>0)?T.grn:T.b1,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:(meta.challan&&filledCount>0)?"pointer":"not-allowed",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5}}>
-                                    {grnSaving?"...":`✓ Receive (${filledCount} item${filledCount===1?"":"s"})`}
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {/* Completed (received) MRs — collapsed summary */}
-                        {doneMRs.length>0&&(
-                          <div style={{marginTop:10,padding:"8px 12px",background:T.grnL,border:"1px solid "+T.grnM,borderRadius:7,fontSize:11.5,color:T.grn,fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
-                            <span style={{fontSize:13}}>✓</span>
-                            <span>{t("material.donemrs_materialdonemrs2_received_this_session_donemrs3", { doneMRs: doneMRs.length, doneMRs2: doneMRs.length>1?"s":"", doneMRs3: doneMRs.map(m=>m.item_name).join(", ") })}</span>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
                 </div>
               )}
-              {grnTab==="direct"&&(
-                <div>
-                  <div style={{background:T.bluL,border:"1px solid "+T.bluM,borderRadius:7,padding:"8px 11px",fontSize:11.5,color:T.blu,marginBottom:12}}>
-                   {t("material.bina_po_ke_directly_site_pe")}
-                  </div>
-                  {/* Global vendor + challan + date — one per submission */}
-                  <div style={{background:T.surface,border:"1.5px solid "+T.bluM,borderRadius:8,padding:"12px",marginBottom:12,borderLeft:"3px solid "+T.blu}}>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>{t("material.delivery_details_single_vendor_one_challan")}</div>
-                    <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr 1fr 1fr",gap:8}}>
-                      <div>
-                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.vendor_2")}</label>
-                        <LibrarySelect type="supplier" value={directGlobal.vendor}
-                          onChange={v=>setDirectGlobal(p=>({...p,vendor:v||""}))}
-                          onAdded={(v)=>setVendorList(prev=>[...prev,v].sort((a,b)=>(a.name||"").localeCompare(b.name||"")))}/>
-                      </div>
-                      <div>
-                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("material.challan_no")}</label>
-                        <input value={directGlobal.challan} onChange={e=>setDirectGlobal(p=>({...p,challan:e.target.value}))} placeholder={t("material.e_g_ch_445")}
-                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                      </div>
-                      <div>
-                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.date")}</label>
-                        <input type="date" value={directGlobal.date} onChange={e=>setDirectGlobal(p=>({...p,date:e.target.value}))}
-                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                      </div>
-                      <div>
-                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.received_by")}</label>
-                        <input
-                          value={directGlobal.received_by !== undefined && directGlobal.received_by !== "" ? directGlobal.received_by : (meUser?.name || "")}
-                          onChange={e=>setDirectGlobal(p=>({...p,received_by:e.target.value}))}
-                          placeholder={meUser?.name || t("material.site_person")}
-                          title={t("material.default_logged_in_user_override_karne")}
-                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Items table — multiple materials in one delivery */}
-                  <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>{t("material.items_received_2")} <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>{t("material.same_vendor_same_challan")}</span></div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 80px 90px 28px",gap:7,padding:"5px 8px",background:T.surfaceB,borderRadius:6,border:"1px solid "+T.b1,marginBottom:5}}>
-                    {["Material Name *","Qty *","Unit","",].map((h,i)=>(<span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>))}
-                  </div>
-                  {directRows.map((row,i)=>{
-                    const libMatch = matLibReal.find(m => (m.name||"").trim().toLowerCase() === (row.item_name||"").trim().toLowerCase());
-                    const isLocked = !!row.item_name;
-                    const displayUnit = libMatch?.unit || row.unit || "Bags";
-                    return (
-                      <div key={row.id} style={{display:"grid",gridTemplateColumns:"1fr 80px 90px 28px",gap:7,padding:"6px 8px",alignItems:"center",borderBottom:i<directRows.length-1?"1px dashed "+T.b1:"none"}}>
-                        <div>
-                          <input value={row.item_name} onChange={e=>{
-                              const v=e.target.value;
-                              const m=matLibReal.find(x=>(x.name||"").trim().toLowerCase()===v.trim().toLowerCase());
-                              setDirectRows(p=>p.map(r=>r.id===row.id?{...r,item_name:v,unit:m?.unit||r.unit}:r));
-                            }}
-                            placeholder={t("material.e_g_cement_opc_53")} list={"mat_lib_"+row.id}
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                          <datalist id={"mat_lib_"+row.id}>{MAT_LIB.map(m=><option key={m} value={m}/>)}</datalist>
-                        </div>
-                        <input type="number" value={row.qty} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,qty:e.target.value}:r))} placeholder="0"
-                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        {isLocked ? (
-                          <div title={t("material.library_me_change_karein")} style={{padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t2,background:T.surfaceB,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:5,height:33,boxSizing:"border-box",justifyContent:"center"}}>
-                            <span style={{fontSize:9}}>🔒</span>{displayUnit}
-                          </div>
-                        ) : (
-                          <select value={row.unit} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,unit:e.target.value}:r))}
-                            style={{padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                            {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                          </select>
-                        )}
-                        {directRows.length>1?(
-                          <button onClick={()=>setDirectRows(p=>p.filter(r=>r.id!==row.id))} title={t("procurement.remove_row")}
-                            style={{width:26,height:26,borderRadius:6,background:T.redL,border:"1px solid "+T.redM,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                            <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2.4} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                          </button>
-                        ):<span/>}
-                        <DualUnitToggle units={UNITS_MR} primaryUnit={displayUnit} itemName={row.item_name} qty={row.qty}
-                          value={row.dual} onChange={d=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,dual:d}:r))}/>
-                      </div>
-                    );
-                  })}
-                  <button onClick={()=>setDirectRows(p=>[...p,{id:Date.now(),item_name:"",qty:"",unit:"Bags"}])}
-                    style={{width:"100%",padding:"9px",borderRadius:7,border:"1.5px dashed "+T.bluM,background:"transparent",color:T.blu,fontSize:12,cursor:"pointer",marginTop:6,fontWeight:600,fontFamily:"inherit"}}>
-                   {t("material.add_another_item_2")}
-                  </button>
-                  {/* Ek hi GRN banta hai is tab me, to issue poori delivery par */}
-                  <div style={{marginTop:12}}>
-                    <GrnIssueBlock value={directIssues} onChange={setDirectIssues}/>
-                  </div>
-                </div>
+              {/* Vendor ka maal — ordered aur direct — site aur godown ka EK form.
+                  Ek hi jagah render hota hai taaki tab badalne par bhara hua na mite. */}
+              {(grnTab==="ordered"||grnTab==="direct")&&(
+                <GrnReceive ref={grnRef} mode={grnTab}
+                  dest={{ type: "project", projectId, projectName }}
+                  photos={grnPhotos} setPhotos={setGrnPhotos}
+                  photoRequired={polFor("grn").mode==="required"}
+                  photoBadgeRequired={grnTab==="ordered" ? grnPhotoRequired : polFor("grn").mode==="required"}
+                  photoCameraOnly={grnPhotoCameraOnly}
+                  meUser={meUser}
+                  hasOtherPending={pendingTransfers.length+pendingIssues.length>0}
+                  onReceived={handleGrnReceived}
+                  onSavingChange={setGrnSaving}
+                  onDoneCount={setGrnDoneCount}
+                  onOrderedCount={setOrderedCount}/>
               )}
-
-              {/* ── Photos section (inside scroll body) ── */}
-              <div style={{marginTop:18,borderTop:"1px solid "+T.b1,paddingTop:14}}>
-                <div style={{fontSize:10.5,fontWeight:700,color:grnPhotoRequired&&grnPhotos.length===0?T.amb:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-                  {t("material.grn_photos")}
-                  <span style={{textTransform:"none",fontSize:10,fontWeight:500,color:T.t4}}>{t("material.challan_material_quality")}</span>
-                  {grnPhotoRequired&&(
-                    <span style={{textTransform:"none",fontSize:9.5,fontWeight:700,color:grnPhotos.length===0?T.red:T.grn,background:grnPhotos.length===0?T.redL:T.grnL,padding:"2px 8px",borderRadius:10,border:`1px solid ${grnPhotos.length===0?T.redM:T.grnM}`}}>
-                      {grnPhotos.length===0?t("material.required"):t("material.attached")}
-                    </span>
-                  )}
-                </div>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  {grnPhotos.map((url,idx)=>(
-                    <div key={idx} style={{position:"relative",width:64,height:64,borderRadius:7,overflow:"hidden",border:"1px solid "+T.b1,boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
-                      <img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                      <button onClick={()=>setGrnPhotos(p=>p.filter((_,i)=>i!==idx))}
-                        style={{position:"absolute",top:3,right:3,width:18,height:18,borderRadius:"50%",background:"rgba(0,0,0,0.65)",color:"white",border:"none",fontSize:10,cursor:"pointer",lineHeight:1,padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-                    </div>
-                  ))}
-                  <label style={{width:64,height:64,borderRadius:7,border:"1.5px dashed "+T.b2,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexDirection:"column",gap:2,transition:"border-color .15s"}}
-                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.blu}
-                    onMouseLeave={e=>e.currentTarget.style.borderColor=T.b2}>
-                    <span style={{fontSize:18}}>📷</span>
-                    <span style={{fontSize:10,color:T.t4,fontWeight:600}}>{t("common.add")}</span>
-                    <input {...fileInputProps({ source: grnPhotoCameraOnly ? "camera" : "both" }, { multiple: true })}
-                      style={{display:"none"}}
-                      onChange={e=>{
-                        const files=Array.from(e.target.files||[]);
-                        files.forEach(file=>{
-                          uploadManager.add({
-                            file, folder:"gb_buildcon/grn",
-                            label:"GRN photo: "+file.name,
-                            onDone:(url)=>setGrnPhotos(p=>[...p,url]),
-                          });
-                        });
-                        e.target.value="";
-                      }}/>
-                  </label>
-                </div>
-                <div style={{marginTop:5,fontSize:10,color:T.t4}}>
-                  {grnPhotoCameraOnly
-                    ? t("material.company_setting_sirf_live_camera_mobile")
-                    : t("material.camera_opens_on_mobile_multi_select_2")}
-                </div>
-              </div>
+              {grnTab==="weigh"&&(
+                <WeighbridgePanel dest={{ type: "project", projectId, projectName }}/>
+              )}
 
             </div>{/* end scroll body */}
 
@@ -1575,14 +1113,14 @@ function TabMaterial({ project }) {
                {t("common.close")}
               </button>
               {grnTab==="direct"&&(
-                <button onClick={handleDirectReceive} disabled={grnSaving}
+                <button onClick={()=>grnRef.current&&grnRef.current.submitDirect()} disabled={grnSaving}
                   style={{flex:2,padding:"9px",borderRadius:7,background:grnSaving?"#ccc":T.grn,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:grnSaving?"not-allowed":"pointer",fontFamily:"inherit",letterSpacing:"-.1px"}}>
                   {grnSaving?t("common.saving_2"):t("material.submit_grn")}
                 </button>
               )}
-              {grnTab==="ordered"&&grnDone.length>0&&(
+              {grnTab==="ordered"&&grnDoneCount>0&&(
                 <button onClick={()=>setShowGRN(false)}
-                  style={{flex:2,padding:"9px",borderRadius:7,background:T.grn,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t("material.done_grndone_received", { grnDone: grnDone.length })}</button>
+                  style={{flex:2,padding:"9px",borderRadius:7,background:T.grn,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t("material.done_grndone_received", { grnDone: grnDoneCount })}</button>
               )}
             </div>
 

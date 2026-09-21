@@ -3413,6 +3413,9 @@ function WarehouseSettings() {
   const [whProcMode, setWhProcMode] = useState("direct"); // direct | via_procurement
   const [mrFlow, setMrFlow] = useState("procurement_driven"); // procurement_driven | warehouse_driven
   const [holdTtl, setHoldTtl] = useState(2);
+  // Dharam kata: net challan se itne % se zyada kam ho to "Short" issue ka
+  // suggestion (routes/weighments.js). Default 1%.
+  const [weighTol, setWeighTol] = useState("1");
   // Photo policy yahan se nikal gayi — ab apna Photo Settings tab hai,
   // jahan har jagah ke teen control (zaroori / camera-only / location)
   // ek saath hain.
@@ -3426,17 +3429,21 @@ function WarehouseSettings() {
         setWhProcMode(r.data.warehouse_procurement_mode || "direct");
         setMrFlow(r.data.mr_fulfillment_mode || "procurement_driven");
         setHoldTtl(Number(r.data.mr_soft_hold_ttl_days) || 2);
+        setWeighTol(r.data.weigh_short_tol_pct != null ? String(Number(r.data.weigh_short_tol_pct)) : "1");
       }
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const save = async () => {
+    const tol = Number(weighTol);
+    if (weighTol === "" || !isFinite(tol) || tol < 0 || tol > 50) { window.alert(t("weigh.tol_range")); return; }
     setSaving(true);
     try {
       await api.put("/settings/company", {
         warehouse_procurement_mode: whProcMode,
         mr_fulfillment_mode: mrFlow,
         mr_soft_hold_ttl_days: holdTtl,
+        weigh_short_tol_pct: tol,
       });
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 1800);
@@ -3513,6 +3520,22 @@ function WarehouseSettings() {
         <div style={{ marginTop: 12, padding: "9px 12px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 7, fontSize: 11, color: "#92400E", lineHeight: 1.5 }}>
           <b>⚠ Note:</b> Mode flip karne par <b>in-flight MRs apne original mode me hi complete</b> honge (har MR pe creation-time mode snapshot hota hai). Naye MRs current mode follow karenge. Drastic break-changes nahi honge.
         </div>
+      </SectionCard>
+
+      <SectionCard title={t("weigh.settings_title")} desc={t("weigh.settings_desc")}
+        action={
+          <button onClick={save} disabled={saving}
+            style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : T.blue, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
+            {savedTick ? t("weigh.saved") : saving ? t("common.saving") : t("common.save")}
+          </button>
+        }>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 4, flexWrap: "wrap" }}>
+          <label style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>{t("weigh.settings_label")}</label>
+          <input type="number" min="0" max="50" step="0.1" value={weighTol} onChange={e => setWeighTol(e.target.value)}
+            style={{ width: 80, padding: "7px 9px", borderRadius: 7, border: `1.5px solid ${T.border}`, fontSize: 13, outline: "none", fontFamily: "inherit" }}/>
+          <span style={{ fontSize: 12.5, color: T.textMid }}>%</span>
+        </div>
+        <div style={{ fontSize: 11.5, color: T.textMid, marginTop: 8, lineHeight: 1.5 }}>{t("weigh.settings_hint")}</div>
       </SectionCard>
     </div>
   );

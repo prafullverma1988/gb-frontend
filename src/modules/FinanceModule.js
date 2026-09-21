@@ -668,7 +668,7 @@ function DualBillStrip({ row, onFields }){
           <span style={{position:"absolute",top:2,left:on?15:2,width:13,height:13,borderRadius:"50%",background:"#fff",transition:"left .15s",boxShadow:"0 1px 2px rgba(0,0,0,.25)"}}/>
         </span>
         <span style={{fontSize:11,fontWeight:600,color:on?T.blu:T.t3}}>{t("finance.billing_unit_alag")}</span>
-        {row.grnHadAlt&&on&&<span style={{fontSize:9,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grnM}`,padding:"1px 6px",borderRadius:8}}>{t("finance.grn_weight")}</span>}
+        {row.grnHadAlt&&on&&<span style={{fontSize:9,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grnM}`,padding:"1px 6px",borderRadius:8}}>{row.altSource==="weighbridge"?t("weigh.bill_badge"):t("finance.grn_weight")}</span>}
         {!on&&learned?.alt_unit&&<span style={{fontSize:10,color:T.t4}}>{t("finance.pichhli_baar_alt_unit_me_bill", { alt_unit: learned.alt_unit })}</span>}
       </button>
       {on&&(
@@ -1436,6 +1436,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           alt_unit:hadAlt?it.alt_unit:"",
           alt_ratio:it.alt_ratio!=null?Number(it.alt_ratio):(hadAlt&&pQty>0?Math.round((Number(it.alt_qty)/pQty)*10000)/10000:null),
           grnHadAlt:!!hadAlt,
+          altSource:it.alt_source||null,
         });
       });
     }
@@ -1573,6 +1574,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         alt_unit:hadAlt?it.alt_unit:"",
         alt_ratio:it.alt_ratio!=null?Number(it.alt_ratio):(hadAlt&&pQty>0?Math.round((Number(it.alt_qty)/pQty)*10000)/10000:null),
         grnHadAlt:!!hadAlt,
+        altSource:it.alt_source||null,
       };
     }));
   };
@@ -1783,7 +1785,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
             ...(useAlt?{
               primary_qty:primaryQty,
               primary_unit:r.unit||"",
-              weight_source:r.grnHadAlt?"grn_verified":"billing_entered",
+              weight_source:r.altSource==="weighbridge"?"weighbridge":(r.grnHadAlt?"grn_verified":"billing_entered"),
             }:{}),
           };
         });
@@ -6106,6 +6108,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   alt_qty:it.alt_qty!=null?parseFloat(it.alt_qty):null,
                   alt_unit:it.alt_unit||null,
                   alt_ratio:it.alt_ratio!=null?parseFloat(it.alt_ratio):null,
+                  // Wazan dharam kate ki slip se aaya (routes/weighments.js) ya haath se.
+                  alt_source:it.alt_source||null,
+                  weigh:(g.weighments||[]).find(w=>w.grn_item_id===it.id)||null,
                   recvDate:g.received_date,
                   project:g.project_name||"—",
                   challan:g.challan_no||"",
@@ -6163,6 +6168,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   alt_qty:p.alt_qty,
                   alt_unit:p.alt_unit,
                   alt_ratio:p.alt_ratio,
+                  alt_source:p.alt_source,
                 })),
               };
             };
@@ -6287,6 +6293,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                                   style={{cursor:"pointer",width:14,height:14,accentColor:T.blu}}/>
                                 <span style={{fontSize:12,color:T.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                                   {it.name}
+                                  {it.weigh&&(
+                                    <span title={t("weigh.bill_row_hint", { net: Math.round(Number(it.weigh.net_kg_share||0)).toLocaleString("en-IN"), vehicle: it.weigh.vehicle_no||"—" })}
+                                      style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:8,padding:"1px 6px"}}>
+                                      ⚖️
+                                    </span>
+                                  )}
                                   {(it.issues||[]).length>0&&(
                                     <span title={(it.issues||[]).map(i=>`${i.issue_type}: ${i.note||""}`).join("\n")}
                                       style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:8,padding:"1px 6px"}}>
