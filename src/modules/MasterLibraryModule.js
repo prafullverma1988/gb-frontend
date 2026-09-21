@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import CityPicker from "../components/CityPicker";
 import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { readSheet, sheetToRows } from "../utils/sheetRows";
 import { t, Rich } from "../i18n";
@@ -6600,6 +6601,187 @@ function DesignationSection() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// CITY
+// ═══════════════════════════════════════════════════════════════════════
+// Company kin-kin city me kaam karti hai — project, CRM lead, Client BOQ ke
+// city rate aur Subcon rate card isi list se city lete hain. (Party/vendor
+// ka pata wali city alag hai, wo is list me nahi aati.)
+//
+// Pehle ye list sirf Client BOQ Rate / Subcon Rate Card ke andar se bharti
+// thi, aur uska koi apna ghar nahi tha: kaunsi city kitne project par lagi
+// hai, dikhta nahi tha; naam badlo to project par purana reh jaata; hatao
+// to project ek band city par latak jaata. Aur jin project ki city tay hi
+// nahi thi (bahar se aaye purane project), unhe ek-ek karke kholna padta.
+function CitySection() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [name, setName] = useState("");
+  const [stateName, setStateName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState("");
+  // Bina city ke project
+  const [loose, setLoose] = useState([]);
+  const [picked, setPicked] = useState(() => new Set());
+  const [assignCity, setAssignCity] = useState("");
+  const [assigning, setAssigning] = useState(false);
+  const [assignMsg, setAssignMsg] = useState(null);   // { ok, text }
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [a, b] = await Promise.all([
+        api.get("/library/cities"),
+        api.get("/library/cities/unassigned-projects"),
+      ]);
+      if (a.success) setItems(a.data || []);
+      if (b.success) setLoose(b.data || []);
+    } catch (e) {}
+    setLoading(false);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? items.filter(c => String(c.name).toLowerCase().includes(q) || String(c.state || "").toLowerCase().includes(q))
+    : items;
+  const totalProjects = items.reduce((n, c) => n + Number(c.project_count || 0), 0);
+
+  const openCreate = () => { setEditing(null); setName(""); setStateName(""); setFormErr(""); setShowModal(true); };
+  const openEdit = (c) => { setEditing(c); setName(c.name); setStateName(c.state || ""); setFormErr(""); setShowModal(true); };
+
+  const save = async () => {
+    const nm = name.trim();
+    if (!nm || saving) return;
+    setSaving(true); setFormErr("");
+    try {
+      let res;
+      if (editing) {
+        res = await api.put("/library/cities/" + editing.id, { name: nm, state: stateName });
+        // Naya naam kisi doosri city ka hai — server pehle poochta hai,
+        // jodta baad me. Isi se "raipur" aur "Raipur" ek hote hain.
+        if (!res.success && res.code === "CITY_MERGE_CONFIRM") {
+          const into = res.data?.into || nm;
+          if (!await window.confirmAsync(t("master_library.city_merge_ask", { name: into }))) { setSaving(false); return; }
+          res = await api.put("/library/cities/" + editing.id, { name: nm, state: stateName, merge: true });
+        }
+      } else {
+        res = await api.post("/library/cities", { name: nm, state: stateName });
+      }
+      if (res.success) { setShowModal(false); await load(); }
+      else setFormErr(res.message || t("common.something_went_wrong"));
+    } catch (e) { setFormErr(t("common.something_went_wrong")); }
+    finally { setSaving(false); }
+  };
+
+  const del = async (id) => {
+    const res = await api.del("/library/cities/" + id);
+    if (res.success) await load();
+    else if (res.message) await window.confirmAsync(res.message);
+  };
+
+  const toggle = (id) => setPicked(prev => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const allPicked = loose.length > 0 && loose.every(p => picked.has(p.id));
+  const toggleAll = () => setPicked(allPicked ? new Set() : new Set(loose.map(p => p.id)));
+
+  const assign = async () => {
+    if (assigning) return;
+    if (!assignCity) { setAssignMsg({ ok: false, text: t("master_library.pick_city_first") }); return; }
+    if (!picked.size) { setAssignMsg({ ok: false, text: t("master_library.pick_projects_first") }); return; }
+    setAssigning(true); setAssignMsg(null);
+    try {
+      const res = await api.post("/library/cities/" + assignCity + "/assign-projects", { project_ids: [...picked] });
+      if (res.success) {
+        setAssignMsg({ ok: true, text: t("master_library.assigned_n", { n: res.data?.assigned || 0, city: res.data?.city || "" }) });
+        setPicked(new Set());
+        await load();
+      } else setAssignMsg({ ok: false, text: res.message || t("common.something_went_wrong") });
+    } catch (e) { setAssignMsg({ ok: false, text: t("common.something_went_wrong") }); }
+    setAssigning(false);
+  };
+
+  const count = (v, color, bg) => Number(v) > 0
+    ? <Badge text={String(v)} color={color} bg={bg} />
+    : <span style={{ fontSize: 12, color: T.textLight }}>—</span>;
+  const columns = [
+    { key: "name",  label: t("common.city"), minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "state", label: t("master_library.state"), minW: 120, style: { fontSize: 12.5, color: T.textMid } },
+    { key: "project_count", label: t("common.projects"), minW: 100, render: r => count(r.project_count, T.blue, T.blueSoft) },
+    { key: "lead_count",    label: t("master_library.crm_leads"), minW: 100, render: r => count(r.lead_count, T.purple, T.purpleSoft) },
+    { key: "rate_count",    label: t("master_library.rate_card"), minW: 100, render: r => count(r.rate_count, T.teal, T.tealSoft) },
+  ];
+
+  const selBox = { width: "100%", padding: "9px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`,
+    fontSize: 13, color: T.text, background: "white", outline: "none", boxSizing: "border-box", fontFamily: T.font };
+
+  return (
+    <div>
+      <Toolbar search={search} setSearch={setSearch} count={filtered.length}
+        label={t("master_library.city_library")} onAdd={openCreate} addLabel={t("master_library.add_city")}
+        filterEl={<span style={{ fontSize: 12, color: T.textLight, whiteSpace: "nowrap" }}>
+          {t("master_library.total_cities_projects", { c: items.length, p: totalProjects })}</span>} />
+
+      {/* Bina city ke project — ye kisi city ki ginti me nahi aate. Ek saath
+          chun kar city lagao, har project ko alag se kholna na pade. */}
+      {loose.length > 0 && (
+        <div style={{ background: T.amberSoft, border: `1px solid ${T.amber}33`, borderRadius: T.radius, padding: "12px 14px", marginBottom: 16 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text }}>{t("master_library.unassigned_projects_title", { n: loose.length })}</div>
+          <div style={{ fontSize: 12, color: T.textMid, marginTop: 2, marginBottom: 10 }}>{t("master_library.unassigned_projects_note")}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ flex: "1 1 220px", minWidth: 200 }}>
+              <CityPicker value={assignCity} cities={items} setCities={setItems}
+                onChange={(id) => { setAssignCity(id || ""); setAssignMsg(null); }} selectStyle={selBox} />
+            </div>
+            <button type="button" onClick={toggleAll}
+              style={{ padding: "8px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, background: "white", color: T.textMid, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: T.font }}>
+              {allPicked ? t("master_library.clear_selection") : t("master_library.select_all_projects")}
+            </button>
+            <button type="button" onClick={assign} disabled={assigning}
+              style={{ padding: "8px 14px", borderRadius: T.radiusSm, border: "none", background: T.blue, color: "white", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: T.font, opacity: assigning ? 0.7 : 1 }}>
+              {assigning ? t("common.saving") : t("master_library.assign_city_n", { n: picked.size })}
+            </button>
+          </div>
+          {assignMsg && (
+            <div style={{ fontSize: 12.5, marginBottom: 8, color: assignMsg.ok ? T.green : T.red }}>{assignMsg.text}</div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 6, maxHeight: 260, overflowY: "auto" }}>
+            {loose.map(p => {
+              const on = picked.has(p.id);
+              return (
+                <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 9px", borderRadius: 7, cursor: "pointer",
+                  background: on ? T.blueSoft : "white", border: `1.5px solid ${on ? T.blue : T.border}` }}>
+                  <input type="checkbox" checked={on} onChange={() => toggle(p.id)} />
+                  <span style={{ fontSize: 12.5, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.name}>{p.name}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del}
+        emptyMsg={loading ? t("common.loading") : t("master_library.no_cities_yet")} />
+      <Modal open={showModal} onClose={() => setShowModal(false)}
+        title={editing ? t("master_library.edit_city") : t("master_library.add_city")}
+        desc={editing ? t("master_library.city_rename_note") : t("master_library.city_add_note")}
+        width={440}>
+        <FormField label={t("common.city")} value={name} onChange={setName} placeholder={t("master_library.e_g_raipur")} required />
+        <div style={{ height: 12 }} />
+        <FormField label={t("master_library.state")} value={stateName} onChange={setStateName} placeholder={t("master_library.e_g_chhattisgarh")} />
+        {!!formErr && <div style={{ marginTop: 10, fontSize: 12.5, color: T.red, background: T.redSoft, borderRadius: 7, padding: "8px 11px" }}>{formErr}</div>}
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? t("common.saving") : (editing ? t("common.update") : t("common.create"))} />
+      </Modal>
+    </div>
+  );
+}
+
 const masterSections = [
   // ── ITEM LIBRARY ──────────────────────────────────────────────────
   { id: "work_cat",      get label() { return t("master_library.work_category"); },       Icon: IcTool,      Comp: WorkCategorySection,      section: "ITEM LIBRARY", countKey: "work_categories", color: T.purple },
@@ -6619,6 +6801,7 @@ const masterSections = [
   // gaya taaki ek machine do jagah edit na ho — register wahi ek rahe.
   // ── OTHER ─────────────────────────────────────────────────────────
   { id: "design_library", get label() { return t("master_library.design_library"); },     Icon: IcLayers,    Comp: DesignLibrarySection,     section: "OTHER", countKey: null, color: T.purple },
+  { id: "city",          get label() { return t("master_library.city_library"); },        Icon: IcMap,       Comp: CitySection,              section: null, countKey: null, color: T.rose },
   { id: "uom",           get label() { return t("master_library.units_uom"); },         Icon: IcRuler,     Comp: UOMMasterSection,         section: null, countKey: "uom", color: T.teal },
   // Count hardcoded "14" tha jabki /library/summary asli `expense_heads`
   // ginti pehle se deta hai — live DB me wo 0 thi, to sidebar ek bhari hui

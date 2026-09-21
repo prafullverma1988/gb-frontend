@@ -6,6 +6,7 @@ import { Credit } from "../components/Credit";
 import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
+import CityPicker from "../components/CityPicker";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 import { t, Rich } from "../i18n";
 import { isoDate } from "../utils/today";
@@ -531,10 +532,7 @@ function NewProjectModal({onClose,onCreated}){
       } catch (_) {}
     })();
   }, [isSolar]);
-  const pickCity = (cid) => {
-    const c = libCities.find(x => String(x.id) === String(cid));
-    setForm(p => ({ ...p, cityId: cid || "", city: c?.name || "" }));
-  };
+
   const pickType = (tid) => {
     const t = libCTypes.find(x => String(x.id) === String(tid));
     setForm(p => ({ ...p, constructionTypeId: tid || "", type: (t?.name || "").toLowerCase() }));
@@ -710,14 +708,14 @@ function NewProjectModal({onClose,onCreated}){
             {/* City * — library-backed dropdown, mandatory */}
             <div>
               <label style={{fontSize:10.5,fontWeight:600,color:form.cityId?T.t3:"#DC2626",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.city_2")}</label>
-              <select value={form.cityId} onChange={e => pickCity(e.target.value)}
-                style={{width:"100%",padding:"9px 12px",borderRadius:7,
+              {/* "+ New" yahin — warna khaali Library wali company me naya
+                  project banana hi atak jaata tha (city zaroori hai). */}
+              <CityPicker value={form.cityId} cities={libCities} setCities={setLibCities}
+                onChange={(id, c) => setForm(p => ({ ...p, cityId: id || "", city: c?.name || "" }))}
+                selectStyle={{width:"100%",padding:"9px 12px",borderRadius:7,
                         border:`1.5px solid ${form.cityId?T.b1:"#FCA5A5"}`,
                         background: form.cityId?T.bg:"#FEF2F2",
-                        fontSize:13, color:T.t1, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}>
-                <option value="">{t("crm.select_city")}</option>
-                {libCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+                        fontSize:13, color:T.t1, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}/>
             </div>
             {/* Type * — library-backed dropdown, mandatory */}
             <div>

@@ -5,6 +5,7 @@ import { Avatar, Credit } from "../components/Credit";
 import PaymentRequestDrawer from "../components/PaymentRequestDrawer";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
+import CityPicker from "../components/CityPicker";
 import MaterialFlowDrawer from "../components/MaterialFlowDrawer";
 import MRDetailDrawer from "../components/MRDetailDrawer";
 import MaterialTransferTab from "../components/MaterialTransferTab";
@@ -526,10 +527,10 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
         <div style={sectionTitle}>{t("project_detail.project_details")}</div>
         <div style={{ marginBottom:10 }}><label style={L}>{t("common.project_name")}</label><input value={form.name} onChange={upd("name")} style={I}/></div>
         <div style={{ marginBottom:10 }}><label style={L}>{t("common.city")}</label>
-          <select value={form.cityId} onChange={upd("cityId")} style={{ ...I, cursor:"pointer" }}>
-            <option value="">{project.city || t("project_detail.select_city")}</option>
-            {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <CityPicker value={form.cityId} cities={cities} setCities={setCities}
+            onChange={(id) => setForm(p => ({ ...p, cityId: id || "" }))}
+            placeholder={project.city || t("project_detail.select_city")}
+            selectStyle={I}/>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
           <div><label style={L}>{t("project_detail.boq_value")}</label><input type="number" value={form.boq_value} onChange={upd("boq_value")} placeholder="0" style={I}/></div>
