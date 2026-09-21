@@ -12,7 +12,7 @@
 // leta hai aur usi INSERT me link kar deta hai. "Link Existing Project"
 // alag rasta hai, wo PUT /tenders/:id/link-project use karta hai.
 // ════════════════════════════════════════════════════════════════════
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import PhotoLocateModal from "./tabs/PhotoLocateModal";
 import TenderAiPlan from "./tabs/TenderAiPlan";
 import BoqMatrixImport from "./tabs/BoqMatrixImport";
@@ -3215,6 +3215,35 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, reloadTen
 
   const shownTotal = round2(filtered.reduce((s,i)=>s+Number(i.amount||0), 0));
 
+  // ── Group (road / sub-head) ──────────────────────────────────────
+  // "Har road alag" wale import me har item ka sub_head = road ka naam —
+  // 10 road × ~55 item ek lambi list me kho jaate the. Do ya zyada group hon
+  // to road-wise khanche: naam, ginti, A (kaam) / B (maintenance) / kul.
+  // Bahut group hon to shuru me band (pehle road ki list dikhe); search
+  // chalte hi milne wale group khule.
+  const groups = useMemo(()=>{
+    const order = [], by = new Map();
+    for (const it of filtered) {
+      const k = String(it.sub_head || "");
+      if (!by.has(k)) { by.set(k, []); order.push(k); }
+      by.get(k).push(it);
+    }
+    const all = new Set(items.map(i => String(i.sub_head || "")));
+    if (all.size < 2) return null;
+    return order.map(k => {
+      const list = by.get(k);
+      const tot = round2(list.reduce((s,i)=>s+Number(i.amount||0), 0));
+      const b = round2(list.filter(i => /^maintenance/i.test(String(i.parent_desc || ""))).reduce((s,i)=>s+Number(i.amount||0), 0));
+      return { key: k, items: list, tot, b, a: round2(tot - b) };
+    });
+  }, [filtered, items]);
+  const [closedGrp, setClosedGrp] = useState(null);   // null = abhi default nahi laga
+  useEffect(()=>{
+    if (groups && closedGrp === null) setClosedGrp(new Set(groups.length > 3 ? groups.map(g => g.key) : []));
+  }, [groups, closedGrp]);
+  const grpOpen = (k) => !!search.trim() || !(closedGrp && closedGrp.has(k));
+  const toggleGrp = (k) => setClosedGrp(prev => { const n = new Set(prev || []); n.has(k) ? n.delete(k) : n.add(k); return n; });
+
   const delItem = async (it) => {
     // Final BOQ par reason wala modal; warna seedha confirm.
     if (boqFinal) { setDelOf(it); return; }
@@ -3460,9 +3489,36 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, reloadTen
 
         {!filtered.length && <Empty text={t("tenders.is_search_me_koi_item_nahi")}/>}
 
-        {filtered.map((it,i)=>(
+        {groups && !search.trim() && (
+          <div style={{display:"flex", justifyContent:"flex-end", gap:12, padding:"6px 14px", borderBottom:`1px solid ${T.b1}`}}>
+            {[[t("tenders.boq_group_sab_kholo"), ()=>setClosedGrp(new Set())],
+              [t("tenders.boq_group_sab_band"), ()=>setClosedGrp(new Set(groups.map(g=>g.key)))]].map(([l, fn])=>(
+              <button key={l} onClick={fn} style={{border:"none", background:"none", padding:0, color:T.ind, fontSize:11.5,
+                fontWeight:600, cursor:"pointer", fontFamily:"inherit"}}>{l}</button>
+            ))}
+          </div>
+        )}
+
+        {(groups || [{ key: null, items: filtered }]).map(g=>(
+        <Fragment key={g.key === null ? "_all" : "g:" + g.key}>
+        {g.key !== null && (
+          <div onClick={()=>toggleGrp(g.key)}
+            style={{display:"flex", alignItems:"center", gap:10, padding:"9px 14px", cursor:"pointer",
+              background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, borderTop:`1px solid ${T.b1}`}}>
+            <span style={{fontSize:11, color:T.t3, width:12, display:"inline-block"}}>{grpOpen(g.key) ? "▾" : "▸"}</span>
+            <span style={{fontSize:12.5, fontWeight:700, color:T.t1, flex:1, minWidth:0, overflow:"hidden",
+              textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{g.key || t("tenders.boq_group_bina_naam")}</span>
+            <span style={{fontSize:11, color:T.t3, whiteSpace:"nowrap"}}>{t("tenders.boq_group_items", { n: g.items.length })}</span>
+            <span style={{fontSize:12, fontWeight:700, color:T.t1, whiteSpace:"nowrap", fontVariantNumeric:"tabular-nums"}}>
+              {g.b > 0
+                ? t("tenders.boq_group_a_b", { a: moneyF(g.a), b: moneyF(g.b), tot: moneyF(g.tot) })
+                : t("tenders.boq_group_kul", { tot: moneyF(g.tot) })}
+            </span>
+          </div>
+        )}
+        {(g.key === null || grpOpen(g.key)) && g.items.map((it,i)=>(
           <div key={it.id} style={{display:"grid", gridTemplateColumns:COLS, padding:"9px 14px", gap:9,
-            alignItems:"center", borderBottom:i<filtered.length-1?`1px solid ${T.b1}`:"none"}}>
+            alignItems:"center", borderBottom:(i<g.items.length-1 || g.key !== null)?`1px solid ${T.b1}`:"none"}}>
             <span style={{fontSize:11.5, color:T.t2, fontWeight:600, display:"flex", alignItems:"center", gap:4}}>
               {it.item_no || "--"}
               {it.item_type === "extra" && <Pill label={t("tenders.extra")} c={T.amb} bg={T.ambL}/>}
@@ -3529,6 +3585,8 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, reloadTen
               )}
             </div>
           </div>
+        ))}
+        </Fragment>
         ))}
 
         {/* Totals footer */}
@@ -7361,6 +7419,17 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
 
   useEffect(()=>{ setLoading(true); load(); }, [load]);
   useEffect(()=>{ setBoqLoading(true); loadBoq(); }, [loadBoq]);
+  // Tender ka status/contract badla (Edit, stage badalna) to BOQ ka summary
+  // bhi dobara — premium tile aur "BOQ final" usi se bante hain. Pehle sirf
+  // header taaza hota tha aur contract badalne ke baad bhi purana +14.06%
+  // atka rehta tha (RATNA, 22 Sep).
+  const boqKeyRef = useRef(null);
+  const boqKey = data ? `${data.status}|${data.contract_value}|${data.premium_pct}` : null;
+  useEffect(()=>{
+    if (boqKey === null) return;
+    if (boqKeyRef.current !== null && boqKeyRef.current !== boqKey) loadBoq();
+    boqKeyRef.current = boqKey;
+  }, [boqKey, loadBoq]);
 
   // Stage peeche gaya (admin) to jis tab par khade the wo gayab ho sakta hai —
   // aise me chupchaap Overview par le aao, warna khali screen dikhti.

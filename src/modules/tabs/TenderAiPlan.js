@@ -215,6 +215,9 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   const [job, setJob] = useState(null);        // {status,kind,error} — peechhe chal raha kaam
   const [dinfo, setDinfo] = useState(null);    // digest ka saar — screen par dikhta hai
   const [boqCount, setBoqCount] = useState(0); // tender me imported BOQ items
+  // BOQ me road ka hissa darj ho (kai road wali file) to plan road-wise banta
+  // hai: AI ek road ka dhaancha, server har road par file ke ankde se.
+  const [roadBoq, setRoadBoq] = useState(null);
   const [err, setErr] = useState("");
   // "Levels se qty" — kaunse kaam ke liye khula hai, aur lagne ke baad server ke note
   const roadAccess = useRoadAccess();
@@ -239,6 +242,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
         setCanExec(!!r.data.can_execute);
         setJob(r.data.draft ? { status: r.data.draft.job_status, kind: r.data.draft.job_kind, error: r.data.draft.job_error } : null);
         setBoqCount(Number(r.data.imported_boq_count) || 0);
+        setRoadBoq(r.data.road_boq || null);
         draft = r.data.draft;
       }
     } catch (_) {}
@@ -487,6 +491,14 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   const totalMarks = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false)
     .reduce((b, w) => b + (hasTukde(w) ? tukdeOf(w).length : (markOn(w) ? 1 : 0)) + (w.stages || []).filter((st) => st.map).length, 0), 0) : 0;
 
+  // Imported BOQ se plan — road-wise BOQ ho to server khud road-wise banata hai
+  const analyzeFromBoq = async () => {
+    setErr(""); setBusy("analyze"); setDinfo(null);
+    const r = await api.post(`/tenders/${tenderId}/ai-plan/analyze`, { from_boq: true }, { timeoutMs: 120000 }).catch((e) => ({ success: false, message: e?.message }));
+    if (r?.success) { setPlan(null); setDirty(false); setExecResult(null); setMsgs([]); setJob({ status: "running", kind: "analyze" }); return; }
+    setErr(r?.message || t("tender_ai_plan.analyze_fail")); setBusy("");
+  };
+
   const totalWorks = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false).length, 0) : 0;
   const totalAmt = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false).reduce((b, w) => b + (Number(w.amount) || 0), 0), 0) : 0;
 
@@ -499,6 +511,12 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
         <div style={{ flex: 1 }} />
         {plan && <>
           {dirty && <button onClick={save} disabled={!!busy} style={{ padding: "6px 14px", borderRadius: 7, border: "none", background: T.amb, color: "white", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{busy === "save" ? "…" : t("tender_ai_plan.save_edits")}</button>}
+          {roadBoq && !plan.road && (
+            <button onClick={() => { if (window.confirm(t("tender_ai_plan.road_wise_dobara_confirm", { n: roadBoq.sites }))) analyzeFromBoq(); }} disabled={!!busy}
+              style={{ padding: "6px 12px", borderRadius: 7, border: `1.5px solid ${T.bluM}`, background: T.bluL, color: T.blu, fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+              {t("tender_ai_plan.road_wise_dobara", { n: roadBoq.sites })}
+            </button>
+          )}
           <button onClick={() => fileRef.current?.click()} disabled={!!busy} style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, fontSize: 11.5, cursor: "pointer" }}>{t("tender_ai_plan.nayi_file_se_dobara")}</button>
           <button onClick={openExec} disabled={!!busy || !canExec} title={canExec ? "" : t("tender_ai_plan.sites_sirf_execution_stage_ke_aage")}
             style={{ padding: "6px 16px", borderRadius: 7, border: "none", background: canExec ? T.grn : T.b1, color: canExec ? "white" : T.t4, fontSize: 12, fontWeight: 700, cursor: canExec ? "pointer" : "not-allowed" }}>{t("tender_ai_plan.execute")}</button>
@@ -541,16 +559,11 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
             ke saath, kyunki BOQ me sirf item/qty/rate hota hai. */}
         {boqCount > 0 && !(busy === "analyze" || job?.status === "running") && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <button onClick={async () => {
-              setErr(""); setBusy("analyze"); setDinfo(null);
-              const r = await api.post(`/tenders/${tenderId}/ai-plan/analyze`, { from_boq: true }, { timeoutMs: 120000 }).catch((e) => ({ success: false, message: e?.message }));
-              if (r?.success) { setPlan(null); setDirty(false); setExecResult(null); setMsgs([]); setJob({ status: "running", kind: "analyze" }); return; }
-              setErr(r?.message || t("tender_ai_plan.analyze_fail")); setBusy("");
-            }}
+            <button onClick={analyzeFromBoq}
               style={{ padding: "8px 16px", borderRadius: 8, border: `1.5px solid ${T.bluM}`, background: T.bluL, color: T.blu, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-              {t("tender_ai_plan.imported_boq_se_banao", { boqCount })}
+              {roadBoq ? t("tender_ai_plan.road_wise_banao", { n: roadBoq.sites }) : t("tender_ai_plan.imported_boq_se_banao", { boqCount })}
             </button>
-            <span style={{ fontSize: 11, color: T.t4 }}>{t("tender_ai_plan.seema_boq_me_sirf_item_qty_rate")}</span>
+            <span style={{ fontSize: 11, color: T.t4 }}>{roadBoq ? t("tender_ai_plan.road_wise_hint") : t("tender_ai_plan.seema_boq_me_sirf_item_qty_rate")}</span>
           </div>
         )}
       </>)}
@@ -578,6 +591,20 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
           {levelsCost > 0 && <span title={t("tender_ai_plan.levels_total_hint")} style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 20, padding: "3px 12px", fontWeight: 700 }}>{t("tender_ai_plan.levels_total_lagat", { amt: fmtAmt(levelsCost) })}</span>}
           {draftMeta?.status === "executed" && <span style={{ background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 20, padding: "3px 12px", color: T.grn }}>{t("tender_ai_plan.execute_ho_chuka_dobara_chalana_surakshit")}</span>}
         </div>
+
+        {plan.road && (
+          <div style={{ padding: "9px 12px", background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 8, fontSize: 11.5, color: T.t2, lineHeight: 1.6 }}>
+            <b style={{ color: T.blu }}>{t("tender_ai_plan.road_wise_patti_title")}</b>{" "}
+            {t("tender_ai_plan.road_wise_patti", { n: plan.road.sites, items: plan.road.items })}
+            {plan.road.check && (
+              <div style={{ marginTop: 3, fontWeight: 700, color: plan.road.check.ok ? T.grn : T.red }}>
+                {plan.road.check.ok
+                  ? t("tender_ai_plan.road_wise_jod_ok")
+                  : t("tender_ai_plan.road_wise_jod_nahi", { roads: (plan.road.check.roads || []).filter((r) => !r.ok).map((r) => r.code).join(", ") })}
+              </div>
+            )}
+          </div>
+        )}
 
         {(plan.warnings?.length > 0 || plan.unmapped?.length > 0) && (
           <div style={{ padding: "9px 12px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, fontSize: 11.5, color: "#92400E", lineHeight: 1.5 }}>

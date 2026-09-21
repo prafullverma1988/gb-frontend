@@ -63,6 +63,9 @@ export default function BoqMatrixImport({ tenderId, fileName, fileB64, initial, 
   const [reason, setReason] = useState("");
   const [override, setOverride] = useState("");
   const [showItems, setShowItems] = useState(false);
+  // BOQ me kaise aaye: "road" = har road ke apne item (naap/RA bill road-wise),
+  // "merged" = ek item, kul qty. Default road — Prafull, 22 Sep.
+  const [mode, setMode] = useState("road");
 
   const recon = data.recon || {};
   const checks = recon.checks || [];
@@ -71,6 +74,8 @@ export default function BoqMatrixImport({ tenderId, fileName, fileB64, initial, 
   const siteCheck = (name, code) => checks.find((c) => c.code === code && c.site === name);
   const work = (data.items || []).filter((i) => i.part === "work");
   const maint = (data.items || []).filter((i) => i.part === "maintenance");
+  const roadLines = (data.items || []).reduce((a, it) => a + (it.splits || []).filter((q) => q !== 0).length, 0);
+  const lines = mode === "road" ? roadLines : (data.items || []).length;
 
   // column ke options — naksha me jitne column dikhe, uske thoda aage tak
   const maxCol = useMemo(() => {
@@ -97,7 +102,7 @@ export default function BoqMatrixImport({ tenderId, fileName, fileB64, initial, 
     let r = null;
     try {
       r = await api.post(`/tenders/${tenderId}/boq/import-matrix`, {
-        file_b64: fileB64, file_name: fileName, layout,
+        file_b64: fileB64, file_name: fileName, layout, mode,
         ...(boqFinal ? { reason: reason.trim() } : {}),
         ...(!recon.ok ? { override_reason: override.trim() } : {}),
       });
@@ -151,6 +156,24 @@ export default function BoqMatrixImport({ tenderId, fileName, fileB64, initial, 
               <div style={{ marginTop: 9, fontSize: 11.5, color: T.t3 }}>{t("boq_matrix.gst_note", { gst: inr(file.gst), grand: inr(file.grand) })}</div>
             )}
             {recon.rounding === "rupee" && <div style={{ marginTop: 4, fontSize: 11, color: T.t4 }}>{t("boq_matrix.rounding_note")}</div>}
+          </div>
+
+          {/* ── BOQ me kaise aaye ── */}
+          <div style={{ ...box, padding: "11px 13px" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 8 }}>{t("boq_matrix.mode_title")}</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {[["road", t("boq_matrix.mode_road"), t("boq_matrix.mode_road_hint", { n: roadLines, sites: (data.sites || []).length })],
+                ["merged", t("boq_matrix.mode_merged"), t("boq_matrix.mode_merged_hint", { n: (data.items || []).length })]].map(([k, l, h]) => (
+                <label key={k} style={{ flex: "1 1 260px", display: "flex", gap: 9, alignItems: "flex-start", cursor: "pointer", padding: "9px 11px", borderRadius: 8,
+                  border: `1.5px solid ${mode === k ? T.ind : T.b1}`, background: mode === k ? (T.indL || T.surfaceB) : T.surface }}>
+                  <input type="radio" name="boq_mode" checked={mode === k} onChange={() => setMode(k)} style={{ marginTop: 2 }} />
+                  <span>
+                    <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{l}</span>
+                    <span style={{ display: "block", fontSize: 11.5, color: T.t3, marginTop: 2, lineHeight: 1.5 }}>{h}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
 
           {/* ── har road ── */}
@@ -289,7 +312,7 @@ export default function BoqMatrixImport({ tenderId, fileName, fileB64, initial, 
               {dirty && <span style={{ fontSize: 11.5, color: T.amb }}>{t("boq_matrix.recheck_first")}</span>}
               <button onClick={onClose} style={btn("ghost")}>{t("common.cancel")}</button>
               <button onClick={doImport} disabled={!canImport} style={{ ...btn("primary"), opacity: canImport ? 1 : .5, cursor: canImport ? "pointer" : "not-allowed" }}>
-                {busy === "import" ? t("boq_matrix.importing") : t("boq_matrix.import_btn", { n: (data.items || []).length })}
+                {busy === "import" ? t("boq_matrix.importing") : t("boq_matrix.import_btn", { n: lines })}
               </button>
             </div>
           </div>
