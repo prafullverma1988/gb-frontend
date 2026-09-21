@@ -101,14 +101,17 @@ export const dispatchStatusLabel = (s) => ({
   in_transit: t("rmc.dst_in_transit"), accepted: t("rmc.dst_accepted"),
   partial: t("rmc.dst_partial"), rejected: t("rmc.dst_rejected"), cancelled: t("rmc.dst_cancelled"),
 }[s] || s || "—");
-export const transportModeLabel = (m) => ({
-  included: t("rmc.tm_included"), per_cum_km: t("rmc.tm_per_cum_km"), slab_cum: t("rmc.tm_slab_cum"),
+export const transportModeLabel = (m, unit) => ({
+  included: t("rmc.tm_included"), per_cum_km: t("rmc.tm_per_cum_km", { unit: unit || "cum" }),
+  slab_cum: t("rmc.tm_slab_cum", { unit: unit || "cum" }),
   slab_trip: t("rmc.tm_slab_trip"), per_km_trip: t("rmc.tm_per_km_trip"), monthly: t("rmc.tm_monthly"),
 }[m] || m || "—");
 export const rejectReasonLabel = (r) => ({
-  slump_fail: t("rmc.rr_slump_fail"), late: t("rmc.rr_late"), wrong_grade: t("rmc.rr_wrong_grade"),
-  extra: t("rmc.rr_extra"), other: t("rmc.rr_other"),
+  slump_fail: t("rmc.rr_slump_fail"), temp_fail: t("rmc.rr_temp_fail"), late: t("rmc.rr_late"),
+  wrong_grade: t("rmc.rr_wrong_grade"), extra: t("rmc.rr_extra"), other: t("rmc.rr_other"),
 }[r] || r || "—");
+// Bill/invoice ki maatra kis unit me — concrete line ki unit (bitumen = MT).
+export const lineUnit = (lines) => ((lines || []).find((l) => l.line_kind === "concrete" && l.unit) || {}).unit || "cum";
 export const sideLabel = (s) => (s === "site" ? t("rmc.side_site") : t("rmc.side_plant"));
 
 // Phase 2 — ginti aur bill ke label. Status ke naam ek hi jagah rahen, warna
@@ -130,7 +133,7 @@ export const lineKindLabel = (k) => ({
 // Phase 3 — cube sample ka status. "partial" ka matlab koi result aa gaya par
 // 28 din wala abhi baaki hai; asli faisla wahi karta hai.
 export const cubeStatusLabel = (s) => ({
-  open: t("rmc.qst_open"), partial: t("rmc.qst_partial"), done: t("rmc.qst_done"),
+  open: t("rmc.qst_open"), partial: t("rmc.qst_partial"), done: t("rmc.qst_done"), review: t("rmc.qst_review"),
 }[s] || s || "—");
 export const decisionLabel = (d) => ({
   charge: t("rmc.dec_charge_done"), reduce: t("rmc.dec_reduce_done"), waive: t("rmc.dec_waive_done"),
@@ -207,11 +210,94 @@ export const billTone = (s) => (s === "approved" ? { c: T.grn, bg: T.grnL }
   : s === "cancelled" ? { c: T.red, bg: T.redL } : { c: T.slt, bg: T.sltL });
 export const BillPill = ({ s }) => { const k = billTone(s); return <Pill label={billStatusLabel(s)} c={k.c} bg={k.bg} />; };
 export const cubeTone = (s) => (s === "done" ? { c: T.grn, bg: T.grnL }
-  : s === "partial" ? { c: T.blu, bg: T.bluL } : { c: T.slt, bg: T.sltL });
+  : s === "partial" ? { c: T.blu, bg: T.bluL } : s === "review" ? { c: T.amb, bg: T.ambL } : { c: T.slt, bg: T.sltL });
 export const CubePill = ({ s }) => { const k = cubeTone(s); return <Pill label={cubeStatusLabel(s)} c={k.c} bg={k.bg} />; };
 // Antar ka rang: plus = maal kitaab se kam nikla (laal), minus = zyada nikla.
 export const diffColor = (n) => (N(n) > 0.0001 ? T.red : N(n) < -0.0001 ? T.blu : T.t3);
 export const GradePill = ({ g }) => <Pill label={g || "—"} c={T.ind} bg={T.indL} />;
+
+// ── PRODUCT: concrete ya bitumen ──────────────────────────────────
+// Unit product se aati hai (bitumen = Library item ki unit, aksar MT).
+// Purani concrete rows par unit khaali = cum.
+export const unitOf = (x) => (x && x.unit ? x.unit : "cum");
+export const isBitumen = (x) => !!x && x.product_kind === "bitumen";
+export const kindLabel = (k) => (k === "bitumen" ? t("rmc.kind_bitumen") : t("rmc.kind_concrete"));
+export const KindPill = ({ k }) => (k === "bitumen"
+  ? <Pill label={t("rmc.kind_bitumen")} c="#6B4E16" bg="#F3E9D2" />
+  : <Pill label={t("rmc.kind_concrete")} c={T.slt} bg={T.sltL} />);
+const gk = (g) => String(g || "").toUpperCase().replace(/\s+/g, "");
+// Grade ka chalta design (sabse naya active/locked version) — meta.designs se.
+export const designFor = (meta, grade) => {
+  const k = gk(grade);
+  if (!k) return null;
+  const list = ((meta && meta.designs) || []).filter((d) => gk(d.grade) === k && (d.status === "active" || d.status === "locked"));
+  return list.sort((a, b) => N(b.version) - N(a.version))[0] || null;
+};
+export const gradeUnit = (meta, grade) => unitOf(designFor(meta, grade));
+// Plant ki unit: concrete = cum; bitumen = uske design ki unit (sab ek hi
+// Library unit par chalte hain), warna "unit".
+export const plantUnit = (meta, plant) => {
+  if (!isBitumen(plant)) return "cum";
+  const d = ((meta && meta.designs) || []).find((x) => x.product_kind === "bitumen" && x.unit);
+  return d ? d.unit : t("rmc.unit_generic");
+};
+// Grade list — plant ke prakaar ke hisaab se (hot-mix plant par sirf bitumen ke grade).
+export const gradesFor = (meta, kind) => {
+  const seen = new Set();
+  return ((meta && meta.designs) || [])
+    .filter((d) => (d.status === "active" || d.status === "locked") && (!kind || (d.product_kind || "concrete") === kind))
+    .filter((d) => (seen.has(d.grade) ? false : (seen.add(d.grade), true)))
+    .map((d) => ({ grade: d.grade, unit: unitOf(d), kind: d.product_kind || "concrete" }));
+};
+
+// ── TEMPERATURE (bitumen) ─────────────────────────────────────────
+// Token backend se: dispatch_missing/low/high, lay_missing/low.
+export const tempFlagLabel = (f) => ({
+  dispatch_missing: t("rmc.tf_dispatch_missing"), dispatch_low: t("rmc.tf_dispatch_low"),
+  dispatch_high: t("rmc.tf_dispatch_high"), lay_missing: t("rmc.tf_lay_missing"), lay_low: t("rmc.tf_lay_low"),
+}[f] || f);
+export const tempTokens = (d) => String((d && d.temp_flag) || "").split(",").filter(Boolean);
+export const reviewLabel = (s) => ({
+  pending: t("rmc.rv_pending"), cleared: t("rmc.rv_cleared"), passed: t("rmc.rv_passed"), failed: t("rmc.rv_failed"),
+}[s] || s || "—");
+export const reviewTone = (s) => (s === "pending" ? { c: T.amb, bg: T.ambL }
+  : s === "failed" ? { c: T.red, bg: T.redL } : { c: T.grn, bg: T.grnL });
+export const ReviewPill = ({ s }) => { if (!s) return null; const k = reviewTone(s); return <Pill label={reviewLabel(s)} c={k.c} bg={k.bg} />; };
+export const TempFlags = ({ d }) => {
+  const toks = tempTokens(d);
+  if (!toks.length && !d?.temp_review) return null;
+  return (
+    <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+      {toks.map((f) => <Pill key={f} label={tempFlagLabel(f)} c={f.endsWith("_missing") ? T.slt : T.red} bg={f.endsWith("_missing") ? T.sltL : T.redL} />)}
+      <ReviewPill s={d.temp_review} />
+    </span>
+  );
+};
+
+// ── MARSHALL ─────────────────────────────────────────────────────
+export const MARSHALL = [
+  { key: "stability_kn", label: () => t("rmc.ms_stability"), unit: "kN", min: "ms_stability_min", max: null },
+  { key: "flow_mm", label: () => t("rmc.ms_flow_v"), unit: "mm", min: "ms_flow_min", max: "ms_flow_max" },
+  { key: "air_voids_pct", label: () => t("rmc.ms_voids_v"), unit: "%", min: "ms_voids_min", max: "ms_voids_max" },
+  { key: "binder_pct", label: () => t("rmc.ms_binder_v"), unit: "%", min: "ms_binder_min", max: "ms_binder_max" },
+];
+export const limitText = (lim, f) => {
+  const lo = lim && lim[f.min] != null ? lim[f.min] : null;
+  const hi = f.max && lim && lim[f.max] != null ? lim[f.max] : null;
+  if (lo != null && hi != null) return fmtN(lo) + " – " + fmtN(hi);
+  if (lo != null) return "≥ " + fmtN(lo);
+  if (hi != null) return "≤ " + fmtN(hi);
+  return "—";
+};
+// Result ke flags "out:flow_mm,missing:binder_pct" → { out:Set, missing:Set }
+export const parseMsFlags = (s) => {
+  const out = new Set(), missing = new Set();
+  String(s || "").split(",").filter(Boolean).forEach((x) => {
+    const [k, v] = x.split(":");
+    if (k === "out") out.add(v); else if (k === "missing") missing.add(v);
+  });
+  return { out, missing };
+};
 
 export const Btn = ({ children, onClick, c = T.ind, disabled, icon: Icon, size = "md", ghost, style = {}, title, type = "button" }) => (
   <button onClick={onClick} disabled={disabled} type={type} title={title}

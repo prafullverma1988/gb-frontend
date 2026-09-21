@@ -13,6 +13,7 @@ import {
   T, N, cum, fmtD, fmtN, rupee, rget, rpost, rpatch, dataOf, inpSm, Field, Grid, KV, Btn,
   Panel, Row, Scroll, Empty, ErrBox, Notice, Drawer, Spinner, BillPill, billKindLabel,
   lineKindLabel, decisionLabel,
+  lineUnit,
 } from "./rmcShared";
 
 const ORDER = ["concrete", "transport", "pump", "waiting", "short_load", "rent", "min_guarantee", "recovery"];
@@ -182,7 +183,7 @@ function BillDrawer({ id, canEdit, canApprove, canDelete, onClose, onChanged }) 
             <KV k={t("rmc.party")} v={b.party_name} />
             <KV k={t("rmc.plant")} v={b.plant_name} />
             <KV k={t("rmc.period")} v={fmtD(b.from_date) + " – " + fmtD(b.to_date)} />
-            <KV k={t("rmc.cum")} v={cum(b.cum_total)} />
+            <KV k={t("rmc.qty_short")} v={cum(b.cum_total) + " " + lineUnit(lines)} />
             <KV k={t("rmc.concrete_amount")} v={rupee(b.concrete_amount)} />
             <KV k={t("rmc.transport_amount")} v={rupee(b.transport_amount)} />
             <KV k={t("rmc.extra_amount")} v={rupee(b.extra_amount)} />

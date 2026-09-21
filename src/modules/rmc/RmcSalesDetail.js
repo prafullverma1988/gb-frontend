@@ -14,6 +14,7 @@ import { t } from "../../i18n";
 import {
   T, N, cum, fmtD, fmtN, rupee, rget, rpost, dataOf, KV, Grid, Btn, Panel, Row, Scroll,
   Empty, ErrBox, Notice, Drawer, Spinner, BillPill, lineKindLabel,
+  lineUnit,
 } from "./rmcShared";
 
 // ── Tax ka jod ───────────────────────────────────────────────────
@@ -128,7 +129,7 @@ function InvoiceDrawer({ id, canApprove, canDelete, onClose, onChanged }) {
             <KV k={t("rmc.buyer_gstin")} v={inv.buyer_gstin || t("rmc.no_gstin")} />
             <KV k={t("rmc.seller_gstin")} v={inv.seller_gstin} />
             <KV k={t("rmc.place_of_supply")} v={inv.place_of_supply || inv.place_of_supply_code} />
-            <KV k={t("rmc.cum")} v={cum(inv.cum_total)} />
+            <KV k={t("rmc.qty_short")} v={cum(inv.cum_total) + " " + lineUnit(lines)} />
           </Grid>
 
           {isDraft && <Notice tone="warn">{t("rmc.invoice_draft_note")}</Notice>}

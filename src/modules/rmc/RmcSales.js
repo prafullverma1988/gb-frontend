@@ -18,6 +18,7 @@ import {
   T, cum, fmtD, fmtN, rupee, rget, rpost, dataOf, inp, inpSm, Field, Grid, Btn, Panel,
   Row, Scroll, Empty, ErrBox, Notice, Modal, Spinner, BillPill, billStatusLabel,
   lineKindLabel, todayStr, monthStartStr,
+  lineUnit,
 } from "./rmcShared";
 import InvoiceDrawer, { TaxBox } from "./RmcSalesDetail";
 
@@ -185,7 +186,7 @@ function NewInvoiceModal({ open, meta, onClose, onCreated }) {
         )}
         {lines.length > 0 && (
           <div style={{ fontSize: 11.5, color: T.t3, marginTop: 8 }}>
-            {t("rmc.sale_cum_line", { cum: cum(pre.cum_total) })}
+            {t("rmc.sale_cum_line", { cum: cum(pre.cum_total), unit: lineUnit(lines) })}
           </div>
         )}
       </>)}
@@ -245,7 +246,7 @@ function RmcSales({ meta, canCreate, canApprove, canDelete, refreshKey, onRefres
                 <span>{t("rmc.customer")}</span>
                 <span>{t("rmc.plant")}</span>
                 <span>{t("rmc.period")}</span>
-                <span style={{ textAlign: "right" }}>{t("rmc.cum")}</span>
+                <span style={{ textAlign: "right" }}>{t("rmc.qty_short")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.invoice_total")}</span>
                 <span>{t("common.status")}</span>
               </Row>

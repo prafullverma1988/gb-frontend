@@ -48,7 +48,7 @@ function RMCModule() {
   const [billSub, setBillSub] = useState("vendor");
   const [meta, setMeta] = useState(null);
   const [dash, setDash] = useState(null);
-  const [todo, setTodo] = useState({ counts: 0, bills: 0, cubeDue: 0, cubeFailed: 0 });
+  const [todo, setTodo] = useState({ counts: 0, bills: 0, cubeDue: 0, cubeFailed: 0, review: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [openOrderId, setOpenOrderId] = useState(null);
@@ -73,6 +73,7 @@ function RMCModule() {
       bills: (dataOf(b, []) || []).length + (dataOf(s, []) || []).length,
       cubeDue: Number(cubeSum.due) || 0,
       cubeFailed: Number(cubeSum.failed) || 0,
+      review: Number(cubeSum.review_pending) || 0,
     });
     setLoading(false);
   }, []);
@@ -90,7 +91,9 @@ function RMCModule() {
     { id: "orders", l: t("rmc.tab_orders"), I: IcDoc, badge: pendingOrders || null },
     { id: "challans", l: t("rmc.tab_challans"), I: IcTruck, badge: onRoad || null },
     { id: "counts", l: t("rmc.tab_counts"), I: IcBox, badge: todo.counts || null },
-    { id: "cube", l: t("rmc.tab_cube"), I: IcChk, badge: todo.cubeDue || null, red: todo.cubeFailed || null },
+    // Bitumen ho to isi tab me Marshall bhi — naam dono bolta hai.
+    { id: "cube", l: (meta && ((meta.plants || []).some((p) => p.product_kind === "bitumen"))) ? t("rmc.tab_qc") : t("rmc.tab_cube"),
+      I: IcChk, badge: (todo.cubeDue + todo.review) || null, red: todo.cubeFailed || null },
     { id: "bills", l: t("rmc.tab_bills"), I: IcRupee, badge: todo.bills || null },
     { id: "setup", l: t("rmc.tab_setup"), I: IcSet },
     { id: "reports", l: t("rmc.tab_reports"), I: IcList },

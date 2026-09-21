@@ -5,7 +5,7 @@ import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
   T, fmtN, fmtD, rget, rpost, rpatch, dataOf, inp, inpSm, Field, Grid, Btn, Panel, Row, Scroll,
-  Empty, ErrBox, Notice, Modal, Spinner, Pill, SubTabs, IcAdd, ownerLabel,
+  Empty, ErrBox, Notice, Modal, Spinner, Pill, SubTabs, IcAdd, ownerLabel, KindPill, plantUnit,
 } from "./rmcShared";
 import RmcArrangements from "./RmcArrangement";
 import RmcMixDesigns from "./RmcMixDesigns";
@@ -20,11 +20,12 @@ function PlantForm({ open, meta, plant, onClose, onSaved }) {
     if (!open) return;
     setV(plant ? {
       name: plant.name || "", owner: plant.owner || "own", plant_type: plant.plant_type || "stationary",
+      product_kind: plant.product_kind || "concrete",
       capacity_cum_hr: plant.capacity_cum_hr == null ? "" : String(plant.capacity_cum_hr),
       vendor_party_id: plant.vendor_party_id || "", warehouse_id: plant.warehouse_id || "",
       equipment_id: plant.equipment_id || "",
       project_id: plant.project_id || "", address: plant.address || "", is_active: plant.is_active,
-    } : { name: "", owner: "own", plant_type: "stationary", capacity_cum_hr: "", vendor_party_id: "", warehouse_id: "", equipment_id: "", project_id: "", address: "" });
+    } : { name: "", owner: "own", plant_type: "stationary", product_kind: "concrete", capacity_cum_hr: "", vendor_party_id: "", warehouse_id: "", equipment_id: "", project_id: "", address: "" });
     setErr("");
   }, [open, plant]);
 
@@ -32,7 +33,7 @@ function PlantForm({ open, meta, plant, onClose, onSaved }) {
   const save = async () => {
     setErr(""); setBusy(true);
     const body = {
-      name: v.name, owner: v.owner, plant_type: v.plant_type,
+      name: v.name, owner: v.owner, plant_type: v.plant_type, product_kind: v.product_kind || "concrete",
       capacity_cum_hr: v.capacity_cum_hr === "" ? null : Number(v.capacity_cum_hr),
       vendor_party_id: v.owner === "vendor" ? v.vendor_party_id || null : null,
       warehouse_id: v.warehouse_id || null, equipment_id: v.equipment_id || null,
@@ -56,6 +57,14 @@ function PlantForm({ open, meta, plant, onClose, onSaved }) {
         <Field label={t("rmc.plant_name")} span={2}>
           <input style={inp} value={v.name || ""} onChange={(e) => upd("name", e.target.value)} />
         </Field>
+        {/* Ek plant ek hi cheez banata hai. Challan ban jaane ke baad backend
+            prakaar badalne nahi deta (purane challan ki unit/QC ulat jaati). */}
+        <Field label={t("rmc.plant_makes")} hint={t("rmc.plant_makes_hint")} span={2}>
+          <select style={inp} value={v.product_kind || "concrete"} onChange={(e) => upd("product_kind", e.target.value)}>
+            <option value="concrete">{t("rmc.kind_concrete")}</option>
+            <option value="bitumen">{t("rmc.kind_bitumen")}</option>
+          </select>
+        </Field>
         <Field label={t("rmc.owner")}>
           <select style={inp} value={v.owner || "own"} onChange={(e) => upd("owner", e.target.value)}>
             <option value="own">{ownerLabel("own")}</option>
@@ -69,7 +78,7 @@ function PlantForm({ open, meta, plant, onClose, onSaved }) {
             <option value="mobile">{t("rmc.type_mobile")}</option>
           </select>
         </Field>
-        <Field label={t("rmc.capacity_cum_hr")}>
+        <Field label={t("rmc.capacity_per_hr", { unit: plantUnit(meta, v) })}>
           <input style={inp} type="number" step="0.01" value={v.capacity_cum_hr || ""} onChange={(e) => upd("capacity_cum_hr", e.target.value)} />
         </Field>
         {v.owner === "vendor" && (
@@ -140,7 +149,7 @@ function PlantsTab({ meta, canCreate, canEdit, onChanged }) {
                 <span>{t("rmc.plant_name")}</span>
                 <span>{t("rmc.owner")}</span>
                 <span>{t("rmc.plant_type")}</span>
-                <span style={{ textAlign: "right" }}>{t("rmc.capacity_short")}</span>
+                <span style={{ textAlign: "right" }}>{t("rmc.capacity_short_u")}</span>
                 <span>{t("rmc.store")}</span>
                 <span />
               </Row>
@@ -153,8 +162,11 @@ function PlantsTab({ meta, canCreate, canEdit, onChanged }) {
                       : null}
                   </span>
                   <span><Pill label={ownerLabel(p.owner)} c={p.owner === "vendor" ? T.amb : T.ind} bg={p.owner === "vendor" ? T.ambL : T.indL} /></span>
-                  <span style={{ color: T.t3 }}>{p.plant_type === "mobile" ? t("rmc.type_mobile") : t("rmc.type_stationary")}</span>
-                  <span style={{ textAlign: "right", color: T.t2 }}>{p.capacity_cum_hr ? fmtN(p.capacity_cum_hr) : "—"}</span>
+                  <span style={{ color: T.t3, display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
+                    <KindPill k={p.product_kind} />
+                    {p.plant_type === "mobile" ? t("rmc.type_mobile") : t("rmc.type_stationary")}
+                  </span>
+                  <span style={{ textAlign: "right", color: T.t2 }}>{p.capacity_cum_hr ? fmtN(p.capacity_cum_hr) + " " + plantUnit(meta, p) : "—"}</span>
                   <span style={{ color: p.warehouse_name ? T.t2 : T.red }}>{p.warehouse_name || t("rmc.no_store")}</span>
                   <span style={{ textAlign: "right" }}>
                     {canEdit && <Btn size="sm" ghost onClick={() => { setEditing(p); setFormOn(true); }}>{t("common.edit")}</Btn>}

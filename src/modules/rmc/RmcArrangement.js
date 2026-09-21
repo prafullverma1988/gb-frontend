@@ -7,7 +7,7 @@ import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
   T, rupee, fmtN, rget, rpost, rpatch, dataOf, inp, inpSm, Field, Grid, Btn, Panel, Row, Scroll,
-  Empty, ErrBox, Notice, Modal, Spinner, Pill, IcAdd, IcX, supplyLabel, transportModeLabel,
+  Empty, ErrBox, Notice, Modal, Spinner, Pill, IcAdd, IcX, supplyLabel, transportModeLabel, plantUnit, plantById,
 } from "./rmcShared";
 
 const SLAB_MODES = ["slab_cum", "slab_trip"];
@@ -103,6 +103,8 @@ function ArrangementForm({ open, meta, row, onClose, onSaved }) {
     onSaved(); onClose();
   };
 
+  // Rate/lead/pump/rent kis unit me — plant jo banata hai (bitumen = MT).
+  const unit = plantUnit(meta, plantById(meta, v.plant_id));
   return (
     <Modal open={open} onClose={onClose} width={860}
       title={row ? t("rmc.edit_arrangement") : t("rmc.new_arrangement")} sub={t("rmc.arr_sub")}
@@ -159,7 +161,7 @@ function ArrangementForm({ open, meta, row, onClose, onSaved }) {
             <Field label={t("rmc.transport_mode")}>
               <select style={inp} value={v.transport_mode} onChange={(e) => upd("transport_mode", e.target.value)}>
                 {(opt.transport_mode || ["included", "per_cum_km", "slab_cum", "slab_trip", "per_km_trip", "monthly"])
-                  .map((m) => <option key={m} value={m}>{transportModeLabel(m)}</option>)}
+                  .map((m) => <option key={m} value={m}>{transportModeLabel(m, unit)}</option>)}
               </select>
             </Field>
             <Field label={t("rmc.free_km")}>
@@ -180,7 +182,7 @@ function ArrangementForm({ open, meta, row, onClose, onSaved }) {
                 {t("rmc.round_trip_yes")}
               </label>
             </Field>
-            <Field label={t("rmc.min_load")}>
+            <Field label={t("rmc.min_load", { unit })}>
               <input style={inp} type="number" step="0.01" value={v.min_load_cum} onChange={(e) => upd("min_load_cum", e.target.value)} />
             </Field>
             <Field label={t("rmc.short_load_charge")}>
@@ -217,7 +219,7 @@ function ArrangementForm({ open, meta, row, onClose, onSaved }) {
         {v.rates.map((r, i) => (
           <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
             <input style={{ ...inpSm, width: 110 }} placeholder="M25" value={r.grade} onChange={(e) => updList("rates", i, { grade: e.target.value })} />
-            <input style={{ ...inpSm, width: 150 }} type="number" placeholder={t("rmc.rate_per_cum")} value={r.rate_per_cum} onChange={(e) => updList("rates", i, { rate_per_cum: e.target.value })} />
+            <input style={{ ...inpSm, width: 150 }} type="number" placeholder={t("rmc.rate_per_cum", { unit })} value={r.rate_per_cum} onChange={(e) => updList("rates", i, { rate_per_cum: e.target.value })} />
             <DelBtn onClick={() => delList("rates", i)} />
           </div>
         ))}
@@ -248,11 +250,11 @@ function ArrangementForm({ open, meta, row, onClose, onSaved }) {
       <Panel title={t("rmc.pump_and_rent")}>
         <div style={{ padding: 14 }}>
           <Grid cols={3}>
-            <Field label={t("rmc.pump_rate")}><input style={inp} type="number" step="1" value={v.pump_rate_cum} onChange={(e) => upd("pump_rate_cum", e.target.value)} /></Field>
+            <Field label={t("rmc.pump_rate", { unit })}><input style={inp} type="number" step="1" value={v.pump_rate_cum} onChange={(e) => upd("pump_rate_cum", e.target.value)} /></Field>
             <Field label={t("rmc.pump_min")}><input style={inp} type="number" step="1" value={v.pump_min_charge} onChange={(e) => upd("pump_min_charge", e.target.value)} /></Field>
             <Field label={t("rmc.rent_monthly")}><input style={inp} type="number" step="1" value={v.rent_monthly} onChange={(e) => upd("rent_monthly", e.target.value)} /></Field>
-            <Field label={t("rmc.rent_rate_cum")}><input style={inp} type="number" step="1" value={v.rent_rate_cum} onChange={(e) => upd("rent_rate_cum", e.target.value)} /></Field>
-            <Field label={t("rmc.rent_min_cum")}><input style={inp} type="number" step="0.01" value={v.rent_min_cum} onChange={(e) => upd("rent_min_cum", e.target.value)} /></Field>
+            <Field label={t("rmc.rent_rate_cum", { unit })}><input style={inp} type="number" step="1" value={v.rent_rate_cum} onChange={(e) => upd("rent_rate_cum", e.target.value)} /></Field>
+            <Field label={t("rmc.rent_min_cum", { unit })}><input style={inp} type="number" step="0.01" value={v.rent_min_cum} onChange={(e) => upd("rent_min_cum", e.target.value)} /></Field>
             <Field label={t("rmc.valid_from")}><input style={inp} type="date" value={v.valid_from} onChange={(e) => upd("valid_from", e.target.value)} /></Field>
             <Field label={t("rmc.valid_to")}><input style={inp} type="date" value={v.valid_to} onChange={(e) => upd("valid_to", e.target.value)} /></Field>
           </Grid>
@@ -307,7 +309,7 @@ function RmcArrangements({ meta, canCreate, canEdit, onChanged }) {
                   <span style={{ color: T.t2 }}>{c.party_name || "—"}</span>
                   <span><Pill label={supplyLabel(c.supply_material)} c={c.supply_material === "own" ? T.grn : T.slt} bg={c.supply_material === "own" ? T.grnL : T.sltL} /></span>
                   <span style={{ color: T.t3 }}>
-                    {transportModeLabel(c.transport_mode)}
+                    {transportModeLabel(c.transport_mode, plantUnit(meta, plantById(meta, c.plant_id)))}
                     {c.transport_rate ? <div style={{ fontSize: 10.5, color: T.t4 }}>{fmtN(c.transport_rate)}</div> : null}
                   </span>
                   <span style={{ textAlign: "right" }}>

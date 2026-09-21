@@ -5,11 +5,18 @@ import { useState, useEffect, useCallback } from "react";
 import { t } from "../../i18n";
 import {
   T, N, cum, fmtN, fmtD, rupee, rget, dataOf, inpSm, Field, Panel, Row, Scroll, Empty,
-  Spinner, SubTabs, RangeBar, KV, Notice, todayStr, monthStartStr, supplyLabel, ownerLabel,
+  Spinner, SubTabs, RangeBar, KV, Notice, todayStr, monthStartStr, supplyLabel, ownerLabel, unitOf, plantUnit,
 } from "./rmcShared";
 import { ReconReport, VendorStockReport, CostPerCumReport } from "./RmcRecon";
 import RmcBatchSheet from "./RmcBatchSheet";
 import RmcTurnaround from "./RmcTurnaround";
+
+// Alag unit (cum + MT) ka jod alag — ek number me milana bematlab.
+const byUnit = (rows, key) => {
+  const m = {};
+  rows.forEach((r) => { const u = unitOf(r); m[u] = (m[u] || 0) + N(r[key]); });
+  return Object.keys(m).map((u) => cum(m[u]) + " " + u).join(" · ") || cum(0);
+};
 
 const GROUPS = ["day", "plant", "project", "grade"];
 const groupLabel = (g) => ({ day: t("rmc.g_day"), plant: t("rmc.g_plant"), project: t("rmc.g_project"), grade: t("rmc.g_grade") }[g] || g);
@@ -51,7 +58,7 @@ function ProductionReport() {
               <Row cols={COLS} head>
                 <span>{groupLabel(group)}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.trips")}</span>
-                <span style={{ textAlign: "right" }}>{t("rmc.cum")}</span>
+                <span style={{ textAlign: "right" }}>{t("rmc.qty_short")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.taken_short")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.returned_short")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.material_amount")}</span>
@@ -62,7 +69,7 @@ function ProductionReport() {
                 <Row key={i} cols={COLS}>
                   <span style={{ color: T.t1, fontWeight: 600 }}>{group === "day" ? fmtD(r.label) : (r.label || "—")}</span>
                   <span style={{ textAlign: "right" }}>{N(r.trips)}</span>
-                  <span style={{ textAlign: "right", fontWeight: 700 }}>{cum(r.cum)}</span>
+                  <span style={{ textAlign: "right", fontWeight: 700 }}>{cum(r.cum)} <span style={{ fontSize: 10, color: T.t4, fontWeight: 600 }}>{unitOf(r)}</span></span>
                   <span style={{ textAlign: "right" }}>{cum(r.accepted_cum)}</span>
                   <span style={{ textAlign: "right", color: N(r.rejected_cum) > 0 ? T.red : T.t3 }}>{cum(r.rejected_cum)}</span>
                   <span style={{ textAlign: "right" }}>{rupee(r.material_amount)}</span>
@@ -73,9 +80,9 @@ function ProductionReport() {
               <Row cols={COLS} style={{ background: T.surfaceB, fontWeight: 700, color: T.t1 }}>
                 <span>{t("rmc.total")}</span>
                 <span style={{ textAlign: "right" }}>{tot.trips}</span>
-                <span style={{ textAlign: "right" }}>{cum(tot.cum)}</span>
-                <span style={{ textAlign: "right" }}>{cum(tot.accepted)}</span>
-                <span style={{ textAlign: "right" }}>{cum(tot.rejected)}</span>
+                <span style={{ textAlign: "right" }}>{byUnit(rows, "cum")}</span>
+                <span style={{ textAlign: "right" }}>{byUnit(rows, "accepted_cum")}</span>
+                <span style={{ textAlign: "right" }}>{byUnit(rows, "rejected_cum")}</span>
                 <span style={{ textAlign: "right" }}>{rupee(tot.mat)}</span>
                 <span style={{ textAlign: "right" }}>{rupee(tot.conc)}</span>
                 <span style={{ textAlign: "right" }}>{rupee(tot.trans)}</span>
@@ -112,7 +119,7 @@ function VehicleReport() {
                 <span>{t("rmc.owner")}</span>
                 <span>{t("rmc.transporter")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.trips")}</span>
-                <span style={{ textAlign: "right" }}>{t("rmc.cum")}</span>
+                <span style={{ textAlign: "right" }}>{t("rmc.qty_short")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.avg_lead")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.transport_amount")}</span>
               </Row>
@@ -122,7 +129,7 @@ function VehicleReport() {
                   <span style={{ color: T.t3 }}>{r.vehicle_owner ? supplyLabel(r.vehicle_owner) : "—"}</span>
                   <span style={{ color: T.t3 }}>{r.transporter_name || "—"}</span>
                   <span style={{ textAlign: "right" }}>{N(r.trips)}</span>
-                  <span style={{ textAlign: "right", fontWeight: 700 }}>{cum(r.cum)}</span>
+                  <span style={{ textAlign: "right", fontWeight: 700 }}>{cum(r.cum)} <span style={{ fontSize: 10, color: T.t4, fontWeight: 600 }}>{unitOf(r)}</span></span>
                   <span style={{ textAlign: "right" }}>{fmtN(r.avg_lead_km)} km</span>
                   <span style={{ textAlign: "right" }}>{rupee(r.transport_amount)}</span>
                 </Row>
@@ -176,7 +183,7 @@ function StockReport({ meta }) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 14, padding: 14, background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 12 }}>
               <KV k={t("rmc.plant")} v={plant && plant.name} />
               <KV k={t("rmc.owner")} v={plant ? ownerLabel(plant.owner) : "—"} />
-              <KV k={t("rmc.produced_cum")} v={cum(data.produced_cum)} />
+              <KV k={t("rmc.produced_in", { unit: data.produced_unit || plantUnit(meta, plant) })} v={cum(data.produced_cum)} />
             </div>
             {plant && !plant.warehouse_id && <Notice tone="warn">{t("rmc.no_store_note")}</Notice>}
 

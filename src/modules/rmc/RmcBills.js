@@ -12,6 +12,7 @@ import {
   T, N, cum, fmtD, fmtN, rupee, rget, rpost, dataOf, inp, inpSm, Field, Grid, Btn, Panel, Row,
   Scroll, Empty, ErrBox, Notice, Modal, Spinner, BillPill, IcAdd, billKindLabel, billStatusLabel,
   lineKindLabel, todayStr, monthStartStr,
+  lineUnit, plantUnit, plantById,
 } from "./rmcShared";
 import BillDrawer from "./RmcBillDetail";
 
@@ -136,7 +137,7 @@ function NewBillModal({ open, meta, onClose, onCreated }) {
                 <Row cols={LC} style={{ background: T.surfaceB, fontWeight: 700, color: T.t1 }}>
                   <span>{t("rmc.total")}</span>
                   <span style={{ color: T.t3, fontWeight: 400, fontSize: 11.5 }}>
-                    {t("rmc.totals_line", { cum: cum(tot.cum_total), recovery: rupee(tot.recovery_amount) })}
+                    {t("rmc.totals_line", { cum: cum(tot.cum_total), unit: lineUnit(lines), recovery: rupee(tot.recovery_amount) })}
                   </span>
                   <span /><span />
                   <span style={{ textAlign: "right" }}>{rupee(tot.total_amount)}</span>
@@ -208,7 +209,7 @@ function RmcBills({ meta, canCreate, canEdit, canApprove, canDelete, refreshKey,
                 <span>{t("rmc.party")}</span>
                 <span>{t("rmc.plant")}</span>
                 <span>{t("rmc.period")}</span>
-                <span style={{ textAlign: "right" }}>{t("rmc.cum")}</span>
+                <span style={{ textAlign: "right" }}>{t("rmc.qty_short")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.bill_total")}</span>
                 <span>{t("common.status")}</span>
               </Row>
@@ -219,7 +220,7 @@ function RmcBills({ meta, canCreate, canEdit, canApprove, canDelete, refreshKey,
                   <span style={{ color: T.t1 }}>{x.party_name || "—"}</span>
                   <span style={{ color: T.t2 }}>{x.plant_name || "—"}</span>
                   <span style={{ color: T.t3, fontSize: 11.5 }}>{fmtD(x.from_date) + " – " + fmtD(x.to_date)}</span>
-                  <span style={{ textAlign: "right" }}>{cum(x.cum_total)}</span>
+                  <span style={{ textAlign: "right" }}>{cum(x.cum_total)} <span style={{ fontSize: 10, color: T.t4, fontWeight: 600 }}>{plantUnit(meta, plantById(meta, x.plant_id))}</span></span>
                   <span style={{ textAlign: "right", fontWeight: 700 }}>
                     {rupee(x.total_amount)}
                     {N(x.recovery_amount) > 0 && (

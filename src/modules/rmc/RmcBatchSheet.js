@@ -77,7 +77,7 @@ function RowsTable({ rows, openRow, onOpenRow }) {
           <span>{t("rmc.batch_no")}</span>
           <span>{t("rmc.batch_at")}</span>
           <span>{t("rmc.grade")}</span>
-          <span style={{ textAlign: "right" }}>{t("rmc.cum")}</span>
+          <span style={{ textAlign: "right" }}>{t("rmc.qty_short")}</span>
           <span>{t("rmc.challan")}</span>
           <span>{t("rmc.match")}</span>
         </Row>

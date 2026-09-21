@@ -7,9 +7,13 @@ import { t } from "../../i18n";
 import {
   T, N, cum, rget, rpost, dataOf, inp, Field, Grid, Btn, Modal, ErrBox, Notice, PhotosField,
   contractById, plantById, showsMaterial, showsTransport, defaultSide, nowLocal, supplyLabel, rejectReasonLabel,
+  unitOf, isBitumen, designFor, gradesFor, plantUnit, fmtN,
 } from "./rmcShared";
 
 const REJECT_REASONS = ["slump_fail", "late", "wrong_grade", "extra", "other"];
+// Bitumen me slump nahi hota — thanda maal lautane ki wajah temperature hai.
+const REJECT_REASONS_BIT = ["temp_fail", "late", "wrong_grade", "extra", "other"];
+const numOrNull = (x) => (x === "" || x == null ? null : Number(x));
 // Backend ke do messages ka seedha rasta hai — aadmi warna phansa reh jaata hai.
 const wantsLead = (m) => /lead|लीड/i.test(String(m || ""));
 const wantsStore = (m) => /store|स्टोर/i.test(String(m || ""));
@@ -19,7 +23,7 @@ export function ChallanForm({ open, meta, preset, onClose, onSaved, onGoSetup })
   const toast = useToast();
   const blank = { order_id: "", project_id: "", plant_id: "", contract_id: "", grade: "", qty_cum: "",
     design_id: "", equipment_id: "", vehicle_no: "", driver_name: "", entered_side: "plant",
-    vendor_challan_no: "", batch_at: "", remark: "", photo_urls: [] };
+    vendor_challan_no: "", batch_at: "", remark: "", photo_urls: [], temp_dispatch_c: "" };
   const [v, setV] = useState(blank);
   const [orders, setOrders] = useState([]);
   const [err, setErr] = useState("");
@@ -48,6 +52,12 @@ export function ChallanForm({ open, meta, preset, onClose, onSaved, onGoSetup })
   const contracts = (meta.contracts || []).filter((c) => !v.plant_id || Number(c.plant_id) === Number(v.plant_id));
   const designs = (meta.designs || []).filter((d) => !v.grade || String(d.grade).toUpperCase() === String(v.grade).toUpperCase());
   const upd = (k, val) => setV((x) => ({ ...x, [k]: val }));
+  // Bitumen plant: unit aur temperature ki seema grade ke design se.
+  const bit = isBitumen(plant);
+  const gDesign = designFor(meta, v.grade);
+  const unit = gDesign ? unitOf(gDesign) : plantUnit(meta, plant);
+  const gradeList = gradesFor(meta, plant ? (bit ? "bitumen" : "concrete") : null);
+  const tempNum = v.temp_dispatch_c === "" ? null : N(v.temp_dispatch_c);
 
   // Plant chunte hi side apne aap tay — vendor ka plant = site wali screen.
   const pickPlant = (id) => {
@@ -72,6 +82,7 @@ export function ChallanForm({ open, meta, preset, onClose, onSaved, onGoSetup })
       vehicle_no: v.vehicle_no || null, driver_name: v.driver_name || null,
       entered_side: v.entered_side, vendor_challan_no: isSite ? (v.vendor_challan_no || null) : null,
       batch_at: v.batch_at || null, photo_urls: v.photo_urls, remark: v.remark || null,
+      temp_dispatch_c: bit ? numOrNull(v.temp_dispatch_c) : null,
     });
     setBusy(false);
     if (!r || !r.success) { setErr((r && r.message) || t("rmc.save_failed")); return; }
@@ -97,7 +108,7 @@ export function ChallanForm({ open, meta, preset, onClose, onSaved, onGoSetup })
         <Field label={t("rmc.order")} hint={t("rmc.order_optional")}>
           <select style={inp} value={v.order_id} onChange={(e) => pickOrder(e.target.value)}>
             <option value="">{t("rmc.no_order")}</option>
-            {orders.map((o) => <option key={o.id} value={o.id}>{o.order_no} · {o.grade} · {cum(o.qty_cum)}</option>)}
+            {orders.map((o) => <option key={o.id} value={o.id}>{o.order_no} · {o.grade} · {cum(o.qty_cum)} {unitOf(o)}</option>)}
           </select>
         </Field>
         <Field label={t("rmc.plant")}>
@@ -119,11 +130,25 @@ export function ChallanForm({ open, meta, preset, onClose, onSaved, onGoSetup })
           </select>
         </Field>
         <Field label={t("rmc.grade")}>
-          <input style={inp} value={v.grade} onChange={(e) => setV((x) => ({ ...x, grade: e.target.value, design_id: "" }))} placeholder="M25" />
+          <input style={inp} list="rmc-challan-grades" value={v.grade}
+            onChange={(e) => setV((x) => ({ ...x, grade: e.target.value, design_id: "" }))}
+            placeholder={bit ? t("rmc.grade_bitumen_ph") : "M25"} />
+          <datalist id="rmc-challan-grades">
+            {gradeList.map((g) => <option key={g.grade} value={g.grade}>{g.unit}</option>)}
+          </datalist>
         </Field>
-        <Field label={t("rmc.qty_cum")}>
-          <input style={inp} type="number" step="0.01" value={v.qty_cum} onChange={(e) => upd("qty_cum", e.target.value)} placeholder="6" />
+        <Field label={t("rmc.qty_in", { unit })}>
+          <input style={inp} type="number" step="0.01" value={v.qty_cum} onChange={(e) => upd("qty_cum", e.target.value)} placeholder={bit ? "10" : "6"} />
         </Field>
+        {bit && (
+          <Field label={t("rmc.temp_dispatch")} span={2}
+            hint={gDesign && (gDesign.temp_min_c != null || gDesign.temp_max_c != null)
+              ? t("rmc.temp_dispatch_hint", { min: fmtN(gDesign.temp_min_c), max: fmtN(gDesign.temp_max_c) })
+              : t("rmc.temp_blank_hint")}>
+            <input style={inp} type="number" step="0.1" value={v.temp_dispatch_c} placeholder="155"
+              onChange={(e) => upd("temp_dispatch_c", e.target.value)} />
+          </Field>
+        )}
         {matShown && (
           <Field label={t("rmc.mix_design")} hint={t("rmc.design_auto_hint")}>
             <select style={inp} value={v.design_id} onChange={(e) => upd("design_id", e.target.value)}>
@@ -132,7 +157,7 @@ export function ChallanForm({ open, meta, preset, onClose, onSaved, onGoSetup })
             </select>
           </Field>
         )}
-        <Field label={t("rmc.tm")}>
+        <Field label={bit ? t("rmc.vehicle_tipper") : t("rmc.tm")}>
           <select style={inp} value={v.equipment_id}
             onChange={(e) => {
               const eq = (meta.vehicles || []).find((x) => String(x.id) === e.target.value);
@@ -166,6 +191,12 @@ export function ChallanForm({ open, meta, preset, onClose, onSaved, onGoSetup })
         ? <div style={{ marginTop: 14 }}><Notice>{t("rmc.stock_will_drop")}</Notice></div>
         : <div style={{ marginTop: 14 }}><Notice tone="warn">{t("rmc.material_not_ours")}</Notice></div>}
       {!transportShown && contract && <Notice tone="warn">{t("rmc.transport_customer")}</Notice>}
+      {/* Temperature na bhara ya seema se bahar — challan banega, par PM/Admin
+          ke paas jaayega. Pehle hi bata do taaki aadmi jaan-boojh kar bhare. */}
+      {bit && (tempNum == null
+        ? <Notice tone="warn">{t("rmc.temp_blank_review")}</Notice>
+        : gDesign && ((gDesign.temp_min_c != null && tempNum < N(gDesign.temp_min_c)) || (gDesign.temp_max_c != null && tempNum > N(gDesign.temp_max_c)))
+          ? <Notice tone="warn">{t("rmc.temp_out_review")}</Notice> : null)}
 
       <ErrBox>{err}</ErrBox>
       {err && (wantsLead(err) || wantsStore(err)) && (
@@ -185,13 +216,26 @@ export function AcceptForm({ open, dispatch, onClose, onDone }) {
   const [v, setV] = useState({});
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lim, setLim] = useState(null);
+  const bit = isBitumen(dispatch);
   useEffect(() => {
     if (!open || !dispatch) return;
     setV({ accepted_cum: String(N(dispatch.qty_cum)), reject_reason: "", reject_note: "", slump_mm: "",
-      cubes_taken: "", arrived_at: "", unload_start_at: "", unload_end_at: "", photo_urls: [] });
+      cubes_taken: "", arrived_at: "", unload_start_at: "", unload_end_at: "", photo_urls: [], temp_lay_c: "" });
     setErr("");
+    setLim(null);
+    // Bichhane ki seema design par hai — list me nahi aati, detail se lo.
+    if (dispatch.product_kind === "bitumen") {
+      let alive = true;
+      rget(`/dispatches/${dispatch.id}`).then((r) => { if (alive) setLim(dataOf(r, null)); });
+      return () => { alive = false; };
+    }
+    return undefined;
   }, [open, dispatch]);
   if (!dispatch) return null;
+  const unit = unitOf(dispatch);
+  const layMin = lim && lim.lay_temp_min_c != null ? N(lim.lay_temp_min_c) : null;
+  const layNum = v.temp_lay_c === "" || v.temp_lay_c == null ? null : N(v.temp_lay_c);
 
   const upd = (k, val) => setV((x) => ({ ...x, [k]: val }));
   const sent = N(dispatch.qty_cum);
@@ -210,6 +254,7 @@ export function AcceptForm({ open, dispatch, onClose, onDone }) {
       cubes_taken: v.cubes_taken === "" ? null : Number(v.cubes_taken),
       arrived_at: v.arrived_at || null, unload_start_at: v.unload_start_at || null,
       unload_end_at: v.unload_end_at || null, photo_urls: v.photo_urls,
+      temp_lay_c: bit ? numOrNull(v.temp_lay_c) : null,
     });
     setBusy(false);
     if (!r || !r.success) { setErr((r && r.message) || t("rmc.save_failed")); return; }
@@ -220,13 +265,13 @@ export function AcceptForm({ open, dispatch, onClose, onDone }) {
   return (
     <Modal open={open} onClose={onClose} width={700}
       title={t("rmc.accept_title", { no: dispatch.challan_no })}
-      sub={[dispatch.project_name, dispatch.grade, cum(sent) + " " + t("rmc.cum")].filter(Boolean).join(" · ")}
+      sub={[dispatch.project_name, dispatch.grade, cum(sent) + " " + unit].filter(Boolean).join(" · ")}
       footer={<>
         <Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
         <Btn c={T.grn} onClick={save} disabled={busy || over || needsReason}>{busy ? t("rmc.saving") : t("rmc.accept_btn")}</Btn>
       </>}>
       <Grid>
-        <Field label={t("rmc.accepted_cum")} hint={t("rmc.accepted_hint", { sent: cum(sent) })}>
+        <Field label={t("rmc.accepted_in", { unit })} hint={t("rmc.accepted_hint", { sent: cum(sent), unit })}>
           <input style={inp} type="number" step="0.01" value={v.accepted_cum} onChange={(e) => upd("accepted_cum", e.target.value)} />
         </Field>
         <Field label={t("rmc.returned_cum")}>
@@ -238,17 +283,23 @@ export function AcceptForm({ open, dispatch, onClose, onDone }) {
           <Field label={t("rmc.reject_reason")}>
             <select style={inp} value={v.reject_reason} onChange={(e) => upd("reject_reason", e.target.value)}>
               <option value="">{t("rmc.pick_reason")}</option>
-              {REJECT_REASONS.map((r) => <option key={r} value={r}>{rejectReasonLabel(r)}</option>)}
+              {(bit ? REJECT_REASONS_BIT : REJECT_REASONS).map((r) => <option key={r} value={r}>{rejectReasonLabel(r)}</option>)}
             </select>
           </Field>
           <Field label={t("rmc.reject_note")}>
             <input style={inp} value={v.reject_note} onChange={(e) => upd("reject_note", e.target.value)} />
           </Field>
         </>)}
-        <Field label={t("rmc.slump_mm")}>
-          <input style={inp} type="number" value={v.slump_mm} onChange={(e) => upd("slump_mm", e.target.value)} placeholder="110" />
-        </Field>
-        <Field label={t("rmc.cubes_taken")}>
+        {bit ? (
+          <Field label={t("rmc.temp_lay")} hint={layMin != null ? t("rmc.temp_lay_hint", { min: fmtN(layMin) }) : t("rmc.temp_blank_hint")}>
+            <input style={inp} type="number" step="0.1" value={v.temp_lay_c} onChange={(e) => upd("temp_lay_c", e.target.value)} placeholder="145" />
+          </Field>
+        ) : (
+          <Field label={t("rmc.slump_mm")}>
+            <input style={inp} type="number" value={v.slump_mm} onChange={(e) => upd("slump_mm", e.target.value)} placeholder="110" />
+          </Field>
+        )}
+        <Field label={bit ? t("rmc.samples_taken") : t("rmc.cubes_taken")}>
           <input style={inp} type="number" value={v.cubes_taken} onChange={(e) => upd("cubes_taken", e.target.value)} placeholder="3" />
         </Field>
         <Field label={t("rmc.arrived_at")}>
@@ -264,6 +315,10 @@ export function AcceptForm({ open, dispatch, onClose, onDone }) {
       </Grid>
       {over && <div style={{ marginTop: 12 }}><Notice tone="warn">{t("rmc.over_sent")}</Notice></div>}
       {needsReason && <div style={{ marginTop: 12 }}><Notice tone="warn">{t("rmc.short_needs_reason")}</Notice></div>}
+      {bit && taken > 0.0001 && (layNum == null
+        ? <div style={{ marginTop: 12 }}><Notice tone="warn">{t("rmc.temp_blank_review")}</Notice></div>
+        : layMin != null && layNum < layMin
+          ? <div style={{ marginTop: 12 }}><Notice tone="warn">{t("rmc.temp_out_review")}</Notice></div> : null)}
       <ErrBox>{err}</ErrBox>
     </Modal>
   );

@@ -7,6 +7,7 @@ import { t } from "../../i18n";
 import {
   T, cum, fmtD, fmtDT, rget, rpost, dataOf, inp, inpSm, Field, Grid, KV, Btn, Panel, Row, Scroll,
   Empty, ErrBox, Modal, Drawer, Spinner, OrderPill, GradePill, IcAdd, Notice, orderStatusLabel,
+  unitOf, gradeUnit, gradesFor,
 } from "./rmcShared";
 
 const STATUSES = ["requested", "approved", "dispatching", "done", "cancelled"];
@@ -48,9 +49,12 @@ function OrderForm({ open, meta, onClose, onSaved }) {
             options={(meta.projects || []).map((p) => ({ id: p.id, name: p.name }))} placeholder={t("rmc.select_project")} />
         </Field>
         <Field label={t("rmc.grade")} hint={grades.length ? t("rmc.grade_hint", { list: grades.join(", ") }) : t("rmc.no_design_yet")}>
-          <input style={inp} value={v.grade} onChange={(e) => upd("grade", e.target.value)} placeholder="M25" />
+          <input style={inp} list="rmc-order-grades" value={v.grade} onChange={(e) => upd("grade", e.target.value)} placeholder="M25" />
+          <datalist id="rmc-order-grades">
+            {gradesFor(meta).map((g) => <option key={g.grade} value={g.grade}>{g.unit}</option>)}
+          </datalist>
         </Field>
-        <Field label={t("rmc.qty_cum")}>
+        <Field label={t("rmc.qty_in", { unit: gradeUnit(meta, v.grade) })}>
           <input style={inp} type="number" step="0.01" value={v.qty_cum} onChange={(e) => upd("qty_cum", e.target.value)} placeholder="6" />
         </Field>
         <Field label={t("rmc.pour_at")}>
@@ -119,7 +123,7 @@ function OrderDrawer({ order, meta, canApprove, onClose, onChanged }) {
 
   return (
     <Drawer open onClose={onClose} title={order.order_no} head={<OrderPill s={order.status} />}
-      sub={[order.project_name, order.grade, cum(order.qty_cum) + " " + t("rmc.cum")].filter(Boolean).join(" · ")}
+      sub={[order.project_name, order.grade, cum(order.qty_cum) + " " + unitOf(order)].filter(Boolean).join(" · ")}
       footer={order.status === "requested" && canApprove ? (
         mode ? (<>
           <Btn ghost onClick={() => { setMode(""); setErr(""); }}>{t("common.back")}</Btn>
@@ -135,8 +139,8 @@ function OrderDrawer({ order, meta, canApprove, onClose, onChanged }) {
         <KV k={t("common.project")} v={order.project_name} />
         <KV k={t("rmc.task")} v={order.task_name} />
         <KV k={t("rmc.grade")} v={order.grade} />
-        <KV k={t("rmc.qty_cum")} v={cum(order.qty_cum)} />
-        <KV k={t("rmc.supplied_cum")} v={cum(order.supplied_cum)} />
+        <KV k={t("rmc.qty_in", { unit: unitOf(order) })} v={cum(order.qty_cum)} />
+        <KV k={t("rmc.supplied_in", { unit: unitOf(order) })} v={cum(order.supplied_cum)} />
         <KV k={t("rmc.pour_at")} v={order.pour_at ? fmtDT(order.pour_at) : "—"} />
         <KV k={t("rmc.plant")} v={order.plant_name} />
         <KV k={t("rmc.pump")} v={order.pump_needed ? t("rmc.pump_yes") : t("rmc.pump_no")} />
@@ -236,7 +240,7 @@ function RmcOrders({ meta, canCreate, canApprove, refreshKey, onRefresh, openId,
                 <span>{t("rmc.order_no")}</span>
                 <span>{t("common.project")}</span>
                 <span>{t("rmc.grade")}</span>
-                <span style={{ textAlign: "right" }}>{t("rmc.cum")}</span>
+                <span style={{ textAlign: "right" }}>{t("rmc.qty_short")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.sent_short")}</span>
                 <span>{t("rmc.pour_at")}</span>
                 <span>{t("common.status")}</span>
@@ -249,7 +253,7 @@ function RmcOrders({ meta, canCreate, canApprove, refreshKey, onRefresh, openId,
                     {o.element ? <div style={{ fontSize: 10.5, color: T.t4 }}>{o.element}</div> : null}
                   </span>
                   <span><GradePill g={o.grade} /></span>
-                  <span style={{ textAlign: "right", fontWeight: 700 }}>{cum(o.qty_cum)}</span>
+                  <span style={{ textAlign: "right", fontWeight: 700 }}>{cum(o.qty_cum)} <span style={{ fontSize: 10, color: T.t4, fontWeight: 600 }}>{unitOf(o)}</span></span>
                   <span style={{ textAlign: "right", color: T.t3 }}>{cum(o.supplied_cum)}</span>
                   <span style={{ color: T.t3 }}>{o.pour_at ? fmtD(o.pour_at) : "—"}</span>
                   <span><OrderPill s={o.status} /></span>

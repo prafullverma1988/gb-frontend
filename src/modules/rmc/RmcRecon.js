@@ -10,6 +10,7 @@ import { t } from "../../i18n";
 import {
   T, N, cum, fmtN, fmtD, rupee, rget, dataOf, inpSm, Field, Panel, Row, Scroll, Empty,
   Spinner, KV, Notice, Pill, diffColor, todayStr, monthStartStr,
+  plantUnit,
 } from "./rmcShared";
 
 // Teeno report ek hi tarah se chuni jaati hain: plant + daur.
@@ -69,7 +70,7 @@ export function ReconReport({ meta }) {
           : !data ? <Panel><Empty>{msg || t("rmc.no_rows")}</Empty></Panel> : (<>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12, marginBottom: 14, padding: 14, background: T.surface, border: `1.5px solid ${T.b1}`, borderRadius: 12 }}>
               <KV k={t("rmc.plant")} v={data.plant && data.plant.name} />
-              <KV k={t("rmc.produced_cum")} v={cum(data.produced_cum)} />
+              <KV k={t("rmc.produced_in", { unit: plantUnit(meta, data.plant) })} v={cum(data.produced_cum)} />
               <KV k={t("rmc.last_count")} v={data.last_check ? fmtD(data.last_check.counted_at) : t("rmc.not_counted")} />
               <KV k={t("rmc.total_diff")} v={<span style={{ color: diffColor(data.total_diff_amount) }}>{rupee(data.total_diff_amount)}</span>} />
             </div>
@@ -185,6 +186,7 @@ export function CostPerCumReport({ meta }) {
   const [range, setRange] = useState({ from: monthStartStr(), to: todayStr() });
   const { data, loading, msg } = usePlantReport("/reports/cost-per-cum", plantId, range);
   const amt = (x) => t("rmc.of_total", { amount: rupee(x) });
+  const unit = (data && data.unit) || plantUnit(meta, (meta.plants || []).find((p) => String(p.id) === String(plantId)));
 
   return (
     <div>
@@ -196,17 +198,17 @@ export function CostPerCumReport({ meta }) {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12, marginBottom: 14 }}>
                 <CostCard label={t("rmc.material")} per={data.material.per_cum} sub={amt(data.material.amount)} />
                 <CostCard label={t("rmc.diesel")} per={data.diesel.per_cum}
-                  sub={t("rmc.litre_per_cum", { n: fmtN(data.diesel.litre_per_cum) })} />
+                  sub={t("rmc.litre_per_cum", { n: fmtN(data.diesel.litre_per_cum), unit })} />
                 <CostCard label={t("rmc.vendor_concrete")} per={data.vendor_concrete.per_cum} sub={amt(data.vendor_concrete.amount)} />
                 <CostCard label={t("rmc.transport")} per={data.transport.per_cum} sub={amt(data.transport.amount)} />
                 <CostCard label={t("rmc.plant_rent")} per={data.rent.per_cum} sub={amt(data.rent.amount)} />
               </div>
-              <Panel title={t("rmc.rep_cost_cum")}>
+              <Panel title={t("rmc.cost_per_x", { unit })}>
                 <div style={{ padding: 16, display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 28, fontWeight: 800, color: T.ind }}>{rupee(data.total_per_cum)}</span>
-                  <span style={{ fontSize: 12.5, color: T.t3 }}>{t("rmc.per_cum")}</span>
+                  <span style={{ fontSize: 12.5, color: T.t3 }}>{t("rmc.per_x", { unit })}</span>
                   <span style={{ flex: 1 }} />
-                  <span style={{ fontSize: 12.5, color: T.t3 }}>{t("rmc.made_cum", { cum: cum(data.cum) })}</span>
+                  <span style={{ fontSize: 12.5, color: T.t3 }}>{t("rmc.made_cum", { cum: cum(data.cum), unit })}</span>
                 </div>
                 <div style={{ padding: "0 16px 14px", fontSize: 11, color: T.t4, lineHeight: 1.55 }}>{t("rmc.cost_note")}</div>
               </Panel>

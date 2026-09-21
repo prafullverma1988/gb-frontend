@@ -7,7 +7,7 @@ import {
   T, N, cum, fmtD, fmtDT, rupee, fmtN, rget, rpost, dataOf, inp, inpSm, Field, Grid, KV, Btn, Panel,
   Row, Scroll, Empty, ErrBox, Notice, Drawer, Spinner, DispatchPill, GradePill, IcAdd, IcTruck,
   contractById, showsMaterial, showsTransport, dispatchStatusLabel, rejectReasonLabel, sideLabel,
-  supplyLabel, transportModeLabel,
+  supplyLabel, transportModeLabel, unitOf, isBitumen, TempFlags, tempTokens, KindPill,
 } from "./rmcShared";
 import { ChallanForm, AcceptForm } from "./RmcChallanForms";
 
@@ -35,6 +35,21 @@ function ChallanDrawer({ id, meta, canCreate, canDelete, onClose, onChanged, onA
   const matShown = d ? showsMaterial(contract) : false;
   const transportShown = d ? showsTransport(contract) : false;
   const ownLines = ((d && d.materials) || []).filter((m) => m.supplied_by === "own");
+  const bit = isBitumen(d);
+  const unit = unitOf(d);
+  const [note, setNote] = useState("");
+  const [rvBusy, setRvBusy] = useState(false);
+  const [rvErr, setRvErr] = useState("");
+  // Temperature ki gadbad PM/Admin note likh kar band karte hain.
+  const clearTemp = async () => {
+    if (!note.trim()) { setRvErr(t("rmc.review_note_needed")); return; }
+    setRvErr(""); setRvBusy(true);
+    const r = await rpost(`/dispatches/${d.id}/temp-review`, { note: note.trim() });
+    setRvBusy(false);
+    if (!r || !r.success) { setRvErr((r && r.message) || t("rmc.save_failed")); return; }
+    toast.success(r.message || t("rmc.done"));
+    setNote(""); load(); onChanged();
+  };
 
   const doCancel = async () => {
     if (!reason.trim()) { setErr(t("rmc.reason_needed")); return; }
@@ -62,32 +77,67 @@ function ChallanDrawer({ id, meta, canCreate, canDelete, onClose, onChanged, onA
       ) : null}>
       {loading ? <Spinner label={t("common.loading")} />
         : !d ? <Empty>{t("rmc.challan_not_found")}</Empty> : (<>
+          {bit && <div style={{ marginBottom: 10 }}><KindPill k="bitumen" /></div>}
           <Grid cols={3} style={{ marginBottom: 14 }}>
             <KV k={t("common.project")} v={d.project_name} />
             <KV k={t("rmc.plant")} v={d.plant_name} />
             <KV k={t("rmc.order")} v={d.order_no} />
             <KV k={t("rmc.grade")} v={d.grade} />
-            <KV k={t("rmc.qty_cum")} v={cum(d.qty_cum)} />
-            <KV k={t("rmc.accepted_cum")} v={d.accepted_cum == null ? "—" : cum(d.accepted_cum)} />
-            <KV k={t("rmc.returned_cum")} v={cum(d.rejected_cum)} />
+            <KV k={t("rmc.qty_in", { unit })} v={cum(d.qty_cum)} />
+            <KV k={t("rmc.accepted_in", { unit })} v={d.accepted_cum == null ? "—" : cum(d.accepted_cum)} />
+            <KV k={t("rmc.returned_in", { unit })} v={cum(d.rejected_cum)} />
             <KV k={t("rmc.entered_side")} v={sideLabel(d.entered_side)} />
             <KV k={t("rmc.vendor_challan_no")} v={d.vendor_challan_no} />
-            <KV k={t("rmc.tm")} v={d.vehicle_no} />
+            <KV k={bit ? t("rmc.vehicle_tipper") : t("rmc.tm")} v={d.vehicle_no} />
             <KV k={t("rmc.driver")} v={d.driver_name} />
             <KV k={t("rmc.lead_km")} v={d.lead_km_snap == null ? "—" : fmtN(d.lead_km_snap) + " km"} />
             <KV k={t("rmc.batch_at")} v={fmtDT(d.batch_at)} />
             <KV k={t("rmc.arrived_at")} v={fmtDT(d.arrived_at)} />
             <KV k={t("rmc.unload_end")} v={fmtDT(d.unload_end_at)} />
-            <KV k={t("rmc.slump_mm")} v={d.slump_mm} />
-            <KV k={t("rmc.cubes_taken")} v={d.cubes_taken} />
+            {bit ? <KV k={t("rmc.temp_dispatch")} v={d.temp_dispatch_c == null ? "—" : fmtN(d.temp_dispatch_c) + " °C"} />
+              : <KV k={t("rmc.slump_mm")} v={d.slump_mm} />}
+            {bit && <KV k={t("rmc.temp_lay")} v={d.temp_lay_c == null ? "—" : fmtN(d.temp_lay_c) + " °C"} />}
+            <KV k={bit ? t("rmc.samples_taken") : t("rmc.cubes_taken")} v={d.cubes_taken} />
             <KV k={t("common.status")} v={dispatchStatusLabel(d.status)} />
           </Grid>
 
           {d.reject_reason && (
-            <Notice tone="warn">{t("rmc.returned_line", { cum: cum(d.rejected_cum), reason: rejectReasonLabel(d.reject_reason) })}
+            <Notice tone="warn">{t("rmc.returned_line", { cum: cum(d.rejected_cum), unit, reason: rejectReasonLabel(d.reject_reason) })}
               {d.reject_note ? " — " + d.reject_note : ""}</Notice>
           )}
           {d.remark && <div style={{ fontSize: 12, color: T.t3, marginBottom: 12 }}>{d.remark}</div>}
+
+          {/* Bitumen: temperature ki gadbad (na bhara bhi gadbad hai). Challan
+              nahi rukta — PM/Admin note ke saath band karte hain. */}
+          {bit && (tempTokens(d).length > 0 || d.temp_review) && (
+            <Panel title={t("rmc.temp_check")} style={{ marginBottom: 14 }}>
+              <div style={{ padding: 14 }}>
+                <div style={{ marginBottom: 8 }}><TempFlags d={d} /></div>
+                <div style={{ fontSize: 11.5, color: T.t3, marginBottom: 8 }}>
+                  {t("rmc.temp_limits_line", {
+                    min: d.temp_min_c == null ? "—" : fmtN(d.temp_min_c),
+                    max: d.temp_max_c == null ? "—" : fmtN(d.temp_max_c),
+                    lay: d.lay_temp_min_c == null ? "—" : fmtN(d.lay_temp_min_c),
+                  })}
+                </div>
+                {d.temp_review === "cleared" && (
+                  <Notice>{t("rmc.review_done_by", { by: d.temp_reviewed_by_name || "—", at: fmtDT(d.temp_reviewed_at) })}
+                    {d.temp_review_note ? " — " + d.temp_review_note : ""}</Notice>
+                )}
+                {d.temp_review === "pending" && (meta.can_review ? (
+                  <>
+                    <Field label={t("rmc.review_note")}>
+                      <input style={inp} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("rmc.review_note_ph_temp")} />
+                    </Field>
+                    <div style={{ marginTop: 10 }}>
+                      <Btn c={T.grn} onClick={clearTemp} disabled={rvBusy || !note.trim()}>{rvBusy ? t("rmc.saving") : t("rmc.review_clear_btn")}</Btn>
+                    </div>
+                    <ErrBox>{rvErr}</ErrBox>
+                  </>
+                ) : <Notice tone="warn">{t("rmc.review_waiting_pm")}</Notice>)}
+              </div>
+            </Panel>
+          )}
 
           {/* Paisa. Vendor ka rate/transport sirf jama hota hai — bill Phase 2. */}
           <Panel title={t("rmc.money")} style={{ marginBottom: 14 }}>
@@ -159,7 +209,7 @@ function ChallanDrawer({ id, meta, canCreate, canDelete, onClose, onChanged, onA
 
 // ── Tab ───────────────────────────────────────────────────────────
 function RmcChallans({ meta, canCreate, canDelete, refreshKey, onRefresh, openId, onOpenDone, onGoSetup }) {
-  const [fl, setFl] = useState({ project_id: "", plant_id: "", status: "", from: "", to: "" });
+  const [fl, setFl] = useState({ project_id: "", plant_id: "", status: "", from: "", to: "", temp_review: "" });
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [detailId, setDetailId] = useState(null);
@@ -209,6 +259,15 @@ function RmcChallans({ meta, canCreate, canDelete, refreshKey, onRefresh, openId
         <Field label={t("common.to")}>
           <input type="date" style={{ ...inpSm, width: 140 }} value={fl.to} onChange={(e) => setFl({ ...fl, to: e.target.value })} />
         </Field>
+        {(meta.plants || []).some(isBitumen) && (
+          <Field label={t("rmc.temp_check")}>
+            <select style={{ ...inpSm, width: 150 }} value={fl.temp_review} onChange={(e) => setFl({ ...fl, temp_review: e.target.value })}>
+              <option value="">{t("common.all")}</option>
+              <option value="pending">{t("rmc.rv_pending")}</option>
+              <option value="cleared">{t("rmc.rv_cleared")}</option>
+            </select>
+          </Field>
+        )}
         <span style={{ flex: 1 }} />
         {canCreate && <Btn ghost icon={IcTruck} onClick={() => openForm("site")}>{t("rmc.enter_vendor_challan")}</Btn>}
         {canCreate && <Btn icon={IcAdd} onClick={() => openForm("plant")}>{t("rmc.make_challan")}</Btn>}
@@ -223,7 +282,7 @@ function RmcChallans({ meta, canCreate, canDelete, refreshKey, onRefresh, openId
                 <span>{t("common.project")}</span>
                 <span>{t("rmc.plant")}</span>
                 <span>{t("rmc.grade")}</span>
-                <span style={{ textAlign: "right" }}>{t("rmc.cum")}</span>
+                <span style={{ textAlign: "right" }}>{t("rmc.qty_short")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.taken_short")}</span>
                 <span>{t("rmc.dispatched_at")}</span>
                 <span>{t("common.status")}</span>
@@ -237,12 +296,15 @@ function RmcChallans({ meta, canCreate, canDelete, refreshKey, onRefresh, openId
                   <span style={{ color: T.t1 }}>{x.project_name || "—"}</span>
                   <span style={{ color: T.t2 }}>{x.plant_name || "—"}</span>
                   <span><GradePill g={x.grade} /></span>
-                  <span style={{ textAlign: "right", fontWeight: 700 }}>{cum(x.qty_cum)}</span>
+                  <span style={{ textAlign: "right", fontWeight: 700 }}>{cum(x.qty_cum)} <span style={{ fontSize: 10, color: T.t4, fontWeight: 600 }}>{unitOf(x)}</span></span>
                   <span style={{ textAlign: "right", color: N(x.rejected_cum) > 0 ? T.red : T.t3 }}>
                     {x.accepted_cum == null ? "—" : cum(x.accepted_cum)}
                   </span>
                   <span style={{ color: T.t3 }}>{x.dispatch_at ? fmtD(x.dispatch_at) : "—"}</span>
-                  <span><DispatchPill s={x.status} /></span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
+                    <DispatchPill s={x.status} />
+                    {x.temp_review === "pending" && <span style={{ fontSize: 9.5, fontWeight: 700, color: T.amb }}>{t("rmc.temp_needs_pm")}</span>}
+                  </span>
                 </Row>
               ))}
             </Scroll>

@@ -12,6 +12,7 @@ import { t } from "../../i18n";
 import {
   T, N, cum, fmtN, fmtDT, rget, dataOf, inpSm, Field, Panel, Row, Scroll, Empty, Spinner,
   Notice, Pill, StatCard, GradePill, RangeBar, IcClock, IcRoad, IcTruck, todayStr,
+  unitOf,
 } from "./rmcShared";
 
 const daysAgo = (n) => new Date(Date.now() - n * 86400000).toLocaleDateString("en-CA");
@@ -72,7 +73,7 @@ function RmcTurnaround() {
                 <span>{t("common.project")}</span>
                 <span>{t("rmc.vehicle")}</span>
                 <span>{t("rmc.grade")}</span>
-                <span style={{ textAlign: "right" }}>{t("rmc.cum")}</span>
+                <span style={{ textAlign: "right" }}>{t("rmc.qty_short")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.road_min")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.wait_min")}</span>
                 <span style={{ textAlign: "right" }}>{t("rmc.unload_min")}</span>
@@ -90,7 +91,7 @@ function RmcTurnaround() {
                   </span>
                   <span style={{ color: T.t2 }}>{r.vehicle || r.vehicle_no || "—"}</span>
                   <span><GradePill g={r.grade} /></span>
-                  <span style={{ textAlign: "right" }}>{cum(r.qty_cum)}</span>
+                  <span style={{ textAlign: "right" }}>{cum(r.qty_cum)} <span style={{ fontSize: 10, color: T.t4, fontWeight: 600 }}>{unitOf(r)}</span></span>
                   <Mins v={r.road_min} />
                   <Mins v={r.wait_min} warn={N(r.wait_min) > 30} />
                   <Mins v={r.unload_min} />

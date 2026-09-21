@@ -8,13 +8,18 @@
 // Ek umar ka ek hi result rehta hai — dobara bharo to purana update ho jaata
 // hai (server par ON DUPLICATE KEY), nayi line nahi banti.
 //
-// POST /rmc/cube-samples/:id/result
+// Marshall (bitumen) ka form alag hai: char aankde, seema design se (server
+// row par limits bhejta hai). Seema se bahar ya bhara nahi → PM/Admin ke paas;
+// wo yahin note ke saath pass/fail karte hain.
+//
+// POST /rmc/cube-samples/:id/result · POST /rmc/cube-samples/:id/review
 import { useState } from "react";
 import { useToast } from "../../components/Toast";
 import { t } from "../../i18n";
 import {
   T, N, fmtD, fmtN, rpost, dataOf, inp, Field, Grid, KV, Btn, Panel, Row, Scroll, Empty,
-  ErrBox, Notice, Drawer, Pill, GradePill, CubePill, IcChk, todayStr,
+  ErrBox, Notice, Drawer, Pill, GradePill, CubePill, IcChk, todayStr, fmtDT,
+  MARSHALL, limitText, parseMsFlags, ReviewPill,
 } from "./rmcShared";
 
 // Grade se fck — "M30" → 30. Custom naam ho to null, tab pass/fail haath se.
@@ -116,6 +121,160 @@ function ResultForm({ sample, onDone }) {
   );
 }
 
+// ── Marshall ka form ─────────────────────────────────────────────
+// Screen par bhi wahi jaanch dikhti hai jo server karega — par faisla server
+// ka hai. Khaali chhodna bach nikalna nahi: wo bhi approval me jaata hai.
+const inRange = (lim, f, val) => {
+  if (val === "" || val == null) return null;
+  const n = N(val);
+  const lo = lim && lim[f.min] != null ? N(lim[f.min]) : null;
+  const hi = f.max && lim && lim[f.max] != null ? N(lim[f.max]) : null;
+  return !((lo != null && n < lo) || (hi != null && n > hi));
+};
+function MarshallForm({ sample, onDone }) {
+  const toast = useToast();
+  const last = (sample.results || [])[0] || null;
+  const init = () => {
+    const o = { test_date: todayStr(), cubes_tested: String(N(sample.cubes_count) || 3), note: "" };
+    MARSHALL.forEach((f) => { o[f.key] = last && last[f.key] != null ? String(last[f.key]) : ""; });
+    return o;
+  };
+  const [v, setV] = useState(init);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const lim = sample.limits || {};
+  const checks = MARSHALL.map((f) => inRange(lim, f, v[f.key]));
+  const anyValue = MARSHALL.some((f) => v[f.key] !== "");
+  const willReview = checks.some((c) => c !== true);
+
+  const save = async () => {
+    setErr(""); setBusy(true);
+    const body = { test_date: v.test_date, cubes_tested: v.cubes_tested, note: v.note || null };
+    MARSHALL.forEach((f) => { body[f.key] = v[f.key] === "" ? null : Number(v[f.key]); });
+    const r = await rpost(`/cube-samples/${sample.id}/result`, body);
+    setBusy(false);
+    if (!r || !r.success) { setErr((r && r.message) || t("rmc.save_failed")); return; }
+    const d = dataOf(r, {}) || {};
+    if (d.needs_review) toast.warning(r.message || t("rmc.done"));
+    else toast.success(r.message || t("rmc.done"));
+    onDone();
+  };
+
+  return (
+    <Panel title={last ? t("rmc.marshall_fix") : t("rmc.marshall_add")} style={{ marginBottom: 14 }}>
+      <div style={{ padding: 14 }}>
+        <Grid cols={2} style={{ marginBottom: 12 }}>
+          {MARSHALL.map((f, i) => (
+            <Field key={f.key} label={`${f.label()} (${f.unit})`} hint={t("rmc.limit_is", { s: limitText(lim, f) })}>
+              <input type="number" step="0.01" style={{ ...inp, borderColor: checks[i] === false ? T.red : checks[i] === true ? T.grn : undefined }}
+                value={v[f.key]} onChange={(e) => setV((x) => ({ ...x, [f.key]: e.target.value }))} />
+            </Field>
+          ))}
+          <Field label={t("rmc.test_date")}>
+            <input type="date" style={inp} value={v.test_date} onChange={(e) => setV((x) => ({ ...x, test_date: e.target.value }))} />
+          </Field>
+          <Field label={t("rmc.specimens_tested")}>
+            <input type="number" min="1" style={inp} value={v.cubes_tested} onChange={(e) => setV((x) => ({ ...x, cubes_tested: e.target.value }))} />
+          </Field>
+          <Field label={t("rmc.note")} span={2}>
+            <input style={inp} value={v.note} onChange={(e) => setV((x) => ({ ...x, note: e.target.value }))} />
+          </Field>
+        </Grid>
+        {anyValue && (willReview
+          ? <Notice tone="warn">{t("rmc.marshall_will_review")}</Notice>
+          : <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 10, color: T.grn }}>{t("rmc.marshall_looks_pass")}</div>)}
+        <Btn icon={IcChk} onClick={save} disabled={busy || !anyValue}>{busy ? t("rmc.saving") : t("rmc.save_result")}</Btn>
+        <ErrBox>{err}</ErrBox>
+      </div>
+    </Panel>
+  );
+}
+
+// ── PM/Admin ka faisla ───────────────────────────────────────────
+function ReviewPanel({ sample, meta, onDone }) {
+  const toast = useToast();
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  const decide = async (decision) => {
+    if (!note.trim()) { setErr(t("rmc.review_note_needed")); return; }
+    setErr(""); setBusy(decision);
+    const r = await rpost(`/cube-samples/${sample.id}/review`, { decision, note: note.trim() });
+    setBusy("");
+    if (!r || !r.success) { setErr((r && r.message) || t("rmc.save_failed")); return; }
+    if (decision === "fail") toast.warning(r.message || t("rmc.done")); else toast.success(r.message || t("rmc.done"));
+    setNote(""); onDone();
+  };
+  if (sample.review_status === "passed" || sample.review_status === "failed") {
+    return (
+      <Notice tone={sample.review_status === "failed" ? "warn" : undefined}>
+        <b>{sample.review_status === "passed" ? t("rmc.rv_passed") : t("rmc.rv_failed")}</b>{" · "}
+        {t("rmc.review_done_by", { by: sample.reviewed_by_name || "—", at: fmtDT(sample.reviewed_at) })}
+        {sample.review_note ? " — " + sample.review_note : ""}
+      </Notice>
+    );
+  }
+  if (sample.review_status !== "pending") return null;
+  if (!(meta && meta.can_review)) return <Notice tone="warn">{t("rmc.review_waiting_pm")}</Notice>;
+  return (
+    <Panel title={t("rmc.review_title")} style={{ marginBottom: 14 }}>
+      <div style={{ padding: 14 }}>
+        <Notice tone="warn">{t("rmc.review_sample_note")}</Notice>
+        <Field label={t("rmc.review_note")}>
+          <input style={inp} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("rmc.review_note_ph_sample")} />
+        </Field>
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <Btn c={T.grn} onClick={() => decide("pass")} disabled={!!busy || !note.trim()}>{busy === "pass" ? t("rmc.saving") : t("rmc.review_pass_btn")}</Btn>
+          <Btn c={T.red} onClick={() => decide("fail")} disabled={!!busy || !note.trim()}>{busy === "fail" ? t("rmc.saving") : t("rmc.review_fail_btn")}</Btn>
+        </div>
+        <ErrBox>{err}</ErrBox>
+      </div>
+    </Panel>
+  );
+}
+
+function MarshallBody({ sample, canCreate, meta, onChanged }) {
+  const res = (sample.results || [])[0] || null;
+  const f = parseMsFlags(res && res.flags);
+  const lim = sample.limits || (res && res.limits_json ? (() => { try { return JSON.parse(res.limits_json); } catch (_) { return {}; } })() : {});
+  return (<>
+    <ReviewPanel sample={sample} meta={meta} onDone={onChanged} />
+    {sample.due_marshall && <Notice tone="warn">{t("rmc.marshall_due_note")}</Notice>}
+    {res && (
+      <Panel title={t("rmc.marshall_result")} style={{ marginBottom: 14 }}>
+        <Scroll minWidth={520}>
+          <Row cols="1fr 120px 140px 130px" head>
+            <span>{t("rmc.ms_param")}</span>
+            <span style={{ textAlign: "right" }}>{t("rmc.ms_value")}</span>
+            <span style={{ textAlign: "right" }}>{t("rmc.ms_limit")}</span>
+            <span>{t("common.status")}</span>
+          </Row>
+          {MARSHALL.map((m) => (
+            <Row key={m.key} cols="1fr 120px 140px 130px">
+              <span style={{ color: T.t1, fontWeight: 600 }}>{m.label()}</span>
+              <span style={{ textAlign: "right", fontWeight: 700, color: f.out.has(m.key) ? T.red : T.t1 }}>
+                {res[m.key] == null ? "—" : fmtN(res[m.key]) + " " + m.unit}
+              </span>
+              <span style={{ textAlign: "right", color: T.t3 }}>{limitText(lim, m)} {m.unit}</span>
+              <span>
+                {f.out.has(m.key) ? <Pill label={t("rmc.ms_out")} c={T.red} bg={T.redL} />
+                  : f.missing.has(m.key) ? <Pill label={t("rmc.ms_missing")} c={T.slt} bg={T.sltL} />
+                    : <Pill label={t("rmc.ms_ok")} c={T.grn} bg={T.grnL} />}
+              </span>
+            </Row>
+          ))}
+        </Scroll>
+        <div style={{ padding: "8px 14px", fontSize: 11, color: T.t4 }}>
+          {fmtD(res.test_date)} · {t("rmc.specimens_n", { n: fmtN(res.cubes_tested) })}{res.note ? " · " + res.note : ""}
+        </div>
+      </Panel>
+    )}
+    {canCreate && sample.review_status !== "passed" && sample.review_status !== "failed" && (
+      <MarshallForm key={res ? res.id + ":" + res.flags : "new"} sample={sample} onDone={onChanged} />
+    )}
+  </>);
+}
+
 // ── Sample ka drawer ─────────────────────────────────────────────
 const RC = "90px 110px 110px 130px 1fr 90px";
 
@@ -128,8 +287,32 @@ const ResultPill = ({ r }) => {
   return <Pill label={hard ? t("rmc.fail") : t("rmc.low")} c={hard ? T.red : T.amb} bg={hard ? T.redL : T.ambL} />;
 };
 
-function SampleDrawer({ sample, canCreate, onClose, onChanged }) {
+function SampleDrawer({ sample, canCreate, meta, onClose, onChanged }) {
   const results = (sample.results || []).slice().sort((a, b) => N(a.age_days) - N(b.age_days));
+  if (sample.test_kind === "marshall") {
+    return (
+      <Drawer open onClose={onClose} width={780}
+        title={sample.sample_no || t("rmc.marshall_sample")}
+        head={<>
+          <CubePill s={sample.status} />
+          {sample.failed ? <Pill label={t("rmc.fail")} c={T.red} bg={T.redL} /> : null}
+          <ReviewPill s={sample.review_status} />
+        </>}
+        sub={[sample.project_name, sample.grade, sample.challan_no].filter(Boolean).join(" · ")}>
+        <Grid cols={4} style={{ marginBottom: 14 }}>
+          <KV k={t("common.project")} v={sample.project_name} />
+          <KV k={t("rmc.plant")} v={sample.plant_name} />
+          <KV k={t("rmc.challan")} v={sample.challan_no} />
+          <KV k={t("rmc.grade")} v={<GradePill g={sample.grade} />} />
+          <KV k={t("rmc.sample_date")} v={fmtD(sample.cast_date)} />
+          <KV k={t("rmc.specimens_count")} v={fmtN(sample.cubes_count)} />
+          <KV k={t("rmc.element")} v={sample.element} />
+          <KV k={t("rmc.note")} v={sample.note} />
+        </Grid>
+        <MarshallBody sample={sample} canCreate={canCreate} meta={meta} onChanged={onChanged} />
+      </Drawer>
+    );
+  }
   return (
     <Drawer open onClose={onClose} width={840}
       title={sample.sample_no || t("rmc.cube_sample")}
