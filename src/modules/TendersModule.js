@@ -2681,20 +2681,24 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
 // ════════════════════════════════════════════════════════════════════
 // REVERT IMPORT — type REVERT to confirm
 // ════════════════════════════════════════════════════════════════════
-function RevertImportModal({tenderId, imp, onClose, onDone}) {
+function RevertImportModal({tenderId, imp, boqFinal, onClose, onDone}) {
   const toast = useToast();
   const [txt, setTxt]   = useState("");
+  const [reason, setReason] = useState("");   // final BOQ par server wajah maangta hai
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState("");
-  const match = txt.trim().toUpperCase() === "REVERT";
+  const needReason = boqFinal && reason.trim().length < 10;
+  const match = txt.trim().toUpperCase() === "REVERT" && !needReason;
 
   const submit = async () => {
+    if (needReason) return setErr(t("tenders.revert_reason_chahiye"));
     if (!match) return setErr(t("tenders.confirm_karne_ke_liye_revert_likho"));
     setErr(""); setBusy(true);
-    const res = await api.post(`/tenders/${tenderId}/boq/imports/${imp.id}/revert`);
+    const res = await api.post(`/tenders/${tenderId}/boq/imports/${imp.id}/revert`,
+      boqFinal ? { reason: reason.trim() } : {});
     setBusy(false);
-    if (!res?.success) { setErr(res?.message || "Revert nahi hua"); return; }
-    toast.success(`Import revert ho gaya — ${res.items_hidden} items hate`);
+    if (!res?.success) { setErr(res?.message || t("tenders.revert_nahi_hua")); return; }
+    toast.success(t("tenders.revert_ho_gaya_n_hate", { n: res.items_hidden }));
     onDone && onDone();
     onClose();
   };
@@ -2717,6 +2721,19 @@ function RevertImportModal({tenderId, imp, onClose, onDone}) {
          {t("tenders.is_import_ki")} <b>{imp.active_items ?? imp.row_count} items</b> {t("tenders.boq_se_hat_jayengi_haath_se")} <b>{t("tenders.koi_asar_nahi")}</b> {t("tenders.padega")}
         </div>
       </div>
+      {boqFinal && (
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:12, color:T.t2, fontWeight:600, marginBottom:6}}>{t("tenders.revert_reason_label")}</div>
+          <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2}
+            placeholder={t("tenders.revert_reason_ph")}
+            style={{width:"100%", padding:"8px 11px", borderRadius:7, border:`1.5px solid ${needReason ? T.ambM || T.b1 : T.b1}`,
+              fontSize:12.5, color:T.t1, background:T.surface, outline:"none", resize:"vertical",
+              boxSizing:"border-box", fontFamily:"inherit"}}/>
+          <div style={{fontSize:11, color:needReason ? T.amb : T.grn, marginTop:3}}>
+            {t("tenders.revert_reason_count", { n: reason.trim().length })}
+          </div>
+        </div>
+      )}
       <div style={{fontSize:12, color:T.red, marginBottom:8}}>
        {t("projects.confirm_karne_ke_liye")} <strong>REVERT</strong> {t("projects.type_karo")}
       </div>
@@ -3304,7 +3321,8 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, reloadTen
           {changeLog.map(l=>{
             const act = {edit:{l:t("common.edit_2"), c:T.amb, bg:T.ambL}, delete:{l:t("activity_log.deleted"), c:T.red, bg:T.redL},
                          add:{l:t("tenders.added"), c:T.grn, bg:T.grnL}, add_extra:{l:t("tenders.extra_added"), c:T.amb, bg:T.ambL},
-                         add_substituted:{l:t("tenders.substituted"), c:T.blu, bg:T.bluL}}[l.action]
+                         add_substituted:{l:t("tenders.substituted"), c:T.blu, bg:T.bluL},
+                         import_revert:{l:t("tenders.import_revert"), c:T.red, bg:T.redL}}[l.action]
                      || {l:l.action, c:T.t3, bg:T.sltL};
             let ch = null;
             try { ch = l.changes_json ? JSON.parse(l.changes_json) : null; } catch (_) {}
@@ -3541,7 +3559,7 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, reloadTen
         onCancel={()=>setDelOf(null)}
         onConfirm={(reason)=>delItemWithReason(delOf, reason)}/>
     )}
-    {revertOf && <RevertImportModal tenderId={tenderId} imp={revertOf}
+    {revertOf && <RevertImportModal tenderId={tenderId} imp={revertOf} boqFinal={boqFinal}
       onClose={()=>setRevertOf(null)} onDone={reload}/>}
   </>);
 }
