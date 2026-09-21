@@ -1089,6 +1089,23 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // Site Expense (Petty Cash) — no fixed party master, recipient is free-text.
   // Bill heads to Site Expense regardless of who received the cash.
   const isSiteExpense=type==="Petty Cash Expense";
+  // Company kharcha kis city ka. Project ka paisa apne aap city me aata hai
+  // (project → city); poochna sirf tab jab project nahi aur entry asli
+  // bill/kharcha ho. Payment/receipt/transfer par nahi — unki city unke bill
+  // se nikalti hai. Default server deta hai (ek hi city / pichhli baar wali /
+  // user ke project ki city); kuch pakka na ho to khud chunna padta hai.
+  const [cityList,setCityList]=useState([]);
+  const [cityChoice,setCityChoice]=useState("");    // "" = chuna nahi · "central" · city id
+  const [cityErr,setCityErr]=useState(false);
+  useEffect(()=>{
+    let alive=true;
+    api.get("/library/cities/my-default").then(r=>{
+      if(!alive||!r?.success) return;
+      setCityList(r.data?.cities||[]);
+      if(r.data?.default_city_id) setCityChoice(String(r.data.default_city_id));
+    }).catch(()=>{});
+    return ()=>{alive=false;};
+  },[]);
 
   // Paid To list (or Received From for inflows):
   //  - Payment Received → Clients + Staff (admin can receive money back
@@ -1157,6 +1174,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     || prefillGRN?.project
     || (isMaterial || isSubcon ? (PROJECTS_LIST[0] || "") : "");
   const [project,setProject]=useState(_projectDefault);
+  // Company ki koi city hi na ho to poochne ko kuch nahi — Central.
+  const showCity=!project&&(isMaterial||isSubcon||isSiteExpense)&&cityList.length>0;
   // GRN-prefilled fields are locked (vendor / project / delivery date / material+qty).
   // When opened from Project Detail's Party tab, lockParty + lockProject
   // pin those same fields without the GRN link — same readonly UI.
@@ -1594,6 +1613,9 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         return;
       }
     }
+    // City ya Central chunna zaroori. Apne aap "Central" maan lete to sab
+    // aalas me wahi chhod dete aur city ka hisaab phir khaali reh jaata.
+    if(showCity&&!cityChoice){ setCityErr(true); setSaveErr(t("finance.city_ya_central_zaroori")); return; }
     setSaveErr("");
     savingRef.current=true; setSavingTxn(true);    // ← lock immediately
     try{
@@ -1680,6 +1702,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         account_id:accObj?.id||null,
         account_name:account||null,
         project_name:project||null,
+        // null = Central. Project ho to city project se aati hai.
+        city_id:showCity&&cityChoice&&cityChoice!=="central"?Number(cityChoice):null,
         note:note||null,
         // Bills (material_purchase / subcon) start as 'unpaid' so they land
         // in Pending Payments per due_date until user records a settlement.
@@ -2236,6 +2260,27 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               </>
             )}
           </div>
+
+          {/* ── Company kharcha kis city ka — sirf jab project nahi chuna ──
+              Choice zaroori hai (Save par rok hai); default server bhar deta
+              hai jab pakka pata ho. Central sabse neeche, taaki aalas me pehla
+              option wahi na ban jaye. */}
+          {showCity&&(
+            <div style={{background:cityErr?"#FEF2F2":T.surface,borderRadius:8,border:`1.5px solid ${cityErr?T.red:T.b1}`,padding:"10px 14px",marginBottom:12,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap"}}>
+              <div style={{flex:"1 1 260px",minWidth:220}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("finance.kis_city_ka_expense")}</div>
+                <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>{t("finance.city_hint_no_project")}</div>
+              </div>
+              <div style={{flex:"1 1 240px",minWidth:220}}>
+                <select value={cityChoice} onChange={e=>{setCityChoice(e.target.value);setCityErr(false);}}
+                  style={{...inp(),cursor:"pointer",...(cityErr?{borderColor:T.red}:{})}}>
+                  <option value="">{t("finance.city_select_placeholder")}</option>
+                  {cityList.map(c=><option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                  <option value="central">{t("finance.central_whole_company")}</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* ════════════════════════════════════════════════════
               BANK TRANSFER — preview + amount

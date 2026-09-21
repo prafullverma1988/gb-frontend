@@ -178,6 +178,38 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState("");
   const [editItems, setEditItems] = useState([]);
+
+  // Company kharcha kis city ka — wahin dikhe, aur galat ho to wahin badle.
+  // Finance ki list ke rows chune hue field ke saath map hote hain (city_id
+  // un tak nahi pahunchta), isliye drawer seedha server se poochta hai. Project
+  // wali entry par nahi — uski city project se aati hai.
+  const [cityInfo, setCityInfo] = useState(null);     // { applicable, city_id, cities }
+  const [citySaving, setCitySaving] = useState(false);
+  const [cityMsg, setCityMsg] = useState(null);       // { ok, text }
+  const cityTxnId = txn?.id;
+  const cityTxnProject = txn?.project_name || txn?.project || "";
+  useEffect(() => {
+    setCityInfo(null); setCityMsg(null);
+    if (!cityTxnId || cityTxnProject) return;
+    let alive = true;
+    api.get("/finance/transactions/" + cityTxnId + "/city")
+      .then(r => { if (alive && r?.success) setCityInfo(r.data); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [cityTxnId, cityTxnProject]);
+  const saveCity = async (val) => {
+    setCitySaving(true); setCityMsg(null);
+    try {
+      const res = await api.patch("/finance/transactions/" + txn.id + "/city",
+        { city_id: val === "central" ? null : Number(val) });
+      if (res.success) {
+        setCityInfo(p => ({ ...p, city_id: res.data?.city_id ?? null }));
+        setCityMsg({ ok: true, text: t("finance.city_saved") });
+        if (onChanged) onChanged();
+      } else setCityMsg({ ok: false, text: res.message || t("common.something_went_wrong") });
+    } catch (e) { setCityMsg({ ok: false, text: t("common.something_went_wrong") }); }
+    setCitySaving(false);
+  };
   // Project ab free-text nahi, dropdown hai. Pehle sirf project_name jaata
   // tha aur backend use exact naam se dhoondhta tha — naam zara bhi alag
   // hua to Save chupchaap kuch nahi badalta tha (COALESCE purana id rakh
@@ -461,6 +493,18 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               <Tile label={t("common.status")}   value={txn.status || "—"} c={txn.status === "paid" ? T.grn : T.amb}/>
               <Tile label={t("common.party")}    value={txn.party_display || txn.party_name || txn.party || "—"}/>
               <Tile label={t("common.project")}  value={txn.project_name || txn.project || "—"}/>
+              {cityInfo?.applicable && cityInfo.cities?.length > 0 && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>{t("finance.city_label")}</div>
+                  <select value={cityInfo.city_id ? String(cityInfo.city_id) : "central"} disabled={citySaving}
+                    onChange={e => saveCity(e.target.value)}
+                    style={{ width: "100%", height: 34, padding: "0 10px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 13, background: "#fff", color: "#111827", outline: "none", cursor: citySaving ? "wait" : "pointer", fontFamily: "inherit" }}>
+                    {cityInfo.cities.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                    <option value="central">{t("finance.central_whole_company")}</option>
+                  </select>
+                  {cityMsg && <div style={{ fontSize: 11.5, marginTop: 4, color: cityMsg.ok ? T.grn : T.red }}>{cityMsg.text}</div>}
+                </div>
+              )}
               {hasDueDate && rawDue && <Tile label={t("transaction_detail.payment_due")} value={fmtDate(rawDue)} c={T.amb}/>}
               {txn.reference_no && <Tile label={t("transaction_detail.reference")} value={txn.reference_no}/>}
               {(txn.account_display || txn.account_name) && <Tile label={t("transaction_detail.account")} value={txn.account_display || txn.account_name}/>}
