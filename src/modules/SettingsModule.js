@@ -791,6 +791,252 @@ function CompanySettings() {
 // ═══════════════════════════════════════════════════════════════════════
 // ROLES & ACCESS — Full rewrite with modals, custom roles, project access
 // ═══════════════════════════════════════════════════════════════════════
+// ── Roles & Access → Mobile: phone par kis role ko kya dikhe ─────────────
+// Patti ke 3 button (app aur project), aur Hub/More ke kaunse tile chhupane
+// hain. Item ki list server se aati hai (utils/mobileLayout.js) — yahan
+// hardcode nahi, warna phone, server aur web teeno ki list alag ho jaati.
+//
+// Permission sabse upar: jiska View band hai wo yahan chuna hi nahi ja
+// sakta, aur phone par bhi nahi dikhta. Ye screen sirf sajati hai.
+// Jo cheez patti me nahi aati uska tile More/Hub me apne aap banta hai; admin
+// wo tile bhi chhupa de to neeche laal chetavni — "kahin nahi milega".
+const MLAY_LABEL_KEY = (surface, id) => {
+  if (surface === "more" && id === "rmc") return "settings.mlay_i_rmc_plant";
+  if (surface === "top_tabs" && id === "attendance") return "settings.mlay_i_tab_attendance";
+  if (id === "roadLevels") return "settings.mlay_i_road_levels";   // key me bada akshar nahi chalta
+  return "settings.mlay_i_" + id;
+};
+const mlayLabel = (surface, id) => {
+  const k = MLAY_LABEL_KEY(surface, id);
+  const v = t(k);
+  return v === k ? id : v;
+};
+// Patti ke item ka tile kis list me hai.
+const MLAY_TILES_OF = { app_nav: "more", project_nav: "hub" };
+const MLAY_HIDE_KEY = { more: "hide_more", hub: "hide_hub" };
+
+function MobileLayoutTab({ roleName, dbRole, perms, isAdmin, coModules }) {
+  const [data, setData] = useState(null);      // { catalog, nav_slots, layouts }
+  const [loadErr, setLoadErr] = useState(false);
+  const [draft, setDraft] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get("/settings/mobile-layout").then(r => {
+      if (r && r.success && r.data && r.data.catalog) setData(r.data);
+      else setLoadErr(true);
+    }).catch(() => setLoadErr(true));
+  }, []);
+
+  const blank = { app_nav: [], project_nav: [], hide_hub: [], hide_more: [] };
+  const saved = (data && dbRole && data.layouts && data.layouts[dbRole.id]) || null;
+  // Role badla ya data aaya — draft wahi jo server par hai.
+  useEffect(() => {
+    setDraft({ ...blank, ...(saved || {}) });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, dbRole && dbRole.id]);
+
+  if (loadErr) return <div style={{ padding: 14, color: T.red, fontSize: 12.5 }}>{t("settings.mlay_load_failed")}</div>;
+  if (!data || !draft) return <div style={{ padding: 14, color: T.textLight, fontSize: 12.5 }}>…</div>;
+
+  const cat = data.catalog;
+  const SLOTS = Number(data.nav_slots) || 3;
+
+  // Phone ka hi niyam: admin sab dekhta hai; row nahi = khula; row hai to view.
+  const permOk = (mod) => {
+    if (isAdmin || !mod) return true;
+    const row = perms ? perms[mod] : undefined;
+    if (row === undefined) return true;
+    return row.includes("view");
+  };
+  // Kyun nahi dikhega — null = dikhega.
+  const blockReason = (item) => {
+    if (item.company_module && !(coModules && coModules[item.company_module] === true)) return t("settings.mlay_company_off");
+    if (item.admin_only && !isAdmin) return t("settings.mlay_admin_only");
+    if (!permOk(item.perm)) return t("settings.mlay_perm_off");
+    return null;
+  };
+  const allowed = (item) => !blockReason(item);
+
+  // Patti: chuna hua (band wale chhod kar), kuchh na bache to apne aap.
+  const navOf = (key) => {
+    const ok = (cat[key] || []).filter(allowed);
+    const pick = draft[key] || [];
+    if (pick.length) {
+      const out = pick.map(id => ok.find(x => x.id === id)).filter(Boolean).slice(0, SLOTS);
+      if (out.length) return { items: out, auto: false };
+    }
+    return { items: ok.slice(0, SLOTS), auto: true };
+  };
+  const navIds = (key) => new Set(navOf(key).items.map(x => x.id));
+
+  const tileState = (surface, item) => {
+    const why = blockReason(item);
+    if (why) return { show: false, locked: true, why };
+    if (item.overflow && navIds(item.overflow).has(item.id)) return { show: false, locked: true, why: t("settings.mlay_in_nav") };
+    const hidden = (draft[MLAY_HIDE_KEY[surface]] || []).includes(item.id);
+    return { show: !hidden, locked: false, why: item.overflow ? t("settings.mlay_overflow_hint") : null };
+  };
+
+  const setSlot = (key, slot, id) => {
+    const cur = navOf(key).items.map(x => x.id);          // abhi jo dikh raha hai, wahi aadhar
+    const next = cur.slice(0, SLOTS);
+    while (next.length < SLOTS) next.push("");
+    const dup = next.indexOf(id);
+    if (id && dup >= 0 && dup !== slot) next[dup] = next[slot];  // adla-badli
+    next[slot] = id;
+    setDraft(d => ({ ...d, [key]: next.filter(Boolean) }));
+  };
+  const toggleTile = (surface, id) => {
+    const k = MLAY_HIDE_KEY[surface];
+    setDraft(d => {
+      const cur = d[k] || [];
+      return { ...d, [k]: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] };
+    });
+  };
+
+  // Jo cheez adhikar hote hue bhi na patti me hai na tile me.
+  const unreachable = [];
+  for (const key of ["app_nav", "project_nav"]) {
+    const inNav = navIds(key);
+    const surface = MLAY_TILES_OF[key];
+    for (const item of (cat[key] || []).filter(allowed)) {
+      if (inNav.has(item.id)) continue;
+      const tile = (cat[surface] || []).find(x => x.id === item.id);
+      if (tile && tileState(surface, tile).show) continue;
+      if (!unreachable.includes(item.id)) unreachable.push(item.id);
+    }
+  }
+
+  const save = async () => {
+    if (!dbRole || saving) { if (!dbRole) alert(t("settings.mlay_no_db_role")); return; }
+    setSaving(true);
+    try {
+      const r = await api.put(`/settings/roles/${dbRole.id}/mobile-layout`, { layout: draft });
+      if (r && r.success) {
+        const lay = r.data ? r.data.layout : null;
+        setData(d => {
+          const layouts = { ...(d.layouts || {}) };
+          if (lay) layouts[dbRole.id] = lay; else delete layouts[dbRole.id];
+          return { ...d, layouts };
+        });
+        alert(t("settings.mlay_saved"));
+      } else alert((r && r.message) || t("settings.mlay_save_failed"));
+    } catch (e) { alert(t("settings.mlay_save_failed")); }
+    setSaving(false);
+  };
+
+  const box = { border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", marginTop: 12 };
+  const head = { fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 8 };
+  const fixedBtn = { flex: "0 0 auto", padding: "8px 10px", borderRadius: 8, background: T.borderLight, color: T.textMid, fontSize: 12, fontWeight: 600 };
+
+  // Render ke andar component banane par har tap par naya mount hota — isliye saade function.
+  const renderNav = (navKey, first, last) => {
+    const nav = navOf(navKey);
+    const shown = nav.items.map(x => x.id);
+    const options = cat[navKey] || [];
+    return (
+      <div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={fixedBtn}>{first}</span>
+          {Array.from({ length: SLOTS }).map((_, i) => (
+            <select key={i} value={shown[i] || ""} onChange={e => setSlot(navKey, i, e.target.value)}
+              style={{ flex: "1 1 120px", minWidth: 110, padding: "7px 8px", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit",
+                border: `1.5px solid ${nav.auto ? T.border : T.blue}`, color: nav.auto ? T.textMid : T.text, background: T.card }}>
+              <option value="">{t("settings.mlay_empty_slot")}</option>
+              {options.map(it => {
+                const why = blockReason(it);
+                return <option key={it.id} value={it.id} disabled={!!why}>{mlayLabel(navKey, it.id)}{why ? ` (${why})` : ""}</option>;
+              })}
+            </select>
+          ))}
+          <span style={fixedBtn}>{last}</span>
+        </div>
+        <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 6, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <span>{nav.auto ? t("settings.mlay_auto_note") : t("settings.mlay_manual_note")}</span>
+          {!nav.auto && (
+            <button onClick={() => setDraft(d => ({ ...d, [navKey]: [] }))}
+              style={{ border: "none", background: "none", color: T.blue, fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+              {t("settings.mlay_auto")}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderTiles = (surface) => (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 6 }}>
+      {(cat[surface] || []).map(item => {
+        const st = tileState(surface, item);
+        return (
+          <label key={item.id} title={st.why || ""}
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 9px", borderRadius: 8, fontSize: 12.5,
+              border: `1px solid ${T.borderLight}`, cursor: st.locked ? "not-allowed" : "pointer",
+              color: st.locked ? T.textLight : T.text, background: st.show ? T.card : T.borderLight }}>
+            <input type="checkbox" checked={st.show} disabled={st.locked} onChange={() => toggleTile(surface, item.id)} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              {mlayLabel(surface, item.id)}
+              {st.why && <span style={{ display: "block", fontSize: 10.5, color: T.textLight }}>{st.why}</span>}
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <SectionCard title={t("settings.mlay_title", { name: roleName || "" })} desc={t("settings.mlay_desc")}
+      action={<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <button onClick={() => setDraft({ ...blank })}
+          style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.card, color: T.textMid, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+          {t("settings.mlay_reset_all")}
+        </button>
+        <SaveBtn label={saving ? t("settings.mlay_saving") : t("settings.mlay_save")} onClick={save} />
+      </div>}>
+      <div style={box}>
+        <div style={head}>{t("settings.mlay_app_nav")}</div>
+        {renderNav("app_nav", t("settings.mlay_home"), t("settings.mlay_more"))}
+      </div>
+
+      <div style={box}>
+        <div style={head}>{t("settings.mlay_project")}</div>
+        <div style={{ fontSize: 12, color: T.textMid, marginBottom: 6 }}>{t("settings.mlay_top_tabs")}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
+          {(cat.top_tabs || []).map(it => {
+            const on = permOk(it.perm);
+            return (
+              <span key={it.id} style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600,
+                background: on ? T.greenSoft : T.borderLight, color: on ? T.green : T.textLight,
+                textDecoration: on ? "none" : "line-through" }}>{mlayLabel("top_tabs", it.id)}</span>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 11.5, color: T.textLight, marginBottom: 12 }}>{t("settings.mlay_top_tabs_note")}</div>
+        <div style={{ fontSize: 12, color: T.textMid, marginBottom: 6 }}>{t("settings.mlay_project_nav")}</div>
+        {renderNav("project_nav", t("settings.mlay_phome"), t("settings.mlay_hub"))}
+        <div style={{ fontSize: 12, color: T.textMid, margin: "14px 0 6px" }}>{t("settings.mlay_hub_tiles")}</div>
+        {renderTiles("hub")}
+      </div>
+
+      <div style={box}>
+        <div style={head}>{t("settings.mlay_more_tiles")}</div>
+        {renderTiles("more")}
+      </div>
+
+      {unreachable.length > 0 && (
+        <div style={{ ...box, borderColor: T.red + "55", background: T.redSoft }}>
+          {unreachable.map(id => (
+            <div key={id} style={{ fontSize: 12.5, color: T.red, padding: "2px 0" }}>
+              ⚠ {t("settings.mlay_unreachable", { name: mlayLabel("app_nav", id) })}
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 function RolesAccess() {
   const [allProjects, setAllProjects] = useState([]);
   useEffect(() => {
@@ -836,7 +1082,7 @@ function RolesAccess() {
   useEffect(() => { loadUsers(); }, []);
 
   const [selectedRole, setSelectedRole] = useState("project_manager");
-  const [tab, setTab] = useState("permissions"); // permissions | users | projects
+  const [tab, setTab] = useState("permissions"); // permissions | mobile | users | projects
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
@@ -1035,6 +1281,7 @@ function RolesAccess() {
     "Machinery": "machinery", "Team & HR": "payroll", "CRM": "crm",
     "MOM": "mom", "Township CRM": "township", "Tenders": "tenders",
     "Reports": "reports", "Library": "library", "Settings": "settings",
+    "RMC": "rmc", "Road Levels": "road_levels",
   };
   // null = abhi load ho raha; tab tak sab dikhao taaki rows blink na karein.
   const [coModules, setCoModules] = useState(null);
@@ -1061,7 +1308,10 @@ function RolesAccess() {
   // "Users & Roles" — user aur role ka prashasan. "Settings" row apni jagah
   // rehti hai (My Profile, password), warna Settings.view hataate hi wo apna
   // password bhi nahi badal paata.
-  const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Pulse","Mapping","Procurement","Warehouse","Fuel","Machinery","Assets","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings","Users & Roles"];
+  // RMC / Road Levels backend ki list (PERM_TOP) me the par yahan nahi — har
+  // save par unki row ud jaati aur wo module us role ke liye chupchaap khul
+  // jaata; admin unhe kabhi set bhi nahi kar sakta tha. (2026-09-22)
+  const ALL_MODULE_ITEMS = ["Projects","Design","Finance","Financial Reports","Pulse","Mapping","Procurement","Warehouse","Fuel","Machinery","Assets","RMC","Road Levels","Team & HR","CRM","MOM","Township CRM","Tenders","Reports","Library","Settings","Users & Roles"];
   // Project ke ANDAR ke saare tabs. Budget/Party/To Do/Tasks/Files/Site-DPR
   // pehle yahan the hi nahi, isliye unhe kabhi rok hi nahi sakte the — wo har
   // role ko hamesha dikhte the. (Design aur MOM upar "Modules" me hain, isliye
@@ -1163,13 +1413,14 @@ function RolesAccess() {
     }).catch(() => {});
   }, []);
 
+  const dbRoleOf = (roleId) => dbRoles.find(r => {
+    const slug = (r.name || "").toLowerCase().replace(/[\s&]+/g, "_").replace(/_+/g, "_");
+    return slug === roleId || r.name === activeRole?.name;
+  });
   const savePermissions = async () => {
     if (selectedRole === "admin") return;
     // Find DB role by name-slug match
-    const dbRole = dbRoles.find(r => {
-      const slug = (r.name || "").toLowerCase().replace(/[\s&]+/g, "_").replace(/_+/g, "_");
-      return slug === selectedRole || r.name === activeRole?.name;
-    });
+    const dbRole = dbRoleOf(selectedRole);
     if (!dbRole) { alert("Role DB record not found. Check /settings/roles API."); return; }
     const perms = permMatrix[selectedRole] || {};
     const permissions = modules.map(m => ({
@@ -1273,6 +1524,7 @@ function RolesAccess() {
 
   const tabs = [
     { id: "permissions", label: "Permissions" },
+    { id: "mobile", label: t("settings.mlay_tab") },
     { id: "users", label: `Users (${roleUsers.length})` },
     { id: "projects", label: "Project Access" },
   ];
@@ -1395,6 +1647,20 @@ function RolesAccess() {
             </table>
           </div>
         </SectionCard>
+      )}
+
+      {/* ── TAB: Mobile — phone par kis role ko kya dikhe ── */}
+      {tab === "mobile" && isAllUsers && (
+        <SectionCard title={t("settings.mlay_tab")} desc={t("settings.mlay_desc")}>
+          <div style={{ background: T.blueSoft, borderRadius: 8, padding: "12px 14px", marginTop: 8, fontSize: 12.5, color: T.blue, display: "flex", gap: 8, alignItems: "center" }}>
+            <IcShield size={15} color={T.blue} /> {t("settings.mlay_all_users")}
+          </div>
+        </SectionCard>
+      )}
+      {tab === "mobile" && !isAllUsers && (
+        <MobileLayoutTab roleName={activeRole?.name} dbRole={dbRoleOf(selectedRole)}
+          perms={permMatrix[selectedRole] || {}} coModules={coModules}
+          isAdmin={selectedRole === "admin" || selectedRole === "super_admin"} />
       )}
 
       {/* ── TAB: Users ── */}
