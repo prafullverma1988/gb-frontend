@@ -15,6 +15,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import PhotoLocateModal from "./tabs/PhotoLocateModal";
 import TenderAiPlan from "./tabs/TenderAiPlan";
+import BoqMatrixImport from "./tabs/BoqMatrixImport";
 import DangerDelete from "./shared/DangerDelete";
 import * as XLSX from "xlsx";
 import api, { getUser, API_BASE, getToken } from "../config/api";
@@ -2181,6 +2182,10 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
   const [totalTouched, setTotalTouched] = useState(false);
   // Step 4
   const [reconcile, setReconcile] = useState(null); // backend ka 400 detail
+  // Kai road/site wali (matrix) file — server ne padhi; {b64, data} ho to
+  // purane 4 step ki jagah BoqMatrixImport khulta hai.
+  const [matrix, setMatrix] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
 
   const loadSheet = useCallback((book, name) => {
     const rows = sheetToAoa(book.Sheets[name]);
@@ -2228,9 +2233,45 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
       setSheetScores(scores);
       const best = scores.length ? scores[0].name : book.SheetNames[0];
       loadSheet(book, best);
+      await askServer(book, buf, f.name);
     } catch (_) {
       setErr(t("tenders.file_padhne_me_dikkat_sahi_xlsx"));
     }
+  };
+
+  // ── Server se naksha ──────────────────────────────────────────────
+  // Browser ka andaza (pehli 3-text wali row = header, /item/ = description)
+  // sarkari BOQ par galat padta tha. Server (gb-backend utils/boqSheet.js)
+  // file padh kar naksha deta hai:
+  //   • kai road/site (matrix) → naya screen: har road ka hissa + file se match
+  //   • seedhi BOQ → yahi purana wizard, bas header row aur column server ke
+  // Server na mile / na samjhe to purana andaza hi rehta hai — kuch rukta nahi.
+  const askServer = async (book, buf, name) => {
+    setMatrix(null);
+    setAnalyzing(true);
+    try {
+      const bytes = new Uint8Array(buf);
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      const b64 = window.btoa(bin);
+      const r = await api.post(`/tenders/${tenderId}/boq/analyze`, { file_b64: b64, file_name: name });
+      if (r && r.success && r.data && r.data.layout) {
+        const L = r.data.layout;
+        if (L.kind === "matrix" && (r.data.sites || []).length >= 2) { setMatrix({ b64, data: r.data }); return; }
+        if (L.kind === "flat" && book.SheetNames.includes(L.sheet) && (L.header_rows || []).length) {
+          const rows = sheetToAoa(book.Sheets[L.sheet]);
+          const colIdx = (l) => (l ? String(l).toUpperCase().split("").reduce((a, c) => a * 26 + (c.charCodeAt(0) - 64), 0) - 1 : null);
+          setSheetName(L.sheet); setAoa(rows);
+          setHeaderRow(L.header_rows[L.header_rows.length - 1] - 1);
+          const m = {};
+          [["item_no", L.cols.sno], ["sor_code", L.cols.item_code], ["description", L.cols.description],
+           ["unit", L.cols.unit], ["qty", L.cols.qty], ["rate", L.cols.rate], ["amount", L.cols.amount]]
+            .forEach(([k, l]) => { const i = colIdx(l); if (i != null) m[k] = i; });
+          setMapping(m);
+        }
+      }
+    } catch (_) { /* server na mile to browser ka andaza hi chale */ }
+    finally { setAnalyzing(false); }
   };
 
   const headerCells = aoa[headerRow] || [];
@@ -2282,7 +2323,13 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
       setErr(res?.message || "Import nahi hua");
       return;
     }
-    toast.success(`${res.data.row_count} items import ho gaye` + (nFiles > 1 ? ` (file ${fileNo}/${nFiles})` : ""));
+    await afterImport(res);
+  };
+
+  // Import ke baad ka kaam — purana wizard aur matrix screen dono yahi chalate hain
+  const afterImport = async (res) => {
+    setMatrix(null);
+    toast.success((res.message || `${res.data.row_count} items import ho gaye`) + (nFiles > 1 ? ` (file ${fileNo}/${nFiles})` : ""));
     onDone && onDone();
     rawDone.current.push(rawFile);
     if (queue.length) {
@@ -2301,7 +2348,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
     onClose();
   };
 
-  const canNext = step === 1 ? aoa.length > 0
+  const canNext = step === 1 ? (aoa.length > 0 && !analyzing)
                 : step === 2 ? (!missing.length && parsed.rows.length > 0)
                 : step === 3 ? liveRows.length > 0
                 : false;
@@ -2311,6 +2358,15 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
     position:"sticky", top:0};
   const td = {fontSize:11.5, color:T.t2, padding:"6px 8px", borderBottom:`1px solid ${T.b1}`,
     whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"};
+
+  // Kai road/site wali file — apna screen (har road ka hissa + file ke jod se match)
+  if (matrix) {
+    return (
+      <BoqMatrixImport tenderId={tenderId} fileName={fileName} fileB64={matrix.b64} initial={matrix.data}
+        boqFinal={boqFinal} onClose={onClose} onImported={afterImport}
+        onFallback={() => setMatrix(null)} />
+    );
+  }
 
   return (
     <Modal title={t("boq_import_wizard.boq_import")} Icon={IcUpload} onClose={onClose} width={940}
@@ -2356,6 +2412,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
               <IcChk size={20} color={T.grn}/>
               <span style={{fontSize:13, color:T.grn, fontWeight:700}}>{fileName}</span>
               <span style={{fontSize:11.5, color:T.t3}}>{t("tenders.aoa_rows_padhi_gayi_badalne_ke", { aoa: aoa.length })}</span>
+              {analyzing && <span style={{fontSize:11.5, color:T.ind, fontWeight:600}}>{t("boq_matrix.analyzing")}</span>}
             </div>
           ) : (
             <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:7}}>
