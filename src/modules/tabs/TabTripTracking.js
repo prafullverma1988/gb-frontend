@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import api from "../../config/api";
 import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
@@ -49,6 +49,52 @@ const inp = { width: "100%", padding: "9px 11px", borderRadius: 7, border: `1.5p
   fontSize: 13, outline: "none", fontFamily: "inherit", color: T.t1, background: T.surface, boxSizing: "border-box" };
 const lblS = { fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 };
 
+// ── Naksha: doori (haversine) — lambai server nikalta hai, ye sirf dikhane ko ──
+const segM = (a, b) => {
+  const R = 6371000, rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+};
+const pathM = (pts) => { let m = 0; for (let i = 1; i < (pts || []).length; i++) m += segM(pts[i - 1], pts[i]); return m; };
+// Expected time ka andaza: bhari gaadi haul road par ~20 km/h (mobile jaisa).
+const SUGGEST_KMH = 20;
+
+// ── Google Maps loader (is tab ka apna) ───────────────────────────
+// Wahi REACT_APP_GOOGLE_MAPS_KEY jo Tenders / Site Mapping lete hain. Kisi aur
+// module ne script pehle daal di ho to dobara nahi daalte, bas intezaar. Khud
+// daalein to geometry+places ke saath — Tenders ko yahi chahiye, aur Google
+// ek page par script do baar load hone par shikayat karta hai.
+const MAPS_KEY = process.env.REACT_APP_GOOGLE_MAPS_KEY;
+let _tripGmaps = null;
+function loadTripGmaps() {
+  if (window.google && window.google.maps && window.google.maps.Map) return Promise.resolve(window.google);
+  if (!MAPS_KEY) return Promise.reject(new Error("no key"));
+  if (_tripGmaps) return _tripGmaps;
+  _tripGmaps = new Promise((resolve, reject) => {
+    if (document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]')) {
+      let n = 0;
+      const iv = setInterval(() => {
+        if (window.google && window.google.maps && window.google.maps.Map) { clearInterval(iv); resolve(window.google); }
+        else if (++n > 75) { clearInterval(iv); _tripGmaps = null; reject(new Error("maps timeout")); }
+      }, 200);
+      return;
+    }
+    const cb = "__gmapsTrip_" + Math.random().toString(36).slice(2);
+    window[cb] = () => {
+      try { delete window[cb]; } catch (_) { /* noop */ }
+      if (window.google && window.google.maps) resolve(window.google);
+      else { _tripGmaps = null; reject(new Error("maps missing")); }
+    };
+    const s = document.createElement("script");
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(MAPS_KEY)}&callback=${cb}&libraries=geometry,places`;
+    s.async = true; s.defer = true;
+    s.onerror = () => { _tripGmaps = null; s.remove(); reject(new Error("maps load failed")); };
+    document.head.appendChild(s);
+  });
+  return _tripGmaps;
+}
+
 function TabTripTracking({ projectId }) {
   const [sub, setSub] = useState("monitor");
   const [summary, setSummary] = useState(null);
@@ -98,6 +144,18 @@ function MonitorTab({ projectId, onChange }) {
   const [openId, setOpenId] = useState(null);
   const [notes, setNotes] = useState({});
   const [busyId, setBusyId] = useState(null);
+  // Trip kholne par naksha: route ka raasta + geofence — route ek hi baar laao.
+  const [routesById, setRoutesById] = useState({});
+  useEffect(() => {
+    if (!projectId) return;
+    api.get("/trips/routes?project_id=" + projectId)
+      .then(r => {
+        const m = {};
+        (r && r.success && Array.isArray(r.data) ? r.data : []).forEach(x => { m[x.id] = x; });
+        setRoutesById(m);
+      })
+      .catch(() => setRoutesById({}));
+  }, [projectId]);
 
   const load = useCallback(() => {
     if (!projectId) return;
@@ -200,6 +258,9 @@ function MonitorTab({ projectId, onChange }) {
                           {flags.map(f => { const m = flagMeta(f); return <Pill key={f} label={m.label} c={m.tone === "red" ? T.red : T.amb} bg={m.tone === "red" ? T.redL : T.ambL} />; })}
                         </div>
                       )}
+                      {MAPS_KEY && (item4.load_lat != null || item4.unload_lat != null || (routesById[item4.route_id] && routesById[item4.route_id].load_lat != null)) && (
+                        <TripMiniMap key={item4.id + (routesById[item4.route_id] ? "-r" : "")} route={routesById[item4.route_id]} trip={item4} />
+                      )}
                       <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
                         <PhotoThumb label={t("trip_tracking.load")} url={item4.load_photo_url} />
                         <PhotoThumb label={t("trip_tracking.unload")} url={item4.unload_photo_url} />
@@ -287,7 +348,10 @@ function RoutesTab({ projectId }) {
             <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 100px 120px 110px 90px 70px",
               padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
               <div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{r.name}</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>
+                  {r.name}
+                  {Array.isArray(r.route_geometry) && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: T.grn }}>{t("trip_tracking.naksha_tag")}</span>}
+                </div>
                 {r.default_task_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{r.default_task_name}</div>}
               </div>
               <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{r.lead_km != null ? r.lead_km : "—"}</span>
@@ -322,20 +386,76 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
   const upd = (k, v) => setF(p => ({ ...p, [k]: v }));
   const numf = (v) => (v !== "" && v != null && !isNaN(parseFloat(v)) ? parseFloat(v) : null);
 
+  // ── Naksha ── pts user ke kheenche kram me; startIs = pehla point Loading
+  // hai ya Unloading — user khud chunta hai, system andaza nahi lagata.
+  // Server ko HAMESHA loading → unloading (canon). geoTouched = is baar
+  // naksha chheda; tabhi bhejte hain, warna server par jo hai wahi rehta hai.
+  const hasGeo = Array.isArray(route?.route_geometry) && route.route_geometry.length >= 2;
+  const [pts, setPts] = useState(hasGeo ? route.route_geometry : []);
+  const [startIs, setStartIs] = useState(hasGeo ? "load" : null);
+  const [showMap, setShowMap] = useState(hasGeo);
+  const [geoTouched, setGeoTouched] = useState(false);
+  // Lead / expected time naksha ki lambai ke saath chalte hain — jab tak user
+  // haath se na likhe (contract ka lead naksha se alag ho sakta hai).
+  const [leadAuto, setLeadAuto] = useState(!!(route && route.route_len_m != null && route.lead_km != null &&
+    Math.abs(Number(route.lead_km) - Number(route.route_len_m) / 1000) < 0.006));
+  const [expAuto, setExpAuto] = useState(false);
+  const geoMode = pts.length >= 2;
+  const canon = geoMode && startIs ? (startIs === "load" ? pts : [...pts].reverse()) : null;
+  const mapKm = geoMode ? Math.round(pathM(pts) / 10) / 100 : null;
+  const leadNum = numf(f.lead_km);
+  const leadPct = mapKm > 0 && leadNum != null ? ((leadNum - mapKm) / mapKm) * 100 : null;
+
+  const onPts = (np) => {
+    setPts(np); setGeoTouched(true);
+    if (!np.length) { setStartIs(null); return; }
+    if (np.length < 2) return;
+    const km = Math.round(pathM(np) / 10) / 100;
+    const fillLead = leadAuto || !f.lead_km;
+    const fillExp = expAuto || !f.expected_travel_min;
+    setF(p => ({ ...p,
+      ...(fillLead ? { lead_km: String(km) } : {}),
+      ...(fillExp ? { expected_travel_min: String(Math.max(1, Math.round((km / SUGGEST_KMH) * 60))) } : {}),
+    }));
+    if (fillLead) setLeadAuto(true);
+    if (fillExp) setExpAuto(true);
+  };
+  const removeGeo = () => {
+    if (pts.length && !window.confirm(t("trip_tracking.raasta_hatao_confirm"))) return;
+    // Naksha ke sire lat/lng khanon me utaar do — point bache rahein.
+    if (canon) {
+      const a = canon[0], b = canon[canon.length - 1];
+      setF(p => ({ ...p, load_lat: a.lat, load_lng: a.lng, unload_lat: b.lat, unload_lng: b.lng }));
+    }
+    setPts([]); setStartIs(null); setShowMap(false); setLeadAuto(false); setExpAuto(false);
+    setGeoTouched(hasGeo || geoTouched);
+  };
+  // Purane route (bina naksha) ke point — naksha par halke nishaan.
+  const refPts = !hasGeo && (numf(f.load_lat) != null || numf(f.unload_lat) != null) ? {
+    load: numf(f.load_lat) != null && numf(f.load_lng) != null ? { lat: numf(f.load_lat), lng: numf(f.load_lng) } : null,
+    unload: numf(f.unload_lat) != null && numf(f.unload_lng) != null ? { lat: numf(f.unload_lat), lng: numf(f.unload_lng) } : null,
+  } : null;
+
   const save = async () => {
     if (!f.name.trim()) { window.alert(t("trip_tracking.route_ka_naam_daalein")); return; }
+    if (pts.length === 1) { window.alert(t("trip_tracking.kam_se_kam_2_point")); return; }
+    if (geoMode && !startIs) { window.alert(t("trip_tracking.pehle_batao")); return; }
     if (numf(f.lead_km) == null) { window.alert(t("trip_tracking.lead_km_bharein")); return; }
     setSaving(true);
+    const a = canon ? canon[0] : null, b = canon ? canon[canon.length - 1] : null;
     const body = {
       project_id: projectId, name: f.name.trim(),
       default_task_id: f.default_task_id || null,
-      load_lat: numf(f.load_lat), load_lng: numf(f.load_lng),
-      unload_lat: numf(f.unload_lat), unload_lng: numf(f.unload_lng),
+      load_lat: a ? a.lat : numf(f.load_lat), load_lng: a ? a.lng : numf(f.load_lng),
+      unload_lat: b ? b.lat : numf(f.unload_lat), unload_lng: b ? b.lng : numf(f.unload_lng),
       load_radius: f.load_radius, unload_radius: f.load_radius,
       lead_km: numf(f.lead_km), rate_per_trip: numf(f.rate_per_trip),
       expected_travel_min: numf(f.expected_travel_min) != null ? Math.round(numf(f.expected_travel_min)) : null,
       tolerance_min: numf(f.tolerance_min) != null ? Math.round(numf(f.tolerance_min)) : 10,
       expected_cycle_min: numf(f.expected_cycle_min) != null ? Math.round(numf(f.expected_cycle_min)) : null,
+      // null = naksha hatao. Server loading/unloading point aur seedhi doori
+      // naksha ke siron se khud bharta hai.
+      ...(geoTouched ? { route_geometry: canon, route_source: canon ? "draw" : null } : {}),
     };
     let r;
     if (route) {
@@ -356,11 +476,33 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
       <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 10 }}>{route ? t("trip_tracking.edit_route") : t("trip_tracking.new_route")}</div>
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
         <div><div style={lblS}>{t("trip_tracking.route_name")}</div><input value={f.name} onChange={e => upd("name", e.target.value)} placeholder={t("trip_tracking.quarry_site_a")} style={inp} /></div>
-        <div><div style={lblS}>{t("trip_tracking.lead_km")} <span style={{ color: T.t4, fontWeight: 400 }}>{t("trip_tracking.haul_road")}</span></div><input value={f.lead_km} onChange={e => upd("lead_km", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0" style={inp} /></div>
+        <div><div style={lblS}>{t("trip_tracking.lead_km")} <span style={{ color: T.t4, fontWeight: 400 }}>{t("trip_tracking.haul_road")}</span></div><input value={f.lead_km} onChange={e => { upd("lead_km", e.target.value.replace(/[^0-9.]/g, "")); setLeadAuto(false); }} placeholder="0" style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.rate_trip")} <span style={{ color: T.t4, fontWeight: 400 }}>{t("trip_tracking.blank_pending")}</span></div><input value={f.rate_per_trip} onChange={e => upd("rate_per_trip", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="800" style={inp} /></div>
       </div>
+      {mapKm != null && (
+        leadPct != null && Math.abs(leadPct) > 5
+          ? <div style={{ fontSize: 11, color: T.amb, fontWeight: 700, marginTop: 5 }}>{t("trip_tracking.lead_farak", { map: mapKm.toFixed(2), lead: leadNum, pct: (leadPct > 0 ? "+" : "") + Math.round(leadPct) })}</div>
+          : <div style={{ fontSize: 11, color: T.t4, marginTop: 5 }}>{t("trip_tracking.lead_naksha_km", { map: mapKm.toFixed(2) })}</div>
+      )}
+
+      {/* Naksha par raasta — dono sire user khud Loading/Unloading mark karta hai */}
+      <div style={{ marginTop: 10 }}>
+        {showMap ? (
+          <RouteMapEditor pts={pts} onPts={onPts} startIs={startIs}
+            onStartIs={(v) => { setStartIs(v); setGeoTouched(true); }}
+            refPts={refPts} km={mapKm} onRemove={removeGeo} />
+        ) : (
+          <button type="button" onClick={() => setShowMap(true)}
+            style={{ width: "100%", padding: "11px 12px", borderRadius: 8, border: `1.5px dashed ${T.blu}`, background: T.surface,
+              cursor: "pointer", fontFamily: "inherit", textAlign: "left", display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: T.blu }}>🗺 {t("trip_tracking.naksha_par_raasta_banao")}</span>
+            <span style={{ fontSize: 11, color: T.t4 }}>{t("trip_tracking.naksha_hint_short")}</span>
+          </button>
+        )}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
-        <div><div style={lblS}>{t("trip_tracking.expected_time_min")}</div><input value={f.expected_travel_min} onChange={e => upd("expected_travel_min", e.target.value.replace(/[^0-9]/g, ""))} placeholder="0" style={inp} /></div>
+        <div><div style={lblS}>{t("trip_tracking.expected_time_min")}</div><input value={f.expected_travel_min} onChange={e => { upd("expected_travel_min", e.target.value.replace(/[^0-9]/g, "")); setExpAuto(false); }} placeholder="0" style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.tolerance_min")}</div><input value={f.tolerance_min} onChange={e => upd("tolerance_min", e.target.value.replace(/[^0-9]/g, ""))} placeholder="10" style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.cycle_time_min")}</div><input value={f.expected_cycle_min} onChange={e => upd("expected_cycle_min", e.target.value.replace(/[^0-9]/g, ""))} placeholder="0" style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.geofence_radius_m")}</div>
@@ -369,12 +511,27 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
           </select>
         </div>
       </div>
+      {expAuto && <div style={{ fontSize: 11, color: T.t4, marginTop: 5 }}>{t("trip_tracking.exp_andaza", { kmh: SUGGEST_KMH })}</div>}
+      {geoMode ? (
+        // Naksha ho to point usi ke siron se — yahan badalne ka matlab naksha
+        // aur point alag ho jaana, isliye khane band.
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
+          {[["a", t("trip_tracking.load_lat"), canon && canon[0].lat], ["b", t("trip_tracking.load_lng"), canon && canon[0].lng],
+            ["c", t("trip_tracking.unload_lat"), canon && canon[canon.length - 1].lat],
+            ["d", t("trip_tracking.unload_lng"), canon && canon[canon.length - 1].lng]].map(([k, lbl, v]) => (
+            <div key={k}><div style={lblS}>{lbl}</div>
+              <input value={v != null ? Number(v).toFixed(6) : ""} readOnly disabled placeholder="—" style={{ ...inp, background: T.surfaceB, color: T.t3 }} /></div>
+          ))}
+          <div style={{ gridColumn: "1 / -1", fontSize: 10.5, color: T.t4, marginTop: -4 }}>{t("trip_tracking.points_naksha_se")}</div>
+        </div>
+      ) : (
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
         <div><div style={lblS}>{t("trip_tracking.load_lat")}</div><input value={f.load_lat} onChange={e => upd("load_lat", e.target.value)} placeholder={t("trip_tracking.21_2xxxx")} style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.load_lng")}</div><input value={f.load_lng} onChange={e => upd("load_lng", e.target.value)} placeholder={t("trip_tracking.81_6xxxx")} style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.unload_lat")}</div><input value={f.unload_lat} onChange={e => upd("unload_lat", e.target.value)} placeholder={t("trip_tracking.21_2xxxx")} style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.unload_lng")}</div><input value={f.unload_lng} onChange={e => upd("unload_lng", e.target.value)} placeholder={t("trip_tracking.81_6xxxx")} style={inp} /></div>
       </div>
+      )}
       <div style={{ marginTop: 10 }}>
         <div style={lblS}>{t("trip_tracking.default_task_optional")}</div>
         <select value={f.default_task_id || ""} onChange={e => upd("default_task_id", e.target.value ? Number(e.target.value) : "")} style={inp}>
@@ -624,6 +781,219 @@ function BillingTab({ projectId }) {
         ))}
       </Panel>
     </div>
+  );
+}
+
+// ── NAKSHA: route ka raasta banao ────────────────────────────────
+// Editable polyline hi sach hai (uska MVCArray path). Click = naya point,
+// point kheencho = khiskao, lakeer ke beech ka gola kheencho = beech me
+// naya point, point par right-click = hatao. Har badlaav path se padh kar
+// upar bhejte hain — React state se path kabhi dobara nahi likhte (purane
+// Tenders map me yahi galti thi: kheencha hua point wapas kood jaata tha).
+function RouteMapEditor({ pts, onPts, startIs, onStartIs, refPts, km, onRemove }) {
+  const boxRef = useRef(null);
+  const m = useRef(null);
+  const onPtsRef = useRef(onPts);
+  onPtsRef.current = onPts;
+  const initPts = useRef(pts);       // sirf pehli baar ke liye
+  const initRef = useRef(refPts);
+  const [state, setState] = useState("loading");
+  const [mapType, setMapType] = useState("hybrid");
+
+  useEffect(() => {
+    let dead = false;
+    loadTripGmaps().then((g) => {
+      if (dead || !boxRef.current) return;
+      const map = new g.maps.Map(boxRef.current, {
+        center: { lat: 21.25, lng: 81.63 }, zoom: 11, mapTypeId: "hybrid",
+        streetViewControl: false, mapTypeControl: false, fullscreenControl: true, clickableIcons: false,
+      });
+      const init = initPts.current || [];
+      // Satellite par peela raasta sabse saaf dikhta hai.
+      const line = new g.maps.Polyline({ map, editable: true, strokeColor: "#FFC400", strokeWeight: 4, zIndex: 10,
+        path: init.map((p) => new g.maps.LatLng(p.lat, p.lng)) });
+      const path = line.getPath();
+      // mute: "Saaf karo" har point par alag remove_at bhejta hai — beech ki
+      // adhoori lambai lead km me na chipke, isliye tab chup, ant me ek baar.
+      const sync = () => {
+        if (m.current && m.current.mute) return;
+        onPtsRef.current(path.getArray().map((ll) => ({ lat: ll.lat(), lng: ll.lng() })));
+      };
+      path.addListener("insert_at", sync);
+      path.addListener("set_at", sync);
+      path.addListener("remove_at", sync);
+      map.addListener("click", (e) => { if (e.latLng) path.push(e.latLng); });
+      line.addListener("contextmenu", (e) => { if (e.vertex != null) path.removeAt(e.vertex); });
+      const endMk = () => new g.maps.Marker({ map, visible: false, clickable: false, zIndex: 50 });
+      m.current = { g, map, path, aMk: endMk(), bMk: endMk() };
+
+      // Purane route ke point (naksha nahi tha) — halke nishaan.
+      const rp = initRef.current;
+      if (!init.length && rp) {
+        const ref = (p, txt) => p && new g.maps.Marker({ map, position: p, clickable: false, zIndex: 20, opacity: 0.75,
+          label: { text: txt, color: "#fff", fontSize: "10px", fontWeight: "700" },
+          icon: { path: g.maps.SymbolPath.CIRCLE, scale: 9, fillColor: txt === "L" ? T.grn : T.red, fillOpacity: 0.55, strokeColor: "#fff", strokeWeight: 1.5 } });
+        ref(rp.load, "L"); ref(rp.unload, "U");
+      }
+      const b = new g.maps.LatLngBounds();
+      let n = 0;
+      init.forEach((p) => { b.extend(p); n++; });
+      if (!n && rp) { [rp.load, rp.unload].forEach((p) => { if (p) { b.extend(p); n++; } }); }
+      if (n >= 2) map.fitBounds(b, 40);
+      else if (n === 1) { map.setCenter(b.getCenter()); map.setZoom(16); }
+      setState("ready");
+    }).catch(() => { if (!dead) setState("fail"); });
+    return () => { dead = true; };
+  }, []);
+
+  // Dono sire: chunav se pehle A/B, phir L (hara) / U (laal).
+  useEffect(() => {
+    const mm = m.current;
+    if (!mm) return;
+    const lab = (isA) => (!startIs ? (isA ? "A" : "B") : (isA === (startIs === "load") ? "L" : "U"));
+    const col = (x) => (x === "L" ? T.grn : x === "U" ? T.red : "#607D8B");
+    const setMk = (mk, p, txt) => {
+      if (!p) { mk.setVisible(false); return; }
+      mk.setPosition(p);
+      mk.setIcon({ path: mm.g.maps.SymbolPath.CIRCLE, scale: 11, fillColor: col(txt), fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2 });
+      mk.setLabel({ text: txt, color: "#fff", fontSize: "11px", fontWeight: "800" });
+      mk.setVisible(true);
+    };
+    setMk(mm.aMk, pts[0], lab(true));
+    setMk(mm.bMk, pts.length >= 2 ? pts[pts.length - 1] : null, lab(false));
+  }, [pts, startIs, state]);
+
+  useEffect(() => { if (m.current) m.current.map.setMapTypeId(mapType); }, [mapType]);
+
+  const undo = () => { const mm = m.current; if (mm && mm.path.getLength()) mm.path.pop(); };
+  const clear = () => {
+    const mm = m.current;
+    if (!mm || !mm.path.getLength() || !window.confirm(t("trip_tracking.saaf_confirm"))) return;
+    mm.mute = true;
+    mm.path.clear();
+    mm.mute = false;
+    onPtsRef.current([]);
+  };
+
+  return (
+    <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden", background: T.surface }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{t("trip_tracking.naksha_km", { km: (km || 0).toFixed(2) })}</span>
+        <span style={{ fontSize: 11, color: T.t4 }}>{t("trip_tracking.n_point", { n: pts.length })}</span>
+        <span style={{ flex: 1 }} />
+        <MiniBtn onClick={undo} disabled={!pts.length}>↶ {t("trip_tracking.undo")}</MiniBtn>
+        <MiniBtn onClick={clear} disabled={!pts.length}>{t("trip_tracking.saaf_karo")}</MiniBtn>
+        <MiniBtn onClick={() => setMapType((v) => (v === "hybrid" ? "roadmap" : "hybrid"))}>{mapType === "hybrid" ? t("trip_tracking.road") : t("trip_tracking.satellite")}</MiniBtn>
+        <MiniBtn danger onClick={onRemove}>{t("trip_tracking.raasta_hatao")}</MiniBtn>
+      </div>
+      <div style={{ position: "relative", height: 380 }}>
+        <div ref={boxRef} style={{ position: "absolute", inset: 0 }} />
+        {state !== "ready" && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+            textAlign: "center", fontSize: 12.5, color: T.t3, background: T.surfaceB }}>
+            {state === "fail" ? t("trip_tracking.naksha_nahi_khula") : t("common.loading_2")}
+          </div>
+        )}
+      </div>
+      <div style={{ padding: "8px 10px", borderTop: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+        background: pts.length && !startIs ? T.ambL : T.surface }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: T.t2 }}>{t("trip_tracking.pehla_point_kya_hai")}</span>
+        <SegBtn on={startIs === "load"} color={T.grn} disabled={!pts.length} onClick={() => onStartIs("load")}>L · {t("trip_tracking.loading")}</SegBtn>
+        <SegBtn on={startIs === "unload"} color={T.red} disabled={!pts.length} onClick={() => onStartIs("unload")}>U · {t("trip_tracking.unloading")}</SegBtn>
+        {startIs && pts.length >= 2 && (
+          <MiniBtn onClick={() => onStartIs(startIs === "load" ? "unload" : "load")}>⇄ {t("trip_tracking.ulta_karo")}</MiniBtn>
+        )}
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 10.5, color: T.t4 }}>{t("trip_tracking.naksha_hint_web")}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── NAKSHA: trip kholne par — route ka raasta, geofence ghera, asli punch ──
+// L/U pin = asli punch; hara = ghere ke andar, laal = bahar (flag wahi batata hai).
+function TripMiniMap({ route, trip }) {
+  const boxRef = useRef(null);
+  const dataRef = useRef({ route, trip });
+  const [state, setState] = useState("loading");
+
+  useEffect(() => {
+    let dead = false;
+    loadTripGmaps().then((g) => {
+      if (dead || !boxRef.current) return;
+      const r = dataRef.current.route || {}, tr = dataRef.current.trip || {};
+      const map = new g.maps.Map(boxRef.current, {
+        center: { lat: 21.25, lng: 81.63 }, zoom: 12, mapTypeId: "hybrid", gestureHandling: "cooperative",
+        streetViewControl: false, mapTypeControl: false, fullscreenControl: true, clickableIcons: false,
+      });
+      const P = (lat, lng) => (lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
+        ? { lat: Number(lat), lng: Number(lng) } : null);
+      const b = new g.maps.LatLngBounds();
+      let n = 0;
+      const add = (p) => { if (p) { b.extend(p); n++; } };
+      const rl = P(r.load_lat, r.load_lng), ru = P(r.unload_lat, r.unload_lng);
+      const geo = Array.isArray(r.route_geometry) && r.route_geometry.length >= 2 ? r.route_geometry : null;
+      if (geo) {
+        new g.maps.Polyline({ map, path: geo, strokeColor: "#FFC400", strokeWeight: 4, clickable: false });
+        geo.forEach(add);
+      } else if (rl && ru) {
+        // Naksha nahi bana — sirf seedhi tooti lakeer, andaze ke liye.
+        new g.maps.Polyline({ map, path: [rl, ru], strokeOpacity: 0, clickable: false,
+          icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, strokeColor: "#FFC400", scale: 3 }, offset: "0", repeat: "12px" }] });
+      }
+      const fence = (p, rad) => p && new g.maps.Circle({ map, center: p, radius: Number(rad) || 100, clickable: false,
+        strokeColor: "#42A5F5", strokeOpacity: 0.95, strokeWeight: 1.5, fillColor: "#42A5F5", fillOpacity: 0.12 });
+      fence(rl, r.load_radius); fence(ru, r.unload_radius);
+      add(rl); add(ru);
+      const flags = parseFlags(tr.flag_reasons);
+      const pin = (p, txt, bad) => p && new g.maps.Marker({ map, position: p, zIndex: 50, clickable: false,
+        label: { text: txt, color: "#fff", fontSize: "11px", fontWeight: "800" },
+        icon: { path: g.maps.SymbolPath.CIRCLE, scale: 10, fillColor: bad ? T.red : T.grn, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2 } });
+      const tl = P(tr.load_lat, tr.load_lng), tu = P(tr.unload_lat, tr.unload_lng);
+      pin(tl, "L", flags.includes("load_outside"));
+      pin(tu, "U", flags.includes("unload_outside"));
+      add(tl); add(tu);
+      if (n >= 2) map.fitBounds(b, 30);
+      else if (n === 1) { map.setCenter(b.getCenter()); map.setZoom(16); }
+      setState("ready");
+    }).catch(() => { if (!dead) setState("fail"); });
+    return () => { dead = true; };
+  }, []);
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ position: "relative", height: 220, borderRadius: 8, overflow: "hidden", border: `1px solid ${T.b1}` }}>
+        <div ref={boxRef} style={{ position: "absolute", inset: 0 }} />
+        {state !== "ready" && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 12, color: T.t3, background: T.surfaceB, padding: 16, textAlign: "center" }}>
+            {state === "fail" ? t("trip_tracking.naksha_nahi_khula") : t("common.loading_2")}
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>{t("trip_tracking.mini_legend")}</div>
+    </div>
+  );
+}
+
+function MiniBtn({ onClick, disabled, danger, children }) {
+  const c = danger ? T.red : T.t2;
+  return (
+    <button type="button" onClick={onClick} disabled={disabled}
+      style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${danger ? T.redL : T.b1}`, background: T.surface,
+        color: disabled ? T.t4 : c, fontSize: 11.5, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+      {children}
+    </button>
+  );
+}
+function SegBtn({ on, color, disabled, onClick, children }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled}
+      style={{ padding: "5px 12px", borderRadius: 6, border: `1.5px solid ${on ? color : T.b1}`, background: on ? color : T.surface,
+        color: on ? "white" : (disabled ? T.t4 : T.t2), fontSize: 11.5, fontWeight: 700,
+        cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+      {children}
+    </button>
   );
 }
 
