@@ -16,6 +16,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
+import { canApproveAction } from "../utils/approvalAuthority";
 import { t } from "../i18n";
 
 const T = {
@@ -118,7 +119,16 @@ export default function MaterialTransferTab({ projectId, projectName, isAdmin = 
           const itemsTxt = (tr.items || []).map(it => `${it.material_name} ${it.qty} ${it.unit || ""}`.trim()).join("  ·  ");
           const totalVal = tr.total_value || (tr.items || []).reduce((s, it) => s + (Number(it.qty)||0)*(Number(it.rate)||0), 0);
           const busy = !!acting[tr.id];
-          const canApprove = isAdmin && tr.status === "PendingApproval";
+          // Server par ye POST /warehouse/transfers/:id/approve|reject hai, aur
+          // wahan DO rok hain: requirePerm("Warehouse","approve") AUR route ke
+          // andar ek role-list (admin / super_admin / project_manager). Screen
+          // par bhi theek wahi dono — pehle sirf isAdmin dekha jaata tha, to
+          // jis PM ke paas approve ka tick nahi tha use button milta tha aur
+          // dabane par 403.
+          const canApprove = canApproveAction({
+            roles: ["admin", "super_admin", "project_manager"],
+            perm: ["Warehouse", "approve"],
+          }) && tr.status === "PendingApproval";
           const canReceive = tr.status === "Pending" && isIncoming;
           return (
             <div key={tr.id} style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${meta.c}`, borderRadius: 9, padding: "11px 13px" }}>

@@ -1,11 +1,47 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import { Avatar, Credit } from "../../components/Credit";
 import SearchSelect from "../../components/SearchSelect";
 import { T } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
+import { canApproveAction } from "../../utils/approvalAuthority";
+import { useRoadAccess } from "../road/roadShared";
 import { t } from "../../i18n";
+
+// Baar-baar aane wale inline styles — ek jagah, is file ke andar hi.
+const S = {
+  label: {fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4},
+  labelLg: {fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5},
+  overlay: {position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(2px)"},
+  drawerHead: {background:"#0D1B2A",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0},
+  drawerTitle: {fontSize:14,fontWeight:700,color:"white"},
+  closeBtn: {background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1},
+  drawerBody: {flex:1,overflowY:"auto",padding:"14px 16px"},
+  scrollBody: {flex:1,overflowY:"auto",padding:"12px"},
+  grid2: {display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12},
+  input: {width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"},
+  searchIcon: {position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"},
+  sub: {fontSize:11,color:T.t4,marginTop:3},
+  title: {fontSize:14,fontWeight:700,color:T.t1},
+  titleEllipsis: {fontSize:13,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
+  chipRow: {display:"flex",gap:6,flexWrap:"wrap"},
+  btnRow: {display:"flex",gap:6,marginTop:7},
+  btnSm: {flex:1,padding:"6px",borderRadius:6,background:T.surface,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3},
+  emptyWrap: {textAlign:"center",padding:"70px 20px",display:"flex",flexDirection:"column",alignItems:"center",gap:12},
+  emptyText: {fontSize:12,color:T.t3,maxWidth:300,lineHeight:1.5},
+};
+
+// Road Levels apna poora section hai (charts + xlsx parsing) — lazy rakha
+// hai taaki Design tab kholne par uska code kheencha na jaye.
+const RoadLevels = lazy(() => import("../road/RoadLevels"));
+
+// Wahi jaanch jo server lagata hai — PATCH /design/drawings/:id/status par
+// requireRole(admin/super_admin/manager/project_manager) + requirePerm("Design","edit").
+const canDecideDesign = () => canApproveAction({
+  roles: ["admin", "super_admin", "manager", "project_manager"],
+  perm: ["Design", "edit"],
+});
 
 function TitleDropdown({ value, titles, onSelect, onChange }) {
   const [open, setOpen] = useState(false);
@@ -71,17 +107,17 @@ function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSav
   return (
     <>
       <div 
-        style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(2px)"}}/>
+        style={S.overlay}/>
       <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
         background:"#FFFFFF",borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",
         zIndex:401,width:480,maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
-        <div style={{background:"#0D1B2A",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{editReq?t("design.edit_request"):t("lead_design.new_design_request")}</div>
-          {!saving&&<button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>}
+        <div style={S.drawerHead}>
+          <div style={S.drawerTitle}>{editReq?t("design.edit_request"):t("lead_design.new_design_request")}</div>
+          {!saving&&<button onClick={onClose} style={S.closeBtn}>×</button>}
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+        <div style={S.drawerBody}>
           <div style={{marginBottom:12,position:"relative"}}>
-            <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>{t("design.kya_drawing_chahiye")}</label>
+            <label style={S.label}>{t("design.kya_drawing_chahiye")}</label>
             <SearchSelect
               value={reqForm.title}
               options={(Array.isArray(dbTitles) ? dbTitles : []).map(t => ({
@@ -101,31 +137,31 @@ function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSav
               placeholder={t("design.type_or_select_from_library")}
             />
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+          <div style={S.grid2}>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.category")}</label>
+              <label style={S.label}>{t("common.category")}</label>
               <SearchSelect value={reqForm.category} options={CATS}
                 onChange={v=>setReqForm(p=>({...p,category:v}))} placeholder={t("common.select_category")}/>
             </div>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.priority")}</label>
+              <label style={S.label}>{t("common.priority")}</label>
               <SearchSelect value={reqForm.priority} options={["Low","Normal","High","Urgent"]}
                 onChange={v=>setReqForm(p=>({...p,priority:v}))} placeholder={t("common.select_priority")}/>
             </div>
           </div>
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>{t("design.assign_to_optional")}</label>
+            <label style={S.label}>{t("design.assign_to_optional")}</label>
             <input value={reqForm.assigned_to||""} onChange={e=>setReqForm(p=>({...p,assigned_to:e.target.value}))}
               placeholder={t("design.designer_name")}
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              style={S.input}/>
           </div>
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>{t("design.due_date_optional")}</label>
+            <label style={S.label}>{t("design.due_date_optional")}</label>
             <input type="date" value={reqForm.due_date||""} onChange={e=>setReqForm(p=>({...p,due_date:e.target.value}))}
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              style={S.input}/>
           </div>
           <div>
-            <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>{t("design.description_reference")}</label>
+            <label style={S.label}>{t("design.description_reference")}</label>
             <textarea value={reqForm.description||""} onChange={e=>setReqForm(p=>({...p,description:e.target.value}))}
               placeholder={t("design.scale_reference_specific_details")} rows={3}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
@@ -153,7 +189,16 @@ function TabDesign({ project, isAdmin }) {
   const CATS_DEFAULT = ["Architectural","Structural","Electrical","Plumbing","Interior","HVAC","Landscape","Approval"];
   const TYPES_DEFAULT = ["Plan","Elevation","Section","Detail","Schedule","Diagram","3D"];
 
-  const [mainTab,  setMainTab]      = useState("drawings"); // "drawings" | "requests"
+  const [mainTab,  setMainTab]      = useState("drawings"); // "drawings" | "requests" | "road"
+  // Road Levels do rok ke peeche hai: company ne module liya hai ya nahi
+  // (SaaS Admin → Modules) aur is role ke paas view ka bit hai ya nahi
+  // (Settings → Roles & Access, module ka naam "Road Levels").
+  const road = useRoadAccess();
+  // Module beech me band ho jaye (ya doosri company par switch ho) to khuli
+  // hui Road Levels par mat atko — warna screen khaali reh jaati hai.
+  useEffect(() => {
+    if (mainTab === "road" && road.ready && !road.show) setMainTab("drawings");
+  }, [mainTab, road.ready, road.show]);
   const [drawings, setDrawings]     = useState([]);
   const [requests, setRequests]     = useState([]);
   const [loading,  setLoading]      = useState(true);
@@ -460,24 +505,24 @@ function TabDesign({ project, isAdmin }) {
   const UploadModal = () => (
     <>
       <div 
-        style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(2px)"}}/>
+        style={S.overlay}/>
       <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
         background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",
         zIndex:401,width:520,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
 
         {/* Header */}
-        <div style={{background:"#0D1B2A",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={S.drawerHead}>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("design.upload_drawing")}</div>
+            <div style={S.drawerTitle}>{t("design.upload_drawing")}</div>
             <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:1}}>{projectName}</div>
           </div>
-          {!uploading&&<button onClick={()=>setShowUpload(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>}
+          {!uploading&&<button onClick={()=>setShowUpload(false)} style={S.closeBtn}>×</button>}
         </div>
 
-        <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+        <div style={S.drawerBody}>
           {/* Form fields */}
           <div style={{marginBottom:12,position:"relative"}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("design.drawing_title")}</label>
+            <label style={S.label}>{t("design.drawing_title")}</label>
             <TitleDropdown
               value={uForm.title}
               titles={dbTitles}
@@ -485,14 +530,14 @@ function TabDesign({ project, isAdmin }) {
               onChange={v => setUForm(p=>({...p, title:v}))}
             />
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+          <div style={S.grid2}>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.category")}</label>
+              <label style={S.label}>{t("common.category")}</label>
               <SearchSelect value={uForm.category} options={CATS}
                 onChange={v=>setUForm(p=>({...p,category:v}))} placeholder={t("common.select_category")}/>
             </div>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.type")}</label>
+              <label style={S.label}>{t("common.type")}</label>
               <SearchSelect value={uForm.drawing_type} options={TYPES}
                 onChange={v=>setUForm(p=>({...p,drawing_type:v}))} placeholder={t("common.select_type")}/>
             </div>
@@ -500,7 +545,7 @@ function TabDesign({ project, isAdmin }) {
 
           {/* File drop zone */}
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.file")}</label>
+            <label style={S.label}>{t("common.file")}</label>
             <label style={{display:"block",border:"2px dashed "+(uFile?T.grn:T.b2),borderRadius:9,padding:"20px 16px",
               textAlign:"center",background:uFile?T.grnL:T.surfaceB,cursor:"pointer",transition:"all 0.2s"}}>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf,.svg" style={{display:"none"}}
@@ -508,12 +553,12 @@ function TabDesign({ project, isAdmin }) {
               {uFile ? (
                 <div>
                   <div style={{fontSize:13,fontWeight:700,color:T.grn}}>✓ {uFile.name}</div>
-                  <div style={{fontSize:11,color:T.t4,marginTop:3}}>{(uFile.size/1024).toFixed(0)} KB</div>
+                  <div style={S.sub}>{(uFile.size/1024).toFixed(0)} KB</div>
                 </div>
               ) : (
                 <div>
                   <div style={{fontSize:13,fontWeight:600,color:T.t2}}>{t("design.file_choose_karo_ya_drop_karo")}</div>
-                  <div style={{fontSize:11,color:T.t4,marginTop:3}}>{t("design.pdf_png_jpg_dwg_dxf_max")}</div>
+                  <div style={S.sub}>{t("design.pdf_png_jpg_dwg_dxf_max")}</div>
                 </div>
               )}
             </label>
@@ -521,7 +566,7 @@ function TabDesign({ project, isAdmin }) {
 
           {/* Note */}
           <div>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.notes_optional")}</label>
+            <label style={S.label}>{t("common.notes_optional")}</label>
             <textarea value={uForm.note} onChange={e=>setUForm(p=>({...p,note:e.target.value}))}
               placeholder={t("design.reviewer_ke_liye_notes")} rows={2}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
@@ -576,7 +621,7 @@ function TabDesign({ project, isAdmin }) {
     };
     return(
       <div style={{marginTop:8}}>
-        <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("design.add_revision_pin_comment")}</label>
+        <label style={S.label}>{t("design.add_revision_pin_comment")}</label>
         <div style={{display:"flex",gap:6}}>
           <input value={pinNote} onChange={e=>setPinNote(e.target.value)}
             placeholder={t("design.e_g_column_dimension_ghalat_hai")}
@@ -598,12 +643,12 @@ function TabDesign({ project, isAdmin }) {
         boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column"}}>
         <div style={{background:"#D97706",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:"white"}}>{t("design.revision_queue")}</div>
+            <div style={S.drawerTitle}>{t("design.revision_queue")}</div>
             <div style={{fontSize:10.5,color:"rgba(255,255,255,0.7)",marginTop:1}}>{t("design.revqueue_drawings_need_revision", { revQueue: revQueue.length })}</div>
           </div>
           <button onClick={()=>setShowRevQ(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:20}}>×</button>
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:"12px"}}>
+        <div style={S.scrollBody}>
           {revQueue.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>{t("design.no_drawings_in_revision_queue")}</div>}
           {revQueue.map(d=>(
             <div key={d.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.ambM,padding:"12px",marginBottom:10,borderLeft:"3px solid "+T.amb}}>
@@ -618,7 +663,7 @@ function TabDesign({ project, isAdmin }) {
               <RevPinForm drawingId={d.id} onAdded={loadDrawings}/>
               {/* Upload new version */}
               <div style={{marginTop:10,paddingTop:8,borderTop:"1px solid "+T.b1}}>
-                <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>{t("design.upload_revised_version")}</label>
+                <label style={S.labelLg}>{t("design.upload_revised_version")}</label>
                 <label style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",
                   border:"1.5px dashed "+(acting["ver"+d.id]?T.blu:T.b2),borderRadius:6,
                   cursor:acting["ver"+d.id]?"not-allowed":"pointer",
@@ -661,11 +706,11 @@ function TabDesign({ project, isAdmin }) {
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
           background:T.surface,borderRadius:12,zIndex:401,width:480,maxHeight:"80vh",
           display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
-          <div style={{background:"#0D1B2A",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={S.drawerHead}>
             <div style={{fontSize:13,fontWeight:700,color:"white"}}>{t("design.version_history_title", { title: drawing.title })}</div>
             <button onClick={()=>setShowVer(null)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:18}}>×</button>
           </div>
-          <div style={{flex:1,overflowY:"auto",padding:"12px"}}>
+          <div style={S.scrollBody}>
             {vLoading&&<div style={{textAlign:"center",padding:"30px",color:T.t4}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>{t("common.loading")}</div>}
             {versions.map((v,i)=>(
               <div key={v.id} style={{display:"flex",gap:10,marginBottom:8,alignItems:"flex-start"}}>
@@ -702,7 +747,7 @@ function TabDesign({ project, isAdmin }) {
       <div style={{margin:"6px 0 8px",padding:"11px 14px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,borderLeft:`3px solid ${isApproved?T.grn:T.blu}`}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
           <div style={{minWidth:0,flex:1}}>
-            <div style={{fontSize:13,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{d.title}</div>
+            <div style={S.titleEllipsis}>{d.title}</div>
             <div style={{fontSize:11,color:T.t4,marginTop:1}}>{d.category} · {d.current_version} · {d.uploaded_by_name||"—"} · {fmtDate(d.updated_at)}</div>
           </div>
           <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
@@ -762,8 +807,8 @@ function TabDesign({ project, isAdmin }) {
           </div>
         )}
 
-        {d.status!=="Approved" && d.client_status!=="PendingShare" && d.client_status!=="SharedWithClient" && (
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {canDecideDesign() && d.status!=="Approved" && d.client_status!=="PendingShare" && d.client_status!=="SharedWithClient" && (
+          <div style={S.chipRow}>
             {/* Approve */}
             <button onClick={()=>handleStatus(d.id,"Approved",null)} disabled={!!acting[d.id]}
               style={{padding:"6px 14px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",boxShadow:`0 2px 5px ${T.grn}33`,transition:"all .12s",opacity:acting[d.id]?.6:1}}
@@ -810,12 +855,12 @@ function TabDesign({ project, isAdmin }) {
         {/* Revision form */}
         {showRevForm&&(
           <div style={{marginTop:10,padding:"10px",background:T.ambL,borderRadius:7,border:"1px solid "+T.ambM}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>{t("design.revision_reason_2")}</label>
+            <label style={S.labelLg}>{t("design.revision_reason_2")}</label>
             <textarea value={revNote} onChange={e=>setRevNote(e.target.value)}
               placeholder={t("design.kya_change_karna_hai")} rows={2}
               style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.ambM,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
-            <div style={{display:"flex",gap:6,marginTop:7}}>
-              <button onClick={()=>setShowRevForm(false)} style={{flex:1,padding:"6px",borderRadius:6,background:T.surface,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>{t("common.cancel")}</button>
+            <div style={S.btnRow}>
+              <button onClick={()=>setShowRevForm(false)} style={S.btnSm}>{t("common.cancel")}</button>
               <button onClick={()=>{ if(revNote) handleStatus(d.id,"Revision",revNote); setShowRevForm(false); }}
                 style={{flex:2,padding:"6px",borderRadius:6,background:T.amb,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                {t("design.send_to_revision_queue")}
@@ -827,12 +872,12 @@ function TabDesign({ project, isAdmin }) {
         {/* Reject form */}
         {showRejForm&&(
           <div style={{marginTop:10,padding:"10px",background:T.redL,borderRadius:7,border:"1px solid "+T.redM}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>{t("design.rejection_reason_2")}</label>
+            <label style={S.labelLg}>{t("design.rejection_reason_2")}</label>
             <textarea value={rejNote} onChange={e=>setRejNote(e.target.value)}
               placeholder={t("design.rejection_ka_reason")} rows={2}
               style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.redM,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
-            <div style={{display:"flex",gap:6,marginTop:7}}>
-              <button onClick={()=>setShowRejForm(false)} style={{flex:1,padding:"6px",borderRadius:6,background:T.surface,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>{t("common.cancel")}</button>
+            <div style={S.btnRow}>
+              <button onClick={()=>setShowRejForm(false)} style={S.btnSm}>{t("common.cancel")}</button>
               <button onClick={()=>{ if(rejNote) handleStatus(d.id,"Rejected",rejNote); setShowRejForm(false); }}
                 style={{flex:2,padding:"6px",borderRadius:6,background:T.red,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                {t("projects.confirm_reject")}
@@ -856,13 +901,17 @@ function TabDesign({ project, isAdmin }) {
 
       {/* Main tab switcher — segmented pill */}
       <div style={{display:"inline-flex",padding:3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:10,marginBottom:14,gap:0}}>
+        {/* NOTE: callback ka naam `tab` hai, `t` nahi — warna i18n ka t()
+            is block ke andar chhup jaata hai aur label kabhi translate
+            nahi hote (gate bhi ise nahi pakadti). */}
         {[
           {id:"drawings", label:t("design.drawings"), count:drawings.length},
           {id:"requests", label:t("lead_design.design_requests"), count:requests.filter(r=>r.status==="Pending").length},
-        ].map(t=>{
-          const active = mainTab===t.id;
+          ...(road.show ? [{id:"road", label:t("road.tab_title"), count:0}] : []),
+        ].map(tab=>{
+          const active = mainTab===tab.id;
           return(
-            <button key={t.id} onClick={()=>setMainTab(t.id)}
+            <button key={tab.id} onClick={()=>setMainTab(tab.id)}
               style={{padding:"6px 16px",border:"none",borderRadius:7,
                 background:active?T.surface:"transparent",
                 color:active?T.t1:T.t3,
@@ -870,12 +919,19 @@ function TabDesign({ project, isAdmin }) {
                 cursor:"pointer",display:"flex",alignItems:"center",gap:7,
                 boxShadow:active?"0 1px 3px rgba(0,0,0,.08)":"none",
                 transition:"all .12s"}}>
-              {t.label}
-              {t.count>0&&<span style={{background:active?T.blu:T.b1,color:active?"white":T.t3,fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:10,fontVariantNumeric:"tabular-nums"}}>{t.count}</span>}
+              {tab.label}
+              {tab.count>0&&<span style={{background:active?T.blu:T.b1,color:active?"white":T.t3,fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:10,fontVariantNumeric:"tabular-nums"}}>{tab.count}</span>}
             </button>
           );
         })}
       </div>
+
+      {/* ── ROAD LEVELS TAB ── */}
+      {mainTab==="road" && road.show && (
+        <Suspense fallback={<div style={{padding:26,fontSize:12.5,color:T.t4}}>{t("common.loading")}</div>}>
+          <RoadLevels project={project}/>
+        </Suspense>
+      )}
 
       {/* ── DRAWINGS TAB ── */}
       {mainTab==="drawings"&&<>
@@ -901,7 +957,7 @@ function TabDesign({ project, isAdmin }) {
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           {/* Search + filters */}
           <div style={{position:"relative"}}>
-            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round" style={S.searchIcon}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
             <input value={searchDraw} onChange={e=>setSearchDraw(e.target.value)}
               placeholder={t("design.search_drawings")}
               style={{padding:"6px 9px 6px 28px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",width:160,color:T.t1,background:T.surface,boxSizing:"border-box",transition:"border-color .12s"}}
@@ -937,12 +993,12 @@ function TabDesign({ project, isAdmin }) {
 
       {/* Empty state */}
       {!loading&&drawings.length===0&&(
-        <div style={{textAlign:"center",padding:"70px 20px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+        <div style={S.emptyWrap}>
           <div style={{width:64,height:64,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4}}>
             <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
           </div>
-          <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{t("design.no_drawings_yet")}</div>
-          <div style={{fontSize:12,color:T.t3,maxWidth:300,lineHeight:1.5}}>{t("common.click")} <b>{t("design.upload_drawing")}</b> {t("design.to_add_the_first_drawing_for")}</div>
+          <div style={S.title}>{t("design.no_drawings_yet")}</div>
+          <div style={S.emptyText}>{t("common.click")} <b>{t("design.upload_drawing")}</b> {t("design.to_add_the_first_drawing_for")}</div>
         </div>
       )}
 
@@ -999,7 +1055,7 @@ function TabDesign({ project, isAdmin }) {
               <b style={{color:T.t1,fontVariantNumeric:"tabular-nums"}}>{requests.length}</b> total
             </span>
             <div style={{position:"relative",flex:1,minWidth:200}}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round" style={S.searchIcon}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
               <input value={searchReq} onChange={e=>setSearchReq(e.target.value)}
                 placeholder={t("design.search_requests")}
                 style={{width:"100%",padding:"6px 9px 6px 28px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",color:T.t1,background:T.surface,transition:"border-color .12s"}}
@@ -1026,12 +1082,12 @@ function TabDesign({ project, isAdmin }) {
 
           {/* Empty state */}
           {requests.length===0&&(
-            <div style={{textAlign:"center",padding:"70px 20px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+            <div style={S.emptyWrap}>
               <div style={{width:64,height:64,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4}}>
                 <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><path d="M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
               </div>
-              <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{t("common.no_design_requests_yet")}</div>
-              <div style={{fontSize:12,color:T.t3,maxWidth:300,lineHeight:1.5}}>{t("common.click")} <b>{t("payment_request.new_request_2")}</b> {t("design.to_ask_for_a_drawing_from")}</div>
+              <div style={S.title}>{t("common.no_design_requests_yet")}</div>
+              <div style={S.emptyText}>{t("common.click")} <b>{t("payment_request.new_request_2")}</b> {t("design.to_ask_for_a_drawing_from")}</div>
             </div>
           )}
 
@@ -1068,7 +1124,7 @@ function TabDesign({ project, isAdmin }) {
                   <Avatar name={req.requested_by||"?"} size={26} title={`Requested by ${req.requested_by||"unknown"}`}/>
                   {/* Title + meta */}
                   <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:2}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{req.title}</div>
+                    <div style={S.titleEllipsis}>{req.title}</div>
                     <div style={{fontSize:10.5,color:T.t4,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                       <span>{req.category}</span>
                       {req.due_date&&<><span>·</span><span>{t("design.due_fmtdate", { fmtDate: fmtDate(req.due_date) })}</span></>}
@@ -1095,7 +1151,7 @@ function TabDesign({ project, isAdmin }) {
                       {req.status==="Uploaded" && <Credit label={t("design.uploaded_by")} name={req.updated_by||req.assigned_to} time={req.updated_at}/>}
                     </div>
                     {/* Action buttons */}
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    <div style={S.chipRow}>
                       {req.status==="Pending"&&<>
                         <button onClick={(e)=>{e.stopPropagation();setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
                           style={{padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>

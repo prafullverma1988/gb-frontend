@@ -81,7 +81,7 @@ export default function PhotoLocateModal({ tenderId, onClose, onDone }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 200,
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 220,
       display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
       <div style={{ background: T.surface, borderRadius: 13, width: "min(640px, 100%)",

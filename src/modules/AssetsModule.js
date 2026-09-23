@@ -30,6 +30,7 @@ import SearchSelect from "../components/SearchSelect";
 import ImportFixPanel, { useImportFix, impNorm } from "../components/ImportFix";
 import { useToast } from "../components/Toast";
 import { t } from "../i18n";
+import { BackClose } from "../utils/backNav";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -116,9 +117,12 @@ const condTone = (c) =>
 // Ginti ka status voucher wale se alag hai (draft/closed/cancelled) — apna tone.
 const verifTone = (s) =>
   s === "draft" ? { c: T.amb, bg: T.ambL }
+  : s === "pending" ? { c: T.blu, bg: T.bluL }
   : s === "closed" ? { c: T.grn, bg: T.grnL }
   : { c: T.slt, bg: T.sltL };
-const verifStatusLabel = (s) => t(s === "closed" ? "assets.verify_closed" : s === "cancelled" ? "assets.status_cancelled" : "assets.verify_draft");
+const verifStatusLabel = (s) => t(s === "closed" ? "assets.verify_closed"
+  : s === "cancelled" ? "assets.status_cancelled"
+  : s === "pending" ? "assets.verify_pending_status" : "assets.verify_draft");
 
 // Voucher ka ek sira (from / to) — jahan bhi voucher dikhta hai wahi shakl.
 const sideText = (v, side) => {
@@ -310,6 +314,7 @@ const Modal = ({ open, onClose, title, sub, width = 620, children, footer }) => 
   if (!open) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+      <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
       <div onClick={(e) => e.stopPropagation()}
         style={{ position: "relative", width, maxWidth: "94vw", maxHeight: "92vh", background: T.surface, borderRadius: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -335,6 +340,7 @@ const Drawer = ({ open, onClose, title, sub, width = 640, children, footer, head
   if (!open) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9998, display: "flex", justifyContent: "flex-end" }} onClick={onClose}>
+      <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)" }} />
       <div onClick={(e) => e.stopPropagation()}
         style={{ position: "relative", width, maxWidth: "100vw", height: "100%", background: T.surface, boxShadow: "-8px 0 32px rgba(0,0,0,0.16)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -480,11 +486,51 @@ const repairLoc = (partyId) => ({ holder_type: "repair", holder_id: Number(party
 // ══════════════════════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════════════════════
-function DashboardTab({ dash, onOpenVoucher, onGo }) {
-  if (!dash) return <Empty>{t("assets.dash_empty")}</Empty>;
-  const k = dash.tiles || {};
+function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
+  // Ek store chuna to server usi store ka dashboard bhejta hai
+  // (GET /assets/dashboard?warehouse_id=). Site/subcon wale tile wahan aate hi
+  // nahi — ledger sirf ye jaanta hai cheez ABHI kahan hai, "is store se gayi
+  // thi" kahin darj nahi hota.
+  const [whId, setWhId] = useState("");
+  const [whDash, setWhDash] = useState(null);
+  const [whBusy, setWhBusy] = useState(false);
+  useEffect(() => {
+    if (!whId) { setWhDash(null); return; }
+    let alive = true;
+    setWhBusy(true); setWhDash(null);
+    api.get(`/assets/dashboard?warehouse_id=${whId}`)
+      .then((r) => { if (alive) setWhDash(r && r.success ? r.data : null); })
+      .catch(() => { if (alive) setWhDash(null); })
+      .finally(() => { if (alive) setWhBusy(false); });
+    return () => { alive = false; };
+  }, [whId]);
+
+  const scoped = !!whId && !!whDash;
+  const view = whId ? whDash : companyDash;
+  const picker = (warehouses || []).length > 1 ? (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+      <select value={whId} onChange={(e) => setWhId(e.target.value)} style={{ ...inp, width: 240 }}>
+        <option value="">{t("assets.all_warehouses")}</option>
+        {(warehouses || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+      </select>
+      {scoped && <span style={{ fontSize: 11.5, color: T.t3 }}>{t("assets.wh_scope_hint")}</span>}
+    </div>
+  ) : null;
+
+  if (!view) return <>{picker}{whBusy ? <Spinner /> : <Empty>{t("assets.dash_empty")}</Empty>}</>;
+  const k = view.tiles || {};
   const totalItems = N(k.serialized_items) + N(k.bulk_items);
-  const tiles = [
+  const tiles = scoped ? [
+    { l: t("assets.items"), v: fmtN(totalItems), sub: t("assets.tile_total_sub", { s: N(k.serialized_items), b: N(k.bulk_items) }), c: T.ind, I: IcBox, go: "register" },
+    { l: t("assets.tile_wh_qty"), v: fmtN(k.in_store_qty), sub: t("assets.tile_wh_qty_sub"), c: T.blu, I: IcStore },
+    { l: t("assets.good"), v: fmtN(k.good_qty), sub: t("assets.tile_wh_good_sub"), c: T.grn, I: IcChk },
+    { l: t("assets.tile_damaged"), v: fmtN(k.damaged_qty), sub: t("assets.tile_wh_damaged_sub"), c: N(k.damaged_qty) ? T.amb : T.grn, I: IcAlert },
+    { l: t("assets.tile_pending"), v: fmtN(k.awaiting_accept), sub: t("assets.tile_wh_pending_sub"), c: N(k.awaiting_accept) ? T.amb : T.grn, I: IcClock, go: "movements" },
+    { l: t("assets.tile_overdue"), v: fmtN(k.overdue), sub: t("assets.tile_wh_overdue_sub"), c: N(k.overdue) ? T.red : T.grn, I: IcAlert },
+    { l: t("assets.tile_verify"), v: fmtN(k.open_verifications), c: N(k.open_verifications) ? T.ind : T.grn, I: IcCount, go: "verify",
+      sub: k.last_count_date ? t("assets.tile_wh_last_count", { d: fmtD(k.last_count_date) }) : t("assets.tile_wh_never_counted") },
+    { l: t("assets.tile_lost"), v: fmtN(k.lost_qty_fy), sub: t("assets.tile_wh_lost_sub"), c: N(k.lost_qty_fy) ? T.red : T.grn, I: IcTag },
+  ] : [
     { l: t("assets.tile_total"), v: fmtN(totalItems), sub: t("assets.tile_total_sub", { s: N(k.serialized_items), b: N(k.bulk_items) }), c: T.ind, I: IcBox, go: "register" },
     { l: t("assets.tile_in_store"), v: fmtN(k.in_store_qty), sub: t("assets.tile_in_store_sub"), c: T.blu, I: IcStore, go: "custody" },
     { l: t("assets.tile_deployed"), v: fmtN(k.deployed_qty), sub: t("assets.tile_deployed_sub"), c: T.grn, I: IcHome, go: "custody" },
@@ -498,9 +544,11 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
     { l: t("assets.tile_verify"), v: fmtN(k.open_verifications), sub: t("assets.tile_verify_sub"), c: N(k.open_verifications) ? T.ind : T.grn, I: IcCount, go: "verify" },
   ];
   const two = { display: "grid", gridTemplateColumns: isMobileWidth() ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 };
+  const dash = view;   // neeche ki list dono view me ek jaisi shakl me aati hai
 
   return (
     <>
+      {picker}
       <div style={{ display: "grid", gridTemplateColumns: isMobileWidth() ? "1fr 1fr" : "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
         {tiles.map((s, i) => <StatCard key={i} label={s.l} value={s.v} sub={s.sub} color={s.c} icon={s.I} onClick={s.go && onGo ? () => onGo(s.go) : undefined} />)}
       </div>
@@ -550,6 +598,84 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
         </Panel>
       </div>
 
+      {scoped ? (
+        <div style={two}>
+          <Panel title={t("assets.wh_items_title")}>
+            {(dash.by_item || []).length === 0 && <Empty>{t("assets.wh_items_empty")}</Empty>}
+            {(dash.by_item || []).length > 0 && (
+              <Scroll minWidth={560}>
+                <Row head cols="96px 1.5fr 70px 70px 76px">
+                  <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.good")}</span><span>{t("assets.damaged")}</span><span>{t("assets.total")}</span>
+                </Row>
+                {(dash.by_item || []).map((r) => (
+                  <Row key={r.id} cols="96px 1.5fr 70px 70px 76px">
+                    <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>{r.code || "—"}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4 }}>{[r.spec, r.unit, r.category].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    <span style={{ fontWeight: 600 }}>{fmtN(r.qty_good)}</span>
+                    <span style={{ color: N(r.qty_damaged) ? T.amb : T.t4 }}>{fmtN(r.qty_damaged)}</span>
+                    <span style={{ color: T.t3 }}>{fmtN(r.total_qty)}</span>
+                  </Row>
+                ))}
+              </Scroll>
+            )}
+          </Panel>
+          <Panel title={t("assets.wh_cats_title")}>
+            {(dash.by_category || []).length === 0 && <Empty>{t("assets.wh_items_empty")}</Empty>}
+            {(dash.by_category || []).length > 0 && (
+              <Row head cols="1.6fr 60px 70px 70px"><span>{t("assets.category")}</span><span>{t("assets.items")}</span><span>{t("assets.qty")}</span><span>{t("assets.damaged")}</span></Row>
+            )}
+            {(dash.by_category || []).map((r, i) => (
+              <Row key={r.category_id || "x" + i} cols="1.6fr 60px 70px 70px">
+                <span style={{ fontWeight: 600, color: T.t1 }}>{r.category || "—"}</span>
+                <span>{fmtN(r.items)}</span><span>{fmtN(r.qty)}</span>
+                <span style={{ color: N(r.damaged_qty) ? T.amb : T.t4 }}>{fmtN(r.damaged_qty)}</span>
+              </Row>
+            ))}
+          </Panel>
+        </div>
+      ) : (<>
+      {scoped ? (
+        <div style={two}>
+          <Panel title={t("assets.wh_items_title")}>
+            {(dash.by_item || []).length === 0 && <Empty>{t("assets.wh_items_empty")}</Empty>}
+            {(dash.by_item || []).length > 0 && (
+              <Scroll minWidth={560}>
+                <Row head cols="96px 1.5fr 70px 70px 76px">
+                  <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.good")}</span><span>{t("assets.damaged")}</span><span>{t("assets.total")}</span>
+                </Row>
+                {(dash.by_item || []).map((r) => (
+                  <Row key={r.id} cols="96px 1.5fr 70px 70px 76px">
+                    <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>{r.code || "—"}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4 }}>{[r.spec, r.unit, r.category].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    <span style={{ fontWeight: 600 }}>{fmtN(r.qty_good)}</span>
+                    <span style={{ color: N(r.qty_damaged) ? T.amb : T.t4 }}>{fmtN(r.qty_damaged)}</span>
+                    <span style={{ color: T.t3 }}>{fmtN(r.total_qty)}</span>
+                  </Row>
+                ))}
+              </Scroll>
+            )}
+          </Panel>
+          <Panel title={t("assets.wh_cats_title")}>
+            {(dash.by_category || []).length === 0 && <Empty>{t("assets.wh_items_empty")}</Empty>}
+            {(dash.by_category || []).length > 0 && (
+              <Row head cols="1.6fr 60px 70px 70px"><span>{t("assets.category")}</span><span>{t("assets.items")}</span><span>{t("assets.qty")}</span><span>{t("assets.damaged")}</span></Row>
+            )}
+            {(dash.by_category || []).map((r, i) => (
+              <Row key={r.category_id || "x" + i} cols="1.6fr 60px 70px 70px">
+                <span style={{ fontWeight: 600, color: T.t1 }}>{r.category || "—"}</span>
+                <span>{fmtN(r.items)}</span><span>{fmtN(r.qty)}</span>
+                <span style={{ color: N(r.damaged_qty) ? T.amb : T.t4 }}>{fmtN(r.damaged_qty)}</span>
+              </Row>
+            ))}
+          </Panel>
+        </div>
+      ) : (<>
       <div style={two}>
         <Panel title={t("assets.by_project")}>
           {(dash.by_project || []).length === 0 && <Empty>{t("assets.nothing_on_site")}</Empty>}
@@ -602,7 +728,7 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
             <Row head cols="1.6fr 60px 70px 70px"><span>{t("assets.warehouse")}</span><span>{t("assets.items")}</span><span>{t("assets.qty")}</span><span>{t("assets.damaged")}</span></Row>
           )}
           {(dash.by_warehouse || []).map((r) => (
-            <Row key={r.warehouse_id} cols="1.6fr 60px 70px 70px">
+            <Row key={r.warehouse_id} cols="1.6fr 60px 70px 70px" onClick={() => setWhId(String(r.warehouse_id))}>
               <span style={{ fontWeight: 600, color: T.t1 }}>{r.warehouse_name}</span>
               <span>{fmtN(r.items)}</span><span>{fmtN(r.qty)}</span>
               <span style={{ color: N(r.damaged_qty) ? T.amb : T.t4 }}>{fmtN(r.damaged_qty)}</span>
@@ -610,6 +736,10 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
           ))}
         </Panel>
       </div>
+
+      </>)}
+
+      </>)}
 
       <Panel title={t("assets.recent_title")}>
         {(dash.recent || []).length === 0 && <Empty>{t("assets.recent_empty")}</Empty>}
@@ -640,20 +770,36 @@ function DashboardTab({ dash, onOpenVoucher, onGo }) {
 // ══════════════════════════════════════════════════════════════════
 // REGISTER
 // ══════════════════════════════════════════════════════════════════
-function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIncharge, onImport, onExport, exportErr, onAddAsset }) {
+function RegisterTab({ items, cats, warehouses, canEdit, canCreate, onOpenItem, onCats, onIncharge, onImport, onExport, exportErr, onAddAsset }) {
   const [q, setQ] = useState("");
   const [tracking, setTracking] = useState("");
   const [cat, setCat] = useState("");
+  // Ek store chuna to server se usi store wali list aati hai — aur qty bhi usi
+  // store ki (here_good / here_damaged). Do godown wali company me "220 pada
+  // hai" dekh kar aadmi ye maan leta tha ki 220 isi store me hai.
+  const [whId, setWhId] = useState("");
+  const [whRows, setWhRows] = useState(null);
+  useEffect(() => {
+    if (!whId) { setWhRows(null); return; }
+    let alive = true;
+    setWhRows(null);
+    api.get(`/assets/items?in_warehouse_id=${whId}`)
+      .then((r) => { if (alive) setWhRows(r && r.success ? r.data || [] : []); })
+      .catch(() => { if (alive) setWhRows([]); });
+    return () => { alive = false; };
+  }, [whId]);
+  const scoped = !!whId;
+  const base = scoped ? whRows : items;
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return (items || []).filter((i) =>
+    return (base || []).filter((i) =>
       (!tracking || i.tracking_mode === tracking) &&
       (!cat || String(i.category_id) === String(cat)) &&
       (!s || [i.code, i.name, i.spec, i.category].some((x) => String(x || "").toLowerCase().includes(s))));
-  }, [items, q, tracking, cat]);
+  }, [base, q, tracking, cat]);
 
-  const cols = "100px 1.6fr 1fr 60px 84px 96px 64px 64px 64px 64px";
+  const cols = scoped ? "100px 1.6fr 1fr 60px 84px 96px 64px 64px 64px" : "100px 1.6fr 1fr 60px 84px 96px 64px 64px 64px 64px";
   return (
     <Panel title={t("assets.register_title", { n: rows.length })}
       action={
@@ -671,19 +817,31 @@ function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIn
           <option value="">{t("assets.all_categories")}</option>
           {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+        {(warehouses || []).length > 1 && (
+          <select value={whId} onChange={(e) => setWhId(e.target.value)} style={{ ...inp, width: 200 }}>
+            <option value="">{t("assets.all_warehouses")}</option>
+            {(warehouses || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        )}
+        {scoped && <span style={{ fontSize: 11.5, color: T.t3 }}>{t("assets.reg_wh_hint")}</span>}
       </div>
       {exportErr && <div style={{ padding: "8px 14px" }}><Notice tone="warn">{exportErr}</Notice></div>}
-      {rows.length === 0 && (
+      {scoped && whRows == null && <Spinner />}
+      {rows.length === 0 && !(scoped && whRows == null) && (
         <Empty>
-          {(items || []).length === 0 ? t("assets.register_empty") : t("assets.no_match")}<br />
-          {(items || []).length === 0 && <span style={{ fontSize: 11.5 }}>{t("assets.register_empty_hint")}</span>}
+          {scoped ? t("assets.wh_items_empty")
+            : (items || []).length === 0 ? t("assets.register_empty") : t("assets.no_match")}<br />
+          {!scoped && (items || []).length === 0 && <span style={{ fontSize: 11.5 }}>{t("assets.register_empty_hint")}</span>}
         </Empty>
       )}
       {rows.length > 0 && (
         <Scroll minWidth={900}>
           <Row head cols={cols}>
             <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.spec")}</span><span>{t("assets.unit")}</span>
-            <span>{t("assets.type")}</span><span>{t("assets.status")}</span><span>{t("assets.total")}</span><span>{t("assets.in_store")}</span><span>{t("assets.deployed")}</span><span>{t("assets.damaged")}</span>
+            <span>{t("assets.type")}</span><span>{t("assets.status")}</span>
+            {scoped
+              ? <><span>{t("assets.good")}</span><span>{t("assets.damaged")}</span><span>{t("assets.total")}</span></>
+              : <><span>{t("assets.total")}</span><span>{t("assets.in_store")}</span><span>{t("assets.deployed")}</span><span>{t("assets.damaged")}</span></>}
           </Row>
           {rows.map((i) => (
             <Row key={i.id} cols={cols} onClick={() => onOpenItem(i)}>
@@ -696,10 +854,20 @@ function RegisterTab({ items, cats, canEdit, canCreate, onOpenItem, onCats, onIn
                 ? <Pill label={itemStatusLabel(i.status)} c={["damaged", "lost", "scrapped"].includes(i.status) ? T.red : i.status === "repair" ? T.amb : i.status === "issued" ? T.blu : T.grn}
                     bg={["damaged", "lost", "scrapped"].includes(i.status) ? T.redL : i.status === "repair" ? T.ambL : i.status === "issued" ? T.bluL : T.grnL} />
                 : <span style={{ color: T.t4 }}>—</span>}</span>
-              <span style={{ fontWeight: 600 }}>{fmtN(i.total_qty)}</span>
-              <span>{fmtN(i.in_store_qty)}</span>
-              <span>{fmtN(i.deployed_qty)}</span>
-              <span style={{ color: N(i.damaged_qty) ? T.amb : T.t4 }}>{fmtN(i.damaged_qty)}</span>
+              {scoped ? (
+                <>
+                  <span style={{ fontWeight: 600 }}>{fmtN(i.here_good)}</span>
+                  <span style={{ color: N(i.here_damaged) ? T.amb : T.t4 }}>{fmtN(i.here_damaged)}</span>
+                  <span style={{ color: T.t3 }}>{fmtN(i.total_qty)}</span>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontWeight: 600 }}>{fmtN(i.total_qty)}</span>
+                  <span>{fmtN(i.in_store_qty)}</span>
+                  <span>{fmtN(i.deployed_qty)}</span>
+                  <span style={{ color: N(i.damaged_qty) ? T.amb : T.t4 }}>{fmtN(i.damaged_qty)}</span>
+                </>
+              )}
             </Row>
           ))}
         </Scroll>
@@ -715,6 +883,7 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
   const [f, setF] = useState({});
   const [holdings, setHoldings] = useState(null);
   const [history, setHistory] = useState(null);
+  const [counts, setCounts] = useState(null);    // is item ki saari ginti (kab, kitna, kyun)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const id = item && item.id;
@@ -735,14 +904,16 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
   useEffect(() => {
     if (!id) return;
     let alive = true;
-    setHoldings(null); setHistory(null);
+    setHoldings(null); setHistory(null); setCounts(null);
     Promise.all([
       api.get(`/assets/items/${id}/holdings`).catch(() => null),
       api.get(`/assets/items/${id}/history`).catch(() => null),
-    ]).then(([h, hs]) => {
+      api.get(`/assets/items/${id}/verifications`).catch(() => null),
+    ]).then(([h, hs, cs]) => {
       if (!alive) return;
       setHoldings(h && h.success ? h.data || [] : []);
       setHistory(hs && hs.success ? hs.data || [] : []);
+      setCounts(cs && cs.success ? cs.data || [] : []);
     });
     return () => { alive = false; };
   }, [id]);
@@ -850,6 +1021,43 @@ function ItemDrawer({ item, cats, canEdit, onClose, onChanged, onOpenVoucher }) 
         </Panel>
       )}
 
+      {/* Ginti ka itihaas — kab gina, ledger me kitna tha, kitna mila, kya wajah. */}
+      {tab === "history" && counts && counts.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <Panel title={t("assets.item_counts")}>
+            <Scroll minWidth={820}>
+              <Row head cols="118px 80px 90px 78px 78px 70px 1.6fr">
+                <span>{t("assets.verify_no")}</span><span>{t("assets.date")}</span><span>{t("assets.status")}</span>
+                <span>{t("assets.verify_system")}</span><span>{t("assets.verify_counted")}</span><span>{t("assets.verify_gap")}</span><span>{t("assets.remarks")}</span>
+              </Row>
+              {counts.map((c, i) => {
+                const sys = N(c.system_good) + N(c.system_damaged);
+                const got = N(c.counted_good) + N(c.counted_damaged);
+                const gap = got - sys;
+                return (
+                  <Row key={c.id + "-" + i} cols="118px 80px 90px 78px 78px 70px 1.6fr">
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: T.t1 }}>{c.verification_no}</div>
+                      {c.adjust_voucher_no && <div style={{ fontSize: 10.5, color: T.ind }}>{c.adjust_voucher_no}</div>}
+                    </div>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtD(c.date)}</span>
+                    <span><Pill label={verifStatusLabel(c.status)} {...verifTone(c.status)} /></span>
+                    <span>{fmtN(sys)}</span>
+                    <span>{fmtN(got)}</span>
+                    <span style={{ fontWeight: 700, color: gap < 0 ? T.red : gap > 0 ? T.grn : T.t4 }}>
+                      {gap === 0 ? "—" : `${gap > 0 ? "+" : ""}${fmtN(gap)}`}
+                    </span>
+                    <div style={{ fontSize: 11.5, color: T.t3, minWidth: 0 }}>
+                      {c.remarks || "—"}
+                      {c.count_note && <div style={{ fontSize: 10.5, color: T.t4 }}>{c.count_note}</div>}
+                    </div>
+                  </Row>
+                );
+              })}
+            </Scroll>
+          </Panel>
+        </div>
+      )}
       {tab === "history" && (
         <Panel>
           {history == null && <Spinner />}
@@ -2311,7 +2519,7 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
 // MOVEMENTS — voucher log
 // ══════════════════════════════════════════════════════════════════
 function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfer, onReturn, onRepairOut, onRepairIn, onOpenVoucher }) {
-  const [fl, setFl] = useState({ type: "", status: "", project_id: "", warehouse_id: "", from: "", to: "" });
+  const [fl, setFl] = useState({ type: "", status: "", project_id: "", warehouse_id: "", from: "", to: "", for_me: "" });
   const [rows, setRows] = useState(null);
   const upd = (k, v) => setFl((p) => ({ ...p, [k]: v }));
 
@@ -2338,6 +2546,10 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
           <Btn size="sm" ghost icon={IcTool} onClick={onRepairIn}>{t("assets.btn_repair_in")}</Btn>
         </div>)}>
       <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
+        {/* Accept sirf jiske naam voucher hai uska haq hai — wo yahan se apne
+            voucher seedha dhoondh leta hai (phone na chale to web par). */}
+        <Seg value={fl.for_me} onChange={(k) => upd("for_me", k)}
+          options={[{ k: "", l: t("assets.all") }, { k: "1", l: t("assets.for_me_accept") }]} />
         <select value={fl.type} onChange={(e) => upd("type", e.target.value)} style={{ ...inp, width: 130 }}>
           <option value="">{t("assets.all_types")}</option>
           <option value="issue">{t("assets.type_issue")}</option>
@@ -2473,25 +2685,30 @@ function NewVerificationModal({ open, meta, pickers, me, onClose, onCreated, onO
   );
 }
 
-function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, onOpenVoucher }) {
+function VerificationDrawer({ id, me, isAdmin, canApprove, canEdit, onClose, onChanged, onOpenVoucher }) {
   const toast = useToast();
   const [v, setV] = useState(null);
   const [failed, setFailed] = useState("");
   const [edit, setEdit] = useState({});          // line id → { g, d, r } — sirf jo haath se badla
+  const [note, setNote] = useState("");          // poori ginti ka note (kya kam/zyada aur kyun)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setFailed("");
     const r = await api.get(`/assets/verifications/${id}`).catch(() => null);
-    if (r && r.success) setV(r.data);
+    if (r && r.success) { setV(r.data); setNote(r.data.remarks || ""); }
     else { setV(null); setFailed((r && r.message) || t("assets.verify_load_failed")); }
   }, [id]);
   useEffect(() => { setV(null); setEdit({}); setError(""); load(); }, [load]);
 
   const draft = v && v.status === "draft";
+  const pending = v && v.status === "pending";
   const canCount = !!(v && v.can_count);
-  const canCancel = !!(draft && v && (isAdmin || v.created_by === me.id));
+  // Approve ke liye Assets me approve AUR edit — dono ka haq. Wahi jaanch server
+  // par bhi lagti hai; yahan sirf button chhupane ke liye.
+  const canDecide = !!(pending && canApprove && canEdit);
+  const canCancel = !!((draft || pending) && v && (isAdmin || v.created_by === me.id));
 
   // Line ki abhi ki value: pehle jo haath se bhara, warna server se aayi.
   const cellOf = (ln) => {
@@ -2504,28 +2721,57 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
   };
   const setCell = (ln, k, val) => setEdit((p) => ({ ...p, [ln.id]: { ...cellOf(ln), ...(p[ln.id] || {}), [k]: val } }));
 
+  const itemsPayload = () => Object.keys(edit).map((lid) => {
+    const e = edit[lid];
+    const g = e.g === undefined ? undefined : (e.g === "" ? null : Number(e.g));
+    return { id: Number(lid), counted_good: g, counted_damaged: g == null ? null : (e.d === "" || e.d === undefined ? 0 : Number(e.d)), remarks: e.r };
+  });
+  const took = (r) => { toast.success(r.message || t("assets.saved")); setEdit({}); setV(r.data); setNote((r.data && r.data.remarks) || ""); onChanged(); };
+
   const saveCount = async () => {
     setError("");
-    const ids = Object.keys(edit);
-    if (!ids.length) { setError(t("assets.verify_nothing_changed")); return; }
-    const items = ids.map((lid) => {
-      const e = edit[lid];
-      const g = e.g === undefined ? undefined : (e.g === "" ? null : Number(e.g));
-      return { id: Number(lid), counted_good: g, counted_damaged: g == null ? null : (e.d === "" || e.d === undefined ? 0 : Number(e.d)), remarks: e.r };
-    });
+    if (!Object.keys(edit).length && note === (v.remarks || "")) { setError(t("assets.verify_nothing_changed")); return; }
     setBusy(true);
-    const r = await api.put(`/assets/verifications/${v.id}/count`, { items });
+    const r = await api.put(`/assets/verifications/${v.id}/count`, { items: itemsPayload(), remarks: note });
     setBusy(false);
-    if (r && r.success) { toast.success(r.message || t("assets.saved")); setEdit({}); setV(r.data); onChanged(); }
+    if (r && r.success) took(r);
     else setError((r && r.message) || t("assets.save_failed"));
   };
 
-  const doClose = async () => {
-    if (!window.confirm(t("assets.verify_close_confirm"))) return;
+  // Bhejne se pehle jo screen par bhara hai wo save ho jaata hai — aadmi ko do
+  // button dabane ki zaroorat na pade.
+  const doSubmit = async () => {
+    setError("");
     setBusy(true);
-    const r = await api.post(`/assets/verifications/${v.id}/close`, {});
+    if (Object.keys(edit).length) {
+      const saved = await api.put(`/assets/verifications/${v.id}/count`, { items: itemsPayload(), remarks: note });
+      if (!(saved && saved.success)) { setBusy(false); setError((saved && saved.message) || t("assets.save_failed")); return; }
+      setEdit({});
+    }
+    const r = await api.post(`/assets/verifications/${v.id}/submit`, { remarks: note });
     setBusy(false);
-    if (r && r.success) { toast.success(r.message || t("assets.saved")); setEdit({}); setV(r.data); onChanged(); }
+    if (r && r.success) took(r);
+    else setError((r && r.message) || t("assets.action_failed"));
+  };
+
+  const doApprove = async () => {
+    const ask = window.confirmAsync || ((m) => Promise.resolve(window.confirm(m)));
+    if (!(await ask(t("assets.verify_approve_confirm")))) return;
+    setBusy(true);
+    const r = await api.post(`/assets/verifications/${v.id}/approve`, {});
+    setBusy(false);
+    if (r && r.success) took(r);
+    else toast.error((r && r.message) || t("assets.action_failed"));
+  };
+
+  const doReject = async () => {
+    const ask = window.promptAsync || ((m) => Promise.resolve(window.prompt(m)));
+    const reason = await ask(t("assets.verify_reject_ask"));
+    if (!reason || !String(reason).trim()) return;
+    setBusy(true);
+    const r = await api.post(`/assets/verifications/${v.id}/reject`, { reason: String(reason).trim() });
+    setBusy(false);
+    if (r && r.success) took(r);
     else toast.error((r && r.message) || t("assets.action_failed"));
   };
   const doCancel = async () => {
@@ -2543,8 +2789,10 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
     : <>
         <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
         {canCancel && <Btn ghost onClick={doCancel} disabled={busy} style={{ color: T.red }}>{t("assets.verify_cancel_btn")}</Btn>}
-        {draft && canCount && <Btn onClick={saveCount} disabled={busy}>{busy ? t("assets.saving") : t("assets.verify_save_count")}</Btn>}
-        {draft && canApprove && <Btn c={T.grn} icon={IcChk} onClick={doClose} disabled={busy}>{t("assets.verify_close_btn")}</Btn>}
+        {draft && canCount && <Btn ghost onClick={saveCount} disabled={busy}>{busy ? t("assets.saving") : t("assets.verify_save_count")}</Btn>}
+        {draft && canCount && <Btn c={T.blu} onClick={doSubmit} disabled={busy}>{busy ? t("assets.saving") : t("assets.verify_submit_btn")}</Btn>}
+        {canDecide && <Btn ghost onClick={doReject} disabled={busy} style={{ color: T.red }}>{t("assets.verify_reject_btn")}</Btn>}
+        {canDecide && <Btn c={T.grn} icon={IcChk} onClick={doApprove} disabled={busy}>{t("assets.verify_approve_btn")}</Btn>}
       </>;
 
   return (
@@ -2559,6 +2807,8 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
         <>
           {draft && canCount && <Notice>{t("assets.verify_null_hint")}</Notice>}
           {draft && !canCount && <Notice tone="warn">{t("assets.verify_readonly")}</Notice>}
+          {draft && v.reject_reason && <Notice tone="warn">{t("assets.verify_rejected_note", { reason: v.reject_reason })}</Notice>}
+          {pending && <Notice tone="warn">{t("assets.verify_pending_note", { by: v.submitted_by_name || "—" })}</Notice>}
           {v.status === "closed" && (
             <Notice>{v.adjust_voucher_no ? t("assets.verify_closed_diff_note", { no: v.adjust_voucher_no }) : t("assets.verify_closed_ok_note")}</Notice>
           )}
@@ -2569,7 +2819,12 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
             <KV k={t("assets.custodian")} v={v.custodian_name} />
             <KV k={t("assets.lines")} v={fmtN(v.line_count)} />
             <KV k={t("assets.verify_pending")} v={<span style={{ color: N(v.pending_count) ? T.amb : T.t1 }}>{fmtN(v.pending_count)}</span>} />
-            <KV k={t("assets.verify_diff")} v={<span style={{ color: N(v.diff_count) ? T.red : T.t1 }}>{fmtN(v.diff_count)}</span>} />
+            <KV k={t("assets.verify_diff")} v={<span style={{ color: N(v.diff_count) ? T.red : T.t1 }}>
+              {fmtN(v.diff_count)}
+              {N(v.net_qty) !== 0 && <span style={{ display: "block", fontSize: 11, fontWeight: 400, color: T.t3 }}>
+                {t("assets.verify_net")}: {N(v.net_qty) > 0 ? "+" : ""}{fmtN(v.net_qty)}
+              </span>}
+            </span>} />
             <KV k={t("assets.verify_adjust_voucher")} v={v.adjust_voucher_no
               ? <span onClick={() => onOpenVoucher(v.adjust_voucher_id)} style={{ color: T.ind, cursor: "pointer" }}>{v.adjust_voucher_no}</span>
               : null} />
@@ -2595,6 +2850,8 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
                 const cg = counted ? Number(c.g) : 0, cd = counted ? (c.d === "" ? 0 : Number(c.d)) : 0;
                 const net = counted ? (cg + cd) - (sg + sd) : null;
                 const condChanged = counted && net === 0 && cg !== sg;
+                // Jiski ginti alag mili uspar wajah bina ginti bheji nahi jaati.
+                const needNote = !!draft && canCount && counted && (net !== 0 || condChanged) && !String(c.r || "").trim();
                 return (
                   <Row key={ln.id} cols={cols}>
                     <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>{ln.code || "—"}</span>
@@ -2626,13 +2883,49 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, onClose, onChanged, o
                       </span>
                       {condChanged && <div style={{ fontSize: 10, color: T.amb }}>{t("assets.verify_cond_changed")}</div>}
                     </div>
-                    <input value={c.r} style={inpSm} readOnly={!canCount} onChange={(e) => setCell(ln, "r", e.target.value)} />
+                    <div style={{ minWidth: 0 }}>
+                      <input value={c.r} readOnly={!draft || !canCount}
+                        placeholder={needNote ? t("assets.verify_line_note_ph") : ""}
+                        style={{ ...inpSm, borderColor: needNote ? T.red : T.b1 }}
+                        onChange={(e) => setCell(ln, "r", e.target.value)} />
+                      {needNote && <div style={{ fontSize: 10, color: T.red, marginTop: 2 }}>{t("assets.verify_line_note_req")}</div>}
+                    </div>
                   </Row>
                 );
               })}
             </Scroll>
           </Panel>
-          {v.remarks && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 10 }}>{t("assets.remarks")}: {v.remarks}</div>}
+          {draft && canCount ? (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: N(v.diff_count) && !String(note || "").trim() ? T.red : T.t2, marginBottom: 4 }}>
+                {t("assets.verify_note_label")}
+              </div>
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("assets.verify_note_ph")}
+                style={{ ...inp, minHeight: 58, resize: "vertical" }} />
+            </div>
+          ) : v.remarks ? (
+            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 10 }}>{t("assets.verify_note_label")}: {v.remarks}</div>
+          ) : null}
+
+          {/* Ginti ka permanent record — kab bheji, kisne approve/wapas ki, kya wajah thi. */}
+          {(v.log || []).length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <Panel title={t("assets.verify_trail")}>
+                {v.log.map((e, i) => (
+                  <div key={i} style={{ padding: "9px 14px", fontSize: 11.5, borderBottom: i < v.log.length - 1 ? `1px solid ${T.b1}` : "none" }}>
+                    <div style={{ fontWeight: 700, color: T.t2 }}>
+                      {t("assets.verify_log_" + e.action)}
+                      <span style={{ fontWeight: 400, color: T.t4 }}> · {e.by_name || "—"} · {fmtD(e.created_at)}</span>
+                    </div>
+                    <div style={{ color: T.t3, marginTop: 2 }}>
+                      {t("assets.verify_log_diff", { n: fmtN(e.diff_count), net: `${N(e.net_qty) > 0 ? "+" : ""}${fmtN(e.net_qty)}` })}
+                      {e.note ? ` · ${e.note}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </Panel>
+            </div>
+          )}
           <ErrBox>{error}</ErrBox>
         </>
       )}
@@ -2661,6 +2954,7 @@ function VerificationsTab({ refreshKey, meta, pickers, canCreate, onNew, onOpen,
         <select value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 140 }}>
           <option value="">{t("assets.all_status")}</option>
           <option value="draft">{t("assets.verify_draft")}</option>
+          <option value="pending">{t("assets.verify_pending_status")}</option>
           <option value="closed">{t("assets.verify_closed")}</option>
           <option value="cancelled">{t("assets.status_cancelled")}</option>
         </select>
@@ -3011,9 +3305,9 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
           </button>
         </div>
 
-        {tab === "dashboard" && <DashboardTab dash={dash} onOpenVoucher={setVoucherId} onGo={setTab} />}
+        {tab === "dashboard" && <DashboardTab dash={dash} warehouses={(meta && meta.warehouses) || []} onOpenVoucher={setVoucherId} onGo={setTab} />}
         {tab === "register" && (
-          <RegisterTab items={items} cats={cats} canEdit={canEdit} canCreate={canCreate} onOpenItem={setOpenItem}
+          <RegisterTab items={items} cats={cats} warehouses={(meta && meta.warehouses) || []} canEdit={canEdit} canCreate={canCreate} onOpenItem={setOpenItem}
             onCats={() => setCatsOpen(true)} onIncharge={() => setInchOpen(true)} onImport={() => setImportOpen(true)} onAddAsset={() => setAddOpen(true)}
             onExport={doExport} exportErr={exportErr} />
         )}
@@ -3033,7 +3327,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
 
       {voucherId && <VoucherDrawer id={voucherId} onClose={() => setVoucherId(null)} onChanged={refresh} />}
       {verifyId && (
-        <VerificationDrawer id={verifyId} me={me} isAdmin={isAdmin} canApprove={canApprove}
+        <VerificationDrawer id={verifyId} me={me} isAdmin={isAdmin} canApprove={canApprove} canEdit={canEdit}
           onClose={() => setVerifyId(null)} onChanged={refresh}
           onOpenVoucher={(vid) => { setVerifyId(null); openVoucherInMovements(vid); }} />
       )}

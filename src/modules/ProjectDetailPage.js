@@ -5,6 +5,7 @@ import { Avatar, Credit } from "../components/Credit";
 import PaymentRequestDrawer from "../components/PaymentRequestDrawer";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
+import CityPicker from "../components/CityPicker";
 import MaterialFlowDrawer from "../components/MaterialFlowDrawer";
 import MRDetailDrawer from "../components/MRDetailDrawer";
 import MaterialTransferTab from "../components/MaterialTransferTab";
@@ -16,6 +17,7 @@ import MapPicker from "../components/MapPicker";
 import { T, fmt, fmtN, localYMD, PROJ, STATUS_S, STAGES, STAGE_S } from "./shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabIc } from "./shared/ui";
 import { t } from "../i18n";
+import { BackClose } from "../utils/backNav";
 
 // ── "Waiting on" label ─────────────────────────────────────────────────────
 // Backend /approvals/pending bhejta hai: _waitingOn (role label, escalation ke
@@ -526,10 +528,10 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
         <div style={sectionTitle}>{t("project_detail.project_details")}</div>
         <div style={{ marginBottom:10 }}><label style={L}>{t("common.project_name")}</label><input value={form.name} onChange={upd("name")} style={I}/></div>
         <div style={{ marginBottom:10 }}><label style={L}>{t("common.city")}</label>
-          <select value={form.cityId} onChange={upd("cityId")} style={{ ...I, cursor:"pointer" }}>
-            <option value="">{project.city || t("project_detail.select_city")}</option>
-            {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <CityPicker value={form.cityId} cities={cities} setCities={setCities}
+            onChange={(id) => setForm(p => ({ ...p, cityId: id || "" }))}
+            placeholder={project.city || t("project_detail.select_city")}
+            selectStyle={I}/>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
           <div><label style={L}>{t("project_detail.boq_value")}</label><input type="number" value={form.boq_value} onChange={upd("boq_value")} placeholder="0" style={I}/></div>
@@ -1082,9 +1084,10 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
   // Reusable simple side drawer (right slide-in)
   const SimpleDrawer = ({title, subtitle, onClose, children}) => (
     <>
+      <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
       <style>{`@keyframes gbSlideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200}}/>
-      <div style={{position:"fixed",top:0,right:0,height:"100vh",width:520,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.15)",zIndex:201,display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif"}}>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:220}}/>
+      <div style={{position:"fixed",top:0,right:0,height:"100vh",width:520,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.15)",zIndex:221,display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif"}}>
         <div style={{padding:"12px 16px",background:"#0D1B2A",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div>
             <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>{title}</div>
