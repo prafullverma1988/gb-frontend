@@ -3,6 +3,7 @@ import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import { T, localYMD } from "../shared/tokens";
+import { canApproveAction, approverRolesFor } from "../../utils/approvalAuthority";
 import { t, Rich } from "../../i18n";
 import { can, currentUser } from "../../utils/perms";
 
@@ -12,12 +13,10 @@ function TabSubcon({ projectId, project }) {
   const [selWo, setSelWo] = useState(null);
   const [subTab, setSubTab] = useState("wo");
   const [bills, setBills] = useState([]);
-  const [payments, setPayments] = useState([]);
   const [summary, setSummary] = useState(null);
   const [subcons, setSubcons] = useState([]);
   const [showNewWO, setShowNewWO] = useState(false);
   const [showNewBill, setShowNewBill] = useState(false);
-  const [showPayModal, setShowPayModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const billSubmitRef = useRef(false);
   const [showEditWO, setShowEditWO] = useState(false);
@@ -28,9 +27,6 @@ function TabSubcon({ projectId, project }) {
   const [editBillSaving, setEditBillSaving] = useState(false);
   const [billItems, setBillItems] = useState({});
   const [billForm, setBillForm] = useState({ bill_date: localYMD(), remark:"", items:[] });
-  const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: localYMD(), /* IST din — UTC nahi (SUB-15) */ payment_mode:"Bank Transfer", reference_no:"", remark:"", account_id:"" });
-  // Finance me gaye RA bill (fin_txn_id) ka payment Finance entry banta hai — account zaroori (SUB-08)
-  const [payAccounts, setPayAccounts] = useState([]);
   const [showManualRaBill, setShowManualRaBill] = useState(false);
   const [manualBillForm, setManualBillForm] = useState({ bill_date: localYMD(), remark:"", items:[{description:"",qty:"",rate:""}] });
   const [manualBillSaving, setManualBillSaving] = useState(false);
@@ -152,8 +148,10 @@ function TabSubcon({ projectId, project }) {
     setLoading(false);
   };
 
-  const selectWo = async (wo) => {
-    setSelWo(wo); setSubTab("wo");
+  // keepTab: a refresh after an action (approve, schedule change…) stays on
+  // the tab the user is working in instead of jumping back to "Work order".
+  const selectWo = async (wo, keepTab = false) => {
+    setSelWo(wo); if (!keepTab) setSubTab("wo");
     setBillingLedger(null); setLinkedTasks({});
     const [bRes, sRes, aRes, mRes, dRes] = await Promise.all([
       api.get("/subcon/ra-bills?wo_id="+wo.id).catch(()=>({success:false})),
@@ -170,24 +168,16 @@ function TabSubcon({ projectId, project }) {
     if(dRes.success) setSelWo(prev => prev ? { ...prev, ...dRes.data } : prev);
   };
 
-  const reloadWo = async () => { if (selWo) await selectWo(selWo); };
-
-  // Finance me gaye bill ka payment modal khule to account list (ek baar) — SUB-08
-  const payBillPosted = !!(showPayModal && bills.find(x => x.id === showPayModal)?.fin_txn_id);
-  useEffect(() => {
-    if (!payBillPosted || payAccounts.length) return;
-    api.get("/finance/accounts").then(r => { if (r?.success) setPayAccounts(r.data || []); }).catch(() => {});
-  }, [payBillPosted, payAccounts.length]);
-  // Finance entry banane ka haq — server bhi yahi maangta hai (admin / accountant + Finance create)
-  const canFinancePay = (() => { const u = currentUser(); return ["admin", "super_admin", "accountant"].includes(u?.role) && can("Finance", "create", u); })();
+  const reloadWo = async () => { if (selWo) await selectWo(selWo, true); };
 
   // ── BILLING-METHOD SWITCH ──
   const switchBillingMethod = async (method) => {
-    if (!selWo) return;
-    if (selWo.billing_method === method) return;
+    if (!selWo) return false;
+    if (selWo.billing_method === method) return true;
     const r = await api.put("/subcon/wo/"+selWo.id+"/billing-method", { billing_method: method }).catch(()=>({success:false}));
-    if (r.success) await reloadWo();
-    else alert(r.message || "Switch failed (incompatible bills?)");
+    if (r.success) { await reloadWo(); return true; }
+    alert(r.message || "Switch failed (incompatible bills?)");
+    return false;
   };
 
   // ── SET MILESTONES / PAYMENT SCHEDULE (rate or percent) ──
@@ -324,7 +314,7 @@ function TabSubcon({ projectId, project }) {
       if (res.data?.warnings?.length) alert("Saved with warnings:\n" + res.data.warnings.join("\n"));
       setShowNewBill(false);
       setBillForm({ bill_date: localYMD(), remark:"", items:[] });
-      selectWo(selWo);
+      reloadWo();
     }
     else alert(res.message||"Failed");
   };
@@ -352,30 +342,27 @@ function TabSubcon({ projectId, project }) {
     if (res.success) {
       setShowManualRaBill(false);
       setManualBillForm({ bill_date: localYMD(), remark:"", items:[{description:"",qty:"",rate:""}] });
-      selectWo(selWo);
+      reloadWo();
     } else {
       alert(res.message || "Failed to save manual RA bill.");
     }
   };
 
-  // ── RECORD PAYMENT ──
-  const submitPayment = async (billId) => {
-    if(!payForm.amount_paid) return alert(t("estimate.amount_required"));
-    const payBill = bills.find(x => x.id === billId);
-    if (payBill?.fin_txn_id && !payForm.account_id) return alert(t("subcon.payment_account_select_karo"));
-    setSaving(true);
-    const res = await api.post("/subcon/payments",{
-      bill_id: billId, wo_id: selWo.id,
-      amount_paid: parseFloat(payForm.amount_paid),
-      payment_date: payForm.payment_date,
-      payment_mode: payForm.payment_mode,
-      reference_no: payForm.reference_no,
-      remark: payForm.remark,
-      account_id: payBill?.fin_txn_id ? Number(payForm.account_id) : undefined,
-    }).catch(()=>({success:false}));
-    setSaving(false);
-    if(res.success){ setShowPayModal(false); selectWo(selWo); setPayForm({amount_paid:"",payment_date:localYMD(),payment_mode:"Bank Transfer",reference_no:"",remark:"",account_id:""}); }
-    else alert(res.message||"Failed");
+  // Payments are no longer recorded here — Finance → Party Payment (bank
+  // account) pays the subcon and settles against approved RA bills.
+
+  // ── RA BILL ACTIONS ──
+  // Approve / submit / "send to ledger" all come back with a server message
+  // when refused (party missing, not awaiting approval…) — show it.
+  const billAction = async (call) => {
+    const r = await call().catch(e => ({ success:false, message:e?.message }));
+    if (!r?.success) alert(r?.message || t("subcon.action_failed"));
+    await reloadWo();
+    return r;
+  };
+  const sendBillToLedger = async (b) => {
+    const r = await billAction(() => api.post("/subcon/ra-bills/"+b.id+"/sync-ledger", {}));
+    if (r?.success) alert(t("subcon.sent_to_ledger"));
   };
 
   const inpStyle = {padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"};
@@ -442,17 +429,18 @@ function TabSubcon({ projectId, project }) {
                   </span>
                 </div>
               </div>
-              <div style={{display:"flex",gap:16,alignItems:"center"}}>
+              <div style={{display:"flex",gap:14,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end",rowGap:6}}>
+                {/* Billed = approved bills only; Paid = settled in Finance;
+                    Payable = approved net + SD/TDS released − paid. */}
                 {summary&&[
-                  {l:t("subcon.wo_value"),v:fmtC(summary.wo_value),c:"#94A3B8"},
-                  {l:t("common.billed"),v:fmtC(summary.total_billed),c:"#60A5FA"},
-                  {l:t("common.paid"),v:fmtC(summary.total_paid),c:"#4ADE80"},
-                  {l:t("common.retention_2"),v:fmtC(summary.retention_held),c:"#FCD34D"},
-                  // Dena baaki = approved bills ka NET − payment; bina bill ka kaam alag (SUB-12)
-                  {l:t("subcon.payable_net"),v:fmtC(summary.payable ?? summary.balance),c:"#F87171"},
-                  {l:t("common.unbilled"),v:fmtC(summary.unbilled),c:"#CBD5E1"},
+                  {l:t("subcon.wo_value"),v:fmtC(summary.wo_value),c:"#94A3B8",tip:t("subcon.tip_wo_value",{amount:fmtC(summary.remaining_to_bill)})},
+                  {l:t("common.billed"),v:fmtC(summary.total_billed),c:"#60A5FA",tip:t("subcon.tip_billed",{amount:fmtC(summary.pending_billed)})},
+                  {l:t("common.paid"),v:fmtC(summary.total_paid),c:"#4ADE80",tip:t("subcon.tip_paid")},
+                  {l:t("subcon.payable"),v:fmtC(summary.payable ?? summary.balance),c:"#F87171",tip:t("subcon.tip_payable")},
+                  {l:t("subcon.sd_held"),v:fmtC(summary.sd_held ?? summary.retention_held),c:"#FCD34D",tip:t("subcon.tip_sd_held")},
+                  {l:t("subcon.tds_held"),v:fmtC(summary.tds_held),c:"#FDBA74",tip:t("subcon.tip_tds_held")},
                 ].map(s=>(
-                  <div key={s.l} style={{textAlign:"right"}}>
+                  <div key={s.l} title={s.tip} style={{textAlign:"right",cursor:"help"}}>
                     <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",textTransform:"uppercase"}}>{s.l}</div>
                     <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
                   </div>
@@ -543,7 +531,19 @@ function TabSubcon({ projectId, project }) {
                       <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("subcon.of_wo_value")}</div>
                       <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{t("subcon.define_milestones_as_of_total_wo")}</div>
                     </div>
-                    <div onClick={async()=>{ setMsChooserOpen(false); if(selWo.billing_method==="manual") return; if(!await window.confirmAsync(t("subcon.switch_to_manual_mode"))) return; await switchBillingMethod("manual"); }}
+                    <div onClick={async()=>{
+                        setMsChooserOpen(false);
+                        // Already manual: earlier this click silently did nothing.
+                        // Manual has no stages to set — say how to bill and go there.
+                        if (!selWo.billing_method || selWo.billing_method==="manual") {
+                          alert(t("subcon.manual_already_on"));
+                          setSubTab("bills");
+                          return;
+                        }
+                        if(!await window.confirmAsync(t("subcon.switch_to_manual_mode"))) return;
+                        const ok = await switchBillingMethod("manual");
+                        if (ok) { alert(t("subcon.switched_to_manual")); setSubTab("bills"); }
+                      }}
                       style={{padding:"10px 12px",cursor:"pointer"}}
                       onMouseEnter={e=>e.currentTarget.style.background="#FAF5FF"} onMouseLeave={e=>e.currentTarget.style.background="white"}>
                       <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{t("subcon.manual_cumulative")}</div>
@@ -888,12 +888,42 @@ function TabSubcon({ projectId, project }) {
                           </div>
                         ))}
                       </div>
+                      {/* Payment state — read off the Finance ledger. Payment is
+                          made in Finance → Party Payment, never from here. */}
+                      {(b.status==="Approved"||b.status==="Paid") && !b.ledger_missing && (
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8,padding:"6px 10px",borderRadius:6,fontSize:11,fontWeight:600,lineHeight:1.45,
+                          background: b.pay_status==="paid" ? T.grnL : b.pay_status==="partial" ? "#FEF3C7" : T.surfaceB,
+                          border: "1px solid "+(b.pay_status==="paid" ? T.grnM : b.pay_status==="partial" ? "#FCD34D" : T.b1),
+                          color: b.pay_status==="paid" ? T.grn : b.pay_status==="partial" ? "#92400E" : T.t2}}>
+                          {b.pay_status==="paid" ? t("subcon.pay_paid")
+                            : b.pay_status==="partial" ? t("subcon.pay_partial", { paid: fmtC(b.paid_amount), net: fmtC(b.net_payable) })
+                            : t("subcon.pay_unpaid", { net: fmtC(b.net_payable) })}
+                        </div>
+                      )}
+                      {/* Approved, but its payable never reached the party ledger
+                          (party was missing at approval) — retry from here. */}
+                      {b.ledger_missing && (
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8,padding:"7px 10px",borderRadius:6,background:"#FEF2F2",border:"1px solid #FCA5A5",fontSize:11,color:"#991B1B",lineHeight:1.45}}>
+                          <span style={{flex:1,minWidth:200}}>{t("subcon.ledger_missing")}</span>
+                          {canApproveAction({perm:["Subcon","edit"]}) && (
+                            <button onClick={()=>sendBillToLedger(b)} style={{padding:"5px 10px",borderRadius:5,background:"#DC2626",color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.send_to_ledger")}</button>
+                          )}
+                        </div>
+                      )}
                       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
-                        {b.status==="Draft"&&<button onClick={async()=>{const r=await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"});if(r&&r.success===false)alert(r.message||t("common.something_went_wrong"));selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
-                        {b.status==="Submitted"&&<button onClick={async()=>{const r=await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});if(r&&r.success===false)alert(r.message||t("common.something_went_wrong"));selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
-                        {b.status==="Approved"&&(!b.fin_txn_id||canFinancePay)&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.record_payment")}</button>}
-                        {/* Edit + Delete (not for Paid) */}
-                        {b.status!=="Paid"&&(
+                        {b.status==="Draft"&&<button onClick={()=>billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"}))} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("estimate.confirm_submit")}</button>}
+                        {b.status==="Rejected"&&<button onClick={()=>billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Submitted"}))} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("subcon.resubmit_bill")}</button>}
+                        {/* RA bill approve — server par requirePerm("Subcon","edit"). On
+                            approval the net payable goes to the subcon's party ledger. */}
+                        {b.status==="Submitted"&&canApproveAction({perm:["Subcon","edit"]})&&<button onClick={async()=>{
+                            const r = await billAction(()=>api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"}));
+                            // Multi-level: after level 1 the bill is still "Submitted" —
+                            // the engine's message says whose turn is next.
+                            if (r?.success && r?.message) alert(r.message);
+                            apiCache.refreshApprovals();
+                          }} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
+                        {/* Edit + Delete — not once a payment is settled against it */}
+                        {b.status!=="Paid"&&!(Number(b.paid_amount)>0.005)&&(
                           <button onClick={async()=>{
                               // Load bill items for editing
                               const r = await api.get("/subcon/ra-bills/"+b.id);
@@ -906,12 +936,12 @@ function TabSubcon({ projectId, project }) {
                            {t("subcon.edit")}
                           </button>
                         )}
-                        {b.status!=="Paid"&&(
+                        {b.status!=="Paid"&&!(Number(b.paid_amount)>0.005)&&(
                           <button onClick={async()=>{
                               if(!await window.confirmAsync(t("subcon.delete_bill_no_this_will_permanently", { bill_no: b.bill_no }))) return;
                               const res = await api.del("/subcon/ra-bills/"+b.id);
                               if(res.success){
-                                selectWo(selWo); // reload bills
+                                reloadWo(); // reload bills
                               } else {
                                 alert(res.message || "Delete failed");
                               }
@@ -1046,12 +1076,13 @@ function TabSubcon({ projectId, project }) {
 
             {/* PAYMENTS TAB */}
             {subTab==="pay"&&(
-              <PaymentsTab woId={selWo.id} fmtC={fmtC}/>
+              <PaymentsTab woId={selWo.id} fmtC={fmtC} summary={summary}
+                inpStyle={inpStyle} lblStyle={lblStyle} onChanged={reloadWo}/>
             )}
 
             {/* AMENDMENTS TAB */}
             {subTab==="amend"&&(
-              <AmendmentsTab amendments={amendments} fmtC={fmtC} onRefresh={()=>selectWo(selWo)}/>
+              <AmendmentsTab amendments={amendments} fmtC={fmtC} onRefresh={()=>reloadWo()}/>
             )}
           </div>
         </>)}
@@ -1555,18 +1586,19 @@ function TabSubcon({ projectId, project }) {
       {/* EDIT RA BILL MODAL */}
       {showEditBillModal && editBill && (() => {
         // ── helpers to recompute net from current retention/TDS ──
-        // TDS bhi gross par — server (recalcBillTotals) yahi karta hai; pehle
-        // yahan (gross − retention) par tha to preview server se alag aata.
+        // Same maths as the server: SD and TDS both on gross.
         const recalcNet = (g, retPct, tdsPct) => {
           const retAmt = Math.round(g * retPct) / 100;
           const tdsAmt = Math.round(g * tdsPct) / 100;
           return { retention_amt: retAmt, tds_amt: tdsAmt, net_payable: Math.round((g - retAmt - tdsAmt) * 100) / 100 };
         };
-        // Approved bill approve hui rakam par tiki hai — sirf remark badalta hai (SUB-09).
-        const locked = editBill.status === "Approved";
+        // Out-of-BOQ bill lines carry their own description — the server
+        // refuses line edits there (would wipe them); date / SD / TDS / remark ok.
+        const linesLocked = editBill.source === "free_form";
         // Recompute gross from edited item cumulative qtys
         const recalcGross = (items) => {
           return items.reduce((s, it) => {
+            if (it.milestone_kind === "percent") return s + parseFloat(it.this_bill_amount || 0);
             const rate = parseFloat(it.rate || 0);
             const cum  = parseFloat(it._editCum ?? it.cumulative_qty ?? 0);
             const prev = parseFloat(it.prev_cumulative || 0);
@@ -1585,21 +1617,27 @@ function TabSubcon({ projectId, project }) {
                 <button onClick={()=>{setShowEditBillModal(false);setEditBill(null);}} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:18}}>×</button>
               </div>
 
-              {/* Date + Status (status sirf dikhta hai — Submit / Approve button se badalta hai) */}
+              {/* Date + Status. Status is NOT editable here any more — picking
+                  "Approved" in this dropdown used to skip the approval chain. */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                 <div>
                   <label style={lblStyle}>{t("common.bill_date")}</label>
-                  <input type="date" value={(editBill.bill_date||"").split("T")[0]} disabled={locked}
-                    onChange={e=>setEditBill(p=>({...p,bill_date:e.target.value}))} style={locked?{...inpStyle,background:T.surfaceB,color:T.t3}:inpStyle}/>
+                  <input type="date" value={(editBill.bill_date||"").split("T")[0]}
+                    onChange={e=>setEditBill(p=>({...p,bill_date:e.target.value}))} style={inpStyle}/>
                 </div>
                 <div>
                   <label style={lblStyle}>{t("common.status")}</label>
-                  <input value={editBill.status||""} disabled style={{...inpStyle,background:T.surfaceB,color:T.t3,fontWeight:700}}/>
+                  <div style={{...inpStyle,background:T.surfaceB,color:T.t2,fontWeight:700}}>{editBill.status||"—"}</div>
                 </div>
               </div>
-              {locked && (
-                <div style={{padding:"7px 10px",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:6,marginBottom:12,fontSize:11,color:"#92400E",lineHeight:1.45}}>
-                  {t("subcon.approved_bill_sirf_remark")}
+              {(editBill.status==="Approved"||editBill.status==="Rejected") && (
+                <div style={{marginBottom:12,padding:"8px 10px",borderRadius:6,background:"#FFFBEB",border:"1px solid #FCD34D",fontSize:11,color:"#92400E",lineHeight:1.45}}>
+                  {editBill.status==="Approved" ? t("subcon.edit_reapproval_note") : t("subcon.edit_rejected_note")}
+                </div>
+              )}
+              {linesLocked && showItems && (
+                <div style={{marginBottom:10,padding:"7px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11,color:T.t3,lineHeight:1.45}}>
+                  {t("subcon.free_form_readonly")}
                 </div>
               )}
 
@@ -1619,15 +1657,20 @@ function TabSubcon({ projectId, project }) {
                       const prev    = parseFloat(it.prev_cumulative || 0);
                       const cumVal  = parseFloat(it._editCum ?? it.cumulative_qty ?? 0);
                       const rate    = parseFloat(it.rate || 0);
+                      // % stage lines have no qty (amount = the stage); free-form
+                      // lines can't change here — both read-only.
+                      const locked  = linesLocked || it.milestone_kind === "percent";
                       const thisQty = Math.max(0, cumVal - prev);
-                      const amt     = Math.round(thisQty * rate * 100) / 100;
-                      const overWO  = it.wo_qty && cumVal > parseFloat(it.wo_qty);
+                      const amt     = locked ? parseFloat(it.this_bill_amount || 0) : Math.round(thisQty * rate * 100) / 100;
+                      const overWO  = !locked && it.wo_qty && cumVal > parseFloat(it.wo_qty);
+                      const belowPrev = !locked && cumVal < prev - 0.0001;
+                      const bad     = overWO || belowPrev;
                       return (
-                        <div key={it.id||idx} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 85px 90px",gap:6,padding:"7px 10px",borderBottom:"1px solid "+T.b1,alignItems:"center",background:overWO?"#FEF2F2":"white"}}>
+                        <div key={it.id||idx} title={belowPrev ? t("subcon.below_prev") : undefined} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 85px 90px",gap:6,padding:"7px 10px",borderBottom:"1px solid "+T.b1,alignItems:"center",background:bad?"#FEF2F2":"white"}}>
                           <span style={{fontSize:11.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description||("Item #"+it.wo_item_id)}</span>
                           <span style={{fontSize:11,color:T.t4,textAlign:"right"}}>{it.unit||""}</span>
                           <span style={{fontSize:11,color:T.t3,textAlign:"right"}}>{prev}</span>
-                          <input type="number" value={it._editCum ?? it.cumulative_qty ?? ""} disabled={locked}
+                          <input type="number" value={it._editCum ?? it.cumulative_qty ?? ""}
                             onChange={e => {
                               const newItems = editItems.map((x,i) => i===idx ? {...x, _editCum: e.target.value} : x);
                               const newGross = Math.round(recalcGross(newItems) * 100) / 100;
@@ -1641,8 +1684,9 @@ function TabSubcon({ projectId, project }) {
                               }));
                             }}
                             style={{...inpStyle,padding:"5px 7px",fontSize:11,textAlign:"right",
-                              borderColor: overWO ? T.red : T.b1,
-                              color: overWO ? T.red : T.t1}}/>
+                              borderColor: bad ? T.red : T.b1,
+                              color: bad ? T.red : T.t1,
+                              background: locked ? T.surfaceB : "white"}}/>
                           <span style={{fontSize:12,fontWeight:700,color:amt>0?T.grn:T.t4,textAlign:"right"}}>{amt>0?fmtC(amt):"—"}</span>
                         </div>
                       );
@@ -1654,8 +1698,8 @@ function TabSubcon({ projectId, project }) {
               {/* Gross / Retention / TDS / Net */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                 <div>
-                  <label style={lblStyle}>{t("subcon.gross_amount")}</label>
-                  {/* Gross items se banta hai — seedha likhne ka khaana nahi (server ise maanta bhi nahi) */}
+                  {/* Gross always comes from the lines (server re-derives it) */}
+                  <label style={lblStyle}>{t("subcon.gross_from_items")}</label>
                   <input type="number" value={editBill.gross_amount ?? 0} disabled
                     style={{...inpStyle,background:T.surfaceB,color:T.t3,fontWeight:700}}/>
                 </div>
@@ -1666,7 +1710,7 @@ function TabSubcon({ projectId, project }) {
                 </div>
                 <div>
                   <label style={lblStyle}>{t("common.retention")}</label>
-                  <input type="number" min={0} max={100} disabled={locked}
+                  <input type="number" min={0} max={100}
                     value={editBill.retention_pct ?? ""}
                     onChange={e=>{
                       const r = parseFloat(e.target.value) || 0;
@@ -1679,7 +1723,7 @@ function TabSubcon({ projectId, project }) {
                 </div>
                 <div>
                   <label style={lblStyle}>{t("common.tds")}</label>
-                  <input type="number" min={0} max={100} disabled={locked}
+                  <input type="number" min={0} max={100}
                     value={editBill.tds_pct ?? ""}
                     onChange={e=>{
                       const tp = parseFloat(e.target.value) || 0;
@@ -1722,18 +1766,17 @@ function TabSubcon({ projectId, project }) {
                 <button onClick={async()=>{
                     setEditBillSaving(true);
                     try {
-                      // Status aur rakam (gross/retention/TDS/net) server khud banata hai —
-                      // bhejte sirf wahi hain jo user badal sakta hai (SUB-09).
-                      const pctVal = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
-                      const payload = { remark: editBill.remark };
-                      if (!locked) {
-                        payload.bill_date = editBill.bill_date;
-                        payload.retention_pct = pctVal(editBill.retention_pct);
-                        payload.tds_pct = pctVal(editBill.tds_pct);
-                      }
+                      // Money (gross / SD / TDS / net) and status are derived on the
+                      // server — only the inputs go up.
+                      const payload = {
+                        bill_date:      (editBill.bill_date || "").split("T")[0] || undefined,
+                        retention_pct:  parseFloat(editBill.retention_pct) || 0,
+                        tds_pct:        parseFloat(editBill.tds_pct)       || 0,
+                        remark:         editBill.remark,
+                      };
                       // Send edited items only if quantities were changed
                       const editedItems = editItems.filter(it => it._editCum !== undefined);
-                      if (!locked && editedItems.length > 0) {
+                      if (editedItems.length > 0 && !linesLocked) {
                         payload.items = editItems.map(it => ({
                           milestone_id:    it.milestone_id || null,
                           wo_item_id:      it.wo_item_id   || null,
@@ -1743,7 +1786,8 @@ function TabSubcon({ projectId, project }) {
                       }
                       const res = await api.put("/subcon/ra-bills/"+editBill.id, payload, { timeoutMs: 30000 });
                       if (res.success) {
-                        setShowEditBillModal(false); setEditBill(null); selectWo(selWo);
+                        setShowEditBillModal(false); setEditBill(null); reloadWo();
+                        if (res.data?.resubmitted) { alert(t("subcon.resubmitted_alert")); apiCache.refreshApprovals(); }
                       } else alert(res.message || "Update failed");
                     } catch(e) { alert("Error: "+e.message); }
                     setEditBillSaving(false);
@@ -1756,48 +1800,6 @@ function TabSubcon({ projectId, project }) {
           </div>
         );
       })()}
-
-      {/* PAYMENT MODAL */}
-      {showPayModal&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <div style={{background:T.surface,borderRadius:10,width:"min(400px,94vw)",padding:20,boxShadow:"0 20px 50px rgba(0,0,0,0.2)"}}>
-            <div style={{fontSize:14,fontWeight:700,color:T.t1,marginBottom:14}}>{t("common.record_payment")}</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
-              <div>
-                <label style={lblStyle}>{t("transaction_detail.amount")}</label>
-                <input type="number" value={payForm.amount_paid} onChange={e=>setPayForm(p=>({...p,amount_paid:e.target.value}))} style={inpStyle} placeholder="0"/>
-              </div>
-              <div>
-                <label style={lblStyle}>{t("common.date")}</label>
-                <input type="date" value={payForm.payment_date} onChange={e=>setPayForm(p=>({...p,payment_date:e.target.value}))} style={inpStyle}/>
-              </div>
-              <div>
-                <label style={lblStyle}>{t("common.mode")}</label>
-                <SearchSelect value={payForm.payment_mode} options={["Bank Transfer","Cheque","Cash","NEFT","RTGS","UPI"]}
-                  onChange={v=>setPayForm(p=>({...p,payment_mode:v}))} placeholder={t("subcon.select_mode")}/>
-              </div>
-              <div>
-                <label style={lblStyle}>{t("common.reference_no")}</label>
-                <input value={payForm.reference_no} onChange={e=>setPayForm(p=>({...p,reference_no:e.target.value}))} style={inpStyle} placeholder={t("subcon.utr_cheque_no")}/>
-              </div>
-            </div>
-            <input value={payForm.remark} onChange={e=>setPayForm(p=>({...p,remark:e.target.value}))} placeholder={t("common.remark_optional")} style={{...inpStyle,marginBottom:12}}/>
-            {payBillPosted && (
-              <div style={{marginBottom:12}}>
-                <label style={lblStyle}>{t("subcon.payment_account")}</label>
-                <SearchSelect value={payForm.account_id ? String(payForm.account_id) : ""}
-                  options={payAccounts.map(a => ({ value: String(a.id), label: a.name }))}
-                  onChange={v=>setPayForm(p=>({...p,account_id:v}))} placeholder={t("finance.select_account")}/>
-                <div style={{fontSize:10.5,color:T.t3,marginTop:5,lineHeight:1.45}}>{t("subcon.payment_finance_note")}</div>
-              </div>
-            )}
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>setShowPayModal(false)} style={{flex:1,padding:"8px",borderRadius:6,border:"1px solid "+T.b1,background:T.surface,cursor:"pointer",fontSize:12}}>{t("common.cancel")}</button>
-              <button onClick={()=>submitPayment(showPayModal)} disabled={saving} style={{flex:2,padding:"8px",borderRadius:6,background:saving?T.t4:T.grn,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>{saving?t("common.saving"):t("subcon.save_payment")}</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── TASK PICKER DRAWER (link milestone to project task) ─────────── */}
       {taskPickerFor !== null && (() => {
@@ -3937,8 +3939,14 @@ function AmendmentsTab({ amendments, fmtC, onRefresh }) {
                     })}
                   </div>
                 )}
-                {/* Approve/Reject buttons */}
-                {a.status==="Pending"&&(
+                {/* Approve/Reject — sirf jiska faisla hai. Server:
+                    requirePerm("Subcon","edit") + checkWorkflowRole("Subcon WO Amendment") */}
+                {a.status==="Pending"&&!canApproveAction({perm:["Subcon","edit"],workflow:"Subcon WO Amendment"})&&(
+                  <div style={{fontSize:11,color:T.t4}}>
+                    ⏳ {t("projects.waiting_on")} {approverRolesFor("Subcon WO Amendment")||t("common.approver")}
+                  </div>
+                )}
+                {a.status==="Pending"&&canApproveAction({perm:["Subcon","edit"],workflow:"Subcon WO Amendment"})&&(
                   <div style={{display:"flex",gap:8}}>
                     <button onClick={()=>action(a.id,"Rejected")} disabled={!!actioning}
                       style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+T.red,background:"white",color:T.red,fontSize:12,fontWeight:700,cursor:"pointer"}}>
@@ -4046,10 +4054,10 @@ function WoItemOptions({ woId, fmtC }) {
 function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onClose, onSave }) {
   const woId   = wo?.id;
   const method = wo?.billing_method || "manual";
-  // WO ka 0% bhi 0 hi rahe (SUB-04) — pehle `|| 5` 0 ko 5% bana deta tha
-  const pctOf = (v, d) => { const n = parseFloat(v); return Number.isFinite(n) ? n : d; };
-  const retPct = pctOf(wo?.retention_pct, 5);
-  const tdsPct = pctOf(wo?.tds_pct, 2);
+  // The WO's own SD / TDS % — same as the server uses. (`|| 5` showed 5% on a
+  // WO with 0% SD, so the preview never matched the saved bill.)
+  const retPct = parseFloat(wo?.retention_pct) || 0;
+  const tdsPct = parseFloat(wo?.tds_pct) || 0;
 
   // ── Form state ─────────────────────────────────────────────────────────
   const [billDate,      setBillDate]      = useState(localYMD());
@@ -4128,21 +4136,32 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
       return;
     }
     if (method === "manual") {
-      // WO qty se zyada = over-bill: pehle "exceeds WO" sirf laal rang tha aur
-      // Submit phir bhi chala jaata; ab Over-Billing Mode + reason chahiye (server bhi rokta hai — SUB-11)
-      const over = sections.some(sec => sec.items.some(it => {
-        const q = parseFloat(it.qty || 0);
-        return q > 0 && parseFloat(cumQtys[it.id] || 0) > q;
-      }));
-      if (over && !overBillMode) {
-        alert(t("subcon.manual_exceeds_wo_turn_on_overbill"));
+      const all = sections.flatMap(sec => sec.items);
+      // An emptied box = item not touched in this bill (stays at billed qty).
+      const cumOf = (it) => {
+        const v = cumQtys[it.id];
+        return v === "" || v == null ? (it.prev_cum || 0) : (parseFloat(v) || 0);
+      };
+      // Cumulative = total done till date, so it can't go below what is
+      // already billed.
+      const below = all.find(it => cumOf(it) < (it.prev_cum||0) - 0.0001);
+      if (below) {
+        alert(t("subcon.cum_below_prev_ui", { item: below.description || ("#"+below.id), prev: below.prev_cum||0 }));
         return;
       }
-      const items = sections.flatMap(sec => sec.items.map(it => ({
+      const over = all.some(it => parseFloat(it.qty||0) > 0 && cumOf(it) > parseFloat(it.qty||0) + 0.0001);
+      if (over && !overBillMode) {
+        alert(t("subcon.some_quantities_exceed_wo_remaining_turn"));
+        return;
+      }
+      const items = all.map(it => ({
         wo_item_id: it.id,
-        cumulative_qty: parseFloat(cumQtys[it.id]||0),
-      })));
-      onSave({ bill_date: billDate, remark, items, over_bill_mode: over ? 1 : 0, over_bill_reason: over ? overBillReason.trim() : "" });
+        cumulative_qty: cumOf(it),
+        rate: parseFloat(it.rate),
+      }));
+      // Earlier this always sent over_bill_mode 0 — the toggle on screen did nothing.
+      onSave({ bill_date: billDate, remark, items,
+               over_bill_mode: overBillMode ? 1 : 0, over_bill_reason: overBillMode ? overBillReason.trim() : "" });
       return;
     }
     if (method === "milestone_percent") {
@@ -4489,8 +4508,9 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
                     const thisBill=Math.max(0,cum-(it.prev_cum||0));
                     const thisAmt=thisBill*parseFloat(it.rate||0);
                     const overLimit=cum>parseFloat(it.qty||0);
+                    const belowPrev=cumQtys[it.id]!==""&&cumQtys[it.id]!=null&&cum<(it.prev_cum||0)-0.0001;
                     return(
-                      <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:overLimit?"#FEF2F2":T.surface}}>
+                      <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:overLimit||belowPrev?"#FEF2F2":T.surface}}>
                         <div style={{fontSize:11.5,color:T.t1,fontWeight:500}}>{it.description}</div>
                         <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>{it.unit}</div>
                         <div style={{fontSize:12,color:T.t2,textAlign:"right",fontWeight:500}}>{it.qty}</div>
@@ -4500,9 +4520,10 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
                           <input type="number" value={cumQtys[it.id]||""} min={0}
                             onChange={e=>setCumQtys(p=>({...p,[it.id]:e.target.value}))}
                             style={{...inpS,textAlign:"right",fontWeight:700,padding:"5px 8px",
-                              border:"1.5px solid "+(overLimit?T.red:cum>(it.prev_cum||0)?T.blu:T.b1),
-                              color:overLimit?T.red:T.t1}}/>
+                              border:"1.5px solid "+(overLimit||belowPrev?T.red:cum>(it.prev_cum||0)?T.blu:T.b1),
+                              color:overLimit||belowPrev?T.red:T.t1}}/>
                           {overLimit&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>{t("subcon.exceeds_wo")}</div>}
+                          {belowPrev&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>{t("subcon.below_prev")}</div>}
                         </div>
                         <div style={{textAlign:"right"}}>
                           <div style={{fontSize:12,fontWeight:700,color:thisAmt>0?T.grn:T.t4}}>{thisAmt>0?fmtC(thisAmt):"—"}</div>
@@ -4558,28 +4579,141 @@ function NewRaBillModal({ wo, milestones, fmtC, inpStyle, lblStyle, saving, onCl
   );
 }
 
-function PaymentsTab({ woId, fmtC }) {
-  const [payments, setPayments] = useState([]);
-  useEffect(()=>{
-    api.get("/subcon/payments?wo_id="+woId).then(r=>{ if(r.success) setPayments(r.data||[]); }).catch(()=>{});
-  },[woId]);
-  if(payments.length===0) return <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("subcon.no_payments_recorded_yet")}</div>;
-  const total = payments.reduce((s,p)=>s+parseFloat(p.amount_paid||0),0);
+// Payments tab — READ ONLY. Subcon payments are made in Finance → Party
+// Payment (from a bank account) and settle against approved RA bills; this
+// tab shows what got settled on this WO, and releases held SD / TDS (a
+// release becomes a payable in the party ledger, paid from Finance too).
+function PaymentsTab({ woId, fmtC, summary, inpStyle, lblStyle, onChanged }) {
+  const [data, setData]         = useState(null);   // { settlements, legacy }
+  const [releases, setReleases] = useState([]);
+  const [relForm, setRelForm]   = useState(null);   // { release_type, amount, release_date, remark }
+  const [busy, setBusy]         = useState(false);
+
+  const load = () => {
+    api.get("/subcon/wo/"+woId+"/settlements").then(r=>{ if(r?.success) setData(r.data); }).catch(()=>{});
+    api.get("/subcon/retention-releases?wo_id="+woId).then(r=>{ if(r?.success) setReleases(r.data||[]); }).catch(()=>{});
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(()=>{ load(); },[woId]);
+
+  const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
+  const settlements = data?.settlements || [];
+  const legacy      = data?.legacy || [];
+  const sdHeld  = Number(summary?.sd_held ?? summary?.retention_held ?? 0);
+  const tdsHeld = Number(summary?.tds_held ?? 0);
+
+  const openRelease = (type) => setRelForm({
+    release_type: type, amount: String(Math.round((type==="tds"?tdsHeld:sdHeld)*100)/100),
+    release_date: localYMD(), remark: "",
+  });
+  const doRelease = async () => {
+    const amt = parseFloat(relForm.amount);
+    if (!(amt > 0)) return alert(t("subcon.release_amount_required_ui"));
+    const kind = relForm.release_type === "tds" ? "TDS" : "SD";
+    if (!await window.confirmAsync(t("subcon.release_confirm", { kind, amount: fmtC(amt) }))) return;
+    setBusy(true);
+    const r = await api.post("/subcon/retention-release", { wo_id: woId, ...relForm, amount: amt })
+      .catch(e => ({ success:false, message:e?.message }));
+    setBusy(false);
+    if (!r?.success) return alert(r?.message || t("subcon.action_failed"));
+    setRelForm(null);
+    load();
+    onChanged && onChanged();
+  };
+
+  const row = { background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"9px 14px",marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10 };
+  const head = { fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".4px",margin:"16px 0 8px" };
+
   return(
     <div>
-      {payments.map((p,i)=>(
-        <div key={p.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"10px 14px",marginBottom:8,borderLeft:"3px solid "+T.grn,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      {/* Where payments happen now */}
+      <div style={{padding:"10px 12px",borderRadius:8,background:T.bluL,border:"1px solid "+T.bluM,marginBottom:12}}>
+        <div style={{fontSize:12.5,fontWeight:700,color:T.blu}}>{t("subcon.pay_via_finance_title")}</div>
+        <div style={{fontSize:11.5,color:T.t2,marginTop:3,lineHeight:1.5}}>{t("subcon.pay_via_finance_body")}</div>
+      </div>
+
+      {/* Settled against this WO's RA bills / releases */}
+      <div style={{...head,marginTop:4}}>{t("subcon.settled_payments")}</div>
+      {!data && <div style={{padding:"16px",textAlign:"center",color:T.t4,fontSize:12}}>{t("common.loading")}</div>}
+      {data && settlements.length===0 && <div style={{padding:"16px",textAlign:"center",color:T.t4,fontSize:12,background:T.surfaceB,borderRadius:8}}>{t("subcon.no_settlements")}</div>}
+      {settlements.map(s=>(
+        <div key={"s"+s.id} style={{...row,borderLeft:"3px solid "+T.grn}}>
           <div>
-            <div style={{fontSize:13,fontWeight:700,color:T.grn}}>{fmtC(p.amount_paid)}</div>
-            <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{p.payment_mode} · {p.payment_date?new Date(p.payment_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</div>
+            <div style={{fontSize:13,fontWeight:700,color:T.grn}}>{fmtC(s.amount)}</div>
+            <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>
+              {fmtD(s.payment_date)}{s.mop?" · "+s.mop:""}{s.account_name?" · "+s.account_name:""}{Number(s.via_staff)?" · "+t("subcon.via_staff"):""}
+            </div>
           </div>
           <div style={{textAlign:"right"}}>
-            {p.reference_no&&<div style={{fontSize:11,color:T.blu,fontFamily:"monospace"}}>{p.reference_no}</div>}
-            {p.remark&&<div style={{fontSize:11,color:T.t3}}>{p.remark}</div>}
+            {s.against_ref&&<div style={{fontSize:11,color:T.t2,fontWeight:600}}>{t("subcon.against_ref",{ref:s.against_ref})}</div>}
+            {s.reference_no&&<div style={{fontSize:10.5,color:T.blu,fontFamily:"monospace"}}>{s.reference_no}</div>}
           </div>
         </div>
       ))}
-      <div style={{textAlign:"right",fontSize:14,fontWeight:800,color:T.grn,marginTop:8}}>{t("subcon.total_paid_fmtc", { fmtC: fmtC(total) })}</div>
+
+      {/* Older payments recorded in this tab before payments moved to Finance */}
+      {legacy.length>0 && (<>
+        <div style={head}>{t("subcon.legacy_payments")}</div>
+        {legacy.map(p=>(
+          <div key={"l"+p.id} style={{...row,borderLeft:"3px solid "+T.t4}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:T.t2}}>{fmtC(p.amount)}</div>
+              <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{fmtD(p.payment_date)}{p.mop?" · "+p.mop:""}</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              {p.against_ref&&<div style={{fontSize:11,color:T.t2,fontWeight:600}}>{t("subcon.against_ref",{ref:p.against_ref})}</div>}
+              {p.reference_no&&<div style={{fontSize:10.5,color:T.blu,fontFamily:"monospace"}}>{p.reference_no}</div>}
+            </div>
+          </div>
+        ))}
+      </>)}
+
+      {/* SD / TDS release */}
+      <div style={head}>{t("subcon.release_title")}</div>
+      <div style={{fontSize:11,color:T.t3,lineHeight:1.5,marginBottom:8}}>{t("subcon.release_hint")}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+        {[{type:"retention",l:"SD",held:sdHeld,btn:t("subcon.release_sd")},{type:"tds",l:"TDS",held:tdsHeld,btn:t("subcon.release_tds")}].map(x=>(
+          <div key={x.type} style={{background:T.surfaceB,border:"1px solid "+T.b1,borderRadius:8,padding:"9px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+            <div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{x.l}</div>
+              <div style={{fontSize:13,fontWeight:800,color:"#B45309"}}>{t("subcon.held_amount",{amount:fmtC(x.held)})}</div>
+            </div>
+            <button disabled={x.held<=0} onClick={()=>openRelease(x.type)}
+              style={{padding:"6px 10px",borderRadius:6,border:"none",fontSize:11,fontWeight:700,
+                cursor:x.held>0?"pointer":"not-allowed",background:x.held>0?T.blu:T.b1,color:x.held>0?"white":T.t4}}>
+              {x.btn}
+            </button>
+          </div>
+        ))}
+      </div>
+      {relForm && (
+        <div style={{border:"1px solid "+T.bluM,borderRadius:8,padding:12,marginBottom:10,background:"white"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:9}}>
+            <div>
+              <label style={lblStyle}>{t("transaction_detail.amount")} ({relForm.release_type==="tds"?"TDS":"SD"})</label>
+              <input type="number" value={relForm.amount} onChange={e=>setRelForm(p=>({...p,amount:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div>
+              <label style={lblStyle}>{t("common.date")}</label>
+              <input type="date" value={relForm.release_date} onChange={e=>setRelForm(p=>({...p,release_date:e.target.value}))} style={inpStyle}/>
+            </div>
+          </div>
+          <input value={relForm.remark} onChange={e=>setRelForm(p=>({...p,remark:e.target.value}))} placeholder={t("common.remark_optional")} style={{...inpStyle,marginBottom:9}}/>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setRelForm(null)} style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+T.b1,background:T.surface,cursor:"pointer",fontSize:12}}>{t("common.cancel")}</button>
+            <button onClick={doRelease} disabled={busy} style={{flex:2,padding:"7px",borderRadius:6,background:busy?T.t4:T.blu,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:busy?"default":"pointer"}}>{busy?t("common.saving"):t("subcon.release_btn")}</button>
+          </div>
+        </div>
+      )}
+      {releases.length>0 && (<>
+        <div style={{fontSize:10.5,fontWeight:700,color:T.t3,margin:"4px 0 6px"}}>{t("subcon.releases_done")}</div>
+        {releases.map(r=>(
+          <div key={"r"+r.id} style={{...row,padding:"7px 12px",borderLeft:"3px solid #F59E0B"}}>
+            <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{r.release_type==="tds"?"TDS":"SD"} · {fmtC(r.amount)}</div>
+            <div style={{fontSize:10.5,color:T.t4,textAlign:"right"}}>{fmtD(r.release_date)}{r.remark?" · "+r.remark:""}</div>
+          </div>
+        ))}
+      </>)}
     </div>
   );
 }

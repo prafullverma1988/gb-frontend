@@ -21,6 +21,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
+import { useBackClose } from "../utils/backNav";
+import SiteMarkingEditor from "./SiteMarkingEditor";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 16, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -40,6 +42,7 @@ const IcX       = (p) => <Ic {...p} d="M18 6L6 18M6 6l12 12" />;
 const IcLock    = (p) => <Ic {...p} d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4" />;
 const IcAlert   = (p) => <Ic {...p} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01" />;
 const IcMap     = (p) => <Ic {...p} d="M9 20l-5.4-2.7A1 1 0 013 16.4V5.6a1 1 0 011.4-.9L9 7m0 13l6-3m-6 3V7m6 10l4.6 2.3a1 1 0 001.4-.9V7.6a1 1 0 00-.6-.9L15 4m0 13V4m0 0L9 7" />;
+const IcPlus    = (p) => <Ic {...p} d="M12 5v14M5 12h14" />;
 const IcTrash   = (p) => <Ic {...p} d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />;
 
 // ── THEME ─────────────────────────────────────────────────────────
@@ -86,6 +89,22 @@ const yes = (v) => v === true || v === 1 || v === "1";
 const cleanPts = (it) => (Array.isArray(it && it.pts) ? it.pts : [])
   .map((p) => ({ lat: Number(p && p.lat), lng: Number(p && p.lng) }))
   .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+// Tooti hui line ("Tod do"): ek hi marking, beech me khaali jagah — jaise
+// pipeline road crossing chhod kar aage badhti hai, ya line par T nikalta
+// hai. `gaps` batata hai kis point se naya tukda shuru hota hai; naksha aur
+// har file (KML/GeoJSON/CSV) ise tukdon me hi dikhate hain, warna gap par
+// ek jhoothi seedhi lakeer khinch jaati hai.
+const partsOfLine = (pts, gaps) => {
+  const arr = Array.isArray(pts) ? pts : [];
+  const cuts = (Array.isArray(gaps) ? gaps : [])
+    .map(Number).filter((i) => Number.isInteger(i) && i > 0 && i < arr.length)
+    .filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
+  if (!cuts.length) return arr.length ? [arr] : [];
+  const out = []; let from = 0;
+  for (const c of cuts) { out.push(arr.slice(from, c)); from = c; }
+  out.push(arr.slice(from));
+  return out.filter((p) => p.length);
+};
 // Kitne point hain us hisaab se asli shakl: 1 point ki "line" pin hai,
 // 2 point ka "rakba" line hai. Map aur export dono isi se chalte hain.
 const shapeOf = (kind, n) => {
@@ -132,7 +151,11 @@ function kmlPlacemark(it, folderName) {
     const a = ring[0], z = ring[ring.length - 1];
     if (a.lat !== z.lat || a.lng !== z.lng) ring.push(a);
     geom = `<Polygon><outerBoundaryIs><LinearRing><coordinates>${cs(ring)}</coordinates></LinearRing></outerBoundaryIs></Polygon>`;
-  } else geom = `<LineString><tessellate>1</tessellate><coordinates>${cs(pts)}</coordinates></LineString>`;
+  } else {
+    const parts = partsOfLine(pts, it.gaps);
+    const ls = (p) => `<LineString><tessellate>1</tessellate><coordinates>${cs(p)}</coordinates></LineString>`;
+    geom = parts.length > 1 ? `<MultiGeometry>${parts.map(ls).join("")}</MultiGeometry>` : ls(pts);
+  }
   const len = Number(it.lenM);
   const desc = [
     `Kind: ${it.kind || "line"}`,
@@ -143,6 +166,7 @@ function kmlPlacemark(it, folderName) {
     folderName ? `Folder: ${folderName}` : "",
     it.file ? `File: ${it.file}` : "",
     it.by ? `By: ${it.by}` : "",
+    partsOfLine(pts, it.gaps).length > 1 ? `Parts: ${partsOfLine(pts, it.gaps).length} (broken line)` : "",
   ].filter(Boolean).join(" | ");
   return `<Placemark><name>${xmlEsc(it.name)}</name><description>${xmlEsc(desc)}</description>${geom}</Placemark>`;
 }
@@ -170,7 +194,12 @@ function buildGeoJson(items, folderName) {
         const a = ring[0], z = ring[ring.length - 1];
         if (a[0] !== z[0] || a[1] !== z[1]) ring.push(a);
         geometry = { type: "Polygon", coordinates: [ring] };
-      } else if (pts.length >= 2) geometry = { type: "LineString", coordinates: pts.map(ll) };
+      } else if (pts.length >= 2) {
+        const parts = partsOfLine(pts, it.gaps);
+        geometry = parts.length > 1
+          ? { type: "MultiLineString", coordinates: parts.map((p) => p.map(ll)) }
+          : { type: "LineString", coordinates: pts.map(ll) };
+      }
       return {
         type: "Feature",
         properties: {
@@ -189,11 +218,15 @@ function buildCsv(items, folderName) {
     const s = String(v == null ? "" : v);
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const head = ["folder", "file", "name", "kind", "length_m", "area_sqm", "start_chainage_m", "points", "by", "created_at"];
+  const head = ["folder", "file", "name", "kind", "length_m", "area_sqm", "start_chainage_m", "parts", "points", "by", "created_at"];
   const rows = items.map((it) => [
     folderName || "", it.file || "", it.name || "", it.kind || "line",
     round2(it.lenM) ?? "", round2(it.areaSqm) ?? "", round2(it.startCh) ?? "",
-    cleanPts(it).map((p) => `${p.lat.toFixed(7)} ${p.lng.toFixed(7)}`).join(";"),
+    // Tooti line: har tukda " | " se alag, taaki GIS wala saaf dekh sake
+    // ki beech me jagah chhodi gayi thi.
+    partsOfLine(cleanPts(it), it.gaps).length,
+    partsOfLine(cleanPts(it), it.gaps)
+      .map((part) => part.map((p) => `${p.lat.toFixed(7)} ${p.lng.toFixed(7)}`).join(";")).join(" | "),
     it.by || "", it.at || "",
   ]);
   // BOM: Excel UTF-8 pehchaan leta hai — Hindi naam ghich-pich nahi hote.
@@ -241,7 +274,8 @@ function loadGmaps(key) {
       else { _gmaps = null; reject(new Error("maps missing")); }
     };
     const s = document.createElement("script");
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&callback=${cb}`;
+    // places: nayi marking ki jagah-khoj; geometry: Tenders ka naksha yahi script dobara leta hai.
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&callback=${cb}&libraries=geometry,places`;
     s.async = true; s.defer = true;
     s.onerror = () => { _gmaps = null; s.remove(); reject(new Error("maps load failed")); };
     document.head.appendChild(s);
@@ -272,6 +306,7 @@ const Btn = ({ children, onClick, disabled, icon: Icon, tone = "ghost", size = "
 };
 
 function Modal({ title, onClose, children, footer, width = 460 }) {
+  useBackClose(onClose);   // browser Back = band (form bhara ho to poochhe)
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
@@ -379,7 +414,13 @@ function MapPreview({ items, onPick, height = 380 }) {
       } else if (shape === "area") {
         ov = new g.maps.Polygon({ map, paths: pts, strokeColor: T.ind, strokeOpacity: 0.9, strokeWeight: 2, fillColor: T.ind, fillOpacity: 0.15 });
       } else {
-        ov = new g.maps.Polyline({ map, path: pts, strokeColor: T.ind, strokeOpacity: 0.9, strokeWeight: 4 });
+        // Tooti hui line: har tukde ki apni lakeer, aur click sab par ek jaisa.
+        partsOfLine(pts, it.gaps).forEach((part) => {
+          const ln = new g.maps.Polyline({ map, path: part, strokeColor: T.ind, strokeOpacity: 0.9, strokeWeight: 4 });
+          ln.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
+          layersRef.current.push(ln);
+        });
+        return;
       }
       ov.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
       layersRef.current.push(ov);
@@ -735,7 +776,7 @@ const failMsg = (r, fallback) => (!r || r._networkError ? t("map_library.net_err
 const normalizeLib = (d) => ({
   canSeeAll: !!(d && d.can_see_all),
   // perms / can_* naye field hain — purane backend par nahi aate, tab sab mana.
-  perms: { export: yes(d && d.perms && d.perms.export), delete: yes(d && d.perms && d.perms.delete) },
+  perms: { export: yes(d && d.perms && d.perms.export), delete: yes(d && d.perms && d.perms.delete), create: yes(d && d.perms && d.perms.create) },
   folders: (Array.isArray(d && d.folders) ? d.folders : []).filter((f) => f && f.id != null),
   items: (Array.isArray(d && d.items) ? d.items : []).filter((x) => x && x.id != null),
 });
@@ -751,6 +792,7 @@ function MapLibraryModule() {
   const [restoring, setRestoring] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
+  const [drawing, setDrawing] = useState(false);   // nayi marking ka editor khula hai
   const toastTimer = useRef(null);
   const libRef = useRef(lib);
   libRef.current = lib;
@@ -926,7 +968,8 @@ function MapLibraryModule() {
       if (!items.length) { flash(t("map_library.export_khaali"), "error"); return; }
       const g = inf.group;
       const folderName = g && g.fk !== NONE ? ((g.folder && g.folder.name) || "") : "";
-      const base = inf.type === "file" ? [folderName, fileTitle(inf.file)].filter(Boolean).join(" - ") : folderTitle(g);
+      const base = inf.type === "item" ? inf.item.name
+        : inf.type === "file" ? [folderName, fileTitle(inf.file)].filter(Boolean).join(" - ") : folderTitle(g);
       const fmt = FORMATS.find((x) => x.id === fmtId);
       let text;
       if (fmtId === "kml") {
@@ -969,7 +1012,7 @@ function MapLibraryModule() {
       fmtArea(st.sqm) ? t("map_library.rakba_total", { area: fmtArea(st.sqm) }) : null,
     ].filter(Boolean).join(" · ");
 
-    const canExport = perms.export && (info.type === "folder" || info.type === "file") && info.items.length > 0;
+    const canExport = perms.export && (info.type === "folder" || info.type === "file" || info.type === "item") && info.items.length > 0;
     const itemEdit = info.type === "item" && yes(it.can_edit);
     const itemDelete = info.type === "item" && yes(it.can_delete);
     const folderEdit = !!(folderRec && yes(folderRec.can_edit));
@@ -1019,7 +1062,8 @@ function MapLibraryModule() {
           <div style={section}>
             <div style={secHead}>{t("common.export")}</div>
             <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 8 }}>
-              {info.type === "folder" ? t("map_library.export_note_folder", { n: info.items.length }) : t("map_library.export_note_file", { n: info.items.length })}
+              {info.type === "folder" ? t("map_library.export_note_folder", { n: info.items.length })
+                : info.type === "item" ? t("map_library.export_note_item") : t("map_library.export_note_file", { n: info.items.length })}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {FORMATS.map((f) => <Btn key={f.id} icon={IcDown} onClick={() => doExport(f.id, info)}>{f.name}</Btn>)}
@@ -1126,7 +1170,15 @@ function MapLibraryModule() {
           ))}
         </div>
         {lib.status !== "loading" && (
-          <Btn icon={IcRefresh} onClick={refresh} disabled={refreshing}>{t("common.refresh")}</Btn>
+          <div style={{ display: "flex", gap: 8 }}>
+            {/* Naksha par haath se marking — freelance (library) ya kaam ke liye.
+                Library ka create band ho tab bhi kaam wala raasta khula rehta hai
+                (wahan faisla Tenders ka adhikar karta hai, server par). */}
+            {lib.status === "ok" && view === "library" && (
+              <Btn tone="primary" icon={IcPlus} onClick={() => setDrawing(true)}>{t("map_library.nayi_marking")}</Btn>
+            )}
+            <Btn icon={IcRefresh} onClick={refresh} disabled={refreshing}>{t("common.refresh")}</Btn>
+          </div>
         )}
       </div>
 
@@ -1158,6 +1210,14 @@ function MapLibraryModule() {
             : t("map_library.folder_hatana_hai_0", { name: folderTitle(dGroup) })}
           confirmLabel={t("map_library.haan_folder_hatao")}
           onClose={() => setDialog(null)} onConfirm={() => deleteFolder(dGroup)} />
+      )}
+      {drawing && data && (
+        <SiteMarkingEditor lib={data} loadMaps={loadGmaps}
+          onClose={() => { setDrawing(false); loadLib("refresh"); }}
+          onSaved={(id) => {
+            // Nayi marking library me turant dikhe — editor band hone par wahi chuni hui milegi.
+            loadLib("refresh").then(() => { if (id) setTimeout(() => reveal(id), 0); });
+          }} />
       )}
       <Toast toast={toast} />
     </div>

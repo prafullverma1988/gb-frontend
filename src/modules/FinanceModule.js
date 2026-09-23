@@ -8,9 +8,11 @@ import useDebounce from "../utils/useDebounce";
 import { t, Rich } from "../i18n";
 import { companyNameHtml } from "../utils/companyName";
 import { canSeeFinancials } from "../utils/perms";
+import { canApproveAction } from "../utils/approvalAuthority";
 import TabAccounts from "./tabs/TabAccounts";
 import { isoDate, todayISO } from "../utils/today";
 import { cashMoveOf, isTransferIn, round2 } from "../utils/moneyRules";
+import { BackClose } from "../utils/backNav";
 
 // A party holds multiple roles: `roles` is the canonical comma list and
 // `type` is only the primary one. Matching on `type` alone dropped equipment
@@ -672,7 +674,7 @@ function DualBillStrip({ row, onFields }){
           <span style={{position:"absolute",top:2,left:on?15:2,width:13,height:13,borderRadius:"50%",background:"#fff",transition:"left .15s",boxShadow:"0 1px 2px rgba(0,0,0,.25)"}}/>
         </span>
         <span style={{fontSize:11,fontWeight:600,color:on?T.blu:T.t3}}>{t("finance.billing_unit_alag")}</span>
-        {row.grnHadAlt&&on&&<span style={{fontSize:9,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grnM}`,padding:"1px 6px",borderRadius:8}}>{t("finance.grn_weight")}</span>}
+        {row.grnHadAlt&&on&&<span style={{fontSize:9,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grnM}`,padding:"1px 6px",borderRadius:8}}>{row.altSource==="weighbridge"?t("weigh.bill_badge"):t("finance.grn_weight")}</span>}
         {!on&&learned?.alt_unit&&<span style={{fontSize:10,color:T.t4}}>{t("finance.pichhli_baar_alt_unit_me_bill", { alt_unit: learned.alt_unit })}</span>}
       </button>
       {on&&(
@@ -795,6 +797,7 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
 
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <BackClose onClose={onClose}/>
       <div style={{background:T.surface,borderRadius:14,width:560,maxWidth:"96vw",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",overflow:"hidden"}}>
         {/* Header */}
         <div style={{padding:"14px 20px",background:T.ind,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
@@ -1016,6 +1019,33 @@ function txnMatchesSearch(raw, { texts = [], amount = null, ds = null }) {
   return texts.some((v) => v && String(v).toLowerCase().includes(needle));
 }
 
+// ── Party ledger ki chhanni — EK jagah ──────────────────────────────
+// Screen ka footer, CSV aur PDF teeno isi se chalte hain. Pehle chhanni
+// sirf render ke andar thi: filter lagane par CR/DR wahi poore ledger ke
+// dikhte rehte the, aur export hamesha saari entry de deta tha.
+const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
+const ledgerLabelOf=(txn)=>LEDGER_TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
+const ledgerProjOf=(txn)=>txn.project||txn.project_name||"";
+// f = {q, type, proj, from, to}
+const ledgerFilterOn=(f)=>!!((f.q||"").trim()||f.type!=="All"||f.proj!=="All"||f.from||f.to);
+const applyLedgerFilter=(rows,f)=>{
+  const lq=(f.q||"").trim().toLowerCase();
+  const fromT=f.from?new Date(f.from).getTime():null;
+  const toT=f.to?new Date(f.to+"T23:59:59").getTime():null;
+  return rows.filter(txn=>{
+    if(f.type!=="All"&&ledgerLabelOf(txn)!==f.type) return false;
+    if(f.proj!=="All"&&ledgerProjOf(txn)!==f.proj) return false;
+    if(fromT||toT){const d=new Date(txn.dateRaw||txn.date).getTime(); if(!isNaN(d)){ if(fromT&&d<fromT) return false; if(toT&&d>toT) return false; }}
+    if(lq){const hay=[txn.date,ledgerProjOf(txn),txn.note,ledgerLabelOf(txn),String(txn.amount||""),fmtN(txn.amount||0)].join(" ").toLowerCase(); if(!hay.includes(lq)) return false;}
+    return true;
+  });
+};
+// CR = hum unpar (ledSign<0), DR = wo hum par (ledSign>0)
+const ledgerCRDR=(rows)=>({
+  cr: rows.reduce((s,r)=>s+((r.ledSign||0)<0?(r.amount||0):0),0),
+  dr: rows.reduce((s,r)=>s+((r.ledSign||0)>0?(r.amount||0):0),0),
+});
+
 // "party nahi mili?" escape hatch on the payment pickers. Dropdown ke
 // theek pehle ek chhota square "+" — text link neeche latakne se form ki
 // line toot jati thi.
@@ -1093,6 +1123,23 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // Site Expense (Petty Cash) — no fixed party master, recipient is free-text.
   // Bill heads to Site Expense regardless of who received the cash.
   const isSiteExpense=type==="Petty Cash Expense";
+  // Company kharcha kis city ka. Project ka paisa apne aap city me aata hai
+  // (project → city); poochna sirf tab jab project nahi aur entry asli
+  // bill/kharcha ho. Payment/receipt/transfer par nahi — unki city unke bill
+  // se nikalti hai. Default server deta hai (ek hi city / pichhli baar wali /
+  // user ke project ki city); kuch pakka na ho to khud chunna padta hai.
+  const [cityList,setCityList]=useState([]);
+  const [cityChoice,setCityChoice]=useState("");    // "" = chuna nahi · "central" · city id
+  const [cityErr,setCityErr]=useState(false);
+  useEffect(()=>{
+    let alive=true;
+    api.get("/library/cities/my-default").then(r=>{
+      if(!alive||!r?.success) return;
+      setCityList(r.data?.cities||[]);
+      if(r.data?.default_city_id) setCityChoice(String(r.data.default_city_id));
+    }).catch(()=>{});
+    return ()=>{alive=false;};
+  },[]);
 
   // Paid To list (or Received From for inflows):
   //  - Payment Received → Clients + Staff (admin can receive money back
@@ -1161,6 +1208,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     || prefillGRN?.project
     || (isMaterial || isSubcon ? (PROJECTS_LIST[0] || "") : "");
   const [project,setProject]=useState(_projectDefault);
+  // Company ki koi city hi na ho to poochne ko kuch nahi — Central.
+  const showCity=!project&&(isMaterial||isSubcon||isSiteExpense)&&cityList.length>0;
   // GRN-prefilled fields are locked (vendor / project / delivery date / material+qty).
   // When opened from Project Detail's Party tab, lockParty + lockProject
   // pin those same fields without the GRN link — same readonly UI.
@@ -1421,6 +1470,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           alt_unit:hadAlt?it.alt_unit:"",
           alt_ratio:it.alt_ratio!=null?Number(it.alt_ratio):(hadAlt&&pQty>0?Math.round((Number(it.alt_qty)/pQty)*10000)/10000:null),
           grnHadAlt:!!hadAlt,
+          altSource:it.alt_source||null,
         });
       });
     }
@@ -1558,6 +1608,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         alt_unit:hadAlt?it.alt_unit:"",
         alt_ratio:it.alt_ratio!=null?Number(it.alt_ratio):(hadAlt&&pQty>0?Math.round((Number(it.alt_qty)/pQty)*10000)/10000:null),
         grnHadAlt:!!hadAlt,
+        altSource:it.alt_source||null,
       };
     }));
   };
@@ -1598,6 +1649,9 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         return;
       }
     }
+    // City ya Central chunna zaroori. Apne aap "Central" maan lete to sab
+    // aalas me wahi chhod dete aur city ka hisaab phir khaali reh jaata.
+    if(showCity&&!cityChoice){ setCityErr(true); setSaveErr(t("finance.city_ya_central_zaroori")); return; }
     setSaveErr("");
     savingRef.current=true; setSavingTxn(true);    // ← lock immediately
     try{
@@ -1684,6 +1738,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         account_id:accObj?.id||null,
         account_name:account||null,
         project_name:project||null,
+        // null = Central. Project ho to city project se aati hai.
+        city_id:showCity&&cityChoice&&cityChoice!=="central"?Number(cityChoice):null,
         note:note||null,
         // Bills (material_purchase / subcon) start as 'unpaid' so they land
         // in Pending Payments per due_date until user records a settlement.
@@ -1763,7 +1819,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
             ...(useAlt?{
               primary_qty:primaryQty,
               primary_unit:r.unit||"",
-              weight_source:r.grnHadAlt?"grn_verified":"billing_entered",
+              weight_source:r.altSource==="weighbridge"?"weighbridge":(r.grnHadAlt?"grn_verified":"billing_entered"),
             }:{}),
           };
         });
@@ -2240,6 +2296,27 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               </>
             )}
           </div>
+
+          {/* ── Company kharcha kis city ka — sirf jab project nahi chuna ──
+              Choice zaroori hai (Save par rok hai); default server bhar deta
+              hai jab pakka pata ho. Central sabse neeche, taaki aalas me pehla
+              option wahi na ban jaye. */}
+          {showCity&&(
+            <div style={{background:cityErr?"#FEF2F2":T.surface,borderRadius:8,border:`1.5px solid ${cityErr?T.red:T.b1}`,padding:"10px 14px",marginBottom:12,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap"}}>
+              <div style={{flex:"1 1 260px",minWidth:220}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{t("finance.kis_city_ka_expense")}</div>
+                <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>{t("finance.city_hint_no_project")}</div>
+              </div>
+              <div style={{flex:"1 1 240px",minWidth:220}}>
+                <select value={cityChoice} onChange={e=>{setCityChoice(e.target.value);setCityErr(false);}}
+                  style={{...inp(),cursor:"pointer",...(cityErr?{borderColor:T.red}:{})}}>
+                  <option value="">{t("finance.city_select_placeholder")}</option>
+                  {cityList.map(c=><option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                  <option value="central">{t("finance.central_whole_company")}</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* ════════════════════════════════════════════════════
               BANK TRANSFER — preview + amount
@@ -2885,6 +2962,7 @@ function AddPartyModal({onClose,onAdd}){
     setTimeout(()=>{setSaved(false);onClose();},800);
   };
   return(<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.48)",zIndex:400,backdropFilter:"blur(3px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
       background:T.bg,borderRadius:12,width:460,maxWidth:"95vw",zIndex:401,
@@ -3003,6 +3081,7 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
   const inp={height:34,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface,color:T.t1,width:"100%"};
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <BackClose onClose={onClose}/>
       <div style={{background:T.surface,borderRadius:14,width:520,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",overflow:"hidden"}}>
         {/* Header */}
         <div style={{padding:"14px 20px",background:T.blu,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -3080,48 +3159,63 @@ function btnSolid(c){return{padding:"8px 16px",borderRadius:7,border:"none",back
 
 // ── Send-to-staff modal — 3-bucket allocation (B4) ─────────────────
 // salary → salary-ledger settlement, NO wallet credit (imprest untouched)
-// imprest → wallet credit (existing behaviour) · petrol → credit tagged petrol
-function SendToStaffModal({staff,onClose,onDone}){
+// imprest → company khaate se staff ko payment (wallet credit) · petrol → wahi, petrol tag
+function SendToStaffModal({staff,accounts,onClose,onDone}){
   const due=Number(staff.salaryDue)||0;
-  const [bucket,setBucket]=useState(due>0?"salary":"imprest"); // salary pre-selected when dues exist
+  const canTopup=staff.canTopup!==false; // WAL-18: viewer / band / hata login → sirf Salary
+  const [bucket,setBucket]=useState(due>0||!canTopup?"salary":"imprest"); // salary pre-selected when dues exist
   const [amount,setAmount]=useState(due>0?String(due):"");
   const [method,setMethod]=useState("bank_transfer");
+  // WAL-15: imprest/petrol company ke kisi khaate se nikalta hai — kaunsa, ye
+  // chunna zaroori (pehle koi khaata nahi likha jaata tha, bank kabhi nahi ghatta).
+  const accts=accounts||[];
+  const [accountId,setAccountId]=useState(accts.length===1?String(accts[0].id):"");
   const [txRef,setTxRef]=useState("");
   const [note,setNote]=useState("");
   const [busy,setBusy]=useState(false);
   const BUCKETS=[
-    {id:"salary", l:t("finance.salary"), sub:due>0?`Due ₹${fmtN(due)}`:"Koi due nahi", c:T.red},
+    {id:"salary", l:t("finance.salary"), sub:due>0?t("finance.due_rs_amt",{amt:fmtN(due)}):t("finance.koi_due_nahi"), c:T.red},
     {id:"imprest",l:t("finance.imprest"),sub:t("finance.wallet_credit_kharche_ke_liye"), c:T.blu},
     {id:"petrol", l:t("finance.petrol"), sub:t("finance.petrol_allowance_credit"), c:T.amb},
   ];
   const doSend=async()=>{
     const amt=Number(amount);
     if(!amt||amt<=0){window.alert(t("finance.amount_sahi_bharo"));return;}
-    if(bucket==="salary"&&amt>due){window.alert(`Salary due ₹${fmtN(due)} hi hai — usse zyada salary bucket me nahi ja sakta`);return;}
+    if(bucket==="salary"&&amt>due){window.alert(t("finance.salary_due_itna_hi_hai",{amt:fmtN(due)}));return;}
+    if(bucket!=="salary"&&!accountId){window.alert(t("finance.send_account_select_karo"));return;}
     setBusy(true);
     try{
-      const r=await api.post("/wallets/send-to-staff",{staff_party_id:staff.id,amount:amt,bucket,payment_method:method,tx_ref:txRef||undefined,note:note||undefined});
-      if(r&&r.success){ window.alert(bucket==="salary"?"Salary settle ho gayi ✓":"Wallet credit ho gaya ✓"); onDone(); }
-      else window.alert((r&&r.message)||"Send failed");
+      const r=await api.post("/wallets/send-to-staff",{staff_party_id:staff.id,amount:amt,bucket,payment_method:method,tx_ref:txRef||undefined,note:note||undefined,account_id:bucket!=="salary"?Number(accountId):undefined});
+      if(r&&r.success){ window.alert(bucket==="salary"?t("finance.salary_settle_ho_gayi"):t("finance.wallet_credit_ho_gaya")); onDone(); }
+      else window.alert((r&&r.message)||t("finance.send_failed"));
     }catch(e){ window.alert(t("finance.send_failed")); }
     setBusy(false);
   };
   return(
-    <ModalW title={`Send to ${staff.name}`} onClose={onClose}>
+    <ModalW title={t("finance.send_to_name",{name:staff.name})} onClose={onClose}>
       <div style={{display:"flex",gap:6,marginBottom:12}}>
         {BUCKETS.map(b=>(
-          <button key={b.id} onClick={()=>{setBucket(b.id); if(b.id==="salary"&&due>0&&!Number(amount)) setAmount(String(due));}}
-            style={{flex:1,padding:"9px 6px",borderRadius:8,border:`1.5px solid ${bucket===b.id?b.c:T.b1}`,background:bucket===b.id?b.c+"11":T.surface,cursor:"pointer",textAlign:"left"}}>
+          <button key={b.id} disabled={b.id!=="salary"&&!canTopup} onClick={()=>{setBucket(b.id); if(b.id==="salary"&&due>0&&!Number(amount)) setAmount(String(due));}}
+            style={{flex:1,padding:"9px 6px",borderRadius:8,border:`1.5px solid ${bucket===b.id?b.c:T.b1}`,background:bucket===b.id?b.c+"11":T.surface,cursor:b.id!=="salary"&&!canTopup?"not-allowed":"pointer",opacity:b.id!=="salary"&&!canTopup?.45:1,textAlign:"left"}}>
             <div style={{fontSize:11.5,fontWeight:800,color:bucket===b.id?b.c:T.t2}}>{b.l}</div>
             <div style={{fontSize:9,color:T.t4,marginTop:2}}>{b.sub}</div>
           </button>
         ))}
       </div>
+      {!canTopup&&<div style={{fontSize:11,color:T.amb,background:T.ambL,padding:"7px 10px",borderRadius:7,marginBottom:10}}>{t("finance.wallet_topup_band_sirf_salary")}</div>}
       {bucket==="salary"&&due<=0&&<div style={{fontSize:11,color:T.amb,background:T.ambL,padding:"7px 10px",borderRadius:7,marginBottom:10}}>{t("finance.is_staff_ka_koi_salary_due")}</div>}
       {bucket==="salary"&&due>0&&<div style={{fontSize:11,color:T.t3,background:T.surfaceB,padding:"7px 10px",borderRadius:7,marginBottom:10}}>{t("finance.salary_bucket_paisa")} <b>{t("finance.salary_ledger")}</b> {t("finance.me_settle_hoga_wallet_balance_nahi")} <b style={{color:T.red}}>₹{fmtN(due)}</b>.</div>}
       <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("common.amount_2")}</label>
       <input type="number" value={amount} onChange={e=>setAmount(e.target.value)}
         style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:13,fontWeight:700,boxSizing:"border-box",margin:"4px 0 10px"}}/>
+      {bucket!=="salary"&&<>
+        <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("finance.pay_from_account")}</label>
+        <select value={accountId} onChange={e=>setAccountId(e.target.value)}
+          style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${accountId?T.b2:T.amb}`,fontSize:12,boxSizing:"border-box",margin:"4px 0 10px",background:T.surface}}>
+          <option value="">{t("finance.select_account")}</option>
+          {accts.map(a=><option key={a.id} value={String(a.id)}>{a.name}{a.no?` ${a.no}`:""} · {fmtS(a.balance)}</option>)}
+        </select>
+      </>}
       <div style={{display:"flex",gap:8}}>
         <div style={{flex:1}}>
           <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>{t("finance.method")}</label>
@@ -3140,7 +3234,7 @@ function SendToStaffModal({staff,onClose,onDone}){
         style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b1}`,fontSize:12,boxSizing:"border-box",marginBottom:12}}/>
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
         <button onClick={onClose} style={btnGhost()}>{t("common.cancel")}</button>
-        <button disabled={busy} onClick={doSend} style={btnSolid(bucket==="salary"?T.red:T.blu)}>{busy?t("common.sending"):`Send ₹${fmtN(Number(amount)||0)}`}</button>
+        <button disabled={busy} onClick={doSend} style={btnSolid(bucket==="salary"?T.red:T.blu)}>{busy?t("common.sending"):t("finance.send_rs_amt",{amt:fmtN(Number(amount)||0)})}</button>
       </div>
     </ModalW>
   );
@@ -3148,6 +3242,7 @@ function SendToStaffModal({staff,onClose,onDone}){
 function ModalW({title,onClose,children}){
   return createPortal(
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <BackClose onClose={onClose}/>
       <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,padding:"16px 18px",width:380,maxWidth:"92vw",boxShadow:"0 12px 40px rgba(0,0,0,0.25)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <span style={{fontSize:14,fontWeight:700,color:T.t1}}>{title}</span>
@@ -3637,11 +3732,17 @@ function FinanceModule(){
   // Salary bucket: outstanding due per staff party (separate ledger — imprest
   // untouched). Drives the red "Salary due" chip + send-modal default bucket.
   const [salaryDues,setSalaryDues]=useState({});
+  // WAL-11: pending "Salary me settle karo" requests (inbox neeche wallets tab me)
+  const [settleReqs,setSettleReqs]=useState([]);
+  const [settleReqBusy,setSettleReqBusy]=useState(null);
   const loadWallets=()=>{
     api.get("/wallets/staff").then(res=>{
       if(res&&res.success){
         setWalletList((res.data||[]).map(w=>({
           id:w.party_id, name:w.name, role:"Staff",
+          // WAL-18: server sirf asli staff bhejta hai; viewer / band / hata hua login
+          // tabhi aata hai jab wallet me paisa ya salary baaki ho — use sirf Salary.
+          userState:w.user_state||"staff", canTopup:w.can_topup!==false,
           balance:Number(w.posted_balance)||0,
           pending:Number(w.pending_amount)||0,
           limit:Number(w.wallet_limit)||0,
@@ -3653,18 +3754,38 @@ function FinanceModule(){
     api.get("/wallets/salary/dues").then(res=>{
       if(res&&res.success) setSalaryDues(res.data||{});
     }).catch(()=>{});
+    api.get("/wallets/salary/settle-requests").then(res=>{
+      if(res&&res.success) setSettleReqs(res.data||[]);
+    }).catch(()=>{});
   };
   useEffect(()=>{ loadWallets(); },[]);
+  // WAL-11: staff ki "Salary me settle karo" requests (wallet ka paisa → salary).
+  // Pehle koi screen inhe dikhati hi nahi thi — request hamesha pending rehti.
+  const confirmSettleReq=async(r)=>{
+    const ok=await window.confirmAsync(t("finance.settle_req_confirm_q",{amt:fmtN(r.amount),name:r.staff_name}));
+    if(!ok) return;
+    setSettleReqBusy(r.id);
+    try{
+      const res=await api.post(`/wallets/salary/settle-request/${r.id}/confirm`,{});
+      window.alert(res&&res.success?t("finance.settle_req_confirmed"):((res&&res.message)||t("finance.settle_req_failed")));
+    }catch(e){ window.alert(t("finance.settle_req_failed")); }
+    setSettleReqBusy(null); loadWallets(); refreshTxns();
+  };
+  const rejectSettleReq=async(r)=>{
+    const reason=await window.promptAsync(t("finance.settle_req_reject_reason"));
+    if(reason===null||reason===undefined) return;
+    setSettleReqBusy(r.id);
+    try{
+      const res=await api.post(`/wallets/salary/settle-request/${r.id}/reject`,{reason:String(reason).trim()||undefined});
+      window.alert(res&&res.success?t("finance.settle_req_rejected"):((res&&res.message)||t("finance.settle_req_failed")));
+    }catch(e){ window.alert(t("finance.settle_req_failed")); }
+    setSettleReqBusy(null); loadWallets();
+  };
   // Send-to-staff modal (3-bucket allocation: salary | imprest | petrol)
   const [sendStaff,setSendStaff]=useState(null); // wallet row being sent to
-  // Wallet approval queue + photo policy (Phase 2)
-  const [walletApprovals,setWalletApprovals]=useState([]);
-  const [walletPhotoPolicy,setWalletPhotoPolicy]=useState({});
-  const loadWalletApprovals=()=>{
-    api.get("/wallets/pending-approvals").then(res=>{ if(res&&res.success) setWalletApprovals(res.data||[]); }).catch(()=>{});
-    api.get("/wallets/photo-policy").then(res=>{ if(res&&res.success) setWalletPhotoPolicy(res.data||{}); }).catch(()=>{});
-  };
-  useEffect(()=>{ loadWalletApprovals(); },[]);
+  // Wallet approval queue + photo policy yahan load hote the par Finance me
+  // kahin dikhte nahi the — har Finance khulne par 3 bekaar query (WAL-19).
+  // Wallet approvals Projects ke approvals panel me hain.
 
   // ── EQUIPMENT REVIEW (new section) ────────────────────────────
   const [equipReview,setEquipReview]=useState([]);
@@ -4381,8 +4502,12 @@ function FinanceModule(){
     }
     return out;
   };
+  // Screen par jo chhanni lagi hai, export me bhi wahi — warna user
+  // "23 of 285" dekhkar CSV kholta hai aur 285 rows milti hain.
+  const ledgerFilterState=()=>({q:ledgerSearch,type:ledgerType,proj:ledgerProj,from:ledgerFrom,to:ledgerTo});
+  const ledgerExportRows=(party)=>applyLedgerFilter(getLedgerRows(party),ledgerFilterState());
   const downloadLedgerCSV=(party)=>{
-    const rows=getLedgerRows(party);
+    const rows=ledgerExportRows(party);
     downloadCSV(`${party.name.replace(/\s+/g,"_")}_Ledger.csv`,[
       ["Party Ledger:",party.name],["Type:",party.type],["Balance:",party.balance,party.balType],[],
       ["Date","Project","Note","Type","CR","DR","Balance"],
@@ -4390,7 +4515,7 @@ function FinanceModule(){
     ]);
   };
   const downloadLedgerPDF=(party)=>{
-    const rows=getLedgerRows(party);
+    const rows=ledgerExportRows(party);
     const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
     const rowsHTML=rows.map(t=>{
       const typeLabel=TYPE_LABELS[t.txnType]||t.type||t.txnType||"Transaction";
@@ -4714,13 +4839,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowAccPanel(!showAccPanel)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,border:`1px solid ${showAccPanel?"#1E40AF":"#CBD5E1"}`,background:"#FFFFFF",fontSize:11.5,fontWeight:600,color:"#475569",cursor:"pointer"}}>
                 <IcBank size={13} color="currentColor"/> {t("finance.accounts")} <IcDown size={10} color="currentColor"/>
+                {settleReqs.length>0&&<span title={t("finance.salary_settle_requests_n",{n:settleReqs.length})} style={{minWidth:15,height:15,padding:"0 4px",boxSizing:"border-box",borderRadius:8,background:T.red,color:"white",fontSize:9,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{settleReqs.length}</span>}
               </button>
               {showAccPanel&&(<>
                 <div onClick={()=>setShowAccPanel(false)} style={{position:"fixed",inset:0,zIndex:140}}/>
                 <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:T.surface,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:`1px solid ${T.b1}`,zIndex:150,width:320,overflow:"hidden"}}>
                   <div style={{display:"flex",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
-                    {[{id:"accounts",l:t("finance.company_accounts")},{id:"wallets",l:t("finance.staff_wallets")}].map(t=>(
-                      <button key={t.id} onClick={()=>setAccTab(t.id)} style={{flex:1,padding:"9px 8px",border:"none",background:"none",color:accTab===t.id?T.blu:T.t3,fontSize:11.5,fontWeight:accTab===t.id?700:400,cursor:"pointer",borderBottom:accTab===t.id?`2px solid ${T.blu}`:"2px solid transparent"}}>{t.l}</button>
+                    {[{id:"accounts",l:t("finance.company_accounts")},{id:"wallets",l:t("finance.staff_wallets"),n:settleReqs.length}].map(t=>(
+                      <button key={t.id} onClick={()=>setAccTab(t.id)} style={{flex:1,padding:"9px 8px",border:"none",background:"none",color:accTab===t.id?T.blu:T.t3,fontSize:11.5,fontWeight:accTab===t.id?700:400,cursor:"pointer",borderBottom:accTab===t.id?`2px solid ${T.blu}`:"2px solid transparent"}}>{t.l}{t.n>0&&<span style={{marginLeft:5,padding:"0 5px",borderRadius:8,background:T.red,color:"white",fontSize:9,fontWeight:800}}>{t.n}</span>}</button>
                     ))}
                   </div>
                   <div style={{padding:"8px 10px"}}>
@@ -4745,12 +4871,32 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       </>
                     ):(
                       <>
+                      {settleReqs.length>0&&<div style={{marginBottom:8,padding:"7px 9px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`}}>
+                        <div style={{fontSize:10,fontWeight:800,color:T.amb,textTransform:"uppercase",letterSpacing:.4,marginBottom:3}}>{t("finance.salary_settle_requests_n",{n:settleReqs.length})}</div>
+                        {settleReqs.map(r=>(
+                          <div key={r.id} style={{padding:"6px 0 2px",borderTop:`1px solid ${T.ambM}`}}>
+                            <div style={{display:"flex",justifyContent:"space-between",gap:6}}>
+                              <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{r.staff_name}</span>
+                              <span style={{fontSize:12,fontWeight:800,color:T.t1}}>₹{fmtN(r.amount)}</span>
+                            </div>
+                            <div style={{fontSize:10,color:T.t3,marginTop:1}}>{t("finance.settle_req_wallet_due",{wallet:fmtS(r.wallet_available),due:fmtS(r.salary_due)})}</div>
+                            {r.note&&<div style={{fontSize:10,color:T.t4,marginTop:1}}>{r.note}</div>}
+                            {!r.can_confirm&&<div style={{fontSize:9.5,fontWeight:600,color:T.red,marginTop:2}}>{t("finance.settle_req_cannot_confirm")}</div>}
+                            <div style={{display:"flex",gap:6,marginTop:5,justifyContent:"flex-end"}}>
+                              <button disabled={settleReqBusy===r.id} onClick={()=>rejectSettleReq(r)}
+                                style={{fontSize:10,fontWeight:700,color:T.red,background:T.surface,border:`1px solid ${T.redM}`,borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>{t("common.reject")}</button>
+                              <button disabled={settleReqBusy===r.id||!r.can_confirm} onClick={()=>confirmSettleReq(r)}
+                                style={{fontSize:10,fontWeight:700,color:"white",background:r.can_confirm?T.grn:T.t4,border:"none",borderRadius:6,padding:"3px 10px",cursor:r.can_confirm?"pointer":"not-allowed"}}>{t("common.confirm")}</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>}
                       {walletList.length===0&&<div style={{padding:"14px 8px",textAlign:"center",fontSize:11,color:T.t4}}>{t("finance.koi_staff_wallet_nahi")}</div>}
                       {walletList.map(w=>{const pct=w.limit>0?Math.max(0,Math.min(100,Math.round(w.balance/w.limit*100))):0;const due=Number(salaryDues[w.id])||0;return(
                         <div key={w.id} style={{padding:"8px 10px",borderRadius:7,marginBottom:4,background:T.surfaceB,border:`1px solid ${T.b1}`}}>
                           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                             <div style={{width:26,height:26,borderRadius:"50%",background:w.color+"22",border:`1px solid ${w.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:w.color,flexShrink:0}}>{w.initials}</div>
-                            <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.pending>0?`₹${fmtN(w.pending)} pending`:w.role}</div></div>
+                            <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.pending>0?t("finance.rs_amt_pending",{amt:fmtN(w.pending)}):t("finance.staff_label")}</div>{!w.canTopup&&<div style={{fontSize:9,fontWeight:600,color:T.amb}}>{t("finance.wallet_state_"+w.userState)}</div>}</div>
                             {/* WAL-10: minus balance = staff ne apne paise se kharcha kiya, company ko dena hai.
                                 Pehle fmtN (Math.abs) se −₹3,69,237 bhi "₹3,69,237" dikhta tha — jaise paisa staff ke paas ho. */}
                             <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:w.balance<0?T.red:T.t1}}>{fmtS(w.balance)}</div>{w.balance<0&&<div style={{fontSize:9,fontWeight:600,color:T.red}}>{t("finance.staff_wallet_company_owes")}</div>}<div style={{fontSize:9,color:T.t4}}>{w.limit>0?`/ ₹${fmtN(w.limit)}`:t("finance.no_limit")}</div></div>
@@ -4772,7 +4918,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 </div>
               </>)}
             </div>
-            {sendStaff&&<SendToStaffModal staff={sendStaff} onClose={()=>setSendStaff(null)} onDone={()=>{setSendStaff(null);loadWallets();}}/>}
+            {sendStaff&&<SendToStaffModal staff={sendStaff} accounts={apiAccounts} onClose={()=>setSendStaff(null)} onDone={()=>{setSendStaff(null);loadWallets();refreshAccounts();refreshTxns();}}/>}
             {/* Create Transaction dropdown */}
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowCreateTxn(!showCreateTxn)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
@@ -4987,29 +5133,22 @@ Status: ${ledgerRow.status||"unpaid"}`;
               // Each row keeps its TRUE running balance (computed on the full,
               // chronological ledger) — filtering only hides rows, so the
               // Balance column and Closing Balance stay accounting-correct.
-              const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
-              const labelOf=(txn)=>LEDGER_TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
-              const projOf=(txn)=>txn.project||txn.project_name||"";
+              const labelOf=ledgerLabelOf, projOf=ledgerProjOf;
               const ledgerTypeOpts=Array.from(new Set(ledgerRows.map(labelOf))).sort();
               const ledgerProjOpts=Array.from(new Set(ledgerRows.map(projOf).filter(Boolean))).sort();
-              const lq=ledgerSearch.trim().toLowerCase();
-              const fromT=ledgerFrom?new Date(ledgerFrom).getTime():null;
-              const toT=ledgerTo?new Date(ledgerTo+"T23:59:59").getTime():null;
-              const ledgerFiltered=!!(lq||ledgerType!=="All"||ledgerProj!=="All"||ledgerFrom||ledgerTo);
-              const viewRows=ledgerRows.filter(txn=>{
-                if(ledgerType!=="All"&&labelOf(txn)!==ledgerType) return false;
-                if(ledgerProj!=="All"&&projOf(txn)!==ledgerProj) return false;
-                if(fromT||toT){const d=new Date(txn.dateRaw||txn.date).getTime(); if(!isNaN(d)){ if(fromT&&d<fromT) return false; if(toT&&d>toT) return false; }}
-                if(lq){const hay=[txn.date,projOf(txn),txn.note,labelOf(txn),String(txn.amount||""),fmtN(txn.amount||0)].join(" ").toLowerCase(); if(!hay.includes(lq)) return false;}
-                return true;
-              });
+              const lgF={q:ledgerSearch,type:ledgerType,proj:ledgerProj,from:ledgerFrom,to:ledgerTo};
+              const ledgerFiltered=ledgerFilterOn(lgF);
+              const viewRows=applyLedgerFilter(ledgerRows,lgF);
               const clearLedgerFilters=()=>{setLedgerSearch("");setLedgerType("All");setLedgerProj("All");setLedgerFrom("");setLedgerTo("");};
               // Signed model: DR = rows that make the party owe us (ledSign>0),
               // CR = rows where we owe them (ledSign<0). Closing includes the
               // signed opening → equals the backend live_balance, so this chip
               // matches the party card + the bot.
-              const totalDR=ledgerRows.reduce((s,r)=>s+((r.ledSign||0)>0?r.amount:0),0);
-              const totalCR=ledgerRows.reduce((s,r)=>s+((r.ledSign||0)<0?r.amount:0),0);
+              const {cr:totalCR,dr:totalDR}=ledgerCRDR(ledgerRows);
+              // Chhanni lagi ho to screen par dikhi hui entries ka apna jod —
+              // closing balance phir bhi POORE ledger ka rehta hai, warna party
+              // ka asli balance galat dikhne lagta.
+              const {cr:viewCR,dr:viewDR}=ledgerCRDR(viewRows);
               const ledgerClosing=(parseFloat(selParty.opening_balance)||0)+totalDR-totalCR; // >0 = they owe us
               const computedBalType=ledgerClosing===0?"Settled":balanceLabelOf(selParty.type,ledgerClosing);
               const computedBal=Math.abs(ledgerClosing);
@@ -5237,10 +5376,25 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     const closeGood= ledgerClosing>=0;  // >=0 = they owe us / settled → green
                     const closeSfx = ledgerClosing===0 ? "" : (ledgerClosing>0?"Dr":"Cr");
                     return (
+                      <>
+                      {ledgerFiltered&&(
+                        <div style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"8px 14px",gap:4,background:T.bluL,borderTop:`1px solid ${T.bluM}`,flexShrink:0,alignItems:"center"}}>
+                          <span/>
+                          <span/>
+                          <span style={{fontSize:11.5,color:T.blu,fontWeight:700,textTransform:"uppercase",letterSpacing:.3,whiteSpace:"nowrap"}}>
+                            {t("finance.filtered_total")} · {viewRows.length}/{ledgerRows.length}
+                          </span>
+                          <span/>
+                          <span/>
+                          <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.grn,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(viewCR)}</span>
+                          <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.red,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(viewDR)}</span>
+                          <span style={{textAlign:"right",fontSize:11,color:T.t4,fontStyle:"italic",whiteSpace:"nowrap"}}>{t("finance.net_fmts", { fmtS: fmtS(viewDR-viewCR) })}</span>
+                        </div>
+                      )}
                       <div style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"10px 14px",gap:4,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0,alignItems:"center"}}>
                         <span/>
                         <span/>
-                        <span style={{fontSize:12,color:T.t2,fontWeight:700,textTransform:"uppercase",letterSpacing:.3}}>{t("finance.closing_balance")}</span>
+                        <span style={{fontSize:12,color:T.t2,fontWeight:700,textTransform:"uppercase",letterSpacing:.3,whiteSpace:"nowrap"}}>{t("finance.closing_balance")}{ledgerFiltered?` · ${t("finance.all_entries")}`:""}</span>
                         <span/>
                         <span/>
                         <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.grn,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(totalCR)}</span>
@@ -5249,6 +5403,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           {closeAbs===0 ? "₹0.00" : `₹${fmtN(closeAbs)} ${closeSfx}`}
                         </span>
                       </div>
+                      </>
                     );
                   })()}
                   {/* ── Integrated action buttons ── */}
@@ -5578,8 +5733,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                             style={{padding:"4px 7px",borderRadius:5,background:isEditing?T.bluL:T.sltL,color:isEditing?T.blu:T.t3,border:`1px solid ${isEditing?T.blu:T.b1}`,fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
                             <IcEdit size={10} color="currentColor"/> {t("common.edit_2")}
                           </button>
-                          <button onClick={()=>approveReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✓</button>
-                          <button onClick={()=>rejectReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✗</button>
+                          {/* ✓/✗ sirf usko jiske paas Finance ka approve hai —
+                              server bhi isi ko maanta hai (requirePerm). */}
+                          {canApproveAction({perm:["Finance","approve"]})&&<>
+                            <button onClick={()=>approveReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✓</button>
+                            <button onClick={()=>rejectReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✗</button>
+                          </>}
                         </>)}
                         {req.status==="approved"&&(
                           <div style={{display:"flex",flexDirection:"column",gap:1}}>
@@ -6040,7 +6199,15 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   {/* Actions */}
                   {!isEditingRoute && (
                     <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:12,flexWrap:"wrap"}}>
-                      {isRateBlocking ? (
+                      {/* Rate ka faisla server par admin / super_admin / PM
+                          tak seemit hai (requireRole) — baaki ke liye button
+                          hi nahi (dabane par 403 milta tha), sirf batate hain
+                          ki kiska intezaar hai. */}
+                      {isRateBlocking && !canApproveAction({roles:["admin","super_admin","project_manager"]}) ? (
+                        <span style={{fontSize:11.5,color:T.t4}}>
+                          ⏳ {t("projects.waiting_on")} {t("projects.admin_or_pm")}
+                        </span>
+                      ) : isRateBlocking ? (
                         <>
                           <button onClick={doRejectRate} disabled={acting}
                             style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.red}`,background:T.redL,color:T.red,fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:acting?0.6:1}}>
@@ -6146,6 +6313,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   alt_qty:it.alt_qty!=null?parseFloat(it.alt_qty):null,
                   alt_unit:it.alt_unit||null,
                   alt_ratio:it.alt_ratio!=null?parseFloat(it.alt_ratio):null,
+                  // Wazan dharam kate ki slip se aaya (routes/weighments.js) ya haath se.
+                  alt_source:it.alt_source||null,
+                  weigh:(g.weighments||[]).find(w=>w.grn_item_id===it.id)||null,
                   recvDate:g.received_date,
                   project:g.project_name||"—",
                   challan:g.challan_no||"",
@@ -6203,6 +6373,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   alt_qty:p.alt_qty,
                   alt_unit:p.alt_unit,
                   alt_ratio:p.alt_ratio,
+                  alt_source:p.alt_source,
                 })),
               };
             };
@@ -6327,6 +6498,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                                   style={{cursor:"pointer",width:14,height:14,accentColor:T.blu}}/>
                                 <span style={{fontSize:12,color:T.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                                   {it.name}
+                                  {it.weigh&&(
+                                    <span title={t("weigh.bill_row_hint", { net: Math.round(Number(it.weigh.net_kg_share||0)).toLocaleString("en-IN"), vehicle: it.weigh.vehicle_no||"—" })}
+                                      style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:8,padding:"1px 6px"}}>
+                                      ⚖️
+                                    </span>
+                                  )}
                                   {(it.issues||[]).length>0&&(
                                     <span title={(it.issues||[]).map(i=>`${i.issue_type}: ${i.note||""}`).join("\n")}
                                       style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:8,padding:"1px 6px"}}>
@@ -6453,8 +6630,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
 
       {/* Unbilled Drawer */}
       {showUB&&(<>
-        <div onClick={()=>{setShowUB(false);setSelUBParty(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
-        <div style={{position:"fixed",right:0,top:0,bottom:0,width:400,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.14)",display:"flex",flexDirection:"column"}}>
+        <div onClick={()=>{setShowUB(false);setSelUBParty(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:220,backdropFilter:"blur(1px)"}}/>
+        <div style={{position:"fixed",right:0,top:0,bottom:0,width:400,background:T.bg,zIndex:221,boxShadow:"-4px 0 24px rgba(0,0,0,0.14)",display:"flex",flexDirection:"column"}}>
           <div style={{background:T.surface,padding:"12px 14px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
             <div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>{t("finance.unbilled_materials")}</div><div style={{fontSize:10,color:T.t4}}>{t("finance.received_but_not_yet_billed")}</div></div>
             <span style={{background:T.purL,color:T.pur,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.pur}33`}}>₹{fmt(UNBILLED_PARTIES.flatMap(p=>p.billItems||[]).reduce((s,i)=>s+i.amt,0))}</span>

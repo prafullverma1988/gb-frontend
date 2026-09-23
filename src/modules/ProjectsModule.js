@@ -6,9 +6,11 @@ import { Credit } from "../components/Credit";
 import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
+import CityPicker from "../components/CityPicker";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 import { t, Rich } from "../i18n";
 import { isoDate } from "../utils/today";
+import { BackClose } from "../utils/backNav";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -275,8 +277,9 @@ function SitePulseDrawer({onClose,onSelectProject}){
   };
 
   return(<>
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(420px,96vw)",background:C.bg,zIndex:201,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",fontFamily:"'Segoe UI',sans-serif",borderRadius:"16px 0 0 16px"}}>
+    <BackClose onClose={onClose}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:220,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(420px,96vw)",background:C.bg,zIndex:221,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",fontFamily:"'Segoe UI',sans-serif",borderRadius:"16px 0 0 16px"}}>
       <div style={{background:C.w,padding:"12px 14px 10px",borderBottom:`1px solid ${C.b}`,flexShrink:0,borderRadius:"16px 0 0 0"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
           <div style={{display:"flex",alignItems:"center",gap:7}}>
@@ -531,10 +534,7 @@ function NewProjectModal({onClose,onCreated}){
       } catch (_) {}
     })();
   }, [isSolar]);
-  const pickCity = (cid) => {
-    const c = libCities.find(x => String(x.id) === String(cid));
-    setForm(p => ({ ...p, cityId: cid || "", city: c?.name || "" }));
-  };
+
   const pickType = (tid) => {
     const t = libCTypes.find(x => String(x.id) === String(tid));
     setForm(p => ({ ...p, constructionTypeId: tid || "", type: (t?.name || "").toLowerCase() }));
@@ -623,6 +623,7 @@ function NewProjectModal({onClose,onCreated}){
     : {grad:`linear-gradient(135deg,${T.blu},#1D4ED8)`,  icon:"🏗️", title:t("projects.new_project"),           sub:t("projects.add_a_new_construction_project")};
 
   return (<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:998}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:500,background:T.surface,borderRadius:14,boxShadow:"0 20px 60px rgba(0,0,0,.25)",zIndex:999,overflow:"hidden"}}>
 
@@ -710,14 +711,14 @@ function NewProjectModal({onClose,onCreated}){
             {/* City * — library-backed dropdown, mandatory */}
             <div>
               <label style={{fontSize:10.5,fontWeight:600,color:form.cityId?T.t3:"#DC2626",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.city_2")}</label>
-              <select value={form.cityId} onChange={e => pickCity(e.target.value)}
-                style={{width:"100%",padding:"9px 12px",borderRadius:7,
+              {/* "+ New" yahin — warna khaali Library wali company me naya
+                  project banana hi atak jaata tha (city zaroori hai). */}
+              <CityPicker value={form.cityId} cities={libCities} setCities={setLibCities}
+                onChange={(id, c) => setForm(p => ({ ...p, cityId: id || "", city: c?.name || "" }))}
+                selectStyle={{width:"100%",padding:"9px 12px",borderRadius:7,
                         border:`1.5px solid ${form.cityId?T.b1:"#FCA5A5"}`,
                         background: form.cityId?T.bg:"#FEF2F2",
-                        fontSize:13, color:T.t1, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}>
-                <option value="">{t("crm.select_city")}</option>
-                {libCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+                        fontSize:13, color:T.t1, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}/>
             </div>
             {/* Type * — library-backed dropdown, mandatory */}
             <div>
@@ -782,6 +783,7 @@ function DuplicateModal({project,onClose,onConfirm}){
     setSaving(false);
   };
   return(<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:300,backdropFilter:"blur(3px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:C.w,borderRadius:16,width:500,maxWidth:"95vw",zIndex:301,boxShadow:"0 24px 70px rgba(0,0,0,0.32)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:`linear-gradient(135deg,${C.p},${C.p2})`,padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
@@ -879,8 +881,6 @@ const mapProject=(p)=>({
 // PROJECT SETTINGS MODAL
 // ═══════════════════════════════════════════════════════════════════
 const STATUS_OPTIONS = ["Not Started","Ongoing","Hold","Completed"];
-const TYPE_OPTIONS   = ["Residential","Commercial","Industrial","Interior"];
-const CITIES         = ["Raipur","Bhilai","Bilaspur","Durg","Rajnandgaon","Other"];
 
 function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   const [section, setSection] = useState("basic"); // basic | team | clients | status | danger
@@ -932,11 +932,35 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
 
+  // City aur Project Type company ki apni Library se aate hain — New Project
+  // modal bhi wahi karta hai. Yahan pehle ek jami hui list thi (Raipur/Bhilai…
+  // aur Residential/Commercial/Industrial/Interior). Do nuksan the: company ke
+  // apne type (Pipe line, Road, ugr & structure) us list me the hi nahi, aur
+  // Save karte hi project ka library-link TOOT jaata tha — naam string me chala
+  // jaata aur city_id / construction_type_id purane hi pade rehte the, jinse
+  // Estimate Builder sahi rate package uthata hai.
+  const [libCities, setLibCities] = useState([]);
+  const [libCTypes, setLibCTypes] = useState([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [cr, tr] = await Promise.all([
+          api.get("/library/cities"),
+          api.get("/library/construction-types"),
+        ]);
+        if (cr?.success) setLibCities(cr.data || []);
+        if (tr?.success) setLibCTypes(tr.data || []);
+      } catch (_) {}
+    })();
+  }, []);
+
   // Form state
   const [form, setForm] = useState({
     name:         project.name       || "",
     client_name:  project.client     || "",
     city:         project.city       || "",
+    cityId:       project._raw?.city_id ? String(project._raw.city_id) : "",
+    constructionTypeId: project._raw?.construction_type_id ? String(project._raw.construction_type_id) : "",
     type:         project._raw?.type || project.type || "Residential",
     pm_name:      project.pm         || "",
     start_date:   project._raw?.start_date ? project._raw.start_date.split("T")[0] : "",
@@ -953,12 +977,13 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
     try {
       // Reverse map display values → DB values
       const STATUS_R={"Ongoing":"ongoing","Completed":"completed","Hold":"hold","Not Started":"not_started"};
-      const TYPE_R={"Residential":"residential","Commercial":"commercial","Industrial":"industrial","Interior":"interior"};
       const payload = {
         name:         form.name,
         client_name:  form.client_name,
-        city:         form.city,
-        type:         TYPE_R[form.type]||form.type,
+        // Sirf library ki id bhejte hain — naam server khud cities /
+        // construction_types se uthata hai, taaki dono jagah ek hi sach rahe.
+        ...(form.cityId ? { cityId: Number(form.cityId) } : {}),
+        ...(form.constructionTypeId ? { constructionTypeId: Number(form.constructionTypeId) } : {}),
         pm_name:      form.pm_name,
         start_date:   form.start_date || null,
         end_date:     form.end_date   || null,
@@ -1006,6 +1031,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   );
 
   return (<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:998,backdropFilter:"blur(2px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:999,width:640,maxHeight:"88vh",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
 
@@ -1050,11 +1076,26 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div>
                   {lbl("City")}
-                  {sel("city",CITIES)}
+                  {/* "+ New" bhi yahin — warna jis company ki library khaali
+                      hai wo city chun hi nahi paati. */}
+                  <CityPicker value={form.cityId} cities={libCities} setCities={setLibCities}
+                    onChange={(id, c) => setForm(p => ({ ...p, cityId: id || "", city: c?.name || "" }))}
+                    selectStyle={{width:"100%",padding:"9px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,
+                      fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
                 <div>
                   {lbl("Project Type")}
-                  {sel("type",TYPE_OPTIONS)}
+                  <select value={form.constructionTypeId}
+                    onChange={e=>{
+                      const tid=e.target.value;
+                      const ct=libCTypes.find(x=>String(x.id)===String(tid));
+                      setForm(p=>({...p,constructionTypeId:tid,type:(ct?.name||"").toLowerCase()}));
+                    }}
+                    style={{width:"100%",padding:"9px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,
+                      fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                    <option value="">{t("common.select_type")}</option>
+                    {libCTypes.map(ct=><option key={ct.id} value={ct.id}>{ct.name}</option>)}
+                  </select>
                 </div>
               </div>
               <div>
@@ -2768,16 +2809,19 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   };
 
   // ── Wallet approval actions (Option A: act via /wallets/* directly) ──
-  const walletPhotoBlocked=(it)=>it.photo_pending && data.walletPhotoPolicy &&
-    data.walletPhotoPolicy[it.is_transfer?"transfer":(it.wallet_category||"generic")]==="required";
+  // WAL-14: photo phone se upload hone me atki ho par staff ne "Ask for info" ke
+  // jawab me photo bhej di ho to approve khula (server bhi yahi maanta hai).
+  const walletPhotoBlocked=(it,clar)=>it.photo_pending && data.walletPhotoPolicy &&
+    data.walletPhotoPolicy[it.is_transfer?"transfer":(it.wallet_category||"generic")]==="required" &&
+    !(clar||[]).some(c=>c.photo_url);
   // Zaroori category + koi photo hi nahi (na entry par, na upload me, na "Ask for
   // info" ke jawab me) — server bhi approve nahi karta (WAL-06), button yahin band.
   const walletPhotoMissing=(it,clar)=>!it.photo_url && !it.photo_pending && data.walletPhotoPolicy &&
     data.walletPhotoPolicy[it.is_transfer?"transfer":(it.wallet_category||"generic")]==="required" &&
     !(clar||[]).some(c=>c.photo_url);
   const removeWallet=(id)=>setData(p=>({...p,wallet:(p.wallet||[]).filter(w=>w.txn_id!==id)}));
-  const walApprove=async(it)=>{
-    if(walletPhotoBlocked(it)){setSaveErr("Is category me photo zaroori — sync hone tak approve disabled.");return;}
+  const walApprove=async(it,clar)=>{
+    if(walletPhotoBlocked(it,clar)){setSaveErr(t("projects.is_category_me_photo_zaroori_sync"));return;}
     setSaveErr("");setActing(p=>({...p,["w"+it.txn_id]:"approving"}));
     try{const r=await api.post("/wallets/approve/"+it.txn_id,{});if(r&&r.success!==false)removeWallet(it.txn_id);else setSaveErr((r&&r.message)||"Approve failed");}
     catch(e){setSaveErr(e.message);}
@@ -2807,14 +2851,15 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     catch(e){setSaveErr(e.message);}
     setActing(p=>({...p,["w"+it.txn_id]:null}));
   };
-  const WCAT_LBL={site_exp:"Site Expense",party_pay:"Party Payment",salary:"Salary",petrol:"Petrol",fuel:"Diesel",service:"Service",generic:"Other"};
+  // WAL-16: category chip user ki bhasha me (pehle English map seedha likha tha)
+  const WCAT_LBL={site_exp:t("projects.wcat_site_exp"),party_pay:t("projects.wcat_party_pay"),salary:t("projects.wcat_salary"),petrol:t("projects.wcat_petrol"),fuel:t("projects.wcat_fuel"),service:t("projects.wcat_service"),generic:t("projects.wcat_generic")};
   const WalletApprovalCard=({item:it})=>{
     const act=acting["w"+it.txn_id];
     // Clarification thread — admin's "Ask info" question + staff's reply.
     // Re-fetches when walletAsked[txn_id] bumps (after the admin asks).
     const [clar,setClar]=useState([]);
     const noPhoto=walletPhotoMissing(it,clar);
-    const blocked=walletPhotoBlocked(it)||noPhoto;
+    const blocked=walletPhotoBlocked(it,clar)||noPhoto;
     const [senderUid,setSenderUid]=useState(null); // submitter's user_id → green; approvers → blue
     const [showClar,setShowClar]=useState(false);   // conversation collapsed by default (clean)
     const askKey=walletAsked[it.txn_id]||0;
@@ -2828,7 +2873,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     return(
       <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.blu}}>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3,flexWrap:"wrap"}}>
-          <span style={{fontSize:9.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>{t("projects.wallet_wcat_lbl", { WCAT_LBL: WCAT_LBL[it.wallet_category]||"Other" })}</span>
+          <span style={{fontSize:9.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>{t("projects.wallet_wcat_lbl", { WCAT_LBL: WCAT_LBL[it.wallet_category]||WCAT_LBL.generic })}</span>
           {it.is_transfer&&<span style={{fontSize:9,fontWeight:700,color:"#7C3AED",background:"#F5F3FF",padding:"1px 7px",borderRadius:10}}>{t("projects.transfer")}</span>}
           {it.limit_exceeded&&<span style={{fontSize:9,fontWeight:700,color:T.red,background:T.redL,padding:"1px 7px",borderRadius:10}}>{t("projects.limit_breach")}</span>}
         </div>
@@ -2872,7 +2917,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         <div style={{display:"flex",gap:6,marginTop:8}}>
           <button onClick={()=>walReject(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="rejecting"?"...":t("common.reject")}</button>
           <button onClick={()=>walAsk(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.bluL,border:"1px solid "+T.blu,color:T.blu,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="asking"?"...":t("projects.ask_info")}</button>
-          <button onClick={()=>walApprove(it)} disabled={!!act||blocked} style={{flex:1,padding:"6px",borderRadius:6,background:blocked?T.b1:T.grn,border:"none",color:blocked?T.t4:"white",fontSize:11,fontWeight:700,cursor:(act||blocked)?"not-allowed":"pointer"}}>{act==="approving"?"...":t("common.approve")}</button>
+          <button onClick={()=>walApprove(it,clar)} disabled={!!act||blocked} style={{flex:1,padding:"6px",borderRadius:6,background:blocked?T.b1:T.grn,border:"none",color:blocked?T.t4:"white",fontSize:11,fontWeight:700,cursor:(act||blocked)?"not-allowed":"pointer"}}>{act==="approving"?"...":t("common.approve")}</button>
         </div>
       </div>
     );
@@ -3964,6 +4009,7 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
   };
 
   return(<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
     {fullPhoto&&(
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
@@ -4177,6 +4223,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
   };
 
   return(<>
+    <BackClose onClose={onClose}/>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(480px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",borderRadius:"16px 0 0 16px"}}>
       {/* Header */}
