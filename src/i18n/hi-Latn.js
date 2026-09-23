@@ -3871,6 +3871,17 @@ const dict = {
   "map_plan_wizard.tenders_map_me_line_draw_karo":             "Tenders → Map me line draw karo ya KML import karo, phir yahan poora tree ek click me ban jayega.",
 
   // ── master_library ──────────────────────────────────────────
+  "master_library.sab_project_type":                           "Sab project type",
+  "master_library.pehle_project_type_banao":                   "Pehle project type banao (Library → Project Type).",
+  "master_library.kuch_na_chuno_to_sab_me":                    "Kuch na chuno to ye har project type me dikhegi.",
+  "master_library.kin_project_type_me":                        "Ye category kin project type me aati hai?",
+  "master_library.is_type_me_kaisa_kaam":                      "Is type me kaisa kaam aata hai",
+  "master_library.e_g_road_project":                           "jaise Road project",
+  "master_library.project_type_name":                          "Project Type ka naam",
+  "master_library.edit_project_type":                          "Project Type badlo",
+  "master_library.add_project_type":                           "Project Type jodo",
+  "master_library.project_types":                              "Project Types",
+  "master_library.project_type":                               "Project Type",
   "master_library.1_construction_type":                        "1 — CONSTRUCTION TYPE",
   "master_library.1_construction_type_2":                      "1 — Construction Type",
   "master_library.1_package_basics":                           "1 — Package Basics",

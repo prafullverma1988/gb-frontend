@@ -3869,6 +3869,17 @@ const dict = {
   "map_plan_wizard.tenders_map_me_line_draw_karo":             "Go to Tenders → Map and draw a line or import KML, then the entire tree will be created here in one click.",
 
   // ── master_library ──────────────────────────────────────────
+  "master_library.sab_project_type":                           "All project types",
+  "master_library.pehle_project_type_banao":                   "Add a project type first (Library → Project Type).",
+  "master_library.kuch_na_chuno_to_sab_me":                    "Choose none and it shows in every project type.",
+  "master_library.kin_project_type_me":                        "Which project types does this category belong to?",
+  "master_library.is_type_me_kaisa_kaam":                      "What kind of work this type covers",
+  "master_library.e_g_road_project":                           "e.g. Road Project",
+  "master_library.project_type_name":                          "Project Type Name",
+  "master_library.edit_project_type":                          "Edit Project Type",
+  "master_library.add_project_type":                           "Add Project Type",
+  "master_library.project_types":                              "Project Types",
+  "master_library.project_type":                               "Project Type",
   "master_library.1_construction_type":                        "1 — CONSTRUCTION TYPE",
   "master_library.1_construction_type_2":                      "1 — Construction Type",
   "master_library.1_package_basics":                           "1 — Package Basics",

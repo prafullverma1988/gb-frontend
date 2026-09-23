@@ -1484,6 +1484,78 @@ function PartyMasterSection() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// 3b. PROJECT TYPE (construction_types)
+// ═══════════════════════════════════════════════════════════════════════
+// Project type ka master pehle se tha (naya project banate waqt yahi list
+// dikhti hai, aur Rate Card ka dhaancha bhi Project Type → City → Work
+// Category → Rate hai) — par use dekhne/badalne ki apni jagah nahi thi,
+// sirf Rate Card ke andar chip se naya jud paata tha. Ab Library me apna
+// tile hai, aur har type ke saamne dikhta hai ki usme kaun si work category
+// aati hai.
+function ProjectTypeSection() {
+  const { items: types, loading, save: apiSave, del: apiDel } = useSection("construction-types");
+  const { items: workCats } = useSection("work-categories");
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: "", description: "" });
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const filtered = types.filter(x => (x.name || "").toLowerCase().includes(search.toLowerCase()));
+  const openCreate = () => { setEditing(null); setForm({ name: "", description: "" }); setShowModal(true); };
+  const openEdit = (x) => { setEditing(x); setForm({ name: x.name, description: x.description || "" }); setShowModal(true); };
+  const save = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    const res = await apiSave({ name: form.name.trim(), description: form.description }, editing?.id);
+    setSaving(false);
+    if (res.success) setShowModal(false);
+    else alert(res.message || "Save failed");
+  };
+
+  // Is type me kaun si category aati hai. Jis category par koi type nahi
+  // chuna wo har type me chalti hai — isliye wo yahan bhi ginti hai.
+  const catsOfType = (typeId) => (workCats || []).filter(
+    c => !(c.type_ids || []).length || (c.type_ids || []).includes(typeId));
+
+  const columns = [
+    { key: "name", label: t("master_library.project_type"), minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "cats", label: t("master_library.work_categories"), minW: 300, render: r => {
+        const list = catsOfType(r.id);
+        if (!list.length) return <span style={{ color: T.textLight }}>—</span>;
+        return (
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {list.slice(0, 6).map(c => (
+              <span key={c.id} style={{ fontSize: 11, fontWeight: 600, color: T.purple, background: T.purpleSoft, padding: "2px 8px", borderRadius: 10 }}>{c.name}</span>
+            ))}
+            {list.length > 6 && <span style={{ fontSize: 11, color: T.textMid }}>+{list.length - 6}</span>}
+          </div>
+        );
+      } },
+    { key: "description", label: t("common.description"), minW: 200, render: r => <span style={{ fontSize: 12, color: T.textMid }}>{r.description || "—"}</span> },
+  ];
+
+  return (
+    <div>
+      <Toolbar search={search} setSearch={setSearch} count={filtered.length}
+        label={t("master_library.project_types")} onAdd={openCreate} addLabel={t("master_library.add_project_type")} />
+      <DataTable columns={columns} data={filtered} loading={loading} onEdit={openEdit} onDelete={apiDel} />
+      <Modal open={showModal} onClose={() => setShowModal(false)}
+        title={editing ? t("master_library.edit_project_type") : t("master_library.add_project_type")} width={480}>
+        <FormField label={t("master_library.project_type_name")} value={form.name} onChange={v => upd("name", v)}
+          placeholder={t("master_library.e_g_road_project")} required />
+        <div style={{ height: 12 }} />
+        <FormTextarea label={t("common.description")} value={form.description} onChange={v => upd("description", v)}
+          placeholder={t("master_library.is_type_me_kaisa_kaam")} rows={2} />
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save}
+          saveLabel={saving ? "Saving..." : editing ? "Update" : "Create"} />
+      </Modal>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // 4. WORK CATEGORY
 // ═══════════════════════════════════════════════════════════════════════
 function WorkCategorySection() {
@@ -1501,15 +1573,22 @@ function WorkCategorySection() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", code: "", desc: "" });
+  const [form, setForm] = useState({ name: "", code: "", desc: "", type_ids: [] });
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  // Ek category kai project type me aa sakti hai (Earthwork sadak me bhi,
+  // pipeline me bhi). Ek bhi type na chuno to wo SAB type me chalti hai.
+  const { items: projTypes } = useSection("construction-types");
+  const toggleType = (id) => setForm(p => ({
+    ...p,
+    type_ids: p.type_ids.includes(id) ? p.type_ids.filter(x => x !== id) : [...p.type_ids, id],
+  }));
 
   const filtered = cats.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     (c.code||"").toLowerCase().includes(search.toLowerCase())
   );
-  const openCreate = () => { setEditing(null); setForm({ name: "", code: "", desc: "" }); setShowModal(true); };
-  const openEdit = (c) => { setEditing(c); setForm({ name: c.name, code: c.code||"", desc: c.description||c.desc||"" }); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setForm({ name: "", code: "", desc: "", type_ids: [] }); setShowModal(true); };
+  const openEdit = (c) => { setEditing(c); setForm({ name: c.name, code: c.code||"", desc: c.description||c.desc||"", type_ids: c.type_ids || [] }); setShowModal(true); };
   const save = async () => {
     if (!form.name.trim()) return alert(t("master_library.work_category_name_required"));
     setSaving(true);
@@ -1520,6 +1599,7 @@ function WorkCategorySection() {
       description: form.desc,
       unit:        "",
       rate:        0,
+      type_ids:    form.type_ids,
     }, editing?.id);
     setSaving(false);
     if (res.success) setShowModal(false);
@@ -1553,6 +1633,15 @@ function WorkCategorySection() {
         ? <code style={{ fontSize: 12, fontWeight: 600, color: T.purple, background: T.purpleSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code>
         : <span style={{ color: T.textLight }}>—</span> },
     { key: "name",        label: t("master_library.work_category"), minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "types", label: t("master_library.project_types"), minW: 200, render: r => {
+        const names = r.type_names || [];
+        if (!names.length) return <span style={{ fontSize: 11.5, color: T.textMid }}>{t("master_library.sab_project_type")}</span>;
+        return (
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {names.map(n => <span key={n} style={{ fontSize: 11, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 10 }}>{n}</span>)}
+          </div>
+        );
+      } },
     { key: "description", label: t("common.description"),   minW: 260, render: r => <span style={{ fontSize: 12, color: T.textMid }}>{r.description || r.desc || "—"}</span> },
   ];
 
@@ -1567,6 +1656,26 @@ function WorkCategorySection() {
           <FormField label={t("common.code")} value={form.code} onChange={v => upd("code", v.toUpperCase())} placeholder={t("master_library.e_g_rcc")} half />
         </div>
         <FormTextarea label={t("common.description")} value={form.desc} onChange={v => upd("desc", v)} placeholder={t("master_library.what_work_is_included")} rows={2} />
+        {/* Ye category kin project type me aati hai — kuch na chuno to sab me */}
+        <div style={{ marginTop: 14 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: T.textMid, textTransform: "uppercase", letterSpacing: ".4px", display: "block", marginBottom: 6 }}>
+            {t("master_library.kin_project_type_me")}
+          </label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {projTypes.map(pt => {
+              const on = form.type_ids.includes(pt.id);
+              return (
+                <button key={pt.id} type="button" onClick={() => toggleType(pt.id)}
+                  style={{ padding: "5px 12px", borderRadius: 14, cursor: "pointer", fontSize: 12, fontWeight: 600,
+                    border: `1.5px solid ${on ? T.blue : T.border}`, background: on ? T.blueSoft : T.card, color: on ? T.blue : T.textMid }}>
+                  {on ? "✓ " : ""}{pt.name}
+                </button>
+              );
+            })}
+            {!projTypes.length && <span style={{ fontSize: 12, color: T.textLight }}>{t("master_library.pehle_project_type_banao")}</span>}
+          </div>
+          <div style={{ fontSize: 11, color: T.textLight, marginTop: 6 }}>{t("master_library.kuch_na_chuno_to_sab_me")}</div>
+        </div>
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Create"} />
       </Modal>
     </div>
@@ -6786,7 +6895,8 @@ function CitySection() {
 
 const masterSections = [
   // ── ITEM LIBRARY ──────────────────────────────────────────────────
-  { id: "work_cat",      get label() { return t("master_library.work_category"); },       Icon: IcTool,      Comp: WorkCategorySection,      section: "ITEM LIBRARY", countKey: "work_categories", color: T.purple },
+  { id: "project_type",  get label() { return t("master_library.project_type"); },        Icon: IcFolder,    Comp: ProjectTypeSection,       section: "ITEM LIBRARY", countKey: null, color: T.indigo },
+  { id: "work_cat",      get label() { return t("master_library.work_category"); },       Icon: IcTool,      Comp: WorkCategorySection,      section: null, countKey: "work_categories", color: T.purple },
   { id: "material_cat",  get label() { return t("master_library.material_category"); },   Icon: IcFolder,    Comp: MaterialCategorySection,  section: null, countKey: "material_categories", color: T.blue },
   { id: "materials",     get label() { return t("master_library.material_master"); },     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, countKey: "materials", color: T.teal },
   { id: "boq_items",     get label() { return t("master_library.boq_item_library"); },    Icon: IcBox,       Comp: BoqItemLibrarySection,    section: null, countKey: null, color: T.purple },

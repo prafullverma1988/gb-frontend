@@ -3868,6 +3868,17 @@ const dict = {
   "map_plan_wizard.tenders_map_me_line_draw_karo":             "टेंडर्स → मैप में लाइन ड्रॉ करो या KML इम्पोर्ट करो, फिर यहां पूरा ट्री एक क्लिक में बन जाएगा।",
 
   // ── master_library ──────────────────────────────────────────
+  "master_library.sab_project_type":                           "सभी प्रोजेक्ट टाइप",
+  "master_library.pehle_project_type_banao":                   "पहले प्रोजेक्ट टाइप बनाओ (Library → Project Type)।",
+  "master_library.kuch_na_chuno_to_sab_me":                    "कुछ न चुनो तो यह हर प्रोजेक्ट टाइप में दिखेगी।",
+  "master_library.kin_project_type_me":                        "यह कैटेगरी किन प्रोजेक्ट टाइप में आती है?",
+  "master_library.is_type_me_kaisa_kaam":                      "इस टाइप में कैसा काम आता है",
+  "master_library.e_g_road_project":                           "जैसे रोड प्रोजेक्ट",
+  "master_library.project_type_name":                          "प्रोजेक्ट टाइप का नाम",
+  "master_library.edit_project_type":                          "प्रोजेक्ट टाइप बदलो",
+  "master_library.add_project_type":                           "प्रोजेक्ट टाइप जोड़ो",
+  "master_library.project_types":                              "प्रोजेक्ट टाइप",
+  "master_library.project_type":                               "प्रोजेक्ट टाइप",
   "master_library.1_construction_type":                        "1 — कंस्ट्रक्शन टाइप",
   "master_library.1_construction_type_2":                      "1 — कंस्ट्रक्शन टाइप",
   "master_library.1_package_basics":                           "1 — पैकेज बेसिक्स",
