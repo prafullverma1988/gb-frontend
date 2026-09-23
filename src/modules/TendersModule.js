@@ -4015,6 +4015,48 @@ const fmtKm = (m) => Number(m||0) >= 1000
   : Math.round(Number(m||0)) + " m";
 // Chainage — 1,250 m ko site par "1+250" bolte hain, metre me koi baat
 // nahi karta. Mobile ke geo.js me bhi thik yahi hai.
+// Hover card — naksha par line/pin par mouse rakhte hi. Department ki KMZ
+// (Google Earth) jaisa: upar naam, phir table. Hamari line par upar se
+// naapi lambai, chainage, kitna ho gaya — file me ye kabhi nahi hota.
+// pointerEvents none: card mouse ke neeche aa kar hover tod na de.
+function HoverCard({ x, y, card }) {
+  const W = 300;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const left = Math.max(8, Math.min(x + 14, vw - W - 12));
+  const flipUp = y + 14 + 280 > vh;
+  const cell = { padding:"3px 11px", verticalAlign:"top", wordBreak:"break-word" };
+  return (
+    <div style={{ position:"fixed", left, top: flipUp ? undefined : y + 14, bottom: flipUp ? (vh - y + 14) : undefined,
+      width:W, zIndex:997, pointerEvents:"none", background:"#fff", border:`1px solid ${T.b1}`, borderRadius:9,
+      boxShadow:"0 10px 30px rgba(0,0,0,.18)", overflow:"hidden", fontSize:12, maxHeight: vh - 40, overflowY:"hidden" }}>
+      <div style={{ padding:"8px 11px", borderLeft:`4px solid ${card.colour}`, background:T.surfaceB, borderBottom:`1px solid ${T.b1}` }}>
+        <div style={{ fontWeight:700, color:T.t1, wordBreak:"break-word" }}>{card.title}</div>
+        {card.sub && <div style={{ fontSize:10.5, color:T.t3, marginTop:1 }}>{card.sub}</div>}
+      </div>
+      {(card.rows.length > 0 || card.attrs.length > 0) && (
+        <table style={{ width:"100%", borderCollapse:"collapse" }}><tbody>
+          {card.rows.map(([k, v], i) => (
+            <tr key={"r" + i}><td style={{ ...cell, color:T.t3, width:"45%" }}>{k}</td>
+              <td style={{ ...cell, paddingLeft:0, color:T.t1, fontWeight:600, fontVariantNumeric:"tabular-nums" }}>{v}</td></tr>
+          ))}
+          {card.rows.length > 0 && card.attrs.length > 0 && (
+            <tr><td colSpan={2} style={{ borderTop:`1px dashed ${T.b1}`, padding:0 }}/></tr>
+          )}
+          {card.attrs.slice(0, 18).map(([k, v], i) => (
+            <tr key={"a" + i} style={{ background: i % 2 ? T.surfaceB : "#fff" }}>
+              <td style={{ ...cell, color:T.t3, width:"45%" }}>{k}</td>
+              <td style={{ ...cell, paddingLeft:0, color:T.t1 }}>{v}</td></tr>
+          ))}
+          {card.attrs.length > 18 && (
+            <tr><td colSpan={2} style={{ ...cell, color:T.t4, fontSize:10.5 }}>+{card.attrs.length - 18}</td></tr>
+          )}
+        </tbody></table>
+      )}
+      {card.notes && <div style={{ padding:"5px 11px", color:T.t2, borderTop:`1px solid ${T.b1}`, fontStyle:"italic" }}>{card.notes}</div>}
+      {card.hint && <div style={{ padding:"4px 11px 6px", color:T.t4, fontSize:10.5, borderTop:`1px solid ${T.b1}` }}>{card.hint}</div>}
+    </div>
+  );
+}
 const chFmt = (m) => {
   const v = Math.max(0, Math.round(Number(m)||0));
   return Math.floor(v/1000) + "+" + String(v%1000).padStart(3,"0");
@@ -4145,6 +4187,15 @@ function MapTab({tenderId, sites}) {
   const [taskMark, setTaskMark] = useState(null);  // {q, wtype} — "task se mark karo" ka chunav
   const [photosOn, setPhotosOn] = useState(false);
   const [locatePhoto, setLocatePhoto] = useState(false);   // purani photo se jagah
+  // Reference naksha — department/consultant ki KMZ, sirf dekhne ke liye.
+  // Kisi ginti me nahi (alag table se aata hai). Layer ka dikhna/chhupna
+  // server par yaad rehta hai — sab ke liye ek jaisa.
+  const [refLayers, setRefLayers] = useState([]);
+  const [refPreview, setRefPreview] = useState(null);   // {file_name, data, doc_name, layers[{take}], project_id}
+  const [refBusy, setRefBusy] = useState(false);
+  const refShapesRef = useRef([]);
+  // Hover card — line/pin par mouse le jaate hi uski jaankari.
+  const [hover, setHover] = useState(null);             // {x, y, card}
   const [sugg, setSugg]       = useState([]);     // search ke suggestions
   const photoMarkersRef = useRef([]);
   const infoWinRef = useRef(null);
@@ -4160,6 +4211,46 @@ function MapTab({tenderId, sites}) {
     if (!r?.success) { setPanel(null); toast.error(r?.message || "Stretch load nahi hua"); return; }
     setPanel({ loading: false, data: { ...r.data, __aid: aid } });
   }, [tenderId, toast]);
+
+  // Hover card ka matter — hamari apni line/pin ke liye. Upar hamari
+  // baatein (naapi lambai, chainage, kitna ho gaya), neeche PM ki likhi
+  // jaankari (attrs) — wahi table jo department ki KMZ me hoti hai.
+  const cardFor = useCallback((it) => {
+    const rows = [];
+    const pr = (progress?.lines || []).find(l => l.id === it.id) || {};
+    if (it.kind === "line") {
+      rows.push([t("tenders.hv_naapi_lambai"), fmtKm(it.length_m)]);
+      if (it.start_chainage_m != null)
+        rows.push([t("tenders.hv_chainage"), `${chFmt(Number(it.start_chainage_m))} → ${chFmt(Number(it.start_chainage_m) + Number(it.length_m || 0))}`]);
+      if (Number(it.width_m) > 0) rows.push([t("tenders.hv_chaudai"), `${it.width_m} m`]);
+      const doneM = Number(pr.done_m || 0), taskM = Number(pr.task_m || 0);
+      if (doneM > 0 || taskM > 0)
+        rows.push([t("tenders.hv_ho_gaya"), `${fmtKm(doneM)} MB` + (taskM > doneM ? ` · ${fmtKm(taskM)} site` : "")]);
+    } else if (it.kind === "area" && Number(it.area_sqm) > 0) {
+      rows.push([t("tenders.hv_rakba"), fmtArea(it.area_sqm)]);
+    }
+    const P = it.props || {};
+    if (P.material) rows.push([t("tenders.material"), String(P.material).toUpperCase()]);
+    if (P.dia_mm) rows.push([t("tenders.vyas_dia_mm"), String(P.dia_mm)]);
+    if (P.surface) rows.push([t("tenders.surface"), String(P.surface).toUpperCase()]);
+    if (P.shape) rows.push([t("tenders.naali_ki_shakl"), String(P.shape)]);
+    if (P.depth_m) rows.push([t("tenders.gehrai_m"), String(P.depth_m)]);
+    if (it.source) rows.push([t("tenders.hv_source"), it.source]);
+    return {
+      title: it.name || alignLabel(it.kind, it.atype),
+      sub: [alignLabel(it.kind, it.atype), FAM_META[familyOf(it.atype)].l, it.project_name].filter(Boolean).join(" · "),
+      colour: it.kind === "line" ? lineColour(it.atype) : FAM_META[familyOf(it.atype)].c,
+      rows, attrs: Array.isArray(it.attrs) ? it.attrs : [], notes: it.notes || "",
+      hint: t("tenders.hv_click_dashboard"),
+    };
+  }, [progress]);
+  // Kisi bhi shape par hover = card; mouse ke saath chalta hai; hatte hi gayab.
+  const hoverOn = useCallback((shape, card) => {
+    const pos = (e) => (e && e.domEvent ? { x: e.domEvent.clientX, y: e.domEvent.clientY } : null);
+    shape.addListener("mouseover", (e) => { const q = pos(e); setHover({ x: q ? q.x : 0, y: q ? q.y : 0, card: typeof card === "function" ? card() : card }); });
+    shape.addListener("mousemove", (e) => { const q = pos(e); if (q) setHover((h) => (h ? { ...h, x: q.x, y: q.y } : h)); });
+    shape.addListener("mouseout", () => setHover(null));
+  }, []);
 
   // F — jagah ka search. Google Geocoder pehle; wo na chale (Geocoding API
   // key par enable nahi — prod par yahi nikla: har search "jagah nahi mili"
@@ -4309,12 +4400,14 @@ function MapTab({tenderId, sites}) {
 
   const load = useCallback(async () => {
     const siteId = fSite || (sitesRef.current.length === 1 ? sitesRef.current[0].id : "");
-    const [a, s, pr, mt] = await Promise.all([
+    const [a, s, pr, mt, rl] = await Promise.all([
       api.get(`/tenders/${tenderId}/alignments${fSite?`?project_id=${fSite}`:""}`),
       api.get(`/tenders/${tenderId}/alignments-summary`),
       api.get(`/tenders/${tenderId}/alignments-progress`),
       siteId ? api.get(`/tenders/by-project/${siteId}/map-tasks`) : Promise.resolve(null),
+      api.get(`/tenders/${tenderId}/ref-layers${fSite?`?project_id=${fSite}`:""}`).catch(()=>null),
     ]);
+    setRefLayers(rl?.success && Array.isArray(rl.data) ? rl.data : []);
     setLoading(false);
     if (a?.success) setItems(Array.isArray(a.data)?a.data:[]);
     else toast.error(a?.message || "Alignment load nahi hua");
@@ -4441,6 +4534,7 @@ function MapTab({tenderId, sites}) {
         const pg = new g.maps.Polygon({ paths: coords, strokeColor: c, strokeWeight: 2,
           strokeOpacity: 0.9, fillColor: c, fillOpacity: 0.22, map: mapRef.current });
         pg.addListener("click", ()=>openStretch(it.id));
+        hoverOn(pg, ()=>cardFor(it));
         shapesRef.current.push(pg);
         coords.forEach(x=>bounds.extend(x));
         continue;
@@ -4473,6 +4567,7 @@ function MapTab({tenderId, sites}) {
             strokeWeight: 4, strokeOpacity: 0.9, map: mapRef.current });
           // Click = stretch ka dashboard. (Pehle sirf ek toast tha.)
           pl.addListener("click", ()=>openStretch(it.id));
+          hoverOn(pl, ()=>cardFor(it));
           shapesRef.current.push(pl);
         });
         // Chainage ke nishaan — sirf un lines par jinka shuruaati chainage
@@ -4523,6 +4618,7 @@ function MapTab({tenderId, sites}) {
               const dl = new g.maps.Polyline({ path: seg, strokeColor: DONE_COLOUR,
                 strokeWeight: 6, strokeOpacity: 0.95, zIndex: 2, map: mapRef.current });
               dl.addListener("click", ()=>openStretch(it.id));
+              hoverOn(dl, ()=>cardFor(it));
               shapesRef.current.push(dl);
             });
           }
@@ -4535,6 +4631,7 @@ function MapTab({tenderId, sites}) {
                   offset: "0", repeat: "14px" }],
                 map: mapRef.current });
               kl.addListener("click", ()=>openStretch(it.id));
+              hoverOn(kl, ()=>cardFor(it));
               shapesRef.current.push(kl);
             });
           }
@@ -4543,12 +4640,69 @@ function MapTab({tenderId, sites}) {
       } else {
         const mk = new g.maps.Marker({ position: coords[0], map: mapRef.current, title: it.name,
           label: { text: (alignLabel("point", it.atype)||"?").slice(0,1), color:"#fff", fontSize:"11px", fontWeight:"700" } });
+        // Pin par bhi click = dashboard (pehle sirf line par tha) aur hover = card.
+        mk.addListener("click", ()=>openStretch(it.id));
+        hoverOn(mk, ()=>cardFor(it));
         shapesRef.current.push(mk);
         bounds.extend(coords[0]);
       }
     }
     if (any) mapRef.current.fitBounds(bounds);
-  }, [items, progress, mapReady, toast, openStretch, hidden, famHidden]);
+  }, [items, progress, mapReady, toast, openStretch, hidden, famHidden, hoverOn, cardFor]);
+
+  // Reference naksha — file ke apne rang/icon me (dhoosar nahi, warna
+  // diameter-wise rang ka matlab hi nahi rehta). Click par kuchh nahi
+  // khulta — ye hamari cheez nahi; sirf hover par uski table.
+  useEffect(()=>{
+    const g = window.google;
+    if (!mapReady || !g || !mapRef.current) return;
+    refShapesRef.current.forEach(s=>s.setMap(null));
+    refShapesRef.current = [];
+    const bounds = new g.maps.LatLngBounds();
+    let any = false;
+    for (const L of refLayers) {
+      if (!L.visible) continue;
+      const ls = L.style || {};
+      for (const f of (L.features || [])) {
+        const st = { ...ls, ...(f.style || {}) };
+        const coords = f.geometry || [];
+        if (!coords.length) continue;
+        const col = st.colour || st.icon_colour || "#64748B";
+        const card = () => ({
+          title: f.name || L.name, sub: `${L.name} · ${t("tenders.ref_layer")}`, colour: col,
+          rows: f.kind === "line" && Number(f.length_m) > 0 ? [[t("tenders.hv_naapi_lambai"), fmtKm(f.length_m)]] : [],
+          attrs: Array.isArray(f.attrs) ? f.attrs : [], notes: "", hint: L.file_name || "",
+        });
+        if (f.kind === "point") {
+          const sc = Number(st.icon_scale) > 0 ? Number(st.icon_scale) : 1;
+          const px = Math.max(10, Math.round(24 * sc));
+          const icon = st.icon
+            ? { url: st.icon, scaledSize: new g.maps.Size(px, px), anchor: new g.maps.Point(px / 2, px / 2) }
+            : { path: g.maps.SymbolPath.CIRCLE, scale: 5, fillColor: col, fillOpacity: 0.95, strokeColor: "#fff", strokeWeight: 1.5 };
+          const mk = new g.maps.Marker({ position: coords[0], map: mapRef.current, icon, zIndex: 3, title: f.name || "" });
+          hoverOn(mk, card); refShapesRef.current.push(mk);
+          bounds.extend(coords[0]); any = true;
+        } else if (f.kind === "area") {
+          const pg = new g.maps.Polygon({ paths: coords, map: mapRef.current, zIndex: 1,
+            strokeColor: col, strokeWeight: st.width || 2, strokeOpacity: st.opacity ?? 0.9,
+            fillColor: st.fill || col, fillOpacity: st.fill_opacity ?? 0.15 });
+          hoverOn(pg, card); refShapesRef.current.push(pg);
+          coords.forEach(c=>bounds.extend(c)); any = true;
+        } else {
+          partsOfLine(coords, f.gaps).forEach((part) => {
+            const pl = new g.maps.Polyline({ path: part, map: mapRef.current, zIndex: 1,
+              strokeColor: col, strokeWeight: st.width || 2, strokeOpacity: st.opacity ?? 0.9 });
+            hoverOn(pl, card); refShapesRef.current.push(pl);
+          });
+          coords.forEach(c=>bounds.extend(c)); any = true;
+        }
+      }
+    }
+    // Apni koi line na ho to naksha reference par hi le jao — warna
+    // Chhattisgarh ka default centre dikhta rehta hai.
+    if (any && !items.length) mapRef.current.fitBounds(bounds);
+  }, [refLayers, mapReady, hoverOn, items.length]);
+  useEffect(()=>()=>{ refShapesRef.current.forEach(s=>s.setMap(null)); refShapesRef.current = []; }, []);
 
   // ── Drawing controls ──────────────────────────────────────────
   // Pending ko poora hataana = box band + map se lakeer bhi gayab. Pehle
@@ -4688,6 +4842,7 @@ function MapTab({tenderId, sites}) {
     width_m: it.width_m == null ? "" : String(it.width_m),
     start_chainage_m: it.start_chainage_m == null ? "" : String(it.start_chainage_m),
     props: it.props ? { ...it.props } : {},
+    attrs: Array.isArray(it.attrs) ? it.attrs.map(a => [String(a[0] ?? ""), String(a[1] ?? "")]) : [],
     notes: it.notes || "",
     project_id: it.project_id || "",
     length_m: it.length_m, area_sqm: it.area_sqm,
@@ -4703,6 +4858,7 @@ function MapTab({tenderId, sites}) {
       start_chainage_m: pending.start_chainage_m === "" || pending.start_chainage_m == null
         ? null : Number(pending.start_chainage_m),
       props: cleanPropsOut(pending.props) || {},
+      attrs: (pending.attrs || []).filter(a => String(a[0] || "").trim()),
       notes: pending.notes || "",
     });
     setBusy(false);
@@ -4729,6 +4885,7 @@ function MapTab({tenderId, sites}) {
       // Type ke apne field. Bemani value server chup-chaap gira deta hai —
       // drawing kisi ek galat khaane ki wajah se kabhi nahi khoti.
       props: cleanPropsOut(pending.props),
+      attrs: (pending.attrs || []).filter(a => String(a[0] || "").trim()),
     });
     setBusy(false);
     if (!res?.success) { toast.error(res?.message || "Save nahi hua"); return; }
@@ -4888,6 +5045,51 @@ function MapTab({tenderId, sites}) {
     load();
   };
 
+  // Reference KMZ — pehle server se layer ki list (ginti ke saath), phir PM
+  // chunta hai kaunsi laani hai. Contour ki 5000 lakeer ya 43 junction bina
+  // poochhe naksha par nahi girne chahiye. File base64 me JSON se jaati hai
+  // (server 10 MB leta hai → 7 MB ki seema).
+  const previewRef = async (file) => {
+    if (!file) return;
+    if (file.size > 7 * 1024 * 1024) { toast.error(t("tenders.ref_file_badi")); return; }
+    const buf = await file.arrayBuffer().catch(()=>null);
+    if (!buf) { toast.error(t("tenders.ref_padh_nahi_payi")); return; }
+    let bin = ""; const bytes = new Uint8Array(buf);
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    const data = btoa(bin);
+    setRefBusy(true);
+    const r = await api.post(`/tenders/${tenderId}/ref-layers/preview`, { file_name: file.name, data });
+    setRefBusy(false);
+    if (!r?.success) { toast.error(r?.message || t("tenders.ref_padh_nahi_payi")); return; }
+    setRefPreview({ file_name: file.name, data, doc_name: r.data.doc_name,
+      layers: (r.data.layers || []).map(L => ({ ...L, take: true })),
+      project_id: fSite || (sites.length === 1 ? String(sites[0].id) : "") });
+  };
+  const importRef = async () => {
+    const take = refPreview.layers.filter(L => L.take);
+    if (!take.length) { toast.error(t("tenders.ref_ek_layer_chuno")); return; }
+    setRefBusy(true);
+    const r = await api.post(`/tenders/${tenderId}/ref-layers/import`, {
+      project_id: refPreview.project_id ? Number(refPreview.project_id) : null,
+      file_name: refPreview.file_name, data: refPreview.data, layers: take.map(L => L.path),
+    });
+    setRefBusy(false);
+    if (!r?.success) { toast.error(r?.message || t("tenders.ref_import_nahi_hua")); return; }
+    toast.success(t("tenders.ref_import_hua", { layers: r.data.layers.length, n: r.data.features }));
+    setRefPreview(null); load();
+  };
+  const toggleRefLayer = async (L) => {
+    setRefLayers(ls => ls.map(x => x.id === L.id ? { ...x, visible: !x.visible } : x));
+    const r = await api.patch(`/tenders/${tenderId}/ref-layers/${L.id}`, { visible: !L.visible }).catch(()=>null);
+    if (!r?.success) load();   // server ne nahi maana — jaisa hai waisa dikhao
+  };
+  const dropRefLayer = async (L) => {
+    if (!window.confirm(t("tenders.ref_hatao_pakka", { name: L.name, n: L.feature_count }))) return;
+    const r = await api.del(`/tenders/${tenderId}/ref-layers/${L.id}`);
+    if (!r?.success) { toast.error(r?.message || t("tenders.ref_import_nahi_hua")); return; }
+    toast.success(t("tenders.ref_hat_gayi", { name: L.name })); load();
+  };
+
   const drawnVsBoq = summary && summary.boq_running_qty > 0
     ? summary.total_length_m - summary.boq_running_qty : null;
 
@@ -4903,6 +5105,13 @@ function MapTab({tenderId, sites}) {
             <IcUpload size={13}/> {t("tenders.kml_import")}
             <input type="file" accept=".kml,application/vnd.google-earth.kml+xml" style={{display:"none"}}
               onChange={e=>{ importKml(e.target.files?.[0]); e.target.value=""; }}/>
+          </label>
+          {/* Department ki KMZ — sirf dekhne ke liye (hover par uski table). */}
+          <label style={{display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:7,
+            border:`1px solid ${T.b1}`, background:T.surface, fontSize:12, color:T.t2, cursor: refBusy ? "wait" : "pointer", whiteSpace:"nowrap"}}>
+            <IcUpload size={13}/> {refBusy ? "…" : t("tenders.ref_kmz")}
+            <input type="file" accept=".kmz,.kml,application/vnd.google-earth.kmz,application/vnd.google-earth.kml+xml" style={{display:"none"}}
+              disabled={refBusy} onChange={e=>{ previewRef(e.target.files?.[0]); e.target.value=""; }}/>
           </label>
           {items.length > 0 && (
             <button onClick={async ()=>{
@@ -5198,6 +5407,39 @@ function MapTab({tenderId, sites}) {
               </div>
             );
           })()}
+
+          {/* Reference layers — file ki har layer ek chip: rang/icon, ginti,
+              dikhao/chhupao (sab ke liye), hatao. Hamari filter se alag
+              patti, kyunki ye ginti me nahi hain. */}
+          {!mode && refLayers.length > 0 && (
+            <div style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center",
+              padding:"7px 14px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB}}>
+              <span style={{fontSize:10.5, color:T.t4, marginRight:2, width:44}}>{t("tenders.ref_layer")}</span>
+              {refLayers.map(L => {
+                const st = L.style || {};
+                const c = st.colour || st.icon_colour || "#64748B";
+                return (
+                  <span key={L.id} style={{display:"inline-flex", alignItems:"center", gap:5, fontSize:11,
+                    padding:"3px 4px 3px 9px", borderRadius:20, border:`1px solid ${L.visible ? c : T.b1}`,
+                    background: L.visible ? c + "14" : T.surface, color: L.visible ? T.t1 : T.t4,
+                    textDecoration: L.visible ? "none" : "line-through", opacity: L.visible ? 1 : .75}}>
+                    {st.icon
+                      ? <img src={st.icon} alt="" style={{width:12, height:12, objectFit:"contain"}}/>
+                      : <span style={{width:8, height:8, borderRadius: L.kind === "line" ? 2 : "50%", background:c, flexShrink:0}}/>}
+                    {L.name} <span style={{fontWeight:400, opacity:.7}}>{L.feature_count}</span>
+                    <button onClick={()=>toggleRefLayer(L)} title={L.visible ? t("tenders.ref_chhupao") : t("tenders.ref_dikhao")}
+                      style={{background:"none", border:"none", cursor:"pointer", padding:"0 3px", display:"flex", color: L.visible ? T.t3 : T.t4}}>
+                      <IcEye size={12}/>
+                    </button>
+                    <button onClick={()=>dropRefLayer(L)} title={t("tenders.ref_hatao")}
+                      style={{background:"none", border:"none", cursor:"pointer", padding:"0 3px", display:"flex", color:T.t4}}>
+                      <IcX size={11}/>
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
 
           <div ref={mapDiv} style={{width:"100%", height:430, background:T.surfaceB}}/>
           {!mapReady && <div style={{position:"absolute", inset:0, display:"flex", alignItems:"center",
@@ -5654,6 +5896,53 @@ function MapTab({tenderId, sites}) {
       )}
 
     {/* Naya drawn feature — type ke hisaab se apne field */}
+    {hover && hover.card && <HoverCard x={hover.x} y={hover.y} card={hover.card}/>}
+
+    {refPreview && (
+      <Modal title={t("tenders.ref_kmz")} sub={refPreview.file_name} width={600}
+        onClose={()=>{ if (!refBusy) setRefPreview(null); }}
+        footer={<>
+          <SecBtn label={t("common.cancel")} onClick={()=>setRefPreview(null)} disabled={refBusy}/>
+          <PrimBtn label={refBusy ? "…" : t("tenders.ref_import_karo", { n: refPreview.layers.filter(L=>L.take).length })}
+            onClick={importRef} disabled={refBusy || !refPreview.layers.some(L=>L.take)}/>
+        </>}>
+        <div style={{fontSize:11.5, color:T.t3, lineHeight:1.5, marginBottom:10}}>{t("tenders.ref_preview_note")}</div>
+        {sites.length > 1 && (
+          <div style={{marginBottom:10}}>
+            <Field label={t("tenders.ref_kis_site")} full>
+              <SelIn value={refPreview.project_id} onChange={v=>setRefPreview(r=>({...r, project_id:v}))}
+                ph={t("tenders.ref_poore_tender")} options={sites.map(s=>({v:String(s.id), l:s.name}))}/>
+            </Field>
+          </div>
+        )}
+        <div style={{border:`1px solid ${T.b1}`, borderRadius:8, overflow:"hidden"}}>
+          {refPreview.layers.map((L, i) => {
+            const cnt = [L.counts.line ? t("tenders.ref_n_line", { n: L.counts.line }) : null,
+              L.counts.point ? t("tenders.ref_n_point", { n: L.counts.point }) : null,
+              L.counts.area ? t("tenders.ref_n_area", { n: L.counts.area }) : null].filter(Boolean).join(" · ");
+            return (
+              <label key={L.path} style={{display:"flex", gap:10, alignItems:"flex-start", padding:"9px 12px",
+                borderTop: i ? `1px solid ${T.b1}` : "none", cursor:"pointer", background: L.take ? T.surface : T.surfaceB}}>
+                <input type="checkbox" checked={L.take} style={{marginTop:2}}
+                  onChange={e=>setRefPreview(r=>({...r, layers: r.layers.map((x, j)=>j===i ? {...x, take:e.target.checked} : x)}))}/>
+                {L.icon ? <img src={L.icon} alt="" style={{width:16, height:16, objectFit:"contain", marginTop:1}}/>
+                  : <span style={{width:10, height:10, borderRadius: L.kind==="line" ? 2 : "50%", background:L.colour || "#64748B", marginTop:4, flexShrink:0}}/>}
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{fontSize:12.5, fontWeight:600, color:T.t1}}>{L.name}
+                    <span style={{fontWeight:400, color:T.t3}}> · {cnt}{L.total_length_m > 0 ? ` · ${fmtKm(L.total_length_m)}` : ""}</span></div>
+                  {L.sample && L.sample.length > 0 && (
+                    <div style={{fontSize:10.5, color:T.t4, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
+                      {t("tenders.ref_fields")}: {L.sample.map(a=>a[0]).join(", ")}
+                    </div>
+                  )}
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      </Modal>
+    )}
+
     {pending && !pendingHidden && (()=>{
       const fam = familyOf(pending.atype);
       const P = pending.props || {};
@@ -5825,6 +6114,31 @@ function MapTab({tenderId, sites}) {
             )}
           </div>
         )}
+
+        {/* Jaankari — jaise department ki KMZ me har cheez ke saath table
+            hoti hai (Diameter, Capacity, GL/FSL…). Naam aur value dono PM
+            ke apne; hover card me yahi dikhta hai, KML export me jaata hai. */}
+        <div style={{marginTop:12}}>
+          <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5}}>
+            <label style={{fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:".5px"}}>{t("tenders.jaankari")}</label>
+            <button onClick={()=>setPending(p=>({...p, attrs:[...(p.attrs||[]), ["",""]]}))} disabled={(pending.attrs||[]).length >= 40}
+              style={{fontSize:11, padding:"3px 9px", borderRadius:20, cursor:"pointer", border:`1px solid ${T.b1}`,
+                background:T.surface, color:T.ind, fontFamily:"inherit"}}>+ {t("tenders.jaankari_jodo")}</button>
+          </div>
+          {(pending.attrs||[]).length === 0 && (
+            <div style={{fontSize:10.5, color:T.t4, lineHeight:1.5}}>{t("tenders.jaankari_note")}</div>
+          )}
+          {(pending.attrs||[]).map(([k, v], i) => (
+            <div key={i} style={{display:"grid", gridTemplateColumns:"1fr 1.4fr auto", gap:6, marginBottom:6, alignItems:"center"}}>
+              <TxtIn value={k} onChange={val=>setPending(p=>{ const a=[...(p.attrs||[])]; a[i]=[val, a[i][1]]; return {...p, attrs:a}; })}
+                ph={t("tenders.jaankari_naam_ph")}/>
+              <TxtIn value={v} onChange={val=>setPending(p=>{ const a=[...(p.attrs||[])]; a[i]=[a[i][0], val]; return {...p, attrs:a}; })}
+                ph={t("tenders.jaankari_value_ph")}/>
+              <button onClick={()=>setPending(p=>({...p, attrs:(p.attrs||[]).filter((_, j)=>j!==i)}))} title={t("tenders.jaankari_hatao")}
+                style={{background:"none", border:"none", cursor:"pointer", color:T.t4, padding:4, display:"flex"}}><IcX size={13}/></button>
+            </div>
+          ))}
+        </div>
 
         {pending.edit && (
           <div style={{marginTop:12}}>
@@ -8065,3 +8379,4 @@ export default function TendersModule({onOpenProject}) {
   );
   return <TenderList onOpen={(v)=>setSelected(typeof v === "object" ? v : {id:v})}/>;
 }
+
