@@ -53,6 +53,33 @@ const T = {
   sb:"#0D1B2A",
 };
 
+// Baar-baar aane wale inline styles — ek jagah, is file ke andar hi.
+const S = {
+  label: {fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4},
+  labelLg: {fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5},
+  colHead: {fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px"},
+  hint: {fontSize:11,color:T.t4,marginBottom:8},
+  sub: {fontSize:11,color:T.t4,marginTop:2},
+  subEllipsis: {fontSize:10.5,color:T.t4,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},
+  metaEllipsis: {fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},
+  metaRow: {fontSize:11,color:T.t4,marginTop:2,display:"flex",gap:10,flexWrap:"wrap"},
+  title: {fontSize:13,fontWeight:700,color:T.t1},
+  filterRow: {display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"},
+  searchWrap: {position:"relative",flex:1,minWidth:160},
+  searchInput: {width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"},
+  searchIcon: {position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"},
+  headRow: {display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:10},
+  grid2: {display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12},
+  card: {background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"},
+  empty40: {textAlign:"center",padding:"40px",color:T.t4},
+  empty50: {textAlign:"center",padding:"50px",color:T.t4},
+  empty60: {textAlign:"center",padding:"60px",color:T.t4},
+  emptyTitle: {fontSize:14,fontWeight:600,color:T.t2},
+  linkBlue: {padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"},
+  linkGrey: {padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"},
+  btnGreen: {padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"},
+};
+
 const fmt = n => n>=10000000?`₹${(n/10000000).toFixed(1)}Cr`:n>=100000?`₹${(n/100000).toFixed(1)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${n||0}`;
 const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
 
@@ -191,7 +218,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
               Request from a specific project (linked_request_id is set).
               The drawing must belong to the requesting project. */}
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.project_2")}</label>
+            <label style={S.label}>{t("common.project_2")}</label>
             {prefill?.linked_request_id ? (
               <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.grnM}`,background:T.grnL}}>
                 <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
@@ -210,16 +237,16 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
             )}
           </div>
           {/* Category + Type */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+          <div style={S.grid2}>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.category")}</label>
+              <label style={S.label}>{t("common.category")}</label>
               <SearchSelect value={form.category}
                 options={Array.from(new Set(dbCats.length>0?dbCats.map(c=>c.name):CATS))}
                 onChange={v=>setForm(p=>({...p,category:v,title:""}))}
                 placeholder={t("common.select_category")}/>
             </div>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.type")}</label>
+              <label style={S.label}>{t("common.type")}</label>
               <SearchSelect value={form.drawing_type}
                 options={Array.from(new Set(dbTypes.length>0?dbTypes.map(t=>t.name):TYPES))}
                 onChange={v=>setForm(p=>({...p,drawing_type:v}))}
@@ -227,16 +254,16 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
             </div>
           </div>
           {/* Stage + Floor */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+          <div style={S.grid2}>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.stage")}</label>
+              <label style={S.label}>{t("common.stage")}</label>
               <SearchSelect value={form.stage}
                 options={STAGES}
                 onChange={v=>setForm(p=>({...p,stage:v}))}
                 placeholder={t("design.concept_schematic_working_gfc_as_built")}/>
             </div>
             <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("design.floor")}</label>
+              <label style={S.label}>{t("design.floor")}</label>
               <SearchSelect value={form.floor}
                 options={FLOORS}
                 onChange={v=>setForm(p=>({...p,floor:v}))}
@@ -264,7 +291,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
           )}
           {/* Title — searchable from library */}
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("design.drawing_title")}</label>
+            <label style={S.label}>{t("design.drawing_title")}</label>
             <input value={form.title} onChange={e=>{setForm(p=>({...p,title:e.target.value}));setTitleSearch(e.target.value);}}
               placeholder={t("design.search_or_type_title")}
               list="drawing_titles_list"
@@ -288,16 +315,16 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
           </div>
           {/* File */}
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.file")}</label>
+            <label style={S.label}>{t("common.file")}</label>
             <label style={{display:"block",border:"2px dashed "+(file?T.grn:T.b2),borderRadius:9,padding:"18px",textAlign:"center",background:file?T.grnL:T.surfaceB,cursor:"pointer"}}>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){setFile(e.target.files[0]);setErr("");}}}/>
-              {file?<div><div style={{fontSize:13,fontWeight:700,color:T.grn}}>✓ {file.name}</div><div style={{fontSize:11,color:T.t4,marginTop:2}}>{(file.size/1024).toFixed(0)} KB</div></div>
-                :<div><div style={{fontSize:13,fontWeight:600,color:T.t2}}>{t("design.choose_file_or_drop")}</div><div style={{fontSize:11,color:T.t4,marginTop:2}}>{t("design.pdf_png_jpg_dwg_max_50mb")}</div></div>}
+              {file?<div><div style={{fontSize:13,fontWeight:700,color:T.grn}}>✓ {file.name}</div><div style={S.sub}>{(file.size/1024).toFixed(0)} KB</div></div>
+                :<div><div style={{fontSize:13,fontWeight:600,color:T.t2}}>{t("design.choose_file_or_drop")}</div><div style={S.sub}>{t("design.pdf_png_jpg_dwg_max_50mb")}</div></div>}
             </label>
           </div>
           {/* Note */}
           <div>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{t("common.notes")}</label>
+            <label style={S.label}>{t("common.notes")}</label>
             <textarea value={form.note} onChange={e=>setForm(p=>({...p,note:e.target.value}))} placeholder={t("design.reviewer_ke_liye")} rows={2}
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
           </div>
@@ -497,11 +524,11 @@ export default function DesignModule() {
   const DrawingsTab = () => (
     <div>
       {/* Filters */}
-      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-        <div style={{position:"relative",flex:1,minWidth:160}}>
+      <div style={S.filterRow}>
+        <div style={S.searchWrap}>
           <input value={dSearch} onChange={e=>setDSearch(e.target.value)} placeholder={t("design.search_drawings")}
-            style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-          <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
+            style={S.searchInput}/>
+          <span style={S.searchIcon}><IcSearch size={13} color={T.t4}/></span>
         </div>
         {[
           {val:dProject,set:setDProject,opts:projectNames,label:t("common.project")},
@@ -519,17 +546,17 @@ export default function DesignModule() {
         </button>
       </div>
 
-      <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{filteredDrawings.length} drawings</div>
+      <div style={S.hint}>{filteredDrawings.length} drawings</div>
 
       {/* Table */}
-      <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
+      <div style={S.card}>
         <div style={{display:"grid",gridTemplateColumns:"2fr 120px 120px 60px 100px 100px 70px",padding:"8px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,gap:8}}>
           {["Title","Project","Category","Ver.","Type","Status","Size"].map((h,i)=>(
             <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i===3?"center":"left"}}>{h}</span>
           ))}
         </div>
-        {loading&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>{t("common.loading")}</div>}
-        {!loading&&filteredDrawings.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>{t("design.no_drawings_found")}</div>}
+        {loading&&<div style={S.empty40}>{t("common.loading")}</div>}
+        {!loading&&filteredDrawings.length===0&&<div style={S.empty40}>{t("design.no_drawings_found")}</div>}
         {filteredDrawings.map(d=>{
           const sm=STATUS_META[d.status]||STATUS_META["Pending"];
           const isSel=selDraw?.id===d.id;
@@ -543,9 +570,9 @@ export default function DesignModule() {
                 onMouseLeave={e=>{e.currentTarget.style.background=isSel?T.bluL:"none";}}>
                 <div>
                   <div style={{fontSize:12.5,fontWeight:isSel?700:500,color:isSel?T.blu:T.t1}}>{d.title}</div>
-                  {d.note&&<div style={{fontSize:10.5,color:T.t4,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.note}</div>}
+                  {d.note&&<div style={S.subEllipsis}>{d.note}</div>}
                 </div>
-                <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.project_name||"—"}</span>
+                <span style={S.metaEllipsis}>{d.project_name||"—"}</span>
                 <span style={{fontSize:11,color:T.t2}}>{d.category||"—"}</span>
                 <span style={{fontSize:11,color:T.t4,fontFamily:"monospace",textAlign:"center"}}>{d.current_version||"v1"}</span>
                 <Pill label={d.drawing_type||"2D"} c={T.pur} bg={T.purL}/>
@@ -557,8 +584,8 @@ export default function DesignModule() {
                 <div style={{padding:"10px 14px",background:T.bluL,borderBottom:"1px solid "+T.bluM}}>
                   {actionErr&&<div style={{padding:"5px 9px",background:T.redL,border:"1px solid "+T.redM,borderRadius:6,fontSize:11.5,color:T.red,marginBottom:8}}>{actionErr}</div>}
                   <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
-                    {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("common.view")}</a>}
-                    {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer" style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("design.download")}</a>}
+                    {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={S.linkBlue}>{t("common.view")}</a>}
+                    {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer" style={S.linkGrey}>{t("design.download")}</a>}
                     <button onClick={()=>setShowVer(d)} style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}><IcHist size={12}/> {t("common.history")}</button>
                     {canDecideDesign()&&d.status!=="Approved"&&<button onClick={()=>handleStatus(d.id,"Approved")} disabled={!!acting[d.id]} style={{padding:"5px 11px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t("common.approve")}</button>}
                     {canDecideDesign()&&d.status!=="Revision"&&<button onClick={()=>{ const r=prompt(t("design.revision_reason")); if(r) handleStatus(d.id,"Revision",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:11,fontWeight:600,cursor:"pointer"}}>{t("design.revision")}</button>}
@@ -593,11 +620,11 @@ export default function DesignModule() {
           {isHouse ? "🏠 " : "🏗️ "}{headerNote}
         </div>
         {/* Filters */}
-        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-          <div style={{position:"relative",flex:1,minWidth:160}}>
+        <div style={S.filterRow}>
+          <div style={S.searchWrap}>
             <input value={rSearch} onChange={e=>setRSearch(e.target.value)} placeholder={isHouse?t("design.search_lead_title"):t("design.search_requests")}
-              style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
+              style={S.searchInput}/>
+            <span style={S.searchIcon}><IcSearch size={13} color={T.t4}/></span>
           </div>
           {[
             ...(isHouse ? [] : [{val:rProject,set:setRProject,opts:projectNames,label:t("common.project")}]),
@@ -614,9 +641,9 @@ export default function DesignModule() {
             {hideUploadedR?t("design.show_completed"):t("design.hide_completed")}
           </button>
         </div>
-        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{list.length} {isHouse?t("design.house_plans"):t("design.site_drawings")} · {pending} pending</div>
+        <div style={S.hint}>{list.length} {isHouse?t("design.house_plans"):t("design.site_drawings")} · {pending} pending</div>
 
-        {list.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>{isHouse?"🏠":"🏗️"}</div><div style={{fontSize:13,color:T.t2}}>{emptyText}</div></div>}
+        {list.length===0&&<div style={S.empty50}><div style={{fontSize:32,marginBottom:8}}>{isHouse?"🏠":"🏗️"}</div><div style={{fontSize:13,color:T.t2}}>{emptyText}</div></div>}
 
         {list.map(req=>{
           const pm=PRIO_META[req.priority]||PRIO_META["Normal"];
@@ -625,8 +652,8 @@ export default function DesignModule() {
             <div key={req.id} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.b1,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+pm.c}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{req.title}</div>
-                  <div style={{fontSize:11,color:T.t4,marginTop:2,display:"flex",gap:10,flexWrap:"wrap"}}>
+                  <div style={S.title}>{req.title}</div>
+                  <div style={S.metaRow}>
                     {isHouse && req.lead_name ? (
                       <span style={{color:T.pur,fontWeight:600}}>👤 {req.lead_name}</span>
                     ) : (
@@ -663,13 +690,13 @@ export default function DesignModule() {
                     </button>
                   )}
                   <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);updateReqStatus(req.id,"In Progress");}}
-                    style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                    style={S.btnGreen}>
                    {t("design.upload_direct")}
                   </button>
                 </>}
                 {req.status==="In Progress"&&(
                   <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);}}
-                    style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                    style={S.btnGreen}>
                    {t("design.upload_drawing_2")}
                   </button>
                 )}
@@ -684,29 +711,29 @@ export default function DesignModule() {
   // ── TAB: REVISION QUEUE ──────────────────────────────────────────
   const RevisionTab = () => (
     <div>
-      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-        <div style={{position:"relative",flex:1,minWidth:160}}>
+      <div style={S.filterRow}>
+        <div style={S.searchWrap}>
           <input value={revSearch} onChange={e=>setRevSearch(e.target.value)} placeholder={t("common.search")}
-            style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-          <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
+            style={S.searchInput}/>
+          <span style={S.searchIcon}><IcSearch size={13} color={T.t4}/></span>
         </div>
         <select value={revProject} onChange={e=>setRevProject(e.target.value)}
           style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(revProject!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:revProject!=="All"?T.bluL:T.surface}}>
           {projectNames.map(p=><option key={p}>{p}</option>)}
         </select>
       </div>
-      <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{t("design.revqueue_drawings_in_revision", { revQueue: revQueue.length })}</div>
-      {revQueue.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>✅</div><div style={{fontSize:13,color:T.t2}}>{t("design.koi_revision_pending_nahi")}</div></div>}
+      <div style={S.hint}>{t("design.revqueue_drawings_in_revision", { revQueue: revQueue.length })}</div>
+      {revQueue.length===0&&<div style={S.empty50}><div style={{fontSize:32,marginBottom:8}}>✅</div><div style={{fontSize:13,color:T.t2}}>{t("design.koi_revision_pending_nahi")}</div></div>}
       {revQueue.map(d=>{
         const latestRev = d.last_revision_comment || "";
         const isClientRev = latestRev.startsWith("[Client]") || latestRev.startsWith("[Client Feedback]");
         const revAtt = Array.isArray(d.last_revision_attachments) ? d.last_revision_attachments : [];
         return(
         <div key={d.id} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.ambM,padding:"13px 14px",marginBottom:10,borderLeft:"3px solid "+T.amb}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:10}}>
+          <div style={S.headRow}>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
-              <div style={{fontSize:11,color:T.t4,marginTop:2}}>{d.project_name||"—"} · {d.category} · {d.current_version}</div>
+              <div style={S.title}>{d.title}</div>
+              <div style={S.sub}>{d.project_name||"—"} · {d.category} · {d.current_version}</div>
               {/* Client revision note (from CRM/Design Approval flow) */}
               {(d.client_note || latestRev) && (
                 <div style={{marginTop:8,padding:"7px 11px",background:isClientRev?T.bluL:T.ambL,border:`1px solid ${isClientRev?T.bluM:T.ambM}`,borderLeft:`3px solid ${isClientRev?T.blu:T.amb}`,borderRadius:6}}>
@@ -823,9 +850,9 @@ export default function DesignModule() {
         </div>
 
         {list.length===0 && (
-          <div style={{textAlign:"center",padding:"60px",color:T.t4}}>
+          <div style={S.empty60}>
             <div style={{fontSize:32,marginBottom:8}}>{chip==="PendingShare"?"📤":"⏳"}</div>
-            <div style={{fontSize:14,fontWeight:600,color:T.t2}}>
+            <div style={S.emptyTitle}>
               {chip==="PendingShare"?t("design.sab_share_ho_gaye"):t("design.koi_drawing_client_se_reply_ka")}
             </div>
           </div>
@@ -836,8 +863,8 @@ export default function DesignModule() {
             borderLeft:`3px solid ${chip==="PendingShare"?T.amb:T.blu}`}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
-                <div style={{fontSize:11,color:T.t4,marginTop:2}}>{t("design.d_categoryd2_d3_by_d4", { d: d.project_name||"—", category: d.category, d2: d.drawing_type?` / ${d.drawing_type}`:"", d3: d.current_version||"v1", d4: d.uploaded_by_name||"—" })}</div>
+                <div style={S.title}>{d.title}</div>
+                <div style={S.sub}>{t("design.d_categoryd2_d3_by_d4", { d: d.project_name||"—", category: d.category, d2: d.drawing_type?` / ${d.drawing_type}`:"", d3: d.current_version||"v1", d4: d.uploaded_by_name||"—" })}</div>
                 {chip==="SharedWithClient" && d.client_shared_at && (
                   <div style={{fontSize:10.5,color:T.blu,marginTop:3}}>{t("design.shared_fmttimeagod", { fmtTimeAgo: fmtTimeAgo(d.client_shared_at), d: d.client_note?` · ${d.client_note}`:"" })}</div>
                 )}
@@ -983,14 +1010,14 @@ export default function DesignModule() {
               )}
             </div>
             <div style={{marginBottom:12}}>
-              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>{t("design.client_phone_phone", { phone: phone?"(auto-filled)":"(enter manually)" })}</label>
+              <label style={S.labelLg}>{t("design.client_phone_phone", { phone: phone?"(auto-filled)":"(enter manually)" })}</label>
               <input value={phone} onChange={e=>setPhone(e.target.value)}
                 placeholder={loadingContact?t("common.loading_2"):t("share_drawing.e_g_919876543210_with_country_code")}
                 style={{width:"100%",padding:"9px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               <div style={{fontSize:10.5,color:T.t4,marginTop:4}}>{t("share_drawing.country_code_zaroori_e_g_91")}</div>
             </div>
             <div>
-              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>
+              <label style={S.labelLg}>
                {t("share_drawing.message_editable")}
               </label>
               <textarea value={msg} onChange={e=>setMsg(e.target.value)} rows={8}
@@ -1082,11 +1109,11 @@ export default function DesignModule() {
     return (
       <div>
         {/* Filters */}
-        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-          <div style={{position:"relative",flex:1,minWidth:160}}>
+        <div style={S.filterRow}>
+          <div style={S.searchWrap}>
             <input value={aprvSearch} onChange={e=>setAprvSearch(e.target.value)} placeholder={t("design.search_drawings")}
-              style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
+              style={S.searchInput}/>
+            <span style={S.searchIcon}><IcSearch size={13} color={T.t4}/></span>
           </div>
           <select value={aprvProject} onChange={e=>setAprvProject(e.target.value)}
             style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(aprvProject!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:aprvProject!=="All"?T.bluL:T.surface}}>
@@ -1098,22 +1125,22 @@ export default function DesignModule() {
           </select>
         </div>
 
-        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{t("design.pendingdrawings_drawings_awaiting_approval", { pendingDrawings: pendingDrawings.length })}</div>
+        <div style={S.hint}>{t("design.pendingdrawings_drawings_awaiting_approval", { pendingDrawings: pendingDrawings.length })}</div>
 
         {pendingDrawings.length===0&&(
-          <div style={{textAlign:"center",padding:"60px",color:T.t4}}>
+          <div style={S.empty60}>
             <div style={{fontSize:32,marginBottom:8}}>✅</div>
-            <div style={{fontSize:14,fontWeight:600,color:T.t2}}>{t("design.sab_clear")}</div>
+            <div style={S.emptyTitle}>{t("design.sab_clear")}</div>
             <div style={{fontSize:12,marginTop:4}}>{t("design.koi_drawing_pending_approval_mein_nahi")}</div>
           </div>
         )}
 
         {pendingDrawings.map(d=>(
           <div key={d.id} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.b1,padding:"13px 14px",marginBottom:8,borderLeft:"3px solid #E5E7EB"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:10}}>
+            <div style={S.headRow}>
               <div style={{flex:1}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
-                <div style={{fontSize:11,color:T.t4,marginTop:2,display:"flex",gap:10,flexWrap:"wrap"}}>
+                <div style={S.title}>{d.title}</div>
+                <div style={S.metaRow}>
                   <span>{d.project_name||"—"}</span>
                   <span>{d.category}</span>
                   <span style={{fontFamily:"monospace"}}>{d.current_version||"v1"}</span>
@@ -1124,9 +1151,9 @@ export default function DesignModule() {
               </div>
               <div style={{display:"flex",gap:6}}>
                 {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer"
-                  style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>{t("common.view")}</a>}
+                  style={S.linkBlue}>{t("common.view")}</a>}
                 {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer"
-                  style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"}}>⬇</a>}
+                  style={S.linkGrey}>⬇</a>}
               </div>
             </div>
             {!canDecideDesign()?(
@@ -1171,11 +1198,11 @@ export default function DesignModule() {
 
     return(
       <div>
-        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-          <div style={{position:"relative",flex:1,minWidth:160}}>
+        <div style={S.filterRow}>
+          <div style={S.searchWrap}>
             <input value={histSearch} onChange={e=>setHistSearch(e.target.value)} placeholder={t("design.search_drawings")}
-              style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
+              style={S.searchInput}/>
+            <span style={S.searchIcon}><IcSearch size={13} color={T.t4}/></span>
           </div>
           <select value={histProject} onChange={e=>setHistProject(e.target.value)}
             style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(histProject!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:histProject!=="All"?T.bluL:T.surface}}>
@@ -1187,15 +1214,15 @@ export default function DesignModule() {
           </select>
         </div>
 
-        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{t("design.histdrawings_drawings_latest_changes_first", { histDrawings: histDrawings.length })}</div>
+        <div style={S.hint}>{t("design.histdrawings_drawings_latest_changes_first", { histDrawings: histDrawings.length })}</div>
 
-        <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
+        <div style={S.card}>
           <div style={{display:"grid",gridTemplateColumns:"2fr 130px 110px 60px 100px 100px 70px 90px",padding:"8px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,gap:8}}>
             {["Title","Project","Category","Ver.","Type","Status","Size","Last Updated"].map((h,i)=>(
-              <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px"}}>{h}</span>
+              <span key={i} style={S.colHead}>{h}</span>
             ))}
           </div>
-          {histDrawings.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>{t("design.no_drawings_found")}</div>}
+          {histDrawings.length===0&&<div style={S.empty40}>{t("design.no_drawings_found")}</div>}
           {histDrawings.map(d=>{
             const sm=STATUS_META[d.status]||STATUS_META["Pending"];
             return(
@@ -1204,9 +1231,9 @@ export default function DesignModule() {
                 onMouseLeave={e=>e.currentTarget.style.background="none"}>
                 <div>
                   <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{d.title}</div>
-                  {d.note&&<div style={{fontSize:10.5,color:T.t4,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.note}</div>}
+                  {d.note&&<div style={S.subEllipsis}>{d.note}</div>}
                 </div>
-                <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.project_name||"—"}</span>
+                <span style={S.metaEllipsis}>{d.project_name||"—"}</span>
                 <span style={{fontSize:11,color:T.t2}}>{d.category}</span>
                 <span style={{fontSize:11,color:T.t4,fontFamily:"monospace"}}>{d.current_version||"v1"}</span>
                 <Pill label={d.drawing_type||"2D"} c={T.pur} bg={T.purL}/>
@@ -1278,14 +1305,14 @@ export default function DesignModule() {
         ))}
       </div>
 
-      <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{dueDateItems.length} items {ddSource!=="all"&&`· ${ddSource==="site"?"Site Drawings":"House Plans"}`}</div>
-      {dueDateItems.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>📅</div><div style={{fontSize:13,color:T.t2}}>{t("design.koi_due_date_nahi")}</div></div>}
+      <div style={S.hint}>{dueDateItems.length} items {ddSource!=="all"&&`· ${ddSource==="site"?"Site Drawings":"House Plans"}`}</div>
+      {dueDateItems.length===0&&<div style={S.empty50}><div style={{fontSize:32,marginBottom:8}}>📅</div><div style={{fontSize:13,color:T.t2}}>{t("design.koi_due_date_nahi")}</div></div>}
 
       {/* Table */}
-      <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
+      <div style={S.card}>
         <div style={{display:"grid",gridTemplateColumns:"60px 2fr 150px 110px 100px 100px 90px",padding:"7px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,gap:8}}>
           {["Source","Drawing Request","Project / Lead","Category","Due Date","Priority","Status"].map((h,i)=>(
-            <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px"}}>{h}</span>
+            <span key={i} style={S.colHead}>{h}</span>
           ))}
         </div>
         {dueDateItems.map(r=>{
