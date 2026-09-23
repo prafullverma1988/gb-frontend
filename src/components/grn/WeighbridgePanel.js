@@ -14,7 +14,7 @@ import uploadManager from "../../utils/uploadManager";
 import { loadPhotoPolicy, policyFor } from "../../utils/photoPolicy";
 import { T } from "../../modules/shared/tokens";
 import { t } from "../../i18n";
-import { fmtKg, kgIn, loadWeighments } from "./weigh";
+import { challanUnits, fmtKg, kgIn, loadWeighments } from "./weigh";
 import { loadOrderedLines, loadPoLines } from "./grnData";
 
 const inp = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1.5px solid " + T.b1, fontSize: 12.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
@@ -74,9 +74,17 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   const reload = async () => {
     setLoading(true);
     const [tr, ls, pl] = await Promise.all([loadWeighments(dest, "all"), loadOrderedLines(dest), loadPoLines(dest)]);
-    // PO ki jo line kisi dikh rahi MR se bani hai, wo MR ki row hi hai — dobara nahi.
+    // PO ki jo line kisi dikh rahi MR se bani hai, wo MR ki row hi hai — dobara
+    // nahi. Do taraf se dekhte hain, kyunki koi bhi ek jod chhoot sakti hai:
+    // (1) line ka apna linked_mr_id, (2) MR ka linked_po_id + wahi naam. 23 Sep
+    // 2026 ko live par PO-2 ki line par link NULL tha aur wahi "gitti" do baar
+    // dikh rahi thi (MR-8 aur PO-2).
+    const nameKey = (s) => String(s || "").trim().toLowerCase();
     const mrIds = new Set(ls.filter((l) => l.kind === "mr").map((l) => l.mrId));
-    setTrips(tr); setLines([...ls, ...pl.filter((l) => !(l.linkedMrId && mrIds.has(l.linkedMrId)))]); setLoading(false);
+    const mrPo = new Set(ls.filter((l) => l.kind === "mr" && l.linkedPoId).map((l) => l.linkedPoId + "|" + nameKey(l.material)));
+    setTrips(tr);
+    setLines([...ls, ...pl.filter((l) => !(l.linkedMrId && mrIds.has(l.linkedMrId)) && !mrPo.has(l.poId + "|" + nameKey(l.material)))]);
+    setLoading(false);
   };
   useEffect(() => { reload(); loadPhotoPolicy().then(setPol); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [dest?.type, dest?.projectId, dest?.warehouseId]);
 
@@ -92,10 +100,15 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   const setN = (p) => setNf(f => ({ ...f, ...p }));
 
   const pickedLines = useMemo(() => lines.filter(l => nf.picked[l.key]), [lines, nf.picked]);
+  const setPick = (key, p) => setNf(f => ({ ...f, picked: { ...f.picked, [key]: { ...f.picked[key], ...p } } }));
+  // Tick karte hi order ki poori pending qty bhar dena galat tha (23 Sep 2026):
+  // 2 gadi ka order ho aur 1 gadi aaye to entry usi 1 gadi ki hai, aur bhari
+  // hui qty waisi hi reh jaati thi — "Short" ka hisaab (challan vs net) jhootha
+  // ho jaata tha. Ab khaali; pending sirf naam ke neeche hint me.
   const togglePick = (l) => setNf(f => {
     const picked = { ...f.picked };
     if (picked[l.key]) delete picked[l.key];
-    else picked[l.key] = { challanQty: l.pending ? String(l.pending) : "" };
+    else picked[l.key] = { challanQty: "", challanUnit: l.unit || "Ton" };
     const firstVendor = lines.find(x => picked[x.key] && x.vendor)?.vendor || "";
     return { ...f, picked, vendor: f.vendor || firstVendor };
   });
@@ -125,6 +138,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
         wh_mr_item_id: l.kind === "wh" ? l.whMrItemId : null,
         material_name: l.material, order_unit: l.unit,
         challan_qty: nf.picked[l.key]?.challanQty || null,
+        challan_unit: nf.picked[l.key]?.challanUnit || l.unit || null,
       })),
       ...nf.free.map(x => ({ material_name: x.name, order_unit: x.unit, challan_qty: x.qty || null })),
     ];
@@ -210,7 +224,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
           {w.vendor_name && <span style={{ fontSize: 11, color: T.t3 }}>{w.vendor_name}</span>}
         </div>
         <div style={{ fontSize: 11, color: T.t2, marginTop: 3 }}>
-          {(w.lines || []).map(l => l.material_name + (l.challan_qty ? ` (${Number(l.challan_qty)} ${l.order_unit || ""})` : "")).join(" · ")}
+          {(w.lines || []).map(l => l.material_name + (l.challan_qty ? ` (${Number(l.challan_qty)} ${l.challan_unit || l.order_unit || ""})` : "")).join(" · ")}
         </div>
         <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>
           {t("weigh.gross_short")} {fmtKg(w.gross_kg)}
@@ -239,11 +253,12 @@ export default function WeighbridgePanel({ dest, onChanged }) {
         <div style={{ background: T.grnL, border: "1px solid " + T.grnM, borderRadius: 8, padding: "10px 12px", marginBottom: 12 }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: T.grn }}>✓ {t("weigh.net_done", { net: fmtKg(result.net_kg) })}</div>
           {(result.short || []).map(s => {
-            const q = kgIn(s.net_kg, s.order_unit);
+            const cu = s.challan_unit || s.order_unit;
+            const q = kgIn(s.net_kg, cu);
             return (
               <div key={s.line_id} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 11.5, color: T.red, fontWeight: 700 }}>⚠ {t("weigh.short_line", { material: s.material_name, pct: s.short_pct })}</span>
-                <span style={{ fontSize: 10.5, color: T.t3 }}>{t("weigh.short_detail", { challan: s.challan_qty, net: q.qty, unit: s.order_unit || q.unit })}</span>
+                <span style={{ fontSize: 10.5, color: T.t3 }}>{t("weigh.short_detail", { challan: s.challan_qty, net: q.qty, unit: cu || q.unit })}</span>
                 {s.grn_id
                   ? (result.issued[s.line_id]
                     ? <span style={{ fontSize: 10.5, color: T.grn, fontWeight: 700 }}>✓ {t("weigh.short_issue_done")}</span>
@@ -272,7 +287,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
             {lines.map(l => {
               const on = !!nf.picked[l.key];
               return (
-                <div key={l.key} style={{ display: "grid", gridTemplateColumns: "22px 1fr 110px", gap: 7, alignItems: "center", padding: "6px 8px", borderBottom: "1px solid " + T.b1, background: on ? T.bluL : T.surface }}>
+                <div key={l.key} style={{ display: "grid", gridTemplateColumns: "22px 1fr 160px", gap: 7, alignItems: "center", padding: "6px 8px", borderBottom: "1px solid " + T.b1, background: on ? T.bluL : T.surface }}>
                   <input type="checkbox" checked={on} onChange={() => togglePick(l)} style={{ width: 15, height: 15, accentColor: T.blu, cursor: "pointer" }} />
                   <div style={{ minWidth: 0, cursor: "pointer" }} onClick={() => togglePick(l)}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.material}</div>
@@ -281,10 +296,15 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                   {on ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                       <input type="number" value={nf.picked[l.key].challanQty}
-                        onChange={e => setNf(f => ({ ...f, picked: { ...f.picked, [l.key]: { challanQty: e.target.value } } }))}
-                        title={t("weigh.challan_qty")} placeholder={t("weigh.challan_qty")}
+                        onChange={e => setPick(l.key, { challanQty: e.target.value })}
+                        title={t("weigh.this_truck_qty")} placeholder={t("weigh.challan_par")}
                         style={{ ...inp, padding: "5px 7px", fontSize: 11.5 }} />
-                      <span style={{ fontSize: 10, color: T.t4 }}>{l.unit}</span>
+                      <select value={nf.picked[l.key].challanUnit}
+                        onChange={e => setPick(l.key, { challanUnit: e.target.value })}
+                        title={t("weigh.this_truck_qty")}
+                        style={{ ...inp, padding: "5px 4px", fontSize: 11, width: 66 }}>
+                        {challanUnits(l.unit).map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
                     </div>
                   ) : <span />}
                 </div>

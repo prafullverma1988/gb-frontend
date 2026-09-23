@@ -56,7 +56,7 @@ export async function loadOrderedLines(dest) {
       const ordered = Number(m.quantity) || 0;
       const received = Number(m.received_qty) || 0;
       return {
-        key: "mr:" + m.id, kind: "mr", mrId: m.id,
+        key: "mr:" + m.id, kind: "mr", mrId: m.id, linkedPoId: m.linked_po_id || null,
         label: m.mr_number || "MR-" + m.id, material: m.item_name || "",
         unit: m.unit || "", ordered, received, pending: Math.max(0, ordered - received),
         vendor: m.linked_vendor || "", partial: m.mat_status === "PartialReceived",

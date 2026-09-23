@@ -6,7 +6,7 @@ import MRDetailDrawer from "../components/MRDetailDrawer";
 import CompanyTransfersTab from "../components/CompanyTransfersTab";
 import GrnIssueBlock from "../components/GrnIssueBlock";
 import WeighChip from "../components/grn/WeighChip";
-import { indexOpenLines, loadWeighmentsForPo } from "../components/grn/weigh";
+import { indexOpenLines, kgIn, kgPerUnit, loadWeighmentsForPo } from "../components/grn/weigh";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
 import { canApproveAction, approverRolesFor, useApprovalAuthority } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
@@ -636,6 +636,29 @@ function GRNModal({po,onClose,onSave}){
   useEffect(()=>{ let alive=true; loadWeighmentsForPo(po.id).then(tr=>{ if(alive) setWeigh(indexOpenLines(tr)); }); return ()=>{ alive=false; }; },[po.id]);
   const hitOf=(it)=>weigh.byPoItem[it.id]||(it.linked_mr_id?weigh.byMr[it.linked_mr_id]:null)
     ||weigh.byName[String(it.desc||"").trim().toLowerCase()]||null;
+  // Tolai aa jaye to qty pending nahi, KAANTE KA NET (23 Sep 2026) — ek gadi
+  // 18.3 Ton laayi ho to order ke 40 Ton nahi, 18.3 hi bharna hai. Sirf un
+  // rows par jinhe aadmi ne haath nahi lagaya (abhi bhi pending hi likha hai),
+  // aur sirf wazan wali unit par — Nos/cft me net "kitna aaya" nahi hota.
+  useEffect(()=>{
+    setRows(rs=>rs.map((r,i)=>{
+      const it=po.items[i]; if(!it) return r;
+      const hit=weigh.byPoItem[it.id]||(it.linked_mr_id?weigh.byMr[it.linked_mr_id]:null)
+        ||weigh.byName[String(it.desc||"").trim().toLowerCase()]||null;
+      if(!hit) return r;
+      const { line, trip }=hit;
+      if(r.qty!==String(pendingOf(it))) return r;   // aadmi ne badal diya = haath mat lagao
+      const closed=trip.status==="Closed"&&Number(line.net_kg_share)>0;
+      if(closed&&kgPerUnit(it.unit)) return { ...r, qty:String(kgIn(line.net_kg_share, it.unit).qty) };
+      // Order Nos/cft me ho to net "kitna aaya" nahi hota — tab is gadi ke
+      // challan ki qty, agar wo usi unit me likhi gayi hai (2 gadi ka order,
+      // 1 gadi aayi → 1).
+      const cUnit=String(line.challan_unit||"").trim()||line.order_unit;
+      if(Number(line.challan_qty)>0&&String(cUnit||"")===String(it.unit||"")) return { ...r, qty:String(Number(line.challan_qty)) };
+      return r;
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[weigh]);
   // Problem seen while unloading — goes to grn_issues with the GRN, so the
   // material's flow drawer shows it afterwards.
   const [issues,setIssues]=useState([]);

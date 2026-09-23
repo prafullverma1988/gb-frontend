@@ -11,6 +11,18 @@ export function kgPerUnit(unit) {
   return null;
 }
 
+// Challan ki unit order ki unit se alag ho sakti hai: order aksar "2 Nos"
+// (= 2 gadi) ya cft me hota hai aur challan par wazan likha aata hai. Pehle
+// challan ki qty hamesha order ki unit me hi bharni padti thi — ek gadi ka
+// wazan kahin darj hi nahi hota tha. Wahi list app (src/weighShared.js) me.
+export const WEIGH_UNITS = ["Ton", "kg", "Quintal"];
+export function challanUnits(orderUnit) {
+  const u = String(orderUnit || "").trim();
+  const out = u ? [u] : [];
+  for (const w of WEIGH_UNITS) if (!out.some((x) => x.toLowerCase() === w.toLowerCase())) out.push(w);
+  return out;
+}
+
 export const fmtKg = (n) =>
   n == null || n === "" || isNaN(Number(n)) ? "—" : Math.round(Number(n)).toLocaleString("en-IN") + " kg";
 
