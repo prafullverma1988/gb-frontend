@@ -12,9 +12,10 @@
 // leta hai aur usi INSERT me link kar deta hai. "Link Existing Project"
 // alag rasta hai, wo PUT /tenders/:id/link-project use karta hai.
 // ════════════════════════════════════════════════════════════════════
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import PhotoLocateModal from "./tabs/PhotoLocateModal";
 import TenderAiPlan from "./tabs/TenderAiPlan";
+import BoqMatrixImport from "./tabs/BoqMatrixImport";
 import DangerDelete from "./shared/DangerDelete";
 import * as XLSX from "xlsx";
 import api, { getUser, API_BASE, getToken } from "../config/api";
@@ -23,6 +24,7 @@ import { useToast } from "../components/Toast";
 // TabTransaction bhi yahi karte hain, taaki receipt banane ke rules ek jagah rahein.
 import { CreateTransactionModal } from "./FinanceModule";
 import { t, Rich } from "../i18n";
+import { BackClose } from "../utils/backNav";
 
 // ── THEME TOKENS ────────────────────────────────────────────────────
 // Module self-contained rehta hai (Finance/CRM/Projects jaisa) — inhi
@@ -314,6 +316,7 @@ const SelIn = ({value, onChange, options, ph}) => (
 // Modal shell — backdrop + panel + header + scrollable body + footer
 const Modal = ({title, sub, onClose, children, footer, width=560, Icon}) => (
   <>
+    <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
     <div onClick={onClose} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:998}}/>
     <div style={{position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)",
       width:"min(94vw,"+width+"px)", background:T.surface, borderRadius:10,
@@ -2185,6 +2188,10 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
   const [totalTouched, setTotalTouched] = useState(false);
   // Step 4
   const [reconcile, setReconcile] = useState(null); // backend ka 400 detail
+  // Kai road/site wali (matrix) file — server ne padhi; {b64, data} ho to
+  // purane 4 step ki jagah BoqMatrixImport khulta hai.
+  const [matrix, setMatrix] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
 
   const loadSheet = useCallback((book, name) => {
     const rows = sheetToAoa(book.Sheets[name]);
@@ -2232,9 +2239,45 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
       setSheetScores(scores);
       const best = scores.length ? scores[0].name : book.SheetNames[0];
       loadSheet(book, best);
+      await askServer(book, buf, f.name);
     } catch (_) {
       setErr(t("tenders.file_padhne_me_dikkat_sahi_xlsx"));
     }
+  };
+
+  // ── Server se naksha ──────────────────────────────────────────────
+  // Browser ka andaza (pehli 3-text wali row = header, /item/ = description)
+  // sarkari BOQ par galat padta tha. Server (gb-backend utils/boqSheet.js)
+  // file padh kar naksha deta hai:
+  //   • kai road/site (matrix) → naya screen: har road ka hissa + file se match
+  //   • seedhi BOQ → yahi purana wizard, bas header row aur column server ke
+  // Server na mile / na samjhe to purana andaza hi rehta hai — kuch rukta nahi.
+  const askServer = async (book, buf, name) => {
+    setMatrix(null);
+    setAnalyzing(true);
+    try {
+      const bytes = new Uint8Array(buf);
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      const b64 = window.btoa(bin);
+      const r = await api.post(`/tenders/${tenderId}/boq/analyze`, { file_b64: b64, file_name: name });
+      if (r && r.success && r.data && r.data.layout) {
+        const L = r.data.layout;
+        if (L.kind === "matrix" && (r.data.sites || []).length >= 2) { setMatrix({ b64, data: r.data }); return; }
+        if (L.kind === "flat" && book.SheetNames.includes(L.sheet) && (L.header_rows || []).length) {
+          const rows = sheetToAoa(book.Sheets[L.sheet]);
+          const colIdx = (l) => (l ? String(l).toUpperCase().split("").reduce((a, c) => a * 26 + (c.charCodeAt(0) - 64), 0) - 1 : null);
+          setSheetName(L.sheet); setAoa(rows);
+          setHeaderRow(L.header_rows[L.header_rows.length - 1] - 1);
+          const m = {};
+          [["item_no", L.cols.sno], ["sor_code", L.cols.item_code], ["description", L.cols.description],
+           ["unit", L.cols.unit], ["qty", L.cols.qty], ["rate", L.cols.rate], ["amount", L.cols.amount]]
+            .forEach(([k, l]) => { const i = colIdx(l); if (i != null) m[k] = i; });
+          setMapping(m);
+        }
+      }
+    } catch (_) { /* server na mile to browser ka andaza hi chale */ }
+    finally { setAnalyzing(false); }
   };
 
   const headerCells = aoa[headerRow] || [];
@@ -2286,7 +2329,13 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
       setErr(res?.message || "Import nahi hua");
       return;
     }
-    toast.success(`${res.data.row_count} items import ho gaye` + (nFiles > 1 ? ` (file ${fileNo}/${nFiles})` : ""));
+    await afterImport(res);
+  };
+
+  // Import ke baad ka kaam — purana wizard aur matrix screen dono yahi chalate hain
+  const afterImport = async (res) => {
+    setMatrix(null);
+    toast.success((res.message || `${res.data.row_count} items import ho gaye`) + (nFiles > 1 ? ` (file ${fileNo}/${nFiles})` : ""));
     onDone && onDone();
     rawDone.current.push(rawFile);
     if (queue.length) {
@@ -2305,7 +2354,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
     onClose();
   };
 
-  const canNext = step === 1 ? aoa.length > 0
+  const canNext = step === 1 ? (aoa.length > 0 && !analyzing)
                 : step === 2 ? (!missing.length && parsed.rows.length > 0)
                 : step === 3 ? liveRows.length > 0
                 : false;
@@ -2315,6 +2364,15 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
     position:"sticky", top:0};
   const td = {fontSize:11.5, color:T.t2, padding:"6px 8px", borderBottom:`1px solid ${T.b1}`,
     whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"};
+
+  // Kai road/site wali file — apna screen (har road ka hissa + file ke jod se match)
+  if (matrix) {
+    return (
+      <BoqMatrixImport tenderId={tenderId} fileName={fileName} fileB64={matrix.b64} initial={matrix.data}
+        boqFinal={boqFinal} onClose={onClose} onImported={afterImport}
+        onFallback={() => setMatrix(null)} />
+    );
+  }
 
   return (
     <Modal title={t("boq_import_wizard.boq_import")} Icon={IcUpload} onClose={onClose} width={940}
@@ -2360,6 +2418,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
               <IcChk size={20} color={T.grn}/>
               <span style={{fontSize:13, color:T.grn, fontWeight:700}}>{fileName}</span>
               <span style={{fontSize:11.5, color:T.t3}}>{t("tenders.aoa_rows_padhi_gayi_badalne_ke", { aoa: aoa.length })}</span>
+              {analyzing && <span style={{fontSize:11.5, color:T.ind, fontWeight:600}}>{t("boq_matrix.analyzing")}</span>}
             </div>
           ) : (
             <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:7}}>
@@ -2628,20 +2687,24 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
 // ════════════════════════════════════════════════════════════════════
 // REVERT IMPORT — type REVERT to confirm
 // ════════════════════════════════════════════════════════════════════
-function RevertImportModal({tenderId, imp, onClose, onDone}) {
+function RevertImportModal({tenderId, imp, boqFinal, onClose, onDone}) {
   const toast = useToast();
   const [txt, setTxt]   = useState("");
+  const [reason, setReason] = useState("");   // final BOQ par server wajah maangta hai
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState("");
-  const match = txt.trim().toUpperCase() === "REVERT";
+  const needReason = boqFinal && reason.trim().length < 10;
+  const match = txt.trim().toUpperCase() === "REVERT" && !needReason;
 
   const submit = async () => {
+    if (needReason) return setErr(t("tenders.revert_reason_chahiye"));
     if (!match) return setErr(t("tenders.confirm_karne_ke_liye_revert_likho"));
     setErr(""); setBusy(true);
-    const res = await api.post(`/tenders/${tenderId}/boq/imports/${imp.id}/revert`);
+    const res = await api.post(`/tenders/${tenderId}/boq/imports/${imp.id}/revert`,
+      boqFinal ? { reason: reason.trim() } : {});
     setBusy(false);
-    if (!res?.success) { setErr(res?.message || "Revert nahi hua"); return; }
-    toast.success(`Import revert ho gaya — ${res.items_hidden} items hate`);
+    if (!res?.success) { setErr(res?.message || t("tenders.revert_nahi_hua")); return; }
+    toast.success(t("tenders.revert_ho_gaya_n_hate", { n: res.items_hidden }));
     onDone && onDone();
     onClose();
   };
@@ -2664,6 +2727,19 @@ function RevertImportModal({tenderId, imp, onClose, onDone}) {
          {t("tenders.is_import_ki")} <b>{imp.active_items ?? imp.row_count} items</b> {t("tenders.boq_se_hat_jayengi_haath_se")} <b>{t("tenders.koi_asar_nahi")}</b> {t("tenders.padega")}
         </div>
       </div>
+      {boqFinal && (
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:12, color:T.t2, fontWeight:600, marginBottom:6}}>{t("tenders.revert_reason_label")}</div>
+          <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2}
+            placeholder={t("tenders.revert_reason_ph")}
+            style={{width:"100%", padding:"8px 11px", borderRadius:7, border:`1.5px solid ${needReason ? T.ambM || T.b1 : T.b1}`,
+              fontSize:12.5, color:T.t1, background:T.surface, outline:"none", resize:"vertical",
+              boxSizing:"border-box", fontFamily:"inherit"}}/>
+          <div style={{fontSize:11, color:needReason ? T.amb : T.grn, marginTop:3}}>
+            {t("tenders.revert_reason_count", { n: reason.trim().length })}
+          </div>
+        </div>
+      )}
       <div style={{fontSize:12, color:T.red, marginBottom:8}}>
        {t("projects.confirm_karne_ke_liye")} <strong>REVERT</strong> {t("projects.type_karo")}
       </div>
@@ -3143,6 +3219,35 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, reloadTen
 
   const shownTotal = round2(filtered.reduce((s,i)=>s+Number(i.amount||0), 0));
 
+  // ── Group (road / sub-head) ──────────────────────────────────────
+  // "Har road alag" wale import me har item ka sub_head = road ka naam —
+  // 10 road × ~55 item ek lambi list me kho jaate the. Do ya zyada group hon
+  // to road-wise khanche: naam, ginti, A (kaam) / B (maintenance) / kul.
+  // Bahut group hon to shuru me band (pehle road ki list dikhe); search
+  // chalte hi milne wale group khule.
+  const groups = useMemo(()=>{
+    const order = [], by = new Map();
+    for (const it of filtered) {
+      const k = String(it.sub_head || "");
+      if (!by.has(k)) { by.set(k, []); order.push(k); }
+      by.get(k).push(it);
+    }
+    const all = new Set(items.map(i => String(i.sub_head || "")));
+    if (all.size < 2) return null;
+    return order.map(k => {
+      const list = by.get(k);
+      const tot = round2(list.reduce((s,i)=>s+Number(i.amount||0), 0));
+      const b = round2(list.filter(i => /^maintenance/i.test(String(i.parent_desc || ""))).reduce((s,i)=>s+Number(i.amount||0), 0));
+      return { key: k, items: list, tot, b, a: round2(tot - b) };
+    });
+  }, [filtered, items]);
+  const [closedGrp, setClosedGrp] = useState(null);   // null = abhi default nahi laga
+  useEffect(()=>{
+    if (groups && closedGrp === null) setClosedGrp(new Set(groups.length > 3 ? groups.map(g => g.key) : []));
+  }, [groups, closedGrp]);
+  const grpOpen = (k) => !!search.trim() || !(closedGrp && closedGrp.has(k));
+  const toggleGrp = (k) => setClosedGrp(prev => { const n = new Set(prev || []); n.has(k) ? n.delete(k) : n.add(k); return n; });
+
   const delItem = async (it) => {
     // Final BOQ par reason wala modal; warna seedha confirm.
     if (boqFinal) { setDelOf(it); return; }
@@ -3251,7 +3356,8 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, reloadTen
           {changeLog.map(l=>{
             const act = {edit:{l:t("common.edit_2"), c:T.amb, bg:T.ambL}, delete:{l:t("activity_log.deleted"), c:T.red, bg:T.redL},
                          add:{l:t("tenders.added"), c:T.grn, bg:T.grnL}, add_extra:{l:t("tenders.extra_added"), c:T.amb, bg:T.ambL},
-                         add_substituted:{l:t("tenders.substituted"), c:T.blu, bg:T.bluL}}[l.action]
+                         add_substituted:{l:t("tenders.substituted"), c:T.blu, bg:T.bluL},
+                         import_revert:{l:t("tenders.import_revert"), c:T.red, bg:T.redL}}[l.action]
                      || {l:l.action, c:T.t3, bg:T.sltL};
             let ch = null;
             try { ch = l.changes_json ? JSON.parse(l.changes_json) : null; } catch (_) {}
@@ -3387,9 +3493,36 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, reloadTen
 
         {!filtered.length && <Empty text={t("tenders.is_search_me_koi_item_nahi")}/>}
 
-        {filtered.map((it,i)=>(
+        {groups && !search.trim() && (
+          <div style={{display:"flex", justifyContent:"flex-end", gap:12, padding:"6px 14px", borderBottom:`1px solid ${T.b1}`}}>
+            {[[t("tenders.boq_group_sab_kholo"), ()=>setClosedGrp(new Set())],
+              [t("tenders.boq_group_sab_band"), ()=>setClosedGrp(new Set(groups.map(g=>g.key)))]].map(([l, fn])=>(
+              <button key={l} onClick={fn} style={{border:"none", background:"none", padding:0, color:T.ind, fontSize:11.5,
+                fontWeight:600, cursor:"pointer", fontFamily:"inherit"}}>{l}</button>
+            ))}
+          </div>
+        )}
+
+        {(groups || [{ key: null, items: filtered }]).map(g=>(
+        <Fragment key={g.key === null ? "_all" : "g:" + g.key}>
+        {g.key !== null && (
+          <div onClick={()=>toggleGrp(g.key)}
+            style={{display:"flex", alignItems:"center", gap:10, padding:"9px 14px", cursor:"pointer",
+              background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, borderTop:`1px solid ${T.b1}`}}>
+            <span style={{fontSize:11, color:T.t3, width:12, display:"inline-block"}}>{grpOpen(g.key) ? "▾" : "▸"}</span>
+            <span style={{fontSize:12.5, fontWeight:700, color:T.t1, flex:1, minWidth:0, overflow:"hidden",
+              textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{g.key || t("tenders.boq_group_bina_naam")}</span>
+            <span style={{fontSize:11, color:T.t3, whiteSpace:"nowrap"}}>{t("tenders.boq_group_items", { n: g.items.length })}</span>
+            <span style={{fontSize:12, fontWeight:700, color:T.t1, whiteSpace:"nowrap", fontVariantNumeric:"tabular-nums"}}>
+              {g.b > 0
+                ? t("tenders.boq_group_a_b", { a: moneyF(g.a), b: moneyF(g.b), tot: moneyF(g.tot) })
+                : t("tenders.boq_group_kul", { tot: moneyF(g.tot) })}
+            </span>
+          </div>
+        )}
+        {(g.key === null || grpOpen(g.key)) && g.items.map((it,i)=>(
           <div key={it.id} style={{display:"grid", gridTemplateColumns:COLS, padding:"9px 14px", gap:9,
-            alignItems:"center", borderBottom:i<filtered.length-1?`1px solid ${T.b1}`:"none"}}>
+            alignItems:"center", borderBottom:(i<g.items.length-1 || g.key !== null)?`1px solid ${T.b1}`:"none"}}>
             <span style={{fontSize:11.5, color:T.t2, fontWeight:600, display:"flex", alignItems:"center", gap:4}}>
               {it.item_no || "--"}
               {it.item_type === "extra" && <Pill label={t("tenders.extra")} c={T.amb} bg={T.ambL}/>}
@@ -3457,6 +3590,8 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, reloadTen
             </div>
           </div>
         ))}
+        </Fragment>
+        ))}
 
         {/* Totals footer */}
         <div style={{display:"grid", gridTemplateColumns:COLS, padding:"10px 14px", gap:9,
@@ -3488,7 +3623,7 @@ function BoqTab({tenderId, boq, loading, reload, rateType, autoImport, reloadTen
         onCancel={()=>setDelOf(null)}
         onConfirm={(reason)=>delItemWithReason(delOf, reason)}/>
     )}
-    {revertOf && <RevertImportModal tenderId={tenderId} imp={revertOf}
+    {revertOf && <RevertImportModal tenderId={tenderId} imp={revertOf} boqFinal={boqFinal}
       onClose={()=>setRevertOf(null)} onDone={reload}/>}
   </>);
 }
@@ -3842,6 +3977,24 @@ const DONE_COLOUR = "#059669";   // laid — same green the rest of the app uses
 // in green over the part still to do. Walks the vertices, then interpolates
 // inside the segment where the distance runs out — otherwise the colour would
 // only ever change at a vertex, which on a 500 m stretch is a visible lie.
+// ── Tooti hui line ("Tod do") ────────────────────────────────────────
+// Ek hi line, beech me khaali jagah — pipeline road crossing chhod kar
+// aage badhti hai, ya line par T nikalta hai. `gaps` batata hai kis point
+// se naya tukda shuru hota hai. Naksha par gap par lakeer NAHI khinchti,
+// aur chainage/progress dono usi jagah ko chhod kar chalte hain — warna
+// green tip aur bill ka aankda alag-alag jagah dikhate.
+function partsOfLine(coords, gaps) {
+  const arr = Array.isArray(coords) ? coords : [];
+  const cuts = (Array.isArray(gaps) ? gaps : [])
+    .map(Number).filter((i) => Number.isInteger(i) && i > 0 && i < arr.length)
+    .filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
+  if (!cuts.length) return arr.length ? [arr] : [];
+  const out = []; let from = 0;
+  for (const c of cuts) { out.push(arr.slice(from, c)); from = c; }
+  out.push(arr.slice(from));
+  return out.filter((p) => p.length);
+}
+
 function splitPathAt(g, coords, metres) {
   const pts = (coords || []).map(c => new g.maps.LatLng(c.lat, c.lng));
   if (pts.length < 2 || !(metres > 0)) return { done: [], rest: pts };
@@ -4306,59 +4459,88 @@ function MapTab({tenderId, sites}) {
         // ki ROW ka ehsaas nahi deti, aur naali kahan padegi ye bhi tabhi
         // samajh aata hai. Zoom badalne par apne aap sahi naapti hai kyunki
         // ye asli lat/lng ki aakriti hai, pixel ki moti lakeer nahi.
+        // Tooti hui line ho to har tukda apna — footprint bhi, lakeer bhi.
+        const parts = partsOfLine(coords, it.gaps);
         if (Number(it.width_m) > 0) {
-          const foot = corridorJS(coords, Number(it.width_m));
-          if (foot.length >= 3) {
-            const poly = new g.maps.Polygon({ paths: foot, strokeColor: lineColour(it.atype),
-              strokeOpacity: 0.35, strokeWeight: 1, fillColor: lineColour(it.atype),
-              fillOpacity: 0.14, clickable: false, map: mapRef.current });
-            shapesRef.current.push(poly);
-          }
+          parts.forEach((part) => {
+            const foot = corridorJS(part, Number(it.width_m));
+            if (foot.length >= 3) {
+              const poly = new g.maps.Polygon({ paths: foot, strokeColor: lineColour(it.atype),
+                strokeOpacity: 0.35, strokeWeight: 1, fillColor: lineColour(it.atype),
+                fillOpacity: 0.14, clickable: false, map: mapRef.current });
+              shapesRef.current.push(poly);
+            }
+          });
         }
-        const pl = new g.maps.Polyline({ path: coords, strokeColor: lineColour(it.atype),
-          strokeWeight: 4, strokeOpacity: 0.9, map: mapRef.current });
-        // Click = stretch ka dashboard. (Pehle sirf ek toast tha.)
-        pl.addListener("click", ()=>openStretch(it.id));
-        shapesRef.current.push(pl);
+        parts.forEach((part) => {
+          const pl = new g.maps.Polyline({ path: part, strokeColor: lineColour(it.atype),
+            strokeWeight: 4, strokeOpacity: 0.9, map: mapRef.current });
+          // Click = stretch ka dashboard. (Pehle sirf ek toast tha.)
+          pl.addListener("click", ()=>openStretch(it.id));
+          shapesRef.current.push(pl);
+        });
         // Chainage ke nishaan — sirf un lines par jinka shuruaati chainage
         // pata hai. Step lambai ke hisaab se, warna 20 km ki line par
         // hazaar label ban kar naksha dhak jaata.
         if (it.start_chainage_m != null) {
           const L = Number(it.length_m || 0);
           const step = L >= 5000 ? 1000 : L >= 2000 ? 500 : L >= 400 ? 100 : L >= 100 ? 50 : 0;
-          chainageMarks(coords, step, Number(it.start_chainage_m), (a,b)=>pathLenM([a,b])).forEach((c)=>{
-            shapesRef.current.push(new g.maps.Marker({
-              map: mapRef.current, position: { lat:c.lat, lng:c.lng }, clickable:false, zIndex:6,
-              label: { text: c.label, color:"#0369A1", fontSize:"10px", fontWeight:"700" },
-              icon: { path: g.maps.SymbolPath.CIRCLE, scale:2.5, fillColor:"#7DD3FC", fillOpacity:0.95,
-                strokeColor:"#0369A1", strokeWeight:1 },
-            }));
+          // Chainage gap ke aar-paar lagataar chalti hai, par chhodi hui
+          // jagah usme judti nahi — isliye har tukde par alag, pichhle
+          // tukde ke ant se aage.
+          let chAt = Number(it.start_chainage_m);
+          parts.forEach((part) => {
+            chainageMarks(part, step, chAt, (a,b)=>pathLenM([a,b])).forEach((c)=>{
+              shapesRef.current.push(new g.maps.Marker({
+                map: mapRef.current, position: { lat:c.lat, lng:c.lng }, clickable:false, zIndex:6,
+                label: { text: c.label, color:"#0369A1", fontSize:"10px", fontWeight:"700" },
+                icon: { path: g.maps.SymbolPath.CIRCLE, scale:2.5, fillColor:"#7DD3FC", fillOpacity:0.95,
+                  strokeColor:"#0369A1", strokeWeight:1 },
+              }));
+            });
+            chAt += pathLenM(part);
           });
         }
         if (g.maps.geometry?.spherical) {
+          // Kitna ho chuka, ye lambai me naapa jaata hai — aur tooti line
+          // par lambai gap chhod kar hi ginti hai. Isliye tukdon par CHAL
+          // kar rang bharte hain: fromM se toM tak, gap ko bina gine.
+          const walkRange = (fromM, toM, draw) => {
+            let acc = 0;
+            for (const part of parts) {
+              const L = pathLenM(part);
+              if (L <= 0) continue;
+              const a = Math.max(0, fromM - acc), b = Math.min(L, toM - acc);
+              if (b > a + 0.01) {
+                const { done: uptoB } = splitPathAt(g, part, b);
+                const ll = uptoB.map((p) => ({ lat: p.lat(), lng: p.lng() }));
+                const seg = a > 0.01 ? splitPathAt(g, ll, a).rest : uptoB;
+                if (seg.length >= 2) draw(seg);
+              }
+              acc += L;
+              if (acc >= toM) break;
+            }
+          };
           // Pakka (MB) — solid green.
           if (doneM > 0) {
-            const { done } = splitPathAt(g, coords, doneM);
-            if (done.length >= 2) {
-              const dl = new g.maps.Polyline({ path: done, strokeColor: DONE_COLOUR,
+            walkRange(0, doneM, (seg) => {
+              const dl = new g.maps.Polyline({ path: seg, strokeColor: DONE_COLOUR,
                 strokeWeight: 6, strokeOpacity: 0.95, zIndex: 2, map: mapRef.current });
               dl.addListener("click", ()=>openStretch(it.id));
               shapesRef.current.push(dl);
-            }
+            });
           }
           // Kachcha (task par likha, MB se aage) — dotted green. Do sach
           // alag-alag: bill jitna solid, site ki taaza khabar jitni dotted.
           if (taskM > doneM) {
-            const { done: uptoTask } = splitPathAt(g, coords, taskM);
-            const { rest: kachchaSeg } = splitPathAt(g, uptoTask.map(p=>({lat:p.lat(), lng:p.lng()})), doneM);
-            if (kachchaSeg.length >= 2) {
-              const kl = new g.maps.Polyline({ path: kachchaSeg, strokeOpacity: 0, zIndex: 2,
+            walkRange(doneM, taskM, (seg) => {
+              const kl = new g.maps.Polyline({ path: seg, strokeOpacity: 0, zIndex: 2,
                 icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 0.9, strokeColor: DONE_COLOUR, scale: 3 },
                   offset: "0", repeat: "14px" }],
                 map: mapRef.current });
               kl.addListener("click", ()=>openStretch(it.id));
               shapesRef.current.push(kl);
-            }
+            });
           }
         }
         coords.forEach(c=>bounds.extend(c));
@@ -7295,6 +7477,17 @@ function TenderDetail({tenderId, initialTab, freshBoq, onBack, onOpenProject}) {
 
   useEffect(()=>{ setLoading(true); load(); }, [load]);
   useEffect(()=>{ setBoqLoading(true); loadBoq(); }, [loadBoq]);
+  // Tender ka status/contract badla (Edit, stage badalna) to BOQ ka summary
+  // bhi dobara — premium tile aur "BOQ final" usi se bante hain. Pehle sirf
+  // header taaza hota tha aur contract badalne ke baad bhi purana +14.06%
+  // atka rehta tha (RATNA, 22 Sep).
+  const boqKeyRef = useRef(null);
+  const boqKey = data ? `${data.status}|${data.contract_value}|${data.premium_pct}` : null;
+  useEffect(()=>{
+    if (boqKey === null) return;
+    if (boqKeyRef.current !== null && boqKeyRef.current !== boqKey) loadBoq();
+    boqKeyRef.current = boqKey;
+  }, [boqKey, loadBoq]);
 
   // Stage peeche gaya (admin) to jis tab par khade the wo gayab ho sakta hai —
   // aise me chupchaap Overview par le aao, warna khali screen dikhti.

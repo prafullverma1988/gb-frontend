@@ -1,9 +1,11 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import CityPicker from "../components/CityPicker";
 import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { readSheet, sheetToRows } from "../utils/sheetRows";
 import { t, Rich } from "../i18n";
+import { BackClose } from "../utils/backNav";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -108,6 +110,7 @@ function Modal({ open, onClose, title, desc, width = 600, children }) {
   if (!open) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.font }}>
+      <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
       {/* backdrop — click-to-close removed so a stray outside click can't wipe a half-filled form; use the × / Cancel button */}
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }} />
       <div style={{ position: "relative", width, maxWidth: "94vw", maxHeight: "90vh", background: T.card, borderRadius: 14, boxShadow: T.shadowLg, display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
@@ -1482,6 +1485,78 @@ function PartyMasterSection() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// 3b. PROJECT TYPE (construction_types)
+// ═══════════════════════════════════════════════════════════════════════
+// Project type ka master pehle se tha (naya project banate waqt yahi list
+// dikhti hai, aur Rate Card ka dhaancha bhi Project Type → City → Work
+// Category → Rate hai) — par use dekhne/badalne ki apni jagah nahi thi,
+// sirf Rate Card ke andar chip se naya jud paata tha. Ab Library me apna
+// tile hai, aur har type ke saamne dikhta hai ki usme kaun si work category
+// aati hai.
+function ProjectTypeSection() {
+  const { items: types, loading, save: apiSave, del: apiDel } = useSection("construction-types");
+  const { items: workCats } = useSection("work-categories");
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: "", description: "" });
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const filtered = types.filter(x => (x.name || "").toLowerCase().includes(search.toLowerCase()));
+  const openCreate = () => { setEditing(null); setForm({ name: "", description: "" }); setShowModal(true); };
+  const openEdit = (x) => { setEditing(x); setForm({ name: x.name, description: x.description || "" }); setShowModal(true); };
+  const save = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    const res = await apiSave({ name: form.name.trim(), description: form.description }, editing?.id);
+    setSaving(false);
+    if (res.success) setShowModal(false);
+    else alert(res.message || "Save failed");
+  };
+
+  // Is type me kaun si category aati hai. Jis category par koi type nahi
+  // chuna wo har type me chalti hai — isliye wo yahan bhi ginti hai.
+  const catsOfType = (typeId) => (workCats || []).filter(
+    c => !(c.type_ids || []).length || (c.type_ids || []).includes(typeId));
+
+  const columns = [
+    { key: "name", label: t("master_library.project_type"), minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "cats", label: t("master_library.work_categories"), minW: 300, render: r => {
+        const list = catsOfType(r.id);
+        if (!list.length) return <span style={{ color: T.textLight }}>—</span>;
+        return (
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {list.slice(0, 6).map(c => (
+              <span key={c.id} style={{ fontSize: 11, fontWeight: 600, color: T.purple, background: T.purpleSoft, padding: "2px 8px", borderRadius: 10 }}>{c.name}</span>
+            ))}
+            {list.length > 6 && <span style={{ fontSize: 11, color: T.textMid }}>+{list.length - 6}</span>}
+          </div>
+        );
+      } },
+    { key: "description", label: t("common.description"), minW: 200, render: r => <span style={{ fontSize: 12, color: T.textMid }}>{r.description || "—"}</span> },
+  ];
+
+  return (
+    <div>
+      <Toolbar search={search} setSearch={setSearch} count={filtered.length}
+        label={t("master_library.project_types")} onAdd={openCreate} addLabel={t("master_library.add_project_type")} />
+      <DataTable columns={columns} data={filtered} loading={loading} onEdit={openEdit} onDelete={apiDel} />
+      <Modal open={showModal} onClose={() => setShowModal(false)}
+        title={editing ? t("master_library.edit_project_type") : t("master_library.add_project_type")} width={480}>
+        <FormField label={t("master_library.project_type_name")} value={form.name} onChange={v => upd("name", v)}
+          placeholder={t("master_library.e_g_road_project")} required />
+        <div style={{ height: 12 }} />
+        <FormTextarea label={t("common.description")} value={form.description} onChange={v => upd("description", v)}
+          placeholder={t("master_library.is_type_me_kaisa_kaam")} rows={2} />
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save}
+          saveLabel={saving ? "Saving..." : editing ? "Update" : "Create"} />
+      </Modal>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // 4. WORK CATEGORY
 // ═══════════════════════════════════════════════════════════════════════
 function WorkCategorySection() {
@@ -1499,15 +1574,22 @@ function WorkCategorySection() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", code: "", desc: "" });
+  const [form, setForm] = useState({ name: "", code: "", desc: "", type_ids: [] });
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  // Ek category kai project type me aa sakti hai (Earthwork sadak me bhi,
+  // pipeline me bhi). Ek bhi type na chuno to wo SAB type me chalti hai.
+  const { items: projTypes } = useSection("construction-types");
+  const toggleType = (id) => setForm(p => ({
+    ...p,
+    type_ids: p.type_ids.includes(id) ? p.type_ids.filter(x => x !== id) : [...p.type_ids, id],
+  }));
 
   const filtered = cats.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     (c.code||"").toLowerCase().includes(search.toLowerCase())
   );
-  const openCreate = () => { setEditing(null); setForm({ name: "", code: "", desc: "" }); setShowModal(true); };
-  const openEdit = (c) => { setEditing(c); setForm({ name: c.name, code: c.code||"", desc: c.description||c.desc||"" }); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setForm({ name: "", code: "", desc: "", type_ids: [] }); setShowModal(true); };
+  const openEdit = (c) => { setEditing(c); setForm({ name: c.name, code: c.code||"", desc: c.description||c.desc||"", type_ids: c.type_ids || [] }); setShowModal(true); };
   const save = async () => {
     if (!form.name.trim()) return alert(t("master_library.work_category_name_required"));
     setSaving(true);
@@ -1518,6 +1600,7 @@ function WorkCategorySection() {
       description: form.desc,
       unit:        "",
       rate:        0,
+      type_ids:    form.type_ids,
     }, editing?.id);
     setSaving(false);
     if (res.success) setShowModal(false);
@@ -1551,6 +1634,15 @@ function WorkCategorySection() {
         ? <code style={{ fontSize: 12, fontWeight: 600, color: T.purple, background: T.purpleSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code>
         : <span style={{ color: T.textLight }}>—</span> },
     { key: "name",        label: t("master_library.work_category"), minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "types", label: t("master_library.project_types"), minW: 200, render: r => {
+        const names = r.type_names || [];
+        if (!names.length) return <span style={{ fontSize: 11.5, color: T.textMid }}>{t("master_library.sab_project_type")}</span>;
+        return (
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {names.map(n => <span key={n} style={{ fontSize: 11, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 10 }}>{n}</span>)}
+          </div>
+        );
+      } },
     { key: "description", label: t("common.description"),   minW: 260, render: r => <span style={{ fontSize: 12, color: T.textMid }}>{r.description || r.desc || "—"}</span> },
   ];
 
@@ -1565,6 +1657,26 @@ function WorkCategorySection() {
           <FormField label={t("common.code")} value={form.code} onChange={v => upd("code", v.toUpperCase())} placeholder={t("master_library.e_g_rcc")} half />
         </div>
         <FormTextarea label={t("common.description")} value={form.desc} onChange={v => upd("desc", v)} placeholder={t("master_library.what_work_is_included")} rows={2} />
+        {/* Ye category kin project type me aati hai — kuch na chuno to sab me */}
+        <div style={{ marginTop: 14 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: T.textMid, textTransform: "uppercase", letterSpacing: ".4px", display: "block", marginBottom: 6 }}>
+            {t("master_library.kin_project_type_me")}
+          </label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {projTypes.map(pt => {
+              const on = form.type_ids.includes(pt.id);
+              return (
+                <button key={pt.id} type="button" onClick={() => toggleType(pt.id)}
+                  style={{ padding: "5px 12px", borderRadius: 14, cursor: "pointer", fontSize: 12, fontWeight: 600,
+                    border: `1.5px solid ${on ? T.blue : T.border}`, background: on ? T.blueSoft : T.card, color: on ? T.blue : T.textMid }}>
+                  {on ? "✓ " : ""}{pt.name}
+                </button>
+              );
+            })}
+            {!projTypes.length && <span style={{ fontSize: 12, color: T.textLight }}>{t("master_library.pehle_project_type_banao")}</span>}
+          </div>
+          <div style={{ fontSize: 11, color: T.textLight, marginTop: 6 }}>{t("master_library.kuch_na_chuno_to_sab_me")}</div>
+        </div>
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Create"} />
       </Modal>
     </div>
@@ -1731,6 +1843,13 @@ function SubconRateCardSection() {
   // master chalta hai (Library -> Work Category). trade_category column me
   // wahi naam string ki tarah jaata hai, isliye koi migration nahi.
   const workCatNames = (workCats || []).map(c => c.name);
+  // Step 1 me chune hue project type ki category — jis category par koi type
+  // nahi chuna wo har type me chalti hai. Sab dekhne ka raasta khula rehta hai.
+  const [tradeShowAll, setTradeShowAll] = useState(false);
+  const tradeNamesForType = (!selType || tradeShowAll)
+    ? workCatNames
+    : (workCats || []).filter(c => !(c.type_ids || []).length || (c.type_ids || []).includes(selType.id)).map(c => c.name);
+  const hiddenTradeCount = workCatNames.length - tradeNamesForType.length;
 
   // Package CRUD modals
   const [addPkgModal, setAddPkgModal] = useState(false);
@@ -2269,10 +2388,21 @@ function SubconRateCardSection() {
            {t("master_library.3_work_category")}
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {workCatNames.map(wc => chipBtn(wc, selTrade===wc, ()=>setSelTrade(wc), T.purple))}
+            {/* Step 1 me project type chun liya hai, to yahan usi type ki
+                category dikhao. Jis category par koi type nahi chuna wo har
+                type me chalti hai. "Sab dikhao" se poori list. */}
+            {tradeNamesForType.map(wc => chipBtn(wc, selTrade===wc, ()=>setSelTrade(wc), T.purple))}
             {addChipBtn(t("master_library.new_category_2"), ()=>openChipAdd("workcat"))}
             {!workCatNames.length && <span style={{color:T.textLight,fontSize:12,alignSelf:"center"}}>{t("master_library.no_work_cats_yet_click_new_category")}</span>}
           </div>
+          {selType && hiddenTradeCount > 0 && (
+            <button type="button" onClick={()=>setTradeShowAll(v=>!v)}
+              style={{background:"none",border:"none",color:T.blue,fontSize:11,fontWeight:700,cursor:"pointer",padding:"8px 0 0"}}>
+              {tradeShowAll
+                ? t("master_library.sirf_is_type_ki_2", { type: selType.name })
+                : t("master_library.sab_dikhao_n_2", { n: hiddenTradeCount })}
+            </button>
+          )}
         </div>
 
         {/* Step 4: Rate Card */}
@@ -5645,6 +5775,10 @@ function BoqItemLibrarySection() {
 
   const [search,    setSearch]    = useState("");
   const [filterCat, setFilterCat] = useState("All");
+  // Project type ka filter — item ka apna type nahi hota, uski category ka
+  // hota hai. "" = sab.
+  const [filterType, setFilterType] = useState("");
+  const { items: projTypes } = useSection("construction-types");
   const [editing,   setEditing]   = useState(null);  // boq_items row or null
   const [showAdd,   setShowAdd]   = useState(false);
   const emptyForm = { name: "", category: catOptions[0] || "", unit: uomOptions[0] || "Sq.Ft", base_rate: 0, description: "" };
@@ -5676,7 +5810,12 @@ function BoqItemLibrarySection() {
   };
 
   // ── Filter ──────────────────────────────────────────────────────────
+  const typeCatNames = !filterType ? null : new Set(
+    (workCats || [])
+      .filter(c => !(c.type_ids || []).length || (c.type_ids || []).includes(Number(filterType)))
+      .map(c => c.name));
   const filtered = rows.filter(r => {
+    if (typeCatNames && !typeCatNames.has(r.category)) return false;
     if (filterCat !== "All" && r.category !== filterCat) return false;
     const q = search.trim().toLowerCase();
     if (!q) return true;
@@ -5687,7 +5826,12 @@ function BoqItemLibrarySection() {
 
   // Cat tabs (with counts).
   const catCounts = rows.reduce((acc, r) => { const k = r.category || "Uncategorized"; acc[k] = (acc[k]||0)+1; return acc; }, {});
-  const allCatPills = ["All", ...Object.keys(catCounts).sort()];
+  // Project type se chhaanto — BOQ item ka apna type nahi hota, uski CATEGORY
+  // ka hota hai (Library → Work Category). Jis category par koi type nahi
+  // chuna wo har type me chalti hai, isliye wo hamesha saath aati hai.
+  const allCatPills = ["All", ...Object.keys(catCounts)
+    .filter(c => !typeCatNames || typeCatNames.has(c))
+    .sort()];
 
   return (
     <div style={{ fontFamily: "inherit" }}>
@@ -5697,6 +5841,11 @@ function BoqItemLibrarySection() {
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder={t("master_library.search_items_by_name_category_or")}
             style={{ flex: 1, maxWidth: 360, padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 12.5, outline: "none", fontFamily: "inherit" }}/>
+          <select value={filterType} onChange={e => { setFilterType(e.target.value); setFilterCat("All"); }}
+            style={{ padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 12.5, outline: "none", fontFamily: "inherit", color: "#374151" }}>
+            <option value="">{t("master_library.sab_project_type")}</option>
+            {projTypes.map(pt => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+          </select>
           <span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} / {rows.length} items</span>
         </div>
         <button onClick={openCreate}
@@ -6602,9 +6751,191 @@ function DesignationSection() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// CITY
+// ═══════════════════════════════════════════════════════════════════════
+// Company kin-kin city me kaam karti hai — project, CRM lead, Client BOQ ke
+// city rate aur Subcon rate card isi list se city lete hain. (Party/vendor
+// ka pata wali city alag hai, wo is list me nahi aati.)
+//
+// Pehle ye list sirf Client BOQ Rate / Subcon Rate Card ke andar se bharti
+// thi, aur uska koi apna ghar nahi tha: kaunsi city kitne project par lagi
+// hai, dikhta nahi tha; naam badlo to project par purana reh jaata; hatao
+// to project ek band city par latak jaata. Aur jin project ki city tay hi
+// nahi thi (bahar se aaye purane project), unhe ek-ek karke kholna padta.
+function CitySection() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [name, setName] = useState("");
+  const [stateName, setStateName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState("");
+  // Bina city ke project
+  const [loose, setLoose] = useState([]);
+  const [picked, setPicked] = useState(() => new Set());
+  const [assignCity, setAssignCity] = useState("");
+  const [assigning, setAssigning] = useState(false);
+  const [assignMsg, setAssignMsg] = useState(null);   // { ok, text }
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [a, b] = await Promise.all([
+        api.get("/library/cities"),
+        api.get("/library/cities/unassigned-projects"),
+      ]);
+      if (a.success) setItems(a.data || []);
+      if (b.success) setLoose(b.data || []);
+    } catch (e) {}
+    setLoading(false);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? items.filter(c => String(c.name).toLowerCase().includes(q) || String(c.state || "").toLowerCase().includes(q))
+    : items;
+  const totalProjects = items.reduce((n, c) => n + Number(c.project_count || 0), 0);
+
+  const openCreate = () => { setEditing(null); setName(""); setStateName(""); setFormErr(""); setShowModal(true); };
+  const openEdit = (c) => { setEditing(c); setName(c.name); setStateName(c.state || ""); setFormErr(""); setShowModal(true); };
+
+  const save = async () => {
+    const nm = name.trim();
+    if (!nm || saving) return;
+    setSaving(true); setFormErr("");
+    try {
+      let res;
+      if (editing) {
+        res = await api.put("/library/cities/" + editing.id, { name: nm, state: stateName });
+        // Naya naam kisi doosri city ka hai — server pehle poochta hai,
+        // jodta baad me. Isi se "raipur" aur "Raipur" ek hote hain.
+        if (!res.success && res.code === "CITY_MERGE_CONFIRM") {
+          const into = res.data?.into || nm;
+          if (!await window.confirmAsync(t("master_library.city_merge_ask", { name: into }))) { setSaving(false); return; }
+          res = await api.put("/library/cities/" + editing.id, { name: nm, state: stateName, merge: true });
+        }
+      } else {
+        res = await api.post("/library/cities", { name: nm, state: stateName });
+      }
+      if (res.success) { setShowModal(false); await load(); }
+      else setFormErr(res.message || t("common.something_went_wrong"));
+    } catch (e) { setFormErr(t("common.something_went_wrong")); }
+    finally { setSaving(false); }
+  };
+
+  const del = async (id) => {
+    const res = await api.del("/library/cities/" + id);
+    if (res.success) await load();
+    else if (res.message) await window.confirmAsync(res.message);
+  };
+
+  const toggle = (id) => setPicked(prev => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const allPicked = loose.length > 0 && loose.every(p => picked.has(p.id));
+  const toggleAll = () => setPicked(allPicked ? new Set() : new Set(loose.map(p => p.id)));
+
+  const assign = async () => {
+    if (assigning) return;
+    if (!assignCity) { setAssignMsg({ ok: false, text: t("master_library.pick_city_first") }); return; }
+    if (!picked.size) { setAssignMsg({ ok: false, text: t("master_library.pick_projects_first") }); return; }
+    setAssigning(true); setAssignMsg(null);
+    try {
+      const res = await api.post("/library/cities/" + assignCity + "/assign-projects", { project_ids: [...picked] });
+      if (res.success) {
+        setAssignMsg({ ok: true, text: t("master_library.assigned_n", { n: res.data?.assigned || 0, city: res.data?.city || "" }) });
+        setPicked(new Set());
+        await load();
+      } else setAssignMsg({ ok: false, text: res.message || t("common.something_went_wrong") });
+    } catch (e) { setAssignMsg({ ok: false, text: t("common.something_went_wrong") }); }
+    setAssigning(false);
+  };
+
+  const count = (v, color, bg) => Number(v) > 0
+    ? <Badge text={String(v)} color={color} bg={bg} />
+    : <span style={{ fontSize: 12, color: T.textLight }}>—</span>;
+  const columns = [
+    { key: "name",  label: t("common.city"), minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "state", label: t("master_library.state"), minW: 120, style: { fontSize: 12.5, color: T.textMid } },
+    { key: "project_count", label: t("common.projects"), minW: 100, render: r => count(r.project_count, T.blue, T.blueSoft) },
+    { key: "lead_count",    label: t("master_library.crm_leads"), minW: 100, render: r => count(r.lead_count, T.purple, T.purpleSoft) },
+    { key: "rate_count",    label: t("master_library.rate_card"), minW: 100, render: r => count(r.rate_count, T.teal, T.tealSoft) },
+  ];
+
+  const selBox = { width: "100%", padding: "9px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`,
+    fontSize: 13, color: T.text, background: "white", outline: "none", boxSizing: "border-box", fontFamily: T.font };
+
+  return (
+    <div>
+      <Toolbar search={search} setSearch={setSearch} count={filtered.length}
+        label={t("master_library.city_library")} onAdd={openCreate} addLabel={t("master_library.add_city")}
+        filterEl={<span style={{ fontSize: 12, color: T.textLight, whiteSpace: "nowrap" }}>
+          {t("master_library.total_cities_projects", { c: items.length, p: totalProjects })}</span>} />
+
+      {/* Bina city ke project — ye kisi city ki ginti me nahi aate. Ek saath
+          chun kar city lagao, har project ko alag se kholna na pade. */}
+      {loose.length > 0 && (
+        <div style={{ background: T.amberSoft, border: `1px solid ${T.amber}33`, borderRadius: T.radius, padding: "12px 14px", marginBottom: 16 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text }}>{t("master_library.unassigned_projects_title", { n: loose.length })}</div>
+          <div style={{ fontSize: 12, color: T.textMid, marginTop: 2, marginBottom: 10 }}>{t("master_library.unassigned_projects_note")}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ flex: "1 1 220px", minWidth: 200 }}>
+              <CityPicker value={assignCity} cities={items} setCities={setItems}
+                onChange={(id) => { setAssignCity(id || ""); setAssignMsg(null); }} selectStyle={selBox} />
+            </div>
+            <button type="button" onClick={toggleAll}
+              style={{ padding: "8px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, background: "white", color: T.textMid, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: T.font }}>
+              {allPicked ? t("master_library.clear_selection") : t("master_library.select_all_projects")}
+            </button>
+            <button type="button" onClick={assign} disabled={assigning}
+              style={{ padding: "8px 14px", borderRadius: T.radiusSm, border: "none", background: T.blue, color: "white", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: T.font, opacity: assigning ? 0.7 : 1 }}>
+              {assigning ? t("common.saving") : t("master_library.assign_city_n", { n: picked.size })}
+            </button>
+          </div>
+          {assignMsg && (
+            <div style={{ fontSize: 12.5, marginBottom: 8, color: assignMsg.ok ? T.green : T.red }}>{assignMsg.text}</div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 6, maxHeight: 260, overflowY: "auto" }}>
+            {loose.map(p => {
+              const on = picked.has(p.id);
+              return (
+                <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 9px", borderRadius: 7, cursor: "pointer",
+                  background: on ? T.blueSoft : "white", border: `1.5px solid ${on ? T.blue : T.border}` }}>
+                  <input type="checkbox" checked={on} onChange={() => toggle(p.id)} />
+                  <span style={{ fontSize: 12.5, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.name}>{p.name}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del}
+        emptyMsg={loading ? t("common.loading") : t("master_library.no_cities_yet")} />
+      <Modal open={showModal} onClose={() => setShowModal(false)}
+        title={editing ? t("master_library.edit_city") : t("master_library.add_city")}
+        desc={editing ? t("master_library.city_rename_note") : t("master_library.city_add_note")}
+        width={440}>
+        <FormField label={t("common.city")} value={name} onChange={setName} placeholder={t("master_library.e_g_raipur")} required />
+        <div style={{ height: 12 }} />
+        <FormField label={t("master_library.state")} value={stateName} onChange={setStateName} placeholder={t("master_library.e_g_chhattisgarh")} />
+        {!!formErr && <div style={{ marginTop: 10, fontSize: 12.5, color: T.red, background: T.redSoft, borderRadius: 7, padding: "8px 11px" }}>{formErr}</div>}
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? t("common.saving") : (editing ? t("common.update") : t("common.create"))} />
+      </Modal>
+    </div>
+  );
+}
+
 const masterSections = [
   // ── ITEM LIBRARY ──────────────────────────────────────────────────
-  { id: "work_cat",      get label() { return t("master_library.work_category"); },       Icon: IcTool,      Comp: WorkCategorySection,      section: "ITEM LIBRARY", countKey: "work_categories", color: T.purple },
+  { id: "project_type",  get label() { return t("master_library.project_type"); },        Icon: IcFolder,    Comp: ProjectTypeSection,       section: "ITEM LIBRARY", countKey: null, color: T.indigo },
+  { id: "work_cat",      get label() { return t("master_library.work_category"); },       Icon: IcTool,      Comp: WorkCategorySection,      section: null, countKey: "work_categories", color: T.purple },
   { id: "material_cat",  get label() { return t("master_library.material_category"); },   Icon: IcFolder,    Comp: MaterialCategorySection,  section: null, countKey: "material_categories", color: T.blue },
   { id: "materials",     get label() { return t("master_library.material_master"); },     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, countKey: "materials", color: T.teal },
   { id: "boq_items",     get label() { return t("master_library.boq_item_library"); },    Icon: IcBox,       Comp: BoqItemLibrarySection,    section: null, countKey: null, color: T.purple },
@@ -6621,6 +6952,7 @@ const masterSections = [
   // gaya taaki ek machine do jagah edit na ho — register wahi ek rahe.
   // ── OTHER ─────────────────────────────────────────────────────────
   { id: "design_library", get label() { return t("master_library.design_library"); },     Icon: IcLayers,    Comp: DesignLibrarySection,     section: "OTHER", countKey: null, color: T.purple },
+  { id: "city",          get label() { return t("master_library.city_library"); },        Icon: IcMap,       Comp: CitySection,              section: null, countKey: null, color: T.rose },
   { id: "uom",           get label() { return t("master_library.units_uom"); },         Icon: IcRuler,     Comp: UOMMasterSection,         section: null, countKey: "uom", color: T.teal },
   // Count hardcoded "14" tha jabki /library/summary asli `expense_heads`
   // ginti pehle se deta hai — live DB me wo 0 thi, to sidebar ek bhari hui

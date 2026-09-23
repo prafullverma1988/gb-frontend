@@ -373,7 +373,7 @@ function UploadModal({ state, setState, projectId, cats, onDone }) {
 
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) setState(null); }}
-      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 200, display: "flex",
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 220, display: "flex",
         alignItems: "center", justifyContent: "center", padding: 18 }}>
       <div style={{ background: T.surface, borderRadius: 12, width: "min(460px,100%)", overflow: "hidden" }}>
         <div style={{ padding: "13px 17px", borderBottom: `1px solid ${T.b1}`, fontSize: 14, fontWeight: 800, color: T.t1 }}>

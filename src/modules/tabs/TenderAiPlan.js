@@ -1,7 +1,12 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
+import { useRoadAccess } from "../road/roadShared";
+
+// Road Levels ki poori screen (Excel import, L-section, graph) bhaari hai aur
+// sirf road wale tender me kaam aati hai — tabhi load ho jab koi button dabaye.
+const RoadPlanLevels = lazy(() => import("../road/RoadPlanLevels"));
 
 /* ────────────────────────────────────────────────────────────────────
    AI PLAN — tender ki workbook se site/task plan, AI ke saath
@@ -210,7 +215,14 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   const [job, setJob] = useState(null);        // {status,kind,error} — peechhe chal raha kaam
   const [dinfo, setDinfo] = useState(null);    // digest ka saar — screen par dikhta hai
   const [boqCount, setBoqCount] = useState(0); // tender me imported BOQ items
+  // BOQ me road ka hissa darj ho (kai road wali file) to plan road-wise banta
+  // hai: AI ek road ka dhaancha, server har road par file ke ankde se.
+  const [roadBoq, setRoadBoq] = useState(null);
   const [err, setErr] = useState("");
+  // "Levels se qty" — kaunse kaam ke liye khula hai, aur lagne ke baad server ke note
+  const roadAccess = useRoadAccess();
+  const [lvl, setLvl] = useState(null);             // { si, wi } | null
+  const [lvlNotes, setLvlNotes] = useState({});     // "si:wi" → [text]
   const fileRef = useRef(null); const chatBoxRef = useRef(null); const prevMsgCount = useRef(0);
   const initialUsed = useRef(null);
 
@@ -230,6 +242,7 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
         setCanExec(!!r.data.can_execute);
         setJob(r.data.draft ? { status: r.data.draft.job_status, kind: r.data.draft.job_kind, error: r.data.draft.job_error } : null);
         setBoqCount(Number(r.data.imported_boq_count) || 0);
+        setRoadBoq(r.data.road_boq || null);
         draft = r.data.draft;
       }
     } catch (_) {}
@@ -361,6 +374,20 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
 
   const upd = (fn) => { setPlan((p) => { const n = JSON.parse(JSON.stringify(p)); fn(n); return n; }); setDirty(true); };
 
+  // Server SAVED plan par levels lagata hai — isliye haath ke edit pehle save.
+  const openLevels = async (si, wi) => {
+    setErr("");
+    if (dirty && plan) {
+      try {
+        const r = await api.put(`/tenders/${tenderId}/ai-plan`, { plan });
+        if (!r?.success) { setErr(r?.message || t("tender_ai_plan.save_fail")); return; }
+        setDirty(false);
+      } catch (e) { setErr(e?.message || t("tender_ai_plan.save_fail")); return; }
+    }
+    setLvl({ si, wi });
+  };
+  const levelsCost = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false).reduce((b, w) => b + (Number(w.est_cost) || 0), 0), 0) : 0;
+
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: T.t4, fontSize: 13 }}>{t("tender_ai_plan.loading")}</div>;
 
   // ── Map par kya markna hai — faisla YAHIN, planning me ──────────
@@ -464,6 +491,14 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
   const totalMarks = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false)
     .reduce((b, w) => b + (hasTukde(w) ? tukdeOf(w).length : (markOn(w) ? 1 : 0)) + (w.stages || []).filter((st) => st.map).length, 0), 0) : 0;
 
+  // Imported BOQ se plan — road-wise BOQ ho to server khud road-wise banata hai
+  const analyzeFromBoq = async () => {
+    setErr(""); setBusy("analyze"); setDinfo(null);
+    const r = await api.post(`/tenders/${tenderId}/ai-plan/analyze`, { from_boq: true }, { timeoutMs: 120000 }).catch((e) => ({ success: false, message: e?.message }));
+    if (r?.success) { setPlan(null); setDirty(false); setExecResult(null); setMsgs([]); setJob({ status: "running", kind: "analyze" }); return; }
+    setErr(r?.message || t("tender_ai_plan.analyze_fail")); setBusy("");
+  };
+
   const totalWorks = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false).length, 0) : 0;
   const totalAmt = plan ? plan.sites.reduce((a, s) => a + s.works.filter((w) => w.take !== false).reduce((b, w) => b + (Number(w.amount) || 0), 0), 0) : 0;
 
@@ -476,6 +511,12 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
         <div style={{ flex: 1 }} />
         {plan && <>
           {dirty && <button onClick={save} disabled={!!busy} style={{ padding: "6px 14px", borderRadius: 7, border: "none", background: T.amb, color: "white", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{busy === "save" ? "…" : t("tender_ai_plan.save_edits")}</button>}
+          {roadBoq && !plan.road && (
+            <button onClick={() => { if (window.confirm(t("tender_ai_plan.road_wise_dobara_confirm", { n: roadBoq.sites }))) analyzeFromBoq(); }} disabled={!!busy}
+              style={{ padding: "6px 12px", borderRadius: 7, border: `1.5px solid ${T.bluM}`, background: T.bluL, color: T.blu, fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+              {t("tender_ai_plan.road_wise_dobara", { n: roadBoq.sites })}
+            </button>
+          )}
           <button onClick={() => fileRef.current?.click()} disabled={!!busy} style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, fontSize: 11.5, cursor: "pointer" }}>{t("tender_ai_plan.nayi_file_se_dobara")}</button>
           <button onClick={openExec} disabled={!!busy || !canExec} title={canExec ? "" : t("tender_ai_plan.sites_sirf_execution_stage_ke_aage")}
             style={{ padding: "6px 16px", borderRadius: 7, border: "none", background: canExec ? T.grn : T.b1, color: canExec ? "white" : T.t4, fontSize: 12, fontWeight: 700, cursor: canExec ? "pointer" : "not-allowed" }}>{t("tender_ai_plan.execute")}</button>
@@ -518,19 +559,28 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
             ke saath, kyunki BOQ me sirf item/qty/rate hota hai. */}
         {boqCount > 0 && !(busy === "analyze" || job?.status === "running") && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <button onClick={async () => {
-              setErr(""); setBusy("analyze"); setDinfo(null);
-              const r = await api.post(`/tenders/${tenderId}/ai-plan/analyze`, { from_boq: true }, { timeoutMs: 120000 }).catch((e) => ({ success: false, message: e?.message }));
-              if (r?.success) { setPlan(null); setDirty(false); setExecResult(null); setMsgs([]); setJob({ status: "running", kind: "analyze" }); return; }
-              setErr(r?.message || t("tender_ai_plan.analyze_fail")); setBusy("");
-            }}
+            <button onClick={analyzeFromBoq}
               style={{ padding: "8px 16px", borderRadius: 8, border: `1.5px solid ${T.bluM}`, background: T.bluL, color: T.blu, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-              {t("tender_ai_plan.imported_boq_se_banao", { boqCount })}
+              {roadBoq ? t("tender_ai_plan.road_wise_banao", { n: roadBoq.sites }) : t("tender_ai_plan.imported_boq_se_banao", { boqCount })}
             </button>
-            <span style={{ fontSize: 11, color: T.t4 }}>{t("tender_ai_plan.seema_boq_me_sirf_item_qty_rate")}</span>
+            <span style={{ fontSize: 11, color: T.t4 }}>{roadBoq ? t("tender_ai_plan.road_wise_hint") : t("tender_ai_plan.seema_boq_me_sirf_item_qty_rate")}</span>
           </div>
         )}
       </>)}
+
+      {lvl && plan && plan.sites[lvl.si] && plan.sites[lvl.si].works[lvl.wi] && (
+        <Suspense fallback={null}>
+          <RoadPlanLevels tenderId={tenderId} siteIdx={lvl.si} workIdx={lvl.wi} work={plan.sites[lvl.si].works[lvl.wi]}
+            onClose={() => setLvl(null)}
+            onApplied={(newPlan, notes) => {
+              const k = lvl.si + ":" + lvl.wi;
+              setPlan(newPlan); setDirty(false);
+              setLvlNotes((m) => ({ ...m, [k]: notes }));
+              setOpen((o) => ({ ...o, [k]: true }));
+              setLvl(null);
+            }} />
+        </Suspense>
+      )}
 
       {/* PLAN TREE */}
       {plan && <>
@@ -538,8 +588,23 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
           <span style={{ background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 20, padding: "3px 12px", fontWeight: 700, color: T.blu }}>{t("tender_ai_plan.n_sites", { n: plan.sites.length })}</span>
           <span style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 20, padding: "3px 12px" }}>{t("tender_ai_plan.n_kaam", { n: totalWorks })}</span>
           <span style={{ background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 20, padding: "3px 12px", color: T.grn, fontWeight: 700 }}>{fmtAmt(totalAmt)}</span>
+          {levelsCost > 0 && <span title={t("tender_ai_plan.levels_total_hint")} style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 20, padding: "3px 12px", fontWeight: 700 }}>{t("tender_ai_plan.levels_total_lagat", { amt: fmtAmt(levelsCost) })}</span>}
           {draftMeta?.status === "executed" && <span style={{ background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 20, padding: "3px 12px", color: T.grn }}>{t("tender_ai_plan.execute_ho_chuka_dobara_chalana_surakshit")}</span>}
         </div>
+
+        {plan.road && (
+          <div style={{ padding: "9px 12px", background: T.bluL, border: `1px solid ${T.bluM}`, borderRadius: 8, fontSize: 11.5, color: T.t2, lineHeight: 1.6 }}>
+            <b style={{ color: T.blu }}>{t("tender_ai_plan.road_wise_patti_title")}</b>{" "}
+            {t("tender_ai_plan.road_wise_patti", { n: plan.road.sites, items: plan.road.items })}
+            {plan.road.check && (
+              <div style={{ marginTop: 3, fontWeight: 700, color: plan.road.check.ok ? T.grn : T.red }}>
+                {plan.road.check.ok
+                  ? t("tender_ai_plan.road_wise_jod_ok")
+                  : t("tender_ai_plan.road_wise_jod_nahi", { roads: (plan.road.check.roads || []).filter((r) => !r.ok).map((r) => r.code).join(", ") })}
+              </div>
+            )}
+          </div>
+        )}
 
         {(plan.warnings?.length > 0 || plan.unmapped?.length > 0) && (
           <div style={{ padding: "9px 12px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, fontSize: 11.5, color: "#92400E", lineHeight: 1.5 }}>
@@ -606,6 +671,15 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                         {t("tender_ai_plan.tukde_n", { n: hasTukde(w) ? tukdeOf(w).length : 1 })}
                       </button>
                     )}
+                    {/* Levels se qty — sirf road ke kaam par, aur tabhi jab company ne Road Levels liya ho */}
+                    {w.wtype === "road" && roadAccess.show && (
+                      <button onClick={() => openLevels(si, wi)} disabled={!!busy || job?.status === "running"}
+                        title={t("tender_ai_plan.levels_hint")}
+                        style={{ border: `1px solid ${w.road_design_id ? T.grnM : T.b2}`, background: w.road_design_id ? T.grnL : "none",
+                          color: w.road_design_id ? T.grn : T.t3, borderRadius: 10, padding: "1px 8px", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
+                        {w.road_design_id ? t("tender_ai_plan.levels_btn_on", { amt: fmtAmt(w.est_cost) }) : t("tender_ai_plan.levels_btn")}
+                      </button>
+                    )}
                     {!w.stages.length && pmSel(w,
                       (e) => upd((p) => { p.sites[si].works[wi].progress_mode = e.target.value; }))}
                     <button onClick={() => setOpen((o) => ({ ...o, [key]: !exp }))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, color: T.blu, fontWeight: 700 }}>
@@ -647,6 +721,12 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                       </div>
                     );
                   })()}
+                  {(lvlNotes[key] || []).length > 0 && (
+                    <div style={{ margin: "0 12px 8px 35px", padding: "7px 10px", background: T.ambL,
+                      border: "1px solid " + T.ambM, borderRadius: 8, fontSize: 11, color: "#92400E", lineHeight: 1.55 }}>
+                      {lvlNotes[key].map((n, i) => <div key={i}>• {n}</div>)}
+                    </div>
+                  )}
                   {sameLenWarn(w) && (
                     <div style={{ margin: "0 12px 8px 35px", padding: "6px 10px", background: T.ambL,
                       border: "1px solid " + T.ambM, borderRadius: 8, fontSize: 11, color: "#92400E" }}>
@@ -660,10 +740,21 @@ export default function TenderAiPlan({ tenderId, onOpenProject, initialFile }) {
                           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                             <span style={{ fontSize: 10, color: T.t4, width: 18 }}>{ti + 1}.</span>
                             <input value={st.name} onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].name = e.target.value; })} style={inp({ flex: "1 1 180px" })} />
-                            <input type="number" value={st.qty || ""} placeholder={w.qty ? String(w.qty) : "qty"} onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].qty = Number(e.target.value) || 0; })} style={inp({ width: 80, textAlign: "right" })} />
-                            <input value={st.unit || ""} placeholder={w.unit || "unit"} onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].unit = e.target.value; })} style={inp({ width: 52 })} />
+                            {/* Levels wali qty ganit ki hai — haath se nahi badalti (Execute waise bhi ganit wali hi likhta hai) */}
+                            <input type="number" value={st.qty || ""} placeholder={w.qty ? String(w.qty) : "qty"} readOnly={st.qty_source === "road_levels"}
+                              title={st.qty_source === "road_levels" ? t("tender_ai_plan.levels_qty_lock") : undefined}
+                              onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].qty = Number(e.target.value) || 0; })}
+                              style={inp({ width: 80, textAlign: "right", ...(st.qty_source === "road_levels" ? { background: T.grnL, borderColor: T.grnM, fontWeight: 700 } : {}) })} />
+                            <input value={st.unit || ""} placeholder={w.unit || "unit"} readOnly={st.qty_source === "road_levels"}
+                              onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].unit = e.target.value; })}
+                              style={inp({ width: 52, ...(st.qty_source === "road_levels" ? { background: T.grnL, borderColor: T.grnM } : {}) })} />
                             <input type="number" value={st.amount || ""} placeholder="₹" onChange={(e) => upd((p) => { p.sites[si].works[wi].stages[ti].amount = Number(e.target.value) || 0; })} style={inp({ width: 100, textAlign: "right", color: T.grn })} />
                             {boqChip(st.boq_item_ids)}
+                            {st.qty_source === "road_levels" && (
+                              <span title={t("tender_ai_plan.levels_stage_hint")} style={{ fontSize: 10, fontWeight: 700, color: T.grn, background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 10, padding: "1px 8px", whiteSpace: "nowrap" }}>
+                                {t("tender_ai_plan.levels_stage_lagat", { amt: fmtAmt(st.est_cost) })}
+                              </span>
+                            )}
                             {/* Stage par tick — aam taur par ZAROORAT NAHI
                                 (parat hai, jagah nahi). Par kabhi ek kaam ke
                                 andar sach me do alag cheezein hoti hain,

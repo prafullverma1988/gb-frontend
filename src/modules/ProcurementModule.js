@@ -5,10 +5,14 @@ import LibrarySelect from "../components/LibrarySelect";
 import MRDetailDrawer from "../components/MRDetailDrawer";
 import CompanyTransfersTab from "../components/CompanyTransfersTab";
 import GrnIssueBlock from "../components/GrnIssueBlock";
+import WeighChip from "../components/grn/WeighChip";
+import { indexOpenLines, kgIn, kgPerUnit, loadWeighmentsForPo } from "../components/grn/weigh";
 import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingContacts";
+import { canApproveAction, approverRolesFor, useApprovalAuthority } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
 import { companyName } from "../utils/companyName";
 import { todayISO } from "../utils/today";
+import { BackClose } from "../utils/backNav";
 
 // Vendor ko jaane wale message ka contacts wala hissa — WhatsApp / Email /
 // PO share, sab ek hi shakl me bhejein. Backend ka contactsWaBlock isi ka
@@ -123,6 +127,7 @@ const Pill=({label,c,bg,brd})=>(
 // ── MODAL SHELL ───────────────────────────────────────────────────────
 function Modal({onClose,width=480,children}){
   return(<>
+    <BackClose onClose={onClose}/>{/* browser Back = band (form bhara ho to poochhe) */}
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:300,backdropFilter:"blur(2px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:301,width,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
       {children}
@@ -636,11 +641,44 @@ function MarkReceivedModal({mr,onSave,onClose}){
 function GRNModal({po,onClose,onSave}){
   const [challan,setChallan]=useState("");
   const [vendorOverride,setVendorOverride]=useState(po.vendor||"");
-  const [rows,setRows]=useState(po.items.map(it=>({qty:String(it.qty),remark:""})));
+  // Qty pehle se PENDING bharti hai, poori order qty nahi — aadhi aa chuki PO
+  // par poori qty bhar dena zyada receive karwa deta tha.
+  const pendingOf=(it)=>Math.max(0,(Number(it.qty)||0)-(Number(it.receivedQty)||0));
+  const [rows,setRows]=useState(po.items.map(it=>({qty:String(pendingOf(it)),remark:""})));
+  // Dharam kante ki tolai (components/grn/WeighbridgePanel) — jo truck is PO
+  // ki line ke liye tula hai, uski row par ⚖️ chip; GRN ke saath tolai judti
+  // hai aur net (empty weight ke baad) bill ka wazan banta hai.
+  const [weigh,setWeigh]=useState({byMr:{},byWhItem:{},byName:{},byPoItem:{}});
+  useEffect(()=>{ let alive=true; loadWeighmentsForPo(po.id).then(tr=>{ if(alive) setWeigh(indexOpenLines(tr)); }); return ()=>{ alive=false; }; },[po.id]);
+  const hitOf=(it)=>weigh.byPoItem[it.id]||(it.linked_mr_id?weigh.byMr[it.linked_mr_id]:null)
+    ||weigh.byName[String(it.desc||"").trim().toLowerCase()]||null;
+  // Tolai aa jaye to qty pending nahi, KAANTE KA NET (23 Sep 2026) — ek gadi
+  // 18.3 Ton laayi ho to order ke 40 Ton nahi, 18.3 hi bharna hai. Sirf un
+  // rows par jinhe aadmi ne haath nahi lagaya (abhi bhi pending hi likha hai),
+  // aur sirf wazan wali unit par — Nos/cft me net "kitna aaya" nahi hota.
+  useEffect(()=>{
+    setRows(rs=>rs.map((r,i)=>{
+      const it=po.items[i]; if(!it) return r;
+      const hit=weigh.byPoItem[it.id]||(it.linked_mr_id?weigh.byMr[it.linked_mr_id]:null)
+        ||weigh.byName[String(it.desc||"").trim().toLowerCase()]||null;
+      if(!hit) return r;
+      const { line, trip }=hit;
+      if(r.qty!==String(pendingOf(it))) return r;   // aadmi ne badal diya = haath mat lagao
+      const closed=trip.status==="Closed"&&Number(line.net_kg_share)>0;
+      if(closed&&kgPerUnit(it.unit)) return { ...r, qty:String(kgIn(line.net_kg_share, it.unit).qty) };
+      // Order Nos/cft me ho to net "kitna aaya" nahi hota — tab is gadi ke
+      // challan ki qty, agar wo usi unit me likhi gayi hai (2 gadi ka order,
+      // 1 gadi aayi → 1).
+      const cUnit=String(line.challan_unit||"").trim()||line.order_unit;
+      if(Number(line.challan_qty)>0&&String(cUnit||"")===String(it.unit||"")) return { ...r, qty:String(Number(line.challan_qty)) };
+      return r;
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[weigh]);
   // Problem seen while unloading — goes to grn_issues with the GRN, so the
   // material's flow drawer shows it afterwards.
   const [issues,setIssues]=useState([]);
-  const isPartial=rows.some((r,i)=>parseFloat(r.qty)<po.items[i].qty);
+  const isPartial=rows.some((r,i)=>parseFloat(r.qty)<pendingOf(po.items[i]));
   const effectiveVendor = (po.vendor && String(po.vendor).trim()) || vendorOverride.trim();
   const canSubmit = !!challan.trim() && !!effectiveVendor;
   return(
@@ -666,19 +704,21 @@ function GRNModal({po,onClose,onSave}){
         </div>
         {po.items.map((it,i)=>(
           <div key={i} style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:10}}>
-            <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:10}}>{it.desc} <span style={{fontSize:11,color:T.t4,fontWeight:400}}>{t("procurement.qty_unit_ordered", { qty: it.qty, unit: it.unit })}</span></div>
+            <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:10}}>{it.desc} <span style={{fontSize:11,color:T.t4,fontWeight:400}}>{t("procurement.qty_unit_ordered", { qty: it.qty, unit: it.unit })}</span>
+              {it.receivedQty>0&&<span style={{fontSize:11,color:T.amb,fontWeight:500}}> · {t("procurement.grn_already_received", { qty: it.receivedQty, unit: it.unit })}</span>}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10}}>
               <div>
                 <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("procurement.qty_received")}</label>
                 <input type="number" value={rows[i].qty} onChange={e=>{const r=[...rows];r[i]={...r[i],qty:e.target.value};setRows(r);}} max={it.qty}
                   style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                {parseFloat(rows[i].qty)<it.qty&&parseFloat(rows[i].qty)>0&&<div style={{fontSize:9.5,color:T.amb,marginTop:3}}>{t("procurement.partial_it_pending", { it: it.qty-parseFloat(rows[i].qty) })}</div>}
+                {parseFloat(rows[i].qty)<pendingOf(it)&&parseFloat(rows[i].qty)>0&&<div style={{fontSize:9.5,color:T.amb,marginTop:3}}>{t("procurement.partial_it_pending", { it: Math.round((pendingOf(it)-parseFloat(rows[i].qty))*1000)/1000 })}</div>}
               </div>
               <div>
                 <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>{t("common.remark")}</label>
                 <input value={rows[i].remark} onChange={e=>{const r=[...rows];r[i]={...r[i],remark:e.target.value};setRows(r);}} placeholder={t("procurement.optional")}
                   style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
+              {hitOf(it)&&<WeighChip hit={hitOf(it)} unit={it.unit} onUseNet={q=>{const r=[...rows];r[i]={...r[i],qty:String(q)};setRows(r);}}/>}
             </div>
           </div>
         ))}
@@ -690,7 +730,7 @@ function GRNModal({po,onClose,onSave}){
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
-        <Btn onClick={()=>onSave(po.id,challan,rows,effectiveVendor,issues)} disabled={!canSubmit} color={T.grn} full icon={<IcGRN size={14} color="white"/>}>
+        <Btn onClick={()=>onSave(po.id,challan,rows.map((r,i)=>({...r,weighLineId:(hitOf(po.items[i])||{line:{}}).line.id||null})),effectiveVendor,issues)} disabled={!canSubmit} color={T.grn} full icon={<IcGRN size={14} color="white"/>}>
           {isPartial?t("procurement.confirm_partial_grn"):t("procurement.confirm_full_grn")}
         </Btn>
       </MFoot>
@@ -699,6 +739,15 @@ function GRNModal({po,onClose,onSave}){
 }
 
 // ── PO DETAIL DRAWER ──────────────────────────────────────────────────
+// ── PO ka agla kadam — list ki row aur drawer DONO isi se ──────────────
+// Approve → Order (vendor ko bhejo) → Receive (GRN). Pehle list ki row
+// order_status dekhti hi nahi thi: Approved hote hi seedha GRN ka button,
+// jabki maal abhi manga hi nahi gaya. Aur drawer sirf "Ordered" par GRN
+// deta tha — aadha maal aane ke baad (PartiallyReceived) baaki receive
+// karne ka raasta hi band ho jaata tha. Server bhi yahi niyam maanta hai.
+const poCanOrder=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&(p.orderStatus||"NotOrdered")==="NotOrdered";
+const poCanReceive=(p)=>p.approval==="Approved"&&p.poStatus==="Open"&&["Ordered","PartiallyReceived"].includes(p.orderStatus);
+
 function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSendToVendor}){
   const [detail, setDetail] = useState(po);
   const [fetching, setFetching] = useState(true);
@@ -756,8 +805,9 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
   const totalAmt=d.items?.reduce((s,it)=>s+(it.amount||0),0)||d.amount||0;
 
   return(<>
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:520,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+    <BackClose onClose={onClose}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:220,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:520,background:T.bg,zIndex:221,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
 
       {/* Header */}
       <div style={{background:"#0D1B2A",padding:"16px 18px",flexShrink:0}}>
@@ -891,7 +941,9 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
 
       {/* Action footer — context-aware: Approve / Edit / SendToVendor / GRN / Close */}
       <div style={{padding:"10px 14px",borderTop:"1px solid "+T.b1,background:T.surface,display:"flex",gap:6,flexShrink:0,flexWrap:"wrap"}}>
-        {d.approval==="Draft"&&<button onClick={()=>onApprove(d.id)} style={{flex:"1 1 100px",padding:"8px",borderRadius:7,background:T.grnL,color:T.grn,border:"1px solid "+T.grnM,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><IcApprv size={12} color={T.grn}/> {t("common.approve_2")}</button>}
+        {/* onApprove null aata hai jab is user ke paas PO approve ki authority
+            nahi (ya abhi uska turn nahi) — button hi nahi banta. */}
+        {d.approval==="Draft"&&onApprove&&<button onClick={()=>onApprove(d.id)} style={{flex:"1 1 100px",padding:"8px",borderRadius:7,background:T.grnL,color:T.grn,border:"1px solid "+T.grnM,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><IcApprv size={12} color={T.grn}/> {t("common.approve_2")}</button>}
         {/* Edit — for Draft / Revision / Rejected (not after sent) */}
         {d.poStatus!=="Cancelled"&&d.orderStatus!=="Ordered"&&d.orderStatus!=="Received"&&onEdit&&(
           <button onClick={()=>onEdit(d)} title={t("procurement.edit_po_change_vendor_items_rates")}
@@ -900,13 +952,13 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
           </button>
         )}
         {/* Send to Vendor — Approved & not yet ordered */}
-        {d.approval==="Approved"&&d.orderStatus==="NotOrdered"&&d.poStatus!=="Cancelled"&&onSendToVendor&&(
+        {poCanOrder(d)&&onSendToVendor&&(
           <button onClick={()=>onSendToVendor(d)} style={{flex:"1 1 130px",padding:"8px",borderRadius:7,background:T.bluL,color:T.blu,border:"1.5px solid "+T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
            {t("procurement.send_to_vendor")}
           </button>
         )}
-        {/* Record GRN — only after ordered */}
-        {d.poStatus==="Open"&&d.approval==="Approved"&&d.orderStatus==="Ordered"&&(
+        {/* Record GRN — order hone ke baad hi; aadha aaya ho (PartiallyReceived) to baaki bhi */}
+        {poCanReceive(d)&&(
           <button onClick={()=>onGRN(d)} style={{flex:"1 1 110px",padding:"8px",borderRadius:7,background:T.ambL,color:T.amb,border:"1.5px solid "+T.amb,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
             <IcGRN size={12} color={T.amb}/> {t("common.record_grn")}
           </button>
@@ -940,8 +992,9 @@ function RFQDetailDrawer({rfq,onClose,onPunch,onLock,onPublish,onCreatePO}){
   const minTotal=Math.min(...allTotals);const maxTotal=Math.max(...allTotals);
   const rs=RFQ_STATUS[rfq.status]||RFQ_STATUS.Draft;
   return(<>
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:680,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+    <BackClose onClose={onClose}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:220,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:680,background:T.bg,zIndex:221,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:"#0D1B2A",padding:"14px 18px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
           <div style={{fontSize:15,fontWeight:700,color:"white"}}>{rfq.id} · {rfq.project}</div>
@@ -1101,7 +1154,7 @@ function CreateRFQModal({onClose,onSave,dbProjects,dbVendors=[]}){
           {form.items.map((it,i)=>(
             <div key={i} style={{display:"grid",gridTemplateColumns:"2.2fr 80px 90px 28px",gap:7,alignItems:"center",marginBottom:6}}>
               <LibrarySelect type="material" value={it.desc} onChange={v=>updItem(i,"desc",v||"")} placeholder={t("procurement.pick_material")} compact hideAddNew/>
-              <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder={t("common.qty")}
+              <input type="number" min="0" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder={t("common.qty")}
                 style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
               <button onClick={()=>{if(form.items.length===1)return;setForm(p=>({...p,items:p.items.filter((_,j)=>j!==i)}));}} disabled={form.items.length===1}
@@ -1303,6 +1356,9 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
 
   const upd=(k,v)=>setForm(p=>({...p,[k]:v}));
   const updItem=(i,k,v)=>{
+    // Qty / rate / total kabhi minus nahi — spinner ka neeche wala teer ya
+    // mouse-wheel pehle 0 ke paar seedha -1, -2… me le jaata tha.
+    if((k==="qty"||k==="rate"||k==="total")&&String(v).trim().startsWith("-")) return;
     const its=[...form.items];
     its[i]={...its[i],[k]:v};
     if(k==="qty"||k==="rate"||k==="total"){
@@ -1489,7 +1545,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
                 <input value={it.hsn} onChange={e=>updItem(i,"hsn",e.target.value)} placeholder="HSN"
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder={t("common.qty")}
+                <input type="number" min="0" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder={t("common.qty")}
                   title={it._d==="qty"?t("finance.auto_total_rate_type_karke_fix"):(it._pick==="qty"?t("finance.selected_total_adjust_karoge_to_qty"):undefined)}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="qty"?"dashed":"solid"} ${T.b1}`,fontSize:12,color:it._d==="qty"?T.t2:T.t1,background:it._d==="qty"?T.surfaceB:(it._pick==="qty"?T.ambL:T.surface),boxShadow:it._pick==="qty"&&it._d!=="qty"?`inset 0 0 0 1.5px ${T.amb}`:"none",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>{e.target.style.borderColor=T.blu;pickItem(i,"qty");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
@@ -1500,11 +1556,11 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
                     </div>
                   : <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder={t("common.unit")}/>
                 }
-                <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder={t("common.rate")}
+                <input type="number" min="0" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder={t("common.rate")}
                   title={it._d==="rate"?t("finance.auto_total_qty"):(it._pick==="rate"?t("finance.selected_total_adjust_karoge_to_rate"):undefined)}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="rate"?"dashed":"solid"} ${T.b1}`,fontSize:12,color:it._d==="rate"?T.t2:T.t1,background:it._d==="rate"?T.surfaceB:(it._pick==="rate"?T.ambL:T.surface),boxShadow:it._pick==="rate"&&it._d!=="rate"?`inset 0 0 0 1.5px ${T.amb}`:"none",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>{e.target.style.borderColor=T.blu;pickItem(i,"rate");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                <input type="number" value={it.total} onChange={e=>updItem(i,"total",e.target.value)} placeholder={t("common.total")}
+                <input type="number" min="0" value={it.total} onChange={e=>updItem(i,"total",e.target.value)} placeholder={t("common.total")}
                   title={it._d==="total"?t("finance.auto_qty_rate_final_total_yahin"):t("procurement.entered_total")}
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="total"?"dashed":"solid"} ${it._d==="total"?T.b1:T.bluM}`,fontSize:12,fontWeight:700,color:Number(it.total)>0?T.blu:T.t4,background:it._d==="total"?T.surfaceB:T.bluL,textAlign:"right",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=it._d==="total"?T.b1:T.bluM}/>
@@ -1552,6 +1608,10 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
         <Btn onClick={onClose} outline color={T.slt} full>{t("common.cancel")}</Btn>
         <Btn onClick={async()=>{
           if(!form.vendor||!form.project||!hasReceivingContact(contacts))return;
+          // Kharid ki line par qty 0/minus ya rate minus ho to PO ka total ulta
+          // ho jaata tha (server bhi ab yahi rokta hai).
+          const badLine=form.items.filter(it=>it.desc).find(it=>!(Number(it.qty)>0)||Number(it.rate)<0);
+          if(badLine){ window.alert(t("procurement.po_line_qty_positive",{item:badLine.desc})); return; }
           // Hard guard — prevents double-fire even before re-render
           if(submittingRef.current) return;
           submittingRef.current = true;
@@ -1860,21 +1920,60 @@ function ProcurementModule(){
     }).catch(()=>{});
   },[]);
 
+  // ── Approve/Reject button kab dikhe ────────────────────────────
+  // Ye screen approval engine se judi hi nahi thi — Pending tab me har MR
+  // par ✓/✗ SABKO dikhte the, aur asli rok sirf server par thi (403
+  // "approve karne ki permission nahi"). Do sawal ab yahin pooch lete hain:
+  //   1. is module me mera role approver hai bhi? → /approvals/my-authority
+  //   2. is record par ABHI mera turn hai?        → engine ka _canActNow
+  // Engine ka jawab na mile to sirf pehla sawal lagta hai (button chhupega
+  // to sirf uska jiska naam kisi level par hai hi nahi).
+  const [apprMy,setApprMy]=useState(null);   // {mr:Set,po:Set} | null = pata nahi
+  const [wfOn,setWfOn]=useState(null);       // {module:bool} | null = pata nahi
+  useApprovalAuthority();                    // jawab aate hi dobara render
+  const applyApprMy=(apRes)=>{
+    if(!(apRes&&apRes.success&&Array.isArray(apRes.data))) return;
+    const pick=(src)=>new Set(apRes.data
+      .filter(i=>i._source===src&&i._canActNow!==false)
+      .map(i=>String(i._source_id)));
+    setApprMy({mr:pick("material_request"),po:pick("purchase_order")});
+  };
+  // Naya PO / MR bante hi uska turn bhi taaza chahiye — pehle ye list sirf
+  // page khulte waqt aati thi, to naye PO par Approve ka faisla purani list
+  // se hota tha (reload tak galat).
+  const reloadApprMy=()=>api.get("/approvals/pending?scope=my")
+    .then(applyApprMy).catch(()=>{});
   // ── Load all data from backend ─────────────────────────────────
   const loadAll=async()=>{
     setLoading(true); setApiError("");
     try{
-      const [mRes,pRes,rRes]=await Promise.all([
+      const [mRes,pRes,rRes,apRes,wfRes]=await Promise.all([
         api.get("/procurement/mrs"),
         api.get("/procurement/pos"),
         api.get("/procurement/rfqs"),
+        api.get("/approvals/pending?scope=my").catch(()=>({success:false})),
+        api.get("/approvals/workflows").catch(()=>({success:false})),
       ]);
       if(mRes.success)setMRs(mRes.data.map(mapMR));
       if(pRes.success)setPOs(pRes.data.map(mapPO));
       if(rRes.success)setRFQs(rRes.data.map(mapRFQ));
+      applyApprMy(apRes);
+      if(wfRes.success&&Array.isArray(wfRes.data)){
+        const on={}; wfRes.data.forEach(w=>{on[w.module]=!!w.enabled;}); setWfOn(on);
+      }
     }catch(e){setApiError("Load failed: "+e.message);}
     finally{setLoading(false);}
   };
+  // scope=my ki list me sirf wahi item aate hain jinpar ABHI mera turn hai.
+  // Workflow band ho (legacy raasta) to turn ka sawal hi nahi — authority hi
+  // faisla hai, wahi backend ka checkWorkflowRole bhi dekhta hai.
+  const _myTurn=(kind,wfModule,id)=>{
+    if(!apprMy||!wfOn) return true;          // engine ka jawab nahi aaya
+    if(!wfOn[wfModule]) return true;         // workflow band → legacy path
+    return apprMy[kind].has(String(id));
+  };
+  const canApproveMR=(id)=>canApproveAction({workflow:"Material Request"})&&_myTurn("mr","Material Request",id);
+  const canApprovePO=(id)=>canApproveAction({workflow:"Purchase Order (PO)"})&&_myTurn("po","Purchase Order (PO)",id);
   // Projects from API (for dropdowns)
   const [dbProjects, setDbProjects] = useState([]);
   const projLoaded = useRef(false);
@@ -2023,6 +2122,7 @@ function ProcurementModule(){
           project_name:po.project||"",
         });
       }catch(_){}
+      reloadApprMy();   // dobara bheja PO — turn phir L1 par, list taaza karo
     } else {
       alert(res.message||"Resubmit failed");
     }
@@ -2132,12 +2232,13 @@ function ProcurementModule(){
           received_qty: parseFloat(r.qty)        || 0,
           unit:         r.unit || po?.items?.[i]?.unit || "",
           remark:       (r.remark||"").trim()    || null,
+          weighment_line_id: r.weighLineId || null,
         })).filter(it=>it.received_qty>0),
         issues: (issues||[]).length ? issues : null,
       };
       const res = await api.post("/procurement/grns", grnPayload);
       if(!res.success) { alert("GRN save failed: "+(res.message||"Unknown error")); return; }
-      const isPartial=rows.some((r,i)=>parseFloat(r.qty)<(po?.items?.[i]?.qty||0));
+      const isPartial=rows.some((r,i)=>parseFloat(r.qty)<Math.max(0,(po?.items?.[i]?.qty||0)-(po?.items?.[i]?.receivedQty||0)));
       if(!isPartial) setPOs(p=>p.map(x=>x.id===poId?{...x,poStatus:"Closed"}:x));
     }catch(e){ alert("GRN error: "+e.message); return; }
     setGrnTarget(null);
@@ -2395,14 +2496,18 @@ function ProcurementModule(){
                           :<span style={{fontSize:10.5,color:T.t4}}>{t("procurement.no_stock")}</span>}
                       </div>
                       <div style={{display:"flex",gap:5,justifyContent:"flex-end"}}>
-                        <button onClick={()=>setApproveTgt(m)} title={t("common.approve_2")}
-                          style={{width:28,height:28,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                          <IcChk size={13} color={T.grn}/>
-                        </button>
-                        <button onClick={()=>setRejectTgt(m)} title={t("common.reject_2")}
-                          style={{width:28,height:28,borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                          <IcX size={13} color={T.red}/>
-                        </button>
+                        {canApproveMR(m.id)?<>
+                          <button onClick={()=>setApproveTgt(m)} title={t("common.approve_2")}
+                            style={{width:28,height:28,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                            <IcChk size={13} color={T.grn}/>
+                          </button>
+                          <button onClick={()=>setRejectTgt(m)} title={t("common.reject_2")}
+                            style={{width:28,height:28,borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                            <IcX size={13} color={T.red}/>
+                          </button>
+                        </>:<span style={{fontSize:10,color:T.t4,whiteSpace:"nowrap"}}>
+                          ⏳ {t("projects.waiting_on")} {approverRolesFor("Material Request")||t("common.approver")}
+                        </span>}
                       </div>
                       <div/>
                     </div>
@@ -2684,9 +2789,11 @@ function ProcurementModule(){
                     <Pill label={PO_PILL_LABEL[dispLbl]||dispLbl} c={as.c} bg={as.bg} brd={as.brd}/>
                     <span style={{fontSize:13,fontWeight:600,color:T.t1}}>₹{fmtN(po.amount)}</span>
                     <div style={{display:"flex",gap:4}}>
-                      {po.approval==="Draft"&&<button onClick={e=>{e.stopPropagation();approvePO(po.id);}} title={t("procurement.approve_po")} style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
+                      {po.approval==="Draft"&&canApprovePO(po.id)&&<button onClick={e=>{e.stopPropagation();approvePO(po.id);}} title={t("procurement.approve_po")} style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
                       {po.approval==="Revision"&&<button onClick={e=>{e.stopPropagation();setEditPo(po);setShowCreatePO(true);}} title={t("procurement.edit_po_and_resubmit_for_approval")} style={{height:26,padding:"0 9px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:3,color:"#1D4ED8",fontSize:10.5,fontWeight:700}}>{t("procurement.edit_resubmit_2")}</button>}
-                      {po.poStatus==="Open"&&po.approval==="Approved"&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title="GRN" style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
+                      {/* Approve ke baad agla kadam ORDER hai (vendor ko bhejo) — receive tab jab order ho chuka */}
+                      {poCanOrder(po)&&<button onClick={e=>{e.stopPropagation();setSendToVendorTarget(po);}} title={t("procurement.send_to_vendor")} style={{height:26,padding:"0 9px",borderRadius:6,background:T.bluL,border:`1px solid ${T.blu}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4,color:T.blu,fontSize:10.5,fontWeight:700,whiteSpace:"nowrap"}}><IcTruck size={12} color={T.blu}/>{t("procurement.order_btn")}</button>}
+                      {poCanReceive(po)&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title={t("common.record_grn")} style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
                     </div>
                   </div>
                   {po.reviewNote&&(po.approval==="Revision"||po.approval==="Rejected")&&(
@@ -2741,7 +2848,7 @@ function ProcurementModule(){
       </div>
 
       {/* ═══ MODALS ═══ */}
-      {selPO&&<PODetailDrawer po={selPO} onClose={()=>setSelPO(null)} onApprove={(id)=>{approvePO(id);setSelPO(p=>p?{...p,approval:"Approved"}:p);}} onShare={(po)=>{setShareTarget(po);setSelPO(null);}} onGRN={(po)=>{setGrnTarget(po);setSelPO(null);}}
+      {selPO&&<PODetailDrawer po={selPO} onClose={()=>setSelPO(null)} onApprove={canApprovePO(selPO.id)?(id)=>{approvePO(id);setSelPO(p=>p?{...p,approval:"Approved"}:p);}:null} onShare={(po)=>{setShareTarget(po);setSelPO(null);}} onGRN={(po)=>{setGrnTarget(po);setSelPO(null);}}
         onSendToVendor={(po)=>{setSendToVendorTarget(po);}}
         onEdit={(po)=>{setEditPo(po);setShowCreatePO(true);setSelPO(null);}}
         onCancel={async(po)=>{
@@ -2880,7 +2987,8 @@ function ProcurementModule(){
             amount: res.data.total_amount || newPO.items.reduce((s,it)=>(s+(it.qty||0)*(it.rate||0)),0),
             project_id: newPO.projectId || (createPOPrefill||[])[0]?.project_id || 1,
             project_name: newPO.project || "",
-          }).catch(e => console.error("Approval submit:", e));
+          }).catch(e => console.error("Approval submit:", e))
+            .finally(reloadApprMy);   // is naye PO par kiska turn hai — ab pata chale
           // PO created as Draft — MRs stay in Approved tab until admin approves PO
           setPOs(prev=>[mapPO(res.data),...prev]);
         } else {
