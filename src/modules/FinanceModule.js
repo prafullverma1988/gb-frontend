@@ -1014,6 +1014,33 @@ function txnMatchesSearch(raw, { texts = [], amount = null, ds = null }) {
   return texts.some((v) => v && String(v).toLowerCase().includes(needle));
 }
 
+// ── Party ledger ki chhanni — EK jagah ──────────────────────────────
+// Screen ka footer, CSV aur PDF teeno isi se chalte hain. Pehle chhanni
+// sirf render ke andar thi: filter lagane par CR/DR wahi poore ledger ke
+// dikhte rehte the, aur export hamesha saari entry de deta tha.
+const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
+const ledgerLabelOf=(txn)=>LEDGER_TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
+const ledgerProjOf=(txn)=>txn.project||txn.project_name||"";
+// f = {q, type, proj, from, to}
+const ledgerFilterOn=(f)=>!!((f.q||"").trim()||f.type!=="All"||f.proj!=="All"||f.from||f.to);
+const applyLedgerFilter=(rows,f)=>{
+  const lq=(f.q||"").trim().toLowerCase();
+  const fromT=f.from?new Date(f.from).getTime():null;
+  const toT=f.to?new Date(f.to+"T23:59:59").getTime():null;
+  return rows.filter(txn=>{
+    if(f.type!=="All"&&ledgerLabelOf(txn)!==f.type) return false;
+    if(f.proj!=="All"&&ledgerProjOf(txn)!==f.proj) return false;
+    if(fromT||toT){const d=new Date(txn.dateRaw||txn.date).getTime(); if(!isNaN(d)){ if(fromT&&d<fromT) return false; if(toT&&d>toT) return false; }}
+    if(lq){const hay=[txn.date,ledgerProjOf(txn),txn.note,ledgerLabelOf(txn),String(txn.amount||""),fmtN(txn.amount||0)].join(" ").toLowerCase(); if(!hay.includes(lq)) return false;}
+    return true;
+  });
+};
+// CR = hum unpar (ledSign<0), DR = wo hum par (ledSign>0)
+const ledgerCRDR=(rows)=>({
+  cr: rows.reduce((s,r)=>s+((r.ledSign||0)<0?(r.amount||0):0),0),
+  dr: rows.reduce((s,r)=>s+((r.ledSign||0)>0?(r.amount||0):0),0),
+});
+
 // "party nahi mili?" escape hatch on the payment pickers. Dropdown ke
 // theek pehle ek chhota square "+" — text link neeche latakne se form ki
 // line toot jati thi.
@@ -4352,8 +4379,12 @@ function FinanceModule(){
     }
     return out;
   };
+  // Screen par jo chhanni lagi hai, export me bhi wahi — warna user
+  // "23 of 285" dekhkar CSV kholta hai aur 285 rows milti hain.
+  const ledgerFilterState=()=>({q:ledgerSearch,type:ledgerType,proj:ledgerProj,from:ledgerFrom,to:ledgerTo});
+  const ledgerExportRows=(party)=>applyLedgerFilter(getLedgerRows(party),ledgerFilterState());
   const downloadLedgerCSV=(party)=>{
-    const rows=getLedgerRows(party);
+    const rows=ledgerExportRows(party);
     downloadCSV(`${party.name.replace(/\s+/g,"_")}_Ledger.csv`,[
       ["Party Ledger:",party.name],["Type:",party.type],["Balance:",party.balance,party.balType],[],
       ["Date","Project","Note","Type","CR","DR","Balance"],
@@ -4361,7 +4392,7 @@ function FinanceModule(){
     ]);
   };
   const downloadLedgerPDF=(party)=>{
-    const rows=getLedgerRows(party);
+    const rows=ledgerExportRows(party);
     const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
     const rowsHTML=rows.map(t=>{
       const typeLabel=TYPE_LABELS[t.txnType]||t.type||t.txnType||"Transaction";
@@ -4945,29 +4976,22 @@ Status: ${ledgerRow.status||"unpaid"}`;
               // Each row keeps its TRUE running balance (computed on the full,
               // chronological ledger) — filtering only hides rows, so the
               // Balance column and Closing Balance stay accounting-correct.
-              const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
-              const labelOf=(txn)=>LEDGER_TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
-              const projOf=(txn)=>txn.project||txn.project_name||"";
+              const labelOf=ledgerLabelOf, projOf=ledgerProjOf;
               const ledgerTypeOpts=Array.from(new Set(ledgerRows.map(labelOf))).sort();
               const ledgerProjOpts=Array.from(new Set(ledgerRows.map(projOf).filter(Boolean))).sort();
-              const lq=ledgerSearch.trim().toLowerCase();
-              const fromT=ledgerFrom?new Date(ledgerFrom).getTime():null;
-              const toT=ledgerTo?new Date(ledgerTo+"T23:59:59").getTime():null;
-              const ledgerFiltered=!!(lq||ledgerType!=="All"||ledgerProj!=="All"||ledgerFrom||ledgerTo);
-              const viewRows=ledgerRows.filter(txn=>{
-                if(ledgerType!=="All"&&labelOf(txn)!==ledgerType) return false;
-                if(ledgerProj!=="All"&&projOf(txn)!==ledgerProj) return false;
-                if(fromT||toT){const d=new Date(txn.dateRaw||txn.date).getTime(); if(!isNaN(d)){ if(fromT&&d<fromT) return false; if(toT&&d>toT) return false; }}
-                if(lq){const hay=[txn.date,projOf(txn),txn.note,labelOf(txn),String(txn.amount||""),fmtN(txn.amount||0)].join(" ").toLowerCase(); if(!hay.includes(lq)) return false;}
-                return true;
-              });
+              const lgF={q:ledgerSearch,type:ledgerType,proj:ledgerProj,from:ledgerFrom,to:ledgerTo};
+              const ledgerFiltered=ledgerFilterOn(lgF);
+              const viewRows=applyLedgerFilter(ledgerRows,lgF);
               const clearLedgerFilters=()=>{setLedgerSearch("");setLedgerType("All");setLedgerProj("All");setLedgerFrom("");setLedgerTo("");};
               // Signed model: DR = rows that make the party owe us (ledSign>0),
               // CR = rows where we owe them (ledSign<0). Closing includes the
               // signed opening → equals the backend live_balance, so this chip
               // matches the party card + the bot.
-              const totalDR=ledgerRows.reduce((s,r)=>s+((r.ledSign||0)>0?r.amount:0),0);
-              const totalCR=ledgerRows.reduce((s,r)=>s+((r.ledSign||0)<0?r.amount:0),0);
+              const {cr:totalCR,dr:totalDR}=ledgerCRDR(ledgerRows);
+              // Chhanni lagi ho to screen par dikhi hui entries ka apna jod —
+              // closing balance phir bhi POORE ledger ka rehta hai, warna party
+              // ka asli balance galat dikhne lagta.
+              const {cr:viewCR,dr:viewDR}=ledgerCRDR(viewRows);
               const ledgerClosing=(parseFloat(selParty.opening_balance)||0)+totalDR-totalCR; // >0 = they owe us
               const computedBalType=ledgerClosing===0?"Settled":balanceLabelOf(selParty.type,ledgerClosing);
               const computedBal=Math.abs(ledgerClosing);
@@ -5195,10 +5219,25 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     const closeGood= ledgerClosing>=0;  // >=0 = they owe us / settled → green
                     const closeSfx = ledgerClosing===0 ? "" : (ledgerClosing>0?"Dr":"Cr");
                     return (
+                      <>
+                      {ledgerFiltered&&(
+                        <div style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"8px 14px",gap:4,background:T.bluL,borderTop:`1px solid ${T.bluM}`,flexShrink:0,alignItems:"center"}}>
+                          <span/>
+                          <span/>
+                          <span style={{fontSize:11.5,color:T.blu,fontWeight:700,textTransform:"uppercase",letterSpacing:.3,whiteSpace:"nowrap"}}>
+                            {t("finance.filtered_total")} · {viewRows.length}/{ledgerRows.length}
+                          </span>
+                          <span/>
+                          <span/>
+                          <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.grn,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(viewCR)}</span>
+                          <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.red,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(viewDR)}</span>
+                          <span style={{textAlign:"right",fontSize:11,color:T.t4,fontStyle:"italic",whiteSpace:"nowrap"}}>{t("finance.net_fmts", { fmtS: fmtS(viewDR-viewCR) })}</span>
+                        </div>
+                      )}
                       <div style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"10px 14px",gap:4,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0,alignItems:"center"}}>
                         <span/>
                         <span/>
-                        <span style={{fontSize:12,color:T.t2,fontWeight:700,textTransform:"uppercase",letterSpacing:.3}}>{t("finance.closing_balance")}</span>
+                        <span style={{fontSize:12,color:T.t2,fontWeight:700,textTransform:"uppercase",letterSpacing:.3,whiteSpace:"nowrap"}}>{t("finance.closing_balance")}{ledgerFiltered?` · ${t("finance.all_entries")}`:""}</span>
                         <span/>
                         <span/>
                         <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.grn,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(totalCR)}</span>
@@ -5207,6 +5246,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           {closeAbs===0 ? "₹0.00" : `₹${fmtN(closeAbs)} ${closeSfx}`}
                         </span>
                       </div>
+                      </>
                     );
                   })()}
                   {/* ── Integrated action buttons ── */}
