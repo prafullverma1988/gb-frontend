@@ -1,10 +1,11 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
-import { canSeeFinancials } from "../utils/perms";
+import { companyName, companyNameHtml } from "../utils/companyName";
+import { canSeeFinancials, currentUser } from "../utils/perms";
+import CompanyDay from "./reports/CompanyDay";
 import { daysAgoISO } from "../utils/today";
 
-const COMPANY_NAME = "Company";
 
 // ── ICONS ─────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -172,7 +173,7 @@ function printHTML(title, html){
     .sig-box{text-align:center;padding-top:30px;border-top:1px solid #E5E7EB;font-size:10px;color:#6B7280}
     @media print{body{padding:10px}}
   </style></head><body>${html}
-  <p class="footer">${COMPANY_NAME} · Construction Management · Generated: ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}</p>
+  <p class="footer">${companyNameHtml()} · Construction Management · Generated: ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}</p>
   </body></html>`);
   w.document.close();setTimeout(()=>w.print(),500);
 }
@@ -286,7 +287,7 @@ function CashBookModule(){
   // Excel download — Cashbook
   const dlExcelCash=()=>{
     const rows=[
-      [COMPANY_NAME+" — Cash Book"],
+      [companyName()+" — Cash Book"],
       [`Period: ${fFrom} to ${fTo}  |  Site: ${fSite}  |  Generated: ${TODAY}`],
       [],
       ["#","Date","Party","Description","Account","Head","MOP","Site","Receipt (₹)","Payment (₹)","Balance (₹)"],
@@ -300,7 +301,7 @@ function CashBookModule(){
   // Excel download — Daybook
   const dlExcelDay=()=>{
     const rows=[
-      [COMPANY_NAME+" — Day Book"],
+      [companyName()+" — Day Book"],
       [`Period: ${fFrom} to ${fTo}  |  Generated: ${TODAY}`],
       [],
       ["Date","Day Receipts (₹)","Day Payments (₹)","Day Balance (₹)","Running Balance (₹)","Entries"],
@@ -324,9 +325,9 @@ function CashBookModule(){
         <td class="pay">${e.payAmt>0?fmtRs(e.payAmt):""}</td>
         <td style="font-weight:700;color:${e.runBal>=0?"#2563EB":"#DC2626"}">${fmtRs(e.runBal)}</td>
       </tr>`).join("");
-    printHTML("Cash Book — "+COMPANY_NAME,`
+    printHTML("Cash Book — "+companyNameHtml(),`
       <div class="header">
-        <div><h1>${COMPANY_NAME} — Cash Book</h1><div class="header-sub">Period: ${fFrom} to ${fTo}  &nbsp;|&nbsp;  Site: ${fSite}</div></div>
+        <div><h1>${companyNameHtml()} — Cash Book</h1><div class="header-sub">Period: ${fFrom} to ${fTo}  &nbsp;|&nbsp;  Site: ${fSite}</div></div>
         <div style="text-align:right;font-size:11px;color:rgba(255,255,255,0.7)">Entries: ${filtered.length}<br/>Net Balance: ${fmtRs(balance)}</div>
       </div>
       <div class="summary-grid">
@@ -346,8 +347,8 @@ function CashBookModule(){
       <tr class="day-header"><td colspan="3"><strong>${fmtDate(d.date)}</strong></td><td class="rec">${fmtRs(d.rec)}</td><td class="pay">${fmtRs(d.pay)}</td><td style="font-weight:700;color:${(d.rec-d.pay)>=0?"#059669":"#DC2626"}">${fmtBal(d.rec-d.pay)}</td><td style="font-weight:700;color:${d.runBal>=0?"#2563EB":"#DC2626"}">${fmtBal(d.runBal)}</td></tr>
       ${d.entries.map(e=>`<tr><td></td><td>${e.desc}</td><td>${e.account} · ${e.mop}</td><td class="rec" style="font-weight:400">${e.recAmt>0?fmtRs(e.recAmt):""}</td><td class="pay" style="font-weight:400">${e.payAmt>0?fmtRs(e.payAmt):""}</td><td></td><td></td></tr>`).join("")}
     `).join("");
-    printHTML("Day Book — "+COMPANY_NAME,`
-      <div class="header"><div><h1>${COMPANY_NAME} — Day Book</h1><div class="header-sub">Period: ${fFrom} to ${fTo}</div></div></div>
+    printHTML("Day Book — "+companyNameHtml(),`
+      <div class="header"><div><h1>${companyNameHtml()} — Day Book</h1><div class="header-sub">Period: ${fFrom} to ${fTo}</div></div></div>
       <div class="summary-grid">
         <div class="summary-box" style="border-top-color:#059669"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Total Receipt</div><div style="font-size:16px;font-weight:800;color:#059669">${fmtRs(totalRec)}</div></div>
         <div class="summary-box" style="border-top-color:#DC2626"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Total Payment</div><div style="font-size:16px;font-weight:800;color:#DC2626">${fmtRs(totalPay)}</div></div>
@@ -748,7 +749,7 @@ function ChallanModule(){
   const dlExcel=()=>{
     const viewLabel = view==="all"?"All Flows (a+b+c+d)":view==="vendor"?"Vendor Purchases (a+b)":view==="project"?"Project Receipts (a+c)":"Warehouse Flow (b+c+d)";
     const xRows=[
-      [COMPANY_NAME+" — Material Register"],
+      [companyName()+" — Material Register"],
       [`View: ${viewLabel}  |  Period: ${fFrom} to ${fTo}  |  Site: ${fSite}  |  Generated: ${TODAY}`],[],
       ["#","Date","Vendor","Site","Flow","Challan / GRN","Material","Category",
        "Qty","Unit","Rate ₹","Total ₹","Status"],
@@ -786,9 +787,9 @@ function ChallanModule(){
         <td><span style="font-size:9px;padding:2px 7px;border-radius:20px;background:${r.status==="Billed"?"#ECFDF5":"#FFFBEB"};color:${r.status==="Billed"?"#059669":"#D97706"}">${r.status}</span></td>
       </tr>`;
     }).join("");
-    printHTML("Material Register — "+COMPANY_NAME,`
+    printHTML("Material Register — "+companyNameHtml(),`
       <div class="header">
-        <div><h1>${COMPANY_NAME} — Material Register</h1>
+        <div><h1>${companyNameHtml()} — Material Register</h1>
           <div class="header-sub">Period: ${fFrom} to ${fTo} &nbsp;|&nbsp; Site: ${fSite} &nbsp;|&nbsp; ${filtered.length} entries</div></div>
         <div style="text-align:right;font-size:11px;color:rgba(255,255,255,0.7)">Total: ${fmtRs(totalAmt)}</div>
       </div>
@@ -1089,14 +1090,14 @@ function ProgressReportModule(){
 
   const dlExcelPortfolio=()=>{
     const rows=[
-      [COMPANY_NAME+" — Portfolio Financial Report"],
+      [companyName()+" — Portfolio Financial Report"],
       [`Generated: ${TODAY}`],[],
       ["Project","Site","Status","Progress %","Contract Value ₹","Billed ₹","Received ₹","Expenses ₹","Net Margin ₹","Margin %","Start","Target"],
       ...projects.map(p=>[p.name,p.site,p.status,p.progress+"%",p.contract,p.billed,p.received,p.expenses,p.received-p.expenses,p.received?Math.round((p.received-p.expenses)/p.received*100)+"%":"—",p.start,p.target]),
       [],
       ["TOTAL","","",avgProgress+"%",totalContract,totalBilled,totalReceived,totalExp,totalProfit,totalReceived?Math.round(totalProfit/totalReceived*100)+"%":"—","",""],
     ];
-    downloadCSV("GB_Portfolio_Report.csv",rows);
+    downloadCSV(companyName().replace(/[^A-Za-z0-9]+/g,"_")+"_Portfolio_Report.csv",rows);
   };
 
   const dlExcelProject=p=>{
@@ -1132,9 +1133,9 @@ function ProgressReportModule(){
         <td>${phasesHtml}</td>
       </tr>`;
     }).join("");
-    printHTML("Portfolio Report — "+COMPANY_NAME,`
+    printHTML("Portfolio Report — "+companyNameHtml(),`
       <div class="header">
-        <div><h1>${COMPANY_NAME} — Portfolio Report</h1><div class="header-sub">As of ${TODAY} &nbsp;|&nbsp; ${projects.length} Projects</div></div>
+        <div><h1>${companyNameHtml()} — Portfolio Report</h1><div class="header-sub">As of ${TODAY} &nbsp;|&nbsp; ${projects.length} Projects</div></div>
       </div>
       <div class="summary-grid" style="grid-template-columns:repeat(5,1fr)">
         <div class="summary-box" style="border-top-color:#2563EB"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Portfolio</div><div style="font-size:14px;font-weight:800;color:#2563EB">${fmtRs(totalContract)}</div></div>
@@ -1178,7 +1179,7 @@ function ProgressReportModule(){
       <table><tr><th>Phase</th><th>Progress Bar</th><th style="text-align:center">%</th><th>Status</th></tr>${phases}</table>
       <div class="sig-row">
         <div class="sig-box">Site Engineer / PM<br/></div>
-        <div class="sig-box">Authorised By<br/>${COMPANY_NAME}</div>
+        <div class="sig-box">Authorised By<br/>${companyNameHtml()}</div>
       </div>`);
   };
 
@@ -1308,6 +1309,10 @@ export default function ReportsModule(){
     {id:"challan", l:t("reports.material_register"),      desc:t("reports.grn_level_material_movement_vendor_project"), icon:IcSheet},
     // Progress & Financial me paisa hota hai — "Financial Reports" ke peeche.
     ...(canSeeFinancials() ? [{id:"progress",l:t("reports.progress_financial"),  desc:t("reports.site_progress_finance_report"),icon:IcBar}] : []),
+    // Company ka din sirf admin/super_admin ko — isme wo paisa bhi hai jo kisi
+    // site ka nahi (server bhi wahi rok lagata hai, GET /dpr/company/day).
+    ...(["admin","super_admin"].includes(currentUser()?.role)
+      ? [{id:"coday",l:t("coday.title"),desc:t("coday.desc"),icon:IcCalc}] : []),
   ];
 
   return(
@@ -1318,7 +1323,7 @@ export default function ReportsModule(){
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/></svg>
         </div>
         <div>
-          <div style={{fontSize:16,fontWeight:800,color:"white",letterSpacing:"-.3px"}}>{COMPANY_NAME}</div>
+          <div style={{fontSize:16,fontWeight:800,color:"white",letterSpacing:"-.3px"}}>{companyName()}</div>
           <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"1px"}}>{t("reports.reports_accounts")}</div>
         </div>
         <div style={{flex:1}}/>
@@ -1340,6 +1345,7 @@ export default function ReportsModule(){
         {tab==="cash"     && <CashBookModule/>}
         {tab==="challan"  && <ChallanModule/>}
         {tab==="progress" && <ProgressReportModule/>}
+        {tab==="coday"    && <CompanyDay/>}
       </div>
 
       <style>{`

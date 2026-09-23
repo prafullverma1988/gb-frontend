@@ -3,6 +3,7 @@ import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import ExportMenu from "../components/DataExport";
 import { t } from "../i18n";
+import { companyNameHtml } from "../utils/companyName";
 
 // ── ICONS ──────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -202,7 +203,7 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
     .attendee{display:inline-block;background:#EFF6FF;color:#2563EB;padding:2px 8px;border-radius:20px;margin:2px;font-size:11px;border:1px solid #BFDBFE}
     </style></head><body>
     <div class="header">
-      <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px">GB BUILDCON — MINUTES OF MEETING</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px;text-transform:uppercase">${companyNameHtml()} — MINUTES OF MEETING</div>
       <h1 style="margin:0;font-size:18px">${mom.title}</h1>
       <div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:4px">${mom.id} · ${mom.type}</div>
     </div>
@@ -442,6 +443,12 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
   const [attendeeInput,setAttendeeInput]=useState("");
 
   const upd=k=>e=>setForm(p=>({...p,[k]:e.target.value}));
+  // SearchSelect option ki KEY (yahan project/user ki id) lautata hai. Pehle wahi
+  // key seedha form me jaati thi: site = '119', project_id khaali, assignee = '65'
+  // — card/PDF/Excel par number chhapta aur MOM project ke MOM tab me nahi aati
+  // (LIB-14). Ab project par project_id + naam, user par naam (mobile jaisa).
+  const labelOf=(opts,key)=>((opts.find(o=>o.key===String(key))||{}).label)||"";
+  const pickProject=key=>setForm(p=>({...p,project_id:/^\d+$/.test(String(key))?Number(key):null,site:labelOf(sites,key)}));
   // Refs for textareas — used to auto-focus newly added points
   const discussionRefs=useRef({});
   const [pendingFocusDisc, setPendingFocusDisc] = useState(null);
@@ -535,7 +542,7 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
                     <span>🔒 {projectName || form.site || "—"}</span>
                   </div>
                 ) : (
-                  <SearchSelect value={form.site} options={sites} onChange={v=>setForm(p=>({...p,site:v}))} placeholder={sites.length?t("common.select_project"):t("common.loading_projects")}/>
+                  <SearchSelect value={form.project_id?String(form.project_id):""} options={sites} onChange={pickProject} placeholder={sites.length?t("common.select_project"):t("common.loading_projects")}/>
                 )}
               </div>
               <div><label style={labelStyle}>{t("common.date")}</label>
@@ -548,7 +555,7 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
                 <input value={form.venue} onChange={upd("venue")} placeholder={t("mom.site_office_head_office_client_location")} style={inputStyle}/>
               </div>
               <div><label style={labelStyle}>{t("mom.conducted_by")}</label>
-                <SearchSelect value={form.conductedBy} options={team} onChange={v=>setForm(p=>({...p,conductedBy:v}))} placeholder={team.length?t("mom.select_user"):t("mom.loading_users")}/>
+                <SearchSelect value={form.conductedBy} options={team} onChange={v=>setForm(p=>({...p,conductedBy:labelOf(team,v)}))} placeholder={team.length?t("mom.select_user"):t("mom.loading_users")}/>
               </div>
             </div>
             {/* Attendees */}
@@ -631,7 +638,7 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
                   <div><label style={labelStyle}>{t("mom.assign_to")}</label>
-                    <SearchSelect value={a.assignee} options={team} onChange={v=>updAction(i,"assignee",v)} placeholder={team.length?t("mom.select_user"):t("common.loading")}/>
+                    <SearchSelect value={a.assignee} options={team} onChange={v=>updAction(i,"assignee",labelOf(team,v))} placeholder={team.length?t("mom.select_user"):t("common.loading")}/>
                   </div>
                   <div><label style={labelStyle}>{t("common.due_date")}</label>
                     <input type="date" value={a.dueDate} onChange={e=>updAction(i,"dueDate",e.target.value)} style={{...inputStyle}}/>

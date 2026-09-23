@@ -17,6 +17,8 @@
 //   import { exportCSV, exportPDF, parseCSV } from "../components/DataExport";
 
 import { useState, useRef, useEffect } from "react";
+import { t } from "../i18n";
+import { companyNameHtml } from "../utils/companyName";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 function csvEscape(v) {
@@ -50,7 +52,7 @@ export function exportCSV(filename, columns, rows) {
 export function exportPDF(title, columns, rows, meta = {}) {
   const win = window.open("", "_blank", "width=900,height=700");
   if (!win) {
-    alert("Allow pop-ups to export as PDF");
+    alert(t("estimate.pop_up_blocked_allow_pop_ups"));
     return;
   }
   const today = new Date().toLocaleDateString("en-IN", {
@@ -83,7 +85,7 @@ export function exportPDF(title, columns, rows, meta = {}) {
 </head>
 <body>
 <h1>${title}</h1>
-<div class="sub">Generated on ${today} · ${rows.length} record${rows.length === 1 ? "" : "s"}</div>
+<div class="sub">${escapeHtml(t("data_export.generated_on_records", { date: today, n: rows.length }))}</div>
 ${meta.subtitle ? `<div class="meta">${meta.subtitle}</div>` : ""}
 <table>
   <thead>
@@ -102,7 +104,7 @@ ${meta.subtitle ? `<div class="meta">${meta.subtitle}</div>` : ""}
       .join("")}
   </tbody>
 </table>
-<div class="footer">GB Buildcon · Construction Manager</div>
+<div class="footer">${companyNameHtml()} · Sanchalan</div>
 <script>
   window.onload = function() {
     setTimeout(function() { window.print(); }, 200);

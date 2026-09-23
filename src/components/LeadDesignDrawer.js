@@ -15,6 +15,7 @@ import { Credit, fmtTimeAgo } from "./Credit";
 import uploadManager from "../utils/uploadManager";
 import RevisionNoteModal from "./RevisionNoteModal";
 import { t, Rich } from "../i18n";
+import { BackClose } from "../utils/backNav";
 
 const T = {
   surface: "#FFFFFF",
@@ -213,10 +214,11 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
   return (
     <>
       <style>{`@keyframes gbLDSlide{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 200 }} />
+      <BackClose onClose={onClose}/>
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 220 }} />
       <div style={{
         position: "fixed", top: 0, right: 0, height: "100vh", width: 580, maxWidth: "95vw",
-        background: T.surface, boxShadow: "-8px 0 30px rgba(0,0,0,0.18)", zIndex: 201,
+        background: T.surface, boxShadow: "-8px 0 30px rgba(0,0,0,0.18)", zIndex: 221,
         display: "flex", flexDirection: "column", animation: "gbLDSlide .25s ease-out",
         fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
       }}>
