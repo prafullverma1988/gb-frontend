@@ -998,7 +998,7 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
 // Project = "Warehouse" (locked, not selectable)
 // Material picker = Material Library only
 // Unit = library se aata hai, locked (sirf Library me change ho sakta hai)
-function NewMRModal({library,onClose,onSaved,prefill}){
+function NewMRModal({library,onClose,onSaved,prefill,warehouse}){
   const [f,setF]=useState({date:today(),priority:"Medium"});
   // When opened from a stock row, pre-select that material by matching the library on name.
   const [items,setItems]=useState(()=>{
@@ -1088,8 +1088,8 @@ function NewMRModal({library,onClose,onSaved,prefill}){
         <Field label={t("common.project")}>
           <div style={{padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,height:38,boxSizing:"border-box"}}>
             <span style={{fontSize:10,opacity:.6}}>🔒</span>
-            <span style={{fontWeight:600,color:T.t1}}>{t("common.warehouse")}</span>
-            <span style={{fontSize:10,color:T.t4}}>{t("warehouse.internal_request")}</span>
+            <span style={{fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{warehouse?.name||t("common.warehouse")}</span>
+            <span style={{fontSize:10,color:T.t4,flexShrink:0}}>{t("warehouse.internal_request")}</span>
           </div>
         </Field>
         <Field label={t("common.priority")}>
@@ -3430,7 +3430,7 @@ function WarehouseModule(){
       if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0})));
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
       if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
-      if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":"Warehouse (internal)"),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
+      if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":(m.warehouse_name?`${m.warehouse_name} ${t("warehouse.internal_request")}`:"Warehouse (internal)")),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
       if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_warehouse_name||t.from_project_name||t.from_location||"—",to:t.to_warehouse_name||t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));
       if(pRes.success) setProjects((pRes.data||[]).map(p=>({id:p.id,name:p.name})));
       if(uRes.success) setUsers((uRes.data||[]).map(u=>({id:u.id,name:u.name})));
@@ -3661,7 +3661,7 @@ function WarehouseModule(){
           onClose={()=>setIssueNewOpen(false)} onSaved={()=>loadAll()}/>
       )}
       {mrNewOpen&&(
-        <NewMRModal library={library} prefill={mrPrefill}
+        <NewMRModal library={library} prefill={mrPrefill} warehouse={activeWh}
           onClose={()=>{setMrNewOpen(false);setMrPrefill(null);}} onSaved={()=>loadAll()}/>
       )}
       {transferNewOpen&&(
