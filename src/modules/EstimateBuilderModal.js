@@ -224,6 +224,17 @@ export default function EstimateBuilderModal({
       } catch (_) {}
     })();
   }, []);
+  // Is project ke TYPE ki work category pehle. Jis category par koi project
+  // type chuna hi nahi gaya wo har type me chalti hai (Library ka niyam), to
+  // wo bhi saath aati hai. "Sab dikhao" se poori list — filter raasta rokta
+  // nahi, sirf bhaari list chhota karta hai.
+  const projTypeId = Number(project?.construction_type_id) || null;
+  const [catShowAll, setCatShowAll] = useState(false);
+  const visibleWorkCats = (!projTypeId || catShowAll)
+    ? allWorkCats
+    : allWorkCats.filter(c => !(c.type_ids || []).length || (c.type_ids || []).includes(projTypeId));
+  const hiddenCatCount = allWorkCats.length - visibleWorkCats.length;
+
   const toggleCatPick  = (id) => setAddCatPicks(p => {
     const idx = p.indexOf(id); return idx >= 0 ? p.filter(x => x !== id) : [...p, id];
   });
@@ -1660,8 +1671,22 @@ export default function EstimateBuilderModal({
                 <button onClick={() => !addCatSaving && setAddCatDrawer(null)}
                   style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
               </div>
+              {projTypeId && (hiddenCatCount > 0 || catShowAll) && (
+                <div style={{ padding:"8px 12px", background:"#F8FAFC", borderBottom:"1px solid #E5E7EB",
+                              display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+                  <span style={{ fontSize:11, color:"#475569" }}>
+                    {catShowAll
+                      ? t("estimate_builder.sab_category")
+                      : t("estimate_builder.is_type_ki_category", { type: project?.construction_type_name || "" })}
+                  </span>
+                  <button type="button" onClick={() => setCatShowAll(v => !v)}
+                    style={{ background:"none", border:"none", color:"#2563EB", fontSize:11, fontWeight:700, cursor:"pointer", padding:0 }}>
+                    {catShowAll ? t("estimate_builder.sirf_is_type_ki") : t("estimate_builder.sab_dikhao_n", { n: hiddenCatCount })}
+                  </button>
+                </div>
+              )}
               <div style={{ flex:1, overflowY:"auto", padding:12 }}>
-                {allWorkCats.map(c => {
+                {visibleWorkCats.map(c => {
                   const exists = alreadyInSection.has(c.name);
                   const pickIdx = addCatPicks.indexOf(c.id);
                   const isPicked = pickIdx >= 0;

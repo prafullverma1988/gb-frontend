@@ -2347,6 +2347,10 @@ const dict = {
   "estimate.will_ask_city_type_then_pick":                     "Will ask city + type, then pick package",
 
   // ── estimate_builder ────────────────────────────────────────
+  "estimate_builder.sab_dikhao_n":                             "Show all (+{n})",
+  "estimate_builder.sirf_is_type_ki":                          "Only this project type",
+  "estimate_builder.is_type_ki_category":                      "{type} categories",
+  "estimate_builder.sab_category":                             "Showing all categories",
   "estimate_builder.add_at_least_one_section_before":          "Add at least one section before saving",
   "estimate_builder.add_item_to_name":                         "+ Add Item to {name}",
   "estimate_builder.attach_pdf_image_dwg":                     "Attach PDF / image / DWG",
@@ -3869,6 +3873,8 @@ const dict = {
   "map_plan_wizard.tenders_map_me_line_draw_karo":             "Go to Tenders → Map and draw a line or import KML, then the entire tree will be created here in one click.",
 
   // ── master_library ──────────────────────────────────────────
+  "master_library.sab_dikhao_n_2":                             "Show all (+{n})",
+  "master_library.sirf_is_type_ki_2":                          "Only {type}",
   "master_library.sab_project_type":                           "All project types",
   "master_library.pehle_project_type_banao":                   "Add a project type first (Library → Project Type).",
   "master_library.kuch_na_chuno_to_sab_me":                    "Choose none and it shows in every project type.",

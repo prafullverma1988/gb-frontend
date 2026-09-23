@@ -2346,6 +2346,10 @@ const dict = {
   "estimate.will_ask_city_type_then_pick":                     "सिटी + टाइप पूछेगा, फिर पैकेज चुनेगा",
 
   // ── estimate_builder ────────────────────────────────────────
+  "estimate_builder.sab_dikhao_n":                             "सब दिखाओ (+{n})",
+  "estimate_builder.sirf_is_type_ki":                          "सिर्फ इस टाइप की",
+  "estimate_builder.is_type_ki_category":                      "{type} की कैटेगरी",
+  "estimate_builder.sab_category":                             "सभी कैटेगरी दिख रही हैं",
   "estimate_builder.add_at_least_one_section_before":          "सेव करने से पहले कम से कम एक सेक्शन ऐड करो",
   "estimate_builder.add_item_to_name":                         "+ {name} में आइटम जोड़ो",
   "estimate_builder.attach_pdf_image_dwg":                     "पीडीएफ / इमेज / DWG अटैच करो",
@@ -3868,6 +3872,8 @@ const dict = {
   "map_plan_wizard.tenders_map_me_line_draw_karo":             "टेंडर्स → मैप में लाइन ड्रॉ करो या KML इम्पोर्ट करो, फिर यहां पूरा ट्री एक क्लिक में बन जाएगा।",
 
   // ── master_library ──────────────────────────────────────────
+  "master_library.sab_dikhao_n_2":                             "सब दिखाओ (+{n})",
+  "master_library.sirf_is_type_ki_2":                          "सिर्फ {type}",
   "master_library.sab_project_type":                           "सभी प्रोजेक्ट टाइप",
   "master_library.pehle_project_type_banao":                   "पहले प्रोजेक्ट टाइप बनाओ (Library → Project Type)।",
   "master_library.kuch_na_chuno_to_sab_me":                    "कुछ न चुनो तो यह हर प्रोजेक्ट टाइप में दिखेगी।",

@@ -2349,6 +2349,10 @@ const dict = {
   "estimate.will_ask_city_type_then_pick":                     "Will ask city + type, then pick package",
 
   // ── estimate_builder ────────────────────────────────────────
+  "estimate_builder.sab_dikhao_n":                             "Sab dikhao (+{n})",
+  "estimate_builder.sirf_is_type_ki":                          "Sirf is type ki",
+  "estimate_builder.is_type_ki_category":                      "{type} ki category",
+  "estimate_builder.sab_category":                             "Sab category dikh rahi hain",
   "estimate_builder.add_at_least_one_section_before":          "Save karne se pehle kam se kam ek section add karo",
   "estimate_builder.add_item_to_name":                         "+ Add Item to {name}",
   "estimate_builder.attach_pdf_image_dwg":                     "Attach PDF / image / DWG",
@@ -3871,6 +3875,8 @@ const dict = {
   "map_plan_wizard.tenders_map_me_line_draw_karo":             "Tenders → Map me line draw karo ya KML import karo, phir yahan poora tree ek click me ban jayega.",
 
   // ── master_library ──────────────────────────────────────────
+  "master_library.sab_dikhao_n_2":                             "Sab dikhao (+{n})",
+  "master_library.sirf_is_type_ki_2":                          "Sirf {type} ki",
   "master_library.sab_project_type":                           "Sab project type",
   "master_library.pehle_project_type_banao":                   "Pehle project type banao (Library → Project Type).",
   "master_library.kuch_na_chuno_to_sab_me":                    "Kuch na chuno to ye har project type me dikhegi.",

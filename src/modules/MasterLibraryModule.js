@@ -1841,6 +1841,13 @@ function SubconRateCardSection() {
   // master chalta hai (Library -> Work Category). trade_category column me
   // wahi naam string ki tarah jaata hai, isliye koi migration nahi.
   const workCatNames = (workCats || []).map(c => c.name);
+  // Step 1 me chune hue project type ki category — jis category par koi type
+  // nahi chuna wo har type me chalti hai. Sab dekhne ka raasta khula rehta hai.
+  const [tradeShowAll, setTradeShowAll] = useState(false);
+  const tradeNamesForType = (!selType || tradeShowAll)
+    ? workCatNames
+    : (workCats || []).filter(c => !(c.type_ids || []).length || (c.type_ids || []).includes(selType.id)).map(c => c.name);
+  const hiddenTradeCount = workCatNames.length - tradeNamesForType.length;
 
   // Package CRUD modals
   const [addPkgModal, setAddPkgModal] = useState(false);
@@ -2379,10 +2386,21 @@ function SubconRateCardSection() {
            {t("master_library.3_work_category")}
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {workCatNames.map(wc => chipBtn(wc, selTrade===wc, ()=>setSelTrade(wc), T.purple))}
+            {/* Step 1 me project type chun liya hai, to yahan usi type ki
+                category dikhao. Jis category par koi type nahi chuna wo har
+                type me chalti hai. "Sab dikhao" se poori list. */}
+            {tradeNamesForType.map(wc => chipBtn(wc, selTrade===wc, ()=>setSelTrade(wc), T.purple))}
             {addChipBtn(t("master_library.new_category_2"), ()=>openChipAdd("workcat"))}
             {!workCatNames.length && <span style={{color:T.textLight,fontSize:12,alignSelf:"center"}}>{t("master_library.no_work_cats_yet_click_new_category")}</span>}
           </div>
+          {selType && hiddenTradeCount > 0 && (
+            <button type="button" onClick={()=>setTradeShowAll(v=>!v)}
+              style={{background:"none",border:"none",color:T.blue,fontSize:11,fontWeight:700,cursor:"pointer",padding:"8px 0 0"}}>
+              {tradeShowAll
+                ? t("master_library.sirf_is_type_ki_2", { type: selType.name })
+                : t("master_library.sab_dikhao_n_2", { n: hiddenTradeCount })}
+            </button>
+          )}
         </div>
 
         {/* Step 4: Rate Card */}
@@ -5755,6 +5773,10 @@ function BoqItemLibrarySection() {
 
   const [search,    setSearch]    = useState("");
   const [filterCat, setFilterCat] = useState("All");
+  // Project type ka filter — item ka apna type nahi hota, uski category ka
+  // hota hai. "" = sab.
+  const [filterType, setFilterType] = useState("");
+  const { items: projTypes } = useSection("construction-types");
   const [editing,   setEditing]   = useState(null);  // boq_items row or null
   const [showAdd,   setShowAdd]   = useState(false);
   const emptyForm = { name: "", category: catOptions[0] || "", unit: uomOptions[0] || "Sq.Ft", base_rate: 0, description: "" };
@@ -5786,7 +5808,12 @@ function BoqItemLibrarySection() {
   };
 
   // ── Filter ──────────────────────────────────────────────────────────
+  const typeCatNames = !filterType ? null : new Set(
+    (workCats || [])
+      .filter(c => !(c.type_ids || []).length || (c.type_ids || []).includes(Number(filterType)))
+      .map(c => c.name));
   const filtered = rows.filter(r => {
+    if (typeCatNames && !typeCatNames.has(r.category)) return false;
     if (filterCat !== "All" && r.category !== filterCat) return false;
     const q = search.trim().toLowerCase();
     if (!q) return true;
@@ -5797,7 +5824,12 @@ function BoqItemLibrarySection() {
 
   // Cat tabs (with counts).
   const catCounts = rows.reduce((acc, r) => { const k = r.category || "Uncategorized"; acc[k] = (acc[k]||0)+1; return acc; }, {});
-  const allCatPills = ["All", ...Object.keys(catCounts).sort()];
+  // Project type se chhaanto — BOQ item ka apna type nahi hota, uski CATEGORY
+  // ka hota hai (Library → Work Category). Jis category par koi type nahi
+  // chuna wo har type me chalti hai, isliye wo hamesha saath aati hai.
+  const allCatPills = ["All", ...Object.keys(catCounts)
+    .filter(c => !typeCatNames || typeCatNames.has(c))
+    .sort()];
 
   return (
     <div style={{ fontFamily: "inherit" }}>
@@ -5807,6 +5839,11 @@ function BoqItemLibrarySection() {
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder={t("master_library.search_items_by_name_category_or")}
             style={{ flex: 1, maxWidth: 360, padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 12.5, outline: "none", fontFamily: "inherit" }}/>
+          <select value={filterType} onChange={e => { setFilterType(e.target.value); setFilterCat("All"); }}
+            style={{ padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 12.5, outline: "none", fontFamily: "inherit", color: "#374151" }}>
+            <option value="">{t("master_library.sab_project_type")}</option>
+            {projTypes.map(pt => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+          </select>
           <span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} / {rows.length} items</span>
         </div>
         <button onClick={openCreate}
