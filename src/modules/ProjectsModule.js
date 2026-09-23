@@ -876,8 +876,6 @@ const mapProject=(p)=>({
 // PROJECT SETTINGS MODAL
 // ═══════════════════════════════════════════════════════════════════
 const STATUS_OPTIONS = ["Not Started","Ongoing","Hold","Completed"];
-const TYPE_OPTIONS   = ["Residential","Commercial","Industrial","Interior"];
-const CITIES         = ["Raipur","Bhilai","Bilaspur","Durg","Rajnandgaon","Other"];
 
 function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   const [section, setSection] = useState("basic"); // basic | team | clients | status | danger
@@ -929,11 +927,35 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
 
+  // City aur Project Type company ki apni Library se aate hain — New Project
+  // modal bhi wahi karta hai. Yahan pehle ek jami hui list thi (Raipur/Bhilai…
+  // aur Residential/Commercial/Industrial/Interior). Do nuksan the: company ke
+  // apne type (Pipe line, Road, ugr & structure) us list me the hi nahi, aur
+  // Save karte hi project ka library-link TOOT jaata tha — naam string me chala
+  // jaata aur city_id / construction_type_id purane hi pade rehte the, jinse
+  // Estimate Builder sahi rate package uthata hai.
+  const [libCities, setLibCities] = useState([]);
+  const [libCTypes, setLibCTypes] = useState([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [cr, tr] = await Promise.all([
+          api.get("/library/cities"),
+          api.get("/library/construction-types"),
+        ]);
+        if (cr?.success) setLibCities(cr.data || []);
+        if (tr?.success) setLibCTypes(tr.data || []);
+      } catch (_) {}
+    })();
+  }, []);
+
   // Form state
   const [form, setForm] = useState({
     name:         project.name       || "",
     client_name:  project.client     || "",
     city:         project.city       || "",
+    cityId:       project._raw?.city_id ? String(project._raw.city_id) : "",
+    constructionTypeId: project._raw?.construction_type_id ? String(project._raw.construction_type_id) : "",
     type:         project._raw?.type || project.type || "Residential",
     pm_name:      project.pm         || "",
     start_date:   project._raw?.start_date ? project._raw.start_date.split("T")[0] : "",
@@ -950,12 +972,13 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
     try {
       // Reverse map display values → DB values
       const STATUS_R={"Ongoing":"ongoing","Completed":"completed","Hold":"hold","Not Started":"not_started"};
-      const TYPE_R={"Residential":"residential","Commercial":"commercial","Industrial":"industrial","Interior":"interior"};
       const payload = {
         name:         form.name,
         client_name:  form.client_name,
-        city:         form.city,
-        type:         TYPE_R[form.type]||form.type,
+        // Sirf library ki id bhejte hain — naam server khud cities /
+        // construction_types se uthata hai, taaki dono jagah ek hi sach rahe.
+        ...(form.cityId ? { cityId: Number(form.cityId) } : {}),
+        ...(form.constructionTypeId ? { constructionTypeId: Number(form.constructionTypeId) } : {}),
         pm_name:      form.pm_name,
         start_date:   form.start_date || null,
         end_date:     form.end_date   || null,
@@ -1048,11 +1071,26 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div>
                   {lbl("City")}
-                  {sel("city",CITIES)}
+                  {/* "+ New" bhi yahin — warna jis company ki library khaali
+                      hai wo city chun hi nahi paati. */}
+                  <CityPicker value={form.cityId} cities={libCities} setCities={setLibCities}
+                    onChange={(id, c) => setForm(p => ({ ...p, cityId: id || "", city: c?.name || "" }))}
+                    selectStyle={{width:"100%",padding:"9px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,
+                      fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
                 <div>
                   {lbl("Project Type")}
-                  {sel("type",TYPE_OPTIONS)}
+                  <select value={form.constructionTypeId}
+                    onChange={e=>{
+                      const tid=e.target.value;
+                      const ct=libCTypes.find(x=>String(x.id)===String(tid));
+                      setForm(p=>({...p,constructionTypeId:tid,type:(ct?.name||"").toLowerCase()}));
+                    }}
+                    style={{width:"100%",padding:"9px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,
+                      fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                    <option value="">{t("common.select_type")}</option>
+                    {libCTypes.map(ct=><option key={ct.id} value={ct.id}>{ct.name}</option>)}
+                  </select>
                 </div>
               </div>
               <div>
