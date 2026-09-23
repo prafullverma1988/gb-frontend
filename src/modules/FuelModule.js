@@ -101,6 +101,12 @@ const uploadToCloudinary = (file) => new Promise((resolve, reject) => {
 // `type` only the primary one. Fuel accepts either role so the pumps already
 // on file keep working before anyone re-tags them.
 const FUEL_VENDOR_ROLES = ["fuel_vendor", "material_vendor", "fuel", "equipment", "vendor", "supplier"];
+// Subcon bhi party hai — uspar "Subcontractor" role laga hota hai.
+const isSubconParty = (p) => {
+  const bag = (String(p.roles || "") + "," + String(p.type || ""))
+    .toLowerCase().split(",").map((x) => x.trim());
+  return bag.includes("subcontractor");
+};
 const isFuelVendor = (p) => {
   const bag = (String(p.roles || "") + "," + String(p.type || ""))
     .toLowerCase().split(",").map((s) => s.trim());
@@ -1162,6 +1168,315 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
           {errorBox}
         </div>
         )}
+      </Modal>
+    </>
+  );
+}
+// ══════════════════════════════════════════════════════════════════
+// SUBCON KO DIESEL — diya hua diesel uske ledger se kat jaata hai
+// ------------------------------------------------------------------
+// Company subcon ki machine / uske hisse ke kaam me bhi diesel deti hai. Wo
+// humara kharcha nahi hai — uska paisa uske khaate se kat'ta hai. Entry save
+// karte hi uske ledger par ek credit note ban jaati hai aur uske khule bill
+// par apne aap adjust ho jaati hai (server: POST /fuel/subcon-issues).
+//
+// Barrel se dete waqt rate poochha hi nahi jaata — drum ka apna average rate
+// lagta hai, wahi jo apni machine par lagta hai. Pump se seedha dete waqt
+// parchi ka rate chahiye, kyunki wahi bill vendor ko dena hai.
+// ══════════════════════════════════════════════════════════════════
+function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onReload }) {
+  const [rows, setRows] = useState(null);
+  const [summary, setSummary] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    const [l, s] = await Promise.all([
+      api.get(`/fuel/subcon-issues?from=${from}&to=${to}`).catch(() => null),
+      api.get(`/fuel/reports/subcon?from=${from}&to=${to}`).catch(() => null),
+    ]);
+    setRows(l?.success ? l.data || [] : []);
+    setSummary(s?.success ? s.data || [] : []);
+  }, [from, to]);
+  useEffect(() => { load(); }, [load]);
+
+  const fromPump = f.source === "pump";
+  const store = stores.find((s) => String(s.id) === String(f.store_id));
+  const litres = parseFloat(f.litres) || 0;
+  // Barrel ka rate drum ka average; pump ka rate parchi se.
+  const rate = fromPump ? (parseFloat(f.rate) || 0) : Number(store?.avg_rate || 0);
+  const amount = Math.round(litres * rate * 100) / 100;
+
+  const pickPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true); setError("");
+    try {
+      const url = await uploadToCloudinary(file);
+      setF((p) => ({ ...p, photo_url: url }));
+    }
+    catch (ex) { setError("Photo upload fail: " + ex.message); }
+    setUploading(false);
+  };
+
+  const save = async () => {
+    setError("");
+    if (!f.subcon_party_id) { setError(t("fuel.subcon_select_karo")); return; }
+    if (!fromPump && !f.store_id) { setError(t("fuel.barrel_chunein")); return; }
+    if (fromPump && !f.vendor_party_id) { setError(t("fuel.pump_vendor_chunein")); return; }
+    if (!litres) { setError(t("fuel.litres_bharein")); return; }
+    if (fromPump && !rate) { setError(t("fuel.rate_bharein")); return; }
+    if (!fromPump && store && litres > Number(store.litres) + 0.001) {
+      setError(`${store.name} me sirf ${fmtL(store.litres)} hai`); return;
+    }
+    // Photo par koi chhoot nahi — subcon ke paise ka saboot yahi hai.
+    if (!f.photo_url) { setError(t("fuel.subcon_photo_lazmi")); return; }
+    setBusy(true);
+    try {
+      const r = await api.post("/fuel/subcon-issues", {
+        source: fromPump ? "pump" : "store",
+        store_id: fromPump ? null : parseInt(f.store_id, 10),
+        vendor_party_id: fromPump ? parseInt(f.vendor_party_id, 10) : null,
+        subcon_party_id: parseInt(f.subcon_party_id, 10),
+        project_id: fromPump && f.project_id ? parseInt(f.project_id, 10) : null,
+        litres,
+        rate: fromPump ? rate : null,
+        amount: fromPump ? amount : null,
+        equipment_text: f.equipment_text || null,
+        purpose: f.purpose || null,
+        issued_at: toSqlDateTime(f.issued_at || nowLocal()),
+        payment_mode: fromPump ? (f.payment_mode || "credit") : null,
+        cash_source: fromPump && f.payment_mode === "cash" ? (f.cash_source || "wallet") : null,
+        slip_no: fromPump ? (f.slip_no || null) : null,
+        note: f.note || null,
+        photo_urls: [f.photo_url],
+      });
+      if (r?.success) {
+        setOpen(false); setF({});
+        if (window.toast && r.message) window.toast.success(r.message);
+        await load(); onReload();
+      } else setError(r?.message || "Save failed");
+    } catch (e) { setError(e?.message || "Network error"); }
+    setBusy(false);
+  };
+
+  const remove = async (r) => {
+    if (!(await window.confirmAsync(t("fuel.subcon_entry_delete_karein", { name: r.subcon_name, amt: fmtC(r.amount) })))) return;
+    try {
+      const res = await api.del(`/fuel/subcon-issues/${r.id}?source=${r.source}`);
+      if (res && res.success === false) { window.alert(res.message || "Delete failed"); return; }
+      await load(); onReload();
+    } catch (e) { window.alert(e?.message || "Network error"); }
+  };
+
+  const totalAmt = summary.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const totalL = summary.reduce((s, r) => s + Number(r.litres || 0), 0);
+
+  return (
+    <>
+      <Panel title={t("fuel.subcon_ko_diesel")} action={
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="date" value={from} onChange={(e) => onRange(e.target.value, to)} style={{ ...inp, width: 140 }} />
+          <input type="date" value={to} onChange={(e) => onRange(from, e.target.value)} style={{ ...inp, width: 140 }} />
+          <Btn size="sm" icon={IcDrop} onClick={() => { setF({ source: "store", issued_at: nowLocal(), payment_mode: "credit" }); setError(""); setOpen(true); }}>
+            {t("fuel.diesel_dein")}
+          </Btn>
+        </div>}>
+        <div style={{ padding: "10px 13px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 7, fontSize: 11.5, color: T.ind, fontWeight: 600, marginBottom: 12 }}>
+          {t("fuel.subcon_diesel_ledger_hint")}
+        </div>
+
+        {summary.length > 0 && (
+          <>
+            <Row head cols="1.6fr 110px 130px 150px">
+              <span>{t("fuel.subcon")}</span><span>{t("fuel.litres")}</span><span>{t("fuel.value")}</span><span>{t("fuel.aakhri_baar")}</span>
+            </Row>
+            {summary.map((s) => (
+              <Row key={s.subcon_id} cols="1.6fr 110px 130px 150px">
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{s.subcon_name || "—"}</span>
+                <span style={{ fontSize: 12, color: T.t2 }}>{fmtL(s.litres)}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{fmtC(s.amount)}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{fmtDT(s.last_at)}</span>
+              </Row>
+            ))}
+            <Row cols="1.6fr 110px 130px 150px">
+              <span style={{ fontSize: 12, fontWeight: 700, color: T.t2 }}>{t("common.total")}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{fmtL(totalL)}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 800, color: T.t1 }}>{fmtC(totalAmt)}</span>
+              <span />
+            </Row>
+          </>
+        )}
+      </Panel>
+
+      <Panel title={t("fuel.kab_kya_diya")}>
+        {rows === null && <Empty>{t("common.loading")}</Empty>}
+        {rows && rows.length === 0 && <Empty>{t("fuel.abhi_kisi_subcon_ko_diesel_nahi")}</Empty>}
+        {rows && rows.length > 0 && (
+          <>
+            <Row head cols="110px 1.3fr 1.1fr 1.2fr 80px 80px 100px 120px 70px">
+              <span>{t("fuel.kab")}</span><span>{t("fuel.subcon")}</span><span>{t("fuel.kahan_se")}</span>
+              <span>{t("fuel.machine_kaam")}</span><span>{t("fuel.litres")}</span><span>{t("common.rate")}</span>
+              <span>{t("fuel.value")}</span><span>{t("fuel.katauti")}</span><span />
+            </Row>
+            {rows.map((r) => {
+              const adj = Number(r.adjusted || 0);
+              const amt = Number(r.amount || 0);
+              const pill = !r.recovery_txn_id
+                ? { l: t("fuel.recovery_hat_gayi"), c: T.red, bg: T.redL }
+                : adj >= amt - 0.005 ? { l: t("fuel.bill_me_adjust"), c: T.grn, bg: T.grnL }
+                : adj > 0.005 ? { l: t("fuel.thoda_adjust"), c: T.amb, bg: T.ambL }
+                : { l: t("fuel.khula_credit"), c: T.slt, bg: T.sltL };
+              return (
+                <Row key={r.source + r.id} cols="110px 1.3fr 1.1fr 1.2fr 80px 80px 100px 120px 70px">
+                  <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r.at)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{r.subcon_name || "—"}</span>
+                  <span style={{ fontSize: 11.5, color: T.t2 }}>
+                    {r.source === "store" ? r.from_name : r.vendor_name}
+                    <span style={{ fontSize: 10, color: T.t4 }}> {r.source === "store" ? t("fuel.barrel_2") : t("fuel.pump")}</span>
+                  </span>
+                  <span style={{ fontSize: 11.5, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {[r.equipment_text, r.purpose].filter(Boolean).join(" · ") || "—"}
+                  </span>
+                  <span style={{ fontSize: 12, color: T.t2 }}>{fmtL(r.litres)}</span>
+                  <span style={{ fontSize: 11.5, color: T.t3 }}>₹{fmtN(r.rate)}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{fmtC(r.amount)}</span>
+                  <span><Pill label={pill.l} c={pill.c} bg={pill.bg} /></span>
+                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    {(r.photos || []).length > 0 && (
+                      <a href={r.photos[0]} target="_blank" rel="noreferrer" title={t("fuel.photo")}
+                        style={{ display: "inline-flex", alignItems: "center", color: T.t3 }}>
+                        <IcCamera size={15} />
+                      </a>
+                    )}
+                    <button type="button" onClick={() => remove(r)} title={t("common.delete")}
+                      style={{ border: "none", background: "none", cursor: "pointer", color: T.t4, padding: 0 }}>
+                      <IcTrash size={15} />
+                    </button>
+                  </div>
+                </Row>
+              );
+            })}
+          </>
+        )}
+      </Panel>
+
+      <Modal open={open} onClose={() => setOpen(false)} title={t("fuel.subcon_ko_diesel_dein")} width={680}
+        footer={<><Btn ghost onClick={() => setOpen(false)}>{t("common.cancel")}</Btn>
+          <Btn onClick={save} disabled={busy || uploading}>{busy ? t("common.saving") : t("fuel.de_diya")}</Btn></>}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label={t("fuel.diesel_kahan_se")} span={2}>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[{ k: "store", l: t("fuel.barrel_se") }, { k: "pump", l: t("fuel.pump_se_seedha") }].map((o) => {
+                const on = (f.source || "store") === o.k;
+                return (
+                  <button key={o.k} type="button" onClick={() => setF((p) => ({ ...p, source: o.k }))}
+                    style={{ flex: 1, padding: "9px 10px", borderRadius: 7, cursor: "pointer", fontFamily: "inherit",
+                      fontSize: 12.5, fontWeight: 700,
+                      border: "1.5px solid " + (on ? T.ind : T.b1),
+                      background: on ? T.indL : T.surface, color: on ? T.ind : T.t2 }}>{o.l}</button>
+                );
+              })}
+            </div>
+          </Field>
+
+          <Field label={t("fuel.kis_subcon_ko")} hint={subcons.length ? null : t("fuel.koi_subcon_nahi")}>
+            <select value={f.subcon_party_id || ""} onChange={(e) => setF((p) => ({ ...p, subcon_party_id: e.target.value }))} style={inp}>
+              <option value="">{t("fuel.chunein")}</option>
+              {subcons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+
+          {fromPump ? (
+            <Field label={t("fuel.pump_fuel_vendor")}>
+              <select value={f.vendor_party_id || ""} onChange={(e) => setF((p) => ({ ...p, vendor_party_id: e.target.value }))} style={inp}>
+                <option value="">{t("fuel.chunein")}</option>
+                {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            </Field>
+          ) : (
+            <Field label={t("fuel.barrel_store")} hint={store ? t("fuel.rate_drum_ke_average_se", { rate: fmtN(store.avg_rate) }) : null}>
+              <select value={f.store_id || ""} onChange={(e) => setF((p) => ({ ...p, store_id: e.target.value }))} style={inp}>
+                <option value="">{t("fuel.chunein")}</option>
+                {stores.map((s) => <option key={s.id} value={s.id}>{s.name} — {fmtL(s.litres)} · {placeOf(s)}</option>)}
+              </select>
+            </Field>
+          )}
+
+          <Field label={t("fuel.litres")}>
+            <input value={f.litres || ""} inputMode="decimal" placeholder="0"
+              onChange={(e) => setF((p) => ({ ...p, litres: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} />
+          </Field>
+
+          {fromPump ? (
+            <Field label={t("common.rate")}>
+              <input value={f.rate || ""} inputMode="decimal" placeholder="0"
+                onChange={(e) => setF((p) => ({ ...p, rate: e.target.value.replace(/[^0-9.]/g, "") }))} style={inp} />
+            </Field>
+          ) : (
+            <Field label={t("common.rate")} hint={t("fuel.drum_ka_apna_rate")}>
+              <input value={rate ? fmtN(rate) : ""} readOnly style={{ ...inp, background: T.surfaceB, color: T.t3 }} />
+            </Field>
+          )}
+
+          <Field label={t("fuel.machine_kaam")} hint={t("fuel.subcon_ki_machine_free_text")}>
+            <input value={f.equipment_text || ""} onChange={(e) => setF((p) => ({ ...p, equipment_text: e.target.value }))}
+              placeholder={t("fuel.e_g_jcb_3dx")} style={inp} />
+          </Field>
+
+          <Field label={t("fuel.kis_kaam_ke_liye")}>
+            <input value={f.purpose || ""} onChange={(e) => setF((p) => ({ ...p, purpose: e.target.value }))} style={inp} />
+          </Field>
+
+          {fromPump && (
+            <Field label={t("common.project")} hint={t("fuel.project_pump_wali_cost")}>
+              <select value={f.project_id || ""} onChange={(e) => setF((p) => ({ ...p, project_id: e.target.value }))} style={inp}>
+                <option value="">{t("fuel.company_level_koi_project_nahi")}</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+          )}
+
+          {fromPump && (
+            <Field label={t("common.payment")}>
+              <select value={f.payment_mode || "credit"} onChange={(e) => setF((p) => ({ ...p, payment_mode: e.target.value }))} style={inp}>
+                <option value="credit">{t("fuel.udhaar_credit")}</option>
+                <option value="cash">{t("common.cash")}</option>
+              </select>
+            </Field>
+          )}
+
+          <Field label={t("fuel.kab")}>
+            <input type="datetime-local" value={f.issued_at || ""} onChange={(e) => setF((p) => ({ ...p, issued_at: e.target.value }))} style={inp} />
+          </Field>
+
+          {fromPump && (
+            <Field label={t("fuel.slip_no_optional")}>
+              <input value={f.slip_no || ""} onChange={(e) => setF((p) => ({ ...p, slip_no: e.target.value }))} style={inp} />
+            </Field>
+          )}
+
+          <Field label={t("fuel.photo")} span={2} hint={t("fuel.subcon_photo_kyon")}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <input type="file" accept="image/*" onChange={pickPhoto} style={{ fontSize: 12 }} />
+              {uploading && <span style={{ fontSize: 11.5, color: T.t4 }}>{t("fuel.upload_ho_rahi_hai")}</span>}
+              {f.photo_url && <a href={f.photo_url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: T.ind, fontWeight: 600 }}>{t("fuel.photo_lag_gayi")}</a>}
+            </div>
+          </Field>
+
+          <Field label={t("common.note_optional")} span={2}>
+            <input value={f.note || ""} onChange={(e) => setF((p) => ({ ...p, note: e.target.value }))} style={inp} />
+          </Field>
+
+          <div style={{ gridColumn: "span 2", padding: "10px 13px", borderRadius: 7, background: amount > 0 ? T.grnL : T.surfaceB,
+            border: `1px solid ${amount > 0 ? T.grnM : T.b1}`, fontSize: 12.5, fontWeight: 700, color: amount > 0 ? T.grn : T.t3 }}>
+            {t("fuel.subcon_ke_khaate_se_katega", { amt: fmtC(amount) })}
+          </div>
+          {error && <div style={{ gridColumn: "span 2", padding: "8px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 6, fontWeight: 600 }}>{error}</div>}
+        </div>
       </Modal>
     </>
   );
@@ -2612,6 +2927,7 @@ function FuelModule() {
   const [issues, setIssues] = useState([]);
   const [equipment, setEquipment] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [subcons, setSubcons] = useState([]);
   const [projects, setProjects] = useState([]);
   const [byEquipment, setByEquipment] = useState([]);
   const [byProject, setByProject] = useState([]);
@@ -2664,6 +2980,7 @@ function FuelModule() {
       if (!alive) return;
       setEquipment(eq?.success ? eq.data || [] : []);
       setVendors((pa?.success ? pa.data || [] : []).filter(isFuelVendor));
+      setSubcons((pa?.success ? pa.data || [] : []).filter(isSubconParty));
       setProjects(pj?.success ? (pj.data || []).filter((p) => p.is_active !== 0) : []);
       setLoading(false);
     })();
@@ -2708,6 +3025,9 @@ function FuelModule() {
     { id: "barrel",    l: t("fuel.barrel_stock_2"),  I: IcDrum, badge: stores.filter((s) => s.below_reorder).length || null, bc: T.amb },
     // Unbilled vendor ledger ke theek pehle — kaam ka kram wahi hai:
     // pehle bill banao, tabhi ledger me kuch aata hai.
+    // Subcon ko diya diesel barrel ke theek baad — wo wahin se nikalta hai,
+    // aur uska paisa vendor ke bill se nahi, subcon ke khaate se aata hai.
+    { id: "subcon",    l: t("fuel.subcon_ko_diesel"), I: IcTruck },
     { id: "unbilled",  l: t("fuel.unbilled"),        I: IcFile, badge: unbilledN || null, bc: T.amb },
     { id: "vendor",    l: t("fuel.vendor_ledger_2"), I: IcTruck },
     // No badge: a count here would have to be invented until the sensor
@@ -2766,6 +3086,10 @@ function FuelModule() {
         {tab === "barrel" && (
           <BarrelTab stores={stores} projects={projects} onReload={reloadAll}
             onOpenLedger={setLedgerStore} onRefuel={() => setRefuelOpen(true)} />
+        )}
+        {tab === "subcon" && (
+          <SubconTab subcons={subcons} stores={stores} vendors={vendors} projects={projects}
+            from={from} to={to} onRange={(f2, t2) => { setFrom(f2); setTo(t2); }} onReload={reloadAll} />
         )}
         {tab === "unbilled" && (
           <UnbilledTab onReload={reloadAll} />
