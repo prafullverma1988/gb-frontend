@@ -9911,6 +9911,7 @@ const dict = {
   "transaction_detail.payment_out":                            "Payment Out",
   "transaction_detail.pdf_ke_liye_pop_up_allow":              "Allow pop-ups to download the PDF",
   "transaction_detail.photo_proof":                            "Photo proof",
+  "transaction_detail.n_photo":                                "{n} photo",
   "transaction_detail.reference":                              "Reference",
   "transaction_detail.sales_invoice":                          "Sales Invoice",
   "transaction_detail.share":                                  "Share",

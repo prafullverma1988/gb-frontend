@@ -9910,6 +9910,7 @@ const dict = {
   "transaction_detail.payment_out":                            "पेमेंट आउट",
   "transaction_detail.pdf_ke_liye_pop_up_allow":              "PDF के लिए पॉप-अप allow करें",
   "transaction_detail.photo_proof":                            "फोटो प्रूफ",
+  "transaction_detail.n_photo":                                "{n} फ़ोटो",
   "transaction_detail.reference":                              "रेफरेंस",
   "transaction_detail.sales_invoice":                          "सेल्स इनवॉइस",
   "transaction_detail.share":                                  "शेयर",

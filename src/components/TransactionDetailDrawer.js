@@ -694,13 +694,25 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                     <span style={{ fontSize: 12.5, fontWeight: 800, color: T.t1 }}>₹{fmtN(e.amount)}</span>
                   </div>
                   <div style={{ fontSize: 11, color: T.t3, marginTop: 3 }}>
-                    {[fmtDate(e.filled_at), e.machine || e.barrel, e.project_name,
+                    {/* Kahan se gaya (drum ya pump), kise, kis machine me, kis project
+                        par, parchi, aur kisne diya — subcon ko diye diesel par yahi
+                        teen sawaal sabse pehle aate hain. */}
+                    {[fmtDate(e.filled_at), e.source_label || e.barrel, e.machine,
+                      e.subcon_name ? "→ " + e.subcon_name : null, e.project_name,
                       e.slip_no ? `${t("fuel.parchi")} ${e.slip_no}` : null, e.entered_by_name].filter(Boolean).join(" · ")}
                   </div>
                   {e.purpose && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{e.purpose}</div>}
                   {e.slip_flag === "mismatch" && (
                     <div style={{ fontSize: 10.5, color: T.amb, fontWeight: 700, marginTop: 3 }}>
                       {t("fuel.slip_se_alag")}{e.slip_note ? ` — ${e.slip_note}` : ""}
+                    </div>
+                  )}
+                  {(e.photos || []).length > 0 && (
+                    <div style={{ marginTop: 7 }}>
+                      <span style={{ display: "inline-block", fontSize: 10, fontWeight: 700, color: T.ind,
+                        background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 999, padding: "2px 8px" }}>
+                        {t("transaction_detail.n_photo", { n: (e.photos || []).length })}
+                      </span>
                     </div>
                   )}
                   <div style={{ display: "flex", gap: 6, marginTop: 7, flexWrap: "wrap" }}>
