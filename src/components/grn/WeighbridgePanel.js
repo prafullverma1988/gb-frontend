@@ -7,6 +7,11 @@
 //      weight. Challan se kam aaya to "Short issue" ek tap me.
 // Kram sakht nahi: slip baad me bhi daal sakte hain (aksar driver WhatsApp
 // par bhejta hai), aur empty weight GRN se pehle bhi ho sakta hai.
+//
+// ULTA RAASTA (23 Sep 2026): apni gadi bharne ja rahi ho to pehle KHALI
+// tulti hai aur bhar kar aane par doosra wazan — "Khali gadi pehle tuli".
+// GADI KA PEECHHA: tuli gadi jab tak site par utar kar GRN nahi hoti, uska
+// challan aur number "utarna baaki" list me khula rehta hai.
 // Backend: routes/weighments.js
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../../config/api";
@@ -86,20 +91,36 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     setLines([...ls, ...pl.filter((l) => !(l.linkedMrId && mrIds.has(l.linkedMrId)) && !mrPo.has(l.poId + "|" + nameKey(l.material)))]);
     setLoading(false);
   };
+  // "Doosra material" ka naam library se — haath se type kiya naam stock
+  // aur rate dono jagah alag item ban jaata tha.
+  const [lib, setLib] = useState([]);
   useEffect(() => { reload(); loadPhotoPolicy().then(setPol); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [dest?.type, dest?.projectId, dest?.warehouseId]);
+  useEffect(() => { api.get("/library/materials").then(r => { if (r?.success) setLib(r.data || []); }).catch(() => {}); }, []);
+  const libUnit = (name) => {
+    const f = (lib || []).find(m => (m.name || "").trim().toLowerCase() === String(name || "").trim().toLowerCase());
+    return f && f.unit ? f.unit : null;
+  };
 
   const photoMissing = (key, url) => policyFor(pol, key).mode === "required" && !url;
 
   const open = trips.filter(w => w.status === "InTransit" || w.status === "Received");
-  const closed = trips.filter(w => w.status === "Closed").slice(0, 10);
+  // Dono wazan ho chuke par maal site par utra nahi — challan aur gadi ka
+  // peechha yahin khula rehta hai, jab tak GRN nahi hota.
+  const waiting = trips.filter(w => w.status === "Closed" && w.pending_unload);
+  const closed = trips.filter(w => w.status === "Closed" && !w.pending_unload).slice(0, 10);
 
   // ── Step 1 form ─────────────────────────────────────────────────
-  const blankNew = { picked: {}, free: [], freeName: "", freeUnit: "Ton", vendor: "", challan: "", vehicle: "", bridge: "", slipNo: "", gross: "", slipUrl: "", vehUrl: "", read: null, readMsg: "" };
+  // mode: pehla wazan bhari gadi ka ('gross', aam) ya khali ka ('tare' —
+  // apni gadi bharne ja rahi hai, bhar kar aane par doosra wazan).
+  const blankNew = { mode: "gross", picked: {}, free: [], freeName: "", freeUnit: "Ton", vendor: "", challan: "", vehicle: "", bridge: "", slipNo: "", gross: "", slipUrl: "", vehUrl: "", read: null, readMsg: "" };
   const [nf, setNf] = useState(blankNew);
   const [reading, setReading] = useState(false);
   const setN = (p) => setNf(f => ({ ...f, ...p }));
 
   const pickedLines = useMemo(() => lines.filter(l => nf.picked[l.key]), [lines, nf.picked]);
+  // Order chuna hai to vendor usi order ka — gadi usi ne bheji hai. Badalne
+  // par GRN kisi aur party ke khaate me chala jaata (server bhi rokta hai).
+  const lockedVendor = (pickedLines.find(l => l.vendor) || {}).vendor || "";
   const setPick = (key, p) => setNf(f => ({ ...f, picked: { ...f.picked, [key]: { ...f.picked[key], ...p } } }));
   // Tick karte hi order ki poori pending qty bhar dena galat tha (23 Sep 2026):
   // 2 gadi ka order ho aur 1 gadi aaye to entry usi 1 gadi ki hai, aur bhari
@@ -143,16 +164,18 @@ export default function WeighbridgePanel({ dest, onChanged }) {
       ...nf.free.map(x => ({ material_name: x.name, order_unit: x.unit, challan_qty: x.qty || null })),
     ];
     if (!payloadLines.length) { alert(t("weigh.need_material")); return; }
-    if (!(Number(nf.gross) > 0)) { alert(t("weigh.need_gross")); return; }
+    if (!(Number(nf.gross) > 0)) { alert(t(nf.mode === "gross" ? "weigh.need_gross" : "weigh.need_tare")); return; }
     if (photoMissing("weigh_slip", nf.slipUrl)) { alert(t("weigh.photo_required", { label: t("weigh.slip_photo") })); return; }
     if (photoMissing("weigh_vehicle", nf.vehUrl)) { alert(t("weigh.photo_required", { label: t("weigh.vehicle_photo") })); return; }
     setBusy(true);
     const body = {
       ...(dest.type === "warehouse" ? { warehouse_id: dest.warehouseId } : { project_id: dest.projectId }),
-      vendor_name: nf.vendor || null, challan_no: nf.challan || null,
+      vendor_name: lockedVendor || nf.vendor || null, challan_no: nf.challan || null,
       vehicle_no: nf.vehicle || null, weighbridge_name: nf.bridge || null,
-      gross_kg: Number(nf.gross), gross_slip_no: nf.slipNo || null,
-      gross_slip_url: nf.slipUrl || null, vehicle_photo_url: nf.vehUrl || null,
+      ...(nf.mode === "gross"
+        ? { gross_kg: Number(nf.gross), gross_slip_no: nf.slipNo || null, gross_slip_url: nf.slipUrl || null }
+        : { tare_kg: Number(nf.gross), tare_slip_no: nf.slipNo || null, tare_slip_url: nf.slipUrl || null }),
+      vehicle_photo_url: nf.vehUrl || null,
       slip_read: nf.read || null, lines: payloadLines,
     };
     const r = await api.post("/weighments", body).catch(e => ({ success: false, message: e.message }));
@@ -165,7 +188,11 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   // ── Step 3 form ─────────────────────────────────────────────────
   const [tf, setTf] = useState({ tare: "", slipNo: "", slipUrl: "", read: null, readMsg: "" });
   const tareTrip = trips.find(w => w.id === tareFor);
-  const netPreview = tareTrip && Number(tf.tare) > 0 ? Number(tareTrip.gross_kg) - Number(tf.tare) : null;
+  // Khali pehle tuli thi to yahi form BHARA hua wazan maangta hai.
+  const needGross = !!tareTrip && tareTrip.gross_kg == null;
+  const netPreview = tareTrip && Number(tf.tare) > 0
+    ? (needGross ? Number(tf.tare) - Number(tareTrip.tare_kg) : Number(tareTrip.gross_kg) - Number(tf.tare))
+    : null;
 
   const onTareSlip = async (url) => {
     setReading(true); setTf(f => ({ ...f, readMsg: "" }));
@@ -179,13 +206,16 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   };
 
   const saveTare = async () => {
-    if (!(Number(tf.tare) > 0)) { alert(t("weigh.need_tare")); return; }
-    if (tareTrip && Number(tf.tare) >= Number(tareTrip.gross_kg)) { alert(t("weigh.tare_gt_gross")); return; }
+    if (!(Number(tf.tare) > 0)) { alert(t(needGross ? "weigh.need_gross" : "weigh.need_tare")); return; }
+    if (tareTrip && !needGross && Number(tf.tare) >= Number(tareTrip.gross_kg)) { alert(t("weigh.tare_gt_gross")); return; }
+    if (tareTrip && needGross && Number(tf.tare) <= Number(tareTrip.tare_kg)) { alert(t("weigh.tare_gt_gross")); return; }
     if (photoMissing("weigh_slip", tf.slipUrl)) { alert(t("weigh.photo_required", { label: t("weigh.slip_photo") })); return; }
     setBusy(true);
-    const r = await api.post(`/weighments/${tareFor}/tare`, {
-      tare_kg: Number(tf.tare), tare_slip_no: tf.slipNo || null,
-      tare_slip_url: tf.slipUrl || null, slip_read: tf.read || null,
+    const r = await api.post(`/weighments/${tareFor}/${needGross ? "gross" : "tare"}`, {
+      ...(needGross
+        ? { gross_kg: Number(tf.tare), gross_slip_no: tf.slipNo || null, gross_slip_url: tf.slipUrl || null }
+        : { tare_kg: Number(tf.tare), tare_slip_no: tf.slipNo || null, tare_slip_url: tf.slipUrl || null }),
+      slip_read: tf.read || null,
     }).catch(e => ({ success: false, message: e.message }));
     setBusy(false);
     if (!r?.success) { alert(r?.message || t("common.something_went_wrong")); return; }
@@ -279,7 +309,20 @@ export default function WeighbridgePanel({ dest, onChanged }) {
         </button>
       ) : (
         <div style={{ background: T.surface, border: "1.5px solid " + T.bluM, borderLeft: "3px solid " + T.blu, borderRadius: 8, padding: 12, marginBottom: 14 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 8 }}>{t("weigh.step1_title")}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 7 }}>
+            {t(nf.mode === "gross" ? "weigh.step1_title" : "weigh.step1_tare_title")}
+          </div>
+          {/* Pehla wazan bhari gadi ka hai ya khali ka — kram ulta ho sakta hai */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 9 }}>
+            {[["gross", t("weigh.mode_gross_first")], ["tare", t("weigh.mode_tare_first")]].map(([m, label]) => (
+              <button key={m} type="button" onClick={() => setN({ mode: m })}
+                style={{ padding: "5px 11px", borderRadius: 14, cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 700,
+                  border: "1px solid " + (nf.mode === m ? T.blu : T.b1),
+                  background: nf.mode === m ? T.bluL : T.surface, color: nf.mode === m ? T.blu : T.t3 }}>
+                {label}
+              </button>
+            ))}
+          </div>
 
           <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, marginBottom: 5 }}>{t("weigh.which_material")}</div>
           {lines.length === 0 && <div style={{ fontSize: 11, color: T.t4, marginBottom: 6 }}>{t("weigh.no_ordered")}</div>}
@@ -322,7 +365,12 @@ export default function WeighbridgePanel({ dest, onChanged }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 80px auto", gap: 6, alignItems: "end", marginBottom: 10 }}>
             <div>
               <label style={lbl}>{t("weigh.free_material")}</label>
-              <input value={nf.freeName} onChange={e => setN({ freeName: e.target.value })} placeholder={t("weigh.free_material_ph")} style={inp} />
+              <input list="weigh-lib-mats" value={nf.freeName}
+                onChange={e => { const v = e.target.value; setN({ freeName: v, freeUnit: libUnit(v) || nf.freeUnit }); }}
+                placeholder={t("weigh.free_material_ph")} style={inp} />
+              <datalist id="weigh-lib-mats">
+                {(lib || []).map(m => <option key={m.id || m.name} value={m.name} />)}
+              </datalist>
             </div>
             <div>
               <label style={lbl}>{t("weigh.challan_qty")}</label>
@@ -331,7 +379,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
             <div>
               <label style={lbl}>{t("common.unit")}</label>
               <select value={nf.freeUnit} onChange={e => setN({ freeUnit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
-                {["Ton", "Kg", "MT", "CFT", "Brass", "Cu.m", "Bags", "Nos"].map(u => <option key={u}>{u}</option>)}
+                {[...new Set([...(libUnit(nf.freeName) ? [libUnit(nf.freeName)] : []), "Ton", "Kg", "MT", "CFT", "Brass", "Cu.m", "Bags", "Nos"])].map(u => <option key={u}>{u}</option>)}
               </select>
             </div>
             <button type="button" disabled={!nf.freeName.trim()}
@@ -346,14 +394,18 @@ export default function WeighbridgePanel({ dest, onChanged }) {
           {nf.readMsg && <div style={{ fontSize: 11, color: nf.read ? T.grn : T.amb, marginBottom: 8 }}>{nf.read ? "✓ " : "⚠ "}{nf.readMsg}</div>}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
-            <div><label style={lbl}>{t("weigh.gross_kg")}</label>
-              <input type="number" value={nf.gross} onChange={e => setN({ gross: e.target.value })} placeholder="18450" style={{ ...inp, fontWeight: 700, borderColor: T.bluM }} /></div>
+            <div><label style={lbl}>{t(nf.mode === "gross" ? "weigh.gross_kg" : "weigh.tare_kg")}</label>
+              <input type="number" value={nf.gross} onChange={e => setN({ gross: e.target.value })} placeholder={nf.mode === "gross" ? "18450" : "6150"} style={{ ...inp, fontWeight: 700, borderColor: T.bluM }} /></div>
             <div><label style={lbl}>{t("weigh.vehicle_no")}</label>
               <input value={nf.vehicle} onChange={e => setN({ vehicle: e.target.value.toUpperCase() })} placeholder={t("weigh.vehicle_no_ph")} style={inp} /></div>
             <div><label style={lbl}>{t("weigh.slip_no")}</label>
               <input value={nf.slipNo} onChange={e => setN({ slipNo: e.target.value })} style={inp} /></div>
             <div><label style={lbl}>{t("weigh.vendor")}</label>
-              <input value={nf.vendor} onChange={e => setN({ vendor: e.target.value })} style={inp} /></div>
+              <input value={lockedVendor || nf.vendor} readOnly={!!lockedVendor}
+                onChange={e => setN({ vendor: e.target.value })}
+                title={lockedVendor ? t("weigh.vendor_locked") : ""}
+                style={{ ...inp, ...(lockedVendor ? { background: T.surfaceB, color: T.t3 } : null) }} />
+              {lockedVendor && <div style={{ fontSize: 9.5, color: T.t4, marginTop: 2 }}>🔒 {t("weigh.vendor_locked")}</div>}</div>
             <div><label style={lbl}>{t("weigh.challan_no")}</label>
               <input value={nf.challan} onChange={e => setN({ challan: e.target.value })} style={inp} /></div>
             <div><label style={lbl}>{t("weigh.weighbridge_name")}</label>
@@ -362,7 +414,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
 
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button type="button" onClick={() => { setShowNew(false); setNf(blankNew); }} style={btn(T.surface, T.t3, T.b1)}>{t("common.cancel")}</button>
-            <button type="button" onClick={saveNew} disabled={busy} style={btn(busy ? "#9CA3AF" : T.grn, "#fff")}>{busy ? t("common.saving") : t("weigh.save_loaded")}</button>
+            <button type="button" onClick={saveNew} disabled={busy} style={btn(busy ? "#9CA3AF" : T.grn, "#fff")}>{busy ? t("common.saving") : t(nf.mode === "gross" ? "weigh.save_loaded" : "weigh.save_tare")}</button>
           </div>
         </div>
       )}
@@ -377,12 +429,12 @@ export default function WeighbridgePanel({ dest, onChanged }) {
           <TripHead w={w} />
           {tareFor === w.id ? (
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed " + T.b1 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 7 }}>{t("weigh.step3_title")}</div>
-              <PhotoPick label={t("weigh.empty_slip")} url={tf.slipUrl} onUrl={u => setTf(f => ({ ...f, slipUrl: u }))} onRead={onTareSlip} reading={reading} />
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 7 }}>{t(needGross ? "weigh.step_gross_title" : "weigh.step3_title")}</div>
+              <PhotoPick label={t(needGross ? "weigh.loaded_slip" : "weigh.empty_slip")} url={tf.slipUrl} onUrl={u => setTf(f => ({ ...f, slipUrl: u }))} onRead={onTareSlip} reading={reading} />
               {tf.readMsg && <div style={{ fontSize: 11, color: tf.read ? T.grn : T.amb, margin: "6px 0" }}>{tf.read ? "✓ " : "⚠ "}{tf.readMsg}</div>}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
-                <div><label style={lbl}>{t("weigh.tare_kg")}</label>
-                  <input type="number" value={tf.tare} onChange={e => setTf(f => ({ ...f, tare: e.target.value }))} placeholder="6150" style={{ ...inp, fontWeight: 700, borderColor: T.bluM }} /></div>
+                <div><label style={lbl}>{t(needGross ? "weigh.gross_kg" : "weigh.tare_kg")}</label>
+                  <input type="number" value={tf.tare} onChange={e => setTf(f => ({ ...f, tare: e.target.value }))} placeholder={needGross ? "18450" : "6150"} style={{ ...inp, fontWeight: 700, borderColor: T.bluM }} /></div>
                 <div><label style={lbl}>{t("weigh.slip_no")}</label>
                   <input value={tf.slipNo} onChange={e => setTf(f => ({ ...f, slipNo: e.target.value }))} style={inp} /></div>
               </div>
@@ -393,13 +445,13 @@ export default function WeighbridgePanel({ dest, onChanged }) {
               )}
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
                 <button type="button" onClick={() => setTareFor(null)} style={btn(T.surface, T.t3, T.b1)}>{t("common.cancel")}</button>
-                <button type="button" onClick={saveTare} disabled={busy} style={btn(busy ? "#9CA3AF" : T.grn, "#fff")}>{busy ? t("common.saving") : t("weigh.save_tare")}</button>
+                <button type="button" onClick={saveTare} disabled={busy} style={btn(busy ? "#9CA3AF" : T.grn, "#fff")}>{busy ? t("common.saving") : t(needGross ? "weigh.save_loaded" : "weigh.save_tare")}</button>
               </div>
             </div>
           ) : (
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <button type="button" onClick={() => { setTareFor(w.id); setResult(null); setTf({ tare: "", slipNo: "", slipUrl: "", read: null, readMsg: "" }); }}
-                style={btn(T.blu, "#fff")}>{t("weigh.weigh_empty")}</button>
+                style={btn(T.blu, "#fff")}>{t(w.gross_kg == null ? "weigh.weigh_loaded" : "weigh.weigh_empty")}</button>
               {!(w.lines || []).some(l => l.grn_item_id) && (
                 <button type="button" onClick={() => cancelTrip(w.id)} style={btn(T.surface, T.red, T.redM)}>{t("common.cancel")}</button>
               )}
@@ -407,6 +459,21 @@ export default function WeighbridgePanel({ dest, onChanged }) {
           )}
         </div>
       ))}
+
+      {/* ── Tuli gadi, site par abhi khali nahi hui ────────── */}
+      {waiting.length > 0 && (
+        <>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", margin: "14px 0 7px" }}>
+            {t("weigh.pending_unload_title")} <span style={{ color: T.amb }}>({waiting.length})</span>
+          </div>
+          {waiting.map(w => (
+            <div key={w.id} style={{ background: T.surface, border: "1px solid " + T.b1, borderLeft: "3px solid " + T.amb, borderRadius: 8, padding: "9px 12px", marginBottom: 7 }}>
+              <TripHead w={w} />
+              <div style={{ fontSize: 10.5, color: T.t3, marginTop: 5 }}>{t("weigh.pending_unload_hint")}</div>
+            </div>
+          ))}
+        </>
+      )}
 
       {/* ── Haal me band hue ──────────────────────────────── */}
       {closed.length > 0 && (
