@@ -2509,7 +2509,7 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
 // MOVEMENTS — voucher log
 // ══════════════════════════════════════════════════════════════════
 function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfer, onReturn, onRepairOut, onRepairIn, onOpenVoucher }) {
-  const [fl, setFl] = useState({ type: "", status: "", project_id: "", warehouse_id: "", from: "", to: "" });
+  const [fl, setFl] = useState({ type: "", status: "", project_id: "", warehouse_id: "", from: "", to: "", for_me: "" });
   const [rows, setRows] = useState(null);
   const upd = (k, v) => setFl((p) => ({ ...p, [k]: v }));
 
@@ -2536,6 +2536,10 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
           <Btn size="sm" ghost icon={IcTool} onClick={onRepairIn}>{t("assets.btn_repair_in")}</Btn>
         </div>)}>
       <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
+        {/* Accept sirf jiske naam voucher hai uska haq hai — wo yahan se apne
+            voucher seedha dhoondh leta hai (phone na chale to web par). */}
+        <Seg value={fl.for_me} onChange={(k) => upd("for_me", k)}
+          options={[{ k: "", l: t("assets.all") }, { k: "1", l: t("assets.for_me_accept") }]} />
         <select value={fl.type} onChange={(e) => upd("type", e.target.value)} style={{ ...inp, width: 130 }}>
           <option value="">{t("assets.all_types")}</option>
           <option value="issue">{t("assets.type_issue")}</option>

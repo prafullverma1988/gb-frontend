@@ -410,6 +410,7 @@ const dict = {
   "assets.expected_return_hint":                               "After this date it shows under 'Return overdue' on the dashboard",
   "assets.export_failed":                                      "Export failed — try again",
   "assets.file_read_failed":                                   "Could not read the file — select it again",
+  "assets.for_me_accept":                                      "Waiting for my accept",
   "assets.from":                                               "From",
   "assets.from_date":                                          "From date",
   "assets.from_empty_hint":                                    "Nothing in this custody right now",

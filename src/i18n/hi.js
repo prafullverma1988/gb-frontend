@@ -409,6 +409,7 @@ const dict = {
   "assets.expected_return_hint":                               "इस डेट के बाद डैशबोर्ड पर 'रिटर्न डेट निकल गई' में दिखेगा",
   "assets.export_failed":                                      "Export नहीं बन पाई — दोबारा try करें",
   "assets.file_read_failed":                                   "फ़ाइल पढ़ नहीं पाए — दोबारा सिलेक्ट करो",
+  "assets.for_me_accept":                                      "मेरे accept का इंतज़ार",
   "assets.from":                                               "कहाँ से",
   "assets.from_date":                                          "डेट से",
   "assets.from_empty_hint":                                    "इस कस्टडी में अभी कुछ नहीं है",

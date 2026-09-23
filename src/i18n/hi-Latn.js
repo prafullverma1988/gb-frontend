@@ -412,6 +412,7 @@ const dict = {
   "assets.expected_return_hint":                               "Is date ke baad dashboard par 'Return date nikal gayi' me dikhega",
   "assets.export_failed":                                      "Export nahi ban paayi — dobara try karo",
   "assets.file_read_failed":                                   "File padh nahi paaye — dobara select karo",
+  "assets.for_me_accept":                                      "Mere accept ka intezaar",
   "assets.from":                                               "Kahan se",
   "assets.from_date":                                          "Date se",
   "assets.from_empty_hint":                                    "Is custody me abhi kuch nahi hai",
