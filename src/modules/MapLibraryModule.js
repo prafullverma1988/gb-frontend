@@ -364,10 +364,61 @@ const Toast = ({ toast }) => (toast ? (
   </div>
 ) : null);
 
+// ── HOVER CARD ────────────────────────────────────────────────────
+// Naksha par line/pin par mouse le jaate hi — Tenders ke Pipeline Map
+// jaisa card: naam, type, lambai/rakba, chainage, kahan rakhi hai, kisne
+// banayi. pointerEvents none: card mouse ke neeche aa kar hover na tode.
+function HoverCard({ x, y, card }) {
+  const W = 280;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const left = Math.max(8, Math.min(x + 14, vw - W - 12));
+  const up = y + 14 + 220 > vh;
+  const cell = { padding: "3px 11px", verticalAlign: "top", wordBreak: "break-word" };
+  return (
+    <div style={{ position: "fixed", left, top: up ? undefined : y + 14, bottom: up ? vh - y + 14 : undefined,
+      width: W, zIndex: 997, pointerEvents: "none", background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 9,
+      boxShadow: "0 10px 30px rgba(0,0,0,.18)", overflow: "hidden", fontSize: 12 }}>
+      <div style={{ padding: "8px 11px", borderLeft: `4px solid ${T.ind}`, background: T.surfaceB, borderBottom: `1px solid ${T.b1}` }}>
+        <div style={{ fontWeight: 700, color: T.t1, wordBreak: "break-word" }}>{card.title}</div>
+        {card.sub && <div style={{ fontSize: 10.5, color: T.t3, marginTop: 1 }}>{card.sub}</div>}
+      </div>
+      {card.rows.length > 0 && (
+        <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>
+          {card.rows.map(([k, v], i) => (
+            <tr key={i} style={{ background: i % 2 ? T.surfaceB : T.surface }}>
+              <td style={{ ...cell, color: T.t3, width: "42%" }}>{k}</td>
+              <td style={{ ...cell, paddingLeft: 0, color: T.t1, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{v}</td>
+            </tr>
+          ))}
+        </tbody></table>
+      )}
+      <div style={{ padding: "4px 11px 6px", color: T.t4, fontSize: 10.5, borderTop: `1px solid ${T.b1}` }}>{t("map_library.hv_click")}</div>
+    </div>
+  );
+}
+function cardOf(it, where) {
+  const rows = [];
+  const len = Number(it.lenM) || 0;
+  if (it.kind === "area") { const a = fmtArea(it.areaSqm); if (a) rows.push([t("map_library.rakba"), a]); }
+  else if (it.kind !== "point" && fmtLen(len)) rows.push([t("map_library.lambai"), fmtLen(len)]);
+  if (it.kind !== "point" && it.kind !== "area" && it.startCh != null) {
+    rows.push([t("map_library.chainage"), len > 0 ? `${fmtCh(it.startCh)} – ${fmtCh(Number(it.startCh) + len)}` : fmtCh(it.startCh)]);
+  }
+  const parts = partsOfLine(cleanPts(it), it.gaps).length;
+  if (it.kind === "line" && parts > 1) rows.push([t("map_library.hv_tukde"), String(parts)]);
+  if (where) rows.push([t("map_library.hv_kahan"), where]);
+  const made = [it.by, fmtDT(it.at)].filter(Boolean).join(" · ");
+  if (made) rows.push([t("map_library.banayi"), made]);
+  return { title: it.name || kindLabel(it.kind), sub: [kindLabel(it.kind), atypeLabel(it.atype)].filter(Boolean).join(" · "), rows };
+}
+
 // ── MAP PREVIEW ───────────────────────────────────────────────────
 // Line = polyline, rakba = polygon, point = marker; jo dikhaya usi par fit.
 // Map na khule (key nahi / net / referrer) to chhota sa note — list aur export chalte rahein.
-function MapPreview({ items, onPick, height = 380 }) {
+function MapPreview({ items, onPick, whereOf, height = 380 }) {
+  const [hover, setHover] = useState(null);   // {x, y, card}
+  const whereRef = useRef(whereOf);
+  whereRef.current = whereOf;
   const boxRef = useRef(null);
   const mapRef = useRef(null);
   const layersRef = useRef([]);
@@ -398,6 +449,14 @@ function MapPreview({ items, onPick, height = 380 }) {
     const g = window.google;
     layersRef.current.forEach((l) => l.setMap(null));
     layersRef.current = [];
+    setHover(null);
+    // Har shape par hover = card, mouse ke saath chalta hai.
+    const hoverOn = (ov, it) => {
+      const at = (e) => (e && e.domEvent ? { x: e.domEvent.clientX, y: e.domEvent.clientY } : null);
+      ov.addListener("mouseover", (e) => { const q = at(e); setHover({ x: q ? q.x : 0, y: q ? q.y : 0, card: cardOf(it, whereRef.current ? whereRef.current(it) : null) }); });
+      ov.addListener("mousemove", (e) => { const q = at(e); if (q) setHover((h) => (h ? { ...h, x: q.x, y: q.y } : h)); });
+      ov.addListener("mouseout", () => setHover(null));
+    };
     const bounds = new g.maps.LatLngBounds();
     let n = 0;
     items.forEach((it) => {
@@ -418,11 +477,13 @@ function MapPreview({ items, onPick, height = 380 }) {
         partsOfLine(pts, it.gaps).forEach((part) => {
           const ln = new g.maps.Polyline({ map, path: part, strokeColor: T.ind, strokeOpacity: 0.9, strokeWeight: 4 });
           ln.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
+          hoverOn(ln, it);
           layersRef.current.push(ln);
         });
         return;
       }
       ov.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
+      hoverOn(ov, it);
       layersRef.current.push(ov);
     });
     if (n === 1) { map.setCenter(bounds.getCenter()); map.setZoom(17); }
@@ -449,6 +510,7 @@ function MapPreview({ items, onPick, height = 380 }) {
       <div ref={boxRef} style={{ position: "absolute", inset: 0 }} />
       {status === "loading" && <div style={note}>{t("map_library.map_load_ho_raha")}</div>}
       {status === "ok" && !drawable && <div style={note}>{t("map_library.map_par_kuch_nahi")}</div>}
+      {hover && <HoverCard x={hover.x} y={hover.y} card={hover.card} />}
     </div>
   );
 }
@@ -1144,7 +1206,11 @@ function MapLibraryModule() {
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
-          <MapPreview items={info ? info.items : EMPTY} onPick={reveal} />
+          <MapPreview items={info ? info.items : EMPTY} onPick={reveal}
+            whereOf={(it) => {
+              const g = tree.find((x) => x.fk === fkOf(it.folder_id));
+              return [g ? folderTitle(g) : t("map_library.bina_folder"), fileTitle(String(it.file || "").trim())].join(" › ");
+            }} />
           {renderDetail()}
         </div>
       </div>
