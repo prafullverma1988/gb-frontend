@@ -8,6 +8,7 @@ import { canApproveAction } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { WarehouseLedgerTab, WarehouseLedgerDrawer } from "./WarehouseLedger";
+import { AllGodownsView } from "./WarehouseConsolidated";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -3570,7 +3571,9 @@ function WarehouseModule(){
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
-        {tab==="godown"&&<WarehousesTab data={whOverview} activeId={whId} onOpen={switchWarehouse}/>}
+        {tab==="godown"&&<AllGodownsView activeId={whId}
+          godownsView={<WarehousesTab data={whOverview} activeId={whId} onOpen={switchWarehouse}/>}
+          onGoto={id=>{switchWarehouse(id);setTab("stock");}}/>}
         {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})} onAddStock={m=>setAddStockTarget(m)} onIssue={m=>setIssueTarget(m)} onQuickRequest={m=>{setMrPrefill({name:m.name,unit:m.unit});setMrNewOpen(true);}}/>}
         {/* key=whId: godown badla to khaata usi godown ka dobara aaye */}
         {tab==="ledger"&&<WarehouseLedgerTab key={whId} onOpen={m=>setLedgerMat(m)}/>}
