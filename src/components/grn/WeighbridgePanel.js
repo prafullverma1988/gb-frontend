@@ -32,7 +32,9 @@ const inp = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1.5px
 const lbl = { fontSize: 9.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginBottom: 3 };
 const btn = (bg, fg, bd) => ({ padding: "7px 14px", borderRadius: 6, background: bg, color: fg, border: bd ? "1px solid " + bd : "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" });
 const secH = { fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", margin: "14px 0 7px" };
-const STATUS = { InTransit: [T.amb, T.ambL, "weigh.in_transit"], Received: [T.blu, T.bluL, "weigh.unloaded"], Closed: [T.grn, T.grnL, "weigh.closed"] };
+const STATUS = { InTransit: [T.amb, T.ambL, "weigh.in_transit"], Received: [T.blu, T.bluL, "weigh.unloaded"], Closed: [T.grn, T.grnL, "weigh.closed"], Cancelled: [T.red, T.redL, "weigh.cancelled"] };
+// Cancel ki jaldi wali wajah — tap se bhar jaati hai, phir badal bhi sakte ho.
+const CANCEL_REASONS = ["weigh.cancel_r1", "weigh.cancel_r2", "weigh.cancel_r3", "weigh.cancel_r4", "weigh.cancel_r5"];
 // Khali wazan itna purana ho to ⚠ (server ka STALE_TARE_HOURS bhi yahi).
 const STALE_H = 12;
 
@@ -122,10 +124,20 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   const [sf, setSf] = useState(blankSecond);
   const setN = (p) => setNf(f => ({ ...f, ...p }));
   const setS = (p) => setSf(f => ({ ...f, ...p }));
+  // Cancel sirf wajah ke saath (24 Sep 2026) — tolai cancel karna chori
+  // chhupane ka sabse aasaan raasta hai. Cancel hui entry neeche log me.
+  const [cancelFor, setCancelFor] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelErr, setCancelErr] = useState("");
+  const [cancelled, setCancelled] = useState([]);
+  const [showCancelled, setShowCancelled] = useState(false);
 
   const reload = async () => {
     setLoading(true);
-    const [tr, ls, pl] = await Promise.all([loadWeighments(dest, "all"), loadOrderedLines(dest), loadPoLines(dest)]);
+    const [tr, ls, pl, gone] = await Promise.all([loadWeighments(dest, "all"), loadOrderedLines(dest), loadPoLines(dest), loadWeighments(dest, "cancelled")]);
+    // Purana server ?status=cancelled nahi jaanta aur sab entry lauta deta hai —
+    // deploy ke beech bhi log me sirf sach me cancel hui entry aaye.
+    setCancelled(gone.filter(w => w.status === "Cancelled"));
     // PO ki jo line kisi dikh rahi MR se bani hai, wo MR ki row hi hai — dobara
     // nahi. Do taraf se dekhte hain, kyunki koi bhi ek jod chhoot sakti hai:
     // (1) line ka apna linked_mr_id, (2) MR ka linked_po_id + wahi naam. 23 Sep
@@ -167,7 +179,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   ];
 
   // ── Pehla wazan ────────────────────────────────────────────────
-  const openNew = (mode) => { setNewMode(mode); setNf(blankNew); setResult(null); setSecondFor(null); };
+  const openNew = (mode) => { setNewMode(mode); setNf(blankNew); setResult(null); setSecondFor(null); setCancelFor(null); };
   const onFirstSlip = async (url) => {
     setReading(true); setN({ readMsg: "" });
     const out = await readSlip(url);
@@ -222,7 +234,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   const netPreview = secondTrip && Number(sf.kg) > 0
     ? (needGross ? Number(sf.kg) - Number(secondTrip.tare_kg) : Number(secondTrip.gross_kg) - Number(sf.kg))
     : null;
-  const openSecond = (id) => { setSecondFor(id); setSf(blankSecond); setResult(null); setNewMode(null); };
+  const openSecond = (id) => { setSecondFor(id); setSf(blankSecond); setResult(null); setNewMode(null); setCancelFor(null); };
 
   const onSecondSlip = async (url) => {
     setReading(true); setS({ readMsg: "" });
@@ -270,12 +282,40 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     onChanged && onChanged();
   };
 
-  const cancelTrip = async (id) => {
-    if (!(await window.confirmAsync(t("weigh.confirm_cancel")))) return;
-    const r = await api.post(`/weighments/${id}/cancel`, {}).catch(e => ({ success: false, message: e.message }));
-    if (!r?.success) { alert(r?.message || t("common.something_went_wrong")); return; }
-    reload();
+  const openCancel = (id) => { setCancelFor(id); setCancelReason(""); setCancelErr(""); setSecondFor(null); setNewMode(null); };
+  const pickReason = (v) => { setCancelReason(v); setCancelErr(""); };
+  const doCancel = async () => {
+    const reason = cancelReason.trim();
+    if (reason.length < 3) { setCancelErr(t("weigh.cancel_reason_required")); return; }
+    setBusy(true); setCancelErr("");
+    const r = await api.post(`/weighments/${cancelFor}/cancel`, { reason }).catch(e => ({ success: false, message: e.message }));
+    setBusy(false);
+    if (!r?.success) { setCancelErr(r?.message || t("common.something_went_wrong")); return; }
+    setCancelFor(null); setCancelReason("");
+    await reload(); onChanged && onChanged();
   };
+  // Cancel ka box — card ke button ki jagah khulta hai. Wajah ke bina aage nahi.
+  const cancelBox = () => (
+    <div style={{ marginTop: 8, padding: "9px 11px", borderRadius: 7, background: T.redL, border: "1px solid " + T.redM }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.red, marginBottom: 6 }}>{t("weigh.cancel_why")}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 7 }}>
+        {CANCEL_REASONS.map(k => {
+          const on = cancelReason === t(k);
+          return (
+            <button key={k} type="button" onClick={() => pickReason(t(k))}
+              style={{ padding: "3px 10px", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 600,
+                border: "1px solid " + (on ? T.red : T.b1), background: T.surface, color: on ? T.red : T.t2 }}>{t(k)}</button>
+          );
+        })}
+      </div>
+      <input value={cancelReason} onChange={e => pickReason(e.target.value)} placeholder={t("weigh.cancel_reason_ph")} style={{ ...inp, marginBottom: 7 }} />
+      {cancelErr && <div style={{ fontSize: 11.5, color: T.red, fontWeight: 600, marginBottom: 7 }}>{cancelErr}</div>}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button type="button" onClick={() => { setCancelFor(null); setCancelReason(""); setCancelErr(""); }} style={btn(T.surface, T.t3, T.b1)}>{t("weigh.cancel_back")}</button>
+        <button type="button" onClick={doCancel} disabled={busy} style={btn(busy ? "#9CA3AF" : T.red, "#fff")}>{busy ? t("common.saving") : t("weigh.cancel_do")}</button>
+      </div>
+    </div>
+  );
 
   const flagText = (f) => f.type === "dup_slip" ? t("weigh.flag_dup_slip")
     : f.type === "slip_mismatch" ? t("weigh.flag_mismatch")
@@ -589,10 +629,10 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                 <span style={{ fontSize: 10, fontWeight: 700, color: T.amb, background: T.ambL, padding: "1px 8px", borderRadius: 10 }}>{t("weigh.gone_to_load")}</span>
               </div>
               {tareSummary(w, true)}
-              {secondFor === w.id ? secondForm(w) : (
+              {secondFor === w.id ? secondForm(w) : cancelFor === w.id ? cancelBox() : (
                 <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                   <button type="button" onClick={() => openSecond(w.id)} style={btn(T.blu, "#fff")}>{t("weigh.loaded_arrived")}</button>
-                  <button type="button" onClick={() => cancelTrip(w.id)} style={btn(T.surface, T.red, T.redM)}>{t("common.cancel")}</button>
+                  <button type="button" onClick={() => openCancel(w.id)} style={btn(T.surface, T.red, T.redM)}>{t("common.cancel")}</button>
                 </div>
               )}
             </div>
@@ -608,11 +648,11 @@ export default function WeighbridgePanel({ dest, onChanged }) {
       {open.map(w => (
         <div key={w.id} style={{ background: T.surface, border: "1px solid " + T.b1, borderLeft: "3px solid " + T.amb, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
           {tripHead(w)}
-          {secondFor === w.id ? secondForm(w) : (
+          {secondFor === w.id ? secondForm(w) : cancelFor === w.id ? cancelBox() : (
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <button type="button" onClick={() => openSecond(w.id)} style={btn(T.blu, "#fff")}>{t("weigh.weigh_empty")}</button>
               {!(w.lines || []).some(l => l.grn_item_id) && (
-                <button type="button" onClick={() => cancelTrip(w.id)} style={btn(T.surface, T.red, T.redM)}>{t("common.cancel")}</button>
+                <button type="button" onClick={() => openCancel(w.id)} style={btn(T.surface, T.red, T.redM)}>{t("common.cancel")}</button>
               )}
             </div>
           )}
@@ -649,6 +689,23 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                     : <span style={{ fontSize: 10.5, color: T.t4 }}>{t("weigh.short_after_grn")}</span>}
                 </div>
               ))}
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* ── Cancel hui entries — wajah, kisne, kab ─────────── */}
+      {cancelled.length > 0 && (
+        <>
+          <button type="button" onClick={() => setShowCancelled(v => !v)}
+            style={{ ...secH, background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit" }}>
+            {t("weigh.cancelled_title")} <span style={{ color: T.red }}>({cancelled.length})</span> <span>{showCancelled ? "▴" : "▾"}</span>
+          </button>
+          {showCancelled && cancelled.map(w => (
+            <div key={w.id} style={{ background: T.surfaceB, border: "1px solid " + T.b1, borderLeft: "3px solid " + T.red, borderRadius: 8, padding: "9px 12px", marginBottom: 7 }}>
+              {tripHead(w)}
+              <div style={{ fontSize: 11, color: T.red, fontWeight: 600, marginTop: 5 }}>{t("weigh.cancelled_reason", { reason: w.cancel_reason || "—" })}</div>
+              <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{t("weigh.cancelled_by", { name: w.cancelled_by_name || "—", when: fmtWhen(w.cancelled_at || w.updated_at) })}</div>
             </div>
           ))}
         </>
