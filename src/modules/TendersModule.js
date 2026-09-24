@@ -25,6 +25,7 @@ import { useToast } from "../components/Toast";
 import { CreateTransactionModal } from "./FinanceModule";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog } from "./mapStyles";
 
 // ── THEME TOKENS ────────────────────────────────────────────────────
 // Module self-contained rehta hai (Finance/CRM/Projects jaisa) — inhi
@@ -3896,7 +3897,9 @@ const FAM_META = {
 };
 // Custom type LINE_TYPES me nahi hota — uska rang parivaar se aata hai,
 // warna har naya item slate-grey "other" jaisa dikhta.
-const lineColour = (t) => (LINE_TYPES.find(x=>x.v===t) || {}).c || FAM_META[familyOf(t)].c;
+// Rang ab company ki Map library se (mapStyles) — library na aayi ho to wahi
+// purane rang (mapStyles ka default = yahi LINE_TYPES ke rang).
+const lineColour = (t) => styleOf("line", t).colour || (LINE_TYPES.find(x=>x.v===t) || {}).c || FAM_META[familyOf(t)].c;
 
 // Polygon ka rakba — wahi ganit jo backend ke utils/kml.js me hai, taaki
 // draw karte waqt dikhne wala ankda save ke baad badal na jaye. Origin
@@ -4196,6 +4199,9 @@ function MapTab({tenderId, sites}) {
   const refShapesRef = useRef([]);
   // Hover card — line/pin par mouse le jaate hi uski jaankari.
   const [hover, setHover] = useState(null);             // {x, y, card}
+  // Map library (rang/shape/line-style) — load hote hi naksha dobara rangta hai.
+  const { lib: mapLib } = useMapLibrary();
+  const [libOpen, setLibOpen] = useState(false);
   const [sugg, setSugg]       = useState([]);     // search ke suggestions
   const photoMarkersRef = useRef([]);
   const infoWinRef = useRef(null);
@@ -4530,9 +4536,10 @@ function MapTab({tenderId, sites}) {
       // Rakba — apne rang ka polygon. Click par wahi stretch-dashboard jo
       // line par khulta hai, taaki UGR ka panel bhi ek hi tareeke se khule.
       if (it.kind === "area") {
-        const c = lineColour(it.atype);
+        const ast = styleOf("area", it.atype);
+        const c = ast.colour;
         const pg = new g.maps.Polygon({ paths: coords, strokeColor: c, strokeWeight: 2,
-          strokeOpacity: 0.9, fillColor: c, fillOpacity: 0.22, map: mapRef.current });
+          strokeOpacity: 0.9, fillColor: c, fillOpacity: ast.fill_opacity ?? 0.22, map: mapRef.current });
         pg.addListener("click", ()=>openStretch(it.id));
         hoverOn(pg, ()=>cardFor(it));
         shapesRef.current.push(pg);
@@ -4563,8 +4570,8 @@ function MapTab({tenderId, sites}) {
           });
         }
         parts.forEach((part) => {
-          const pl = new g.maps.Polyline({ path: part, strokeColor: lineColour(it.atype),
-            strokeWeight: 4, strokeOpacity: 0.9, map: mapRef.current });
+          // Rang, motai aur seedhi/dashed/dotted — sab Map library se.
+          const pl = new g.maps.Polyline({ path: part, ...lineOpts(g, styleOf("line", it.atype)), map: mapRef.current });
           // Click = stretch ka dashboard. (Pehle sirf ek toast tha.)
           pl.addListener("click", ()=>openStretch(it.id));
           hoverOn(pl, ()=>cardFor(it));
@@ -4638,8 +4645,9 @@ function MapTab({tenderId, sites}) {
         }
         coords.forEach(c=>bounds.extend(c));
       } else {
-        const mk = new g.maps.Marker({ position: coords[0], map: mapRef.current, title: it.name,
-          label: { text: (alignLabel("point", it.atype)||"?").slice(0,1), color:"#fff", fontSize:"11px", fontWeight:"700" } });
+        // Structure apne library-shape aur rang me (pehle laal pin + ek akshar tha).
+        const mk = new g.maps.Marker({ position: coords[0], map: mapRef.current, title: it.name, zIndex: 4,
+          icon: markerIcon(g, styleOf("point", it.atype), 26) });
         // Pin par bhi click = dashboard (pehle sirf line par tha) aur hover = card.
         mk.addListener("click", ()=>openStretch(it.id));
         hoverOn(mk, ()=>cardFor(it));
@@ -4648,7 +4656,7 @@ function MapTab({tenderId, sites}) {
       }
     }
     if (any) mapRef.current.fitBounds(bounds);
-  }, [items, progress, mapReady, toast, openStretch, hidden, famHidden, hoverOn, cardFor]);
+  }, [items, progress, mapReady, toast, openStretch, hidden, famHidden, hoverOn, cardFor, mapLib]);
 
   // Reference naksha — file ke apne rang/icon me (dhoosar nahi, warna
   // diameter-wise rang ka matlab hi nahi rehta). Click par kuchh nahi
@@ -5113,6 +5121,11 @@ function MapTab({tenderId, sites}) {
             <input type="file" accept=".kmz,.kml,application/vnd.google-earth.kmz,application/vnd.google-earth.kml+xml" style={{display:"none"}}
               disabled={refBusy} onChange={e=>{ previewRef(e.target.files?.[0]); e.target.value=""; }}/>
           </label>
+          {/* Map library — kaunsi line kis rang/style, kaunsa structure kis shape/rang. */}
+          <button onClick={()=>setLibOpen(true)} style={{display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:7,
+            border:`1px solid ${T.b1}`, background:T.surface, fontSize:12, color:T.t2, cursor:"pointer", whiteSpace:"nowrap", fontFamily:"inherit"}}>
+            🎨 {t("map_style.button")}
+          </button>
           {items.length > 0 && (
             <button onClick={async ()=>{
               // Authed download — export me wahi site-filter jo screen par hai
@@ -5359,7 +5372,7 @@ function MapTab({tenderId, sites}) {
               else pins++;
             });
             const fams = Object.keys(FAM_META).filter(f=>famCnt[f]);
-            const chips = LINE_TYPES.filter(x=>cnt[x.v]).map(x=>({key:x.v, label:x.l, n:cnt[x.v], c:x.c}));
+            const chips = LINE_TYPES.filter(x=>cnt[x.v]).map(x=>({key:x.v, label:x.l, n:cnt[x.v], c:lineColour(x.v)}));
             // Custom line types LINE_TYPES me nahi hote — inke apne chips.
             Object.keys(cnt).filter(k=>!LINE_TYPES.some(x=>x.v===k)).forEach(k=>{
               chips.push({key:k, label:typeLabel(k), n:cnt[k], c:lineColour(k)});
@@ -5897,6 +5910,7 @@ function MapTab({tenderId, sites}) {
 
     {/* Naya drawn feature — type ke hisaab se apne field */}
     {hover && hover.card && <HoverCard x={hover.x} y={hover.y} card={hover.card}/>}
+    {libOpen && <MapLibraryDialog onClose={()=>setLibOpen(false)}/>}
 
     {refPreview && (
       <Modal title={t("tenders.ref_kmz")} sub={refPreview.file_name} width={600}
@@ -8379,4 +8393,5 @@ export default function TendersModule({onOpenProject}) {
   );
   return <TenderList onOpen={(v)=>setSelected(typeof v === "object" ? v : {id:v})}/>;
 }
+
 
