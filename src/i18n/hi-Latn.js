@@ -3363,6 +3363,10 @@ const dict = {
   "kal_ka_plan.kal_ka_plan":                                   "🌅 Kal ka plan",
   "kal_ka_plan.koi_chalu_kaam_nahi_mila_pehle":                "Koi chalu kaam nahi mila — pehle Tasks me plan banao.",
   "kal_ka_plan.koi_rukavat_nahi":                              "Koi rukavat nahi",
+  "kal_ka_plan.kram_me_pehle":                                 "Kram me pehle \"{name}\" hai — wo abhi shuru nahi hua (jod nahi lagi, kram se andaza)",
+  "kal_ka_plan.ruka_entry_se":                                 "{n} din se koi entry nahi",
+  "kal_ka_plan.ruka_update_se":                                "Koi entry nahi — aakhri update {n} din pehle",
+  "kal_ka_plan.ruka_pata_nahi":                                "Koi entry nahi — kab se ruka, pata nahi",
   "kal_ka_plan.raftar_schedule_rukavat_sab_ganit_se":          "Raftar + schedule + rukavat, sab ganit se — ye suggestion hai, faisla aapka",
   "kal_ka_plan.yahi_sahayak_se_bhi_kal":                       "Yahi Sahayak se bhi: \"{kal}\"",
 

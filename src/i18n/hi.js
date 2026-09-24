@@ -3360,6 +3360,10 @@ const dict = {
   "kal_ka_plan.kal_ka_plan":                                   "🌅 कल का प्लान",
   "kal_ka_plan.koi_chalu_kaam_nahi_mila_pehle":                "कोई चालू काम नहीं मिला — पहले Tasks में प्लान बनाओ।",
   "kal_ka_plan.koi_rukavat_nahi":                              "कोई रुकावट नहीं",
+  "kal_ka_plan.kram_me_pehle":                                 "क्रम में पहले \"{name}\" है — वह अभी शुरू नहीं हुआ (जोड़ नहीं लगा, क्रम से अंदाज़ा)",
+  "kal_ka_plan.ruka_entry_se":                                 "{n} दिन से कोई एंट्री नहीं",
+  "kal_ka_plan.ruka_update_se":                                "कोई एंट्री नहीं — आख़िरी अपडेट {n} दिन पहले",
+  "kal_ka_plan.ruka_pata_nahi":                                "कोई एंट्री नहीं — कब से रुका है, पता नहीं",
   "kal_ka_plan.raftar_schedule_rukavat_sab_ganit_se":          "रफ़्तार + शेड्यूल + रुकावट, सब गणित से — यह सजेशन है, फ़ैसला आपका",
   "kal_ka_plan.yahi_sahayak_se_bhi_kal":                       "यही सहायक से भी: \"{kal}\"",
 

@@ -3361,6 +3361,10 @@ const dict = {
   "kal_ka_plan.kal_ka_plan":                                   "🌅 Tomorrow's plan",
   "kal_ka_plan.koi_chalu_kaam_nahi_mila_pehle":                "No active work found — first create a plan in Tasks.",
   "kal_ka_plan.koi_rukavat_nahi":                              "No obstruction",
+  "kal_ka_plan.kram_me_pehle":                                 "\"{name}\" comes before it and has not started yet (no dependency set — going by order)",
+  "kal_ka_plan.ruka_entry_se":                                 "No entry for {n} days",
+  "kal_ka_plan.ruka_update_se":                                "No entry — last update {n} days ago",
+  "kal_ka_plan.ruka_pata_nahi":                                "No entry — not known since when it stopped",
   "kal_ka_plan.raftar_schedule_rukavat_sab_ganit_se":          "Pace + schedule + obstruction, all by calculation — this is a suggestion, the decision is yours.",
   "kal_ka_plan.yahi_sahayak_se_bhi_kal":                       "From Sahayak too: \"{kal}\"",
 
