@@ -7,6 +7,7 @@ import { loadPhotoPolicy, policyFor } from "../utils/photoPolicy";
 import { canApproveAction } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { WarehouseLedgerTab, WarehouseLedgerDrawer } from "./WarehouseLedger";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -3282,6 +3283,7 @@ function WarehouseModule(){
   const [transferNewOpen,setTransferNewOpen]=useState(false);
   const [issueFromMR,setIssueFromMR]=useState(null);    // {mr} when issuing against MR
   const [matDetail,setMatDetail]=useState(null);
+  const [ledgerMat,setLedgerMat]=useState(null);  // Ledger tab — khula hua material ka khaata
   const [transferDetail,setTransferDetail]=useState(null);
   const [orderMR,setOrderMR]=useState(null);       // Tab 1: place order modal target
   const [grnMR,setGrnMR]=useState(null);           // Tab 1: receive GRN modal target
@@ -3478,13 +3480,14 @@ function WarehouseModule(){
   // taki refresh ke baad bhi wahi godown khule.
   const switchWarehouse=useCallback((id)=>{
     if(String(id)===String(whId)) return;
-    setWarehouseId(id); setWhId(String(id)); setLoading(true);
+    setWarehouseId(id); setWhId(String(id)); setLoading(true); setLedgerMat(null);
     loadAll(); loadOverview();
   },[whId,loadAll,loadOverview]);
 
   const TABS=[
     ...(warehouses.length>1?[{id:"godown", l:t("warehouse.warehouses_tab"), I:IcIn, badge:null, bc:T.blu}]:[]),
     {id:"stock",  l:t("common.stock"),         I:IcBox,  badge:lowStock.length>0?lowStock.length:null, bc:T.red},
+    {id:"ledger", l:t("warehouse.ledger_tab"), I:IcHist, badge:null},
     {id:"grn",    l:t("material.material_in"),   I:IcIn,   badge:pendingInMRs>0?pendingInMRs:null, bc:T.pur},
     {id:"issue",  l:t("warehouse.material_out"),  I:IcOut,  badge:pendingOutMRs>0?pendingOutMRs:null, bc:T.cyn},
     {id:"mr",     l:t("common.requests"),      I:IcMR,   badge:pendingMRs>0?pendingMRs:null, bc:T.amb},
@@ -3569,6 +3572,8 @@ function WarehouseModule(){
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
         {tab==="godown"&&<WarehousesTab data={whOverview} activeId={whId} onOpen={switchWarehouse}/>}
         {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})} onAddStock={m=>setAddStockTarget(m)} onIssue={m=>setIssueTarget(m)} onQuickRequest={m=>{setMrPrefill({name:m.name,unit:m.unit});setMrNewOpen(true);}}/>}
+        {/* key=whId: godown badla to khaata usi godown ka dobara aaye */}
+        {tab==="ledger"&&<WarehouseLedgerTab key={whId} onOpen={m=>setLedgerMat(m)}/>}
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
           onNewGRN={()=>setGrnNewOpen(true)} onVerifyGRN={handleVerifyGRN}
@@ -3631,6 +3636,7 @@ function WarehouseModule(){
         {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={()=>setTransferNewOpen(true)} onSelect={t=>setTransferDetail(t)}/>}
       </div>
 
+      {ledgerMat&&<WarehouseLedgerDrawer material={ledgerMat} godownName={activeWh?.name} onClose={()=>setLedgerMat(null)}/>}
       {matDetail&&(
         <MaterialDetailDrawer material={matDetail}
           onClose={()=>setMatDetail(null)}
