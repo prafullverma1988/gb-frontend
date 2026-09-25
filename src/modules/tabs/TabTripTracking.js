@@ -24,9 +24,20 @@ const FLAG_META = {
   load_outside:     { get label() { return t("trip_tracking.load_outside"); },     tone: "amber" },
   unload_outside:   { get label() { return t("trip_tracking.unload_outside"); },   tone: "amber" },
   manual_close:     { get label() { return t("trip_tracking.manual_close"); },     tone: "amber" },
+  // Route par point hai par phone ne location nahi bheji — pehle ye "bahar" dikhta tha.
+  gps_missing:      { get label() { return t("trip_tracking.gps_missing"); },      tone: "amber" },
 };
 const flagMeta = (f) => FLAG_META[f] || { label: String(f || "").toUpperCase(), tone: "amber" };
 const parseFlags = (raw) => { try { return Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []); } catch { return []; } };
+// Unload ka delay reason app CODE me bhejta hai ("jam" / "jam: note") — label yahin.
+const DELAY_CODES = ["truck_breakdown", "jam", "stuck", "other"];
+const delayReasonLabel = (raw) => {
+  const s = String(raw || "");
+  const m = s.match(/^([a-z_]+)(?::\s*([\s\S]*))?$/);
+  if (!m || !DELAY_CODES.includes(m[1])) return s;
+  const lbl = t("trip_tracking.delay_" + m[1]);
+  return m[2] ? lbl + ": " + m[2] : lbl;
+};
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const fmtD = (raw) => { if (!raw) return "—"; const d = new Date(String(raw).replace(" ", "T")); return isNaN(d.getTime()) ? String(raw).slice(0,10) : d.getDate() + " " + MONTHS[d.getMonth()]; };
@@ -110,9 +121,9 @@ function TabTripTracking({ projectId }) {
     <div style={{ padding: "16px 18px" }}>
       {/* KPI */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
-        <Stat label={t("trip_tracking.trips_today")} value={summary ? summary.trips_today : "—"} note="Aaj ki trips" color={T.blu} />
-        <Stat label={t("common.in_transit")} value={summary ? summary.in_transit_count : "—"} note="Raste me abhi" color={T.amb} />
-        <Stat label={t("trip_tracking.flagged")} value={summary ? summary.flagged_count : "—"} note="Review pending" color={summary && summary.flagged_count ? T.red : T.slt} />
+        <Stat label={t("trip_tracking.trips_today")} value={summary ? summary.trips_today : "—"} note={t("trip_tracking.note_aaj_ki_trips")} color={T.blu} />
+        <Stat label={t("common.in_transit")} value={summary ? summary.in_transit_count : "—"} note={t("trip_tracking.note_raste_me_abhi")} color={T.amb} />
+        <Stat label={t("trip_tracking.flagged")} value={summary ? summary.flagged_count : "—"} note={t("trip_tracking.note_review_pending")} color={summary && summary.flagged_count ? T.red : T.slt} />
       </div>
 
       <div style={{ marginBottom: 14 }}>
@@ -161,7 +172,7 @@ function MonitorTab({ projectId, onChange }) {
     if (!projectId) return;
     setLoading(true);
     let qs = "project_id=" + projectId;
-    if (filter === "flagged") qs += "&verify_status=flagged";
+    if (filter === "flagged") qs += "&verify_status=flagged&status=completed";
     else if (filter === "transit") qs += "&status=in_transit";
     else if (filter === "completed") qs += "&status=completed";
     api.get("/trips?" + qs)
@@ -177,7 +188,7 @@ function MonitorTab({ projectId, onChange }) {
     setBusyId(item.id);
     const r = await api.post("/trips/" + item.id + "/review", { action, note: note || null });
     setBusyId(null);
-    if (!r || r.success === false) { window.alert((r && r.message) || "Action fail"); return; }
+    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.action_fail")); return; }
     setOpenId(null); load(); onChange && onChange();
   };
   const stuckAct = async (item2, kind) => {
@@ -188,7 +199,7 @@ function MonitorTab({ projectId, onChange }) {
       ? await api.post("/trips/" + item2.id + "/cancel", { remark })
       : await api.post("/trips/" + item2.id + "/manual-close", { remark });
     setBusyId(null);
-    if (!r || r.success === false) { window.alert((r && r.message) || "Action fail"); return; }
+    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.action_fail")); return; }
     setOpenId(null); load(); onChange && onChange();
   };
 
@@ -222,7 +233,7 @@ function MonitorTab({ projectId, onChange }) {
         {!loading && rows.length > 0 && (
           <>
             <THead cols="150px 1.3fr 1fr 90px 100px 1fr 40px"
-              headers={["Truck / Trip", "Route", "Loaded", "Travel", "Amount", "Status", ""]} />
+              headers={[t("trip_tracking.hdr_truck_trip"), t("trip_tracking.hdr_route"), t("trip_tracking.hdr_loaded"), t("trip_tracking.hdr_travel"), t("trip_tracking.hdr_amount"), t("trip_tracking.hdr_status"), ""]} />
             {rows.map(item4 => {
               const flags = parseFlags(item4.flag_reasons);
               const open = openId === item4.id;
@@ -240,7 +251,7 @@ function MonitorTab({ projectId, onChange }) {
                       {item4.task_name && <div style={{ fontSize: 10.5, color: T.t4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item4.task_name}</div>}
                     </div>
                     <span style={{ fontSize: 11.5, color: T.t2 }}>{fmtClock(item4.load_at)}</span>
-                    <span style={{ fontSize: 11.5, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{item4.travel_min != null ? item4.travel_min + " min" : "—"}</span>
+                    <span style={{ fontSize: 11.5, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{item4.travel_min != null ? t("trip_tracking.n_min", { n: item4.travel_min }) : "—"}</span>
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{item4.amount != null ? rs(item4.amount) : "—"}</span>
                     <span style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>{verifyPill(item4)}
                       {flags.slice(0, 1).map(f => { const m = flagMeta(f); return <Pill key={f} label={m.label} c={m.tone === "red" ? T.red : T.amb} bg={m.tone === "red" ? T.redL : T.ambL} />; })}
@@ -265,11 +276,11 @@ function MonitorTab({ projectId, onChange }) {
                         <PhotoThumb label={t("trip_tracking.load")} url={item4.load_photo_url} />
                         <PhotoThumb label={t("trip_tracking.unload")} url={item4.unload_photo_url} />
                         <div style={{ flex: 1, fontSize: 11.5, color: T.t2, lineHeight: 1.9 }}>
-                          <div><Rich k="trip_tracking.travel_t_t2" params={{ t: item4.travel_min != null ? item4.travel_min + " min" : "—", t2: item4.expected_travel_min != null ? ` (expected ${item4.expected_travel_min} ± ${item4.tolerance_min || 0})` : "" }} /></div>
+                          <div><Rich k="trip_tracking.travel_t_t2" params={{ t: item4.travel_min != null ? t("trip_tracking.n_min", { n: item4.travel_min }) : "—", t2: item4.expected_travel_min != null ? t("trip_tracking.expected_pm", { exp: item4.expected_travel_min, tol: item4.tolerance_min || 0 }) : "" }} /></div>
                           <div>{t("trip_tracking.loaded_by_t_fmtclock", { t: item4.load_by_name || "—", fmtClock: fmtClock(item4.load_at) })}</div>
                           <div>{t("trip_tracking.unloaded_by_t_fmtclock", { t: item4.unload_by_name || "—", fmtClock: fmtClock(item4.unload_at) })}</div>
-                          <div>{t("trip_tracking.vendor_t_rate_t2", { t: item4.vendor_name || "—", t2: item4.rate_snap != null ? rs(item4.rate_snap) : "RATE PENDING" })}</div>
-                          {item4.delay_reason && <div style={{ color: T.amb }}>{t("trip_tracking.delay_delay_reason", { delay_reason: item4.delay_reason })}</div>}
+                          <div>{t("trip_tracking.vendor_t_rate_t2", { t: item4.vendor_name || "—", t2: item4.rate_snap != null ? rs(item4.rate_snap) : t("trip_tracking.rate_pending") })}</div>
+                          {item4.delay_reason && <div style={{ color: T.amb }}>{t("trip_tracking.delay_delay_reason", { delay_reason: delayReasonLabel(item4.delay_reason) })}</div>}
                           {item4.review_note && <div style={{ color: T.t3 }}>{t("trip_tracking.review_note_review_note", { review_note: item4.review_note })}</div>}
                         </div>
                       </div>
@@ -343,7 +354,7 @@ function RoutesTab({ projectId }) {
       )}
       {!loading && list.length > 0 && (
         <>
-          <THead cols="1.6fr 100px 120px 110px 90px 70px" headers={["Route", "Lead km", "Rate / trip", "Exp. time", "Status", ""]} />
+          <THead cols="1.6fr 100px 120px 110px 90px 70px" headers={[t("trip_tracking.hdr_route"), t("trip_tracking.hdr_lead_km"), t("trip_tracking.rate_trip"), t("trip_tracking.hdr_exp_time"), t("trip_tracking.hdr_status"), ""]} />
           {list.map(r => (
             <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 100px 120px 110px 90px 70px",
               padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
@@ -358,7 +369,7 @@ function RoutesTab({ projectId }) {
               <span style={{ fontSize: 12 }}>
                 {r.rate_per_trip != null ? <span style={{ color: T.t1, fontVariantNumeric: "tabular-nums" }}>{rs(r.rate_per_trip)}</span> : <Pill label={t("trip_tracking.rate_pending")} c={T.amb} bg={T.ambL} />}
               </span>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>{r.expected_travel_min != null ? r.expected_travel_min + " min" : "—"}</span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{r.expected_travel_min != null ? t("trip_tracking.n_min", { n: r.expected_travel_min }) : "—"}</span>
               <span>{r.is_active ? <Pill label={t("common.active")} c={T.grn} bg={T.grnL} /> : <Pill label={t("subcon.inactive")} c={T.t3} bg={T.sltL} />}</span>
               <button onClick={() => setForm(r)} type="button" style={{ justifySelf: "end", fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button>
             </div>
@@ -460,14 +471,16 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
     let r;
     if (route) {
       r = await api.put("/trips/routes/" + route.id, body);
-      if (r && r.success !== false && route.rate_per_trip == null && numf(f.rate_per_trip) != null) {
+      // Rate bhara hai to har save par backfill (AST-14): server sirf khaali-rate
+      // wali unbilled trips (raste wali bhi) chhoota hai, isliye dobara bulana safe.
+      if (r && r.success !== false && numf(f.rate_per_trip) != null) {
         await api.post("/trips/routes/" + route.id + "/backfill-rate", { rate: numf(f.rate_per_trip) });
       }
     } else {
       r = await api.post("/trips/routes", body);
     }
     setSaving(false);
-    if (!r || r.success === false) { window.alert((r && r.message) || "Save fail"); return; }
+    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.save_fail")); return; }
     onSaved();
   };
 
@@ -572,7 +585,7 @@ function TrucksTab() {
     setSaving(true);
     const r = await api.post("/trips/trucks", { registration_no: reg.trim(), ownership: own, default_vendor_id: vendorId || null });
     setSaving(false);
-    if (!r || r.success === false) { window.alert((r && r.message) || "Truck save fail"); return; }
+    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.truck_save_fail")); return; }
     setAdd(false); setReg(""); setVendorId(""); load();
   };
 
@@ -600,11 +613,11 @@ function TrucksTab() {
       {!loading && list.length === 0 && <div style={{ textAlign: "center", padding: "34px 20px", color: T.t4, fontSize: 13 }}>{t("trip_tracking.abhi_koi_truck_nahi")}</div>}
       {!loading && list.length > 0 && (
         <>
-          <THead cols="1.4fr 1fr 1.4fr 110px 110px" headers={["Registration", "Ownership", "Vendor", "Today trips", "Status"]} />
+          <THead cols="1.4fr 1fr 1.4fr 110px 110px" headers={[t("trip_tracking.hdr_registration"), t("common.ownership"), t("common.vendor"), t("trip_tracking.hdr_today_trips"), t("trip_tracking.hdr_status")]} />
           {list.map(item5 => (
             <div key={item5.id} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr 110px 110px", padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>{item5.registration_no || item5.name}</span>
-              <span style={{ fontSize: 11.5, color: T.t2 }}>{item5.ownership || "—"}</span>
+              <span style={{ fontSize: 11.5, color: T.t2 }}>{item5.ownership ? (String(item5.ownership).toLowerCase() === "owned" ? t("machinery.owned") : t("machinery.rented")) : "—"}</span>
               <span style={{ fontSize: 11.5, color: T.t2 }}>{item5.default_vendor_name || "—"}</span>
               <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{Number(item5.today_trip_count || 0)}</span>
               <span>{Number(item5.open_trip_count) > 0 ? <Pill label={t("trip_tracking.in_transit")} c={T.amb} bg={T.ambL} /> : <Pill label={t("common.idle")} c={T.t3} bg={T.sltL} />}</span>
@@ -633,7 +646,7 @@ function ReportsTab({ projectId }) {
     api.get(ep + "?" + qs).then(r => setRows(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setRows([])).finally(() => setLoading(false));
   }, [kind, from, to, projectId]);
 
-  const nameOf = (r) => kind === "vendor" ? (r.vendor_name || "—") : kind === "task" ? (r.task_name || "—") : (r.registration_no || r.truck_name || "Truck");
+  const nameOf = (r) => kind === "vendor" ? (r.vendor_name || "—") : kind === "task" ? (r.task_name || "—") : (r.registration_no || r.truck_name || t("trip_tracking.truck"));
 
   return (
     <div>
@@ -647,13 +660,15 @@ function ReportsTab({ projectId }) {
         {!loading && rows.length === 0 && <div style={{ textAlign: "center", padding: "34px 20px", color: T.t4, fontSize: 13 }}>{t("trip_tracking.is_range_me_koi_verified_trip")}</div>}
         {!loading && rows.length > 0 && (
           <>
-            <THead cols="1.6fr 90px 110px 130px 1.2fr" headers={["Name", "Trips", "Total km", "Amount", "Hired / Owned"]} />
+            <THead cols="1.6fr 90px 110px 130px 1.2fr" headers={[t("trip_tracking.hdr_name"), t("trip_tracking.hdr_trips"), t("trip_tracking.hdr_total_km"), t("trip_tracking.hdr_amount"), t("trip_tracking.hdr_hired_owned")]} />
             {rows.map((r, i) => (
               <div key={i} style={{ display: "grid", gridTemplateColumns: "1.6fr 90px 110px 130px 1.2fr", padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{nameOf(r)}</span>
                 <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{r.trips || 0}</span>
                 <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{fmtN(Number(r.total_km) || 0)}</span>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{rs(r.total_amount)}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{rs(r.total_amount)}
+                  {Number(r.rate_pending_trips) > 0 && <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: T.amb }}>{t("trip_tracking.n_rate_pending", { n: Number(r.rate_pending_trips) })}</span>}
+                </span>
                 <span style={{ fontSize: 11, color: T.t3 }}>{t("trip_tracking.hired_r_rs_owned_r2_rs2", { r: r.hired_trips || 0, rs: rs(r.hired_amount), r2: r.owned_trips || 0, rs2: rs(r.owned_amount) })}</span>
               </div>
             ))}
@@ -698,8 +713,8 @@ function BillingTab({ projectId }) {
     setGenerating(true);
     const r = await api.post("/trips/bills", { vendor_id: vendorId, from, to, project_id: projectId });
     setGenerating(false);
-    if (!r || r.success === false) { window.alert((r && r.message) || "Bill generate fail"); return; }
-    window.alert("Bill #" + r.data.id + " ban gaya · " + rs(r.data.total_amount) + " — Finance me party_payment ban gaya");
+    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.bill_generate_fail")); return; }
+    window.alert(t("trip_tracking.bill_ban_gaya", { id: r.data.id, amount: rs(r.data.total_amount) }));
     setPreview(null); setVendorId(""); loadBills();
   };
   const toggleBill = async (b) => {
@@ -763,7 +778,7 @@ function BillingTab({ projectId }) {
               <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>#{b.id}</span>
               <span style={{ fontSize: 12.5, color: T.t1 }}>{b.vendor_name || "—"}</span>
               <span style={{ fontSize: 11.5, color: T.t3 }}>{String(b.from_date).slice(0, 10)} → {String(b.to_date).slice(0, 10)}</span>
-              <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{b.trip_count} trips</span>
+              <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{t("trip_tracking.n_trips", { n: b.trip_count })}</span>
               <span style={{ fontSize: 13, fontWeight: 800, color: T.t1, fontVariantNumeric: "tabular-nums", justifySelf: "end" }}>{rs(b.total_amount)}</span>
             </div>
             {expanded && expanded.billId === b.id && (
