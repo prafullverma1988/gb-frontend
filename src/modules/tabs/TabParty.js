@@ -375,7 +375,7 @@ function TabParty({ projectId, projectName }) {
     const w = window.open("", "_blank");
     if (!w) { window.alert(t("party.print_window_blocked_allow_pop_ups")); return; }
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"/>
-      <title>${escapeHTML(party.name)} — ${escapeHTML(project||"Project")}</title>
+      <title>${escapeHTML(party.name)} — ${escapeHTML(project||t("common.project"))}</title>
       <style>
         body{font-family:'Segoe UI',system-ui,sans-serif;color:#111827;margin:24px;font-size:13px}
         h1{font-size:18px;margin:0 0 4px}
@@ -396,27 +396,27 @@ function TabParty({ projectId, projectName }) {
         @media print { body{margin:12mm} }
       </style></head><body>
         <h1>${escapeHTML(party.name)}</h1>
-        <div class="sub">Party Ledger — ${escapeHTML(project||"Project")} · Generated ${today}</div>
+        <div class="sub">${escapeHTML(t("party.pdf_sub", { project: project||t("common.project"), date: today }))}</div>
         <div class="meta">
-          <div><span class="l">Type:</span> <span class="v">${escapeHTML(party.type)}</span></div>
-          <div><span class="l">Status:</span> <span class="v">${escapeHTML(party.balLabel)}</span></div>
-          <div><span class="l">Balance:</span> <span class="v" style="color:${party.balPositive?"#059669":"#DC2626"}">₹${(party.balance||0).toLocaleString("en-IN")}</span></div>
-          <div><span class="l">Entries:</span> <span class="v">${party.txnRows.length}</span></div>
+          <div><span class="l">${t("common.type")}:</span> <span class="v">${escapeHTML(party.type)}</span></div>
+          <div><span class="l">${t("common.status")}:</span> <span class="v">${escapeHTML(balLabelText(party.balLabel))}</span></div>
+          <div><span class="l">${t("common.balance")}:</span> <span class="v" style="color:${party.balPositive?"#059669":"#DC2626"}">₹${(party.balance||0).toLocaleString("en-IN")}</span></div>
+          <div><span class="l">${t("reports.entries")}:</span> <span class="v">${party.txnRows.length}</span></div>
         </div>
         <table>
           <tr>
-            <th style="width:70px">Date</th>
-            <th style="width:110px">Project</th>
-            <th>Note</th>
-            <th style="width:100px">Type</th>
+            <th style="width:70px">${t("common.date")}</th>
+            <th style="width:110px">${t("common.project")}</th>
+            <th>${t("common.note")}</th>
+            <th style="width:100px">${t("common.type")}</th>
             <th style="text-align:right;width:85px">CR ₹</th>
             <th style="text-align:right;width:85px">DR ₹</th>
-            <th style="text-align:right;width:115px">Balance</th>
+            <th style="text-align:right;width:115px">${t("common.balance")}</th>
           </tr>
-          ${party.txnRows.length ? `<tr style="background:#F8F9FB"><td colspan="6" style="font-style:italic;color:#6B7280">Opening Balance</td><td style="text-align:right;font-weight:600;color:#6B7280">₹0.00</td></tr>` : ""}
-          ${rows || `<tr><td colspan="7" style="text-align:center;padding:30px;color:#9CA3AF">No transactions</td></tr>`}
+          ${party.txnRows.length ? `<tr style="background:#F8F9FB"><td colspan="6" style="font-style:italic;color:#6B7280">${t("common.opening_balance")}</td><td style="text-align:right;font-weight:600;color:#6B7280">₹0.00</td></tr>` : ""}
+          ${rows || `<tr><td colspan="7" style="text-align:center;padding:30px;color:#9CA3AF">${t("party.no_transactions_on_this_project")}</td></tr>`}
           ${party.txnRows.length ? `<tr style="background:#F8F9FB;border-top:2px solid #D1D5DB">
-            <td colspan="4" style="font-weight:700;text-transform:uppercase;letter-spacing:.3px;font-size:10.5px">Closing Balance</td>
+            <td colspan="4" style="font-weight:700;text-transform:uppercase;letter-spacing:.3px;font-size:10.5px">${t("finance.closing_balance")}</td>
             <td style="text-align:right;font-weight:700;color:#059669">₹${totalCR.toLocaleString("en-IN")}</td>
             <td style="text-align:right;font-weight:700;color:#DC2626">₹${totalDR.toLocaleString("en-IN")}</td>
             <td style="text-align:right;font-weight:800;color:${closeAbs===0?"#9CA3AF":(closeGood?"#059669":"#DC2626")}">
@@ -425,11 +425,11 @@ function TabParty({ projectId, projectName }) {
           </tr>` : ""}
         </table>
         <div class="totals">
-          <div>Total Credits: <span class="cr">₹${totalCR.toLocaleString("en-IN")}</span></div>
-          <div>Total Debits: <span class="dr">₹${totalDR.toLocaleString("en-IN")}</span></div>
-          <div>Net Balance: <span class="net">${party.balPositive?"":"−"}₹${party.balance.toLocaleString("en-IN")} (${escapeHTML(party.balLabel)})</span></div>
+          <div>${t("party.pdf_total_credits")}: <span class="cr">₹${totalCR.toLocaleString("en-IN")}</span></div>
+          <div>${t("party.pdf_total_debits")}: <span class="dr">₹${totalDR.toLocaleString("en-IN")}</span></div>
+          <div>${t("reports.net_balance")}: <span class="net">${party.balPositive?"":"−"}₹${party.balance.toLocaleString("en-IN")} (${escapeHTML(balLabelText(party.balLabel))})</span></div>
         </div>
-        <div class="footer">Generated by ${escapeHTML(companyName())} · Project-scoped ledger</div>
+        <div class="footer">${escapeHTML(t("party.pdf_footer", { company: companyName() }))}</div>
       </body></html>`);
     w.document.close();
     setTimeout(()=>w.print(), 400);
@@ -528,7 +528,7 @@ function TabParty({ projectId, projectName }) {
         <Panel style={{height:"100%", overflow:"hidden", display:"flex", flexDirection:"column"}}>
           {selP?(
             <>
-              <PHead title={`${selP.name}  ·  ${projectName||"Project"}`} action={<SecBtn label={t("mom.export_pdf")} onClick={()=>exportPartyLedgerPDF(selP, projectName)}/>}/>
+              <PHead title={`${selP.name}  ·  ${projectName||t("common.project")}`} action={<SecBtn label={t("mom.export_pdf")} onClick={()=>exportPartyLedgerPDF(selP, projectName)}/>}/>
               <div style={{padding:"8px 15px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", gap:20}}>
                 {[[t("common.type"),selP.type],[t("common.balance"),`₹${fmtN(selP.balance)}`],[t("common.status"),balLabelText(selP.balLabel)]].map(([l,v])=>(
                   <div key={l} style={{display:"flex", gap:6, alignItems:"center"}}>
@@ -544,7 +544,7 @@ function TabParty({ projectId, projectName }) {
                   const COLS = "72px 110px 1fr 105px 92px 92px 118px";
                   return (
                     <>
-                      <THead cols={COLS} headers={["Date","Project","Note","Type","CR ₹","DR ₹","Balance"]}/>
+                      <THead cols={COLS} headers={[t("common.date"),t("common.project"),t("common.note"),t("common.type"),"CR ₹","DR ₹",t("common.balance")]}/>
                       {/* Opening balance row — project-scoped ledger always starts at 0 */}
                       {selP.txnRows.length>0 && (
                         <div style={{display:"grid", gridTemplateColumns:COLS, padding:"7px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", background:T.surfaceB}}>

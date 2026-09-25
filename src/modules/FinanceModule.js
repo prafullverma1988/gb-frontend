@@ -125,6 +125,11 @@ const ledgerSign = (rawType) => {
 const balanceLabelOf = (partyType, bal) => isVendorType(partyType)
   ? (bal <= 0 ? "To Pay" : "Advance Paid")
   : (bal >= 0 ? "To Receive" : "Advance Received");
+// balType ek CODE hai ("To Pay" / "To Receive" / "Advance Paid" / "Advance Received" /
+// "Settled") — rang aur jod usi se; screen par label t() se (FIN-31, TabParty jaisa).
+const balTypeText = (b) => (b === "To Pay" ? t("finance.to_pay") : b === "To Receive" ? t("finance.to_receive")
+  : b === "Advance Paid" ? t("finance.advance_paid") : b === "Advance Received" ? t("finance.advance_received")
+  : b === "Settled" ? t("finance.settled") : (b || ""));
 const T={
   bg:"#F4F6F9",surface:"#FFFFFF",surfaceB:"#F8F9FB",
   t1:"#111827",t2:"#374151",t3:"#6B7280",t4:"#9CA3AF",
@@ -5175,7 +5180,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         </div>
                         <div style={{textAlign:"right",flexShrink:0}}>
                           <div style={{fontSize:12.5,fontWeight:700,color:["To Pay","Advance Received"].includes(p.balType)?T.red:T.grn}}>₹{fmt(p.balance)}</div>
-                          <div style={{fontSize:10,color:T.t4}}>{p.balType}</div>
+                          <div style={{fontSize:10,color:T.t4}}>{balTypeText(p.balType)}</div>
                         </div>
                       </div>
                     </div>
@@ -5228,7 +5233,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     </div>
                     <span style={{fontSize:11,color:T.grn,fontWeight:600,whiteSpace:"nowrap"}}>{t("finance.cr_fmtn", { fmtN: fmtN(totalCR) })}</span>
                     <span style={{fontSize:11,color:T.red,fontWeight:600,whiteSpace:"nowrap"}}>{t("finance.dr_fmtn", { fmtN: fmtN(totalDR) })}</span>
-                    <span style={{background:chipC.bg,color:chipC.fg,fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:8,border:`1px solid ${chipC.br}`}}>₹{fmtN(computedBal)} · {computedBalType}</span>
+                    <span style={{background:chipC.bg,color:chipC.fg,fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:8,border:`1px solid ${chipC.br}`}}>₹{fmtN(computedBal)} · {balTypeText(computedBalType)}</span>
                     <button onClick={()=>downloadLedgerCSV(selParty)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>CSV</button>
                     <button onClick={()=>downloadLedgerPDF(selParty)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>PDF</button>
                     <button onClick={()=>setSelParty(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex",padding:3}}><IcX size={16}/></button>
