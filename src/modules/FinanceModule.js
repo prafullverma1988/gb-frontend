@@ -10,7 +10,7 @@ import { companyNameHtml } from "../utils/companyName";
 import { canSeeFinancials } from "../utils/perms";
 import { canApproveAction } from "../utils/approvalAuthority";
 import TabAccounts from "./tabs/TabAccounts";
-import { isoDate, todayISO } from "../utils/today";
+import { isoDate, todayISO, daysAgoISO } from "../utils/today";
 import { cashMoveOf, isTransferIn, round2 } from "../utils/moneyRules";
 import { BackClose } from "../utils/backNav";
 
@@ -3419,10 +3419,7 @@ const r2c = round2;
 // running ledger balance, plus a per-day "Day Balance" (net in−out).
 // Negative balances render in red WITH a leading minus sign (fmtS).
 // ══════════════════════════════════════════════════════════════
-function CashDayBook({ txns: bookTxns, accounts=[], view="cashbook" }){ // view driven by parent sub-tab (cashbook | daybook)
-  // FIN-10: har row ka Receipt/Payment aur rakam uske khaate par asli asar
-  // (cashMove) se — list wala `dr` nahi (usme transfer ka IN leg bhi payment tha).
-  const txns = useMemo(()=>bookTxns.map(t=>({...t, dr:t.cashMove<0, amount:Math.abs(t.cashMove||0)})),[bookTxns]);
+function CashDayBook({ accounts=[], view="cashbook", mapRow, reloadKey=0 }){ // view driven by parent sub-tab (cashbook | daybook)
   const [chip,setChip]   = useState("All");      // All | Receipts | Payments
   const [fSite,setFSite] = useState("All");
   const [fHead,setFHead] = useState("All");
@@ -3430,8 +3427,34 @@ function CashDayBook({ txns: bookTxns, accounts=[], view="cashbook" }){ // view 
   const [fAcc,setFAcc]   = useState("All");
   const [fParty,setFParty]=useState("All");
   const [search,setSearch]=useState("");
-  const [fFrom,setFFrom] = useState("");
-  const [fTo,setFTo]     = useState("");
+  // FIN-30: sirf chune daur ki entries server se (GET /finance/cashbook — Khaata
+  // Ledger wala hi niyam: opening + har row ke baad khaate ka asli balance).
+  // Pehle company ki POORI history browser me aakar yahan chhanti jaati thi.
+  // Default pichhle 30 din — Reports → Cash Book jaisa; tareekh badlo to wahi daur.
+  const [defFrom]=useState(()=>daysAgoISO(30));
+  const [defTo]=useState(()=>todayISO());
+  const [fFrom,setFFrom] = useState(defFrom);
+  const [fTo,setFTo]     = useState(defTo);
+  const EMPTY_CB={rows:[],accounts:[],opening:0,closing:0,balances:false};
+  const [cb,setCb]=useState(EMPTY_CB);
+  const [cbLoading,setCbLoading]=useState(false);
+  useEffect(()=>{
+    // adhoori tareekh (picker me type ho rahi) par call nahi; khaali = us taraf koi seema nahi
+    const ok=(x)=>!x||/^\d{4}-\d{2}-\d{2}$/.test(x);
+    if(!ok(fFrom)||!ok(fTo)) return;
+    let dead=false; setCbLoading(true);
+    const q=[fFrom&&`from=${fFrom}`,fTo&&`to=${fTo}`].filter(Boolean).join("&");
+    api.get("/finance/cashbook"+(q?"?"+q:""))
+      .then(r=>{ if(dead) return; const d=r&&r.success?r.data:null;
+        setCb(d&&Array.isArray(d.rows)?{rows:d.rows,accounts:Array.isArray(d.accounts)?d.accounts:[],opening:Number(d.opening)||0,closing:Number(d.closing)||0,balances:!!d.balances}:EMPTY_CB); })
+      .catch(()=>{ if(!dead) setCb(EMPTY_CB); })
+      .finally(()=>{ if(!dead) setCbLoading(false); });
+    return ()=>{ dead=true; };
+  },[fFrom,fTo,reloadKey]);
+  // FIN-10: har row ka Receipt/Payment aur rakam uske khaate par asli asar
+  // (server ka movement, utils/accountBalance) se — list wala `dr` nahi.
+  const txns = useMemo(()=>cb.rows.map(r=>{ const mv=Number(r.movement)||0;
+    return {...mapRow(r), cashMove:mv, dr:mv<0, amount:Math.abs(mv), bal:r.balance, cbal:r.combined_balance}; }),[cb,mapRow]);
 
   const uniq=(arr)=>Array.from(new Set(arr.filter(Boolean))).sort();
   const SITES  = useMemo(()=>uniq(txns.map(t=>t.project)),[txns]);
@@ -3467,18 +3490,21 @@ function CashDayBook({ txns: bookTxns, accounts=[], view="cashbook" }){ // view 
   // "Se" tareekh se pehle ki entries opening me jud jaati hain — Khaata Ledger
   // jaisa. Party/site/head/MOP/search/chip sirf row chhupate hain, Balance
   // column hamesha us khaate ka asli balance rehta hai (chhupi row samet).
+  // FIN-30: opening / har row ka balance / closing server ka (daur se pehle ki
+  // entries opening me already judi). Finance VIEW na ho to server balance nahi
+  // bhejta — tab daur ka chalta jod 0 se.
   const book=useMemo(()=>{
-    const rows=txns.filter(t=>fAcc==="All"||t.account===fAcc).sort((a,b)=>(a.ds-b.ds)||((a.id||0)-(b.id||0)));
-    const bookAccts=fAcc==="All"?accounts:accounts.filter(a=>a.name===fAcc);
-    let b=r2c(bookAccts.reduce((s,a)=>s+(Number(a.opening)||0),0));
-    rows.forEach(t=>{ if(fromN&&t.ds<fromN) b=r2c(b+t.cashMove); });
+    const accSel=fAcc==="All"?null:cb.accounts.find(a=>a.name===fAcc);
+    let b=cb.balances?r2c(Number(accSel?accSel.opening:cb.opening)||0):0;
     const opening=b, after=new Map(), dayEnd={};
-    rows.forEach(t=>{
-      if((fromN&&t.ds<fromN)||(toN&&t.ds>toN)) return;
-      b=r2c(b+t.cashMove); after.set(t,b); dayEnd[t.ds]=b;
+    txns.forEach(t=>{
+      if(fAcc!=="All"&&t.account!==fAcc) return;
+      b=cb.balances?r2c(Number(fAcc==="All"?t.cbal:t.bal)||0):r2c(b+t.cashMove);
+      after.set(t,b); dayEnd[t.ds]=b;
     });
-    return {opening, closing:b, after, dayEnd};
-  },[txns,accounts,fAcc,fromN,toN]);
+    const closing=cb.balances?r2c(Number(accSel?accSel.closing:cb.closing)||0):b;
+    return {opening, closing, after, dayEnd};
+  },[txns,cb,fAcc]);
   const withBal=filtered.map(t=>({...t,runBal:book.after.get(t)??book.opening}));
 
   // Day Book — group by day; per-day net + cumulative ledger
@@ -3550,8 +3576,8 @@ function CashDayBook({ txns: bookTxns, accounts=[], view="cashbook" }){ // view 
           <select value={fMOP}   onChange={e=>setFMOP(e.target.value)}   style={{...selStyle,borderColor:fMOP!=="All"?T.blu:T.b1,background:fMOP!=="All"?T.bluL:T.surface,color:fMOP!=="All"?T.blu:T.t2}}><option value="All">{t("finance.all_mop")}</option>{MOPS.map(m=><option key={m}>{m}</option>)}</select>
           <select value={fAcc}   onChange={e=>setFAcc(e.target.value)}   style={{...selStyle,borderColor:fAcc!=="All"?T.blu:T.b1,background:fAcc!=="All"?T.bluL:T.surface,color:fAcc!=="All"?T.blu:T.t2}}><option value="All">{t("finance.all_accounts")}</option>{ACCTS.map(a=><option key={a}>{a}</option>)}</select>
           <select value={fParty} onChange={e=>setFParty(e.target.value)} style={{...selStyle,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}><option value="All">{t("finance.all_parties")}</option>{PARTIES.map(p=><option key={p}>{p}</option>)}</select>
-          {(fSite!=="All"||fHead!=="All"||fMOP!=="All"||fAcc!=="All"||fParty!=="All"||chip!=="All"||search||fFrom||fTo)&&(
-            <button onClick={()=>{setFSite("All");setFHead("All");setFMOP("All");setFAcc("All");setFParty("All");setChip("All");setSearch("");setFFrom("");setFTo("");}}
+          {(fSite!=="All"||fHead!=="All"||fMOP!=="All"||fAcc!=="All"||fParty!=="All"||chip!=="All"||search||fFrom!==defFrom||fTo!==defTo)&&(
+            <button onClick={()=>{setFSite("All");setFHead("All");setFMOP("All");setFAcc("All");setFParty("All");setChip("All");setSearch("");setFFrom(defFrom);setFTo(defTo);}}
               style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer"}}>{t("common.clear")}</button>
           )}
         </div>
@@ -3602,7 +3628,7 @@ function CashDayBook({ txns: bookTxns, accounts=[], view="cashbook" }){ // view 
                 <span style={{fontSize:12,fontWeight:700,color:e.runBal>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(e.runBal)}</span>
               </div>
             ))}
-            {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.no_cash_entries_for_these_filters")}</div>}
+            {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{cbLoading?t("common.loading"):t("finance.no_cash_entries_for_these_filters")}</div>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:CB_COLS,padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
             <span style={{gridColumn:"1/6",fontSize:12.5,fontWeight:700,color:T.t1}}>{t("finance.total_filtered_entries", { filtered: filtered.length })}</span>
@@ -3655,7 +3681,7 @@ function CashDayBook({ txns: bookTxns, accounts=[], view="cashbook" }){ // view 
                 ))}
               </div>
             ))}
-            {daybook.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.no_cash_entries_for_these_filters")}</div>}
+            {daybook.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{cbLoading?t("common.loading"):t("finance.no_cash_entries_for_these_filters")}</div>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:DB_COLS,padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
             <span style={{fontSize:12,fontWeight:700,color:T.t1}}>TOTAL</span>
@@ -3904,6 +3930,14 @@ function FinanceModule(){
   // API data
   const [apiAccounts,setApiAccounts]=useState(null);
   const [apiTransactions,setApiTransactions]=useState(null);
+  // FIN-30 / PERF-11: Fin Activity ka ek page + usi chhanni ka jod server se;
+  // company bhar ke tiles GET /transactions/totals se; Party patti ka jod
+  // (list ke +/−, bina chhanni) — pehle ye sab poori history browser me judta tha.
+  const [txnMeta,setTxnMeta]=useState({total:0,dir_in:0,dir_out:0});
+  const [coTotals,setCoTotals]=useState(null);
+  const [partyDir,setPartyDir]=useState({dir_in:0,dir_out:0});
+  const [txnReload,setTxnReload]=useState(0);
+  const [billedRows,setBilledRows]=useState(null);   // Billed Material — apne tab par hi
   const [apiPartyTxns,setApiPartyTxns]=useState(null);
   // Real projects list — drives the Project picker in Create-Transaction
   // / Payment modals. Previously project options were derived from
@@ -4118,29 +4152,70 @@ function FinanceModule(){
   });
 
   // ── REFRESH FUNCTIONS (called after mutations) ────────────────
-  // GET /finance/transactions ek baar me zyada se zyada 1000 row deta hai
-  // (bina limit ke sirf 500). Pehle yahan bina limit ke maanga jaata tha, to
-  // 4,000+ entry wali company me Fin Activity / Cash Book / Day Book sirf
-  // aakhri ~6 hafte dikhate the — totals adhoore, aur jis account ki entry
-  // us window se pehle ki thi wo dropdown se gayab. Ab page-by-page sab.
-  const fetchAllTxns=async()=>{
-    const PAGE=1000, MAX_PAGES=30;   // 30k rows — isse bada tenant aaye to server-side filter chahiye
-    let all=[];
-    for(let i=0;i<MAX_PAGES;i++){
-      const r=await api.get(`/finance/transactions?limit=${PAGE}&offset=${i*PAGE}`);
-      if(!r?.success||!Array.isArray(r.data)) break;
-      all=all.concat(r.data);
-      if(r.data.length<PAGE) break;
-    }
-    return all;
-  };
-  const refreshTxns=async()=>{
+  // FIN-30 / PERF-11: pehle yahan company ki POORI history page-by-page aati
+  // thi (greenbox bhilai: 6 request ek ke baad ek, ~8 MB JSON) — har khulne aur
+  // har save par — aur saare tiles / list / Cash Book browser me judte the.
+  // Ab: Fin Activity sirf dikhne wala page (100 row, halke khaane) + usi chhanni
+  // ka jod (GET /transactions?with_total=1 — chip = type/unpaid, khoj = q, Khaata
+  // Ledger wala khoj niyam); tiles GET /transactions/totals se; Cash/Day Book
+  // apne daur ke liye GET /finance/cashbook se; Billed Material apne tab par.
+  const TXN_CHIP_QS={"Payment In":"type=receipt","Payment Out":"type=payment","Material":"type=material_purchase",
+    "Site Expense":"type=site_expense","Sub-Con":"type=subcon_expense","Party Payment":"type=party_payment",
+    "Settlement":"type=settle_in,settle_out","Unpaid":"unpaid=1"};
+  const txnQs=(chip,q)=>[TXN_CHIP_QS[chip]||"",q?`q=${encodeURIComponent(q)}`:""].filter(Boolean).join("&");
+  const txnSeq=useRef(0);
+  const loadTxnPage=async(page,chip,q)=>{
+    const seq=++txnSeq.current;
     try{
       setLoading(l=>({...l,txns:true}));
-      const rows=await fetchAllTxns();
-      if(rows.length) setApiTransactions(rows.map(mapTxn));
-    }catch(e){console.error("Refresh txns:",e);}
-    finally{setLoading(l=>({...l,txns:false}));}
+      const qs=txnQs(chip,q);
+      const r=await api.get(`/finance/transactions?fields=list&with_total=1&limit=${TXN_PAGE_SIZE}&offset=${page*TXN_PAGE_SIZE}${qs?"&"+qs:""}`);
+      if(seq!==txnSeq.current) return;          // beech me doosri chhanni/page maang li gayi
+      if(r?.success&&Array.isArray(r.data)){
+        setApiTransactions(r.data.map(mapTxn));
+        const meta={total:Number(r.total)||0,dir_in:Number(r.dir_in)||0,dir_out:Number(r.dir_out)||0};
+        setTxnMeta(meta);
+        if(!qs) setPartyDir({dir_in:meta.dir_in,dir_out:meta.dir_out});   // bina chhanni = poori company
+      }
+    }catch(e){console.error("Load txns:",e);}
+    finally{ if(seq===txnSeq.current) setLoading(l=>({...l,txns:false})); }
+  };
+  const refreshTotals=async()=>{
+    try{
+      const filtered=chipTxn!=="All"||!!(dbTxnSearch||"").trim();
+      const [tot,all]=await Promise.all([
+        api.get("/finance/transactions/totals"),
+        // chhanni lagi ho to Party patti ke liye bina chhanni ka jod alag se (sirf 1 row)
+        filtered?api.get("/finance/transactions?fields=list&with_total=1&limit=1"):Promise.resolve(null),
+      ]);
+      if(tot?.success&&tot.data) setCoTotals(tot.data);
+      if(all?.success) setPartyDir({dir_in:Number(all.dir_in)||0,dir_out:Number(all.dir_out)||0});
+    }catch(e){console.error("Refresh totals:",e);}
+  };
+  // save / delete / Refresh ke baad: dikhne wala page, tiles, Cash Book aur (khula ho to) Billed Material dobara
+  const refreshTxns=async()=>{ setTxnReload(n=>n+1); await refreshTotals(); };
+  // Excel / PDF: isi chhanni ki SAARI row (sirf button dabane par)
+  const fetchTxnFilteredAll=async()=>{
+    const qs=txnQs(chipTxn,(dbTxnSearch||"").trim());
+    let all=[];
+    for(let i=0;i<30;i++){
+      const r=await api.get(`/finance/transactions?fields=list&limit=1000&offset=${i*1000}${qs?"&"+qs:""}`);
+      if(!r?.success||!Array.isArray(r.data)) break;
+      all=all.concat(r.data);
+      if(r.data.length<1000) break;
+    }
+    return all.map(mapTxn);
+  };
+  // Billed Material — sirf material bill (line items samet), sab page ek saath
+  const loadBilledMat=async()=>{
+    try{
+      const first=await api.get("/finance/transactions?fields=list&with_total=1&type=material_purchase&limit=1000&offset=0");
+      if(!first?.success||!Array.isArray(first.data)){ setBilledRows([]); return; }
+      const pages=Math.ceil((Number(first.total)||0)/1000);
+      const rest=await Promise.all(Array.from({length:Math.max(0,pages-1)},(_,i)=>
+        api.get(`/finance/transactions?fields=list&type=material_purchase&limit=1000&offset=${(i+1)*1000}`)));
+      setBilledRows(first.data.concat(...rest.map(r=>(r?.success&&Array.isArray(r.data))?r.data:[])).map(mapTxn));
+    }catch(e){ console.error("Billed material:",e); setBilledRows([]); }
   };
 
   const refreshPayReqs=async()=>{
@@ -4257,9 +4332,10 @@ function FinanceModule(){
   };
 
   // Refresh all at once (parallel)
-  const refreshAll=async()=>{
+  const refreshAll=async(opts)=>{
+    const initial=!!(opts&&opts.initial===true);   // pehli baar page apne effect se aata hai
     await Promise.allSettled([
-      refreshParties(),refreshTxns(),refreshAccounts(),
+      refreshParties(),initial?refreshTotals():refreshTxns(),refreshAccounts(),
       refreshPayReqs(),refreshPendPmts(),refreshProjects(),
       // Also reload Unbilled GRN list (the in-tab green Refresh was removed —
       // the single top-bar Refresh now covers it too).
@@ -4271,7 +4347,17 @@ function FinanceModule(){
   };
 
   // ── INITIAL LOAD ──────────────────────────────────────────────
-  useEffect(()=>{ refreshAll(); },[]);
+  useEffect(()=>{ refreshAll({initial:true}); },[]);
+  // Fin Activity ka page: page / chip / khoj badle to (aur save ke baad txnReload).
+  // Chhanni badli aur page 0 nahi tha to pehle page 0 — ek hi request jaati hai.
+  const txnFilterKey=useRef(null);
+  useEffect(()=>{
+    const q=(dbTxnSearch||"").trim(), key=chipTxn+"|"+q;
+    if(txnFilterKey.current!==null&&key!==txnFilterKey.current&&txnPage!==0){ txnFilterKey.current=key; setTxnPage(0); return; }
+    txnFilterKey.current=key;
+    loadTxnPage(txnPage,chipTxn,q);
+  },[txnPage,chipTxn,dbTxnSearch,txnReload]);
+  useEffect(()=>{ if(tab==="billed_mat") loadBilledMat(); },[tab,txnReload]);
 
   // Use API data if available, fallback to hardcoded
   const activeAccounts=apiAccounts||ACCOUNTS.map(mapAccount);
@@ -4310,51 +4396,25 @@ function FinanceModule(){
   // (including unrelated state changes). Now only re-runs when
   // activeTxns or any filter input changes. Search box typing is
   // covered by `dbTxnSearch` upstream (see #67's useDebounce wrap).
-  const txnFiltered = useMemo(() => {
-    const q = (dbTxnSearch || "").trim();
-    return activeTxns.filter(t => {
-      // Rakam / tareekh / text — teeno ek hi box se (txnMatchesSearch dekho).
-      if (q && !txnMatchesSearch(q, { texts: [t.party, t.sub, t.note, t.project, t.account], amount: t.amount, ds: t.ds })) return false;
-      if (fProject !== "All" && t.project !== fProject) return false;
-      if (fType    !== "All" && t.type    !== fType)    return false;
-      if (fAcc     !== "All" && t.account !== fAcc)     return false;
-      if (fStatus  !== "All" && t.status  !== fStatus)  return false;
-      if (chipTxn === "Payment In"    && t.type !== "Payment In") return false;
-      if (chipTxn === "Payment Out"   && t.type !== "Payment Out") return false;
-      if (chipTxn === "Material"      && t.type !== "Material Purchase") return false;
-      if (chipTxn === "Site Expense"  && t.type !== "Site Expense") return false;
-      if (chipTxn === "Sub-Con"       && t.type !== "Sub-Con Expense") return false;
-      if (chipTxn === "Party Payment" && t.type !== "Party Payment") return false;
-      if (chipTxn === "Settlement"    && t.type !== "Settlement") return false;
-      if (chipTxn === "Unpaid"        && t.status === "paid") return false;
-      return true;
-    });
-  }, [activeTxns, dbTxnSearch, fProject, fType, fAcc, fStatus, chipTxn]);
-  // ── P4 #67: Sort once, page slice — render-cheap.
-  // Sorting txnFiltered (descending by `ds` = display sort key) here
-  // means the render no longer rebuilds a 5000-item sorted array on
-  // every keystroke / re-render. Page slice on top is the actual DOM
-  // payload — bounded at TXN_PAGE_SIZE.
-  const txnSorted = useMemo(() => {
-    const arr = txnFiltered.slice();
-    arr.sort((a, b) => (b.ds || 0) - (a.ds || 0));
-    return arr;
-  }, [txnFiltered]);
-  const txnPageRows  = useMemo(() => txnSorted.slice(txnPage * TXN_PAGE_SIZE, (txnPage + 1) * TXN_PAGE_SIZE), [txnSorted, txnPage]);
-  const txnPageCount = Math.max(1, Math.ceil(txnFiltered.length / TXN_PAGE_SIZE));
-  // Auto-reset to page 0 when filters / search shrink the result set
-  // below the current page (otherwise user lands on an empty page).
-  useEffect(() => { if (txnPage >= txnPageCount) setTxnPage(0); }, [txnPageCount, txnPage]);
-  const tIn=txnFiltered.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
-  const tOut=txnFiltered.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+  // FIN-30: list server se chhan kar aati hai (chip → type / unpaid, khoj → q,
+  // tarteeb tareekh + id ulti) — yahan sirf wahi ek page. Kul ginti aur
+  // "+ ₹ / − ₹" jod usi chhanni ki POORI list ka, server se (txnMeta).
+  const txnPageRows  = activeTxns;
+  const txnTotal     = txnMeta.total;
+  const txnPageCount = Math.max(1, Math.ceil(txnTotal / TXN_PAGE_SIZE));
+  // Auto-reset to page 0 when the result set shrinks below the current page
+  // (e.g. delete ke baad) — otherwise user lands on an empty page.
+  useEffect(() => { if (txnTotal > 0 && txnPage >= txnPageCount) setTxnPage(0); }, [txnPageCount, txnPage, txnTotal]);
+  const tIn=txnMeta.dir_in;
+  const tOut=txnMeta.dir_out;
   const totalBal=activeAccounts.reduce((s,a)=>s+a.balance,0);
   const totalWalletBal=walletList.reduce((s,w)=>s+w.balance,0);
   const pendPR=payReqs.filter(r=>r.status==="pending").length;
   const pendTotal=pendPmts.reduce((s,p)=>s+p.amount,0);
 
-  const allPartyTxns=activeTxns.length>0?activeTxns:Object.values(PARTY_TXNS).flat();
-  const partyTotalCR=allPartyTxns.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
-  const partyTotalDR=allPartyTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+  // Party Ledger patti — list ke +/− ka jod poori company ki history par (server)
+  const partyTotalCR=partyDir.dir_in;
+  const partyTotalDR=partyDir.dir_out;
   const toReceive=partiesWithBalance.filter(p=>p.balType==="To Receive").reduce((s,p)=>s+p.balance,0);
   const toPay=partiesWithBalance.filter(p=>p.balType==="To Pay").reduce((s,p)=>s+p.balance,0);
   // FIN-11: Fin Activity ke tiles paise ke ASLI aane-jaane par — Cash Book wala
@@ -4363,8 +4423,9 @@ function FinanceModule(){
   // khaaton ke beech hai). Pehle har "dr" row judti thi: bill + usi bill ka
   // payment + dono transfer leg + settlement, cancel/reject samet (greenbox
   // bhilai "Total Expense" ₹8.1 Cr, "Net" −₹3.7 Cr jabki khaaton me ₹62 L).
-  const allTxnIn=round2(activeTxns.reduce((s,t)=>s+(t.txnType==="receipt"&&t.cashMove>0?t.cashMove:0),0));
-  const allTxnOut=round2(activeTxns.reduce((s,t)=>s+(t.txnType!=="bank_transfer"&&t.cashMove<0?-t.cashMove:0),0));
+  // FIN-30: wahi niyam ab server par (utils/txnFlow in/out = isi cashMove ki copy)
+  const allTxnIn=round2(coTotals?coTotals.cash_in:0);
+  const allTxnOut=round2(coTotals?coTotals.cash_out:0);
   // Unpaid = bills ka BAAKI (partial samet) — wahi server list jo Pending Payments
   // dikhata hai. Pehle sirf status "unpaid" ki POORI rakam (partial chhoot, site
   // expense jud jaata).
@@ -4390,13 +4451,13 @@ function FinanceModule(){
   // FIN-10: pehchan paid_via_staff_id se nahi, khaate par asli asar (cashMove,
   // utils/accountBalance) se — staff ki jama ki hui "Bank Transfer IN" (khaata
   // bhi, staff bhi) pehle gayab thi aur transfer ka IN leg payment ginta tha.
-  const isCashEvent = (t) => t.account_id!=null && (t.cashMove||0)!==0;
-  const cbTxnsBase=activeTxns.length>0
-    ? activeTxns.filter(isCashEvent)
-    : TRANSACTIONS_DATA.filter(isCashEvent);
-  const cbTxns=cbTxnsBase;
-  const cbIn=cbTxns.reduce((s,t)=>s+(t.cashMove>0?t.cashMove:0),0);
-  const cbOut=cbTxns.reduce((s,t)=>s+(t.cashMove<0?-t.cashMove:0),0);
+  // FIN-30: tiles poori history ke (server GET /transactions/totals: chalu khaaton
+  // ki clear aavak-jaavak, accountBalance movementCase); Cash/Day Book ki rows
+  // apne daur ke liye CashDayBook khud GET /finance/cashbook se laata hai.
+  const cbIn=coTotals?coTotals.book_in:0;
+  const cbOut=coTotals?coTotals.book_out:0;
+  // Cash Book ki row (GET /finance/cashbook) → list jaisi row (type label, date, sub…)
+  const mapCbRow=(r)=>mapTxn({...r, party_display:r.party, project_name:r.project, paid_via_staff_name:r.via_staff});
 
   const TILE_SETS={
     party:[
@@ -4422,8 +4483,8 @@ function FinanceModule(){
       const sgn=(n)=>`${n<0?"-₹":"₹"}${fmt(Math.abs(n))}`;
       return [
         {l:t("common.opening_balance"),v:sgn(openingBal),sub:t("finance.before_period_all_accounts"),Icon:IcBank,c:openingBal>=0?T.blu:T.red,bg:openingBal>=0?T.bluL:T.redL,brd:openingBal>=0?T.bluM:T.redM},
-        {l:t("finance.total_receipts"),v:`₹${fmt(cbIn)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>t.cashMove>0).length }),Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
-        {l:t("finance.total_payments"),v:`₹${fmt(cbOut)}`,sub:t("finance.length_entries", { length: cbTxns.filter(t=>t.cashMove<0).length }),Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
+        {l:t("finance.total_receipts"),v:`₹${fmt(cbIn)}`,sub:t("finance.length_entries", { length: coTotals?coTotals.book_in_count:0 }),Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
+        {l:t("finance.total_payments"),v:`₹${fmt(cbOut)}`,sub:t("finance.length_entries", { length: coTotals?coTotals.book_out_count:0 }),Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
         // Split shown so it's obvious how much is COMPANY money (bank+cash)
         // vs money sitting in staff wallets — avoids "balance kyu kam hai"
         // confusion now that wallet spends don't touch the company book.
@@ -4454,12 +4515,6 @@ function FinanceModule(){
     let txns=apiLedger[party.id]||[];
     if(txns.length===0){
       txns=[...(PARTY_TXNS[party.id]||[])];
-    }
-    if(txns.length===0&&activeTxns.length>0){
-      txns=activeTxns.filter(t=>t.party===party.name).map(t=>({
-        id:t.id,date:t.date,note:t.sub||t.type,amount:t.amount,
-        dr:t.dr,status:t.status,txnType:t.txnType||"",
-      }));
     }
 
     // Signed model (mirrors backend): each row's sign decides DR (+1, they owe
@@ -4671,14 +4726,16 @@ Status: ${ledgerRow.status||"unpaid"}`;
   };
 
   // ── Transaction CSV/PDF ──────────────────────────────────────
-  const dlTxnCSV=()=>{
+  const dlTxnCSV=async()=>{
+    const txnFiltered=await fetchTxnFilteredAll();
     downloadCSV("Transactions.csv",[
       ["Company — Transactions"],["Date","Party","Note","Project","Type","Account","Amount","DR/CR","Status"],
       ...txnFiltered.map(t=>[t.date,t.party,t.sub,t.project,t.type,t.account,t.amount,t.dr?"DR":"CR",t.status]),
       [],[,"IN",tIn,,"OUT",tOut,,"NET",tIn-tOut],
     ]);
   };
-  const dlTxnPDF=()=>{
+  const dlTxnPDF=async()=>{
+    const txnFiltered=await fetchTxnFilteredAll();
     const rowsHTML=txnFiltered.map(t=>`<tr><td>${t.date}</td><td><strong>${t.party}</strong><br/><span style="font-size:10px;color:#6B7280">${t.sub}</span></td><td>${t.project}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:#F1F5F9;color:#64748B">${t.type}</span></td><td>${t.account}</td><td style="font-weight:700;color:${t.dr?"#DC2626":"#059669"}">${t.dr?"−":"+"} ₹${fmtN(t.amount)}</td><td><span style="font-size:10px;padding:1px 6px;border-radius:20px;background:${t.status==="paid"?"#ECFDF5":t.status==="unbilled"?"#F5F3FF":"#FEF2F2"};color:${t.status==="paid"?"#059669":t.status==="unbilled"?"#7C3AED":"#DC2626"}">${t.status}</span></td></tr>`).join("");
     printHTML("Transactions — Company",`<h2>Transactions — Company</h2><p>${txnFiltered.length} entries &nbsp;|&nbsp; IN: ₹${fmtN(tIn)} &nbsp;|&nbsp; OUT: ₹${fmtN(tOut)} &nbsp;|&nbsp; NET: ${fmtS(tIn-tOut)}</p><table><tr><th>Date</th><th>Party / Note</th><th>Project</th><th>Type</th><th>Account</th><th>Amount</th><th>Status</th></tr>${rowsHTML}</table><p class="footer">Generated by Company</p>`);
   };
@@ -5035,7 +5092,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   onMouseLeave={e=>{if(!isActive){e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.color=T.t3;e.currentTarget.style.background=T.surfaceB;}}}>
                   {chip}
                   {/* count badges */}
-                  {tab==="transaction"&&chip==="Unpaid"&&(<span style={{marginLeft:5,background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{activeTxns.filter(t=>t.status!=="paid").length}</span>)}
+                  {tab==="transaction"&&chip==="Unpaid"&&(<span style={{marginLeft:5,background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{coTotals?coTotals.not_paid_count:0}</span>)}
                   {tab==="payreq"&&chip==="Pending"&&pendPR>0&&(<span style={{marginLeft:5,background:T.amb,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{pendPR}</span>)}
                   {tab==="pending"&&chip==="Overdue"&&(<span style={{marginLeft:5,background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{pendPmts.filter(p=>p.overdue).length}</span>)}
                 </button>
@@ -5451,7 +5508,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   <button key={id} onClick={()=>setChipTxn(id)}
                     style={{padding:"4px 12px",borderRadius:20,border:`1.5px solid ${on?cc.c:T.b1}`,background:on?cc.bg:T.surfaceB,color:on?cc.c:T.t3,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5}}>
                     {id}
-                    {id==="Unpaid"&&<span style={{background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{activeTxns.filter(t=>t.status!=="paid").length}</span>}
+                    {id==="Unpaid"&&<span style={{background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{coTotals?coTotals.not_paid_count:0}</span>}
                   </button>
                 );})}
                 {chipTxn!=="All"&&(
@@ -5575,7 +5632,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   );
                 });
               })()}
-              {txnFiltered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("finance.no_transactions_recorded")}</div>}
+              {txnPageRows.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{loading.txns?t("common.loading"):t("finance.no_transactions_recorded")}</div>}
               </div>
               {/* Pagination strip — only when there are multiple pages */}
               {txnPageCount > 1 && (
@@ -5586,7 +5643,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage===0?T.b1:T.surface,color:txnPage===0?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage===0?"not-allowed":"pointer"}}>{t("finance.prev_2")}</button>
                   <span style={{fontSize:11.5,color:T.t3,padding:"0 8px",fontVariantNumeric:"tabular-nums"}}>
                    {t("finance.page")} <b style={{color:T.t1}}>{txnPage+1}</b> of <b style={{color:T.t1}}>{txnPageCount}</b>
-                    <span style={{marginLeft:8,color:T.t4}}>· {txnFiltered.length} total</span>
+                    <span style={{marginLeft:8,color:T.t4}}>· {txnTotal} total</span>
                   </span>
                   <button onClick={()=>setTxnPage(p=>Math.min(txnPageCount-1,p+1))} disabled={txnPage>=txnPageCount-1}
                     style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage>=txnPageCount-1?T.b1:T.surface,color:txnPage>=txnPageCount-1?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage>=txnPageCount-1?"not-allowed":"pointer"}}>{t("finance.next")}</button>
@@ -5596,7 +5653,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
               )}
               {/* Footer totals — In / Out for the filtered set */}
               <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0,alignItems:"center"}}>
-                <span style={{gridColumn:"1/6",fontSize:12,fontWeight:700,color:T.t1}}>{t("finance.total_txnfiltered_entries", { txnFiltered: txnFiltered.length })}</span>
+                <span style={{gridColumn:"1/6",fontSize:12,fontWeight:700,color:T.t1}}>{t("finance.total_txnfiltered_entries", { txnFiltered: txnTotal })}</span>
                 <span style={{fontSize:13,fontWeight:800,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>+ ₹{fmtN(tIn)} &nbsp;/&nbsp; − ₹{fmtN(tOut)}</span>
                 <span/>
               </div>
@@ -5609,7 +5666,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
 
         {/* CASH BOOK + DAY BOOK TAB */}
         {(tab==="cashbook"||tab==="daybook")&&(
-          <CashDayBook txns={cbTxnsBase} accounts={apiAccounts||[]} view={tab==="daybook"?"daybook":"cashbook"}/>
+          <CashDayBook accounts={apiAccounts||[]} view={tab==="daybook"?"daybook":"cashbook"} mapRow={mapCbRow} reloadKey={txnReload}/>
         )}
 
         {/* PROJECT-WISE P&L TAB (Reports) */}
@@ -6545,7 +6602,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
             {(()=>{
               const billRows = [];
-              activeTxns
+              if (billedRows === null) return <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>{t("common.loading")}</div>;
+              billedRows
                 .filter(t => t.txnType === "material_purchase" && Array.isArray(t.items) && t.items.length > 0)
                 .forEach(t => {
                   t.items.forEach((it, i) => {
@@ -6800,9 +6858,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
         <BillConflictModal
           data={conflictData}
           onCancel={()=>setConflictData(null)}
-          onViewExisting={(txnId)=>{
-            // Find txn in activeTxns and open detail drawer
-            const t = activeTxns.find(x=>x.id===txnId);
+          onViewExisting={async(txnId)=>{
+            // Dikhne wale page me ho to wahi, warna id se laao (FIN-30: poori list ab nahi aati)
+            let t = activeTxns.find(x=>x.id===txnId);
+            if (!t) { try { const r = await api.get("/finance/transactions?fields=list&ids="+txnId); if (r?.success && r.data?.[0]) t = mapTxn(r.data[0]); } catch(_) {} }
             if (t) setSelTxn(t);
             setConflictData(null);
           }}
