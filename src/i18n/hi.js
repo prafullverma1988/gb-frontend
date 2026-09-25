@@ -7742,6 +7742,8 @@ const dict = {
   "settings.wallet_limits_role_admin":                         "एडमिन",
   "settings.wallet_limits_role_pm":                            "प्रोजेक्ट मैनेजर",
   "settings.wallet_limits_role_supervisor":                    "साइट सुपरवाइज़र",
+  "settings.appr_escalation_note":                             "पेंडिंग अप्रूवल समय बीतने पर अपने आप अगले लेवल पर नहीं जाती — जिसकी बारी है वही अप्रूव करेगा। किसी लेवल पर उस प्रोजेक्ट का कोई अप्रूवर ही न हो, तो वह लेवल एडमिन के पास जाता है।",
+  "settings.appr_escalation_title":                            "एस्केलेशन",
   "settings.wallet_limits_title":                              "वॉलेट खर्च — कितने तक अपने आप अप्रूव",
   "settings.wallet_limits_upto":                               "₹{amt} तक अपने आप",
   "settings.wallet_limits_workflow_off":                       "वर्कफ़्लो बंद — सब अपने आप",
