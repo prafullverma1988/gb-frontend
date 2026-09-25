@@ -2615,12 +2615,21 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
     predsMap[t.id]=deps;
     deps.forEach(d=>{ succMap[d]=succMap[d]||[]; succMap[d].push(t.id); });
   });
-  // ── Broken dep detection — pred.end > succ.start = violation ──
+  // ── Broken dep detection — jod ka TYPE aur GAP dekh kar (TSK-03) ──
+  // Pehle har jod FS maan kar `pred.end > succ.start` — har "saath" (SS) jod
+  // ka teer laal '⚠' dikhta tha jabki tareekhein us jod ko maanti thin.
+  //   FS: succ.start >= pred.end + gap   (usi din haath-badli chalti hai)
+  //   SS: succ.start >= pred.start + gap
+  const depInfo = {}; // "predId-succId" → {type, lag}
+  allFlat.forEach(t=>{ (Array.isArray(t.deps)?t.deps:[]).forEach(d=>{ depInfo[`${Number(d.id)}-${t.id}`]={type:d.dep_type==="SS"?"SS":"FS",lag:Number(d.lag_days)||0}; }); });
+  const dDiff=(a,b)=>Math.round((new Date(String(b).slice(0,10)+"T00:00:00Z")-new Date(String(a).slice(0,10)+"T00:00:00Z"))/86400000);
   const brokenSet = new Set(); // "predId-succId" keys
   allFlat.forEach(t=>{
     (predsMap[t.id]||[]).forEach(depId=>{
       const pred = allFlat.find(x=>x.id===depId);
-      if(pred && pred.baseEnd && t.baseStart && new Date(pred.baseEnd)>new Date(t.baseStart))
+      const info = depInfo[`${depId}-${t.id}`] || {type:"FS",lag:0};
+      const anchor = info.type==="SS" ? pred?.baseStart : pred?.baseEnd;
+      if(pred && anchor && t.baseStart && dDiff(anchor, t.baseStart) < info.lag)
         brokenSet.add(`${depId}-${t.id}`);
     });
   });
@@ -2774,7 +2783,9 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
         return deps.map(dep=>{
           const a=pos[Number(dep)], b=pos[t.id];
           if(!a||!b||a.bx2==null||b.bx1==null) return null;
-          const x1=a.bx2, y1=a.y, x2=b.bx1, y2=b.y;
+          // SS (saath) teer pred ki SHURUAAT se, FS pred ke khatam hone se
+          const isSS=(depInfo[`${Number(dep)}-${t.id}`]||{}).type==="SS";
+          const x1=isSS&&a.bx1!=null?a.bx1:a.bx2, y1=a.y, x2=b.bx1, y2=b.y;
           const mx=x1+Math.max(10,(x2-x1)*0.4);
           // highlight if either endpoint is hovered
           const isBroken = brokenSet.has(`${dep}-${t.id}`);
