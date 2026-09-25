@@ -7,6 +7,8 @@ import { loadPhotoPolicy, policyFor } from "../utils/photoPolicy";
 import { canApproveAction } from "../utils/approvalAuthority";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { WarehouseLedgerTab, WarehouseLedgerDrawer } from "./WarehouseLedger";
+import { AllGodownsView } from "./WarehouseConsolidated";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -1004,7 +1006,7 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
 // Project = "Warehouse" (locked, not selectable)
 // Material picker = Material Library only
 // Unit = library se aata hai, locked (sirf Library me change ho sakta hai)
-function NewMRModal({library,onClose,onSaved,prefill}){
+function NewMRModal({library,onClose,onSaved,prefill,warehouse}){
   const [f,setF]=useState({date:today(),priority:"Medium"});
   // When opened from a stock row, pre-select that material by matching the library on name.
   const [items,setItems]=useState(()=>{
@@ -1094,8 +1096,8 @@ function NewMRModal({library,onClose,onSaved,prefill}){
         <Field label={t("common.project")}>
           <div style={{padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,height:38,boxSizing:"border-box"}}>
             <span style={{fontSize:10,opacity:.6}}>🔒</span>
-            <span style={{fontWeight:600,color:T.t1}}>{t("common.warehouse")}</span>
-            <span style={{fontSize:10,color:T.t4}}>{t("warehouse.internal_request")}</span>
+            <span style={{fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{warehouse?.name||t("common.warehouse")}</span>
+            <span style={{fontSize:10,color:T.t4,flexShrink:0}}>{t("warehouse.internal_request")}</span>
           </div>
         </Field>
         <Field label={t("common.priority")}>
@@ -3289,6 +3291,7 @@ function WarehouseModule(){
   const [transferNewOpen,setTransferNewOpen]=useState(false);
   const [issueFromMR,setIssueFromMR]=useState(null);    // {mr} when issuing against MR
   const [matDetail,setMatDetail]=useState(null);
+  const [ledgerMat,setLedgerMat]=useState(null);  // Ledger tab — khula hua material ka khaata
   const [transferDetail,setTransferDetail]=useState(null);
   const [orderMR,setOrderMR]=useState(null);       // Tab 1: place order modal target
   const [grnMR,setGrnMR]=useState(null);           // Tab 1: receive GRN modal target
@@ -3437,7 +3440,7 @@ function WarehouseModule(){
       if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,value:m.stock_value!=null?Number(m.stock_value)||0:(Number(m.qty)||0)*(Number(m.rate)||0),qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0})));
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
       if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
-      if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":"Warehouse (internal)"),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
+      if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":(m.warehouse_name?`${m.warehouse_name} ${t("warehouse.internal_request")}`:"Warehouse (internal)")),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
       if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_warehouse_name||t.from_project_name||t.from_location||"—",to:t.to_warehouse_name||t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));
       if(pRes.success) setProjects((pRes.data||[]).map(p=>({id:p.id,name:p.name})));
       if(uRes.success) setUsers((uRes.data||[]).map(u=>({id:u.id,name:u.name})));
@@ -3486,13 +3489,14 @@ function WarehouseModule(){
   // taki refresh ke baad bhi wahi godown khule.
   const switchWarehouse=useCallback((id)=>{
     if(String(id)===String(whId)) return;
-    setWarehouseId(id); setWhId(String(id)); setLoading(true);
+    setWarehouseId(id); setWhId(String(id)); setLoading(true); setLedgerMat(null);
     loadAll(); loadOverview();
   },[whId,loadAll,loadOverview]);
 
   const TABS=[
     ...(warehouses.length>1?[{id:"godown", l:t("warehouse.warehouses_tab"), I:IcIn, badge:null, bc:T.blu}]:[]),
     {id:"stock",  l:t("common.stock"),         I:IcBox,  badge:lowStock.length>0?lowStock.length:null, bc:T.red},
+    {id:"ledger", l:t("warehouse.ledger_tab"), I:IcHist, badge:null},
     {id:"grn",    l:t("material.material_in"),   I:IcIn,   badge:pendingInMRs>0?pendingInMRs:null, bc:T.pur},
     {id:"issue",  l:t("warehouse.material_out"),  I:IcOut,  badge:pendingOutMRs>0?pendingOutMRs:null, bc:T.cyn},
     {id:"mr",     l:t("common.requests"),      I:IcMR,   badge:pendingMRs>0?pendingMRs:null, bc:T.amb},
@@ -3575,8 +3579,12 @@ function WarehouseModule(){
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
-        {tab==="godown"&&<WarehousesTab data={whOverview} activeId={whId} onOpen={switchWarehouse}/>}
+        {tab==="godown"&&<AllGodownsView activeId={whId}
+          godownsView={<WarehousesTab data={whOverview} activeId={whId} onOpen={switchWarehouse}/>}
+          onGoto={id=>{switchWarehouse(id);setTab("stock");}}/>}
         {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})} onAddStock={m=>setAddStockTarget(m)} onIssue={m=>setIssueTarget(m)} onQuickRequest={m=>{setMrPrefill({name:m.name,unit:m.unit});setMrNewOpen(true);}}/>}
+        {/* key=whId: godown badla to khaata usi godown ka dobara aaye */}
+        {tab==="ledger"&&<WarehouseLedgerTab key={whId} onOpen={m=>setLedgerMat(m)}/>}
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
           onNewGRN={()=>setGrnNewOpen(true)} onVerifyGRN={handleVerifyGRN}
@@ -3639,6 +3647,7 @@ function WarehouseModule(){
         {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={()=>setTransferNewOpen(true)} onSelect={t=>setTransferDetail(t)}/>}
       </div>
 
+      {ledgerMat&&<WarehouseLedgerDrawer material={ledgerMat} godownName={activeWh?.name} onClose={()=>setLedgerMat(null)}/>}
       {matDetail&&(
         <MaterialDetailDrawer material={matDetail}
           onClose={()=>setMatDetail(null)}
@@ -3669,7 +3678,7 @@ function WarehouseModule(){
           onClose={()=>setIssueNewOpen(false)} onSaved={()=>loadAll()}/>
       )}
       {mrNewOpen&&(
-        <NewMRModal library={library} prefill={mrPrefill}
+        <NewMRModal library={library} prefill={mrPrefill} warehouse={activeWh}
           onClose={()=>{setMrNewOpen(false);setMrPrefill(null);}} onSaved={()=>loadAll()}/>
       )}
       {transferNewOpen&&(
