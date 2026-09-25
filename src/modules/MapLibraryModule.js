@@ -23,6 +23,7 @@ import api from "../config/api";
 import { t } from "../i18n";
 import { useBackClose } from "../utils/backNav";
 import SiteMarkingEditor from "./SiteMarkingEditor";
+import { useMapLibrary, styleOf, lineOpts, markerIcon, MapLibraryDialog, typeName, typesFor, StyleSwatch } from "./mapStyles";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 16, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -165,6 +166,7 @@ function kmlPlacemark(it, folderName) {
     it.startCh != null && len > 0 ? `Chainage: ${fmtCh(it.startCh)} to ${fmtCh(Number(it.startCh) + len)}` : "",
     folderName ? `Folder: ${folderName}` : "",
     it.file ? `File: ${it.file}` : "",
+    Number(it.dia_mm) > 0 ? `Dia: ${it.dia_mm} mm` : "",
     it.by ? `By: ${it.by}` : "",
     partsOfLine(pts, it.gaps).length > 1 ? `Parts: ${partsOfLine(pts, it.gaps).length} (broken line)` : "",
   ].filter(Boolean).join(" | ");
@@ -364,10 +366,64 @@ const Toast = ({ toast }) => (toast ? (
   </div>
 ) : null);
 
+// ── HOVER CARD ────────────────────────────────────────────────────
+// Naksha par line/pin par mouse le jaate hi — Tenders ke Pipeline Map
+// jaisa card: naam, type, lambai/rakba, chainage, kahan rakhi hai, kisne
+// banayi. pointerEvents none: card mouse ke neeche aa kar hover na tode.
+function HoverCard({ x, y, card }) {
+  const W = 280;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const left = Math.max(8, Math.min(x + 14, vw - W - 12));
+  const up = y + 14 + 220 > vh;
+  const cell = { padding: "3px 11px", verticalAlign: "top", wordBreak: "break-word" };
+  return (
+    <div style={{ position: "fixed", left, top: up ? undefined : y + 14, bottom: up ? vh - y + 14 : undefined,
+      width: W, zIndex: 997, pointerEvents: "none", background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 9,
+      boxShadow: "0 10px 30px rgba(0,0,0,.18)", overflow: "hidden", fontSize: 12 }}>
+      <div style={{ padding: "8px 11px", borderLeft: `4px solid ${card.colour || T.ind}`, background: T.surfaceB, borderBottom: `1px solid ${T.b1}` }}>
+        <div style={{ fontWeight: 700, color: T.t1, wordBreak: "break-word" }}>{card.title}</div>
+        {card.sub && <div style={{ fontSize: 10.5, color: T.t3, marginTop: 1 }}>{card.sub}</div>}
+      </div>
+      {card.rows.length > 0 && (
+        <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>
+          {card.rows.map(([k, v], i) => (
+            <tr key={i} style={{ background: i % 2 ? T.surfaceB : T.surface }}>
+              <td style={{ ...cell, color: T.t3, width: "42%" }}>{k}</td>
+              <td style={{ ...cell, paddingLeft: 0, color: T.t1, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{v}</td>
+            </tr>
+          ))}
+        </tbody></table>
+      )}
+      <div style={{ padding: "4px 11px 6px", color: T.t4, fontSize: 10.5, borderTop: `1px solid ${T.b1}` }}>{t("map_library.hv_click")}</div>
+    </div>
+  );
+}
+function cardOf(it, where) {
+  const rows = [];
+  const len = Number(it.lenM) || 0;
+  if (it.kind === "area") { const a = fmtArea(it.areaSqm); if (a) rows.push([t("map_library.rakba"), a]); }
+  else if (it.kind !== "point" && fmtLen(len)) rows.push([t("map_library.lambai"), fmtLen(len)]);
+  if (it.kind !== "point" && it.kind !== "area" && it.startCh != null) {
+    rows.push([t("map_library.chainage"), len > 0 ? `${fmtCh(it.startCh)} – ${fmtCh(Number(it.startCh) + len)}` : fmtCh(it.startCh)]);
+  }
+  const parts = partsOfLine(cleanPts(it), it.gaps).length;
+  if (it.kind === "line" && parts > 1) rows.push([t("map_library.hv_tukde"), String(parts)]);
+  if (Number(it.dia_mm) > 0) rows.push([t("map_library.dia"), `${it.dia_mm} mm`]);
+  if (where) rows.push([t("map_library.hv_kahan"), where]);
+  const made = [it.by, fmtDT(it.at)].filter(Boolean).join(" · ");
+  if (made) rows.push([t("map_library.banayi"), made]);
+  return { title: it.name || kindLabel(it.kind), sub: [kindLabel(it.kind), typeName(it.kind, it.atype || "other")].filter(Boolean).join(" · "), rows,
+    colour: styleOf(it.kind, it.atype || "other").colour };
+}
+
 // ── MAP PREVIEW ───────────────────────────────────────────────────
 // Line = polyline, rakba = polygon, point = marker; jo dikhaya usi par fit.
 // Map na khule (key nahi / net / referrer) to chhota sa note — list aur export chalte rahein.
-function MapPreview({ items, onPick, height = 380 }) {
+function MapPreview({ items, onPick, whereOf, height = 380 }) {
+  const { lib: mapLib } = useMapLibrary();   // load hote hi dobara rango
+  const [hover, setHover] = useState(null);   // {x, y, card}
+  const whereRef = useRef(whereOf);
+  whereRef.current = whereOf;
   const boxRef = useRef(null);
   const mapRef = useRef(null);
   const layersRef = useRef([]);
@@ -398,6 +454,14 @@ function MapPreview({ items, onPick, height = 380 }) {
     const g = window.google;
     layersRef.current.forEach((l) => l.setMap(null));
     layersRef.current = [];
+    setHover(null);
+    // Har shape par hover = card, mouse ke saath chalta hai.
+    const hoverOn = (ov, it) => {
+      const at = (e) => (e && e.domEvent ? { x: e.domEvent.clientX, y: e.domEvent.clientY } : null);
+      ov.addListener("mouseover", (e) => { const q = at(e); setHover({ x: q ? q.x : 0, y: q ? q.y : 0, card: cardOf(it, whereRef.current ? whereRef.current(it) : null) }); });
+      ov.addListener("mousemove", (e) => { const q = at(e); if (q) setHover((h) => (h ? { ...h, x: q.x, y: q.y } : h)); });
+      ov.addListener("mouseout", () => setHover(null));
+    };
     const bounds = new g.maps.LatLngBounds();
     let n = 0;
     items.forEach((it) => {
@@ -407,27 +471,28 @@ function MapPreview({ items, onPick, height = 380 }) {
       const shape = shapeOf(it.kind, pts.length);
       let ov;
       if (shape === "point") {
-        ov = new g.maps.Marker({
-          map, position: pts[0], title: it.name || "",
-          icon: { path: g.maps.SymbolPath.CIRCLE, scale: 6, fillColor: T.ind, fillOpacity: 1, strokeColor: "#FFFFFF", strokeWeight: 2 },
-        });
+        // Type ka shape aur rang — Map library se.
+        ov = new g.maps.Marker({ map, position: pts[0], title: it.name || "", icon: markerIcon(g, styleOf("point", it.atype || "other"), 24) });
       } else if (shape === "area") {
-        ov = new g.maps.Polygon({ map, paths: pts, strokeColor: T.ind, strokeOpacity: 0.9, strokeWeight: 2, fillColor: T.ind, fillOpacity: 0.15 });
+        const ast = styleOf("area", it.atype || "other");
+        ov = new g.maps.Polygon({ map, paths: pts, strokeColor: ast.colour, strokeOpacity: 0.9, strokeWeight: 2, fillColor: ast.colour, fillOpacity: ast.fill_opacity ?? 0.22 });
       } else {
         // Tooti hui line: har tukde ki apni lakeer, aur click sab par ek jaisa.
         partsOfLine(pts, it.gaps).forEach((part) => {
-          const ln = new g.maps.Polyline({ map, path: part, strokeColor: T.ind, strokeOpacity: 0.9, strokeWeight: 4 });
+          const ln = new g.maps.Polyline({ map, path: part, ...lineOpts(g, styleOf("line", it.atype || "other")) });
           ln.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
+          hoverOn(ln, it);
           layersRef.current.push(ln);
         });
         return;
       }
       ov.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
+      hoverOn(ov, it);
       layersRef.current.push(ov);
     });
     if (n === 1) { map.setCenter(bounds.getCenter()); map.setZoom(17); }
     else if (n > 1) map.fitBounds(bounds, 48);
-  }, [status, items]);
+  }, [status, items, mapLib]);
 
   useEffect(() => () => {
     layersRef.current.forEach((l) => l.setMap(null));
@@ -449,6 +514,7 @@ function MapPreview({ items, onPick, height = 380 }) {
       <div ref={boxRef} style={{ position: "absolute", inset: 0 }} />
       {status === "loading" && <div style={note}>{t("map_library.map_load_ho_raha")}</div>}
       {status === "ok" && !drawable && <div style={note}>{t("map_library.map_par_kuch_nahi")}</div>}
+      {hover && <HoverCard x={hover.x} y={hover.y} card={hover.card} />}
     </div>
   );
 }
@@ -666,6 +732,47 @@ function MoveDialog({ item, currentTitle, targets, onClose, onSave }) {
   );
 }
 
+// Type aur dia badlo — rang type se aata hai (Map library), marking ka apna
+// rang nahi. Purani sab marking "Anya" thi; yahin se sahi type milta hai.
+function TypeDialog({ item, onClose, onSave }) {
+  const kind = item.kind === "point" || item.kind === "area" ? item.kind : "line";
+  const [code, setCode] = useState(item.atype || "other");
+  const [dia, setDia] = useState(item.dia_mm == null ? "" : String(item.dia_mm));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true); setErr("");
+    const msg = await onSave(code, kind === "line" ? dia : "");
+    if (msg) { setErr(msg); setBusy(false); }
+  };
+  return (
+    <Modal title={t("map_library.type_badlo")} onClose={busy ? () => {} : onClose}
+      footer={<>
+        <Btn onClick={onClose} disabled={busy}>{t("common.cancel")}</Btn>
+        <Btn tone="primary" onClick={submit} disabled={busy}>{t("common.save")}</Btn>
+      </>}>
+      <div style={{ fontSize: 12.5, color: T.t2, marginBottom: 10 }}>{item.name}</div>
+      <label style={lbl} htmlFor="mlib-type">{t("map_library.type")}</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <StyleSwatch kind={kind} code={code} size={18} />
+        <select id="mlib-type" value={code} onChange={(e) => setCode(e.target.value)} style={inp}>
+          {typesFor(kind).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+      {kind === "line" && (
+        <>
+          <label style={{ ...lbl, marginTop: 12 }} htmlFor="mlib-dia">{t("map_library.dia_mm")}</label>
+          <input id="mlib-dia" value={dia} inputMode="decimal" placeholder="—" style={inp}
+            onChange={(e) => setDia(e.target.value.replace(/[^\d.]/g, ""))} />
+        </>
+      )}
+      <div style={{ marginTop: 8, fontSize: 11.5, color: T.t4, lineHeight: 1.5 }}>{t("map_library.rang_type_se")}</div>
+      {err && <div style={errBox}>{err}</div>}
+    </Modal>
+  );
+}
+
 // Hatane ka confirm: Cancel par focus (Enter dabane se kuch nahi hatega), laal
 // button par naam ke saath saaf baat.
 function ConfirmDialog({ title, message, confirmLabel, onClose, onConfirm }) {
@@ -793,6 +900,8 @@ function MapLibraryModule() {
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
   const [drawing, setDrawing] = useState(false);   // nayi marking ka editor khula hai
+  const [libOpen, setLibOpen] = useState(false);   // Map library (rang/shape)
+  useMapLibrary();                                  // type ke naam/rang ke liye
   const toastTimer = useRef(null);
   const libRef = useRef(lib);
   libRef.current = lib;
@@ -901,6 +1010,14 @@ function MapLibraryModule() {
     setDialog(null);
     await loadLib("refresh");
     flash(t("map_library.naam_badal_gaya"));
+    return null;
+  };
+  const retypeItem = async (it, atype, dia) => {
+    const r = await api.patch(`/map-library/${it.id}`, { atype, dia_mm: dia === "" ? null : Number(dia) }).catch(() => null);
+    if (!r || !r.success) return failMsg(r, t("map_library.save_nahi_hua"));
+    setDialog(null);
+    await loadLib("refresh");
+    flash(t("map_library.type_badal_gaya"));
     return null;
   };
   const moveItem = async (it, target) => {
@@ -1021,7 +1138,12 @@ function MapLibraryModule() {
     const facts = [];
     if (it) {
       const pts = cleanPts(it).length;
-      facts.push([t("map_library.type"), [kindLabel(it.kind), atypeLabel(it.atype)].filter(Boolean).join(" · ")]);
+      facts.push([t("map_library.type"), (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <StyleSwatch kind={it.kind} code={it.atype || "other"} />
+          {[kindLabel(it.kind), typeName(it.kind, it.atype || "other")].filter(Boolean).join(" · ")}
+        </span>)]);
+      if (Number(it.dia_mm) > 0) facts.push([t("map_library.dia"), `${it.dia_mm} mm`]);
       if (it.kind === "area") facts.push([t("map_library.rakba"), fmtArea(it.areaSqm) || "—"]);
       else if (it.kind !== "point") facts.push([t("map_library.lambai"), fmtLen(it.lenM) || "—"]);
       if (it.kind !== "point" && it.kind !== "area" && it.startCh != null) {
@@ -1077,6 +1199,7 @@ function MapLibraryModule() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {itemEdit && <Btn onClick={() => setDialog({ kind: "rename-item", item: it })}>{t("map_library.naam_badlo")}</Btn>}
               {itemEdit && <Btn onClick={() => setDialog({ kind: "move-item", item: it })}>{t("map_library.folder_badlo")}</Btn>}
+              {itemEdit && <Btn onClick={() => setDialog({ kind: "type-item", item: it })}>{t("map_library.type_badlo")}</Btn>}
               {folderEdit && <Btn onClick={() => setDialog({ kind: "rename-folder", group: g })}>{t("map_library.naam_badlo")}</Btn>}
             </div>
           </div>
@@ -1144,7 +1267,11 @@ function MapLibraryModule() {
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
-          <MapPreview items={info ? info.items : EMPTY} onPick={reveal} />
+          <MapPreview items={info ? info.items : EMPTY} onPick={reveal}
+            whereOf={(it) => {
+              const g = tree.find((x) => x.fk === fkOf(it.folder_id));
+              return [g ? folderTitle(g) : t("map_library.bina_folder"), fileTitle(String(it.file || "").trim())].join(" › ");
+            }} />
           {renderDetail()}
         </div>
       </div>
@@ -1175,6 +1302,9 @@ function MapLibraryModule() {
                 Library ka create band ho tab bhi kaam wala raasta khula rehta hai
                 (wahan faisla Tenders ka adhikar karta hai, server par). */}
             {lib.status === "ok" && view === "library" && (
+              <Btn onClick={() => setLibOpen(true)}>🎨 {t("map_style.button")}</Btn>
+            )}
+            {lib.status === "ok" && view === "library" && (
               <Btn tone="primary" icon={IcPlus} onClick={() => setDrawing(true)}>{t("map_library.nayi_marking")}</Btn>
             )}
             <Btn icon={IcRefresh} onClick={refresh} disabled={refreshing}>{t("common.refresh")}</Btn>
@@ -1188,6 +1318,10 @@ function MapLibraryModule() {
         <RenameDialog title={t("map_library.marking_ka_naam_badlo")} initial={dItem.name}
           onClose={() => setDialog(null)} onSave={(name) => renameItem(dItem, name)} />
       )}
+      {dialog && dialog.kind === "type-item" && (
+        <TypeDialog item={dItem} onClose={() => setDialog(null)} onSave={(atype, dia) => retypeItem(dItem, atype, dia)} />
+      )}
+      {libOpen && <MapLibraryDialog onClose={() => setLibOpen(false)} />}
       {dialog && dialog.kind === "move-item" && (
         <MoveDialog item={dItem} targets={moveTargets(dItem)}
           currentTitle={dItem.folder_id == null ? t("map_library.bina_folder") : folderTitle(tree.find((g) => g.fk === fkOf(dItem.folder_id)) || { fk: fkOf(dItem.folder_id), id: dItem.folder_id })}
