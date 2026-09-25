@@ -404,22 +404,23 @@ function TabTasks({ projectId, isAdmin }) {
   const [cascadeApplying,setCascadeApplying] = useState(false);
   const [reasonMenu,setReasonMenu] = useState(null); // P4: {x,y,task}
   // ── Gantt: quick dep remove + cascade fix callbacks ────────────
+  // Jod ka ek hi sach server ki edge table (TSK-16): pehle ye PUT se sirf
+  // `dependencies` JSON badalte the — teer gayab hota par re-plan edge maan kar
+  // kaam phir bhi khiskata tha, aur chakkar ki jaanch bhi nahi hoti thi.
   const ganttRemoveDep = async (taskId, depId) => {
-    const t = allFlat.find(x=>x.id===Number(taskId));
-    if(!t) return;
-    let deps = Array.isArray(t.dependencies) ? t.dependencies.map(Number) : [];
-    deps = deps.filter(d=>d!==Number(depId));
-    try { await api.put("/tasks/"+taskId, {dependencies: deps}); } catch(_){}
-    setTasks(updateInTree(tasks, Number(taskId), {dependencies: deps}));
+    const tk = allFlat.find(x=>x.id===Number(taskId));
+    if(!tk) return;
+    const r = await api.del(`/tasks/${taskId}/deps/${depId}`);
+    if (r && r.success === false) window.toast?.error?.(r.message || t("tasks.save_nahi_hua"));
+    await refetchTasks();
   };
   const ganttAddDep = async (taskId, depId) => {
-    const t = allFlat.find(x=>x.id===Number(taskId));
-    if(!t) return;
-    let deps = Array.isArray(t.dependencies) ? t.dependencies.map(Number) : [];
-    if(deps.includes(Number(depId))) return;
-    deps = [...deps, Number(depId)];
-    try { await api.put("/tasks/"+taskId, {dependencies: deps}); } catch(_){}
-    setTasks(updateInTree(tasks, Number(taskId), {dependencies: deps}));
+    const tk = allFlat.find(x=>x.id===Number(taskId));
+    if(!tk) return;
+    if((tk.deps||[]).some(d=>Number(d.id)===Number(depId))) return;
+    const r = await api.post(`/tasks/${taskId}/deps`, { predecessor_task_id: Number(depId), dep_type: "FS", lag_days: 0 });
+    if (r && r.success === false) window.toast?.error?.(r.message || t("tasks.save_nahi_hua"));
+    await refetchTasks();
   };
   const ganttCascadeFix = async (taskId, newStart) => {
     if(!newStart) return;
@@ -1593,7 +1594,11 @@ function TabTasks({ projectId, isAdmin }) {
         const r = await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress,
           // Khaali tareekh par "" bhejna = server par 500 (MySQL date me ""
           // ja hi nahi sakta). null = "is khaane ko haath mat lagao".
-          base_start:u.baseStart||null, base_end:u.baseEnd||null, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen,
+          base_start:u.baseStart||null, base_end:u.baseEnd||null, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dhyan_rakhen:u.dhyanRakhen,
+          // Jod wale project me jodein "Pehle wale kaam" editor turant server par
+          // likhta hai — yahan drawer khulte waqt ki purani list bhejna unhe
+          // wapas palat deta tha (TSK-16). Bina jod wale project me list yahi se.
+          ...(hasDeps ? {} : { dependencies: u.dependencies }),
           // Kaam kisko diya — user ki ID jaati hai, "" = kisi ko nahi.
           // (Ye pehle bheja hi nahi jaata tha, isliye chunav gum ho jaata tha.)
           assigned_to: u.assignedTo === "" || u.assignedTo == null ? "" : Number(u.assignedTo),
@@ -2601,9 +2606,12 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
   // ── Dependency maps (for hover highlight) ────────────────────
   // predsMap[id] = [dep ids this task depends on]
   // succMap[id]  = [ids that depend on this task]
+  // Jodein server ke `deps` se (edge table; jahan edge nahi wahan purana JSON
+  // FS+0) — list, editor aur re-plan wali hi jodein (TSK-16). Purana server
+  // `deps` na bheje to JSON.
   const predsMap={}, succMap={};
   allFlat.forEach(t=>{
-    const deps=Array.isArray(t.dependencies)?t.dependencies.map(Number):[];
+    const deps=Array.isArray(t.deps)?t.deps.map(d=>Number(d.id)):Array.isArray(t.dependencies)?t.dependencies.map(Number):[];
     predsMap[t.id]=deps;
     deps.forEach(d=>{ succMap[d]=succMap[d]||[]; succMap[d].push(t.id); });
   });
@@ -2762,7 +2770,7 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
 
       {/* ── DEPENDENCY ARROWS — highlighted when hovered ── */}
       {allFlat.map(t=>{
-        const deps=Array.isArray(t.dependencies)?t.dependencies:[];
+        const deps=predsMap[t.id]||[];
         return deps.map(dep=>{
           const a=pos[Number(dep)], b=pos[t.id];
           if(!a||!b||a.bx2==null||b.bx1==null) return null;
