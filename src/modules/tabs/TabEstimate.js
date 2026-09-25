@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import api, { API_BASE } from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
-import EstimateBuilderModal from "../EstimateBuilderModal";
+import EstimateBuilderModal, { PROJ_CLIENT, customerOptions, pickCustomer } from "../EstimateBuilderModal";
 import { T, localYMD } from "../shared/tokens";
 import { PTAddTask } from "./TabTasks";
 import { canApproveAction, approverRolesFor } from "../../utils/approvalAuthority";
@@ -1372,7 +1372,13 @@ function TabEstimate({ project }) {
                   </div>
 
                   {/* PATH 4 — Quick Manual (existing modal, kept) */}
-                  <div onClick={()=>{ setShowNewEst(true); setEstChooserOpen(false); }}
+                  <div onClick={()=>{
+                    // Project ka client pehle se bhara (E-50) — library me mila to uska id bhi.
+                    if (!estForm.customer_id && !estForm.customer_name && project?.client_name) {
+                      const hit = pickCustomer(customers, project.client_name);
+                      setEstForm(p => ({...p, customer_id: hit.id === PROJ_CLIENT ? "" : hit.id, customer_name: hit.name}));
+                    }
+                    setShowNewEst(true); setEstChooserOpen(false); }}
                     style={{padding:"10px 12px",cursor:"pointer"}}
                     onMouseEnter={e=>e.currentTarget.style.background="#F8FAFC"}
                     onMouseLeave={e=>e.currentTarget.style.background="white"}>
@@ -2650,9 +2656,10 @@ function TabEstimate({ project }) {
                 {/* Searchable picker — client parties only (junk names
                     filtered server-side). value = customer_id. */}
                 <SearchSelect
-                  value={estForm.customer_id}
-                  options={customers.map(c => ({ id: c.id, name: c.name }))}
+                  value={estForm.customer_id || (estForm.customer_name && estForm.customer_name === project?.client_name ? PROJ_CLIENT : "")}
+                  options={customerOptions(customers, project?.client_name)}
                   onChange={(id) => {
+                    if (id === PROJ_CLIENT) { setEstForm(p => ({...p, customer_id: "", customer_name: project?.client_name || ""})); return; }
                     const match = customers.find(c => String(c.id) === String(id));
                     setEstForm(p => ({...p, customer_id: match?.id || "", customer_name: match?.name || ""}));
                   }}
