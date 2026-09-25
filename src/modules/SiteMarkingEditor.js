@@ -17,6 +17,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import api, { API_BASE, getToken } from "../config/api";
 import { t } from "../i18n";
+import { useMapLibrary, styleOf, typesFor, StyleSwatch } from "./mapStyles";
 
 // ── THEME (MapLibraryModule jaisa) ────────────────────────────────
 const T = {
@@ -328,7 +329,8 @@ function DrawMap({ loadMaps, pts, gaps, kind, drawing, existing, showExist, onAd
     existing.forEach((a) => {
       const p = geoOf(a);
       if (!p.length) return;
-      const col = a.hl ? "#34D399" : "#CBD5E1";
+      // Pehle se bani cheez apne type ke rang me (Map library); chuna hua kaam hara.
+      const col = a.hl ? "#34D399" : styleOf(a.kind === "point" || a.kind === "area" ? a.kind : "line", a.atype || "other").colour;
       if (a.kind === "point" || p.length === 1) {
         exLayers.current.push(new g.maps.Marker({ map, position: p[0], clickable: false, title: a.name || "",
           icon: { path: g.maps.SymbolPath.CIRCLE, scale: 5, fillColor: col, fillOpacity: 1, strokeColor: "#1F2937", strokeWeight: 1 } }));
@@ -577,6 +579,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
   const [folderSel, setFolderSel] = useState("");  // "" = bina folder, "new", ya folder id
   const [newFolder, setNewFolder] = useState("");
   const [fileName, setFileName] = useState("");
+  const [diaMm, setDiaMm] = useState("");          // freelance pipe ka diameter (mm)
 
   // Point aur tod
   const [pts, setPtsS] = useState([]);
@@ -667,14 +670,19 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
     if (isTask) {
       return (existing || []).map((a) => ({ ...a, hl: !!(selTask && Number(a.task_id) === Number(selTask.id)) }));
     }
-    return ((lib && lib.items) || []).map((x) => ({ id: x.id, name: x.name, kind: x.kind, pts: x.pts, gaps: x.gaps }));
+    return ((lib && lib.items) || []).map((x) => ({ id: x.id, name: x.name, kind: x.kind, atype: x.atype, pts: x.pts, gaps: x.gaps }));
   }, [isTask, existing, selTask, lib]);
   const focusKey = isTask ? `p${proj ? proj.id : 0}:${existing.length ? 1 : 0}` : "lib";
 
-  const typeOptions = useMemo(() => [
-    ...TYPES[kind].map((c) => [c, atypeName(c)]),
-    ...customTypes.filter((c) => c.kind === kind).map((c) => [c.code, c.label]),
-  ], [kind, customTypes]);
+  // Type ki list company ki Map library se (built-in + apne) — dono raaste.
+  const { lib: mapLib } = useMapLibrary();
+  const typeOptions = useMemo(() => {
+    const fromLib = typesFor(kind);
+    const extra = customTypes.filter((c) => c.kind === kind && !fromLib.some(([v]) => v === c.code)).map((c) => [c.code, c.label]);
+    return [...fromLib, ...extra];
+    // mapLib badle to naye naam/type — isliye deps me
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, customTypes, mapLib]);
 
   // ── Kaam chunna — mobile ka pickTask ──
   const pickTask = (x) => {
@@ -855,7 +863,8 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
     if (folderSel === "new" && !newFolder.trim()) { setErr(t("map_draw.folder_naam_daalo")); return; }
     const kept = ptsRef.current;
     const body = {
-      client_key: newKey(), name: nm, kind, atype: "other",
+      client_key: newKey(), name: nm, kind, atype: atype || "other",
+      dia_mm: kind === "line" && Number(diaMm) > 0 ? Number(diaMm) : undefined,
       pts: kept.map((p) => ({ lat: p.lat, lng: p.lng })),
       lenM: kind === "point" ? 0 : lenM,
       areaSqm: kind === "area" ? Math.round(areaSqm * 100) / 100 : undefined,
@@ -1229,12 +1238,23 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
             <Chip key={k + i} on={kind === k && (k !== "area" || !isTask || centerPin === pin)} onClick={() => changeKind(k, pin)}>{l}</Chip>
           ))}
       </div>
-      {withType && isTask && (
+      {withType && (
         <>
+          {/* Freelance me bhi type (Prafull, 2026-09-24) — rang isi se aata hai. */}
           <div style={lbl}>{t("map_draw.type")}</div>
-          <select value={atype} onChange={(e) => setAtype(e.target.value)} style={{ ...inp, marginBottom: 10 }}>
-            {typeOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <StyleSwatch kind={kind} code={atype} size={18} />
+            <select value={atype} onChange={(e) => setAtype(e.target.value)} style={inp}>
+              {typeOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          {!isTask && kind === "line" && (
+            <>
+              <div style={lbl}>{t("map_draw.dia_mm")}</div>
+              <input value={diaMm} inputMode="decimal" placeholder="—" style={{ ...inp, marginBottom: 10 }}
+                onChange={(e) => setDiaMm(e.target.value.replace(/[^\d.]/g, ""))} />
+            </>
+          )}
         </>
       )}
     </>
