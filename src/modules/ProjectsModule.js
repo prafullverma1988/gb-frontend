@@ -1822,7 +1822,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   const canSeeAll=["admin","super_admin","project_manager"].includes(_cu?.role);
   // Wallet approvals (staff cash expenses) are surfaced in the Finance tab too.
   // Only the roles that can actually approve a wallet txn see them.
-  const isWalletApprover=["admin","super_admin","project_manager"].includes(_cu?.role);
+  const isWalletApprover=["admin","super_admin","project_manager","accountant"].includes(_cu?.role); // accountant = seeded L2 approver; server ka level-role check asli rok hai
   const [apprScope,setApprScope]=useState("my"); // "my" | "all"
   const [activeTab,setActiveTab]=useState(mode==="approvals"?"design":"mr");
   const [mrStage,setMrStage]=useState("Requested");  // MR stage sub-tab
@@ -3313,7 +3313,7 @@ function ProjectsPage({onSelectProject}){
     try{
       // Wallet pending approvals now live in the Pending Approvals drawer
       // (Finance column), so the tile must count them too — keeps tile == drawer.
-      const _isWalletApprover=["admin","super_admin","project_manager"].includes(currentUser?.role);
+      const _isWalletApprover=["admin","super_admin","project_manager","accountant"].includes(currentUser?.role);
       const [apRes,whmrRes,walRes]=await Promise.all([
         api.get("/approvals/pending?scope=my").catch(()=>({success:false})),
         api.get("/warehouse/mr").catch(()=>({success:false})),
