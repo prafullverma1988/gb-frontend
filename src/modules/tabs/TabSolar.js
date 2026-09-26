@@ -3,6 +3,7 @@ import api, { API_BASE } from "../../config/api";
 import { T } from "../shared/tokens";
 import { Panel } from "../shared/ui";
 import { t } from "../../i18n";
+import { cld } from "../../utils/cloudinary";
 
 // Stage status colors (solar)
 const SOLAR_STAGE_S = {
@@ -547,7 +548,7 @@ function TabSuryaGhar({ projectId }) {
                               {/* Photo preview or upload placeholder */}
                               {step.photo_url?(
                                 <a href={step.photo_url} target="_blank" rel="noreferrer" style={{display:"block"}}>
-                                  <img src={step.photo_url} alt={step.step_name}
+                                  <img src={cld(step.photo_url, "thumb")} alt={step.step_name}
                                     style={{width:"100%",height:80,objectFit:"cover",display:"block"}}
                                     onError={e=>{e.target.style.display="none";}}/>
                                 </a>
@@ -1308,7 +1309,7 @@ function TabSolarInstall({ projectId }) {
               </div>
               {step.photo_url && (
                 <a href={step.photo_url} target="_blank" rel="noreferrer">
-                  <img src={step.photo_url} alt="step" style={{width:48,height:48,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`}} onError={e=>e.target.style.display="none"}/>
+                  <img src={cld(step.photo_url, "thumb")} alt="step" style={{width:48,height:48,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`}} onError={e=>e.target.style.display="none"}/>
                 </a>
               )}
               {/* Upload / Replace button — file picker */}

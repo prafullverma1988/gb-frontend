@@ -15,6 +15,7 @@ import { Credit, fmtTimeAgo } from "./Credit";
 import RevisionNoteModal from "./RevisionNoteModal";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { cld } from "../utils/cloudinary";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -392,7 +393,7 @@ function RequestCard({ r: initial, onOpenLead, onShareClick, onClose }) {
 function DrawingThumb({ url }) {
   const isImage = url && /\.(jpe?g|png|gif|webp|svg)$/i.test(url);
   if (isImage) {
-    return <img src={url} alt="" style={{ width: 44, height: 44, borderRadius: 6, objectFit: "cover", flexShrink: 0, border: `1px solid ${T.b1}` }}/>;
+    return <img src={cld(url, "thumb")} alt="" style={{ width: 44, height: 44, borderRadius: 6, objectFit: "cover", flexShrink: 0, border: `1px solid ${T.b1}` }}/>;
   }
   return (
     <div style={{ width: 44, height: 44, borderRadius: 6, background: T.bluL, display: "flex",

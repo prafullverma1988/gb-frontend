@@ -13,6 +13,7 @@
 import { useState, useRef } from "react";
 import uploadManager from "../utils/uploadManager";
 import { t } from "../i18n";
+import { cld } from "../utils/cloudinary";
 
 const T = {
   surface:"#FFFFFF", surfaceB:"#F8F9FB",
@@ -132,7 +133,7 @@ export default function RevisionNoteModal({ mode = "Revision", drawingTitle, onC
                 return (
                   <div key={i} style={{ position: "relative", padding: "5px 9px 5px 5px", borderRadius: 6, background: T.surface, border: `1px solid ${a.uploading ? T.bluM : T.b1}`, display: "inline-flex", alignItems: "center", gap: 6 }}>
                     {isImg ? (
-                      <img src={a.url} alt="" style={{ width: 32, height: 32, borderRadius: 4, objectFit: "cover" }} />
+                      <img src={cld(a.url, "thumb")} alt="" style={{ width: 32, height: 32, borderRadius: 4, objectFit: "cover" }} />
                     ) : (
                       <span style={{ fontSize: 16 }}>📄</span>
                     )}

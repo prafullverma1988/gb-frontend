@@ -16,6 +16,7 @@ import uploadManager from "../utils/uploadManager";
 import RevisionNoteModal from "./RevisionNoteModal";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { cld } from "../utils/cloudinary";
 
 const T = {
   surface: "#FFFFFF",
@@ -307,7 +308,7 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
                       {refs.map((img, i) => (
                         <a key={i} href={img.url} target="_blank" rel="noreferrer"
-                          style={{ width: 60, height: 60, borderRadius: 6, background: `url(${img.url}) center/cover`, border: `1px solid ${T.b1}`, cursor: "pointer", display: "block" }} />
+                          style={{ width: 60, height: 60, borderRadius: 6, background: `url(${cld(img.url, "thumb")}) center/cover`, border: `1px solid ${T.b1}`, cursor: "pointer", display: "block" }} />
                       ))}
                     </div>
                   )}
@@ -479,7 +480,7 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
                         <span style={{ fontSize: 9 }}>{t("lead_design.uploading")}</span>
                       </div>
                     ) : (
-                      <div style={{ width: "100%", height: "100%", background: `url(${img.url}) center/cover` }} />
+                      <div style={{ width: "100%", height: "100%", background: `url(${cld(img.url, "thumb")}) center/cover` }} />
                     )}
                     <button onClick={() => removeRefImage(img.tempId)}
                       style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "white", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, fontSize: 11 }}>×</button>

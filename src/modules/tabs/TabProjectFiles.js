@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
+import { cld } from "../../utils/cloudinary";
 
 /* ────────────────────────────────────────────────────────────────────
    FILES — construction site ka kaagaz-ghar
@@ -265,7 +266,7 @@ function PhotoGrid({ items, arch, canRemove, busy, onOpen, onRemove, onRestore, 
       {items.map((m, i) => (
         <div key={m.ref} style={{ position: "relative", borderRadius: 9, overflow: "hidden", border: `1px solid ${T.b1}` }}>
           <div onClick={() => onOpen(i)} style={{ position: "relative", paddingTop: "76%", background: T.sltL, cursor: "zoom-in" }}>
-            <img src={m.url} alt="" loading="lazy"
+            <img src={cld(m.url, "tile")} alt="" loading="lazy"
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
             <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "14px 7px 4px",
               background: "linear-gradient(transparent, rgba(0,0,0,.78))", color: "#fff", fontSize: 9.5,
@@ -330,7 +331,7 @@ function PhotoViewer({ items, index, onIndex, onClose, onRemove, busy }) {
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ flex: 1, overflow: "hidden", display: "flex",
         alignItems: "center", justifyContent: "center" }}>
-        <img src={m.url} alt="" style={{ maxWidth: "92%", maxHeight: "100%", objectFit: "contain" }} />
+        <img src={cld(m.url, "view")} alt="" style={{ maxWidth: "92%", maxHeight: "100%", objectFit: "contain" }} />
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", justifyContent: "center", gap: 16,
         padding: "10px 0 16px", flexShrink: 0 }}>

@@ -5,6 +5,7 @@ import { Pill, PBar, Stat, Panel, PHead } from "../shared/ui";
 import { t } from "../../i18n";
 import { canSeeFinancials } from "../../utils/perms";
 import { todayISO } from "../../utils/today";
+import { cld } from "../../utils/cloudinary";
 
 /* ────────────────────────────────────────────────────────────────────
    Project Overview — mirrors the company dashboard's depth at the
@@ -464,7 +465,7 @@ function TabOverview({proj, onRequestPayment}) {
                           <div style={{position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,.28)"}}>
                             <svg width={22} height={22} viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
                           </div></>
-                      : <img src={m.url} alt="" loading="lazy" style={{position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover"}}/>}
+                      : <img src={cld(m.url, "tile")} alt="" loading="lazy" style={{position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover"}}/>}
                     {m.task_name && (
                       <div style={{position:"absolute", left:0, right:0, bottom:0, padding:"12px 6px 4px",
                         background:"linear-gradient(transparent, rgba(0,0,0,.75))", color:"white", fontSize:9.5,
@@ -703,7 +704,7 @@ function MediaLightbox({items, index, onIndex, onClose, isVid, onRemove}){
           cursor: isVid(m) ? "default" : (z>1 ? (drag.current?"grabbing":"grab") : "zoom-in")}}>
         {isVid(m)
           ? <video src={m.url} controls autoPlay style={{maxWidth:"92%", maxHeight:"100%"}}/>
-          : <img src={m.url} alt="" draggable={false}
+          : <img src={cld(m.url, "view")} alt="" draggable={false}
               style={{maxWidth:"92%", maxHeight:"100%", objectFit:"contain",
                 transform:`translate(${off.x}px,${off.y}px) scale(${z})`,
                 transition: drag.current?"none":"transform .12s ease-out"}}/>}

@@ -21,6 +21,7 @@ import api from "../config/api";
 import ActivityLog from "./ActivityLog";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { cld } from "../utils/cloudinary";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -750,7 +751,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
                   <div style={{ display: "flex", gap: 6, marginTop: 7, flexWrap: "wrap" }}>
                     {(e.photos || []).map((u, i) => (
                       <a key={i} href={u} target="_blank" rel="noreferrer" title={t("transaction_detail.photo_proof")}>
-                        <img src={u} alt="" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}` }} />
+                        <img src={cld(u, "thumb")} alt="" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}` }} />
                       </a>
                     ))}
                     {!(e.photos || []).length && (

@@ -4,6 +4,7 @@ import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
 import { canApproveAction } from "../../utils/approvalAuthority";
 import { t, Rich } from "../../i18n";
+import { cld } from "../../utils/cloudinary";
 
 // Flagged trip ka faisla server par admin / super_admin / PM tak hi seemit
 // hai (routes/trips.js → POST /:id/review, requireRole). Screen par bhi wahi.
@@ -1018,7 +1019,7 @@ function PhotoThumb({ label, url }) {
     <div style={{ width: 120 }}>
       <div style={{ fontSize: 9.5, color: T.t4, fontWeight: 700, marginBottom: 3, textTransform: "uppercase" }}>{label}</div>
       {url ? (
-        <img src={url} alt={label} onClick={() => window.open(url, "_blank")}
+        <img src={cld(url, "thumb")} alt={label} onClick={() => window.open(url, "_blank")}
           style={{ width: 120, height: 90, objectFit: "cover", borderRadius: 7, cursor: "pointer", border: `1px solid ${T.b1}` }} />
       ) : (
         <div style={{ width: 120, height: 90, borderRadius: 7, border: `1px dashed ${T.b1}`, display: "flex", alignItems: "center", justifyContent: "center", color: T.t4, fontSize: 10.5 }}>{t("trip_tracking.no_photo")}</div>
