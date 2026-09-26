@@ -260,7 +260,7 @@ function DesignCard({ d, canEdit, canCreate, onEdit, onChanged }) {
         <KindPill k={d.product_kind} />
         <Pill label={statusLabel(d.status)} c={tone.c} bg={tone.bg} />
         {canEdit && !locked && <Btn size="sm" ghost onClick={() => onEdit(d)}>{t("common.edit")}</Btn>}
-        {canEdit && d.status !== "active" && <Btn size="sm" onClick={() => call("activate")} disabled={busy === "activate"}>{t("rmc.activate")}</Btn>}
+        {canEdit && d.status === "draft" && <Btn size="sm" onClick={() => call("activate")} disabled={busy === "activate"}>{t("rmc.activate")}</Btn>}
         {canCreate && locked && <Btn size="sm" ghost onClick={() => call("new-version")} disabled={busy === "new-version"}>{t("rmc.new_version")}</Btn>}
       </div>}>
       {locked && <div style={{ padding: "10px 14px 0" }}><Notice tone="warn">{t("rmc.locked_note")}</Notice></div>}
