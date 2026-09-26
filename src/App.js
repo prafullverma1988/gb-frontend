@@ -2070,11 +2070,16 @@ function App(){
     if(mod) setNav(mod);
   };
 
-  const handleSwitchCompany=async(companyId)=>{
+  // password = same mobile wale doosre account ka (SEC-09) — server tabhi
+  // maangta hai jab is login me us account ka saboot nahi (SWITCH_PROOF_*).
+  const handleSwitchCompany=async(companyId,password)=>{
     if(switching||companyId===user?.company_id) return;
     setSwitching(true);
+    let askMsg=null;
     try{
-      const res=await api.switchCompany(companyId);
+      const res=await api.switchCompany(companyId,password);
+      if(res.code==="SWITCH_PROOF_REQUIRED"||res.code==="SWITCH_PROOF_WRONG") askMsg=res.message;
+      else if(!res.success&&res.message&&window.toast) window.toast.error(res.message);
       if(res.success){
         apiCache.clear();
         resetBackSteps();   // doosri company — purane kadam bekaar
@@ -2093,6 +2098,10 @@ function App(){
       }
     }catch(e){console.error("Switch company error:",e);}
     setSwitching(false);
+    if(askMsg&&window.promptAsync){
+      const pw=await window.promptAsync({message:askMsg,password:true,okLabel:t("app.switch_karo"),cancelLabel:t("common.cancel")});
+      if(pw) handleSwitchCompany(companyId,pw);
+    }
   };
 
   if(!loggedIn) return <ToastProvider><ConfirmProvider><PromptProvider><LoginScreen onLogin={(u,cos)=>{setUser(u);setCompanies(cos||getCompanies());clearApprovalAuthority();loadApprovalAuthority(true);}}/></PromptProvider></ConfirmProvider></ToastProvider>;

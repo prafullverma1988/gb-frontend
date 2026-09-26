@@ -273,6 +273,7 @@ const dict = {
   "app.sub_contractor":                                        "Sub-Contractor",
   "app.surya_ghar_other_solar":                                "Surya Ghar + Other Solar",
   "app.surya_ghar_yojana":                                     "Surya Ghar Yojana",
+  "app.switch_karo":                                           "Switch",
   "app.switching_company":                                     "Switching company…",
   "app.team_attendance_today":                                 "Team Attendance — Today",
   "app.team_hr":                                               "Team & HR",
