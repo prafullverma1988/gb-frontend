@@ -18,6 +18,7 @@ import { T, fmt, fmtN, localYMD, PROJ, STATUS_S, STAGES, STAGE_S } from "./share
 import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabIc } from "./shared/ui";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { can } from "../utils/perms";
 
 // ── "Waiting on" label ─────────────────────────────────────────────────────
 // Backend /approvals/pending bhejta hai: _waitingOn (role label, escalation ke
@@ -363,6 +364,9 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
   const [msg, setMsg] = useState("");
 
   // Geo-location (per project) — backed by a single admin geofence row.
+  // Server (POST/PUT /geofences) Roles & Access ka Projects → Edit maangta hai —
+  // Save bhi usi tick par, role ke naam par nahi (PLT-12).
+  const canGeo = can("Projects", "edit");
   const [geo, setGeo] = useState({ id:null, lat:"", lng:"", radius:80, label:"" });
   const [geoLoading, setGeoLoading] = useState(true);
   const [geoBusy, setGeoBusy] = useState(false);
@@ -691,13 +695,13 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
           </div>
           {geo.id && <div style={{ fontSize:10.5, color:T.grn, marginBottom:8 }}>{t("project_detail.existing_fence_id_editing", { id: geo.id })}</div>}
           {geoMsg && <div style={{ fontSize:11.5, fontWeight:600, color:geoMsg.startsWith("✓")?T.grn:geoMsg.startsWith("📍")?T.blu:T.amb, marginBottom:8 }}>{geoMsg}</div>}
-          {isAdmin && (
+          {canGeo && (
             <button onClick={saveGeo} disabled={geoBusy}
               style={{ width:"100%", padding:"10px", borderRadius:8, background:geoBusy?T.b2:T.grn, color:"white", border:"none", fontSize:12.5, fontWeight:700, cursor:geoBusy?"not-allowed":"pointer" }}>
               {geoBusy ? t("common.saving_2") : (geo.id ? t("project_detail.update_geo_location") : t("project_detail.set_geo_location"))}
             </button>
           )}
-          {!isAdmin && <div style={{ fontSize:11, color:T.t4, fontStyle:"italic" }}>{t("project_detail.admin_pm_only_set_location")}</div>}
+          {!canGeo && <div style={{ fontSize:11, color:T.t4, fontStyle:"italic" }}>{t("project_detail.geo_needs_projects_edit")}</div>}
         </>)}
       </div>
       )}
