@@ -1856,7 +1856,9 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
       const rent = external && l.charge_mode === "rent";
       if (rent && !(Number(l.rent_rate) > 0)) { setError(t("assets.err_rent_rate", { n: i + 1 })); return; }
       items.push({
-        asset_item_id: h.asset_item_id, qty, condition: l.condition || "good",
+        // Yahan haalat hi bucket hai (theek wala ya toota wala stock) — server
+        // usi se nikaalta hai (from_condition), kami doosre bucket se nahi bharta.
+        asset_item_id: h.asset_item_id, qty, condition: l.condition || "good", from_condition: l.condition || "good",
         charge_mode: rent ? "rent" : "free", rent_rate: rent ? Number(l.rent_rate) : null, rent_basis: rent ? (l.rent_basis || "day") : null,
         remarks: l.remarks || null,
       });
@@ -1939,6 +1941,12 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
 // paas hai (ya mere warehouse me) wahi dikhti hai; aur har line par ye bhi
 // ki wahan kitni padi hai.
 const groupKey = (h) => (h.warehouse_id ? `w:${h.warehouse_id}` : `s:${h.project_id}:${h.holder_type}:${h.holder_id}:${h.custodian_user_id}`);
+// Ek holding → theek aur toote ki alag row (app ke Return/Transfer jaisa).
+// Line jis row se chuni usi bucket se nikalti hai (from_condition): toote me se
+// "Lost" likhne par theek stock nahi katta, aur reject/cancel par usi me wapas.
+const bucketRows = (rows) => rows.flatMap((s) => ["good", "damaged"]
+  .map((b) => ({ ...s, key: `${s.id}:${b}`, bucket: b, have: N(b === "good" ? s.qty_good : s.qty_damaged) }))
+  .filter((x) => x.have > 0));
 
 // ══════════════════════════════════════════════════════════════════
 // EK ASSET HAATH SE — opening stock, Excel ke bina
@@ -2181,7 +2189,8 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
   }, [hold, storeMode, isReturn]);
   const g = groups.find((x) => x.key === from);
   const fromIsWh = !!(g && g.warehouse_id);
-  const stockOf = (key) => (g ? g.rows.find((h) => String(h.id) === String(key)) : null);
+  const bRows = bucketRows(g ? g.rows : []);
+  const stockOf = (key) => bRows.find((h) => h.key === String(key)) || null;
   const updLine = (i, v) => setLines((p) => p.map((l, j) => (j === i ? v : l)));
   const external = !isReturn && !storeMode && ["worker", "subcon"].includes(toSite.holder_type);
 
@@ -2203,12 +2212,12 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
       if (!h) { setError(t("assets.err_line_item", { n: i + 1 })); return; }
       const qty = h.tracking_mode === "serialized" ? 1 : Number(l.qty);
       if (!(qty > 0)) { setError(t("assets.err_line_qty", { n: i + 1 })); return; }
-      const have = N(h.qty_good) + N(h.qty_damaged);
-      if (qty > have) { setError(t("assets.err_line_stock", { n: i + 1, have: fmtN(have) })); return; }
+      if (qty > h.have) { setError(t("assets.err_line_stock", { n: i + 1, have: fmtN(h.have) })); return; }
       const rent = external && l.charge_mode === "rent";
       if (rent && !(Number(l.rent_rate) > 0)) { setError(t("assets.err_rent_rate", { n: i + 1 })); return; }
+      const cond = h.bucket === "damaged" && (l.condition || "good") === "good" ? "damaged" : (l.condition || "good");
       items.push({
-        asset_item_id: h.asset_item_id, qty, condition: l.condition || "good",
+        asset_item_id: h.asset_item_id, qty, condition: cond, from_condition: h.bucket,
         charge_mode: rent ? "rent" : "free", rent_rate: rent ? Number(l.rent_rate) : null, rent_basis: rent ? (l.rent_basis || "day") : null,
         remarks: l.remarks || null,
       });
@@ -2278,15 +2287,15 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
                 <Row key={i} cols={lineCols}>
                   <div>
                     <SearchSelect value={l.key} accent={T.ind} compact
-                      onChange={(k) => { const hh = stockOf(k); updLine(i, { ...l, key: k, qty: hh && hh.tracking_mode === "serialized" ? "1" : l.qty }); }}
-                      options={g.rows.map((s) => ({ id: s.id, name: `${lineLabel(s)} — ${fmtN(s.qty_good)} ${t("assets.good").toLowerCase()}${N(s.qty_damaged) ? `, ${fmtN(s.qty_damaged)} ${t("assets.damaged").toLowerCase()}` : ""}` }))}
+                      onChange={(k) => { const hh = stockOf(k); updLine(i, { ...l, key: k, condition: hh ? hh.bucket : l.condition, qty: hh && hh.tracking_mode === "serialized" ? "1" : l.qty }); }}
+                      options={bRows.map((s) => ({ id: s.key, name: `${lineLabel(s)} — ${fmtN(s.have)} ${(s.bucket === "damaged" ? t("assets.damaged") : t("assets.good")).toLowerCase()}` }))}
                       placeholder={t("assets.select_item")} />
-                    {h && <div style={{ fontSize: 10, color: T.t4, marginTop: 3 }}>{t("assets.with_you_n", { n: fmtN(N(h.qty_good) + N(h.qty_damaged)), unit: h.unit || "" })}</div>}
+                    {h && <div style={{ fontSize: 10, color: h.bucket === "damaged" ? T.amb : T.t4, marginTop: 3 }}>{t("assets.with_you_n", { n: fmtN(h.have), unit: h.unit || "" })}{h.bucket === "damaged" ? ` · ${t("assets.damaged").toLowerCase()}` : ""}</div>}
                   </div>
                   <input value={h && h.tracking_mode === "serialized" ? "1" : l.qty} inputMode="decimal" style={inpSm} disabled={!!(h && h.tracking_mode === "serialized")}
                     onChange={(e) => updLine(i, { ...l, qty: e.target.value.replace(/[^0-9.]/g, "") })} />
                   <select value={l.condition} onChange={(e) => updLine(i, { ...l, condition: e.target.value })} style={inpSm}>
-                    <option value="good">{t("assets.cond_good")}</option>
+                    {!(h && h.bucket === "damaged") && <option value="good">{t("assets.cond_good")}</option>}
                     <option value="damaged">{t("assets.cond_damaged")}</option>
                     <option value="lost">{t("assets.cond_lost")}</option>
                   </select>
