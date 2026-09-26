@@ -1118,12 +1118,22 @@ function ModuleDisabled({name}){
 }
 
 // ── DASHBOARD MODULE ──────────────────────────────────────────────────
+// Project ka asli kharcha-bantwara (/dashboard/overview `breakdown`) → donut slices (PLT-08)
+function projectSlices(bd){
+  return [{label:t("common.material"),value:Number(bd&&bd.material)||0,color:T.blu},{label:t("app.sub_con"),value:Number(bd&&bd.subcon)||0,color:T.pur},{label:t("app.site_exp"),value:Number(bd&&bd.site)||0,color:T.amb},{label:t("app.equip"),value:Number(bd&&bd.equipment)||0,color:T.slt}].filter(s=>s.value>0);
+}
 function ProjectExpandedRow({p}){
   const margin=p.boq-p.expense; const marginPct=p.boq>0?((margin/p.boq)*100).toFixed(1):0;
   const spentPct=p.boq>0?((p.expense/p.boq)*100).toFixed(0):0;
   const sm=STATUS_META[p.status]||STATUS_META["Ongoing"];
   const progColor=p.progress===100?T.grn:p.progress>60?T.blu:p.progress>30?T.amb:T.red;
-  const expSlices=[{label:t("common.material"),value:p.expense*0.46,color:T.blu},{label:t("app.sub_con"),value:p.expense*0.30,color:T.pur},{label:t("common.labour"),value:p.expense*0.15,color:T.grn},{label:t("app.site_exp"),value:p.expense*0.06,color:T.amb},{label:t("app.equip"),value:p.expense*0.03,color:T.slt}].filter(s=>s.value>0);
+  // PLT-08: asli bantwara aur mahine /dashboard/overview se (utils/projectPnl
+  // ka hi cost niyam). Pehle kul kharche ke fixed % (Material 46%, Sub-Con 30%…)
+  // aur likhe hue Oct–Mar mahine the — bina subcon wale project par bhi lakhon Sub-Con.
+  const bd=p.breakdown||{};
+  const expSlices=projectSlices(bd);
+  const trend=(p.monthly||[]).map(m=>({month:m.month,expense:Number(m.cost)||0}));
+  const hasTrend=trend.some(m=>m.expense!==0);
   return(
     <tr><td colSpan={10} style={{padding:0,background:T.bluL,borderBottom:`2px solid ${T.bluM}`}}>
       <div style={{padding:"14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr 1.2fr 1fr",gap:14}}>
@@ -1140,17 +1150,17 @@ function ProjectExpandedRow({p}){
         <div>
           <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>{t("app.expense_breakdown")}</div>
           <div style={{display:"flex",gap:12,alignItems:"center"}}>
-            <div style={{width:104,height:104,flexShrink:0}}><EChart option={eDonutMini(expSlices)} height={104}/></div>
-            <div style={{flex:1}}>{expSlices.map((s,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}><div style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/><span style={{fontSize:10.5,color:T.t3,flex:1}}>{s.label}</span><span style={{fontSize:10.5,fontWeight:600,color:T.t1}}>₹{fmt(s.value)}</span></div>))}</div>
+            {expSlices.length?<div style={{width:104,height:104,flexShrink:0}}><EChart option={eDonutMini(expSlices)} height={104}/></div>:null}
+            <div style={{flex:1}}>{expSlices.length?expSlices.map((s,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}><div style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/><span style={{fontSize:10.5,color:T.t3,flex:1}}>{s.label}</span><span style={{fontSize:10.5,fontWeight:600,color:T.t1}}>₹{fmt(s.value)}</span></div>)):<div style={{fontSize:11,color:T.t4}}>{t("app.no_expense_recorded")}</div>}</div>
           </div>
         </div>
         <div>
           <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>{t("app.monthly_spend_trend")}</div>
-          <EChart option={eBarMini([{month:"Oct",expense:p.expense*0.08},{month:"Nov",expense:p.expense*0.12},{month:"Dec",expense:p.expense*0.18},{month:"Jan",expense:p.expense*0.15},{month:"Feb",expense:p.expense*0.22},{month:"Mar",expense:p.expense*0.25}])} height={96}/>
+          {hasTrend?<EChart option={eBarMini(trend)} height={96}/>:<div style={{fontSize:11,color:T.t4}}>{t("app.no_spend_last_6_months")}</div>}
         </div>
         <div>
           <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>{t("app.details")}</div>
-          {[["Client",p.client],["City",p.city],["Type",p.type],["PM",p.pm],["Start",p.start],["End",p.end],["Margin",`${marginPct}% (${margin>=0?"profit":"loss"})`]].map(([k,v])=>(<div key={k} style={{display:"flex",gap:8,padding:"4px 0",borderBottom:`1px solid ${T.bluM}`}}><span style={{width:52,fontSize:10.5,color:T.t4,flexShrink:0}}>{k}</span><span style={{fontSize:11,fontWeight:500,color:T.t1}}>{v}</span></div>))}
+          {[[t("app.client"),p.client],[t("common.city"),p.city],[t("common.type"),p.type],[t("app.pm"),p.pm],[t("common.start"),p.start],[t("app.end"),p.end],[t("common.margin"),`${marginPct}% (${margin>=0?t("app.profit"):t("app.loss")})`]].map(([k,v])=>(<div key={k} style={{display:"flex",gap:8,padding:"4px 0",borderBottom:`1px solid ${T.bluM}`}}><span style={{width:52,fontSize:10.5,color:T.t4,flexShrink:0}}>{k}</span><span style={{fontSize:11,fontWeight:500,color:T.t1}}>{v||"—"}</span></div>))}
         </div>
       </div>
     </td></tr>
@@ -1350,11 +1360,15 @@ function DashboardModule(){
   const num=(v)=>{const n=Number(v);return isFinite(n)?n:0;};
   const totalExp=filteredProjects.reduce((s,p)=>s+num(p.expense||p.total_expense),0);
   const pendingCount=pendingArr.length;
-  const cfData=range==="week"?cashflowArr.slice(-2):range==="month"?cashflowArr.slice(-3):cashflowArr;
+  // PLT-08: project chuna ho to USI project ke mahine (aaya paisa / cost) aur
+  // bantwara — pehle company ka cashflow × 0.35 aur kharche ke fixed % the.
+  const selP=selProject==="All"?null:filteredProjects[0]||null;
+  const cfSeries=selP?(selP.monthly||[]).map(m=>({month:m.month,in:Number(m.in)||0,out:Number(m.cost)||0})):cashflowArr;
+  const cfData=range==="week"?cfSeries.slice(-2):range==="month"?cfSeries.slice(-3):cfSeries;
   const totalIn=cfData.reduce((s,d)=>s+(d.in||0),0);
   const totalOut=cfData.reduce((s,d)=>s+(d.out||0),0);
-  const financeBarData=cashflowArr.map(d=>({month:d.month,sales:Math.round((d.in||0)*(selProject==="All"?1:0.35)),expense:Math.round((d.out||0)*(selProject==="All"?1:0.35))}));
-  const expSlices=dd.expense_breakdown||[{label:t("common.material_purchase"),value:totalExp*0.46,color:T.blu},{label:t("app.sub_contractor"),value:totalExp*0.30,color:T.pur},{label:t("app.direct_labour"),value:totalExp*0.15,color:T.grn},{label:t("app.site_expenses"),value:totalExp*0.06,color:T.amb},{label:t("common.equipment"),value:totalExp*0.03,color:T.slt}].filter(s=>s.value>0);
+  const financeBarData=cfSeries.some(d=>d.in||d.out)?cfSeries.map(d=>({month:d.month,sales:Math.round(d.in||0),expense:Math.round(d.out||0)})):[];
+  const expSlices=selP?projectSlices(selP.breakdown):(dd.expense_breakdown||[]);
   const activityToShow=showAllActivity?activityArr:activityArr.slice(0,4);
   const actionsToShow=showAllActions?pendingArr:pendingArr.slice(0,4);
 
