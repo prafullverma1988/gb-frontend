@@ -675,7 +675,8 @@ function CompanyDetailPage({ companyId, onBack }) {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
               <StatCard label="Projects" value={fmtNum(usage.projects)} color={T.blu} Icon={IcFolder}/>
               <StatCard label="Transactions" value={fmtNum(usage.transactions)} color={T.grn} Icon={IcActivity}/>
-              <StatCard label="Revenue" value={"₹" + fmtMoney(usage.revenue)} color={T.amb} Icon={IcDollar}/>
+              {/* Money received from the tenant's clients (receipts) — not the sum of every transaction (SAAS-07) */}
+              <StatCard label="Received" value={"₹" + fmtMoney(usage.revenue)} sub="client receipts" color={T.amb} Icon={IcDollar}/>
             </div>
           </div>
 
