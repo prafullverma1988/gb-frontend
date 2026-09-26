@@ -216,8 +216,10 @@ api.loginSelect = async (pending, user_id, company_id) => {
   if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
   return data;
 };
-api.switchCompany = async (companyId) => {
-  const data = await api.post("/auth/switch-company", { company_id: companyId });
+// password = same mobile wale doosre account ka password — sirf tab jab server
+// SWITCH_PROOF_REQUIRED bole (us account ka saboot, SEC-09).
+api.switchCompany = async (companyId, password) => {
+  const data = await api.post("/auth/switch-company", password ? { company_id: companyId, password } : { company_id: companyId });
   if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
   return data;
 };
