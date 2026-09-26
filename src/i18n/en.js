@@ -8233,6 +8233,7 @@ const dict = {
   "tasks.imp_sub":                                             "Each row becomes a new top-level task. Name is required; Category, Tag, Start Date and End Date are optional. A row whose name already exists is skipped.",
   "tasks.imp_title":                                           "Import tasks — CSV or Excel",
   "tasks.kisi_ko_nahi":                                       "— nobody —",
+  "tasks.photo_kaam_ke_saath":                                "Photos arrive with progress, material used or an issue",
   "tasks.save_nahi_hua":                                      "Not saved — please try again",
   "tasks.tpl_start_date":                                     "Project start date",
   "tasks.tpl_start_date_hint":                                "The whole schedule is built from this day. Leave blank to use the project start date, or today if that is not set.",

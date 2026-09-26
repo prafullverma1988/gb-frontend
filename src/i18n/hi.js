@@ -8232,6 +8232,7 @@ const dict = {
   "tasks.imp_sub":                                             "हर row से एक नया task बनेगा, सबसे ऊपर के level पर। Name ज़रूरी; Category, Tag, Start Date, End Date optional। इसी नाम का task पहले से हो तो वो row Skip।",
   "tasks.imp_title":                                           "Tasks import — CSV या Excel",
   "tasks.kisi_ko_nahi":                                       "— किसी को नहीं —",
+  "tasks.photo_kaam_ke_saath":                                "फ़ोटो प्रोग्रेस, मटेरियल यूज़्ड या इशू के साथ लगती है",
   "tasks.save_nahi_hua":                                      "सेव नहीं हुआ — दोबारा कोशिश करो",
   "tasks.tpl_start_date":                                     "प्रोजेक्ट स्टार्ट डेट",
   "tasks.tpl_start_date_hint":                                "इसी दिन से पूरा शेड्यूल बनेगा। खाली छोड़ो तो प्रोजेक्ट की स्टार्ट डेट, वो भी न हो तो आज।",
