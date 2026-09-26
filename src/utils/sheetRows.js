@@ -6,7 +6,8 @@
 // Template ki upar wali instructions line me comma ho to purana parser use hi
 // header maan leta tha, aur Materials/Parties/Workers ka template 0 row import
 // karta tha. Comma wale value ("cement, putty") bhi ab poore aate hain.
-import * as XLSX from "xlsx";
+// xlsx (~400 KB) sirf file padhte waqt (readSheet) — import hote hi nahi (PERF-05):
+// CRM / Library module khulte hi ye chunk kheenchna bekaar tha.
 
 const hnorm = (s) => String(s ?? "")
   .replace(/^﻿/, "")
@@ -19,6 +20,7 @@ const hnorm = (s) => String(s ?? "")
 // ka Excel number, taaki screen par wahi row number dikhe jo file me hai.
 // CSV raw padhi jaati hai: "007" jaisa code "7" na ban jaaye.
 export async function readSheet(file) {
+  const XLSX = await import("xlsx");
   const name = String((file && file.name) || "").toLowerCase();
   const csv = /\.(csv|txt)$/.test(name);
   const wb = csv
@@ -28,7 +30,7 @@ export async function readSheet(file) {
   if (!ws || !ws["!ref"]) return { matrix: [], firstRow: 1 };
   const range = XLSX.utils.decode_range(ws["!ref"]);
   const matrix = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "", blankrows: true });
-  if (!csv) excelDatesToIso(ws, range, matrix);
+  if (!csv) excelDatesToIso(XLSX, ws, range, matrix);
   return { matrix, firstRow: range.s.r + 1 };
 }
 
@@ -39,7 +41,7 @@ export async function readSheet(file) {
 // seedha uske Excel serial se yyyy-mm-dd (SSF.parse_date_code — timezone ka koi
 // khel nahi). Text me likhi tareekh jaisi thi waisi rehti hai. Wahi tareeka jo
 // bank statement import me hai (FIN-28).
-function excelDatesToIso(ws, rg, matrix) {
+function excelDatesToIso(XLSX, ws, rg, matrix) {
   for (let r = rg.s.r; r <= rg.e.r; r++) {
     const row = matrix[r - rg.s.r];
     if (!row) continue;

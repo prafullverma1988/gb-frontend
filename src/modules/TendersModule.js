@@ -17,7 +17,11 @@ import PhotoLocateModal from "./tabs/PhotoLocateModal";
 import TenderAiPlan from "./tabs/TenderAiPlan";
 import BoqMatrixImport from "./tabs/BoqMatrixImport";
 import DangerDelete from "./shared/DangerDelete";
-import * as XLSX from "xlsx";
+// xlsx (~400 KB) sirf BOQ file kholte waqt chahiye — Tenders khulte hi nahi (PERF-05).
+// loadFile() pehle loadXlsx() await karta hai; baaki helper (sheetToAoa,
+// scoreBoqSheets) sirf uske baad bane workbook par chalte hain.
+let XLSX = null;
+const loadXlsx = async () => XLSX || (XLSX = await import("xlsx"));
 import api, { getUser, API_BASE, getToken } from "../config/api";
 import { useToast } from "../components/Toast";
 // Receipt lene ke liye Finance ka hi form dobara use hota hai — TabParty aur
@@ -2225,6 +2229,7 @@ function BoqImportModal({tenderId, onClose, onDone, boqFinal, onAiPlan}) {
     setErr(""); setReconcile(null); setFileTotal(""); setTotalTouched(false); setExcluded({});
     try {
       const buf = await f.arrayBuffer();
+      await loadXlsx();
       // cellFormula:false → formula load hi nahi hota, sirf cached value.
       // cellText:true    → .w (displayed text) fallback ke liye milta hai.
       const book = XLSX.read(new Uint8Array(buf), {
