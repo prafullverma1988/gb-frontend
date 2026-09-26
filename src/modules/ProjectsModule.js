@@ -1828,6 +1828,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // Wallet approvals (staff cash expenses) are surfaced in the Finance tab too.
   // Only the roles that can actually approve a wallet txn see them — server
   // Roles & Access ka Finance → APPROVE maangta hai, row na ho to nahi (SEC-02).
+  // Accountant (seeded chain ka ₹5K–25K/50K level) ko bhi button isi tick se
+  // milta hai — role naam se nahi: bina tick ke server /wallets/pending-approvals
+  // aur approve/reject dono 403 dete, to button bekaar dikhta.
   const isWalletApprover=["admin","super_admin"].includes(_cu?.role)||!!_cu?.module_permissions?.Finance?.approve;
   const [apprScope,setApprScope]=useState("my"); // "my" | "all"
   const [activeTab,setActiveTab]=useState(mode==="approvals"?"design":"mr");
