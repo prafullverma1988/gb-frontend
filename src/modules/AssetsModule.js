@@ -2764,10 +2764,16 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, canEdit, onClose, onC
   };
   const setCell = (ln, k, val) => setEdit((p) => ({ ...p, [ln.id]: { ...cellOf(ln), ...(p[ln.id] || {}), [k]: val } }));
 
+  // Server aur app wala hi niyam: do me se ek bhi box bhara = line gini gayi,
+  // khaali doosra = 0. Dono khaali = abhi gina nahi. Pehle yahan "Theek" khaali
+  // hote hi dono null jaate — sirf "Toota: 2" bharne wale ki ginti web par
+  // chupchaap "gini nahi" reh jaati, jabki app par wahi ginti lag jaati.
+  const blank = (x) => x === "" || x === undefined || x === null;
   const itemsPayload = () => Object.keys(edit).map((lid) => {
     const e = edit[lid];
-    const g = e.g === undefined ? undefined : (e.g === "" ? null : Number(e.g));
-    return { id: Number(lid), counted_good: g, counted_damaged: g == null ? null : (e.d === "" || e.d === undefined ? 0 : Number(e.d)), remarks: e.r };
+    const counted = !blank(e.g) || !blank(e.d);
+    return { id: Number(lid), counted_good: counted ? (blank(e.g) ? 0 : Number(e.g)) : null,
+             counted_damaged: counted ? (blank(e.d) ? 0 : Number(e.d)) : null, remarks: e.r };
   });
   const took = (r) => { toast.success(r.message || t("assets.saved")); setEdit({}); setV(r.data); setNote((r.data && r.data.remarks) || ""); onChanged(); };
 
@@ -2889,8 +2895,8 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, canEdit, onClose, onC
                 const useCur = hasCur && (edited || !saved);
                 const sg = useCur ? N(ln.current_good) : N(ln.system_good), sd = useCur ? N(ln.current_damaged) : N(ln.system_damaged);
                 const movedAfter = hasCur && saved && !edited && (N(ln.current_good) !== N(ln.system_good) || N(ln.current_damaged) !== N(ln.system_damaged));
-                const counted = c.g !== "";
-                const cg = counted ? Number(c.g) : 0, cd = counted ? (c.d === "" ? 0 : Number(c.d)) : 0;
+                const counted = c.g !== "" || c.d !== "";
+                const cg = counted ? (c.g === "" ? 0 : Number(c.g)) : 0, cd = counted ? (c.d === "" ? 0 : Number(c.d)) : 0;
                 const net = counted ? (cg + cd) - (sg + sd) : null;
                 const condChanged = counted && net === 0 && cg !== sg;
                 // Jiski ginti alag mili uspar wajah bina ginti bheji nahi jaati.
@@ -2917,8 +2923,8 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, canEdit, onClose, onC
                           onChange={(e) => setCell(ln, "d", e.target.value.replace(/[^0-9.]/g, ""))}
                           style={{ ...inpSm, width: 60, background: canCount ? T.surface : T.surfaceB }} />
                       </div>
-                      {/* Sirf damaged bhar dena kaafi nahi — good khali rahe to line "gini nahi" hi rehti hai. */}
-                      {!counted && <div style={{ fontSize: 10, color: c.d === "" ? T.t4 : T.amb, marginTop: 3 }}>{t("assets.verify_not_counted")}</div>}
+                      {/* Dono box khaali = abhi gina nahi. Ek bhi bhara to khaali doosra 0 (server aur app jaisa). */}
+                      {!counted && <div style={{ fontSize: 10, color: T.t4, marginTop: 3 }}>{t("assets.verify_not_counted")}</div>}
                     </div>
                     <div>
                       <span style={{ fontWeight: 700, color: net == null ? T.t4 : net < 0 ? T.red : net > 0 ? T.grn : T.t4 }}>

@@ -696,7 +696,7 @@ const dict = {
   "assets.verify_note_label":                                  "Note for the whole count — what was short or extra overall and why (required to send)",
   "assets.verify_note_ph":                                     "e.g. post-monsoon count — 5 plates scrapped, 2 hammers missed in an old entry",
   "assets.verify_nothing_changed":                             "Nothing changed — fill in the count first",
-  "assets.verify_null_hint":                                   "Leaving the count box empty is not the same as writing 0: empty means not counted yet, 0 means nothing is left there. Lines that were never counted are left untouched when the count is closed.",
+  "assets.verify_null_hint":                                   "Leaving the count box empty is not the same as writing 0: empty means not counted yet, 0 means nothing is left there. Lines that were never counted are left untouched when the count is closed. If you fill one box and leave the other empty, the empty one counts as 0 — entering only damaged means good = 0.",
   "assets.verify_open_existing":                               "Open the existing one",
   "assets.verify_owner":                                       "Responsible",
   "assets.verify_pending":                                     "Left",

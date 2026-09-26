@@ -698,7 +698,7 @@ const dict = {
   "assets.verify_note_label":                                  "Poori ginti ka note — kul kya kam ya zyada nikla aur kyun (bhejne ke liye zaroori)",
   "assets.verify_note_ph":                                     "jaise: baarish ke baad ki ginti — 5 plate scrap me, 2 hammer purani entry se chhoote",
   "assets.verify_nothing_changed":                             "Kuch badla hi nahi — pehle ginti bharo",
-  "assets.verify_null_hint":                                   "Ginti ka box chhod dena aur 0 likhna do alag baat hai: box chhoda = abhi gina nahi, 0 = wahan kuch bacha hi nahi. Band karte waqt bina gini line ko haath nahi lagta.",
+  "assets.verify_null_hint":                                   "Ginti ka box chhod dena aur 0 likhna do alag baat hai: box chhoda = abhi gina nahi, 0 = wahan kuch bacha hi nahi. Band karte waqt bina gini line ko haath nahi lagta. Ek box bhara aur doosra khaali chhoda to khaali wala 0 maana jaata hai — sirf \"toota\" bharoge to theek 0 ginega.",
   "assets.verify_open_existing":                               "Purani ginti kholo",
   "assets.verify_owner":                                       "Zimmedar",
   "assets.verify_pending":                                     "Baaki",
