@@ -2111,14 +2111,22 @@ function RolesAccess() {
 // MULTI-LEVEL APPROVAL — Expanded with all 12 transaction types + edit/create
 // ═══════════════════════════════════════════════════════════════════════
 function ApprovalSettings() {
-  // Role options: value = slug (matches req.user.role), label = display name
-  const ROLE_OPTIONS = [
-    { value: "site_supervisor",  label: "Site Supervisor"  },
-    { value: "project_manager",  label: "Project Manager"  },
-    { value: "accountant",       label: "Accountant"       },
-    { value: "admin",            label: "Admin"            },
+  // Role options: value = slug (matches req.user.role), label = display name.
+  // (PLT-13) Pehle sirf ye 4 jami hui option thi aur "Site Supervisor" ka value
+  // "site_supervisor" tha — users.role "supervisor" hai, to wo level kabhi kisi
+  // supervisor ko nahi dikhta (chupchaap Admin par jaata). Ab system role sahi
+  // slug se, aur company ke custom role (Settings → Roles & Access) bhi.
+  const SYSTEM_ROLE_OPTIONS = [
+    { value: "supervisor",       get label() { return t("settings.wallet_limits_role_supervisor"); } },
+    { value: "project_manager",  get label() { return t("settings.wallet_limits_role_pm"); } },
+    { value: "accountant",       get label() { return t("settings.wallet_limits_role_accountant"); } },
+    { value: "admin",            get label() { return t("settings.wallet_limits_role_admin"); } },
   ];
-  const roleLabel = (v) => ROLE_OPTIONS.find(r => r.value === v)?.label || v;
+  const [customRoleOptions, setCustomRoleOptions] = useState([]);
+  const ROLE_OPTIONS = [...SYSTEM_ROLE_OPTIONS, ...customRoleOptions];
+  // Purana save hua "site_supervisor" bhi naam se dikhe (server use supervisor maanta hai).
+  const roleLabel = (v) => ROLE_OPTIONS.find(r => r.value === v)?.label
+    || (v === "site_supervisor" ? t("settings.wallet_limits_role_supervisor") : v);
 
   const DEFAULTS = [
     { id: 0,  module: "Design Approval",       cat: "DESIGN",       enabled: true,  levels: [{ role: "Project Manager", limit: null }] },
@@ -2163,6 +2171,16 @@ function ApprovalSettings() {
       try {
         api.get("/approvals/settings").then(r => {
           if (r.success && r.data) setAutoApproveSelf(!!r.data.auto_approve_self);
+        }).catch(() => {});
+        // Custom roles (RATNA: Head Engineer, Site Engineer, Store Keeper …) —
+        // slug wahi jo server users.role me rakhta hai (routes/settings.js roleSlug).
+        api.get("/settings/roles").then(r => {
+          if (!r.success || !Array.isArray(r.data)) return;
+          const slugOf = (n) => String(n || "").toLowerCase().trim().replace(/[\s&]+/g, "_").replace(/_+/g, "_");
+          const SYSTEM = ["admin", "super_admin", "project_manager", "supervisor", "site_supervisor", "accountant", "viewer", "staff", "client"];
+          setCustomRoleOptions(r.data
+            .filter(x => x && x.name && !SYSTEM.includes(slugOf(x.name)))
+            .map(x => ({ value: slugOf(x.name), label: x.name })));
         }).catch(() => {});
         const res = await api.get("/approvals/workflows");
         if (res.success && res.data && res.data.length > 0) {
@@ -2277,7 +2295,7 @@ function ApprovalSettings() {
     setShowEditModal(false);
   };
 
-  const addLevel = () => setEditLevels(p => [...p, { roles: ["site_supervisor"], limit: null }]);
+  const addLevel = () => setEditLevels(p => [...p, { roles: ["supervisor"], limit: null }]);
   const removeLevel = (i) => setEditLevels(p => p.filter((_, idx) => idx !== i));
   const updateLevel = (i, k, v) => setEditLevels(p => p.map((l, idx) => idx === i ? { ...l, [k]: v } : l));
   // Parallel role helpers — add/remove a role within a single level
@@ -2372,14 +2390,13 @@ function ApprovalSettings() {
         );
       })}
 
-      {/* Escalation Rules */}
-      <SectionCard title="Escalation Rules" desc="Auto-escalate if approval pending beyond time limit">
-        <div style={{ paddingTop: 8 }}>
-          <ToggleRow icon={<IcBell size={17} color={T.blue} />} label="Auto-Escalation" desc="Escalate to next level if not approved within the set hours" value={true} onChange={() => {}} />
-          <div style={{ display: "flex", gap: 16, marginTop: 14, flexWrap: "wrap" }}>
-            <FormSelect label="Escalation After" value="24" onChange={() => {}} options={[{ value: "12", label: "12 hours" }, { value: "24", label: "24 hours" }, { value: "48", label: "48 hours" }, { value: "72", label: "72 hours" }]} half />
-            <FormSelect label="Notify Via" value="all" onChange={() => {}} options={[{ value: "email", label: "Email only" }, { value: "push", label: "Push only" }, { value: "whatsapp", label: "WhatsApp only" }, { value: "all", label: "Email + Push + WhatsApp" }]} half />
-          </div>
+      {/* Escalation — (PLT-13) pehle yahan "Auto-Escalation ON, 24 hours, Email + Push +
+          WhatsApp" ke nakli control the (onChange khaali, server kuch padhta hi nahi).
+          Aisa koi kaam hota hi nahi, isliye sach likha hai. */}
+      <SectionCard title={t("settings.appr_escalation_title")}>
+        <div style={{ paddingTop: 8, display: "flex", gap: 10, alignItems: "flex-start", fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+          <IcBell size={17} color={T.blue} style={{ flexShrink: 0, marginTop: 2 }} />
+          <span>{t("settings.appr_escalation_note")}</span>
         </div>
       </SectionCard>
 

@@ -23,12 +23,33 @@ export async function readSheet(file) {
   const csv = /\.(csv|txt)$/.test(name);
   const wb = csv
     ? XLSX.read((await file.text()).replace(/^﻿/, ""), { type: "string", raw: true })
-    : XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
+    : XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array", cellNF: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   if (!ws || !ws["!ref"]) return { matrix: [], firstRow: 1 };
   const range = XLSX.utils.decode_range(ws["!ref"]);
   const matrix = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "", blankrows: true });
+  if (!csv) excelDatesToIso(ws, range, matrix);
   return { matrix, firstRow: range.s.r + 1 };
+}
+
+// LIB-08: Excel ki ASLI date cell (jaise 04-03-2026 type karke) ka text SheetJS
+// apne default short-date format (m/d/yy) me deta hai — "3/4/26" — aur server
+// Bharat ka d/m/yy padhta hai: 4 Mar 2026 chupchaap 3 Apr 2026 ban jaata tha
+// (13+ tareekh wali row 'samajh nahi aayi' deti thi). Isliye date cell ki tareekh
+// seedha uske Excel serial se yyyy-mm-dd (SSF.parse_date_code — timezone ka koi
+// khel nahi). Text me likhi tareekh jaisi thi waisi rehti hai. Wahi tareeka jo
+// bank statement import me hai (FIN-28).
+function excelDatesToIso(ws, rg, matrix) {
+  for (let r = rg.s.r; r <= rg.e.r; r++) {
+    const row = matrix[r - rg.s.r];
+    if (!row) continue;
+    for (let c = rg.s.c; c <= rg.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (!cell || cell.t !== "n" || !cell.z || !XLSX.SSF.is_date(cell.z)) continue;
+      const d = XLSX.SSF.parse_date_code(cell.v);
+      if (d && d.y) row[c - rg.s.c] = `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
+    }
+  }
 }
 
 // fields: [{ key, col, aliases?, required? }] — col = template ka column naam.
