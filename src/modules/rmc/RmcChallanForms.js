@@ -36,11 +36,12 @@ export function ChallanForm({ open, meta, preset, onClose, onSaved, onGoSetup })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Us project ke khule order — challan unhi me se kisi se juda hota hai.
+  // Us project ke khule order (approved + jisme pehli gaadi ja chuki) — order ki
+  // doosri, teesri gaadi bhi usi se judni chahiye.
   useEffect(() => {
     if (!open || !v.project_id) { setOrders([]); return; }
     let alive = true;
-    rget("/orders", { project_id: v.project_id, status: "approved" }).then((r) => { if (alive) setOrders(dataOf(r, [])); });
+    rget("/orders", { project_id: v.project_id, status: "approved,dispatching" }).then((r) => { if (alive) setOrders(dataOf(r, [])); });
     return () => { alive = false; };
   }, [open, v.project_id]);
 
