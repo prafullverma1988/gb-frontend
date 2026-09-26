@@ -26,6 +26,7 @@ import uploadManager from "../utils/uploadManager";
 import ActivityLog from "./ActivityLog";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { cld } from "../utils/cloudinary";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -540,7 +541,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                       <div style={{ display: "flex", gap: 6, marginBottom: 7, alignItems: "center" }}>
                         {issuePhoto ? (
                           <div style={{ position: "relative", width: 50, height: 50, borderRadius: 5, overflow: "hidden", border: `1px solid ${T.redM}` }}>
-                            <img src={issuePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+                            <img src={cld(issuePhoto, "thumb")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
                             <button onClick={() => setIssuePhoto("")}
                               style={{ position: "absolute", top: 1, right: 1, width: 16, height: 16, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "white", border: "none", fontSize: 9, cursor: "pointer", lineHeight: 1, padding: 0 }}>×</button>
                           </div>
@@ -596,7 +597,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                             </div>
                             <div style={{ fontSize: 11.5, color: T.t1, marginBottom: 4 }}>{iss.note}</div>
                             {iss.photo_url && (
-                              <img src={iss.photo_url} alt="" onClick={() => window.open(iss.photo_url, "_blank")}
+                              <img src={cld(iss.photo_url, "thumb")} alt="" onClick={() => window.open(iss.photo_url, "_blank")}
                                 onError={e => { e.target.style.display = "none"; }}
                                 style={{ display: "block", width: 80, height: 80, objectFit: "cover", borderRadius: 5, border: `1px solid ${resolved ? T.b1 : T.redM}`, marginBottom: 4, cursor: "zoom-in" }}/>
                             )}
@@ -743,7 +744,7 @@ function Section({ color, bg, icon, title, rows = [], empty = false, emptyText =
       {photos.length > 0 && (
         <div style={{ paddingLeft: 29, marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
           {photos.map((url, i) => (
-            <img key={i} src={url} alt="" onClick={() => setZoom(url)}
+            <img key={i} src={cld(url, "thumb")} alt="" onClick={() => setZoom(url)}
               onError={e => { e.target.style.display = "none"; }}
               style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, cursor: "zoom-in" }}/>
           ))}
@@ -752,7 +753,7 @@ function Section({ color, bg, icon, title, rows = [], empty = false, emptyText =
       {zoom && (
         <div 
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
-          <img src={zoom} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}/>
+          <img src={cld(zoom, "view")} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}/>
         </div>
       )}
     </div>

@@ -11,6 +11,7 @@ import ReceivingContacts, { hasReceivingContact } from "../components/ReceivingC
 import { t, Rich } from "../i18n";
 import { isoDate } from "../utils/today";
 import { BackClose } from "../utils/backNav";
+import { cld } from "../utils/cloudinary";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -432,7 +433,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
 
               {/* Photo if available */}
               {f.photo_url&&(
-                <img src={f.photo_url} alt="site" style={{width:"100%",height:180,objectFit:"cover",display:"block"}}
+                <img src={cld(f.photo_url, "card")} alt="site" style={{width:"100%",height:180,objectFit:"cover",display:"block"}}
                   onError={e=>{e.target.style.display="none";}}/>
               )}
 
@@ -1293,7 +1294,7 @@ function PhotoStrip({ photos, accent = "#2563EB" }) {
           📷 {list.length} photo{list.length>1?"s":""}
         </span>
         {list.map((url,i)=>(
-          <img key={i} src={url} alt="" onClick={()=>setZoom(url)}
+          <img key={i} src={cld(url, "thumb")} alt="" onClick={()=>setZoom(url)}
             onError={e=>{e.target.style.display="none";}}
             style={{width:42,height:42,objectFit:"cover",borderRadius:5,border:"1px solid "+T.b1,cursor:"zoom-in"}}/>
         ))}
@@ -1301,7 +1302,7 @@ function PhotoStrip({ photos, accent = "#2563EB" }) {
       {zoom && (
         <div 
           style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:2500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
-          <img src={zoom} alt="" style={{maxWidth:"92vw",maxHeight:"92vh",borderRadius:8,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}/>
+          <img src={cld(zoom, "view")} alt="" style={{maxWidth:"92vw",maxHeight:"92vh",borderRadius:8,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}/>
         </div>
       )}
     </>
@@ -4016,7 +4017,7 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
     {fullPhoto&&(
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
-        <img src={fullPhoto} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
+        <img src={cld(fullPhoto, "view")} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
         <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
@@ -4083,7 +4084,7 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
               {/* Photo + Assigned + Category + Chat + Date */}
               <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center",marginBottom:issue.photo_url?8:0}}>
                 {issue.photo_url&&(
-                  <img src={issue.photo_url} alt="issue"
+                  <img src={cld(issue.photo_url, "thumb")} alt="issue"
                     onClick={()=>setFullPhoto(issue.photo_url)}
                     style={{width:44,height:44,borderRadius:6,objectFit:"cover",border:"1px solid #E2E8F0",cursor:"zoom-in",flexShrink:0}}/>
                 )}

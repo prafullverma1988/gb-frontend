@@ -7,6 +7,7 @@ import uploadManager from "../../utils/uploadManager";
 import { fileInputProps } from "../../utils/photoPolicy";
 import { T } from "../../modules/shared/tokens";
 import { t } from "../../i18n";
+import { cld } from "../../utils/cloudinary";
 
 export default function GrnPhotoBox({ photos, setPhotos, required, cameraOnly, folder = "gb_buildcon/grn" }) {
   const list = Array.isArray(photos) ? photos : [];
@@ -24,7 +25,7 @@ export default function GrnPhotoBox({ photos, setPhotos, required, cameraOnly, f
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {list.map((url, idx) => (
           <div key={idx} style={{ position: "relative", width: 64, height: 64, borderRadius: 7, overflow: "hidden", border: "1px solid " + T.b1, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
-            <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <img src={cld(url, "thumb")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             <button type="button" onClick={() => setPhotos(p => p.filter((_, i) => i !== idx))}
               style={{ position: "absolute", top: 3, right: 3, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.65)", color: "white", border: "none", fontSize: 10, cursor: "pointer", lineHeight: 1, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
           </div>

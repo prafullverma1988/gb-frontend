@@ -9,6 +9,7 @@ import RevisionNoteModal from "../components/RevisionNoteModal";
 import { canApproveAction } from "../utils/approvalAuthority";
 import { t } from "../i18n";
 import { companyName } from "../utils/companyName";
+import { cld } from "../utils/cloudinary";
 
 // Drawing ka status badalna = approval ka faisla. Server ise
 // requireRole(admin/super_admin/manager/project_manager) + requirePerm("Design","edit")
@@ -748,7 +749,7 @@ export default function DesignModule() {
                         const isImg = /\.(jpe?g|png|gif|webp|svg)(\?|$)/i.test(url);
                         return isImg ? (
                           <a key={i} href={url} target="_blank" rel="noreferrer"
-                            style={{display:"block",width:60,height:60,borderRadius:5,background:`url(${url}) center/cover`,border:`1px solid ${T.b1}`,cursor:"pointer"}}/>
+                            style={{display:"block",width:60,height:60,borderRadius:5,background:`url(${cld(url, "thumb")}) center/cover`,border:`1px solid ${T.b1}`,cursor:"pointer"}}/>
                         ) : (
                           <a key={i} href={url} target="_blank" rel="noreferrer"
                             style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 9px",borderRadius:5,background:T.surface,border:`1px solid ${T.b1}`,color:T.blu,fontSize:11,textDecoration:"none"}}>{t("design.attachment_i", { i: i+1 })}</a>

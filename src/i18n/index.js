@@ -12,15 +12,25 @@
 //   2. Bundle. Mobile app OTA se update hota hai; ek 40KB library sirf
 //      isliye kheenchna ki t() mil jaye, mehnga sauda hai.
 //
-// Sirf DEFAULT pack bundle me jaata hai. hi/en dynamic import() se aate
-// hain — jo user Hinglish par hai (matlab zyadatar) wo unka code kabhi
-// download hi nahi karta.
+// PERF-04 — entry chunk (main.js) me poora pack NAHI jaata. Pehle default
+// (Hinglish) pack ~600 KB static tha: login dikhne se pehle har user ko, aur
+// Hindi/English wale ko uske upar apna pack bhi (2 MB raw). Ab:
+//   • core/*.js — sirf wo ~250 key jo entry-chunk ka code (shell, dashboard,
+//     login) maangta hai. hi-Latn ka core static hai, hi/en ka core dynamic.
+//     GENERATED hai: node scripts/i18n/core.js --write (gb-backend), gate check karta hai.
+//   • poora pack (hi-Latn.js / hi.js / en.js) alag chunk hai. loadFullPack()
+//     usse laata hai — index.js first render ke baad idle me bulata hai, aur
+//     App.js har lazy module ko import karne se PEHLE isi ka intezaar karta hai
+//     (module-level t() bhi poori pack dekhe). Isliye lazy module me kabhi
+//     key ka naam nahi dikhta.
+// Ye file gb-frontend ke liye hai — sanchalan-app ki i18n/index.js ye badlav
+// nahi lehti (app ka entry chunk local/OTA hai, network ka sawaal nahi).
 //
 // Missing key kabhi crash nahi karti: hi-Latn par girti hai, phir key khud
 // dikh jaati hai. Adhoora translation blank screen se behtar hai.
 // ════════════════════════════════════════════════════════════════
 import { useSyncExternalStore, createElement, Fragment } from "react";
-import hiLatn from "./hi-Latn";
+import hiLatnCore from "./core/hi-Latn";
 
 export const LANGS = [
   { code: "hi-Latn", label: "Hinglish" },
@@ -30,12 +40,19 @@ export const LANGS = [
 export const DEFAULT_LANG = "hi-Latn";
 const STORE_KEY = "gb_lang";
 
-// Default pack static hai — baaki do lazy.
-const PACKS = { "hi-Latn": hiLatn };
-const LOADERS = {
+// t() yahin dekhta hai: pehle core, poora pack aate hi uski jagah poora.
+const PACKS = { "hi-Latn": hiLatnCore };
+const CORE_LOADERS = {
+  "hi": () => import("./core/hi"),
+  "en": () => import("./core/en"),
+};
+const FULL_LOADERS = {
+  "hi-Latn": () => import("./hi-Latn"),
   "hi": () => import("./hi"),
   "en": () => import("./en"),
 };
+const FULL = {};     // code → true jab poora pack PACKS me aa gaya
+const FULL_P = {};   // code → Promise (ek bhi pack do baar nahi khinchta)
 
 let current = DEFAULT_LANG;
 const listeners = new Set();
@@ -81,28 +98,57 @@ export function t(key, params) {
   const hit = PACKS[current] && PACKS[current][key];
   if (hit != null) return interpolate(hit, params);
 
-  const fallback = hiLatn[key];
+  const fallback = PACKS[DEFAULT_LANG] && PACKS[DEFAULT_LANG][key];
   if (fallback != null) return interpolate(fallback, params);
 
-  if (process.env.NODE_ENV !== "production") {
+  // Hindi/English user ki key uske pack me na mile (teeno pack ka parity gate
+  // rokta hai, phir bhi) → Hinglish poora pack peeche se bula lo; aane par
+  // components dobara ban jaate hain. Tab tak key hi dikhegi.
+  if (current !== DEFAULT_LANG && FULL[current] && !FULL_P[DEFAULT_LANG]) loadFull(DEFAULT_LANG).catch(() => {});
+
+  if (process.env.NODE_ENV !== "production" && FULL[current]) {
     console.warn(`[i18n] missing key: ${key} (lang=${current})`);
   }
   return key;
 }
 
-async function loadPack(code) {
+// Sirf core (hi/en ke liye) — initI18n render se pehle isi ka intezaar karta hai.
+async function loadCore(code) {
   if (PACKS[code]) return;
-  const loader = LOADERS[code];
+  const loader = CORE_LOADERS[code];
   if (!loader) return;
   try {
     const mod = await loader();
-    PACKS[code] = mod.default || mod;
+    if (!PACKS[code]) PACKS[code] = mod.default || mod;
   } catch (err) {
     // Pack load fail (offline, stale chunk) → chupchaap default par raho.
     // User ko Hinglish dikhega, jo blank screen se behtar hai.
     console.warn("[i18n] pack load failed:", code, err && err.message);
   }
 }
+
+// Poora pack (ek baar). Fail ho to REJECT — lazy module ka load bhi fail ho
+// (retry ho sake), warna module adhoore pack ke saath key ke naam dikhata.
+function loadFull(code) {
+  if (FULL_P[code]) return FULL_P[code];
+  const loader = FULL_LOADERS[code];
+  if (!loader) return Promise.resolve();
+  FULL_P[code] = loader().then((mod) => {
+    PACKS[code] = mod.default || mod;
+    FULL[code] = true;
+    if (code === current) listeners.forEach((fn) => fn());
+  }).catch((err) => {
+    delete FULL_P[code];
+    console.warn("[i18n] full pack load failed:", code, err && err.message);
+    throw err;
+  });
+  return FULL_P[code];
+}
+
+// Abhi ki bhasha ka poora pack. index.js first render ke baad bulata hai;
+// App.js lazy module import karne se pehle await karta hai.
+export function loadFullPack() { return loadFull(current); }
+export function isFullPackLoaded() { return !!FULL[current]; }
 
 // Language badlo.
 //
@@ -118,7 +164,8 @@ async function loadPack(code) {
 export async function setLang(code, { reload = true } = {}) {
   const next = normalizeLang(code);
   if (next === current) return next;
-  await loadPack(next);
+  // reload par naya page apna core khud laayega; bina reload ke poora pack chahiye.
+  if (reload) await loadCore(next); else await loadFull(next).catch(() => {});
   if (!PACKS[next]) return current;      // load fail — jahan the wahin raho
   current = next;
   applyHtmlLang(next);
@@ -134,7 +181,7 @@ export async function initI18n(preferred) {
   let saved = null;
   try { saved = localStorage.getItem(STORE_KEY); } catch (_) {}
   const want = normalizeLang(preferred || saved);
-  if (want !== DEFAULT_LANG) await loadPack(want);
+  if (want !== DEFAULT_LANG) await loadCore(want);
   current = PACKS[want] ? want : DEFAULT_LANG;
   applyHtmlLang(current);
   return current;

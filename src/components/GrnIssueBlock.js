@@ -16,6 +16,7 @@
 import React, { useState } from "react";
 import uploadManager from "../utils/uploadManager";
 import { t } from "../i18n";
+import { cld } from "../utils/cloudinary";
 
 const T = {
   surface: "#FFFFFF",
@@ -109,7 +110,7 @@ export default function GrnIssueBlock({ value, onChange, compact = false, title 
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
             {photo ? (
               <div style={{ position: "relative", width: 44, height: 44, borderRadius: 6, overflow: "hidden", border: `1px solid ${T.b1}`, flexShrink: 0 }}>
-                <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <img src={cld(photo, "thumb")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 <button type="button" onClick={() => setPhoto("")}
                   style={{ position: "absolute", top: 1, right: 1, width: 15, height: 15, borderRadius: "50%", background: "rgba(0,0,0,.65)", color: "white", border: "none", fontSize: 9, cursor: "pointer", lineHeight: 1, padding: 0 }}>×</button>
               </div>

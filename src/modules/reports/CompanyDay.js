@@ -4,6 +4,7 @@ import { T } from "../shared/tokens";
 import { Pill } from "../shared/ui";
 import { t, getLang } from "../../i18n";
 import { todayISO, isoDate } from "../../utils/today";
+import { cld } from "../../utils/cloudinary";
 
 // ── Company ka din ──────────────────────────────────────────────
 // Ek tareekh, poori company. Project ki DPR ek site ka sach hai; ye uska
@@ -168,7 +169,7 @@ function SiteDetail({ line }) {
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
           {photos.slice(0, 12).map((p, i) => (
             <a key={i} href={p.url} target="_blank" rel="noreferrer">
-              <img src={p.url} alt="" style={{ width: 62, height: 62, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}` }} />
+              <img src={cld(p.url, "thumb")} alt="" style={{ width: 62, height: 62, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}` }} />
             </a>
           ))}
           {photos.length > 12 && <span style={{ fontSize: 11, color: T.t3, alignSelf: "center" }}>+{photos.length - 12}</span>}

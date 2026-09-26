@@ -11,6 +11,7 @@ import KalKaPlanModal from "./KalKaPlanModal";
 import { T } from "../shared/tokens";
 import { t, Rich } from "../../i18n";
 import { isoDate, todayISO } from "../../utils/today";
+import { cld } from "../../utils/cloudinary";
 
 // Tasks ka CSV/Excel import — common sudhaar screen (components/ImportFileModal),
 // jaanch server par (POST /tasks/import/rows). Column NAAM se pehchane jaate hain,
@@ -3344,7 +3345,7 @@ function TaskIssueDrawer({issues, loading, filter, setFilter, onClose, onStatusC
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     {fullPhoto&&(
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
-        <img src={fullPhoto} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
+        <img src={cld(fullPhoto, "view")} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
         <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
@@ -3404,7 +3405,7 @@ function TaskIssueDrawer({issues, loading, filter, setFilter, onClose, onStatusC
                   {/* Photo + assigned + category */}
                   <div style={{display:"flex",gap:7,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
                     {issue.photo_url&&(
-                      <img src={issue.photo_url} alt="issue" onClick={()=>setFullPhoto(issue.photo_url)}
+                      <img src={cld(issue.photo_url, "thumb")} alt="issue" onClick={()=>setFullPhoto(issue.photo_url)}
                         style={{width:44,height:44,borderRadius:6,objectFit:"cover",border:"1px solid #E2E8F0",cursor:"zoom-in",flexShrink:0}}/>
                     )}
                     <div style={{flex:1,display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
@@ -3897,7 +3898,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
     {/* Full photo viewer */}
     {fullPhoto&&(
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
-        <img src={fullPhoto.photo_url} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
+        <img src={cld(fullPhoto.photo_url, "view")} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
         {(fullPhoto.lat||fullPhoto.lng)&&<div style={{position:"absolute",bottom:20,left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,.7)",borderRadius:20,padding:"6px 14px",color:"white",fontSize:11,display:"flex",alignItems:"center",gap:6}}>
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
           {Number(fullPhoto.lat).toFixed(6)}, {Number(fullPhoto.lng).toFixed(6)}
@@ -4425,7 +4426,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               {photos.map(p=>(
                 <div key={p.id} style={{borderRadius:12,overflow:"hidden",border:"1px solid #E2E8F0",background:"white",cursor:"zoom-in"}} onClick={()=>setFullPhoto(p)}>
                   <div style={{position:"relative"}}>
-                    <img src={p.photo_url} alt="site" style={{width:"100%",height:130,objectFit:"cover",display:"block"}}/>
+                    <img src={cld(p.photo_url, "tile")} alt="site" style={{width:"100%",height:130,objectFit:"cover",display:"block"}}/>
                     {(p.lat||p.lng)&&<div style={{position:"absolute",bottom:5,left:5,background:"rgba(0,0,0,.6)",borderRadius:10,padding:"2px 8px",display:"flex",alignItems:"center",gap:3}}>
                       <svg width={8} height={8} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
                       <span style={{fontSize:8,color:"white",fontWeight:600}}>GPS</span>
@@ -4503,7 +4504,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   setIssueUploading(false);e.target.value="";
                 }}/>
               </label>
-              {issueForm.photo_url&&<img src={issueForm.photo_url} style={{width:"100%",borderRadius:8,marginBottom:12,maxHeight:160,objectFit:"cover"}}/>}
+              {issueForm.photo_url&&<img src={cld(issueForm.photo_url, "tile")} style={{width:"100%",borderRadius:8,marginBottom:12,maxHeight:160,objectFit:"cover"}}/>}
               <button onClick={async()=>{
                 if(!issueForm.title.trim()) return alert(t("design.title_required"));
                 const res=await api.post("/tasks/"+task.id+"/issues",issueForm);
@@ -4540,7 +4541,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                       )}
                     </div>
                     <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
-                      {issue.photo_url&&!isExp&&<img src={issue.photo_url} style={{width:38,height:38,borderRadius:6,objectFit:"cover",border:"1px solid #E2E8F0"}} onClick={e=>{e.stopPropagation();setFullPhoto({photo_url:issue.photo_url,created_at:issue.created_at});}}/>}
+                      {issue.photo_url&&!isExp&&<img src={cld(issue.photo_url, "thumb")} style={{width:38,height:38,borderRadius:6,objectFit:"cover",border:"1px solid #E2E8F0"}} onClick={e=>{e.stopPropagation();setFullPhoto({photo_url:issue.photo_url,created_at:issue.created_at});}}/>}
                       <span style={{background:pc.bg,color:pc.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{issue.priority}</span>
                       <span style={{background:ic.bg,color:ic.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{issue.status}</span>
                       <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d={isExp?"M18 15l-6-6-6 6":"M6 9l6 6 6-6"}/></svg>
@@ -4556,7 +4557,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                         {issue.work_category&&<span style={{fontSize:11,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"3px 9px",fontWeight:600}}>🔧 {issue.work_category}</span>}
                       </div>
                     )}
-                    {issue.photo_url&&<img src={issue.photo_url} style={{width:"100%",borderRadius:8,marginBottom:10,cursor:"zoom-in",maxHeight:180,objectFit:"cover"}} onClick={()=>setFullPhoto({photo_url:issue.photo_url})}/>}
+                    {issue.photo_url&&<img src={cld(issue.photo_url, "card")} style={{width:"100%",borderRadius:8,marginBottom:10,cursor:"zoom-in",maxHeight:180,objectFit:"cover"}} onClick={()=>setFullPhoto({photo_url:issue.photo_url})}/>}
                     <TaskIssueChat issueId={issue.id}/>
                     <div style={{marginBottom:9}}>
                       <div style={{fontSize:10,fontWeight:600,color:"#94A3B8",marginBottom:6,textTransform:"uppercase",letterSpacing:".4px"}}>{t("tasks.change_status")}</div>

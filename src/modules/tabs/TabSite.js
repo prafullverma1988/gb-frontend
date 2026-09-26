@@ -6,6 +6,7 @@ import DinKaByoraModal from "./DinKaByoraModal";
 import { canApproveAction } from "../../utils/approvalAuthority";
 import { t, getLang } from "../../i18n";
 import { todayISO, isoDate } from "../../utils/today";
+import { cld } from "../../utils/cloudinary";
 
 // DPR approve server par PATCH /dpr/:id/approve hai —
 // requirePerm(["Site / DPR","Projects"], "approve", {strict:true}). Yahan
@@ -489,7 +490,7 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
                 <div style={{ padding: "10px 14px", display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {a.photos.items.filter(p => p.src === "equipment").map((p, i) => (
                     <a key={i} href={p.url} target="_blank" rel="noreferrer" title={p.caption || ""}>
-                      <img src={p.url} alt="" loading="lazy"
+                      <img src={cld(p.url, "thumb")} alt="" loading="lazy"
                         style={{ width: 104, height: 78, objectFit: "cover", borderRadius: 7, border: `1px solid ${T.b1}` }} />
                     </a>
                   ))}
@@ -557,7 +558,7 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
             {photos.length === 0 && <div style={{ gridColumn: "1/-1", padding: "24px", textAlign: "center", color: T.t4, fontSize: 12.5, ...card }}>{t("site.is_dpr_me_photos_nahi_hain")}</div>}
             {photos.map((p, i) => (
               <a key={i} href={p.url} target="_blank" rel="noreferrer" style={{ display: "block", borderRadius: 9, overflow: "hidden", border: `1px solid ${T.b1}`, background: T.surfaceB }}>
-                <img src={p.url} alt={p.task || `Site photo ${i + 1}`} loading="lazy" style={{ width: "100%", height: 130, objectFit: "cover", display: "block" }} />
+                <img src={cld(p.url, "tile")} alt={p.task || `Site photo ${i + 1}`} loading="lazy" style={{ width: "100%", height: 130, objectFit: "cover", display: "block" }} />
                 {(p.task || p.caption) && (
                   <div style={{ padding: "5px 8px", fontSize: 10.5, color: T.t3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {p.task || p.caption}

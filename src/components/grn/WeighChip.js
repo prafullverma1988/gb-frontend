@@ -7,6 +7,7 @@ import React, { useState } from "react";
 import { T } from "../../modules/shared/tokens";
 import { t } from "../../i18n";
 import { fmtKg, kgIn, kgPerUnit } from "./weigh";
+import { cld } from "../../utils/cloudinary";
 
 export default function WeighChip({ hit, unit, onUseNet }) {
   const [open, setOpen] = useState(false);
@@ -75,7 +76,7 @@ export default function WeighChip({ hit, unit, onUseNet }) {
               {photos.map(([u, lbl]) => (
                 <a key={u} href={u} target="_blank" rel="noreferrer" title={lbl}
                   style={{ display: "block", width: 46, height: 46, borderRadius: 6, overflow: "hidden", border: "1px solid " + T.b1 }}>
-                  <img src={u} alt={lbl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <img src={cld(u, "thumb")} alt={lbl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 </a>
               ))}
             </div>

@@ -13,6 +13,7 @@ import { loadPhotoPolicy, policyFor } from "../../utils/photoPolicy";
 import { T, fmtN, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, Panel, THead } from "../shared/ui";
 import { t } from "../../i18n";
+import { cld } from "../../utils/cloudinary";
 
 // Dual-unit billing toggle ab components/grn/DualUnitToggle.js me hai —
 // site aur godown dono ke GRN me wahi switch chalta hai.
@@ -738,7 +739,7 @@ function TabMaterial({ project }) {
                 <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
                   {(form.photos||[]).map((url,idx)=>(
                     <div key={idx} style={{position:"relative",width:60,height:60,borderRadius:7,overflow:"hidden",border:`1px solid ${T.b1}`}}>
-                      <img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                      <img src={cld(url, "thumb")} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                       <button onClick={()=>setForm(p=>({...p,photos:(p.photos||[]).filter((_,i)=>i!==idx)}))}
                         style={{position:"absolute",top:2,right:2,width:16,height:16,borderRadius:"50%",background:"rgba(0,0,0,0.65)",color:"white",border:"none",fontSize:10,cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
                     </div>

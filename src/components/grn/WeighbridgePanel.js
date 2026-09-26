@@ -27,6 +27,7 @@ import { T } from "../../modules/shared/tokens";
 import { t } from "../../i18n";
 import { challanUnits, fmtKg, kgIn, loadWeighments } from "./weigh";
 import { loadOrderedLines, loadPoLines } from "./grnData";
+import { cld } from "../../utils/cloudinary";
 
 const inp = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1.5px solid " + T.b1, fontSize: 12.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
 const lbl = { fontSize: 9.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginBottom: 3 };
@@ -64,7 +65,7 @@ function PhotoPick({ label, url, onUrl, onRead, reading }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         {url ? (
           <div style={{ position: "relative", width: 54, height: 54, borderRadius: 7, overflow: "hidden", border: "1px solid " + T.b1, flexShrink: 0 }}>
-            <a href={url} target="_blank" rel="noreferrer"><img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /></a>
+            <a href={url} target="_blank" rel="noreferrer"><img src={cld(url, "thumb")} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /></a>
             <button type="button" onClick={() => onUrl("")}
               style={{ position: "absolute", top: 2, right: 2, width: 16, height: 16, borderRadius: "50%", background: "rgba(0,0,0,.65)", color: "#fff", border: "none", fontSize: 10, cursor: "pointer", lineHeight: 1, padding: 0 }}>×</button>
           </div>
@@ -103,7 +104,7 @@ const Thumbs = ({ list }) => {
       {ph.map(([u, cap]) => (
         <a key={u} href={u} target="_blank" rel="noreferrer" title={cap}
           style={{ display: "block", width: 46, height: 46, borderRadius: 6, overflow: "hidden", border: "1px solid " + T.b1 }}>
-          <img src={u} alt={cap} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <img src={cld(u, "thumb")} alt={cap} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </a>
       ))}
     </div>

@@ -11,22 +11,27 @@ import { PromptProvider } from "./components/PromptDialog";
 import NotificationBell from "./components/NotificationBell";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import SahayakFab from "./components/SahayakFab";
-import { t } from "./i18n";
+import { t, loadFullPack } from "./i18n";
+import { visiblePoll } from "./utils/poll";
 
 // ── LAZY + PRELOAD: shared promise so prefetch & React.lazy use same cache ──
 // When preload() resolves, React.lazy gets already-resolved promise = NO spinner
 const _cache = {};
-function lazyWithPreload(key, fn) {
-  const load = () => { if (!_cache[key]) _cache[key] = fn(); return _cache[key]; };
+function lazyWithPreload(key, fn, needsPack = true) {
+  // PERF-04: module ka JS chalne se PEHLE poora i18n pack aa chuka ho (entry me
+  // sirf core hai) — module-level t() bhi poori pack dekhe. Pack aa chuka ho to
+  // ye turant resolve hota hai, koi extra intezaar nahi.
+  const load = () => { if (!_cache[key]) _cache[key] = needsPack ? loadFullPack().then(() => fn()) : fn(); return _cache[key]; };
   const Comp = lazy(load);
   Comp.preload = load;
+  Comp.cacheKey = key;   // safePreload fail par yahi slot khaali karta hai
   return Comp;
 }
 
 // EChart pehle static import tha → poora echarts (~450KB) main bundle me
 // ghus kar first paint slow karta tha. Ab lazy: dashboard render hote hi
 // chunk fetch hota hai; tab tak same-height khali box (no layout jump).
-const EChartInner = lazyWithPreload("echart", () => import("./components/EChart"));
+const EChartInner = lazyWithPreload("echart", () => import("./components/EChart"), false);   // chart me koi text nahi — pack ka intezaar nahi
 const EChart = (props) => (
   <Suspense fallback={<div style={{ height: props.height || 160 }} />}>
     <EChartInner {...props} />
@@ -71,43 +76,72 @@ function safePreload(label, comp) {
     if (p && typeof p.catch === "function") {
       p.catch((err) => {
         console.warn(`[preload] ${label} failed (will retry on demand):`, err?.message);
-        // Best-effort cache eviction — _cache key === label by convention.
-        try { if (_cache[label]) delete _cache[label]; } catch (_) {}
+        // Best-effort cache eviction — slot ka naam lazyWithPreload ki key hai
+        // (label alag hota hai, isliye pehle ye kabhi khaali hi nahi hota tha).
+        try { const k = comp.cacheKey || label; if (_cache[k]) delete _cache[k]; } catch (_) {}
       });
     }
+    return p;
   } catch (err) {
     console.warn(`[preload] ${label} threw:`, err?.message);
   }
 }
 
-function prefetchAllModules(){
-  // Wave 1 — heavy/frequent modules (1s after dashboard)
-  setTimeout(()=>{
-    safePreload("ProjectsPage",     ProjectsPage);
-    safePreload("ProjectDetailPage",ProjectDetailPage);
-    safePreload("FinanceModule",    FinanceModule);
-    safePreload("ProcurementModule",ProcurementModule);
-  }, 800);
-  // Wave 2 — remaining modules (2s after dashboard)
-  setTimeout(()=>{
-    safePreload("DesignModule",        DesignModule);
-    safePreload("CRMModule",           CRMModule);
-    safePreload("SettingsModule",      SettingsModule);
-    safePreload("PayrollModule",       PayrollModule);
-    safePreload("TeamScheduleModule",  TeamScheduleModule);
-    safePreload("MOMModule",           MOMModule);
-    safePreload("MasterLibraryModule", MasterLibraryModule);
-    safePreload("WarehouseModule",     WarehouseModule);
-    safePreload("FuelModule",          FuelModule);
-    safePreload("MachineryModule",     MachineryModule);
-    safePreload("AssetsModule",        AssetsModule);
-    safePreload("RMCModule",           RMCModule);
-    safePreload("MapLibraryModule",    MapLibraryModule);
-    safePreload("TownshipCRMModule",   TownshipCRMModule);
-    safePreload("ReportsModule",       ReportsModule);
-    safePreload("SaaSModule",          SaaSModule);
-    safePreload("SaaSLeadsModule",     SaaSLeadsModule);
-  }, 2000);
+// Pehle: login ke 800 ms / 2 s baad SAARE 20 module ek saath import() hote the —
+// har user ke liye, role aur enabled-modules dekhe bina (SaaS panel bhi tenant
+// user ko) — 1-2 s tak tab atka rehta tha aur ~1.4 MB (gzip) data jaata tha.
+// Ab (PERF-05): sirf wahi module jo Sidebar me is user ko dikhte hain
+// (navAllowed), browser ke khaali waqt (requestIdleCallback) me ek-ek karke,
+// aur Data Saver / 2G par bilkul nahi (3G par sirf Projects). Jo module abhi
+// tak nahi aaya, wo click par pehle jaisa hi on-demand khulta hai.
+const PREFETCH_LIST = [
+  // [nav id, component, label] — jaldi kaam aane wale pehle
+  ["projects",    ProjectsPage,      "ProjectsPage"],
+  ["projects",    ProjectDetailPage, "ProjectDetailPage"],
+  ["finance",     FinanceModule,     "FinanceModule"],
+  ["procurement", ProcurementModule, "ProcurementModule"],
+  ["design",      DesignModule,      "DesignModule"],
+  ["crm",         CRMModule,         "CRMModule"],
+  ["settings",    SettingsModule,    "SettingsModule"],
+  ["payroll",     PayrollModule,     "PayrollModule"],
+  ["team",        TeamScheduleModule,"TeamScheduleModule"],
+  ["mom",         MOMModule,         "MOMModule"],
+  ["library",     MasterLibraryModule,"MasterLibraryModule"],
+  ["warehouse",   WarehouseModule,   "WarehouseModule"],
+  ["fuel",        FuelModule,        "FuelModule"],
+  ["machinery",   MachineryModule,   "MachineryModule"],
+  ["assets",      AssetsModule,      "AssetsModule"],
+  ["rmc",         RMCModule,         "RMCModule"],
+  ["mapping",     MapLibraryModule,  "MapLibraryModule"],
+  ["township",    TownshipCRMModule, "TownshipCRMModule"],
+  ["reports",     ReportsModule,     "ReportsModule"],
+  ["saas",        SaaSModule,        "SaaSModule"],
+  ["saas-leads",  SaaSLeadsModule,   "SaaSLeadsModule"],
+];
+
+// Kaun se module prefetch honge — pure function (test: tests/WP31).
+function prefetchPlan(user, enabledModules, conn){
+  const c = conn || {};
+  if(c.saveData || /(^|-)2g$/.test(c.effectiveType||"")) return [];
+  const list = PREFETCH_LIST.filter(([id])=>navAllowed(id,user,enabledModules));
+  return c.effectiveType==="3g" ? list.filter(([id])=>id==="projects") : list;
+}
+
+// Cleanup function lautata hai (login/company badalne par pichhla queue band).
+function prefetchModules(user, enabledModules){
+  const queue = prefetchPlan(user, enabledModules, typeof navigator!=="undefined" ? navigator.connection : null);
+  let dead = false, timer = null;
+  const idle = (fn)=> (typeof window!=="undefined" && typeof window.requestIdleCallback==="function")
+    ? window.requestIdleCallback(fn, {timeout:5000})
+    : setTimeout(fn, 300);
+  const next = ()=>{
+    if(dead || !queue.length) return;
+    const [, comp, label] = queue.shift();
+    // Ek module ka chunk aa kar chal chuke, tab agla — download aur execute jama nahi hote.
+    Promise.resolve(safePreload(label, comp)).catch(()=>{}).then(()=>{ if(!dead) idle(next); });
+  };
+  timer = setTimeout(()=>idle(next), 800);
+  return ()=>{ dead = true; clearTimeout(timer); };
 }
 
 // ── ICONS ─────────────────────────────────────────────────────────────
@@ -230,6 +264,46 @@ const NAV_GROUPS=[
 
 // Modules that are always ON — cannot be toggled off
 const ALWAYS_ON = ["dashboard","projects","finance","procurement","reports","library","settings"];
+
+// ── NAV VISIBILITY (Sidebar + prefetch ek hi niyam) ─────────────────────
+// Pehle ye Sidebar ke andar tha; ab prefetchModules() bhi yahi poochta hai,
+// taaki jo module user ko sidebar me dikhta hi nahi uska JS background me
+// download na ho (PERF-05).
+const MODULE_MAP_NAV={
+  dashboard:"Dashboard",projects:"Projects",design:"Design",
+  finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
+  reports:"Reports",library:"Library",settings:"Settings",
+  crm:"CRM",mom:"MOM",payroll:"Team & HR",team:"Team & HR",
+  township:"Township CRM",tenders:"Tenders",
+  // Iske bina machinery kisi bhi non-admin ko dikh hi nahi sakti (isVisible
+  // ALWAYS_ON par gir jaata hai) — jabki kaagaz-expiry ki bell accountant ko
+  // jaati hai aur uska link /machinery hai. Yahan hone se ye grantable ho jata hai.
+  fuel:"Fuel",machinery:"Machinery",assets:"Assets",mapping:"Mapping",rmc:"RMC"
+};
+function navAllowed(id,user,enabledModules){
+  if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
+  // Company-level module toggle FIRST. This is a SaaS entitlement — what the
+  // company has actually bought — not a role permission, so a company admin
+  // must not bypass it. It used to sit below the admin short-circuit, which
+  // meant a module switched OFF in SaaS Admin still showed (and opened) for
+  // every admin of that tenant.
+  if(enabledModules && enabledModules[id]===false) return false;
+  // Admins see every module the company DOES have.
+  if(["admin","super_admin"].includes(user?.role)) return true;
+  // Role-based permission check from DB (Settings → Roles & Access)
+  const perms = user?.module_permissions;
+  const modName = MODULE_MAP_NAV[id];
+  if(perms && modName){
+    // Only gate modules actually configured in the matrix. A module with NO
+    // row (not added to Settings yet) stays VISIBLE by default — unconfigured
+    // is NOT blocked. An explicit row with view=0 still hides it.
+    if(perms[modName] !== undefined) return !!(perms[modName].view);
+    return true;
+  }
+  // Unmapped nav item → visible by default. Perms not loaded → ALWAYS_ON.
+  if(!modName) return true;
+  return ALWAYS_ON.includes(id);
+}
 
 // Primary tabs pinned to the mobile bottom bar
 const BOTTOM_TABS = [
@@ -792,42 +866,8 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     setCreating(false);
   };
 
-  // Filter nav items — disabled modules hidden from sidebar
-  const MODULE_MAP_NAV={
-    dashboard:"Dashboard",projects:"Projects",design:"Design",
-    finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
-    reports:"Reports",library:"Library",settings:"Settings",
-    crm:"CRM",mom:"MOM",payroll:"Team & HR",team:"Team & HR",
-    township:"Township CRM",tenders:"Tenders",
-    // Iske bina machinery kisi bhi non-admin ko dikh hi nahi sakti (isVisible
-    // ALWAYS_ON par gir jaata hai) — jabki kaagaz-expiry ki bell accountant ko
-    // jaati hai aur uska link /machinery hai. Yahan hone se ye grantable ho jata hai.
-    fuel:"Fuel",machinery:"Machinery",assets:"Assets",mapping:"Mapping",rmc:"RMC"
-  };
-  const isVisible=(id)=>{
-    if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
-    // Company-level module toggle FIRST. This is a SaaS entitlement — what the
-    // company has actually bought — not a role permission, so a company admin
-    // must not bypass it. It used to sit below the admin short-circuit, which
-    // meant a module switched OFF in SaaS Admin still showed (and opened) for
-    // every admin of that tenant.
-    if(enabledModules && enabledModules[id]===false) return false;
-    // Admins see every module the company DOES have.
-    if(["admin","super_admin"].includes(user?.role)) return true;
-    // Role-based permission check from DB (Settings → Roles & Access)
-    const perms = user?.module_permissions;
-    const modName = MODULE_MAP_NAV[id];
-    if(perms && modName){
-      // Only gate modules actually configured in the matrix. A module with NO
-      // row (not added to Settings yet) stays VISIBLE by default — unconfigured
-      // is NOT blocked. An explicit row with view=0 still hides it.
-      if(perms[modName] !== undefined) return !!(perms[modName].view);
-      return true;
-    }
-    // Unmapped nav item → visible by default. Perms not loaded → ALWAYS_ON.
-    if(!modName) return true;
-    return ALWAYS_ON.includes(id);
-  };
+  // Filter nav items — disabled modules hidden from sidebar (rule: navAllowed(), module level)
+  const isVisible=(id)=>navAllowed(id,user,enabledModules);
   const mobileHidden = isMobile && collapsed;
   const handleNav=(id)=>{setActive(id); if(isMobile) setCollapsed(true);};
   const showLabel=isMobile||!collapsed;
@@ -1929,10 +1969,11 @@ function App(){
   useEffect(()=>{ initDiag(); },[]);
   useEffect(()=>{ recordScreen(nav); },[nav]);
 
-  // Prefetch all modules in background after dashboard loads
+  // Prefetch: enabledModules aane ke baad, sirf allowed modules (PERF-05)
   useEffect(()=>{
-    if(loggedIn) prefetchAllModules();
-  },[loggedIn]);
+    if(!loggedIn || !enabledModules) return;
+    return prefetchModules(user, enabledModules);
+  },[loggedIn, enabledModules]);
 
   // Fetch module access config when logged in
   useEffect(()=>{
@@ -2028,24 +2069,34 @@ function App(){
     // Advisory Sahayak-stream count (onboarding nudges + insight digests) — now
     // out of the main bell, surfaced on the Sahayak nav badge instead. All
     // logged-in users (site staff simply get 0).
-    const refreshSahayakNotif=async()=>{
-      if(!loggedIn){ setSahayakNotifCount(0); return; }
-      try{
-        const r=await api.get("/notifications/count?scope=sahayak");
-        if(r&&r.success) setSahayakNotifCount(Number(r.count)||0);
-      }catch(_){}
-    };
-    const tick=()=>{ refreshPerms(); refreshTickets(); refreshSahayakNotif(); };
+    // (PERF-08) Ye ginti ab alag poll se nahi aati: NotificationBell ka
+    // /notifications/counts ek call me bell + Sahayak dono deta hai aur
+    // "sanchalan:notif-counts" event se yahan pahunchta hai (neeche wala effect).
+    if(!loggedIn) setSahayakNotifCount(0);
+    const tick=()=>{ refreshPerms(); refreshTickets(); };
     tick();
     // Page khulte hi approve-authority bhi taaza kar lo — Settings me
     // Approval Flow ke level badle to button turant sahi ho jaye.
     if(loggedIn) loadApprovalAuthority(true);
-    window.addEventListener("focus", tick);
     // 60s poll (same cadence as the mobile app) — an admin's permission
     // change or a subscription lapse lands without waiting for a refocus.
-    const pollId=setInterval(tick, 60_000);
-    return()=>{window.removeEventListener("focus", tick);clearInterval(pollId);};
+    // (PERF-08) visiblePoll: chhupe tab me band (raat bhar khula tab ab 0
+    // request), focus/wapas aane par turant, aur 10 min se kuch chhua na ho to
+    // 5 min ki cadence — kaam karte user ko wahi 60 s wali taazgi.
+    const stopPoll=visiblePoll(tick, 60_000, { idleAfter: 10*60_000, idleMs: 5*60_000 });
+    return()=>{ stopPoll(); };
   },[loggedIn,user?.role]);
+
+  // Bell ka /notifications/counts (30 s, sirf jab tab saamne ho) Sahayak badge
+  // ki ginti bhi laata hai — alag poll ki jagah (PERF-08).
+  useEffect(()=>{
+    const onCounts=(e)=>{
+      const n=Number(e&&e.detail&&e.detail.sahayak);
+      if(Number.isFinite(n)) setSahayakNotifCount(n);
+    };
+    window.addEventListener("sanchalan:notif-counts", onCounts);
+    return()=>window.removeEventListener("sanchalan:notif-counts", onCounts);
+  },[]);
 
   // ── Global keyboard shortcuts ────────────────────────────────────────
   useEffect(()=>{

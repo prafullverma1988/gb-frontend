@@ -17,6 +17,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { API_BASE, getToken } from "../config/api";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { cld } from "../utils/cloudinary";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -709,7 +710,7 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
             </label>
             {f.photo_url && (
               <>
-                <img src={f.photo_url} alt="slip" style={{ height: 38, width: 38, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}` }} />
+                <img src={cld(f.photo_url, "thumb")} alt="slip" style={{ height: 38, width: 38, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}` }} />
                 <button type="button" onClick={() => upd("photo_url", "")}
                   style={{ background: "none", border: "none", color: T.t4, cursor: "pointer", fontSize: 11.5, fontFamily: "inherit" }}>{t("fuel.hatayein")}</button>
               </>
@@ -1686,7 +1687,7 @@ function UnbilledTab({ onReload }) {
                     </span>
                     <span style={{ display: "flex", gap: 3 }}>
                       {(e.photos || []).slice(0, 3).map((u, i) => (
-                        <img key={i} src={u} alt="" onClick={() => setShot(u)}
+                        <img key={i} src={cld(u, "thumb")} alt="" onClick={() => setShot(u)}
                           style={{ width: 26, height: 26, objectFit: "cover", borderRadius: 4,
                             border: `1px solid ${T.b1}`, cursor: "pointer" }} />
                       ))}
@@ -1767,7 +1768,7 @@ function UnbilledTab({ onReload }) {
         <div onClick={() => setShot(null)}
           style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,.8)",
             display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
-          <img src={shot} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8 }} />
+          <img src={cld(shot, "view")} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8 }} />
         </div>
       )}
     </div>
