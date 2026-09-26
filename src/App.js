@@ -1796,6 +1796,9 @@ export default function AppGate(){
 function App(){
 
   const [user,setUser]=useState(()=>getUser());
+  // Hamesha taaza user — lambe chalne wale timer/effect isi ko padhein (PLT-04)
+  const userRef=useRef(user);
+  userRef.current=user;
   const [companies,setCompanies]=useState(()=>getCompanies());
   const [switching,setSwitching]=useState(false);
   const [nav,setNav]=useState("projects");
@@ -1938,10 +1941,19 @@ function App(){
       // Platform super_admin is not a tenant — never subject to subscription
       // enforcement. Every other logged-in user (incl. company admin) is
       // checked so a mid-session subscription lapse blocks them here.
-      if(!loggedIn||user?.role==="super_admin") return;
+      const asked=userRef.current;
+      if(!loggedIn||asked?.role==="super_admin") return;
       try{
         const res=await api.get("/auth/permissions");
         if(!res) return;
+        // Taaza user ref se, closure se nahi (PLT-04): ye effect sirf
+        // [loggedIn, role] par banta hai — same role wali company me switch ke
+        // baad closure ka `user` purani company ka rehta tha, aur har 60 s tick
+        // uska id/company_id sidebar + localStorage me wapas likh deta tha.
+        // Beech me switch ho gaya ho to ye jawab purani company ka hai — chhodo
+        // (warna refreshed_token bhi purani company ka token wapas rakh deta).
+        const user=userRef.current;
+        if(!user||user.id!==asked?.id||user.company_id!==asked?.company_id) return;
         // Subscription lifecycle: company's access lapsed → block this session.
         if(res.subscription_blocked){
           try{ window.alert(res.subscription?.message||"Aapki subscription samaapt ho gayi hai. Access dobara shuru karne ke liye renew karein."); }catch(_){}
