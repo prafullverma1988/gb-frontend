@@ -13,8 +13,14 @@ import { initI18n } from './i18n';
 if (process.env.REACT_APP_SENTRY_DSN) {
   // Lazy-load Sentry so the bundle doesn't pull it on dev / for users
   // when the DSN isn't configured.
-  import('@sentry/react').then((Sentry) => {
-    Sentry.init({
+  // PERF-16: pehle poora namespace (import * + window.Sentry = Sentry) tha, isliye
+  // webpack kuch bhi tree-shake nahi kar paata tha — 473 KB chunk me rrweb
+  // (session replay, 77 KB) bhi aata tha jabki replay configure hi nahi hai.
+  // Ab sirf init + captureException (AppErrorBoundary yahi maangta hai) liye
+  // jaate hain (webpackExports), aur load first render ke baad browser ke
+  // khaali waqt me hota hai — login/dashboard ke raaste me nahi.
+  const startSentry = () => import(/* webpackExports: ["init", "captureException"] */ '@sentry/react').then(({ init, captureException }) => {
+    init({
       dsn: process.env.REACT_APP_SENTRY_DSN,
       environment: process.env.NODE_ENV,
       release: process.env.REACT_APP_SENTRY_RELEASE || undefined,
@@ -26,11 +32,16 @@ if (process.env.REACT_APP_SENTRY_DSN) {
         'Network request failed',
       ],
     });
-    window.Sentry = Sentry;
+    window.Sentry = { captureException };
   }).catch((err) => {
     // Sentry failed to load? Don't crash the app — log and move on.
     console.warn('[Sentry] failed to initialize:', err?.message);
   });
+  const whenIdle = () => (typeof window.requestIdleCallback === 'function'
+    ? window.requestIdleCallback(startSentry, { timeout: 4000 })
+    : setTimeout(startSentry, 1500));
+  if (document.readyState === 'complete') whenIdle();
+  else window.addEventListener('load', whenIdle, { once: true });
 }
 
 initCapacitor();
