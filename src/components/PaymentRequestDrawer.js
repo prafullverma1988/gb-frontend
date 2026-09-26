@@ -55,6 +55,19 @@ const TYPES = [
   { id: "other",   get label() { return t("common.other"); },         icon: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5", c: T.pur, bg: T.purL, brd: T.purM, get desc() { return t("payment_request.other_payment_need"); } },
 ];
 
+// Saved text ke "[Type]" tag se type. Jis bhasha me request bani usi ka label
+// save hota hai ("[Site Labour]" / "[साइट लेबर]"), isliye aaj ki bhasha ke
+// label ke saath English naam bhi milate hain. Tag beech me bhi ho sakta hai
+// ("Staff wallet top-up: [Site expense] ...").
+const TYPE_TAGS = { subcon: ["subcontractor", "subcon"], labour: ["site labour", "labour"], expense: ["site expense", "expense"] };
+const prTypeOf = (text) => {
+  const tags = (String(text || "").match(/\[([^\]]+)\]/g) || []).map((s) => s.slice(1, -1).trim().toLowerCase());
+  if (!tags.length) return null;
+  const hit = TYPES.find((ty) => ty.id !== "other" &&
+    tags.some((tg) => tg === String(ty.label).toLowerCase() || (TYPE_TAGS[ty.id] || []).includes(tg)));
+  return hit ? hit.id : null;
+};
+
 const PRIORITIES = [
   { id: "Low",    c: T.t3,  bg: T.surfaceB, brd: T.b1 },
   { id: "Medium", c: T.amb, bg: T.ambL,     brd: T.ambM },
@@ -353,15 +366,17 @@ export default function PaymentRequestDrawer({
                   }
                 };
                 return filtered.map(r => {
-                  // Detect type from request_type or purpose prefix [Type]
-                  const detectedType = r.request_type
-                    || (TYPES.find(t => (r.purpose || "").toLowerCase().includes(`[${t.label.toLowerCase()}]`))?.id)
-                    || "other";
+                  // Detect type from request_type or purpose prefix [Type].
+                  // API `purpose` nahi bhejta (payment_requests me wo column hai hi
+                  // nahi) — "[Type] kaam" description me save hota hai. Pehle yahan
+                  // sirf r.purpose padha jaata tha, isliye har request "Other · —".
+                  const rawText = String(r.purpose || r.description || "");
+                  const detectedType = r.request_type || prTypeOf(rawText) || "other";
                   const tMeta = TYPE_BY_ID[detectedType] || TYPE_BY_ID.other;
                   const sKey = prStatus(r);
                   const sMeta = STATUS_META[sKey];
                   const isExp = expandedId === r.id;
-                  const cleanPurpose = String(r.purpose || "").replace(/^\[[^\]]+\]\s*/, "");
+                  const cleanPurpose = rawText.replace(/^\[[^\]]+\]\s*/, "");
                   const partyDisplay = r.party_name || r.party || "—";
                   return (
                     <div key={r.id}
