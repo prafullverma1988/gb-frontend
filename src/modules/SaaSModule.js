@@ -171,10 +171,14 @@ function TabStats() {
 
       {/* Money — all of it from real client contracts (utils/saasRevenue.js) */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:12 }}>
-        <StatCard label="MRR"          value={"₹" + fmtMoney(kpi.mrr || 0)}         sub={`ARR: ₹${fmtMoney(kpi.arr || 0)} · ${kpi.active_subs || 0} contracts`} color={T.grn} Icon={IcDollar}/>
+        {/* Suspended clients are outside MRR/ARR (SAAS-04) — their contract value and unpaid
+            invoices are called out separately instead of silently counting as live revenue. */}
+        <StatCard label="MRR"          value={"₹" + fmtMoney(kpi.mrr || 0)}
+          sub={`ARR: ₹${fmtMoney(kpi.arr || 0)} · ${kpi.active_subs || 0} contracts` + (kpi.suspended_acv > 0 ? ` · excl. ₹${fmtMoney(kpi.suspended_acv)} ACV of suspended clients` : "")}
+          color={T.grn} Icon={IcDollar}/>
         <StatCard label="Collected"    value={"₹" + fmtMoney(kpi.collected || 0)}   sub="paid invoices, incl. GST" color={T.cyn} Icon={IcChk}/>
         <StatCard label="Outstanding"  value={"₹" + fmtMoney(kpi.outstanding || 0)}
-          sub={kpi.overdue_count > 0 ? `${kpi.overdue_count} overdue · ₹${fmtMoney(kpi.overdue)}` : "nothing overdue"}
+          sub={(kpi.overdue_count > 0 ? `${kpi.overdue_count} overdue · ₹${fmtMoney(kpi.overdue)}` : "nothing overdue") + (kpi.outstanding_suspended > 0 ? ` · ₹${fmtMoney(kpi.outstanding_suspended)} from suspended clients` : "")}
           color={kpi.overdue_count > 0 ? T.red : T.amb} Icon={IcActivity}/>
         {/* Replaces the old "Free Trial" card. Trials were counted from the
             legacy plan table that nothing enforces; an unbilled live customer
@@ -347,7 +351,7 @@ function TabStats() {
                 </div>
                 <div style={{ fontSize:12, color:T.t2, textAlign:"center" }}>{c.users} <span style={{fontSize:9,color:T.t4}}>users</span></div>
                 <div style={{ fontSize:12, color:T.t2, textAlign:"center" }}>{c.projects} <span style={{fontSize:9,color:T.t4}}>proj</span></div>
-                <div style={{ fontSize:12, fontWeight:600, color:T.grn, textAlign:"right" }}>{fmtMoney(c.revenue)}</div>
+                <div title="Received from the company's clients (receipts)" style={{ fontSize:12, fontWeight:600, color:T.grn, textAlign:"right" }}>{fmtMoney(c.revenue)} <span style={{fontSize:9,color:T.t4,fontWeight:400}}>recd</span></div>
               </div>
             ))}
             {(!data.company_stats || data.company_stats.length === 0) && (
@@ -1011,7 +1015,7 @@ function TabSanchalan({ onOpenDetail }) {
       setToast({ msg: "This template is coming soon. Pick a full template.", type: "error" });
       return;
     }
-    if (!await window.confirmAsync(`Apply "${tpl?.name}" to ${tplTarget.name}?\n\nPrevious DEMO data (if any) will be wiped first. Real data stays.\n\nContinue?`)) return;
+    if (!await window.confirmAsync(`Apply "${tpl?.name}" to ${tplTarget.name}?\n\nPrevious DEMO data (if any) will be wiped first. The ★ Shri Balaji template wipes ALL data of this demo company.\n\nContinue?`)) return;
     setApplyingTpl(true);
     const r = await apiFetch("/saas-admin/sanchalan/companies/" + tplTarget.id + "/apply-template", {
       method: "POST",
@@ -1071,6 +1075,25 @@ function TabSanchalan({ onOpenDetail }) {
       load();
     } else {
       setToast({ msg: r.message || "Reset failed", type: "error" });
+    }
+  };
+
+  // Demo flag (SAAS-08): Apply Template / Seed / Factory Reset run only on a
+  // company marked demo — "internal" also holds real companies (GB Buildcon).
+  const handleDemo = async (c, flag) => {
+    const msg = flag
+      ? `Mark "${c.name}" as a DEMO company?\n\nApply Template and Factory Reset will then be allowed on it — both can DELETE all of this company's data (projects, finance, payroll, template users).\n\nOnly for a sandbox company with no real business data. Continue?`
+      : `Remove the demo mark from "${c.name}"?\n\nApply Template and Factory Reset will refuse this company.`;
+    if (!await window.confirmAsync(msg)) return;
+    const r = await apiFetch("/saas-admin/companies/" + c.id + "/toggle-demo", {
+      method: "PUT",
+      body: { is_demo: flag },
+    });
+    if (r.success) {
+      setToast({ msg: r.message, type: "success" });
+      load();
+    } else {
+      setToast({ msg: r.message || "Failed", type: "error" });
     }
   };
 
@@ -1168,13 +1191,17 @@ function TabSanchalan({ onOpenDetail }) {
                   <td style={td}><span style={{ fontWeight:700, color:T.t1 }}>{c.user_count}</span></td>
                   <td style={td}><span style={{ fontWeight:700, color:T.t1 }}>{c.project_count}</span></td>
                   <td style={td}>{c.last_login ? fmtDateTime(c.last_login) : <span style={{color:T.t4}}>never</span>}</td>
-                  <td style={td}>{c.is_active ? <Badge text="ACTIVE" color={T.grn}/> : <Badge text="DISABLED" color={T.red}/>}</td>
+                  <td style={td}>
+                    {c.is_active ? <Badge text="ACTIVE" color={T.grn}/> : <Badge text="DISABLED" color={T.red}/>}
+                    {c.is_demo ? <span style={{ marginLeft:4 }}><Badge text="DEMO" color="#EC4899"/></span> : null}
+                  </td>
                   <td style={td}>{fmtDate(c.created_at)}</td>
                   <td style={{...td, textAlign:"right"}}>
                     <div style={{ display:"inline-flex", gap:6, alignItems:"center", justifyContent:"flex-end", flexWrap:"wrap" }}>
-                      <Btn onClick={() => openTemplatePicker(c)} color="#EC4899" style={{ padding:"6px 13px", fontSize:11, fontWeight:700, boxShadow:"0 2px 6px rgba(236,72,153,0.28)" }}>🎯 Apply Template</Btn>
+                      <Btn onClick={() => openTemplatePicker(c)} disabled={!c.is_demo} title={c.is_demo ? undefined : "Mark this company as demo first"} color="#EC4899" style={{ padding:"6px 13px", fontSize:11, fontWeight:700, boxShadow:"0 2px 6px rgba(236,72,153,0.28)" }}>🎯 Apply Template</Btn>
                       <Btn onClick={() => onOpenDetail(c)} variant="secondary" style={{ padding:"6px 11px", fontSize:11 }}>Details</Btn>
-                      <Btn onClick={() => runFactoryReset(c)} variant="secondary" color={T.red} style={{ padding:"6px 11px", fontSize:11 }}>Factory Reset</Btn>
+                      <Btn onClick={() => runFactoryReset(c)} disabled={!c.is_demo} title={c.is_demo ? undefined : "Mark this company as demo first"} variant="secondary" color={T.red} style={{ padding:"6px 11px", fontSize:11 }}>Factory Reset</Btn>
+                      <Btn onClick={() => handleDemo(c, !c.is_demo)} variant="secondary" color="#EC4899" style={{ padding:"6px 11px", fontSize:11 }}>{c.is_demo ? "Unmark demo" : "Mark demo"}</Btn>
                       <Btn onClick={() => handleUnmark(c.id, c.name)} variant="secondary" color={T.slt} style={{ padding:"6px 11px", fontSize:11 }}>Unmark</Btn>
                     </div>
                   </td>
@@ -1193,7 +1220,7 @@ function TabSanchalan({ onOpenDetail }) {
             <div style={{ background:"linear-gradient(135deg,#EC4899,#BE185D)", color:"white", padding:"18px 22px" }}>
               <div style={{ fontSize:10, fontWeight:700, letterSpacing:"1.5px", opacity:0.85, marginBottom:3 }}>DEMO TEMPLATES</div>
               <div style={{ fontSize:16, fontWeight:800 }}>🎯 Apply scenario template to {tplTarget.name}</div>
-              <div style={{ fontSize:11, opacity:0.9, marginTop:4 }}>Existing demo data will be wiped first. Real data is untouched.</div>
+              <div style={{ fontSize:11, opacity:0.9, marginTop:4 }}>Existing demo data will be wiped first. Runs only on companies marked demo.</div>
             </div>
             {/* Body */}
             <div style={{ padding:"14px 22px 16px", overflowY:"auto", flex:1 }}>
