@@ -11,14 +11,17 @@ import { PromptProvider } from "./components/PromptDialog";
 import NotificationBell from "./components/NotificationBell";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import SahayakFab from "./components/SahayakFab";
-import { t } from "./i18n";
+import { t, loadFullPack } from "./i18n";
 import { visiblePoll } from "./utils/poll";
 
 // ── LAZY + PRELOAD: shared promise so prefetch & React.lazy use same cache ──
 // When preload() resolves, React.lazy gets already-resolved promise = NO spinner
 const _cache = {};
-function lazyWithPreload(key, fn) {
-  const load = () => { if (!_cache[key]) _cache[key] = fn(); return _cache[key]; };
+function lazyWithPreload(key, fn, needsPack = true) {
+  // PERF-04: module ka JS chalne se PEHLE poora i18n pack aa chuka ho (entry me
+  // sirf core hai) — module-level t() bhi poori pack dekhe. Pack aa chuka ho to
+  // ye turant resolve hota hai, koi extra intezaar nahi.
+  const load = () => { if (!_cache[key]) _cache[key] = needsPack ? loadFullPack().then(() => fn()) : fn(); return _cache[key]; };
   const Comp = lazy(load);
   Comp.preload = load;
   Comp.cacheKey = key;   // safePreload fail par yahi slot khaali karta hai
@@ -28,7 +31,7 @@ function lazyWithPreload(key, fn) {
 // EChart pehle static import tha → poora echarts (~450KB) main bundle me
 // ghus kar first paint slow karta tha. Ab lazy: dashboard render hote hi
 // chunk fetch hota hai; tab tak same-height khali box (no layout jump).
-const EChartInner = lazyWithPreload("echart", () => import("./components/EChart"));
+const EChartInner = lazyWithPreload("echart", () => import("./components/EChart"), false);   // chart me koi text nahi — pack ka intezaar nahi
 const EChart = (props) => (
   <Suspense fallback={<div style={{ height: props.height || 160 }} />}>
     <EChartInner {...props} />

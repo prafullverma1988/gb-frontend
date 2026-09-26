@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import { initCapacitor } from './capacitor-init';
-import { initI18n } from './i18n';
+import { initI18n, loadFullPack } from './i18n';
 
 // ── Sentry (production crash + chunk-error reporting) ────────────
 // Gated on REACT_APP_SENTRY_DSN so dev/local runs don't need a DSN.
@@ -59,4 +59,10 @@ initI18n().finally(() => {
       </AppErrorBoundary>
     </React.StrictMode>
   );
+  // PERF-04: entry me sirf core pack hai (i18n/index.js). Poora pack pehli render
+  // ke baad browser ke khaali waqt me — lazy module usse pehle chalta hi nahi
+  // (App.js lazyWithPreload), isliye koi screen key ka naam nahi dikhati.
+  const fullPack = () => { loadFullPack().catch(() => {}); };
+  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(fullPack, { timeout: 1500 });
+  else setTimeout(fullPack, 500);
 });
