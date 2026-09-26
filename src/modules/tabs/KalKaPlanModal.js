@@ -75,11 +75,20 @@ export default function KalKaPlanModal({ projectId, onClose }) {
 
             {!!data.stalled?.length && (
               <Sec title={`Ruka hua (${data.stalled.length})`} color="#B91C1C">
-                {data.stalled.map((r) => (
-                  <Row key={r.task_id} main={r.name}
-                    sub={`${r.pace.idle_days} din se koi entry nahi${r.remaining !== null ? ` · ${fq(r.remaining, r.unit)} bacha` : ""}`}
-                    chip="RUKA" chipC="#B91C1C" chipBg={T.redL} />
-                ))}
+                {data.stalled.map((r) => {
+                  // TSK-11: idle_days = aakhri entry se (14 din se purani bhi); entry na
+                  // ho to aakhri update se; wo bhi na ho to "pata nahi" — kabhi "null din" nahi
+                  const idle = r.idle_days !== undefined ? r.idle_days : r.pace.idle_days;
+                  const src = r.idle_source !== undefined ? r.idle_source : (idle !== null ? "entry" : null);
+                  const since = src === "entry" ? t("kal_ka_plan.ruka_entry_se", { n: idle })
+                    : src === "update" ? t("kal_ka_plan.ruka_update_se", { n: idle })
+                    : t("kal_ka_plan.ruka_pata_nahi");
+                  return (
+                    <Row key={r.task_id} main={r.name}
+                      sub={`${since}${r.remaining !== null ? ` · ${fq(r.remaining, r.unit)} bacha` : ""}`}
+                      chip="RUKA" chipC="#B91C1C" chipBg={T.redL} />
+                  );
+                })}
               </Sec>
             )}
 
@@ -114,7 +123,9 @@ export default function KalKaPlanModal({ projectId, onClose }) {
               <Sec title={`Atka hua (${data.blocked.length})`} color="#B45309">
                 {data.blocked.map((r) => (
                   <Row key={r.task_id} main={r.name}
-                    sub={`pehle "${r.waiting_on[0]?.name}" poora ho (abhi ${r.waiting_on[0]?.progress}%)`}
+                    sub={r.by_order
+                      ? t("kal_ka_plan.kram_me_pehle", { name: r.waiting_on[0]?.name || "" })
+                      : `pehle "${r.waiting_on[0]?.name}" poora ho (abhi ${r.waiting_on[0]?.progress}%)`}
                     chip="ATKA" chipC="#B45309" chipBg={T.ambL} />
                 ))}
               </Sec>
