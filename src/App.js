@@ -12,6 +12,7 @@ import NotificationBell from "./components/NotificationBell";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import SahayakFab from "./components/SahayakFab";
 import { t } from "./i18n";
+import { visiblePoll } from "./utils/poll";
 
 // ── LAZY + PRELOAD: shared promise so prefetch & React.lazy use same cache ──
 // When preload() resolves, React.lazy gets already-resolved promise = NO spinner
@@ -2065,24 +2066,34 @@ function App(){
     // Advisory Sahayak-stream count (onboarding nudges + insight digests) — now
     // out of the main bell, surfaced on the Sahayak nav badge instead. All
     // logged-in users (site staff simply get 0).
-    const refreshSahayakNotif=async()=>{
-      if(!loggedIn){ setSahayakNotifCount(0); return; }
-      try{
-        const r=await api.get("/notifications/count?scope=sahayak");
-        if(r&&r.success) setSahayakNotifCount(Number(r.count)||0);
-      }catch(_){}
-    };
-    const tick=()=>{ refreshPerms(); refreshTickets(); refreshSahayakNotif(); };
+    // (PERF-08) Ye ginti ab alag poll se nahi aati: NotificationBell ka
+    // /notifications/counts ek call me bell + Sahayak dono deta hai aur
+    // "sanchalan:notif-counts" event se yahan pahunchta hai (neeche wala effect).
+    if(!loggedIn) setSahayakNotifCount(0);
+    const tick=()=>{ refreshPerms(); refreshTickets(); };
     tick();
     // Page khulte hi approve-authority bhi taaza kar lo — Settings me
     // Approval Flow ke level badle to button turant sahi ho jaye.
     if(loggedIn) loadApprovalAuthority(true);
-    window.addEventListener("focus", tick);
     // 60s poll (same cadence as the mobile app) — an admin's permission
     // change or a subscription lapse lands without waiting for a refocus.
-    const pollId=setInterval(tick, 60_000);
-    return()=>{window.removeEventListener("focus", tick);clearInterval(pollId);};
+    // (PERF-08) visiblePoll: chhupe tab me band (raat bhar khula tab ab 0
+    // request), focus/wapas aane par turant, aur 10 min se kuch chhua na ho to
+    // 5 min ki cadence — kaam karte user ko wahi 60 s wali taazgi.
+    const stopPoll=visiblePoll(tick, 60_000, { idleAfter: 10*60_000, idleMs: 5*60_000 });
+    return()=>{ stopPoll(); };
   },[loggedIn,user?.role]);
+
+  // Bell ka /notifications/counts (30 s, sirf jab tab saamne ho) Sahayak badge
+  // ki ginti bhi laata hai — alag poll ki jagah (PERF-08).
+  useEffect(()=>{
+    const onCounts=(e)=>{
+      const n=Number(e&&e.detail&&e.detail.sahayak);
+      if(Number.isFinite(n)) setSahayakNotifCount(n);
+    };
+    window.addEventListener("sanchalan:notif-counts", onCounts);
+    return()=>window.removeEventListener("sanchalan:notif-counts", onCounts);
+  },[]);
 
   // ── Global keyboard shortcuts ────────────────────────────────────────
   useEffect(()=>{

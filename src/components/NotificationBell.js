@@ -30,8 +30,21 @@ export default function NotificationBell({ onNavigate }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
 
-  const fetchCount = () => api.get("/notifications/count")
-    .then(r => { if (r && r.success) setCount(r.count || 0); })
+  // /notifications/counts = bell + Sahayak badge ek call me (PERF-08). Sahayak ki
+  // ginti App.js ko event se jaati hai. Server purana ho (counts nahi) to pehle
+  // wale /count par lautte hain.
+  const fetchCount = () => api.get("/notifications/counts")
+    .then(r => {
+      if (r && r.success && r.sahayak !== undefined) {
+        setCount(r.count || 0);
+        try { window.dispatchEvent(new CustomEvent("sanchalan:notif-counts", { detail: { count: r.count || 0, sahayak: r.sahayak || 0 } })); } catch (_) {}
+        return;
+      }
+      return Promise.all([api.get("/notifications/count"), api.get("/notifications/count?scope=sahayak")]).then(([o, s]) => {
+        if (o && o.success) setCount(o.count || 0);
+        if (s && s.success) { try { window.dispatchEvent(new CustomEvent("sanchalan:notif-counts", { detail: { count: (o && o.count) || 0, sahayak: s.count || 0 } })); } catch (_) {} }
+      });
+    })
     .catch(() => {});
   const fetchList = () => api.get("/notifications/unread")
     .then(r => { if (r && r.success) setItems(r.data || []); })
