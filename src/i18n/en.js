@@ -508,6 +508,8 @@ const dict = {
   "assets.photo":                                              "Photo",
   "assets.photo_hint":                                         "If 'Asset issue / return' is required under Settings › Photo Settings, the voucher needs a photo",
   "assets.photo_optional":                                     "Photo (optional)",
+  "assets.photo_required_label":                               "Photo *",
+  "assets.err_photo_required":                                 "A photo is required — the company setting (Photo Settings › Asset issue / return) makes it compulsory",
   "assets.photo_pick":                                         "Select a photo",
   "assets.photo_too_big":                                      "Photo is larger than 10 MB",
   "assets.photo_view":                                         "View photo",

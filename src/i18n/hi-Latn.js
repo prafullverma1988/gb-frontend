@@ -510,6 +510,8 @@ const dict = {
   "assets.photo":                                              "Photo",
   "assets.photo_hint":                                         "Settings › Photo Settings me 'Asset issue / return' zaroori ho to bina photo voucher nahi banega",
   "assets.photo_optional":                                     "Photo (optional)",
+  "assets.photo_required_label":                               "Photo *",
+  "assets.err_photo_required":                                 "Photo lagana zaroori hai — company setting (Photo Settings › Asset issue / return) me photo compulsory hai",
   "assets.photo_pick":                                         "Photo select karo",
   "assets.photo_too_big":                                      "Photo 10 MB se badi hai",
   "assets.photo_view":                                         "Photo dekho",

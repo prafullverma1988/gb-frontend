@@ -31,6 +31,7 @@ import ImportFixPanel, { useImportFix, impNorm } from "../components/ImportFix";
 import { useToast } from "../components/Toast";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -379,7 +380,26 @@ const Spinner = ({ label }) => (
   </div>
 );
 
-const PhotoField = ({ value, onChange }) => {
+// Company ki photo policy "asset_move" (Settings › Photo Settings › "Asset issue /
+// return"). Server ise har voucher par lagata hai jo GRN nahi — issue, return,
+// transfer aur repair bhi. Web ke Repair form me photo ka box hi nahi tha, to
+// jahan photo zaroori hai (RATNA KHANIJ) wahan web se repair ban hi nahi paata.
+function useMovePhotoPolicy(open) {
+  const [pol, setPol] = useState(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    loadPhotoPolicy().then((x) => { if (alive) setPol(policyFor(x, "asset_move")); });
+    return () => { alive = false; };
+  }, [open]);
+  return pol;
+}
+const photoMissing = (pol, photo) => !!(pol && pol.mode === "required" && !photo);
+
+// pol: Band = box hi nahi; Zaroori = label "Photo *"; sirf camera = mobile browser
+// seedha camera kholta hai (desktop par gallery rokne ka koi bharosemand tareeka
+// nahi — asli rok server par hai).
+const PhotoField = ({ value, onChange, pol }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const pick = async (e) => {
@@ -392,8 +412,9 @@ const PhotoField = ({ value, onChange }) => {
     catch (ex) { setError(ex.message || t("assets.upload_failed")); }
     setBusy(false);
   };
+  if (pol && pol.mode === "off") return null;
   return (
-    <Field label={t("assets.photo_optional")} hint={t("assets.photo_hint")}>
+    <Field label={pol && pol.mode === "required" ? t("assets.photo_required_label") : t("assets.photo_optional")} hint={t("assets.photo_hint")}>
       {value ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <a href={value} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: T.ind, fontWeight: 700, textDecoration: "none" }}>{t("assets.photo_view")}</a>
@@ -403,7 +424,7 @@ const PhotoField = ({ value, onChange }) => {
       ) : (
         <label style={{ ...inp, display: "flex", alignItems: "center", cursor: busy ? "wait" : "pointer", color: busy ? T.t4 : T.t3 }}>
           {busy ? t("assets.uploading") : t("assets.photo_pick")}
-          <input type="file" accept="image/*" capture="environment" onChange={pick} disabled={busy} style={{ display: "none" }} />
+          <input {...fileInputProps(pol || { source: "camera" })} onChange={pick} disabled={busy} style={{ display: "none" }} />
         </label>
       )}
       {error && <div style={{ fontSize: 10.5, color: T.red, marginTop: 4, fontWeight: 600 }}>{error}</div>}
@@ -1816,6 +1837,7 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
   const [photo, setPhoto] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const pol = useMovePhotoPolicy(open);
 
   const all = (meta && meta.warehouses) || [];
   const myIds = (meta && meta.my_warehouse_ids) || [];
@@ -1863,6 +1885,7 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
         remarks: l.remarks || null,
       });
     }
+    if (photoMissing(pol, photo)) { setError(t("assets.err_photo_required")); return; }
     setBusy(true);
     const r = await api.post("/assets/vouchers", {
       type: "issue", date, from: { warehouse_id: Number(wh) }, to: siteLocBody(to), items,
@@ -1927,7 +1950,7 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 14 }}>
         <Field label={t("assets.expected_return")} hint={t("assets.expected_return_hint")}><input type="date" value={ret} onChange={(e) => setRet(e.target.value)} style={inp} /></Field>
         <Field label={t("assets.remarks")}><input value={remarks} onChange={(e) => setRemarks(e.target.value)} style={inp} /></Field>
-        <PhotoField value={photo} onChange={setPhoto} />
+        <PhotoField value={photo} onChange={setPhoto} pol={pol} />
       </div>
       <ErrBox>{error}</ErrBox>
     </Modal>
@@ -2140,6 +2163,7 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
   const [photo, setPhoto] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const pol = useMovePhotoPolicy(open);
 
   const all = (meta && meta.warehouses) || [];
   const myIds = (meta && meta.my_warehouse_ids) || [];
@@ -2224,6 +2248,7 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
     }
     const fromLoc = g.warehouse_id ? { warehouse_id: g.warehouse_id }
       : { project_id: g.project_id, holder_type: g.holder_type, holder_id: g.holder_id, custodian_user_id: g.custodian_user_id };
+    if (photoMissing(pol, photo)) { setError(t("assets.err_photo_required")); return; }
     setBusy(true);
     const r = await api.post("/assets/vouchers", {
       type: isReturn ? "return" : "transfer", date, from: fromLoc, to: toLoc, items,
@@ -2313,7 +2338,7 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 14 }}>
         {!isReturn && !storeMode && <Field label={t("assets.expected_return")} hint={t("assets.expected_return_hint")}><input type="date" value={ret} onChange={(e) => setRet(e.target.value)} style={inp} /></Field>}
         <Field label={t("assets.remarks")}><input value={remarks} onChange={(e) => setRemarks(e.target.value)} style={inp} /></Field>
-        <PhotoField value={photo} onChange={setPhoto} />
+        <PhotoField value={photo} onChange={setPhoto} pol={pol} />
       </div>
       <ErrBox>{error}</ErrBox>
     </Modal>
@@ -2340,8 +2365,10 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
   const [cost, setCost] = useState("");
   const [invoice, setInvoice] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [photo, setPhoto] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const pol = useMovePhotoPolicy(open);
 
   const all = (meta && meta.warehouses) || [];
   const myIds = (meta && meta.my_warehouse_ids) || [];
@@ -2351,7 +2378,7 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
     if (!open) return;
     const def = myWh.find((w) => w.is_default) || myWh[0];
     setParty(""); setFrom(""); setToWh(def ? String(def.id) : ""); setDate(todayStr());
-    setLines([newMoveLine()]); setCost(""); setInvoice(""); setRemarks(""); setError("");
+    setLines([newMoveLine()]); setCost(""); setInvoice(""); setRemarks(""); setPhoto(""); setError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, kind]);
 
@@ -2428,11 +2455,13 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
       ? (g.warehouse_id ? { warehouse_id: g.warehouse_id }
         : { project_id: g.project_id, holder_type: g.holder_type, holder_id: g.holder_id, custodian_user_id: g.custodian_user_id })
       : repairLoc(party);
+    if (photoMissing(pol, photo)) { setError(t("assets.err_photo_required")); return; }
     setBusy(true);
     const r = await api.post("/assets/vouchers", {
       type: isOut ? "repair_out" : "repair_in", date, from: fromLoc,
       to: isOut ? repairLoc(party) : { warehouse_id: Number(toWh) }, items,
       repair_cost: cost === "" ? null : Number(cost), invoice_no: invoice || null, remarks: remarks || null,
+      photo_url: photo || null,
     });
     setBusy(false);
     if (r && r.success) { toast.success(r.message || t("assets.voucher_done", { no: (r.data && r.data.voucher_no) || "" })); onSaved(r.data); onClose(); }
@@ -2516,12 +2545,13 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
       </Panel>
       <div style={{ fontSize: 11, color: T.t4, marginTop: 8 }}>{isOut ? t("assets.repair_out_hint") : t("assets.repair_in_hint")}</div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginTop: 14 }}>
         <Field label={t("assets.repair_cost")} hint={t("assets.repair_cost_hint")}>
           <input value={cost} inputMode="decimal" placeholder="₹" onChange={(e) => setCost(e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
         </Field>
         <Field label={t("assets.invoice_no")}><input value={invoice} onChange={(e) => setInvoice(e.target.value)} style={inp} /></Field>
         <Field label={t("assets.remarks")}><input value={remarks} onChange={(e) => setRemarks(e.target.value)} style={inp} /></Field>
+        <PhotoField value={photo} onChange={setPhoto} pol={pol} />
       </div>
       <ErrBox>{error}</ErrBox>
     </Modal>

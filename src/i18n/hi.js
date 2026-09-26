@@ -507,6 +507,8 @@ const dict = {
   "assets.photo":                                              "फोटो",
   "assets.photo_hint":                                         "Settings › Photo Settings में 'Asset issue / return' ज़रूरी हो तो बिना फोटो वाउचर नहीं बनेगा",
   "assets.photo_optional":                                     "फोटो (ऑप्शनल)",
+  "assets.photo_required_label":                               "फोटो *",
+  "assets.err_photo_required":                                 "फोटो लगाना ज़रूरी है — कंपनी सेटिंग (Photo Settings › Asset issue / return) में फोटो ज़रूरी है",
   "assets.photo_pick":                                         "फोटो सिलेक्ट करो",
   "assets.photo_too_big":                                      "फोटो 10 MB से बड़ी है",
   "assets.photo_view":                                         "फोटो देखो",
