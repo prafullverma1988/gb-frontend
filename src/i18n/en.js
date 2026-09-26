@@ -7756,6 +7756,8 @@ const dict = {
   "settings.wallet_limits_role_admin":                         "Admin",
   "settings.wallet_limits_role_pm":                            "Project Manager",
   "settings.wallet_limits_role_supervisor":                    "Site Supervisor",
+  "settings.appr_escalation_note":                             "A pending approval does not move to the next level on its own after some time — whoever’s turn it is approves it. If a level has no approver for that project, that level goes to Admin.",
+  "settings.appr_escalation_title":                            "Escalation",
   "settings.wallet_limits_title":                              "Wallet expense — auto-approve limits",
   "settings.wallet_limits_upto":                               "Auto up to ₹{amt}",
   "settings.wallet_limits_workflow_off":                       "Workflow off — all auto-approved",
