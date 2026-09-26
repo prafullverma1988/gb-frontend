@@ -22,6 +22,25 @@ const LIFECYCLE = {
 };
 const BUCKET_ORDER = ["active", "attention", "dormant", "archived"];
 
+// Login-access badge for a client row (SAAS-02). The API sends access as
+// c.access_state = { state, reason, graceDaysLeft, archived }; c.lifecycle is the
+// commercial bucket STRING above, so c.lifecycle.state was always undefined and
+// GRACE / SUSPENDED · PURGE-ELIGIBLE never showed. A manual suspend already has
+// its own SUSPENDED badge (c.status), so only date-driven states are added here.
+function accessBadge(c) {
+  const a = c && c.access_state;
+  if (!a || typeof a !== "object") return null;
+  if (a.state === "grace") return { text: `GRACE · ${a.graceDaysLeft}d`, color: T.amb };
+  if (a.state === "suspended" && a.reason !== "manual_suspend") {
+    return { text: a.archived ? "SUSPENDED · PURGE-ELIGIBLE" : "SUSPENDED", color: T.red };
+  }
+  return null;
+}
+function AccessBadge({ c }) {
+  const b = accessBadge(c);
+  return b ? <div style={{ marginTop:3 }}><Badge text={b.text} color={b.color}/></div> : null;
+}
+
 
 
 // ── ONBOARD A NEW PAYING CUSTOMER ─────────────────────────────────────
@@ -652,7 +671,9 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
 
   const toggleSuspend = async () => {
     const next = client.status === "suspended" ? "active" : "suspended";
-    if (next === "suspended" && !window.confirm(`Suspend ${client.name}? New companies/users/projects will be blocked immediately.`)) return;
+    // SAAS-03: suspend is a full lockout (auth middleware 403 + login gate), not a creation limit.
+    const nCo = usage?.companies ?? companies.length;
+    if (next === "suspended" && !window.confirm(`Suspend ${client.name}?\n\nEvery user of ${nCo === 1 ? "its company" : `all ${nCo} companies`} (${usage?.users ?? 0} users) is blocked from logging in and from the app/web right away (within about a minute) — attendance, entries, everything stops.\n\nData stays safe; Reactivate restores access.`)) return;
     const res = await apiFetch(`/saas-admin/clients/${client.id}`, { method: "PUT", body: { status: next } });
     if (res.success) { setToast({ msg: next === "suspended" ? "Client suspended" : "Client reactivated" }); load(); }
     else setToast({ msg: res.message || "Failed", type: "error" });
@@ -1030,9 +1051,9 @@ function TabCustomers({ onOpenCompany }) {
       {/* Billing KPIs */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, marginBottom:16 }}>
         <StatCard label="Active Subscriptions" value={fmtNum(kpi.active_subs)} sub={`${fmtNum(kpi.pending_subs)} pending activation`} color={T.grn} Icon={IcDollar}/>
-        <StatCard label="Annual Contract Value" value={"₹" + fmtMoney(kpi.active_acv)} sub="active subs, excl. GST" color={T.blu} Icon={IcTrend}/>
+        <StatCard label="Annual Contract Value" value={"₹" + fmtMoney(kpi.active_acv)} sub={"live contracts, excl. GST" + (kpi.suspended_acv > 0 ? ` · excl. ₹${fmtMoney(kpi.suspended_acv)} suspended` : "")} color={T.blu} Icon={IcTrend}/>
         <StatCard label="Collected" value={"₹" + fmtMoney(kpi.collected)} sub="all-time, incl. GST" color={T.cyn} Icon={IcChk}/>
-        <StatCard label="Outstanding" value={"₹" + fmtMoney(kpi.outstanding)} sub={kpi.overdue_count > 0 ? `${kpi.overdue_count} overdue · ₹${fmtMoney(kpi.overdue_amount)}` : "nothing overdue"} color={kpi.overdue_count > 0 ? T.red : T.amb} Icon={IcActivity}/>
+        <StatCard label="Outstanding" value={"₹" + fmtMoney(kpi.outstanding)} sub={(kpi.overdue_count > 0 ? `${kpi.overdue_count} overdue · ₹${fmtMoney(kpi.overdue_amount)}` : "nothing overdue") + (kpi.outstanding_suspended > 0 ? ` · ₹${fmtMoney(kpi.outstanding_suspended)} from suspended clients` : "")} color={kpi.overdue_count > 0 ? T.red : T.amb} Icon={IcActivity}/>
       </div>
 
       {/* Billing-gap strip — customer live but nothing to bill against.
@@ -1146,8 +1167,7 @@ function TabCustomers({ onOpenCompany }) {
                     )}
                   </>
                 : <span style={{ fontSize:11, color:T.t4 }}>--</span>}
-              {c.lifecycle && c.lifecycle.state === "grace" && <div style={{ marginTop:3 }}><Badge text={`GRACE · ${c.lifecycle.graceDaysLeft}d`} color={T.amb}/></div>}
-              {c.lifecycle && c.lifecycle.state === "suspended" && <div style={{ marginTop:3 }}><Badge text={c.lifecycle.archived ? "SUSPENDED · PURGE-ELIGIBLE" : "SUSPENDED"} color={T.red}/></div>}
+              <AccessBadge c={c}/>
             </div>
             <div style={{ fontSize:11.5, color: c.overdue_count > 0 ? T.red : T.t3, fontWeight: c.overdue_count > 0 ? 700 : 400 }}>
               {c.overdue_count > 0 ? `${c.overdue_count} OVERDUE` : (c.next_due ? fmtDate(c.next_due) : "--")}

@@ -129,6 +129,15 @@ export default function EstimateBuilderModal({
   const [customers, setCustomers]         = useState([]);
   const [customerId, setCustomerId]       = useState(null);
   const [customerName, setCustomerName]   = useState(project?.client_name || "");
+  // Project ka client library me mil gaya to picker me wahi chuna dikhe (id
+  // ke saath) — pehle naam andar bhara rehta tha par picker khaali dikhta tha.
+  useEffect(() => {
+    if (customerId || !customerName.trim() || !customers.length) return;
+    const hit = pickCustomer(customers, customerName);
+    if (hit.id !== PROJ_CLIENT) setCustomerId(hit.id);
+  // sirf list aane par — baad me aadmi khud badle to use mat chhedo
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers]);
   const [description, setDescription]     = useState("");
 
   // ── Scratch-mode sections: pkgStructures will hold ad-hoc sections
@@ -1030,9 +1039,10 @@ export default function EstimateBuilderModal({
                           server-side). value = customerId; we mirror the
                           chosen name into customerName for the save payload. */}
                       <SearchSelect
-                        value={customerId}
-                        options={customers.map(c => ({ id: c.id, name: c.name }))}
+                        value={customerId || (customerName.trim() ? PROJ_CLIENT : null)}
+                        options={customerOptions(customers, project?.client_name)}
                         onChange={(id) => {
+                          if (id === PROJ_CLIENT) { setCustomerId(null); setCustomerName(project?.client_name || ""); return; }
                           const match = customers.find(c => String(c.id) === String(id));
                           setCustomerId(match?.id || null);
                           setCustomerName(match?.name || "");
@@ -1918,4 +1928,25 @@ export default function EstimateBuilderModal({
       })()}
     </div>
   );
+}
+
+// ── Customer picker: project ka client ────────────────────────────
+// Picker sirf party library ke "client" dikhata hai. Project ka client naam
+// library me na ho (greenbox: 20 me se 18 project) to estimate kholte hi
+// customer khaali dikhta tha — Bug Inbox E-50, "project estimate me customer
+// name nahi aa raha". Ab project ka client bhi ek option hai (upar), aur wahi
+// pehle se chuna hua. Save par customer_id khaali, naam wahi — server naam
+// se hi party ledger jodta hai.
+export const PROJ_CLIENT = "__project_client__";
+const _norm = (x) => String(x || "").trim().toLowerCase();
+export function customerOptions(customers, clientName) {
+  const opts = (customers || []).map(c => ({ id: c.id, name: c.name }));
+  const cn = String(clientName || "").trim();
+  if (cn && !opts.some(o => _norm(o.name) === _norm(cn))) opts.unshift({ id: PROJ_CLIENT, name: cn });
+  return opts;
+}
+// Naam se: library me mila to uska id, warna project wala option.
+export function pickCustomer(customers, name) {
+  const hit = (customers || []).find(c => _norm(c.name) === _norm(name));
+  return hit ? { id: hit.id, name: hit.name } : { id: PROJ_CLIENT, name: String(name || "").trim() };
 }

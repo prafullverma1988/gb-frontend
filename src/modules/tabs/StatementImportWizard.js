@@ -528,7 +528,7 @@ function ResultView({ result, tab, setTab }) {
 
       <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
         <div style={{ maxHeight: 380, overflowY: "auto" }}>
-          {tab === "stmt" && <ReviewCreate accountId={d.account.id} rows={d.only_in_statement} />}
+          {tab === "stmt" && <ReviewCreate accountId={d.account.id} rows={d.only_in_statement} tol={d.tolerance_days} />}
           {tab === "books" && <Rows rows={d.only_in_books} kind="books" />}
           {tab === "ok" && <Rows rows={d.matched} kind="ok" />}
         </div>
@@ -559,7 +559,7 @@ function ResultView({ result, tab, setTab }) {
 //      hai: "pehle se bani hai" par kuch nahi hota; "shaq hai" par ek button
 //      hai "Phir bhi banao", kyunki do baar ₹1,000 ek hi din sach bhi ho
 //      sakta hai — aur wo faisla aadmi ka hai, code ka nahi.
-function ReviewCreate({ accountId, rows }) {
+function ReviewCreate({ accountId, rows, tol }) {
   const [parties, setParties] = useState([]);
   const [draft, setDraft] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -612,6 +612,8 @@ function ReviewCreate({ accountId, rows }) {
           date: x.date, amount: x.amount, dir: x.dir, description: x.description, ref: x.ref || null,
           party_id: x.party_id ? Number(x.party_id) : null, force: !!x.force,
         })),
+        // FIN-24: server ka duplicate-guard milaan wali hi ±din ki chhoot lagaye
+        ...(Number.isFinite(Number(tol)) ? { tolerance_days: Number(tol) } : {}),
       });
       if (!r || !r.success) throw new Error((r && r.message) || t("stmt.failed"));
       // Nateeja wapas usi row par — fingerprint nahi, kram se, kyunki server
