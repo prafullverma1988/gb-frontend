@@ -3802,7 +3802,6 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   // Photos
   const [photos,setPhotos]=useState([]);
   const [phLoading,setPhLoading]=useState(true);
-  const [uploading,setUploading]=useState(false);
   const [fullPhoto,setFullPhoto]=useState(null);
 
   // Issues
@@ -4394,31 +4393,20 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>{t("common.photos")}</span>
               {photos.length>0&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{photos.length}</span>}
             </div>
-            <label style={{padding:"9px 16px",borderRadius:8,background:uploading?"#94A3B8":"#EA580C",color:"white",fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,minHeight:40,boxSizing:"border-box"}}>
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
-              {uploading?t("common.uploading"):t("tasks.add_photo")}
-              <input type="file" accept="image/*" capture="environment" style={{display:"none"}} disabled={uploading} onChange={async(e)=>{
-                const file=e.target.files[0]; if(!file) return;
-                setUploading(true);
-                let lat=null,lng=null;
-                if(navigator.geolocation){
-                  await new Promise(resolve=>navigator.geolocation.getCurrentPosition(p=>{lat=p.coords.latitude;lng=p.coords.longitude;resolve();},resolve,{timeout:5000}));
-                }
-                try{
-                  const cd=await uploadToCloudinary(file,"site_photos");
-                  const res=await api.post("/tasks/"+task.id+"/photos",{photo_url:cd.secure_url,caption:"",lat,lng});
-                  if(res.success) setPhotos(p=>[res.data,...p]);
-                }catch(e){alert(t("common.upload_failed"));}
-                setUploading(false);e.target.value="";
-              }}/>
-            </label>
+            {/* Yahan "Add Photo" ka button tha — 26 Sep 2026 ko hata diya
+                (mobile se bhi usi din). Aise chhuti hui photo kisi kaam se
+                judi nahi hoti thi: na pata chalta tha kis din ka kaam hai,
+                na kis entry ka saboot. Ab photo progress, material used ya
+                issue ke saath hi aati hai — aur company Settings → Photo
+                Settings se tay karti hai ki wo zaroori hai ya nahi.
+                Ye album wahi sab dikhata hai. */}
           </div>
           {phLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>{t("tasks.loading_photos")}</div>}
           {!phLoading&&photos.length===0&&(
             <div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8"}}>
               <svg width={44} height={44} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{marginBottom:8}}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
               <div style={{fontSize:13}}>{t("tasks.no_photos_yet")}</div>
-              <div style={{fontSize:11,marginTop:4,color:"#CBD5E1"}}>{t("tasks.tap_add_photo_to_upload")}</div>
+              <div style={{fontSize:11,marginTop:4,color:"#CBD5E1"}}>{t("tasks.photo_kaam_ke_saath")}</div>
             </div>
           )}
           {!phLoading&&photos.length>0&&(

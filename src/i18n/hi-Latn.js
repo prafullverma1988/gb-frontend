@@ -8471,6 +8471,7 @@ const dict = {
   "tasks.imp_sub":                                             "Har row se ek naya task banega, sabse upar ke level par. Name zaroori; Category, Tag, Start Date, End Date optional. Isi naam ka task pehle se ho to wo row Skip.",
   "tasks.imp_title":                                           "Tasks import — CSV ya Excel",
   "tasks.kisi_ko_nahi":                                       "— kisi ko nahi —",
+  "tasks.photo_kaam_ke_saath":                                "Photo progress, material used ya issue ke saath lagti hai",
   "tasks.save_nahi_hua":                                      "Save nahi hua — dobara koshish karo",
   "tasks.tpl_start_date":                                     "Project start date",
   "tasks.tpl_start_date_hint":                                "Isi din se poora schedule banega. Khali chhodo to project ki start date, wo bhi na ho to aaj.",
