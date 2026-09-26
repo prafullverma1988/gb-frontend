@@ -6086,6 +6086,7 @@ const dict = {
   // ── project_detail ──────────────────────────────────────────
   "project_detail.10_digit":                                   "10 digit",
   "project_detail.admin_pm_only_set_location":                 "Admin/PM only — set location.",
+  "project_detail.geo_needs_projects_edit":             "Only roles with Projects → Edit in Roles & Access can set the location (Admin always).",
   "project_detail.all_approval_requests_are_clear":            "All approval requests are clear",
   "project_detail.all_projects_esc":                           "All Projects (Esc)",
   "project_detail.approvals":                                  "Approvals",

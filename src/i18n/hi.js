@@ -6085,6 +6085,7 @@ const dict = {
   // ── project_detail ──────────────────────────────────────────
   "project_detail.10_digit":                                   "10 डिजिट",
   "project_detail.admin_pm_only_set_location":                 "एडमिन/पीएम ओनली — सेट लोकेशन।",
+  "project_detail.geo_needs_projects_edit":             "लोकेशन सिर्फ वही सेट कर सकता है जिसके रोल को Roles & Access में Projects का Edit मिला है (एडमिन हमेशा)।",
   "project_detail.all_approval_requests_are_clear":            "सभी अप्रूवल रिक्वेस्ट क्लियर हैं",
   "project_detail.all_projects_esc":                           "सभी प्रोजेक्ट्स (एस्क)",
   "project_detail.approvals":                                  "अप्रूवल्स",
