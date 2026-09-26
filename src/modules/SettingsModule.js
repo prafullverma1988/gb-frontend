@@ -1417,13 +1417,30 @@ function RolesAccess() {
     const slug = (r.name || "").toLowerCase().replace(/[\s&]+/g, "_").replace(/_+/g, "_");
     return slug === roleId || r.name === activeRole?.name;
   });
+  // Jis module ki row DB me hai hi nahi, server wahan apna default maanta hai
+  // (row nahi = khula; Viewer sirf dekhna; Users & Roles band). Pehle matrix
+  // use khaali (band) dikhata tha aur Save sab khaali rows ko 0 likh deta tha —
+  // module chupchaap band ho jaata (PLT-09). Ab default ko halke (dashed) tick
+  // se dikhate hain, aur bina chhue save me nahi bhejte.
+  const [touchedPerm, setTouchedPerm] = useState({});
+  const rowMissing = (roleKey, mod) => {
+    if (roleKey === "admin" || touchedPerm[roleKey]?.[mod]) return false;
+    const r = dbRoleOf(roleKey);
+    if (!r) return false;
+    return !(r.permissions || []).some(p => String(p.module).toLowerCase() === mod.toLowerCase());
+  };
+  const rowDefault = (roleKey, mod) => {
+    if (mod === "Users & Roles") return [];
+    if (roleKey === "viewer") return ["view"];
+    return allPerms.filter(p => !permNA(mod, p));
+  };
   const savePermissions = async () => {
     if (selectedRole === "admin") return;
     // Find DB role by name-slug match
     const dbRole = dbRoleOf(selectedRole);
     if (!dbRole) { alert("Role DB record not found. Check /settings/roles API."); return; }
     const perms = permMatrix[selectedRole] || {};
-    const permissions = modules.map(m => ({
+    const permissions = modules.filter(m => !rowMissing(selectedRole, m.name)).map(m => ({
       module: m.name,
       can_view:    (perms[m.name]||[]).includes("view")    ? 1 : 0,
       can_create:  (perms[m.name]||[]).includes("create")  ? 1 : 0,
@@ -1436,14 +1453,18 @@ function RolesAccess() {
     setPermSaving(true);
     const res = await api.put(`/settings/roles/${dbRole.id}/permissions`, { permissions });
     setPermSaving(false);
-    if (res.success) alert("Permissions saved!");
+    if (res.success) { const k = selectedRole; reloadDbRoles().then(() => setTouchedPerm(p => ({ ...p, [k]: {} }))); alert("Permissions saved!"); }
     else alert(res.message || "Failed to save permissions");
   };
 
   const togglePerm = (mod, perm) => {
     if (selectedRole === "admin") return;
+    // Default wali row pe pehla click: jo default abhi chal raha hai wahi se
+    // shuru karo, phir ye badlaav — taaki ek click baaki ticks na gira de.
+    const fromDefault = rowMissing(selectedRole, mod) ? rowDefault(selectedRole, mod) : null;
+    if (fromDefault) setTouchedPerm(p => ({ ...p, [selectedRole]: { ...(p[selectedRole] || {}), [mod]: true } }));
     setPermMatrix(prev => {
-      const cur = prev[selectedRole]?.[mod] || [];
+      const cur = fromDefault || prev[selectedRole]?.[mod] || [];
       const has = cur.includes(perm);
       let next;
       if (perm === "view") {
@@ -1617,11 +1638,14 @@ function RolesAccess() {
                     </td>
                   </tr>,
                   ...(collapsed ? [] : group.items.map(name => {
-                    const perms = permMatrix[selectedRole]?.[name] || [];
+                    const dflt = rowMissing(selectedRole, name);
+                    const perms = dflt ? rowDefault(selectedRole, name) : (permMatrix[selectedRole]?.[name] || []);
                     return (
                       <tr key={name} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
                         <td style={{ padding: "12px", fontWeight: 600, color: T.text }}
-                            title={(PERM_HELP[name] || {}).view || name}>{name}</td>
+                            title={(PERM_HELP[name] || {}).view || name}>{name}
+                          {dflt && <div style={{ fontSize: 10.5, fontWeight: 500, color: T.amber, marginTop: 2 }}
+                            title={t("settings.perm_row_default_tip")}>{t(perms.length === 0 ? "settings.perm_row_default_closed" : perms.length === 1 ? "settings.perm_row_default_view" : "settings.perm_row_default_open")}</div>}</td>
                         {allPerms.map(p => {
                           const has = perms.includes(p);
                           // Report "banayi" ya "delete" nahi jaati — us row par
@@ -1632,7 +1656,7 @@ function RolesAccess() {
                             <td key={p} style={{ textAlign: "center", padding: "8px 6px" }}>
                               <button onClick={() => { if (!na) togglePerm(name, p); }}
                                 title={na ? "Is row par lagoo nahi hota" : permTip(name, p)}
-                                style={{ width: 28, height: 28, borderRadius: 6, background: na ? "transparent" : (has ? permColors[p].bg : T.borderLight), border: `1.5px solid ${na ? T.borderLight : (has ? permColors[p].text + "44" : "transparent")}`, cursor: (na || selectedRole === "admin") ? "not-allowed" : "pointer", opacity: na ? 0.4 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                                style={{ width: 28, height: 28, borderRadius: 6, background: na ? "transparent" : (has ? (dflt ? "transparent" : permColors[p].bg) : T.borderLight), border: `1.5px ${dflt && has ? "dashed" : "solid"} ${na ? T.borderLight : (has ? permColors[p].text + (dflt ? "99" : "44") : "transparent")}`, cursor: (na || selectedRole === "admin") ? "not-allowed" : "pointer", opacity: na ? 0.4 : 1, display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
                                 {na ? <span style={{ fontSize: 12, color: T.textLight }}>–</span> : (has && <IcCheck size={14} color={permColors[p].text} strokeWidth={2.5} />)}
                               </button>
                             </td>
