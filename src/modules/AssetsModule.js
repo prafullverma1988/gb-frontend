@@ -1458,6 +1458,11 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
   const save = async () => {
     setError("");
     if (!f.warehouse_id) { setError(t("assets.err_warehouse_required")); return; }
+    // Vendor zaroori — GRN Finance ke Unbilled me jaata hai aur wahan bill vendor
+    // se hi judta hai. App aur server bhi bina vendor ka GRN nahi lete.
+    const party = (pickers.parties || []).find((p) => String(p.id) === String(f.party_id));
+    const vendorName = vendorMode === "party" ? (party ? party.name : "") : String(f.vendor_name || "").trim();
+    if (!vendorName) { setError(t("assets.err_vendor_required")); return; }
     const items = [];
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i];
@@ -1473,11 +1478,10 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
         category_id: l.category_id || null, code: l.tracking_mode === "serialized" && qty === 1 && l.code.trim() ? l.code.trim() : null,
       });
     }
-    const party = (pickers.parties || []).find((p) => String(p.id) === String(f.party_id));
     const body = {
       type: "grn", date: f.date || todayStr(), to: { warehouse_id: Number(f.warehouse_id) }, items,
       party_id: vendorMode === "party" && f.party_id ? Number(f.party_id) : null,
-      vendor_name: vendorMode === "party" ? (party ? party.name : "") : f.vendor_name.trim(),
+      vendor_name: vendorName,
       invoice_no: f.invoice_no || null, invoice_date: f.invoice_date || null, remarks: f.remarks || null,
     };
     setBusy(true);
@@ -1503,7 +1507,7 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
         <Field label={t("assets.date")}><input type="date" value={f.date || ""} onChange={(e) => upd("date", e.target.value)} style={inp} /></Field>
         <Field label={t("assets.invoice_no")}><input value={f.invoice_no || ""} onChange={(e) => upd("invoice_no", e.target.value)} style={inp} /></Field>
         <Field label={t("assets.invoice_date")}><input type="date" value={f.invoice_date || ""} onChange={(e) => upd("invoice_date", e.target.value)} style={inp} /></Field>
-        <Field label={t("assets.vendor")} span={2}>
+        <Field label={t("assets.vendor_required_label")} span={2}>
           {vendorMode === "party" ? (
             <SearchSelect value={f.party_id || ""} onChange={(k) => upd("party_id", k)} accent={T.ind}
               options={(pickers.parties || []).map((p) => ({ id: p.id, name: p.name + (p.type ? ` · ${p.type}` : "") }))} placeholder={t("assets.select_vendor")} />
