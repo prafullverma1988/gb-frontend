@@ -17,9 +17,11 @@ if (process.env.REACT_APP_SENTRY_DSN) {
   // webpack kuch bhi tree-shake nahi kar paata tha — 473 KB chunk me rrweb
   // (session replay, 77 KB) bhi aata tha jabki replay configure hi nahi hai.
   // Ab sirf init + captureException (AppErrorBoundary yahi maangta hai) liye
-  // jaate hain (webpackExports), aur load first render ke baad browser ke
-  // khaali waqt me hota hai — login/dashboard ke raaste me nahi.
-  const startSentry = () => import(/* webpackExports: ["init", "captureException"] */ '@sentry/react').then(({ init, captureException }) => {
+  // jaate hain — destructuring hai, isliye webpack baaki export (replay, feedback ..)
+  // tree-shake kar deta hai (webpackExports comment ki zaroorat nahi — webpack khud
+  // warning deta hai) — aur load first render ke baad browser ke khaali waqt me
+  // hota hai, login/dashboard ke raaste me nahi.
+  const startSentry = () => import('@sentry/react').then(({ init, captureException }) => {
     init({
       dsn: process.env.REACT_APP_SENTRY_DSN,
       environment: process.env.NODE_ENV,
