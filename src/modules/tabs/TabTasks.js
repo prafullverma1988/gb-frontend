@@ -82,7 +82,9 @@ function fmtDate(d){
   const [y,m,dd]=s.split("-");
   return dd+"/"+m+"/"+y;
 }
-function ptDelayDays(t){if(t.status==="Completed"||!t.baseEnd) return 0;const d=Math.round((new Date()-new Date(t.baseEnd))/(1000*86400));return d>0?d:0;}
+// Late = aaj (IST din) End ke AAKHRI din se aage nikal gaya. Pehle ghante gine jaate
+// the: End ke din hi shaam 5:30 ke baad "+1d late" (TSK-17).
+function ptDelayDays(t){if(t.status==="Completed"||!t.baseEnd) return 0;const d=Math.round((new Date(todayISO()+"T00:00:00Z")-new Date(String(t.baseEnd).slice(0,10)+"T00:00:00Z"))/(1000*86400));return d>0?d:0;}
 
 // ── Parent (summary) task progress ───────────────────────────────────────
 // A task with children does NOT own its progress — the backend derives it as a
@@ -132,7 +134,8 @@ function ptFinishVar(t){
     if(d<0) return {kind:"early",days:-d};
     return {kind:"ontime",days:0};
   }
-  const d = Math.round((new Date()-new Date(pe))/86400000);
+  // aaj ka IST din vs planned AAKHRI din (ghante nahi — TSK-17)
+  const d = Math.round((new Date(todayISO()+"T00:00:00Z")-new Date(String(pe).slice(0,10)+"T00:00:00Z"))/86400000);
   if(d>0) return {kind:"running",days:d};
   return {kind:"ontime",days:0};
 }
@@ -401,22 +404,23 @@ function TabTasks({ projectId, isAdmin }) {
   const [cascadeApplying,setCascadeApplying] = useState(false);
   const [reasonMenu,setReasonMenu] = useState(null); // P4: {x,y,task}
   // ── Gantt: quick dep remove + cascade fix callbacks ────────────
+  // Jod ka ek hi sach server ki edge table (TSK-16): pehle ye PUT se sirf
+  // `dependencies` JSON badalte the — teer gayab hota par re-plan edge maan kar
+  // kaam phir bhi khiskata tha, aur chakkar ki jaanch bhi nahi hoti thi.
   const ganttRemoveDep = async (taskId, depId) => {
-    const t = allFlat.find(x=>x.id===Number(taskId));
-    if(!t) return;
-    let deps = Array.isArray(t.dependencies) ? t.dependencies.map(Number) : [];
-    deps = deps.filter(d=>d!==Number(depId));
-    try { await api.put("/tasks/"+taskId, {dependencies: deps}); } catch(_){}
-    setTasks(updateInTree(tasks, Number(taskId), {dependencies: deps}));
+    const tk = allFlat.find(x=>x.id===Number(taskId));
+    if(!tk) return;
+    const r = await api.del(`/tasks/${taskId}/deps/${depId}`);
+    if (r && r.success === false) window.toast?.error?.(r.message || t("tasks.save_nahi_hua"));
+    await refetchTasks();
   };
   const ganttAddDep = async (taskId, depId) => {
-    const t = allFlat.find(x=>x.id===Number(taskId));
-    if(!t) return;
-    let deps = Array.isArray(t.dependencies) ? t.dependencies.map(Number) : [];
-    if(deps.includes(Number(depId))) return;
-    deps = [...deps, Number(depId)];
-    try { await api.put("/tasks/"+taskId, {dependencies: deps}); } catch(_){}
-    setTasks(updateInTree(tasks, Number(taskId), {dependencies: deps}));
+    const tk = allFlat.find(x=>x.id===Number(taskId));
+    if(!tk) return;
+    if((tk.deps||[]).some(d=>Number(d.id)===Number(depId))) return;
+    const r = await api.post(`/tasks/${taskId}/deps`, { predecessor_task_id: Number(depId), dep_type: "FS", lag_days: 0 });
+    if (r && r.success === false) window.toast?.error?.(r.message || t("tasks.save_nahi_hua"));
+    await refetchTasks();
   };
   const ganttCascadeFix = async (taskId, newStart) => {
     if(!newStart) return;
@@ -1590,7 +1594,11 @@ function TabTasks({ projectId, isAdmin }) {
         const r = await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress,
           // Khaali tareekh par "" bhejna = server par 500 (MySQL date me ""
           // ja hi nahi sakta). null = "is khaane ko haath mat lagao".
-          base_start:u.baseStart||null, base_end:u.baseEnd||null, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen,
+          base_start:u.baseStart||null, base_end:u.baseEnd||null, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dhyan_rakhen:u.dhyanRakhen,
+          // Jod wale project me jodein "Pehle wale kaam" editor turant server par
+          // likhta hai — yahan drawer khulte waqt ki purani list bhejna unhe
+          // wapas palat deta tha (TSK-16). Bina jod wale project me list yahi se.
+          ...(hasDeps ? {} : { dependencies: u.dependencies }),
           // Kaam kisko diya — user ki ID jaati hai, "" = kisi ko nahi.
           // (Ye pehle bheja hi nahi jaata tha, isliye chunav gum ho jaata tha.)
           assigned_to: u.assignedTo === "" || u.assignedTo == null ? "" : Number(u.assignedTo),
@@ -2196,10 +2204,28 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
   const apply = async () => {
     setError("");
     if (!selected) { setError(t("tasks.pick_a_template_first")); return; }
-    if (!await window.confirmAsync(`"${tpl?.name}" load karein?\n\nProject ke maujooda Gantt tasks REPLACE ho jaayenge — sirf yeh template rahega. (To-Do tab affect nahi hota.)\n\nContinue?`)) return;
+    // Confirm se pehle taaza ginti (dry_run): kitne purane task jaayenge, kis par
+    // site ka kaam juda hai. Pehle confirm bina ginti ke tha aur server kaam wale
+    // task bhi mita deta tha (TSK-10). Kaam juda ho to server unhe archive tabhi
+    // karta hai jab hum saaf `archive_touched` bhejein — warna 409, kuch nahi mitta.
+    let pv = null;
+    try {
+      const dry = { template_id: selected, dry_run: true };
+      if (startDate) dry.start_date = startDate;
+      if (isDbTpl) dry.selected_groups = groups;
+      const pr = await api.taskTemplates.apply(projectId, dry);
+      if (pr && pr.success) pv = pr.data;
+    } catch (_) { /* ginti na mili — server phir bhi kaam wale task nahi mitayega (409) */ }
+    const oldN = pv ? Number(pv.tasks_wiped) || 0 : 0;
+    const msg = pv && pv.touched
+      ? t("tasks.tpl_confirm_archive", { name: tpl?.name || "", n: oldN, reasons: (pv.touched_reasons || []).join(", ") })
+      : oldN > 0 ? t("tasks.tpl_confirm_replace", { name: tpl?.name || "", n: oldN })
+      : t("tasks.tpl_confirm_empty", { name: tpl?.name || "" });
+    if (!await window.confirmAsync(msg)) return;
     setApplying(true);
     try {
       const body = { template_id: selected, wipe_existing: true, include_boq: includeBOQ };
+      if (pv && pv.touched) body.archive_touched = true;
       if (startDate) body.start_date = startDate;
       if (isDbTpl) body.selected_groups = groups;
       const r = await api.taskTemplates.apply(projectId, body);
@@ -2228,7 +2254,8 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
         {/* Body */}
         <div style={{padding:"14px 20px",overflowY:"auto",flex:1}}>
           {error && <div style={{background:T.redL,color:"#991B1B",padding:"8px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:`1px solid ${T.redM}`}}>{error}</div>}
-          {result && <div style={{background:T.grnL,color:"#065F46",padding:"10px 14px",borderRadius:7,fontSize:12.5,marginBottom:12,border:`1px solid ${T.grnM}`,fontWeight:600}}>{t("tasks.template_applied_tasks_inserted_tasks_result", { tasks_inserted: result.task_count || result.tasks_inserted, result: result.boq_inserted || 0, total_duration_days: result.total_duration_days })}</div>}
+          {result && <div style={{background:T.grnL,color:"#065F46",padding:"10px 14px",borderRadius:7,fontSize:12.5,marginBottom:12,border:`1px solid ${T.grnM}`,fontWeight:600}}>{t("tasks.template_applied_tasks_inserted_tasks_result", { tasks_inserted: result.task_count || result.tasks_inserted, result: result.boq_inserted || 0, total_duration_days: result.total_duration_days })}
+            {Number(result.tasks_archived) > 0 && <div style={{fontWeight:400,marginTop:3}}>{t("tasks.tpl_result_archived", { n: result.tasks_archived })}</div>}</div>}
 
           {!list && !error && <div style={{padding:24,textAlign:"center",color:T.t4,fontSize:12}}>{t("tasks.loading_templates")}</div>}
           {list && list.length === 0 && <div style={{padding:24,textAlign:"center",color:T.t4,fontSize:12}}>{t("tasks.no_templates_available_yet")}</div>}
@@ -2302,6 +2329,14 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
                         <span style={{fontSize:12.5,fontWeight:700,color:IND}}>{t("tasks.tpl_preview_line", { count: preview.task_count, days: preview.total_duration_days, end: fmtD(preview.end_date) })}</span>
                         {preview.skipped_count > 0 && <span style={{fontSize:10.5,color:T.t3}}>{t("tasks.tpl_preview_skipped", { n: preview.skipped_count })}</span>}
                       </>}
+                </div>
+              )}
+              {/* Purane task ka kya hoga — asli ginti (dry_run), kaam juda ho to archive (TSK-10) */}
+              {isDbTpl && !previewing && preview && Number(preview.tasks_wiped) > 0 && (
+                <div style={{marginTop:6,padding:"7px 12px",borderRadius:6,fontSize:11.5,lineHeight:1.45,
+                  background:preview.touched?T.ambL:T.surfaceB,border:`1px solid ${preview.touched?T.ambM:T.b1}`,color:preview.touched?"#92400E":T.t3}}>
+                  {t("tasks.tpl_preview_replace", { n: preview.tasks_wiped })}
+                  {preview.touched && <> — {t("tasks.tpl_preview_touched", { reasons: (preview.touched_reasons || []).join(", ") })}</>}
                 </div>
               )}
 
@@ -2560,6 +2595,8 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
   const chartWidth = cx;
   const ROW_H=30, LBL_W=270, HDR_H=28, HDR2_H=18;
   const toX=(ds)=>{if(!ds)return null;const ms=new Date(ds).getTime()-pStart.getTime();if(isNaN(ms))return null;return LBL_W+ms*pxPerMs;};
+  // End tareekh kaam ka AAKHRI din hai — bar us din ke khatam hone tak (TSK-17)
+  const toXEnd=(ds)=>{const x=toX(ds);return x==null?null:x+PX_PER_DAY;};
   const todayX=toX(todayStr);
   const TOTAL_HEADER=HDR_H+HDR2_H;
   const TOTAL_W=LBL_W+chartWidth;
@@ -2569,18 +2606,30 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
   // ── Dependency maps (for hover highlight) ────────────────────
   // predsMap[id] = [dep ids this task depends on]
   // succMap[id]  = [ids that depend on this task]
+  // Jodein server ke `deps` se (edge table; jahan edge nahi wahan purana JSON
+  // FS+0) — list, editor aur re-plan wali hi jodein (TSK-16). Purana server
+  // `deps` na bheje to JSON.
   const predsMap={}, succMap={};
   allFlat.forEach(t=>{
-    const deps=Array.isArray(t.dependencies)?t.dependencies.map(Number):[];
+    const deps=Array.isArray(t.deps)?t.deps.map(d=>Number(d.id)):Array.isArray(t.dependencies)?t.dependencies.map(Number):[];
     predsMap[t.id]=deps;
     deps.forEach(d=>{ succMap[d]=succMap[d]||[]; succMap[d].push(t.id); });
   });
-  // ── Broken dep detection — pred.end > succ.start = violation ──
+  // ── Broken dep detection — jod ka TYPE aur GAP dekh kar (TSK-03) ──
+  // Pehle har jod FS maan kar `pred.end > succ.start` — har "saath" (SS) jod
+  // ka teer laal '⚠' dikhta tha jabki tareekhein us jod ko maanti thin.
+  //   FS: succ.start >= pred.end + gap   (usi din haath-badli chalti hai)
+  //   SS: succ.start >= pred.start + gap
+  const depInfo = {}; // "predId-succId" → {type, lag}
+  allFlat.forEach(t=>{ (Array.isArray(t.deps)?t.deps:[]).forEach(d=>{ depInfo[`${Number(d.id)}-${t.id}`]={type:d.dep_type==="SS"?"SS":"FS",lag:Number(d.lag_days)||0}; }); });
+  const dDiff=(a,b)=>Math.round((new Date(String(b).slice(0,10)+"T00:00:00Z")-new Date(String(a).slice(0,10)+"T00:00:00Z"))/86400000);
   const brokenSet = new Set(); // "predId-succId" keys
   allFlat.forEach(t=>{
     (predsMap[t.id]||[]).forEach(depId=>{
       const pred = allFlat.find(x=>x.id===depId);
-      if(pred && pred.baseEnd && t.baseStart && new Date(pred.baseEnd)>new Date(t.baseStart))
+      const info = depInfo[`${depId}-${t.id}`] || {type:"FS",lag:0};
+      const anchor = info.type==="SS" ? pred?.baseStart : pred?.baseEnd;
+      if(pred && anchor && t.baseStart && dDiff(anchor, t.baseStart) < info.lag)
         brokenSet.add(`${depId}-${t.id}`);
     });
   });
@@ -2590,7 +2639,7 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
 
   // bar positions for arrows
   const pos={};
-  allFlat.forEach((t,i)=>{ pos[t.id]={y:TOTAL_HEADER+i*ROW_H+ROW_H/2, bx1:toX(t.baseStart), bx2:toX(t.baseEnd)}; });
+  allFlat.forEach((t,i)=>{ pos[t.id]={y:TOTAL_HEADER+i*ROW_H+ROW_H/2, bx1:toX(t.baseStart), bx2:toXEnd(t.baseEnd)}; });
 
   const phaseColors=["#1E3A5F","#1A4731","#4A1942","#3D2900","#1A2E4A","#2D1B4E","#1F3A2F"];
 
@@ -2650,8 +2699,8 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
         const isPkg=t._depth===1;
         const hasKids=t.children?.length>0;
         const isOpen=!(collapsed&&collapsed[t.id]);
-        const bx1=toX(t.baseStart), bx2=toX(t.baseEnd);
-        const ax1=toX(t.actualStart), ax2=t.actualEnd?toX(t.actualEnd):todayX;
+        const bx1=toX(t.baseStart), bx2=toXEnd(t.baseEnd);
+        const ax1=toX(t.actualStart), ax2=t.actualEnd?toXEnd(t.actualEnd):todayX;
         // min 4px so 1-day tasks always visible
         const bw=bx1!=null&&bx2!=null?Math.max(4,bx2-bx1):0;
         const prog=Number(t.progress)||0;
@@ -2730,11 +2779,13 @@ function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttSc
 
       {/* ── DEPENDENCY ARROWS — highlighted when hovered ── */}
       {allFlat.map(t=>{
-        const deps=Array.isArray(t.dependencies)?t.dependencies:[];
+        const deps=predsMap[t.id]||[];
         return deps.map(dep=>{
           const a=pos[Number(dep)], b=pos[t.id];
           if(!a||!b||a.bx2==null||b.bx1==null) return null;
-          const x1=a.bx2, y1=a.y, x2=b.bx1, y2=b.y;
+          // SS (saath) teer pred ki SHURUAAT se, FS pred ke khatam hone se
+          const isSS=(depInfo[`${Number(dep)}-${t.id}`]||{}).type==="SS";
+          const x1=isSS&&a.bx1!=null?a.bx1:a.bx2, y1=a.y, x2=b.bx1, y2=b.y;
           const mx=x1+Math.max(10,(x2-x1)*0.4);
           // highlight if either endpoint is hovered
           const isBroken = brokenSet.has(`${dep}-${t.id}`);
@@ -4785,10 +4836,10 @@ const teamOpts=(team)=>[{id:"",name:t("tasks.kisi_ko_nahi")},
     name:m.name+(m.designation||m.role?" · "+String(m.designation||m.role).replace(/_/g," "):"")})))];
 
 function PTEditTask({task,allTasks,projectId,team,depsMode,phaseCodeMap,onDepsChanged,onClose,onSave}){
-  // Dependency wale schedule me duration EXCLUSIVE hai (end = start + din) —
-  // wahi ganit jo template apply karte waqt chala tha. Purane, haath se bane
-  // schedule me duration inclusive hai (2 tarikh ke beech ke din + 1).
-  const DSPAN = depsMode ? 0 : 1;
+  // End = kaam ka AAKHRI din, har project me (6 se 7 tarikh = 2 din). Pehle
+  // dependency wale project me yahan exclusive ganit tha (end = start + din) aur
+  // baaki me inclusive — ek hi task web par 1d, app par 2d dikhta (TSK-17).
+  const DSPAN = 1;
   const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignedTo:task.assigned_to??"",status:task.status,progress:task.progress,unit:task.unit||"",scopeQty:task.scope_qty??"",baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+DSPAN:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
   // Tender links. A task made by hand ("Pipe line laying") carries no BOQ item,
   // so its daily quantity has nowhere to go. Linking it once here is what puts
