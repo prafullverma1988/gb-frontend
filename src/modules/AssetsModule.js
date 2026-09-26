@@ -31,6 +31,7 @@ import ImportFixPanel, { useImportFix, impNorm } from "../components/ImportFix";
 import { useToast } from "../components/Toast";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -379,7 +380,26 @@ const Spinner = ({ label }) => (
   </div>
 );
 
-const PhotoField = ({ value, onChange }) => {
+// Company ki photo policy "asset_move" (Settings › Photo Settings › "Asset issue /
+// return"). Server ise har voucher par lagata hai jo GRN nahi — issue, return,
+// transfer aur repair bhi. Web ke Repair form me photo ka box hi nahi tha, to
+// jahan photo zaroori hai (RATNA KHANIJ) wahan web se repair ban hi nahi paata.
+function useMovePhotoPolicy(open) {
+  const [pol, setPol] = useState(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    loadPhotoPolicy().then((x) => { if (alive) setPol(policyFor(x, "asset_move")); });
+    return () => { alive = false; };
+  }, [open]);
+  return pol;
+}
+const photoMissing = (pol, photo) => !!(pol && pol.mode === "required" && !photo);
+
+// pol: Band = box hi nahi; Zaroori = label "Photo *"; sirf camera = mobile browser
+// seedha camera kholta hai (desktop par gallery rokne ka koi bharosemand tareeka
+// nahi — asli rok server par hai).
+const PhotoField = ({ value, onChange, pol }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const pick = async (e) => {
@@ -392,8 +412,9 @@ const PhotoField = ({ value, onChange }) => {
     catch (ex) { setError(ex.message || t("assets.upload_failed")); }
     setBusy(false);
   };
+  if (pol && pol.mode === "off") return null;
   return (
-    <Field label={t("assets.photo_optional")} hint={t("assets.photo_hint")}>
+    <Field label={pol && pol.mode === "required" ? t("assets.photo_required_label") : t("assets.photo_optional")} hint={t("assets.photo_hint")}>
       {value ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <a href={value} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: T.ind, fontWeight: 700, textDecoration: "none" }}>{t("assets.photo_view")}</a>
@@ -403,7 +424,7 @@ const PhotoField = ({ value, onChange }) => {
       ) : (
         <label style={{ ...inp, display: "flex", alignItems: "center", cursor: busy ? "wait" : "pointer", color: busy ? T.t4 : T.t3 }}>
           {busy ? t("assets.uploading") : t("assets.photo_pick")}
-          <input type="file" accept="image/*" capture="environment" onChange={pick} disabled={busy} style={{ display: "none" }} />
+          <input {...fileInputProps(pol || { source: "camera" })} onChange={pick} disabled={busy} style={{ display: "none" }} />
         </label>
       )}
       {error && <div style={{ fontSize: 10.5, color: T.red, marginTop: 4, fontWeight: 600 }}>{error}</div>}
@@ -1458,6 +1479,11 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
   const save = async () => {
     setError("");
     if (!f.warehouse_id) { setError(t("assets.err_warehouse_required")); return; }
+    // Vendor zaroori — GRN Finance ke Unbilled me jaata hai aur wahan bill vendor
+    // se hi judta hai. App aur server bhi bina vendor ka GRN nahi lete.
+    const party = (pickers.parties || []).find((p) => String(p.id) === String(f.party_id));
+    const vendorName = vendorMode === "party" ? (party ? party.name : "") : String(f.vendor_name || "").trim();
+    if (!vendorName) { setError(t("assets.err_vendor_required")); return; }
     const items = [];
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i];
@@ -1473,11 +1499,10 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
         category_id: l.category_id || null, code: l.tracking_mode === "serialized" && qty === 1 && l.code.trim() ? l.code.trim() : null,
       });
     }
-    const party = (pickers.parties || []).find((p) => String(p.id) === String(f.party_id));
     const body = {
       type: "grn", date: f.date || todayStr(), to: { warehouse_id: Number(f.warehouse_id) }, items,
       party_id: vendorMode === "party" && f.party_id ? Number(f.party_id) : null,
-      vendor_name: vendorMode === "party" ? (party ? party.name : "") : f.vendor_name.trim(),
+      vendor_name: vendorName,
       invoice_no: f.invoice_no || null, invoice_date: f.invoice_date || null, remarks: f.remarks || null,
     };
     setBusy(true);
@@ -1503,7 +1528,7 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
         <Field label={t("assets.date")}><input type="date" value={f.date || ""} onChange={(e) => upd("date", e.target.value)} style={inp} /></Field>
         <Field label={t("assets.invoice_no")}><input value={f.invoice_no || ""} onChange={(e) => upd("invoice_no", e.target.value)} style={inp} /></Field>
         <Field label={t("assets.invoice_date")}><input type="date" value={f.invoice_date || ""} onChange={(e) => upd("invoice_date", e.target.value)} style={inp} /></Field>
-        <Field label={t("assets.vendor")} span={2}>
+        <Field label={t("assets.vendor_required_label")} span={2}>
           {vendorMode === "party" ? (
             <SearchSelect value={f.party_id || ""} onChange={(k) => upd("party_id", k)} accent={T.ind}
               options={(pickers.parties || []).map((p) => ({ id: p.id, name: p.name + (p.type ? ` · ${p.type}` : "") }))} placeholder={t("assets.select_vendor")} />
@@ -1812,6 +1837,7 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
   const [photo, setPhoto] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const pol = useMovePhotoPolicy(open);
 
   const all = (meta && meta.warehouses) || [];
   const myIds = (meta && meta.my_warehouse_ids) || [];
@@ -1852,11 +1878,14 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
       const rent = external && l.charge_mode === "rent";
       if (rent && !(Number(l.rent_rate) > 0)) { setError(t("assets.err_rent_rate", { n: i + 1 })); return; }
       items.push({
-        asset_item_id: h.asset_item_id, qty, condition: l.condition || "good",
+        // Yahan haalat hi bucket hai (theek wala ya toota wala stock) — server
+        // usi se nikaalta hai (from_condition), kami doosre bucket se nahi bharta.
+        asset_item_id: h.asset_item_id, qty, condition: l.condition || "good", from_condition: l.condition || "good",
         charge_mode: rent ? "rent" : "free", rent_rate: rent ? Number(l.rent_rate) : null, rent_basis: rent ? (l.rent_basis || "day") : null,
         remarks: l.remarks || null,
       });
     }
+    if (photoMissing(pol, photo)) { setError(t("assets.err_photo_required")); return; }
     setBusy(true);
     const r = await api.post("/assets/vouchers", {
       type: "issue", date, from: { warehouse_id: Number(wh) }, to: siteLocBody(to), items,
@@ -1921,7 +1950,7 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 14 }}>
         <Field label={t("assets.expected_return")} hint={t("assets.expected_return_hint")}><input type="date" value={ret} onChange={(e) => setRet(e.target.value)} style={inp} /></Field>
         <Field label={t("assets.remarks")}><input value={remarks} onChange={(e) => setRemarks(e.target.value)} style={inp} /></Field>
-        <PhotoField value={photo} onChange={setPhoto} />
+        <PhotoField value={photo} onChange={setPhoto} pol={pol} />
       </div>
       <ErrBox>{error}</ErrBox>
     </Modal>
@@ -1935,6 +1964,12 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
 // paas hai (ya mere warehouse me) wahi dikhti hai; aur har line par ye bhi
 // ki wahan kitni padi hai.
 const groupKey = (h) => (h.warehouse_id ? `w:${h.warehouse_id}` : `s:${h.project_id}:${h.holder_type}:${h.holder_id}:${h.custodian_user_id}`);
+// Ek holding → theek aur toote ki alag row (app ke Return/Transfer jaisa).
+// Line jis row se chuni usi bucket se nikalti hai (from_condition): toote me se
+// "Lost" likhne par theek stock nahi katta, aur reject/cancel par usi me wapas.
+const bucketRows = (rows) => rows.flatMap((s) => ["good", "damaged"]
+  .map((b) => ({ ...s, key: `${s.id}:${b}`, bucket: b, have: N(b === "good" ? s.qty_good : s.qty_damaged) }))
+  .filter((x) => x.have > 0));
 
 // ══════════════════════════════════════════════════════════════════
 // EK ASSET HAATH SE — opening stock, Excel ke bina
@@ -2128,6 +2163,7 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
   const [photo, setPhoto] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const pol = useMovePhotoPolicy(open);
 
   const all = (meta && meta.warehouses) || [];
   const myIds = (meta && meta.my_warehouse_ids) || [];
@@ -2177,7 +2213,8 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
   }, [hold, storeMode, isReturn]);
   const g = groups.find((x) => x.key === from);
   const fromIsWh = !!(g && g.warehouse_id);
-  const stockOf = (key) => (g ? g.rows.find((h) => String(h.id) === String(key)) : null);
+  const bRows = bucketRows(g ? g.rows : []);
+  const stockOf = (key) => bRows.find((h) => h.key === String(key)) || null;
   const updLine = (i, v) => setLines((p) => p.map((l, j) => (j === i ? v : l)));
   const external = !isReturn && !storeMode && ["worker", "subcon"].includes(toSite.holder_type);
 
@@ -2199,18 +2236,19 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
       if (!h) { setError(t("assets.err_line_item", { n: i + 1 })); return; }
       const qty = h.tracking_mode === "serialized" ? 1 : Number(l.qty);
       if (!(qty > 0)) { setError(t("assets.err_line_qty", { n: i + 1 })); return; }
-      const have = N(h.qty_good) + N(h.qty_damaged);
-      if (qty > have) { setError(t("assets.err_line_stock", { n: i + 1, have: fmtN(have) })); return; }
+      if (qty > h.have) { setError(t("assets.err_line_stock", { n: i + 1, have: fmtN(h.have) })); return; }
       const rent = external && l.charge_mode === "rent";
       if (rent && !(Number(l.rent_rate) > 0)) { setError(t("assets.err_rent_rate", { n: i + 1 })); return; }
+      const cond = h.bucket === "damaged" && (l.condition || "good") === "good" ? "damaged" : (l.condition || "good");
       items.push({
-        asset_item_id: h.asset_item_id, qty, condition: l.condition || "good",
+        asset_item_id: h.asset_item_id, qty, condition: cond, from_condition: h.bucket,
         charge_mode: rent ? "rent" : "free", rent_rate: rent ? Number(l.rent_rate) : null, rent_basis: rent ? (l.rent_basis || "day") : null,
         remarks: l.remarks || null,
       });
     }
     const fromLoc = g.warehouse_id ? { warehouse_id: g.warehouse_id }
       : { project_id: g.project_id, holder_type: g.holder_type, holder_id: g.holder_id, custodian_user_id: g.custodian_user_id };
+    if (photoMissing(pol, photo)) { setError(t("assets.err_photo_required")); return; }
     setBusy(true);
     const r = await api.post("/assets/vouchers", {
       type: isReturn ? "return" : "transfer", date, from: fromLoc, to: toLoc, items,
@@ -2274,15 +2312,15 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
                 <Row key={i} cols={lineCols}>
                   <div>
                     <SearchSelect value={l.key} accent={T.ind} compact
-                      onChange={(k) => { const hh = stockOf(k); updLine(i, { ...l, key: k, qty: hh && hh.tracking_mode === "serialized" ? "1" : l.qty }); }}
-                      options={g.rows.map((s) => ({ id: s.id, name: `${lineLabel(s)} — ${fmtN(s.qty_good)} ${t("assets.good").toLowerCase()}${N(s.qty_damaged) ? `, ${fmtN(s.qty_damaged)} ${t("assets.damaged").toLowerCase()}` : ""}` }))}
+                      onChange={(k) => { const hh = stockOf(k); updLine(i, { ...l, key: k, condition: hh ? hh.bucket : l.condition, qty: hh && hh.tracking_mode === "serialized" ? "1" : l.qty }); }}
+                      options={bRows.map((s) => ({ id: s.key, name: `${lineLabel(s)} — ${fmtN(s.have)} ${(s.bucket === "damaged" ? t("assets.damaged") : t("assets.good")).toLowerCase()}` }))}
                       placeholder={t("assets.select_item")} />
-                    {h && <div style={{ fontSize: 10, color: T.t4, marginTop: 3 }}>{t("assets.with_you_n", { n: fmtN(N(h.qty_good) + N(h.qty_damaged)), unit: h.unit || "" })}</div>}
+                    {h && <div style={{ fontSize: 10, color: h.bucket === "damaged" ? T.amb : T.t4, marginTop: 3 }}>{t("assets.with_you_n", { n: fmtN(h.have), unit: h.unit || "" })}{h.bucket === "damaged" ? ` · ${t("assets.damaged").toLowerCase()}` : ""}</div>}
                   </div>
                   <input value={h && h.tracking_mode === "serialized" ? "1" : l.qty} inputMode="decimal" style={inpSm} disabled={!!(h && h.tracking_mode === "serialized")}
                     onChange={(e) => updLine(i, { ...l, qty: e.target.value.replace(/[^0-9.]/g, "") })} />
                   <select value={l.condition} onChange={(e) => updLine(i, { ...l, condition: e.target.value })} style={inpSm}>
-                    <option value="good">{t("assets.cond_good")}</option>
+                    {!(h && h.bucket === "damaged") && <option value="good">{t("assets.cond_good")}</option>}
                     <option value="damaged">{t("assets.cond_damaged")}</option>
                     <option value="lost">{t("assets.cond_lost")}</option>
                   </select>
@@ -2300,7 +2338,7 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 14 }}>
         {!isReturn && !storeMode && <Field label={t("assets.expected_return")} hint={t("assets.expected_return_hint")}><input type="date" value={ret} onChange={(e) => setRet(e.target.value)} style={inp} /></Field>}
         <Field label={t("assets.remarks")}><input value={remarks} onChange={(e) => setRemarks(e.target.value)} style={inp} /></Field>
-        <PhotoField value={photo} onChange={setPhoto} />
+        <PhotoField value={photo} onChange={setPhoto} pol={pol} />
       </div>
       <ErrBox>{error}</ErrBox>
     </Modal>
@@ -2327,8 +2365,10 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
   const [cost, setCost] = useState("");
   const [invoice, setInvoice] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [photo, setPhoto] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const pol = useMovePhotoPolicy(open);
 
   const all = (meta && meta.warehouses) || [];
   const myIds = (meta && meta.my_warehouse_ids) || [];
@@ -2338,7 +2378,7 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
     if (!open) return;
     const def = myWh.find((w) => w.is_default) || myWh[0];
     setParty(""); setFrom(""); setToWh(def ? String(def.id) : ""); setDate(todayStr());
-    setLines([newMoveLine()]); setCost(""); setInvoice(""); setRemarks(""); setError("");
+    setLines([newMoveLine()]); setCost(""); setInvoice(""); setRemarks(""); setPhoto(""); setError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, kind]);
 
@@ -2415,11 +2455,13 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
       ? (g.warehouse_id ? { warehouse_id: g.warehouse_id }
         : { project_id: g.project_id, holder_type: g.holder_type, holder_id: g.holder_id, custodian_user_id: g.custodian_user_id })
       : repairLoc(party);
+    if (photoMissing(pol, photo)) { setError(t("assets.err_photo_required")); return; }
     setBusy(true);
     const r = await api.post("/assets/vouchers", {
       type: isOut ? "repair_out" : "repair_in", date, from: fromLoc,
       to: isOut ? repairLoc(party) : { warehouse_id: Number(toWh) }, items,
       repair_cost: cost === "" ? null : Number(cost), invoice_no: invoice || null, remarks: remarks || null,
+      photo_url: photo || null,
     });
     setBusy(false);
     if (r && r.success) { toast.success(r.message || t("assets.voucher_done", { no: (r.data && r.data.voucher_no) || "" })); onSaved(r.data); onClose(); }
@@ -2503,12 +2545,13 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
       </Panel>
       <div style={{ fontSize: 11, color: T.t4, marginTop: 8 }}>{isOut ? t("assets.repair_out_hint") : t("assets.repair_in_hint")}</div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginTop: 14 }}>
         <Field label={t("assets.repair_cost")} hint={t("assets.repair_cost_hint")}>
           <input value={cost} inputMode="decimal" placeholder="₹" onChange={(e) => setCost(e.target.value.replace(/[^0-9.]/g, ""))} style={inp} />
         </Field>
         <Field label={t("assets.invoice_no")}><input value={invoice} onChange={(e) => setInvoice(e.target.value)} style={inp} /></Field>
         <Field label={t("assets.remarks")}><input value={remarks} onChange={(e) => setRemarks(e.target.value)} style={inp} /></Field>
+        <PhotoField value={photo} onChange={setPhoto} pol={pol} />
       </div>
       <ErrBox>{error}</ErrBox>
     </Modal>
@@ -2721,10 +2764,16 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, canEdit, onClose, onC
   };
   const setCell = (ln, k, val) => setEdit((p) => ({ ...p, [ln.id]: { ...cellOf(ln), ...(p[ln.id] || {}), [k]: val } }));
 
+  // Server aur app wala hi niyam: do me se ek bhi box bhara = line gini gayi,
+  // khaali doosra = 0. Dono khaali = abhi gina nahi. Pehle yahan "Theek" khaali
+  // hote hi dono null jaate — sirf "Toota: 2" bharne wale ki ginti web par
+  // chupchaap "gini nahi" reh jaati, jabki app par wahi ginti lag jaati.
+  const blank = (x) => x === "" || x === undefined || x === null;
   const itemsPayload = () => Object.keys(edit).map((lid) => {
     const e = edit[lid];
-    const g = e.g === undefined ? undefined : (e.g === "" ? null : Number(e.g));
-    return { id: Number(lid), counted_good: g, counted_damaged: g == null ? null : (e.d === "" || e.d === undefined ? 0 : Number(e.d)), remarks: e.r };
+    const counted = !blank(e.g) || !blank(e.d);
+    return { id: Number(lid), counted_good: counted ? (blank(e.g) ? 0 : Number(e.g)) : null,
+             counted_damaged: counted ? (blank(e.d) ? 0 : Number(e.d)) : null, remarks: e.r };
   });
   const took = (r) => { toast.success(r.message || t("assets.saved")); setEdit({}); setV(r.data); setNote((r.data && r.data.remarks) || ""); onChanged(); };
 
@@ -2846,8 +2895,8 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, canEdit, onClose, onC
                 const useCur = hasCur && (edited || !saved);
                 const sg = useCur ? N(ln.current_good) : N(ln.system_good), sd = useCur ? N(ln.current_damaged) : N(ln.system_damaged);
                 const movedAfter = hasCur && saved && !edited && (N(ln.current_good) !== N(ln.system_good) || N(ln.current_damaged) !== N(ln.system_damaged));
-                const counted = c.g !== "";
-                const cg = counted ? Number(c.g) : 0, cd = counted ? (c.d === "" ? 0 : Number(c.d)) : 0;
+                const counted = c.g !== "" || c.d !== "";
+                const cg = counted ? (c.g === "" ? 0 : Number(c.g)) : 0, cd = counted ? (c.d === "" ? 0 : Number(c.d)) : 0;
                 const net = counted ? (cg + cd) - (sg + sd) : null;
                 const condChanged = counted && net === 0 && cg !== sg;
                 // Jiski ginti alag mili uspar wajah bina ginti bheji nahi jaati.
@@ -2874,8 +2923,8 @@ function VerificationDrawer({ id, me, isAdmin, canApprove, canEdit, onClose, onC
                           onChange={(e) => setCell(ln, "d", e.target.value.replace(/[^0-9.]/g, ""))}
                           style={{ ...inpSm, width: 60, background: canCount ? T.surface : T.surfaceB }} />
                       </div>
-                      {/* Sirf damaged bhar dena kaafi nahi — good khali rahe to line "gini nahi" hi rehti hai. */}
-                      {!counted && <div style={{ fontSize: 10, color: c.d === "" ? T.t4 : T.amb, marginTop: 3 }}>{t("assets.verify_not_counted")}</div>}
+                      {/* Dono box khaali = abhi gina nahi. Ek bhi bhara to khaali doosra 0 (server aur app jaisa). */}
+                      {!counted && <div style={{ fontSize: 10, color: T.t4, marginTop: 3 }}>{t("assets.verify_not_counted")}</div>}
                     </div>
                     <div>
                       <span style={{ fontWeight: 700, color: net == null ? T.t4 : net < 0 ? T.red : net > 0 ? T.grn : T.t4 }}>
