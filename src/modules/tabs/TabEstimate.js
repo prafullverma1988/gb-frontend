@@ -122,7 +122,7 @@ function TabEstimate({ project }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = (invNo || "invoice") + ".pdf";
+      a.download = String(invNo || "invoice").replace(/[/\\~]/g, "-") + ".pdf";  // INV/26-27/001 → INV-26-27-001.pdf
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -154,6 +154,8 @@ function TabEstimate({ project }) {
         tds_pct: parseFloat(inv.tds_pct || 0),
         customer_name: inv.customer_name || "",
         _editId: inv.id,
+        _editStatus: inv.status,   // Draft ke alawa edit par note zaroori (SUB-05)
+        edit_note: "",
       });
       closeInvoiceDetail();
       setShowNewInv(true);
@@ -168,15 +170,30 @@ function TabEstimate({ project }) {
         retention_pct: parseFloat(inv.retention_pct) || 0,
         tds_pct: parseFloat(inv.tds_pct) || 0,
         tax_pct: parseFloat(inv.tax_pct) || 0,
+        status: inv.status,
+        edit_note: "",
       });
       closeInvoiceDetail();
     }
+  };
+  // SUB-05: pichhla bill hata/badla to sirf Draft dobara banta hai — baad wale
+  // Submitted/Approved/Partial/Paid jaise bheje the waise rehte hain. Server
+  // unki list `locked` me deta hai; user ko batao kaunse bill nahi badle.
+  const showLockedInvoices = (locked) => {
+    const lines = (locked || []).map(l => l.skipped === "status_locked"
+      ? t("estimate.locked_invoice_line", { no: l.invoice_no, status: l.status, gross: fmtC(l.gross), would: fmtC(l.gross_if_recalculated) })
+      : t("estimate.locked_invoice_line_legacy", { no: l.invoice_no, status: l.status }));
+    if (lines.length) alert(t("estimate.locked_invoices_not_recalculated", { list: lines.join("\n") }));
   };
   // Compact invoice-header editor state (milestone/auto invoices)
   const [hdrEditForm, setHdrEditForm] = useState(null);
   const [hdrEditSaving, setHdrEditSaving] = useState(false);
   const submitHdrEdit = async () => {
     if (!hdrEditForm) return;
+    // Draft ke alawa (client ko ja chuka) bill par edit ka reason zaroori
+    const needsNote = hdrEditForm.status !== "Draft";
+    const editNote = String(hdrEditForm.edit_note || "").trim();
+    if (needsNote && editNote.length < 3) { alert(t("estimate.edit_note_required")); return; }
     const gross = parseFloat(hdrEditForm.gross_amount) || 0;
     const retPct = parseFloat(hdrEditForm.retention_pct) || 0;
     const tdsPct = parseFloat(hdrEditForm.tds_pct) || 0;
@@ -194,10 +211,12 @@ function TabEstimate({ project }) {
       tds_pct: tdsPct, tds_amt: tdsAmt,
       tax_pct: taxPct, tax_amt: taxAmt,
       net_receivable: netRec,
+      ...(needsNote ? { edit_note: editNote } : {}),
     }).catch(e => ({ success:false, message:e.message }));
     setHdrEditSaving(false);
     if (!r?.success) { alert(r?.message || "Save failed"); return; }
     setHdrEditForm(null);
+    showLockedInvoices(r.data?.locked);
     await reloadSel();
   };
 
@@ -932,6 +951,12 @@ function TabEstimate({ project }) {
       console.error('[SUBMIT] body is undefined — CASE routing failed. invForm:', JSON.stringify({ source: invForm.source, overBillMode: invForm.overBillMode, _editId: invForm._editId }));
       return alert(t("estimate.internal_error_invoice_body_not_prepared"));
     }
+    // Draft ke alawa (client ko ja chuka) invoice edit par reason zaroori (SUB-05)
+    if (invForm._editId && invForm._editStatus !== "Draft") {
+      const editNote = String(invForm.edit_note || "").trim();
+      if (editNote.length < 3) { setSaving(false); return alert(t("estimate.edit_note_required")); }
+      body.edit_note = editNote;
+    }
     console.log('[SUBMIT] Sending invoice body:', JSON.stringify(body));
 
     // Edit path (PS-19): manual invoice being edited → PUT instead of POST.
@@ -953,6 +978,7 @@ function TabEstimate({ project }) {
     }
 
     if (r.success) {
+      if (invForm._editId) showLockedInvoices(r.data?.locked);
       setShowNewInv(false);
       setInvForm({ source:"milestone", invoice_date: localYMD(), remark:"", items:[],
         manualItems:[{description:"",qty:"",rate:""}], tax_pct:0, retention_pct:0, tds_pct:0, customer_name:"",
@@ -1117,6 +1143,7 @@ function TabEstimate({ project }) {
     setPreviewConfirming(false);
     if (!r?.success) { alert(r?.message || "Reject failed"); return; }
     setPreviewInv(null);
+    showLockedInvoices(r.data?.locked);
     await reloadSel();
   };
 
@@ -1245,7 +1272,7 @@ function TabEstimate({ project }) {
   const deleteInvoice = async (invId, no) => {
     if (!await window.confirmAsync("Delete invoice " + no + "? This cannot be undone.")) return;
     const r = await api.del("/customer-estimates/invoices/" + invId);
-    if (r.success) await reloadSel();
+    if (r.success) { showLockedInvoices(r.data?.locked); await reloadSel(); }
     else alert(r.message || "Delete failed");
   };
 
@@ -2745,6 +2772,14 @@ function TabEstimate({ project }) {
               {invForm.source==="manual" && <div><label style={lblS}>{t("estimate.customer_name")}</label><input value={invForm.customer_name} onChange={e=>setInvForm(p=>({...p,customer_name:e.target.value}))} placeholder={selEst?.customer_name||t("common.customer")} style={inpS}/></div>}
               {invForm.source==="milestone" && selEst && <div><div style={{fontSize:11,color:T.t3,paddingTop:18}}><b>{t("estimate.estimate")}</b> {selEst.estimate_no} ({selEst.billing_method})</div></div>}
             </div>
+            {invForm._editId && invForm._editStatus !== "Draft" && (
+              <div style={{marginBottom:14}}>
+                <label style={lblS}>{t("estimate.edit_note_label")}</label>
+                <textarea value={invForm.edit_note || ""} onChange={e=>setInvForm(p=>({...p,edit_note:e.target.value}))} rows={2} maxLength={500}
+                  placeholder={t("estimate.edit_note_placeholder")} style={{...inpS,resize:"vertical",fontFamily:"inherit"}}/>
+                <div style={{fontSize:10.5,color:T.t4,marginTop:3}}>{t("estimate.edit_note_hint")}</div>
+              </div>
+            )}
 
             {/* ── Over-Billing Mode toggle ──────────────────────────
                 Per-invoice user-driven flag for legitimate extra work
@@ -3820,6 +3855,14 @@ function TabEstimate({ project }) {
                 <label style={lblS}>{t("common.remark")}</label>
                 <input value={hdrEditForm.remark} onChange={e=>set("remark", e.target.value)} placeholder={t("common.optional_note")} style={inpS}/>
               </div>
+              {hdrEditForm.status !== "Draft" && (
+                <div style={{marginBottom:12}}>
+                  <label style={lblS}>{t("estimate.edit_note_label")}</label>
+                  <textarea value={hdrEditForm.edit_note} onChange={e=>set("edit_note", e.target.value)} rows={2} maxLength={500}
+                    placeholder={t("estimate.edit_note_placeholder")} style={{...inpS,resize:"vertical",fontFamily:"inherit"}}/>
+                  <div style={{fontSize:10.5,color:T.t4,marginTop:3}}>{t("estimate.edit_note_hint")}</div>
+                </div>
+              )}
               {/* Live recompute preview */}
               <div style={{background:"linear-gradient(135deg, #ECFDF5, #D1FAE5)",border:"1.5px solid "+T.grnM,borderRadius:8,padding:"10px 14px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,color:"#065F46",marginBottom:4}}>
