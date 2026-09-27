@@ -157,6 +157,7 @@ const dict = {
   "app.no_expense_recorded":                                   "Is project par abhi koi expense darj nahi",
   "app.no_spend_last_6_months":                                "Pichhle 6 mahine me koi expense nahi",
   "app.dev_otp":                                               "DEV OTP:",
+  "app.otp_sms_pehchan":                                       "SMS kisi aur naam (jaise 'Dashanan') se aa sakta hai aur signup jaisa likha ho sakta hai — usme jo 6 ank ka number hai, wahi aapka OTP hai.",
   "app.dhyaan_chahiye":                                        "Attention chahiye",
   "app.diesel_barrel_stock_machine_consumption":               "Diesel, barrel stock & machine consumption",
   "app.direct_labour":                                         "Direct Labour",

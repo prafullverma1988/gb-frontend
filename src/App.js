@@ -653,6 +653,8 @@ function LoginScreen({onLogin}){
             <div style={{marginBottom:22}}>
               <label style={labelStyle}>{t("app.enter_otp_4_digit")}</label>
               <input type="tel" inputMode="numeric" maxLength={6} placeholder="••••••" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,"").slice(0,6))} style={{...inputStyle,letterSpacing:"8px",textAlign:"center",fontSize:18,fontWeight:700}} onKeyDown={e=>e.key==="Enter"&&handleOtpLogin()} autoFocus/>
+              {/* SMS MSG91 ke shared template se aata hai ("…signup… username: 123456… Team Dashanan") — pehchaan */}
+              {!devOtp&&<div style={{fontSize:11.5,color:C.tm,marginTop:8,lineHeight:1.5}}>{t("app.otp_sms_pehchan")}</div>}
             </div>
             <button onClick={handleOtpLogin} disabled={loading} style={primaryBtn(loading)}>{loading?t("app.verifying"):t("app.verify_login")}</button>
             <div style={{textAlign:"center",marginTop:14}}>
