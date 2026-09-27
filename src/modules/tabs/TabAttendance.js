@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
@@ -95,6 +95,9 @@ function TabAttendance({ project, onRequestPayment }) {
   const [showNewWf,      setShowNewWf]      = useState(false);     // inline new worker form
   const [wfForm,         setWfForm]         = useState({ name:"", role:"Labour", category:"Unskilled", dailyRate:"", phone:"", city:"" });
   const [wfSaving,       setWfSaving]       = useState(false);
+  // Worker jodna ek hi baar chale — wfSaving state agle render tak nahi lagta,
+  // double-click do request bhej deta tha (Ratna 2026-09-25: 10 "Ballu").
+  const wfAddingRef = useRef(false);
 
   // ── Rate change approval modal ───────────────────────────────────
   const [showRateModal,  setShowRateModal]  = useState(false);
@@ -331,7 +334,8 @@ function TabAttendance({ project, onRequestPayment }) {
 
   // ── Add new worker (not in library) ─────────────────────────────────
   const addNewWorker = async () => {
-    if(!wfForm.name.trim()) return;
+    if(!wfForm.name.trim() || wfAddingRef.current) return;
+    wfAddingRef.current = true;
     setWfSaving(true);
     try {
       // Save to library (payroll_workers) first
@@ -360,8 +364,9 @@ function TabAttendance({ project, onRequestPayment }) {
         setWfForm({name:"",role:"Labour",category:"Unskilled",dailyRate:"",phone:"",city:""});
         setShowNewWf(false);
         if(r.rate_pending && r.message) alert(r.message);
-      }
+      } else if(r && r.message) alert(r.message);   // jaise "Ballu is project me pehle se juda hai"
     } catch(e){}
+    wfAddingRef.current = false;
     setWfSaving(false);
   };
 
@@ -1410,12 +1415,15 @@ function TabAttendance({ project, onRequestPayment }) {
             <div style={{display:"flex",gap:8,marginTop:6}}>
               <button onClick={()=>setShowAddWf(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>{t("common.cancel")}</button>
               <button onClick={async()=>{
-                if(!wfForm.name.trim()) return; setWfSaving(true);
+                if(!wfForm.name.trim() || wfAddingRef.current) return; wfAddingRef.current=true; setWfSaving(true);
+                try {
                 const cardRate=getRateForRole(wfForm.role);
                 const payload={project_id:projectId,type:labType,name:wfForm.name,role:wfForm.role,daily_rate:Number(wfForm.dailyRate)||cardRate,phone:wfForm.phone,rateStatus:"card"};
                 const r=await api.post(`/projects/${projectId}/workforce`,payload);
                 if(r.success){setWorkforce(prev=>({...prev,[labType]:[...prev[labType],{...payload,id:r.data?.id||Date.now(),dailyRate:payload.daily_rate}]}));setShowAddWf(false);}
-                setWfSaving(false);
+                else if(r&&r.message) alert(r.message);
+                } catch(e){}
+                wfAddingRef.current=false; setWfSaving(false);
               }} disabled={wfSaving||!wfForm.name.trim()}
                 style={{flex:2,padding:"9px",borderRadius:7,background:wfForm.name.trim()?TYPE_COLORS[labType]:"#ccc",color:"white",fontSize:12,fontWeight:700,border:"none",cursor:wfForm.name.trim()?"pointer":"not-allowed",opacity:wfSaving?.7:1}}>
                 {wfSaving?t("common.adding"):t("attendance.add_to_workforce")}
