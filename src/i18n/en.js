@@ -774,6 +774,8 @@ const dict = {
   "attendance.add_skill":                                      "+ Add Skill",
   "attendance.add_skill_ratecard":                             "+ Add Skill {rateCard}",
   "attendance.add_to_workforce":                               "Add to Workforce",
+  "attendance.worker_naam_pehle_se":                           "A worker named \"{name}\" already exists in the company. Is this the same person?\n\nOK = yes, add the same person · Cancel = someone else",
+  "attendance.alag_aadmi_surname":                             "If it is someone else, add a surname or father's name to the name — e.g. \"{name} Sahu\" or \"{name} s/o Ramesh\".",
   "attendance.add_type_labels_to_project":                     "Add {TYPE_LABELS} to Project",
   "attendance.add_vendor":                                     "Add Vendor",
   "attendance.add_vendor_to_project":                          "Add Vendor to Project",

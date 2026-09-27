@@ -776,6 +776,8 @@ const dict = {
   "attendance.add_skill":                                      "+ Add Skill",
   "attendance.add_skill_ratecard":                             "+ Add Skill {rateCard}",
   "attendance.add_to_workforce":                               "Workforce mein add karo",
+  "attendance.worker_naam_pehle_se":                           "Company me \"{name}\" naam ka worker pehle se hai. Kya ye wahi aadmi hai?\n\nOK = haan, wahi jodo · Cancel = alag aadmi",
+  "attendance.alag_aadmi_surname":                             "Alag aadmi hai to naam ke saath surname ya pita ka naam lagao — jaise \"{name} Sahu\" ya \"{name} s/o Ramesh\".",
   "attendance.add_type_labels_to_project":                     "Add {TYPE_LABELS} to Project",
   "attendance.add_vendor":                                     "Vendor add karo",
   "attendance.add_vendor_to_project":                          "Project mein Vendor add karo",

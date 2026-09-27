@@ -192,9 +192,11 @@ function TabAttendance({ project, onRequestPayment }) {
         : attRecs.find(r=>String(r.date||"").split("T")[0]===attDate && r.type===labType);
     if(mode==="name") {
       setTodayEntries(workers.map(w => {
-        const found = existing?.entries?.find(e=>e.worker_id===w.id||e.name===w.name);
+        // ID pehle: payroll_worker_id = library worker (w.lib_id); worker_id is
+        // screen ki apni key (project workforce row). Purani entry naam se.
+        const found = existing?.entries?.find(e=>(e.payroll_worker_id&&w.lib_id&&Number(e.payroll_worker_id)===Number(w.lib_id))||e.worker_id===w.id||e.name===w.name);
         // Default status = "" (unmarked) — user clicks P/A/H to mark each worker
-        return { worker_id:w.id, name:w.name, role:w.role, dailyRate:w.dailyRate||w.daily_rate||0,
+        return { worker_id:w.id, payroll_worker_id:w.lib_id||undefined, name:w.name, role:w.role, dailyRate:w.dailyRate||w.daily_rate||0,
                  status:found?.status||"", hours:found?.hours??(found?.status==="A"?0:found?.status==="H"?4:8),
                  ot:found?.ot||0, remark:found?.remark||"", rateStatus:w.rateStatus||"card" };
       }));
@@ -343,6 +345,9 @@ function TabAttendance({ project, onRequestPayment }) {
         name: wfForm.name.trim(), role: wfForm.role, category: wfForm.category,
         daily_rate: Number(wfForm.dailyRate)||0, phone: wfForm.phone, city: wfForm.city, status:"Active",
       });
+      // Naam company me pehle se (409) — wahi aadmi hai to library se chuno,
+      // alag hai to surname / pita ka naam; project me jodna yahin ruk jaata.
+      if (libRes && libRes.success === false) { alert(libRes.message || t("attendance.alag_aadmi_surname", { name: wfForm.name.trim() })); return; }
       const libId = libRes.data?.id || null;
       const cardRate = getRateForRole(wfForm.role);
       const rate = Number(wfForm.dailyRate)||cardRate||0;
@@ -366,8 +371,7 @@ function TabAttendance({ project, onRequestPayment }) {
         if(r.rate_pending && r.message) alert(r.message);
       } else if(r && r.message) alert(r.message);   // jaise "Ballu is project me pehle se juda hai"
     } catch(e){}
-    wfAddingRef.current = false;
-    setWfSaving(false);
+    finally { wfAddingRef.current = false; setWfSaving(false); }
   };
 
   // ── Submit rate change approval ──────────────────────────────────
@@ -1417,13 +1421,16 @@ function TabAttendance({ project, onRequestPayment }) {
               <button onClick={async()=>{
                 if(!wfForm.name.trim() || wfAddingRef.current) return; wfAddingRef.current=true; setWfSaving(true);
                 try {
+                // Company me naam alag: library me ye naam pehle se ho to poochho
+                if(labType==="company"){const nm=wfForm.name.trim().toLowerCase();const same=workerLib.find(w=>(w.name||"").trim().toLowerCase()===nm);
+                  if(same&&!window.confirm(t("attendance.worker_naam_pehle_se",{name:same.name}))){alert(t("attendance.alag_aadmi_surname",{name:same.name}));return;}}
                 const cardRate=getRateForRole(wfForm.role);
                 const payload={project_id:projectId,type:labType,name:wfForm.name,role:wfForm.role,daily_rate:Number(wfForm.dailyRate)||cardRate,phone:wfForm.phone,rateStatus:"card"};
                 const r=await api.post(`/projects/${projectId}/workforce`,payload);
                 if(r.success){setWorkforce(prev=>({...prev,[labType]:[...prev[labType],{...payload,id:r.data?.id||Date.now(),dailyRate:payload.daily_rate}]}));setShowAddWf(false);}
                 else if(r&&r.message) alert(r.message);
                 } catch(e){}
-                wfAddingRef.current=false; setWfSaving(false);
+                finally { wfAddingRef.current=false; setWfSaving(false); }
               }} disabled={wfSaving||!wfForm.name.trim()}
                 style={{flex:2,padding:"9px",borderRadius:7,background:wfForm.name.trim()?TYPE_COLORS[labType]:"#ccc",color:"white",fontSize:12,fontWeight:700,border:"none",cursor:wfForm.name.trim()?"pointer":"not-allowed",opacity:wfSaving?.7:1}}>
                 {wfSaving?t("common.adding"):t("attendance.add_to_workforce")}

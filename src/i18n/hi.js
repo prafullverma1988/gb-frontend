@@ -773,6 +773,8 @@ const dict = {
   "attendance.add_skill":                                      "+ स्किल ऐड करें",
   "attendance.add_skill_ratecard":                             "+ स्किल {rateCard} ऐड करें",
   "attendance.add_to_workforce":                               "वर्कफोर्स में ऐड करो",
+  "attendance.worker_naam_pehle_se":                           "कंपनी में \"{name}\" नाम का वर्कर पहले से है। क्या ये वही आदमी है?\n\nOK = हाँ, वही जोड़ो · Cancel = अलग आदमी",
+  "attendance.alag_aadmi_surname":                             "अलग आदमी है तो नाम के साथ सरनेम या पिता का नाम लगाओ — जैसे \"{name} साहू\" या \"{name} s/o रमेश\"।",
   "attendance.add_type_labels_to_project":                     "{TYPE_LABELS} को प्रोजेक्ट में ऐड करें",
   "attendance.add_vendor":                                     "वेंडर ऐड करो",
   "attendance.add_vendor_to_project":                          "प्रोजेक्ट में वेंडर ऐड करो",
