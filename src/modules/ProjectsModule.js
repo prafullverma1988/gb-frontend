@@ -1823,9 +1823,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // items for a module (workflow disabled). Otherwise the engine's
   // role+level-filtered /approvals/pending list decides who sees buttons.
   const isAdminUser=["admin","super_admin"].includes(_cu?.role);
-  // My Approvals / All toggle — only admin/super_admin/PM get the company-wide
+  // My Approvals / All toggle — admin/super_admin/PM/accountant get the
   // "All" view (matches backend scope gate). Default = "my" (actionable only).
-  const canSeeAll=["admin","super_admin","project_manager"].includes(_cu?.role);
+  const canSeeAll=["admin","super_admin","project_manager","accountant"].includes(_cu?.role);
   // Wallet approvals (staff cash expenses) are surfaced in the Finance tab too.
   // Only the roles that can actually approve a wallet txn see them — server
   // Roles & Access ka Finance → APPROVE maangta hai, row na ho to nahi (SEC-02).
@@ -2113,9 +2113,22 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     ...data.centralized.filter(i=>i._source==="payment_request"&&inScope(i)),
     ...data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")),
   ];
-  // Wallet pending approvals — all are actionable by the viewer (an approver),
-  // so they show in both My and All. Only in approvals mode + Finance tab.
-  const walletItems = mode==="approvals" ? (data.wallet||[]) : [];
+  // Wallet pending approvals — WHOSE TURN comes from the approval engine.
+  // /wallets/pending-approvals lists every pending wallet txn of the company;
+  // it used to be shown with buttons to every approver, so an accountant saw
+  // Approve on a request waiting for the PM and got 403 on click. Each row now
+  // carries engine_request_id; we match it to the /approvals/pending row
+  // (_source "wallet_expense") and use that row's _canActNow / _waitingOn.
+  //   engine row mine          → buttons
+  //   engine row, not mine     → "Waiting on X" (only in All)
+  //   no engine request at all → workflow OFF, legacy path = admin only
+  const _walletEngine=new Map(data.centralized.filter(c=>c._source==="wallet_expense").map(c=>[String(c._source_id??c.ref_id),c]));
+  const walletAll = mode==="approvals" ? (data.wallet||[]).map(w=>{
+    const e=_walletEngine.get(String(w.txn_id))||null;
+    const _canActNow = w.engine_request_id ? (!!e&&e._canActNow!==false) : isAdminUser;
+    return {...w,_canActNow,_eng:e};
+  }) : [];
+  const walletItems = walletAll.filter(inScope);
 
   // ── MR filtered list (site + material search) ──
   //
@@ -2201,11 +2214,13 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // what this drawer actually shows.
   const _isMatSrc=(i)=>i._source==="material_request"||i._source==="purchase_order";
   const _financePR=data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")).length;
+  // wallet_expense engine rows are shown as wallet cards (walletAll), so they
+  // are left out of the centralized part — earlier one wallet txn counted twice.
   const myCount = mode==="approvals"
-    ? data.centralized.filter(i=>!_isMatSrc(i)&&i._canActNow!==false).length + _financePR + walletItems.length
+    ? data.centralized.filter(i=>!_isMatSrc(i)&&i._source!=="wallet_expense"&&i._canActNow!==false).length + _financePR + walletAll.filter(w=>w._canActNow).length
     : mrByStage("Requested").filter(m=>canActOnMr(m.id)).length + pendingPOs.filter(p=>canActOnPo(p.id)).length + whPendingMRs.length;
   const allCount = mode==="approvals"
-    ? data.centralized.filter(i=>!_isMatSrc(i)).length + _financePR + walletItems.length
+    ? data.centralized.filter(i=>!_isMatSrc(i)&&i._source!=="wallet_expense").length + _financePR + walletAll.length
     : mrByStage("Requested").length + pendingPOs.length + whPendingMRs.length;
 
   const totalCount = mode==="approvals"
@@ -2918,11 +2933,19 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             )}
           </div>
         )}
-        <div style={{display:"flex",gap:6,marginTop:8}}>
+        {!it._canActNow
+          ?<div style={{marginTop:8,padding:"7px 10px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,display:"flex",flexDirection:"column",gap:2}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:11.5}}>⏳</span>
+                <span style={{fontSize:11,color:T.t3}}>{t("projects.waiting_on")} <b style={{color:T.amb}}>{waitingText(it._eng)||"approver"}</b></span>
+              </div>
+              {escalationNote(it._eng)&&<span style={{fontSize:10,color:T.t3,paddingLeft:17.5}}>{escalationNote(it._eng)}</span>}
+            </div>
+          :<div style={{display:"flex",gap:6,marginTop:8}}>
           <button onClick={()=>walReject(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="rejecting"?"...":t("common.reject")}</button>
           <button onClick={()=>walAsk(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.bluL,border:"1px solid "+T.blu,color:T.blu,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="asking"?"...":t("projects.ask_info")}</button>
           <button onClick={()=>walApprove(it,clar)} disabled={!!act||blocked} style={{flex:1,padding:"6px",borderRadius:6,background:blocked?T.b1:T.grn,border:"none",color:blocked?T.t4:"white",fontSize:11,fontWeight:700,cursor:(act||blocked)?"not-allowed":"pointer"}}>{act==="approving"?"...":t("common.approve")}</button>
-        </div>
+        </div>}
       </div>
     );
   };
@@ -3346,7 +3369,12 @@ function ProjectsPage({onSelectProject}){
       const items=apRes.success?(apRes.data||[]):[];
       const isMat=i=>i._source==="material_request"||i._source==="purchase_order";
       const whPending=(whmrRes.success?whmrRes.data:[]).filter(m=>!m.status||m.status==="Pending").length;
-      const walletCount=walRes.success?(walRes.data||[]).length:0;
+      // Wallet rows that have an engine request are already in `items` (scope=my
+      // = only my turn). Adding the whole wallet queue on top counted others'
+      // turns and double-counted mine. Only legacy rows (no engine request,
+      // workflow OFF) are extra — and those are admin-only.
+      const _tileAdmin=["admin","super_admin"].includes(currentUser?.role);
+      const walletCount=(_tileAdmin&&walRes.success)?(walRes.data||[]).filter(w=>!w.engine_request_id).length:0;
       const mrCount=items.filter(isMat).length+whPending;          // Material tile
       const prCount=items.filter(i=>i._source==="payment_request").length;
       const total=items.filter(i=>!isMat(i)).length+walletCount;   // Pending Approvals tile (incl. wallet)
