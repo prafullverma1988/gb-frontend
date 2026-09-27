@@ -2,8 +2,9 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import api from "../config/api";
 import { t } from "../i18n";
 import { companyName, companyNameHtml } from "../utils/companyName";
-import { canSeeFinancials, currentUser } from "../utils/perms";
+import { can, canSeeFinancials, currentUser } from "../utils/perms";
 import CompanyDay from "./reports/CompanyDay";
+import PartyLedger from "./reports/PartyLedger";
 import { daysAgoISO } from "../utils/today";
 
 
@@ -1353,6 +1354,8 @@ export default function ReportsModule(){
     // site ka nahi (server bhi wahi rok lagata hai, GET /dpr/company/day).
     ...(["admin","super_admin"].includes(currentUser()?.role)
       ? [{id:"coday",l:t("coday.title"),desc:t("coday.desc"),icon:IcCalc}] : []),
+    // Party ka statement (Excel / PDF) — wahi rok jo Finance ke party ledger par hai.
+    ...(can("Finance","view") ? [{id:"pledger",l:t("reports.party_ledger"),desc:t("reports.party_ledger_desc"),icon:IcXLS}] : []),
   ];
 
   return(
@@ -1386,6 +1389,7 @@ export default function ReportsModule(){
         {tab==="challan"  && <ChallanModule/>}
         {tab==="progress" && <ProgressReportModule/>}
         {tab==="coday"    && <CompanyDay/>}
+        {tab==="pledger"  && <PartyLedger/>}
       </div>
 
       <style>{`
