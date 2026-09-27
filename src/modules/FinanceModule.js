@@ -1272,7 +1272,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
 
   // ── invoice state ────────────────────────────────────────────
   const [invMode,setInvMode]=useState("fresh");
-  const [invoiceNo,setInvoiceNo]=useState("INV-2026-001");
+  const [invoiceNo,setInvoiceNo]=useState("MINV/…");  // asli number save par backend deta hai
   const _today15 = (() => { const d = new Date(); d.setDate(d.getDate()+15); return isoDate(d); })();
   const [dueDate,setDueDate]=useState(_today15);
 
@@ -2093,10 +2093,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               <>
                 <div>
                   {lbl("Invoice No.")}
-                  {/* Read-only: the backend assigns MANINV-1, MANINV-2 … per
-                      project inside the insert transaction, so anything typed
-                      here would be silently replaced. */}
-                  <input value="auto (MANINV-…)" readOnly title={t("finance.save_karte_hi_apne_aap_ban")}
+                  {/* Read-only: the backend assigns MINV/26-27/001, 002 … (company-wide,
+                      har financial year 001 se) inside the insert transaction, so
+                      anything typed here would be silently replaced. */}
+                  <input value="auto (MINV/…)" readOnly title={t("finance.save_karte_hi_apne_aap_ban")}
                     style={inp({fontFamily:"monospace",fontSize:12.5,fontWeight:700,background:T.surfaceB,color:T.t4,cursor:"not-allowed"})}/>
                 </div>
                 <div>
