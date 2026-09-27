@@ -6,7 +6,8 @@ import api from "../config/api";
 import apiCache from "../utils/apiCache";
 import useDebounce from "../utils/useDebounce";
 import { t, Rich } from "../i18n";
-import { companyNameHtml } from "../utils/companyName";
+import { companyName, companyNameHtml } from "../utils/companyName";
+import { downloadLedgerExcel, downloadLedgerPdf, fromScreenRow } from "../utils/partyLedgerDownload";
 import { canSeeFinancials } from "../utils/perms";
 import { canApproveAction } from "../utils/approvalAuthority";
 import TabAccounts from "./tabs/TabAccounts";
@@ -3719,6 +3720,7 @@ function FinanceModule(){
   const [ledgerProj,setLedgerProj]=useState("All");
   const [ledgerFrom,setLedgerFrom]=useState("");
   const [ledgerTo,setLedgerTo]=useState("");
+  const [ledgerDl,setLedgerDl]=useState("");   // "excel" | "pdf" jab file ban rahi ho
   // Reset ledger filters whenever a different party is opened
   useEffect(()=>{setLedgerSearch("");setLedgerType("All");setLedgerProj("All");setLedgerFrom("");setLedgerTo("");},[selParty?.id]);
   const [apiLedger,setApiLedger]=useState({});
@@ -4562,52 +4564,20 @@ function FinanceModule(){
     }
     return out;
   };
-  // Screen par jo chhanni lagi hai, export me bhi wahi — warna user
-  // "23 of 285" dekhkar CSV kholta hai aur 285 rows milti hain.
-  const ledgerFilterState=()=>({q:ledgerSearch,type:ledgerType,proj:ledgerProj,from:ledgerFrom,to:ledgerTo});
-  const ledgerExportRows=(party)=>applyLedgerFilter(getLedgerRows(party),ledgerFilterState());
-  const downloadLedgerCSV=(party)=>{
-    const rows=ledgerExportRows(party);
-    downloadCSV(`${party.name.replace(/\s+/g,"_")}_Ledger.csv`,[
-      ["Party Ledger:",party.name],["Type:",party.type],["Balance:",party.balance,party.balType],[],
-      ["Date","Project","Note","Type","CR","DR","Balance"],
-      ...rows.map(t=>[t.date,t.project||"",t.note||"",t.txnType||t.type||"",(t.ledSign||0)<0?t.amount:"",(t.ledSign||0)>0?t.amount:"",`${Math.abs(t.runBal||0)} ${(t.runBal||0)>0?"Dr":(t.runBal||0)<0?"Cr":""}`.trim()]),
-    ]);
-  };
-  const downloadLedgerPDF=(party)=>{
-    const rows=ledgerExportRows(party);
-    const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
-    const rowsHTML=rows.map(t=>{
-      const typeLabel=TYPE_LABELS[t.txnType]||t.type||t.txnType||"Transaction";
-      const proj=t.project||t.project_name||"";
-      const noteTxt=(t.note||"").trim();
-      const hasNote=!!noteTxt;
-      const sgn=t.ledSign||0;
-      const balAbs=Math.abs(t.runBal||0);
-      const balGood=(t.runBal||0)>=0;
-      const balSfx=(t.runBal||0)===0?"":((t.runBal||0)>0?"Dr":"Cr");
-      return `<tr>
-        <td style="color:#6B7280;white-space:nowrap">${t.date}</td>
-        <td style="color:#6B7280">${proj||"—"}</td>
-        <td style="${hasNote?"":"color:#9CA3AF;font-style:italic"}">${hasNote?noteTxt:"—"}</td>
-        <td><span style="font-size:9.5px;padding:2px 7px;border-radius:10px;background:#F8F9FB;color:#4B5563">${typeLabel}</span></td>
-        <td style="text-align:right;color:${sgn<0?"#059669":"#CBD5E1"};font-weight:600">${sgn<0?`₹${fmtN(t.amount)}`:"—"}</td>
-        <td style="text-align:right;color:${sgn>0?"#DC2626":"#CBD5E1"};font-weight:600">${sgn>0?`₹${fmtN(t.amount)}`:"—"}</td>
-        <td style="text-align:right;color:${balAbs===0?"#9CA3AF":(balGood?"#059669":"#DC2626")};font-weight:700">${balAbs===0?"₹0.00":`₹${fmtN(balAbs)} ${balSfx}`}</td>
-      </tr>`;
-    }).join("");
-    const totalCR=rows.reduce((s,r)=>s+((r.ledSign||0)<0?(r.amount||0):0),0);
-    const totalDR=rows.reduce((s,r)=>s+((r.ledSign||0)>0?(r.amount||0):0),0);
-    const lastBal=rows.length?(rows[rows.length-1].runBal||0):0;
-    const closeAbs=Math.abs(lastBal);
-    const closeGood=lastBal>=0;
-    const closeSfx=lastBal===0?"":(lastBal>0?"Dr":"Cr");
-    const ob=parseFloat(party.opening_balance||0);
-    const obAbs=Math.abs(ob);
-    const obSfx=ob===0?"":(ob>0?"Dr":"Cr");
-    const openingHTML=rows.length?`<tr style="background:#F8F9FB"><td colspan="6" style="font-style:italic;color:#6B7280">Opening Balance</td><td style="text-align:right;font-weight:600;color:#6B7280">${obAbs===0?"₹0.00":`₹${fmtN(obAbs)} ${obSfx}`}</td></tr>`:"";
-    const closingHTML=rows.length?`<tr style="background:#F8F9FB;border-top:2px solid #D1D5DB"><td colspan="4" style="font-weight:700;text-transform:uppercase;letter-spacing:.3px;font-size:10.5px">Closing Balance</td><td style="text-align:right;font-weight:700;color:#059669">₹${fmtN(totalCR)}</td><td style="text-align:right;font-weight:700;color:#DC2626">₹${fmtN(totalDR)}</td><td style="text-align:right;font-weight:800;color:${closeAbs===0?"#9CA3AF":(closeGood?"#059669":"#DC2626")}">${closeAbs===0?"₹0.00":`₹${fmtN(closeAbs)} ${closeSfx}`}</td></tr>`:"";
-    printHTML(`Party Ledger — ${party.name}`,`<h2>Party Ledger — ${party.name}</h2><p>${party.type} &nbsp;|&nbsp; Balance: <strong>₹${fmtN(party.balance)}</strong> (${party.balType})</p><table><tr><th style="width:70px">Date</th><th style="width:110px">Project</th><th>Note</th><th style="width:130px">Type</th><th style="text-align:right;width:85px">CR ₹</th><th style="text-align:right;width:85px">DR ₹</th><th style="text-align:right;width:115px">Balance</th></tr>${openingHTML}${rowsHTML||`<tr><td colspan="7" style="text-align:center;padding:30px;color:#9CA3AF">No transactions</td></tr>`}${closingHTML}</table><p class="footer">Generated by Company · ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</p>`);
+  // Download = tareekh ki range ka statement (utils/partyLedgerDownload): Excel
+  // yahin banta hai, PDF server se (GET /finance/parties/:id/ledger.pdf) — dono me
+  // wahi opening / rows / closing. Search / project / type ki chhanni file me nahi
+  // lagti: beech se row hatane par opening + rows = closing ka jod toot jaata.
+  // (Pehle CSV + browser ka print window tha — print window asli file nahi deta.)
+  const downloadLedger=async(party,kind)=>{
+    if(ledgerDl) return;
+    setLedgerDl(kind);
+    try{
+      const range={from:ledgerFrom||null,to:ledgerTo||null};
+      if(kind==="excel") await downloadLedgerExcel({party,rows:getLedgerRows(party).map(fromScreenRow),...range,company:companyName()});
+      else await downloadLedgerPdf({party,...range});
+    }catch(e){ window.alert((e&&e.message)||t("finance.ledger_dl_failed")); }
+    finally{ setLedgerDl(""); }
   };
 
   // ── Customer Invoice PDF + Share ─────────────────────────────
@@ -5234,8 +5204,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     <span style={{fontSize:11,color:T.grn,fontWeight:600,whiteSpace:"nowrap"}}>{t("finance.cr_fmtn", { fmtN: fmtN(totalCR) })}</span>
                     <span style={{fontSize:11,color:T.red,fontWeight:600,whiteSpace:"nowrap"}}>{t("finance.dr_fmtn", { fmtN: fmtN(totalDR) })}</span>
                     <span style={{background:chipC.bg,color:chipC.fg,fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:8,border:`1px solid ${chipC.br}`}}>₹{fmtN(computedBal)} · {balTypeText(computedBalType)}</span>
-                    <button onClick={()=>downloadLedgerCSV(selParty)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>CSV</button>
-                    <button onClick={()=>downloadLedgerPDF(selParty)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>PDF</button>
+                    <button onClick={()=>downloadLedger(selParty,"excel")} disabled={!!ledgerDl} title={t("finance.ledger_dl_hint")} style={{height:28,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:ledgerDl?"wait":"pointer"}}>{ledgerDl==="excel"?t("finance.ledger_dl_working"):t("finance.ledger_dl_excel")}</button>
+                    <button onClick={()=>downloadLedger(selParty,"pdf")} disabled={!!ledgerDl} title={t("finance.ledger_dl_hint")} style={{height:28,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:ledgerDl?"wait":"pointer"}}>{ledgerDl==="pdf"?t("finance.ledger_dl_working"):t("finance.ledger_dl_pdf")}</button>
                     <button onClick={()=>setSelParty(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex",padding:3}}><IcX size={16}/></button>
                   </div>
                   {/* Per-party CR/DR/Balance now live as compact chips in the header
@@ -5270,7 +5240,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   </div>
                   {/* Result count strip — only while filtering, so nothing looks "missing" */}
                   {ledgerFiltered&&(
-                    <div style={{padding:"4px 14px",background:T.bluL,borderBottom:`1px solid ${T.b1}`,fontSize:10.5,color:T.blu,fontWeight:600,flexShrink:0}}>{t("finance.showing_viewrows_of_ledgerrows_entries", { viewRows: viewRows.length, ledgerRows: ledgerRows.length })}</div>
+                    <div style={{padding:"4px 14px",background:T.bluL,borderBottom:`1px solid ${T.b1}`,fontSize:10.5,color:T.blu,fontWeight:600,flexShrink:0}}>{t("finance.showing_viewrows_of_ledgerrows_entries", { viewRows: viewRows.length, ledgerRows: ledgerRows.length })}
+                      {(ledgerSearch.trim()||ledgerType!=="All"||ledgerProj!=="All")&&<span style={{fontWeight:500,color:T.t3}}> · {t("finance.ledger_dl_date_only")}</span>}</div>
                   )}
                   {/* 8-col ledger: Date | Project | Note | Type | Paid By | CR | DR | Balance */}
                   <div style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,flexShrink:0,gap:4}}>
