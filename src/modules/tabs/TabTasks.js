@@ -3798,6 +3798,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   },[]);
   // % wale task ka note — qty wale box me pehle se tha, yahan nahi.
   const [pctNote,setPctNote]=useState("");
+  // Progress peeche jaa raha hai? Slider ki ek phisalan 70% ko 40% kar
+  // deti thi aur kisi ko khabar tak nahi hoti thi. Kam karna band nahi
+  // kiya — bas ab wajah ke saath, aur wajah admin/PM tak jaati hai.
+  // 10 akshar wahi hain jo server (budget.js MIN_DROP_NOTE) maangta hai.
+  const savedPct=Math.max(0,Math.min(100,Number(task.progress)||0));
+  const isDrop=prog<savedPct;
+  const dropNoteOk=pctNote.trim().length>=10;
 
   // Photos
   const [photos,setPhotos]=useState([]);
@@ -4073,15 +4080,39 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                 </button>
               ))}
             </div>
-            {ui.notes&&(
+            {isDrop&&(
+              <div style={{display:"flex",alignItems:"flex-start",gap:9,padding:"11px 13px",borderRadius:10,
+                background:"#FEF2F2",border:"1px solid #FECACA",marginBottom:14}}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth={2.2}
+                  strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,marginTop:1}}>
+                  <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:700,color:"#991B1B"}}>
+                    {t("tasks.progress_kam_ho_raha", { from: savedPct, to: prog })}
+                  </div>
+                  <div style={{fontSize:11,color:"#B91C1C",marginTop:2,lineHeight:1.45}}>
+                    {t("tasks.ghatne_par_khabar")}
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Note ka khaana company Settings se band ho sakta hai. Par
+                progress peeche jaa raha ho to wajah ke bina server entry
+                leta hi nahi — us haalat me khaana dikhna hi chahiye. */}
+            {(ui.notes||isDrop)&&(
               <div style={{marginBottom:14}}>
-                <label style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>
-                  {t("tasks.note_optional")}
+                <label style={{fontSize:10,fontWeight:700,color:isDrop?"#DC2626":"#94A3B8",textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>
+                  {isDrop?t("tasks.ghatne_ki_wajah"):t("tasks.note_optional")}
                 </label>
                 <textarea rows={2} value={pctNote} onChange={e=>setPctNote(e.target.value.slice(0,300))}
-                  placeholder={t("tasks.note_kya_kaam_hua_ai_isse")}
-                  style={{width:"100%",padding:"9px 11px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:12.5,
+                  placeholder={isDrop?t("tasks.ghatne_ki_wajah_ph"):t("tasks.note_kya_kaam_hua_ai_isse")}
+                  style={{width:"100%",padding:"9px 11px",borderRadius:8,
+                    border:"1.5px solid "+((isDrop&&!dropNoteOk)?"#FCA5A5":"#E2E8F0"),
+                    background:(isDrop&&!dropNoteOk)?"#FFFBFB":"white",fontSize:12.5,
                     color:"#1E293B",outline:"none",fontFamily:"inherit",boxSizing:"border-box",resize:"none",lineHeight:1.5}}/>
+                {isDrop&&!dropNoteOk&&(
+                  <div style={{fontSize:10.5,color:"#DC2626",marginTop:3}}>{t("tasks.ghatne_ki_wajah_hint", { n: 10 })}</div>
+                )}
               </div>
             )}
             {/* % ka update bhi ab wahi raasta leta hai jo qty ka leta hai —
@@ -4093,12 +4124,16 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               const res=await api.post("/budget/task/"+task.id+"/progress",{
                 report_date:todayISO(),
                 done_qty:0, pct:prog, remarks:pctNote.trim()||"Web se darj",
+                // Alag khaana — `remarks` me hum khud "Web se darj" bhar dete
+                // hain, to usse ye pata nahi chalta ki aadmi ne jaan-boojh
+                // kar wajah likhi hai.
+                drop_note:isDrop?pctNote.trim():undefined,
               });
               setSaving(false);
               if(res.success){setPctNote("");onUpdate(task.id,{progress:prog,status:autoStatus(prog)});onClose();}
               else alert(res.message||"Save failed");
-            }} disabled={saving}
-              style={{width:"100%",padding:"14px",borderRadius:10,background:saving?"#94A3B8":"#2563EB",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:saving?"default":"pointer",letterSpacing:".2px"}}>
+            }} disabled={saving||(isDrop&&!dropNoteOk)}
+              style={{width:"100%",padding:"14px",borderRadius:10,background:(saving||(isDrop&&!dropNoteOk))?"#94A3B8":"#2563EB",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:(saving||(isDrop&&!dropNoteOk))?"default":"pointer",letterSpacing:".2px"}}>
               {saving?t("common.saving"):t("tasks.save_progress")}
             </button>
           </>}

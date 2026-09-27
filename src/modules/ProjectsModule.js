@@ -135,7 +135,7 @@ const UNBILLED_PARTIES=[];
 const PAY_REQS_DATA=[];
 const PEND_PMTS_DATA=[];
 
-const PULSE_ALL_TYPES=["progress","material","material_request","approval","payment","photo","document"];
+const PULSE_ALL_TYPES=["flag","progress","material","material_request","approval","payment","photo","document"];
 
 // Which project tab a pulse activity belongs to, so clicking a feed card lands
 // the user exactly where the activity happened instead of a generic overview.
@@ -153,7 +153,7 @@ const PULSE_TAB={
 const PULSE_TAB_BY_MODULE={
   "GRN":"material","Material Request":"material","Payment":"transaction",
   "Installation":"solar_install","Stage":"solar_stages",
-  "Site Photo":"site","Document":"files",
+  "Site Photo":"site","Document":"files","Tasks":"task",
   // approval rows carry their approval module here
   "Design Approval":"design","Purchase Order (PO)":"material",
   "Payment Request":"transaction","Customer Estimate Amendment":"estimate",
@@ -183,7 +183,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
   // Multi-select type filter — user tick-marks the activity types they care
   // about and Saves; the choice persists (per-device) and is applied on every
   // future open. Default = all types until the user saves a custom set.
-  const [selTypes,setSelTypes]=useState(()=>{ try{const s=JSON.parse(localStorage.getItem("gb_pulse_types"));return Array.isArray(s)&&s.length?s:PULSE_ALL_TYPES;}catch{return PULSE_ALL_TYPES;} });
+  const [selTypes,setSelTypes]=useState(()=>{ try{const s=JSON.parse(localStorage.getItem("gb_pulse_types_v2"));return Array.isArray(s)&&s.length?s:PULSE_ALL_TYPES;}catch{return PULSE_ALL_TYPES;} });
   const [showTypeMenu,setShowTypeMenu]=useState(false);
   const [feed,setFeed]=useState([]);
   const [projects,setProjects]=useState([]);
@@ -206,6 +206,10 @@ function SitePulseDrawer({onClose,onSelectProject}){
     "payment":{c:C.o,b:C.ol,icon:"💰",label:t("common.payment")},
     "photo":{c:"#7C3AED",b:"#EDE9FE",icon:"📸",label:t("projects.photo")},
     "document":{c:C.p,b:C.bl,icon:"📄",label:t("machinery.document")},
+    // Jaanch maangne wali khabar. Pulse me ab tak sirf "kya hua" aata tha;
+    // "kya gadbad lagti hai" kahin nahi aata tha — aur admin ko sabse pehle
+    // wahi chahiye. Isliye chip sabse aage.
+    "flag":{c:"#DC2626",b:"#FEE2E2",icon:"⚠️",label:t("projects.flag")},
   };
   const avatarColors=["#1565C0","#2E7D32","#6A1B9A","#AD1457","#E65100","#00838F","#4527A0","#C62828"];
   const getAC=(name)=>avatarColors[Math.abs([...name].reduce((a,c)=>a+c.charCodeAt(0),0))%avatarColors.length];
@@ -242,7 +246,7 @@ function SitePulseDrawer({onClose,onSelectProject}){
   const filtered=feed.filter(f=>(site==="All"||f.project_name===site)&&selTypes.includes(f.feed_type));
   const allSelected=selTypes.length>=PULSE_ALL_TYPES.length;
   const toggleType=(k)=>setSelTypes(p=>p.includes(k)?p.filter(x=>x!==k):[...p,k]);
-  const saveFilter=()=>{ try{localStorage.setItem("gb_pulse_types",JSON.stringify(selTypes));}catch(_){} setShowTypeMenu(false); };
+  const saveFilter=()=>{ try{localStorage.setItem("gb_pulse_types_v2",JSON.stringify(selTypes));}catch(_){} setShowTypeMenu(false); };
   const resetFilter=()=>setSelTypes(PULSE_ALL_TYPES);
 
   // Respect the drawer's project filter so "All" shows everything but a chosen
