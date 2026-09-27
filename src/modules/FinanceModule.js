@@ -12,7 +12,7 @@ import { canSeeFinancials } from "../utils/perms";
 import { canApproveAction } from "../utils/approvalAuthority";
 import TabAccounts from "./tabs/TabAccounts";
 import { isoDate, todayISO, daysAgoISO } from "../utils/today";
-import { cashMoveOf, isTransferIn, round2 } from "../utils/moneyRules";
+import { cashMoveOf, isTransferIn, round2, partyTypeBucket, PARTY_TYPE_BUCKETS } from "../utils/moneyRules";
 import { BackClose } from "../utils/backNav";
 
 // A party holds multiple roles: `roles` is the canonical comma list and
@@ -4385,7 +4385,8 @@ function FinanceModule(){
   // client sign, so it disagreed with the ledger and the bot; removed. mapParty
   // already carries balance (abs) + balType (from the signed live_balance).
   const partiesWithBalance=masterParties;
-  const filteredParties=partiesWithBalance.filter(p=>chipParty==="All"||p.type===chipParty);
+  // Type filter bucket se (partyTypeBucket) — DB ke 'vendor' / 'Material Supplier' / 'labour_vendor' sab sahi jagah.
+  const filteredParties=partiesWithBalance.filter(p=>chipParty==="All"||partyTypeBucket(p.type,p.is_staff)===chipParty);
   // Jo list sach me screen par dikhti hai — type filter ke baad khoj aur
   // tarteeb. Header ka count filteredParties par hi rehta hai (pehle jaisa).
   const visibleParties=useMemo(()=>{
@@ -5113,7 +5114,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   </div>
                   <select value={chipParty} onChange={e=>setChipParty(e.target.value)} title={t("finance.filter_by_type")}
                     style={{height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${chipParty!=="All"?T.blu:T.b1}`,fontSize:11.5,color:chipParty!=="All"?T.blu:T.t2,background:chipParty!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
-                    {["All","Client","Vendor","Labour","Sub-Con","Material Supplier"].map(o=><option key={o} value={o}>{o==="All"?t("finance.all_types"):o}</option>)}
+                    {["All",...PARTY_TYPE_BUCKETS].map(o=><option key={o} value={o}>{o==="All"?t("finance.all_types"):t("finance.ptype_"+o)}</option>)}
                   </select>
                   {[["az",t("party.sort_a_z")],["bal","₹"]].map(([mode,label])=>(
                     <button key={mode} onClick={()=>setPartySort(mode)}
@@ -5131,7 +5132,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 )}
                 {visibleParties.map(p=>{
                   const isS=selParty?.id===p.id;
-                  const tc=p.type==="Client"?T.grn:p.type==="Material Supplier"?T.blu:p.type==="Sub-Con"?T.slt:T.amb;
+                  const pb=partyTypeBucket(p.type,p.is_staff);
+                  const tc=pb==="client"?T.grn:pb==="supplier"?T.blu:pb==="subcon"?T.slt:T.amb;
                   const initials=(p.name||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase()||"?";
                   return(
                     <div key={p.id} onClick={()=>{
@@ -5191,7 +5193,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                          :computedBalType==="To Receive"?{bg:T.ambL,fg:T.amb,br:T.ambM}
                          :{bg:T.grnL,fg:T.grn,br:T.grnM};
               const dInitials=(selParty.name||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase()||"?";
-              const dTc=selParty.type==="Client"?T.grn:selParty.type==="Material Supplier"?T.blu:selParty.type==="Sub-Con"?T.slt:T.amb;
+              const dPb=partyTypeBucket(selParty.type,selParty.is_staff);const dTc=dPb==="client"?T.grn:dPb==="supplier"?T.blu:dPb==="subcon"?T.slt:T.amb;
               return(
                 <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
                   {/* Header: avatar · name/type · export · close */}

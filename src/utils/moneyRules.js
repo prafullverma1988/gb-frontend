@@ -61,6 +61,25 @@ export const isVendorType = (type) => {
   return t.includes("supplier") || t.includes("vendor") || t.includes("labour") ||
          t.includes("labor") || t.includes("contractor") || t.includes("sub-con") || t.includes("subcon");
 };
+// Party ka type ek BUCKET me — list ka type filter aur rang isi se. DB me type
+// kai roop me pada hai (live 27 Sep: 'vendor', 'Material Supplier', 'client',
+// 'Customer', 'Contractor', 'material_vendor', 'subcontractor', 'Labour
+// Contractor', 'labour_vendor', 'equipment_vendor', 'fuel_vendor', 'staff' …).
+// Pehle filter `p.type === "Vendor"` jaisa exact match tha — Vendor / Labour /
+// Sub-Con / Material Supplier chunte hi 0 party aati thi. App me yahi FIN-14 me
+// theek hua tha (typeBucket). Kram maayne rakhta hai: labour pehle, phir subcon.
+export const PARTY_TYPE_BUCKETS = ["client", "vendor", "supplier", "labour", "subcon", "staff", "other"];
+export const partyTypeBucket = (type, isStaff) => {
+  const t = String(type || "").trim().toLowerCase();
+  if (Number(isStaff) === 1 || t === "staff") return "staff";
+  if (t.includes("client") || t.includes("customer")) return "client";
+  if (t.includes("labour") || t.includes("labor")) return "labour";
+  if (t.includes("subcon") || t.includes("sub-con") || t.includes("sub con") || t === "contractor") return "subcon";
+  if (t.includes("material") || t === "supplier") return "supplier";
+  if (t.includes("vendor") || t.includes("supplier") || t.includes("equipment") || t.includes("fuel") || t.includes("transport")) return "vendor";
+  return "other";
+};
+
 export const balanceLabel = (type, bal) => (isVendorType(type)
   ? (bal <= 0 ? "To Pay" : "Advance Paid")
   : (bal >= 0 ? "To Receive" : "Advance Received"));
