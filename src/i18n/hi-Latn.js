@@ -7771,7 +7771,7 @@ const dict = {
   "settings.wallet_limits_role_admin":                         "Admin",
   "settings.wallet_limits_role_pm":                            "Project Manager",
   "settings.wallet_limits_role_supervisor":                    "Site Supervisor",
-  "settings.appr_escalation_note":                             "Pending approval time beetne par apne aap agle level par nahi jaati — jiska turn hai wahi approve karega. Kisi level par us project ka koi approver hi na ho, to wo level Admin ke paas jaata hai.",
+  "settings.appr_escalation_note":                             "Pending approval time beetne par apne aap agle level par nahi jaati — jiska turn hai wahi approve karega. Kisi level par us project ka koi approver hi na ho (jaise project par PM appoint nahi), to wo level apne aap Admin ke paas jaata hai aur Admin ko notification jaati hai.",
   "settings.appr_escalation_title":                            "Escalation",
   "settings.wallet_limits_title":                              "Wallet kharch — kitne tak apne aap approve",
   "settings.wallet_limits_upto":                               "₹{amt} tak apne aap",
