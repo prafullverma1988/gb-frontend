@@ -2173,6 +2173,11 @@ function ApprovalSettings() {
     { id: 0,  module: "Customer Estimate Amendment", cat: "FINANCE",   enabled: true,  levels: [{ role: "Project Manager", limit: null }, { role: "Admin", limit: null }] },
     { id: 0,  module: "Labour Rate Change",          cat: "HR",        enabled: true,  levels: [{ role: "Project Manager", limit: null }, { role: "Admin", limit: null }] },
     { id: 0,  module: "Salary Edit",                 cat: "HR",        enabled: true,  levels: [{ role: "Admin", limit: null }] },
+    // DPR ka approval-hierarchy (28 Sep 2026). Default BAND: jab tak admin yahan
+    // chalu na kare, DPR pehle jaisi seedhe "Site / DPR" ke approve wale se
+    // approve hoti hai. Chalu karne par supervisor ke "Bhej do" ke baad level-wise
+    // approve — approver ko ye DPR apne DPR tab me dikhti hai (Approvals inbox me nahi).
+    { id: 0,  module: "DPR",                         cat: "SITE",      enabled: false, levels: [{ role: "Project Manager", limit: null }] },
   ];
 
   const [approvals, setApprovals] = useState(DEFAULTS);
@@ -2301,8 +2306,8 @@ function ApprovalSettings() {
     if (tone === "ok") setTimeout(() => setSaveMsg(""), 3000);
   };
 
-  const categories = ["DESIGN", "PROCUREMENT", "WAREHOUSE", "FINANCE", "PAYMENTS", "HR"];
-  const catColors = { DESIGN: T.purple, PROCUREMENT: T.teal, WAREHOUSE: T.blue, FINANCE: T.amber, PAYMENTS: T.green, HR: T.red };
+  const categories = ["SITE", "DESIGN", "PROCUREMENT", "WAREHOUSE", "FINANCE", "PAYMENTS", "HR"];
+  const catColors = { SITE: T.blue, DESIGN: T.purple, PROCUREMENT: T.teal, WAREHOUSE: T.blue, FINANCE: T.amber, PAYMENTS: T.green, HR: T.red };
 
   const openEdit = (a) => {
     setEditItem(a);

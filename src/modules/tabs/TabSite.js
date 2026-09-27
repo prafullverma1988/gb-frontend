@@ -84,6 +84,13 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
   const [busy, setBusy]       = useState(false);
   const [msg, setMsg]         = useState(null);
   const [byora, setByora]     = useState(false);
+  const [tone, setTone]       = useState("err");
+  // Approval-hierarchy (28 Sep 2026): approve/wapas bhejna DPR screen me hi.
+  // Kaun kar sakta hai ye server batata hai (day.approval.can_act).
+  const [mode, setMode]       = useState("day");             // day | pending | approved
+  const [appr, setAppr]       = useState({ pending: null, approved: null });
+  const [rejOpen, setRejOpen] = useState(false);
+  const [rejText, setRejText] = useState("");
 
   // Pichhle 60 din ki DPR — sirf isliye ki tareekh ki patti par rang aa sake.
   useEffect(() => {
@@ -108,7 +115,17 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
   }, [projectId, date]);
   useEffect(load, [load]);
 
-  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(null), 4000); };
+  const flash = (m, tn) => { setTone(tn || "err"); setMsg(m); setTimeout(() => setMsg(null), 4000); };
+  const loadAppr = useCallback(() => {
+    if (!projectId) return;
+    Promise.all([
+      api.get(`/dpr/approvals?status=pending&project_id=${projectId}`).catch(() => null),
+      api.get(`/dpr/approvals?status=approved&project_id=${projectId}`).catch(() => null),
+    ]).then(([p1, p2]) => setAppr({
+      pending: p1?.success ? (p1.data || []) : [], approved: p2?.success ? (p2.data || []) : [],
+    }));
+  }, [projectId]);
+  useEffect(loadAppr, [loadAppr]);
 
   // ── Client copy ke hisse ────────────────────────────────────────
   // Tick project-wise server par hain (utils/dprSections.js). App ki
@@ -131,7 +148,16 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
     setBusy(true);
     const r = await api.patch(`/dpr/${day.dpr.id}/approve`, {}).catch(() => null);
     setBusy(false);
-    if (r && r.success) load(); else flash((r && r.message) || t("site.approve_failed"));
+    if (r && r.success) { flash(r.message, "ok"); load(); loadAppr(); } else flash((r && r.message) || t("site.approve_failed"));
+  };
+  // Wapas bhejna — wajah zaroori; DPR draft me lautti hai, bhejne wale ko wajah dikhti hai.
+  const rejectDPR = async () => {
+    if (!day?.dpr?.id || busy || !rejText.trim()) return;
+    setBusy(true);
+    const r = await api.post(`/dpr/${day.dpr.id}/reject`, { remark: rejText.trim() }).catch(() => null);
+    setBusy(false);
+    if (r && r.success) { setRejOpen(false); setRejText(""); flash(r.message, "ok"); load(); loadAppr(); }
+    else flash((r && r.message) || t("site.approve_failed"));
   };
 
   // copy = "client" → sirf wo hisse jo is project ki client copy me tick hain.
@@ -149,6 +175,9 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
 
   const a = day?.assembled;
   const st = (STATUS[day?.status] || STATUS.none)();
+  const canAct = day?.status === "submitted" && (day?.approval ? !!day.approval.can_act : canApproveDpr());
+  const showAppr = canApproveDpr() || (appr.pending && appr.pending.length > 0);
+  const nPending = (appr.pending || []).length;
   const tasks = a?.tasks || [];
   const photos = a?.photos?.items || [];
   const materialUsed = tasks.flatMap(x => x.material_used.map(m => ({ ...m, task: x.task })))
@@ -171,8 +200,54 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
   const card = { background: T.surface, borderRadius: 9, border: `1px solid ${T.b1}` };
   const secLbl = { fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 8 };
 
+  const segBtn = (k, label) => (
+    <button key={k} onClick={() => { setMode(k); if (k !== "day") loadAppr(); }}
+      style={{ padding: "6px 14px", borderRadius: 7, border: "none", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer",
+        background: mode === k ? T.surface : "transparent", color: mode === k ? T.t1 : T.t3, boxShadow: mode === k ? "0 1px 3px rgba(0,0,0,.08)" : "none" }}>
+      {label}
+    </button>
+  );
+  const segBar = showAppr ? (
+    <div style={{ display: "flex", gap: 3, padding: 3, background: T.sltL, borderRadius: 9, width: "fit-content", marginBottom: 12 }}>
+      {segBtn("day", t("site.seg_din"))}
+      {segBtn("pending", t("site.seg_approval") + (nPending ? " · " + nPending : ""))}
+      {segBtn("approved", t("site.seg_approved"))}
+    </div>
+  ) : null;
+  if (mode !== "day") {
+    const list = mode === "pending" ? appr.pending : appr.approved;
+    return (
+      <div style={{ padding: "14px 18px" }}>
+        {segBar}
+        {list === null && <div style={{ padding: 30, textAlign: "center", color: T.t4, fontSize: 13 }}>{t("site.loading_dprs")}</div>}
+        {list && list.length === 0 && (
+          <div style={{ ...card, padding: 24, textAlign: "center", color: T.t4, fontSize: 12.5 }}>
+            {mode === "pending" ? t("site.koi_pending_nahi") : t("site.koi_approved_nahi")}
+          </div>
+        )}
+        {(list || []).map((it) => (
+          <button key={it.id} onClick={() => { setDate(it.report_date); setView("overview"); setMode("day"); }}
+            style={{ ...card, display: "flex", width: "100%", alignItems: "center", gap: 12, padding: "10px 14px", marginBottom: 8,
+              cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>{dayLabel(it.report_date)}</div>
+              <div style={{ fontSize: 11.5, color: T.t4, marginTop: 2 }}>
+                {it.status === "approved"
+                  ? t("site.approved_by") + " " + (it.approved_by || "")
+                  : [it.submitted_by ? t("site.bheja_x_ne", { who: it.submitted_by }) : null,
+                     it.level && it.max ? t("site.level_n_of_m", { n: it.level, m: it.max }) : null].filter(Boolean).join(" · ")}
+              </div>
+            </div>
+            <span style={{ color: T.t4 }}>›</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: "14px 18px" }}>
+      {segBar}
 
       {/* ── Tareekh ki patti ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
@@ -213,6 +288,11 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
         {day?.changed_since_submit && day.status !== "none" && (
           <Pill label={t("site.badla_hua")} c={T.amb} bg={T.ambL} border={T.ambM} />
         )}
+        {day?.status === "submitted" && day?.approval?.level ? (
+          <span style={{ fontSize: 11.5, color: T.t2, fontWeight: 600 }}>
+            {t("site.approval_level_x", { role: day.approval.role_label || "—", n: day.approval.level, max: day.approval.max || day.approval.level })}
+          </span>
+        ) : null}
         {day?.completeness && day.status !== "approved" && (
           <span style={{ fontSize: 11.5, color: T.t4 }}>{t("site.bhara_hua_x", { s: day.completeness.score })}</span>
         )}
@@ -250,7 +330,14 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
               </div>
             )}
           </div>
-          {day?.status === "submitted" && canApproveDpr() && (
+          {canAct && (
+            <button onClick={() => setRejOpen((v) => !v)} disabled={busy}
+              style={{ padding: "6px 13px", borderRadius: 7, background: T.surface, color: T.red, border: `1px solid ${T.redM}`,
+                fontSize: 11.5, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit" }}>
+              {t("site.wapas_bhejo")}
+            </button>
+          )}
+          {canAct && (
             <button onClick={approveDPR} disabled={busy}
               style={{ padding: "6px 15px", borderRadius: 7, background: T.grn, color: "white", border: "none",
                 fontSize: 11.5, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit" }}>
@@ -260,8 +347,25 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
         </div>
       </div>
 
+      {day?.status === "draft" && day?.approval?.reject_reason && (
+        <div style={{ ...card, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12.5, padding: "9px 13px", marginBottom: 12 }}>
+          <b>{t("site.wapas_aayi")}</b> — {day.approval.reject_reason}
+          <span style={{ color: T.t3 }}> · {t("site.sudhar_ke_bhejo")}</span>
+        </div>
+      )}
+      {rejOpen && canAct && (
+        <div style={{ ...card, padding: "10px 13px", marginBottom: 12, display: "flex", gap: 8, alignItems: "center" }}>
+          <input value={rejText} autoFocus onChange={(e) => setRejText(e.target.value)} placeholder={t("site.wajah_hint")}
+            aria-label={t("site.wapas_bhejne_ki_wajah")}
+            style={{ flex: 1, padding: "7px 10px", borderRadius: 7, border: `1px solid ${T.b2}`, fontSize: 12.5, fontFamily: "inherit" }} />
+          <button onClick={rejectDPR} disabled={busy || !rejText.trim()}
+            style={{ padding: "7px 14px", borderRadius: 7, background: rejText.trim() ? T.red : T.t4, color: "white", border: "none",
+              fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{t("site.wapas_bhejo")}</button>
+        </div>
+      )}
       {msg && (
-        <div style={{ ...card, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12.5, padding: "9px 13px", marginBottom: 12 }}>{msg}</div>
+        <div style={{ ...card, background: tone === "ok" ? T.grnL : T.redL, border: `1px solid ${tone === "ok" ? T.grnM : T.redM}`,
+          color: tone === "ok" ? T.grn : T.red, fontSize: 12.5, padding: "9px 13px", marginBottom: 12 }}>{msg}</div>
       )}
       {byora && <DinKaByoraModal projectId={projectId} onClose={() => setByora(false)} />}
 
@@ -365,7 +469,7 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
                   <div style={secLbl}>{t("site.hindrance")}</div>
                   {a.hindrances.map(h => (
                     <div key={h.id} style={{ fontSize: 12, color: T.t2, marginBottom: 4 }}>
-                      <b style={{ color: T.t1 }}>{t("dpr.reason_" + h.reason)}</b>
+                      <b style={{ color: T.t1 }}>{t("dpr.reason_" + h.reason)}{h.material ? " (" + h.material + ")" : ""}</b>
                       {h.hours_lost ? " — " + t("site.n_ghante", { n: fq(h.hours_lost) }) : ""}
                       {h.task ? " · " + h.task : ""}
                       {h.note ? <div style={{ fontSize: 11, color: T.t4 }}>{h.note}</div> : null}

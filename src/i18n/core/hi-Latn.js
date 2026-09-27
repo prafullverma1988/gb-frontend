@@ -122,7 +122,7 @@ const dict = {
   "app.on_time": "on time",
   "app.operations_team": "Operations & Team",
   "app.otp_could_not_be_sent_please": "OTP could not be sent. Please try again.",
-  "app.otp_sms_pehchan": "SMS kisi aur naam (jaise 'Dashanan') se aa sakta hai aur signup jaisa likha ho sakta hai — usme jo 6 ank ka number hai, wahi aapka OTP hai.",
+  "app.otp_sms_pehchan": "SMS kisi aur naam (jaise 'Dashanan') se aa sakta hai aur signup jaisa likha ho sakta hai — usme jo 6 digit ka number hai, wahi aapka OTP hai.",
   "app.outstanding": "Outstanding",
   "app.overduetasks_overdue": "{overdueTasks} overdue",
   "app.password": "Password",

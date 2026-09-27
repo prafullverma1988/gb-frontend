@@ -59,6 +59,7 @@ const TabFiles       = lazy(() => import("./tabs/TabFiles"));
 // bekaar hai — wahan site ke apne kaagaz aur photo dikhne chahiye.
 const TabProjectFiles= lazy(() => import("./tabs/TabProjectFiles"));
 const TabSite        = lazy(() => import("./tabs/TabSite"));
+const TabSiteMemo    = lazy(() => import("./tabs/TabSiteMemo"));
 const TabMOM         = lazy(() => import("./tabs/TabMOM"));
 const TabSuryaGhar   = lazy(() => import("./tabs/TabSolar").then(m => ({ default: m.TabSuryaGhar })));
 const TabSolarBOQ    = lazy(() => import("./tabs/TabSolar").then(m => ({ default: m.TabSolarBOQ })));
@@ -186,6 +187,9 @@ const TABS = [
   {id:"equipment",  get label() { return t("project_detail.equipment"); },   key:"q", Icon:IcEquip},
   {id:"files",      get label() { return t("project_detail.files"); },       key:"i", Icon:IcFiles},
   {id:"site",       get label() { return t("project_detail.site_dpr"); },  key:"y", Icon:IcSite},
+  // Site memo — site ki kahani (note, rukawat wajah-wise) + yaad rakhne ke
+  // site notes, ek hi module me (28 Sep 2026).
+  {id:"sitememo",   get label() { return t("sitememo.tab"); },  key:"z", Icon:IcSite},
   {id:"mom",        label:"MOM",         key:"n", Icon:IcMOM},
 ];
 
@@ -730,7 +734,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     budget:"Budget", party:"Party", transaction:"Transaction",
     todo:"To Do", task:"Tasks", material:"Material", subcon:"Subcon",
     attendance:"Attendance", equipment:"Equipment", files:"Files",
-    site:"Site / DPR", mom:"MOM",
+    site:"Site / DPR", sitememo:"Site / DPR", mom:"MOM",
   };
   const _perms = currentUser?.module_permissions;
   const _isAdminRole = ["admin","super_admin"].includes(currentUser?.role);
@@ -856,6 +860,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     equipment:   <TabEquipment projectId={project.id}/>,
     files:       isSolar ? <TabFiles projectId={project.id}/> : <TabProjectFiles projectId={project.id}/>,
     site:        <TabSite project={project} isAdmin={isAdmin}/>,
+    sitememo:    <TabSiteMemo project={project}/>,
     mom:         <TabMOM project={project}/>,
     // ── Solar EPC tabs ──
     solar_stages:  <TabSuryaGhar  projectId={project.id}/>,
