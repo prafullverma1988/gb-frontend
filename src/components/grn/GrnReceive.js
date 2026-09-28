@@ -28,7 +28,7 @@ import DualUnitToggle from "./DualUnitToggle";
 import GrnPhotoBox from "./GrnPhotoBox";
 import WeighChip from "./WeighChip";
 import { loadOrderedLines } from "./grnData";
-import { loadWeighments, indexOpenLines } from "./weigh";
+import { loadWeighments, indexOpenLines, suggestedQty, fmtKg } from "./weigh";
 import { T } from "../../modules/shared/tokens";
 import { t, Rich } from "../../i18n";
 
@@ -47,7 +47,14 @@ const GrnReceive = forwardRef(function GrnReceive({
 }, ref) {
   const isWh = dest?.type === "warehouse";
   const [lines, setLines] = useState([]);
-  const [weigh, setWeigh] = useState({ byMr: {}, byWhItem: {}, byName: {} });
+  const [weigh, setWeigh] = useState({ byMr: {}, byWhItem: {}, byName: {}, trucks: [] });
+  // Gadi-wise GRN (28 Sep 2026): jo gadi kaante par tul chuki par yahan utri
+  // nahi, uski list — "Is gadi ka GRN karo" par sirf USI gadi ka material
+  // neeche rehta hai, challan aur qty bhare aate hain, kaante par jo "challan
+  // se kam" dikha tha uska Short issue tick ke saath GRN par bhi banta hai.
+  const [showTrucks, setShowTrucks] = useState(false);
+  const [truckFor, setTruckFor] = useState(null);     // grn_weighments.id
+  const [shortTick, setShortTick] = useState({});     // { [weighment line id]: true }
   const [lib, setLib] = useState([]);
   const [grnRows, setGrnRows] = useState({});         // { lineKey: { received_qty, rate, dual } }
   const [vendorMeta, setVendorMeta] = useState({});   // { vendor: { challan, date, received_by } }
@@ -76,7 +83,66 @@ const GrnReceive = forwardRef(function GrnReceive({
   }, [destKey]);
   useEffect(() => { onDoneCount && onDoneCount(done.length); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [done.length]);
 
-  const hitFor = (l) => (l.kind === "mr" ? weigh.byMr[l.mrId] : weigh.byWhItem[l.whMrItemId]) || null;
+  const trucks = weigh.trucks || [];
+  const truck = truckFor ? trucks.find(x => x.trip.id === truckFor) || null : null;
+  // Gadi-wise mode me chip aur GRN ka jod USI gadi ki line se — pehli gadi se nahi.
+  const truckLineFor = (l) => (truck ? truck.lines.find(x => (l.kind === "mr" ? x.mr_id === l.mrId : x.wh_mr_item_id === l.whMrItemId)) || null : null);
+  const hitFor = (l) => { const tl = truckLineFor(l); return tl ? { line: tl, trip: truck.trip } : ((l.kind === "mr" ? weigh.byMr[l.mrId] : weigh.byWhItem[l.whMrItemId]) || null); };
+  const moreFor = (l) => Math.max(0, ((l.kind === "mr" ? (weigh.allByMr || {})[l.mrId] : (weigh.allByWhItem || {})[l.whMrItemId]) || []).length - 1);
+  const inTruck = (l) => !truck || !!truckLineFor(l);
+  // Gadi ki jo line yahan kisi row se nahi milti (order list me nahi, ya bina
+  // order ka maal) — wo Direct tab se utarti hai.
+  const orphanLines = () => (truck ? truck.lines.filter(x => !lines.some(l => (l.kind === "mr" ? x.mr_id === l.mrId : x.wh_mr_item_id === l.whMrItemId))) : []);
+  const pickTruck = (tr) => {
+    setTruckFor(tr.trip.id); setShowTrucks(false);
+    const q = {}; const tick = {}; const vendors = new Set();
+    for (const x of tr.lines) {
+      const l = lines.find(y => (y.kind === "mr" ? x.mr_id === y.mrId : x.wh_mr_item_id === y.whMrItemId));
+      if (l) { vendors.add(l.vendor || t("grn.unassigned")); const v = suggestedQty({ line: x, trip: tr.trip }, l.unit); if (v != null) q[l.key] = { received_qty: String(v) }; }
+      if (x.is_short) tick[x.id] = true;
+    }
+    setGrnRows(r => { const n = { ...r }; for (const k of Object.keys(q)) n[k] = { ...(n[k] || {}), ...q[k] }; return n; });
+    if (tr.trip.challan_no) setVendorMeta(m => { const n = { ...m }; for (const v of vendors) if (!(n[v] && n[v].challan)) n[v] = { ...(n[v] || {}), challan: tr.trip.challan_no }; return n; });
+    setShortTick(tick);
+  };
+  const leaveTruck = () => { setTruckFor(null); setShortTick({}); };
+  // Gadi-wise GRN ke baad: kaante par jo "challan se kam" dikha tha, uska Short
+  // issue GRN par bhi — jab tak aadmi ne tick nahi hataya (server wahi note
+  // likhta hai jo tolai ke screen ka "Short issue banao" likhta hai).
+  const shortIssuesForTruck = async () => {
+    if (!truck) return;
+    for (const x of truck.lines) {
+      if (shortTick[x.id]) await api.post(`/weighments/${truck.trip.id}/short-issue`, { line_id: x.id }).catch(() => null);
+    }
+    leaveTruck();
+  };
+  const truckCard = (tr) => {
+    const w = tr.trip; const closed = w.status === "Closed";
+    return (
+      <div key={w.id} style={{ background: T.surface, border: "1px solid " + T.b1, borderLeft: "3px solid " + (closed ? T.grn : T.amb), borderRadius: 8, padding: "9px 12px", marginTop: 7 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: T.t1, fontFamily: "monospace" }}>{w.vehicle_no || "—"}</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: closed ? T.grn : T.amb, background: closed ? T.grnL : T.ambL, padding: "1px 8px", borderRadius: 10 }}>{t(closed ? "weigh.closed" : "weigh.in_transit")}</span>
+          {w.vendor_name && <span style={{ fontSize: 11, color: T.t3 }}>{w.vendor_name}</span>}
+          <span style={{ flex: 1 }} />
+          <button type="button" onClick={() => pickTruck(tr)} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: T.blu, color: "#fff", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{t("weigh.truck_grn")}</button>
+        </div>
+        {tr.lines.map(x => (
+          <div key={x.id} style={{ fontSize: 11, color: T.t2, marginTop: 3 }}>
+            <b style={{ color: T.t1 }}>{x.material_name}</b>
+            {x.challan_qty ? " · " + t("weigh.challan_line", { qty: Number(x.challan_qty), unit: x.challan_unit || x.order_unit || "" }) : ""}
+            {closed && Number(x.net_kg_share) > 0 ? " · " + t("weigh.net_short") + " " + fmtKg(x.net_kg_share) : ""}
+            {x.is_short && <span style={{ color: T.red, fontWeight: 700 }}> · {t("weigh.chip_short", { pct: x.short_pct })}</span>}
+          </div>
+        ))}
+        <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>
+          {(w.gross_slip_no || w.tare_slip_no) ? t("weigh.slip_no_short") + " " + (w.gross_slip_no || w.tare_slip_no) : ""}
+          {w.challan_no ? ((w.gross_slip_no || w.tare_slip_no) ? " · " : "") + t("weigh.challan_no") + " " + w.challan_no : ""}
+          {w.pending_unload && w.open_hours > 0 ? " · " + t("weigh.open_since", { h: w.open_hours }) : ""}
+        </div>
+      </div>
+    );
+  };
   const libFind = (name) => lib.find(m => (m.name || "").trim().toLowerCase() === String(name || "").trim().toLowerCase());
   const photoMissing = () => {
     if (photoRequired && !(photos || []).length) {
@@ -92,11 +158,13 @@ const GrnReceive = forwardRef(function GrnReceive({
     const g = {};
     for (const l of lines) {
       if (done.includes(l.key)) continue;
+      if (!inTruck(l)) continue;
       const v = l.vendor || t("grn.unassigned");
       (g[v] ||= []).push(l);
     }
     return g;
-  }, [lines, done]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, done, truckFor, weigh]);
   const vendorKeys = Object.keys(groups).sort();
 
   const receiveVendor = async (vendor) => {
@@ -170,6 +238,7 @@ const GrnReceive = forwardRef(function GrnReceive({
       }
     }
     setRowIssues(p => { const n = { ...p }; target.forEach(l => { delete n[l.key]; }); return n; });
+    if (ok > 0) await shortIssuesForTruck();
     setBusy(false);
     afterSave({ mode: "ordered", ok });
     if (fails.length) alert(t("grn.partial_errors", { ok, total: target.length, errors: fails.join("\n") }));
@@ -260,6 +329,35 @@ const GrnReceive = forwardRef(function GrnReceive({
             </div>
           </div>
         )}
+        {/* Gadi-wise GRN — kaante par tuli gadiyan jo yahan abhi utri nahi */}
+        {truck ? (
+          <div style={{ background: T.bluL, border: "1px solid " + T.bluM, borderRadius: 8, padding: "8px 12px", marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: T.blu }}>{t("weigh.truck_mode_banner", { vehicle: truck.trip.vehicle_no || "—" })}</div>
+                <div style={{ fontSize: 10.5, color: T.t3, marginTop: 1 }}>{truck.trip.vendor_name || ""}{truck.trip.challan_no ? (truck.trip.vendor_name ? " · " : "") + t("weigh.challan_no") + " " + truck.trip.challan_no : ""}</div>
+              </div>
+              <button type="button" onClick={leaveTruck} style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid " + T.b1, background: T.surface, color: T.t2, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{t("weigh.show_all")}</button>
+            </div>
+            {truck.lines.filter(x => x.is_short).map(x => (
+              <label key={x.id} style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 11.5, fontWeight: 600, color: T.red, cursor: "pointer" }}>
+                <input type="checkbox" checked={!!shortTick[x.id]} onChange={e => setShortTick(p => ({ ...p, [x.id]: e.target.checked }))} />
+                {t("weigh.short_tick", { material: x.material_name, pct: x.short_pct })}
+              </label>
+            ))}
+            {orphanLines().map(x => (
+              <div key={"n" + x.id} style={{ fontSize: 10.5, color: T.amb, marginTop: 5 }}>{t("weigh.truck_no_order_row", { material: x.material_name })}</div>
+            ))}
+          </div>
+        ) : trucks.length > 0 ? (
+          <div style={{ marginBottom: 10 }}>
+            <button type="button" onClick={() => setShowTrucks(v => !v)}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1.5px dashed " + T.bluM, background: T.bluL, color: T.blu, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{t("weigh.trucks_btn", { n: trucks.length })}</span><span>{showTrucks ? "▴" : "▾"}</span>
+            </button>
+            {showTrucks && trucks.map(truckCard)}
+          </div>
+        ) : null}
         {vendorKeys.map(vendor => {
           const ls = groups[vendor];
           const meta = vendorMeta[vendor] || {};
@@ -327,7 +425,7 @@ const GrnReceive = forwardRef(function GrnReceive({
                           placeholder={t("common.rate")} title={t("grn.rate_fifo_hint")}
                           style={{ padding: "6px 8px", borderRadius: 5, border: "1px solid " + T.b1, fontSize: 11.5, textAlign: "right", fontFamily: "inherit", outline: "none" }} />
                       )}
-                      {hit && <WeighChip hit={hit} unit={l.unit} onUseNet={(q) => setRow({ received_qty: String(q) })} />}
+                      {hit && <WeighChip hit={hit} unit={l.unit} more={truck ? 0 : moreFor(l)} onMore={() => setShowTrucks(true)} onUseNet={(q) => setRow({ received_qty: String(q) })} />}
                       {/* Pending se zyada: sirf jaan-boojh kar — tick + wajah (server bhi maangta hai, MAT-08) */}
                       {over && !isWh && (
                         <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 8px", background: T.redL, border: "1px solid " + T.redM, borderRadius: 6 }}>

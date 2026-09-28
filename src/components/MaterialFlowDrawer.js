@@ -452,6 +452,8 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                       ["GRN #",          grn.grn_number],
                       ["Vendor",         grn.vendor_name],
                       ["Challan",        grn.challan_no],
+                      // Dharam kaante ki tolai wali gadi (28 Sep 2026)
+                      ...(grn.vehicle_no ? [["⚖️ " + t("weigh.vehicle_no"), grn.vehicle_no]] : []),
                       ["Received On",    fmtDate(grn.received_date)],
                       ["Received By",    receivedByName],
                       ["Type",           grn.grn_type || "Full"],

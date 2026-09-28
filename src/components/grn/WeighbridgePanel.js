@@ -25,7 +25,7 @@ import uploadManager from "../../utils/uploadManager";
 import { loadPhotoPolicy, policyFor } from "../../utils/photoPolicy";
 import { T } from "../../modules/shared/tokens";
 import { t } from "../../i18n";
-import { challanUnits, fmtKg, kgIn, loadWeighments } from "./weigh";
+import { challanUnits, fmtKg, kgIn, kgPerUnit, loadWeighments } from "./weigh";
 import { loadOrderedLines, loadPoLines } from "./grnData";
 import { cld } from "../../utils/cloudinary";
 
@@ -39,7 +39,12 @@ const CANCEL_REASONS = ["weigh.cancel_r1", "weigh.cancel_r2", "weigh.cancel_r3",
 // Khali wazan itna purana ho to ⚠ (server ka STALE_TARE_HOURS bhi yahi).
 const STALE_H = 12;
 
-const blankPick = { picked: {}, free: [], freeName: "", freeQty: "", freeUnit: "Ton" };
+// adding/pm/swapFor sirf picker ki UI ke liye: adder khula hai, kaunsa
+// material chuna ja raha hai ("__free__" = bina order ka), kis line ka order
+// badla ja raha hai.
+const blankPick = { picked: {}, free: [], freeName: "", freeQty: "", freeUnit: "Ton", adding: false, pm: null, swapFor: null };
+const nameKeyOf = (s) => String(s || "").trim().toLowerCase();
+const FREE_UNITS = ["Ton", "Kg", "MT", "CFT", "Brass", "Cu.m", "Bags", "Nos"];
 const blankNew = { ...blankPick, vendor: "", challan: "", vehicle: "", bridge: "", slipNo: "", kg: "", slipUrl: "", vehUrl: "", read: null, readMsg: "" };
 const blankSecond = { ...blankPick, kg: "", slipNo: "", slipUrl: "", vehUrl: "", vendor: "", challan: "", read: null, readMsg: "" };
 
@@ -178,6 +183,41 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     })),
     ...st.free.map(x => ({ material_name: x.name, order_unit: x.unit, challan_qty: x.qty || null })),
   ];
+  // Ek material + ek vendor ke order, kram me: jisme baaki hai wo pehle, phir
+  // sabse purana (MR/godown MR pehle, phir PO). Pehla = apne aap juda hua order.
+  const ordOf = (l) => Number(l.kind === "mr" ? l.mrId : l.kind === "po" ? l.poItemId : l.whMrItemId) || 0;
+  const lineOrder = (a, b) => ((a.kind === "po") === (b.kind === "po") ? ordOf(a) - ordOf(b) : a.kind === "po" ? 1 : -1);
+  const candidates = (matKey, vendor, exceptKey) => lines
+    .filter(l => nameKeyOf(l.material) === matKey && nameKeyOf(l.vendor) === nameKeyOf(vendor) && l.key !== exceptKey)
+    .sort((a, b) => (Number(b.pending > 0) - Number(a.pending > 0)) || lineOrder(a, b));
+
+  // Challan ki qty aur kaante ka wazan do alag cheezein hain — aadmi kaante ka
+  // wazan challan wale khaane me daal de to yahin pakdo (28 Sep 2026).
+  const challanKgOf = (st) => {
+    let sum = 0, any = false;
+    for (const key of Object.keys(st.picked)) {
+      const p = st.picked[key]; const k = kgPerUnit(p.challanUnit); const q = Number(p.challanQty);
+      if (k && q > 0) { sum += q * k; any = true; }
+    }
+    for (const x of st.free) { const k = kgPerUnit(x.unit); const q = Number(x.qty); if (k && q > 0) { sum += q * k; any = true; } }
+    return any ? sum : null;
+  };
+  const challanWarn = (st, grossKg) => {
+    const c = challanKgOf(st); const g = Number(grossKg);
+    if (c == null || !(g > 0) || c < g) return null;
+    return t("weigh.challan_over_gross", { challan: fmtKg(c), gross: fmtKg(g) });
+  };
+  const blockH = (title, hint) => (
+    <div style={{ margin: "2px 0 7px" }}>
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: T.blu }}>{title}</div>
+      {hint && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 1, lineHeight: 1.4 }}>{hint}</div>}
+    </div>
+  );
+  const warnBox = (msg) => msg ? (
+    <div style={{ margin: "6px 0 8px", padding: "7px 10px", borderRadius: 6, background: T.redL, border: "1px solid " + T.redM, color: T.red, fontSize: 11, fontWeight: 600, lineHeight: 1.4 }}>⚠ {msg}</div>
+  ) : null;
+  const chip = (color) => ({ padding: "5px 10px", borderRadius: 14, border: "1.5px solid " + (color || T.b1), background: T.surface, color: color || T.t1, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", textAlign: "left" });
+  const linkBtn = { border: "none", background: "none", color: T.blu, fontWeight: 700, fontSize: 10.5, cursor: "pointer", padding: 0, fontFamily: "inherit" };
 
   // ── Pehla wazan ────────────────────────────────────────────────
   const openNew = (mode) => { setNewMode(mode); setNf(blankNew); setResult(null); setSecondFor(null); setCancelFor(null); };
@@ -378,81 +418,183 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     );
   };
 
-  // Material picker — pehle wazan (nf) aur doosre wazan (sf) dono me wahi.
+  // ── Material picker (28 Sep 2026) ───────────────────────────────
+  // Pehle har order ki line ek checkbox thi — ek material ke 7 order, sab ek
+  // vendor ke, list lambi aur vendor chhota sa. Ab: MATERIAL chuno → (ek se
+  // zyada vendor ho to) VENDOR chuno → order apne aap jud jaata hai (sabse
+  // purana jisme baaki hai), "badlo" se doosra. Vendor tay hote hi aage sirf
+  // usi vendor ka material dikhta hai — ek gadi me ek hi vendor ka maal.
+  // Pehle wazan (nf) aur doosre wazan (sf) dono me wahi.
   const picker = (st, upd) => {
     const setPick = (key, p) => upd({ picked: { ...st.picked, [key]: { ...st.picked[key], ...p } } });
+    const locked = lockedVendorOf(st);
+    const pickedKeys = Object.keys(st.picked);
     // Tick karte hi order ki poori pending qty bhar dena galat tha (23 Sep
     // 2026): 2 gadi ka order ho aur 1 gadi aaye to entry usi 1 gadi ki hai.
-    const toggle = (l) => {
-      const picked = { ...st.picked };
-      if (picked[l.key]) delete picked[l.key];
-      else picked[l.key] = { challanQty: "", challanUnit: l.unit || "Ton" };
-      upd({ picked });
+    const addLine = (l) => upd({ picked: { ...st.picked, [l.key]: { challanQty: "", challanUnit: l.unit || "Ton" } }, pm: null, adding: false, swapFor: null });
+    const swapLine = (fromKey, l) => {
+      const p = { ...st.picked }; const old = p[fromKey] || {}; delete p[fromKey];
+      const unitOk = challanUnits(l.unit).includes(old.challanUnit);
+      p[l.key] = { challanQty: old.challanQty || "", challanUnit: unitOk ? old.challanUnit : (l.unit || "Ton") };
+      upd({ picked: p, swapFor: null });
     };
+    const removeLine = (key) => { const p = { ...st.picked }; delete p[key]; upd({ picked: p, swapFor: null }); };
+    const avail = lines.filter(l => !st.picked[l.key] && (!locked || nameKeyOf(l.vendor) === nameKeyOf(locked)));
+    const mats = [];
+    for (const l of avail) {
+      const k = nameKeyOf(l.material);
+      let m = mats.find(x => x.k === k);
+      if (!m) { m = { k, name: l.material, n: 0, vendors: [] }; mats.push(m); }
+      m.n++;
+      if (!m.vendors.some(v => nameKeyOf(v) === nameKeyOf(l.vendor))) m.vendors.push(l.vendor || "");
+    }
+    const chooseMat = (m) => {
+      if (m.vendors.length <= 1) { const c = candidates(m.k, m.vendors[0] || "", null).filter(l => !st.picked[l.key]); if (c.length) addLine(c[0]); return; }
+      upd({ pm: m.k });
+    };
+    const chooseVendor = (mk, v) => { const c = candidates(mk, v, null).filter(l => !st.picked[l.key]); if (c.length) addLine(c[0]); };
+    const vendorSub = (mk, v) => {
+      const ls = candidates(mk, v, null).filter(l => !st.picked[l.key]);
+      const units = [...new Set(ls.map(l => l.unit))];
+      const sum = Math.round(ls.reduce((a, l) => a + Number(l.pending || 0), 0) * 1000) / 1000;
+      return t("weigh.n_orders", { n: ls.length }) + (units.length === 1 && sum > 0 ? " · " + t("weigh.pending_sum", { qty: sum, unit: units[0] }) : "");
+    };
+    const adding = st.adding || (!pickedKeys.length && !st.free.length);
+    const pmMat = st.pm && st.pm !== "__free__" ? mats.find(x => x.k === st.pm) : null;
+
     return (
       <>
         <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, marginBottom: 5 }}>{t("weigh.which_material")}</div>
-        {lines.length === 0 && <div style={{ fontSize: 11, color: T.t4, marginBottom: 6 }}>{t("weigh.no_ordered")}</div>}
-        <div style={{ maxHeight: 190, overflowY: "auto", border: lines.length ? "1px solid " + T.b1 : "none", borderRadius: 6, marginBottom: 8 }}>
-          {lines.map(l => {
-            const on = !!st.picked[l.key];
-            return (
-              <div key={l.key} style={{ display: "grid", gridTemplateColumns: "22px 1fr 160px", gap: 7, alignItems: "center", padding: "6px 8px", borderBottom: "1px solid " + T.b1, background: on ? T.bluL : T.surface }}>
-                <input type="checkbox" checked={on} onChange={() => toggle(l)} style={{ width: 15, height: 15, accentColor: T.blu, cursor: "pointer" }} />
-                <div style={{ minWidth: 0, cursor: "pointer" }} onClick={() => toggle(l)}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.material}</div>
-                  <div style={{ fontSize: 10, color: T.t4 }}>{l.label} · {t("weigh.pending_qty", { qty: l.pending, unit: l.unit })}{l.vendor ? " · " + l.vendor : ""}</div>
-                </div>
-                {on ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <input type="number" value={st.picked[l.key].challanQty}
-                      onChange={e => setPick(l.key, { challanQty: e.target.value })}
-                      title={t("weigh.this_truck_qty")} placeholder={t("weigh.challan_par")}
-                      style={{ ...inp, padding: "5px 7px", fontSize: 11.5 }} />
-                    <select value={st.picked[l.key].challanUnit}
-                      onChange={e => setPick(l.key, { challanUnit: e.target.value })}
-                      title={t("weigh.this_truck_qty")}
-                      style={{ ...inp, padding: "5px 4px", fontSize: 11, width: 66 }}>
-                      {challanUnits(l.unit).map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
+
+        {/* Chune hue material — har ek par uska order, aur challan ki qty */}
+        {pickedKeys.map(key => {
+          const l = lines.find(x => x.key === key);
+          if (!l) return null;
+          const p = st.picked[key] || {};
+          const alts = candidates(nameKeyOf(l.material), l.vendor, key).filter(x => !st.picked[x.key]);
+          return (
+            <div key={key} style={{ border: "1px solid " + T.bluM, background: T.bluL, borderRadius: 7, padding: "7px 10px", marginBottom: 6 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto 20px", gap: 8, alignItems: "center" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>✓ {l.material} <span style={{ fontWeight: 500, color: T.t3 }}>· {l.vendor || t("weigh.no_vendor")}</span></div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2, fontSize: 10.5, color: T.t3, flexWrap: "wrap" }}>
+                    <span>{t("weigh.order_line", { label: l.label, qty: l.pending, unit: l.unit })}</span>
+                    {alts.length > 0 && (
+                      <button type="button" onClick={() => upd({ swapFor: st.swapFor === key ? null : key })} style={linkBtn}>{t("weigh.change_order")} ▾</button>
+                    )}
                   </div>
-                ) : <span />}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <span style={{ fontSize: 10, color: T.t3, whiteSpace: "nowrap" }}>{t("weigh.challan_written")}</span>
+                  <input type="number" value={p.challanQty || ""} placeholder="0"
+                    onChange={e => setPick(key, { challanQty: e.target.value })}
+                    style={{ ...inp, width: 80, padding: "5px 7px", fontSize: 11.5 }} />
+                  <select value={p.challanUnit || l.unit || "Ton"}
+                    onChange={e => setPick(key, { challanUnit: e.target.value })}
+                    style={{ ...inp, padding: "5px 4px", fontSize: 11, width: 66 }}>
+                    {challanUnits(l.unit).map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+                <button type="button" onClick={() => removeLine(key)} style={{ border: "none", background: "none", color: T.red, fontSize: 16, lineHeight: 1, cursor: "pointer", padding: 0 }}>×</button>
               </div>
-            );
-          })}
-        </div>
+              {st.swapFor === key && alts.length > 0 && (
+                <div style={{ marginTop: 5, border: "1px solid " + T.b1, borderRadius: 6, background: T.surface, overflow: "hidden" }}>
+                  <div style={{ fontSize: 10, color: T.t4, padding: "4px 8px", borderBottom: "1px solid " + T.b1 }}>{t("weigh.change_order_title")}</div>
+                  {alts.map(a => (
+                    <div key={a.key} onClick={() => swapLine(key, a)} style={{ padding: "5px 8px", fontSize: 11.5, color: T.t1, borderBottom: "1px solid " + T.surfaceB, cursor: "pointer" }}>
+                      <b>{a.label}</b> · {t("weigh.pending_qty", { qty: a.pending, unit: a.unit })}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {kgPerUnit(p.challanUnit) && !kgPerUnit(l.unit) && (
+                <div style={{ fontSize: 10, color: T.t4, marginTop: 3 }}>{t("weigh.unit_note", { unit: l.unit })}</div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Bina order ka material */}
         {st.free.map((x, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, marginBottom: 4 }}>
-            <span style={{ fontWeight: 600 }}>{x.name}</span>
-            <span style={{ color: T.t4 }}>{x.qty ? `${x.qty} ${x.unit}` : x.unit}</span>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid " + T.ambM, background: T.ambL, borderRadius: 7, padding: "6px 10px", marginBottom: 6, fontSize: 11.5 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b>✓ {x.name}</b> <span style={{ color: T.t3 }}>· {t("weigh.free_material")} · {t("weigh.challan_written")}: {x.qty ? `${x.qty} ${x.unit}` : "—"}</span>
+            </div>
             <button type="button" onClick={() => upd({ free: st.free.filter((_, j) => j !== i) })}
-              style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 13 }}>×</button>
+              style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0 }}>×</button>
           </div>
         ))}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 80px auto", gap: 6, alignItems: "end", marginBottom: 10 }}>
-          <div>
-            <label style={lbl}>{t("weigh.free_material")}</label>
-            <input list="weigh-lib-mats" value={st.freeName}
-              onChange={e => { const v = e.target.value; upd({ freeName: v, freeUnit: libUnit(v) || st.freeUnit }); }}
-              placeholder={t("weigh.free_material_ph")} style={inp} />
-            <datalist id="weigh-lib-mats">
-              {(lib || []).map(m => <option key={m.id || m.name} value={m.name} />)}
-            </datalist>
+
+        {/* Adder: material → (vendor) → order apne aap */}
+        {adding ? (
+          <div style={{ border: "1.5px dashed " + T.b2, borderRadius: 7, padding: "8px 10px", marginBottom: 8, background: T.surface }}>
+            {st.pm == null ? (
+              <>
+                <div style={{ fontSize: 10.5, color: T.t4, marginBottom: 6, lineHeight: 1.4 }}>
+                  {locked ? t("weigh.pick_material_locked", { vendor: locked }) : t("weigh.pick_material_hint")}
+                </div>
+                {mats.length === 0 && <div style={{ fontSize: 11, color: T.t4, marginBottom: 6 }}>{locked ? t("weigh.no_more_for_vendor") : t("weigh.no_ordered")}</div>}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {mats.map(m => (
+                    <button key={m.k} type="button" onClick={() => chooseMat(m)} style={chip()}>
+                      {m.name}
+                      <span style={{ fontWeight: 500, color: T.t4 }}> · {t("weigh.n_orders", { n: m.n })}{m.vendors.length > 1 ? " · " + t("weigh.n_vendors", { n: m.vendors.length }) : ""}</span>
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => upd({ pm: "__free__" })} style={chip(T.amb)}>{t("weigh.free_chip")}</button>
+                </div>
+                {(pickedKeys.length > 0 || st.free.length > 0) && (
+                  <button type="button" onClick={() => upd({ adding: false, pm: null })} style={{ ...linkBtn, color: T.t3, marginTop: 7 }}>{t("weigh.cancel_back")}</button>
+                )}
+              </>
+            ) : st.pm === "__free__" ? (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px auto auto", gap: 6, alignItems: "end" }}>
+                {/* Naam material library se — unit uske saath apne aap. */}
+                <div>
+                  <label style={lbl}>{t("weigh.free_material")}</label>
+                  <input list="weigh-lib-mats" value={st.freeName}
+                    onChange={e => { const v = e.target.value; upd({ freeName: v, freeUnit: libUnit(v) || st.freeUnit }); }}
+                    placeholder={t("weigh.free_material_ph")} style={inp} />
+                  <datalist id="weigh-lib-mats">
+                    {(lib || []).map(m => <option key={m.id || m.name} value={m.name} />)}
+                  </datalist>
+                </div>
+                <div>
+                  <label style={lbl}>{t("weigh.challan_written")}</label>
+                  <input type="number" value={st.freeQty || ""} onChange={e => upd({ freeQty: e.target.value })} style={inp} />
+                </div>
+                <div>
+                  <label style={lbl}>{t("common.unit")}</label>
+                  <select value={st.freeUnit} onChange={e => upd({ freeUnit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
+                    {[...new Set([...(libUnit(st.freeName) ? [libUnit(st.freeName)] : []), ...FREE_UNITS])].map(u => <option key={u}>{u}</option>)}
+                  </select>
+                </div>
+                <button type="button" onClick={() => upd({ pm: null })} style={{ ...btn(T.surface, T.t3, T.b1), height: 33 }}>{t("weigh.cancel_back")}</button>
+                <button type="button" disabled={!st.freeName.trim()}
+                  onClick={() => upd({ free: [...st.free, { name: st.freeName.trim(), unit: st.freeUnit, qty: st.freeQty || "" }], freeName: "", freeQty: "", pm: null, adding: false })}
+                  style={{ ...btn(T.blu, "#fff"), height: 33, opacity: st.freeName.trim() ? 1 : 0.5 }}>{t("weigh.add_free")}</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{pmMat ? pmMat.name : ""} <span style={{ fontWeight: 500, color: T.t4, fontSize: 10.5 }}>— {t("weigh.pick_vendor")}</span></div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                  {(pmMat ? pmMat.vendors : []).map(v => (
+                    <button key={v || "-"} type="button" onClick={() => chooseVendor(st.pm, v)} style={chip()}>
+                      {v || t("weigh.no_vendor")}
+                      <span style={{ fontWeight: 500, color: T.t4 }}> · {vendorSub(st.pm, v)}</span>
+                    </button>
+                  ))}
+                </div>
+                <button type="button" onClick={() => upd({ pm: null })} style={{ ...linkBtn, color: T.t3, marginTop: 7 }}>{t("weigh.cancel_back")}</button>
+              </>
+            )}
           </div>
-          <div>
-            <label style={lbl}>{t("weigh.challan_qty")}</label>
-            <input type="number" value={st.freeQty || ""} onChange={e => upd({ freeQty: e.target.value })} style={inp} />
-          </div>
-          <div>
-            <label style={lbl}>{t("common.unit")}</label>
-            <select value={st.freeUnit} onChange={e => upd({ freeUnit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
-              {[...new Set([...(libUnit(st.freeName) ? [libUnit(st.freeName)] : []), "Ton", "Kg", "MT", "CFT", "Brass", "Cu.m", "Bags", "Nos"])].map(u => <option key={u}>{u}</option>)}
-            </select>
-          </div>
-          <button type="button" disabled={!st.freeName.trim()}
-            onClick={() => upd({ free: [...st.free, { name: st.freeName.trim(), unit: st.freeUnit, qty: st.freeQty || "" }], freeName: "", freeQty: "" })}
-            style={{ ...btn(T.surface, T.blu, T.bluM), height: 33, opacity: st.freeName.trim() ? 1 : 0.5 }}>{t("weigh.add_free")}</button>
-        </div>
+        ) : (
+          <button type="button" onClick={() => upd({ adding: true, pm: null, swapFor: null })}
+            style={{ padding: "6px 12px", borderRadius: 7, border: "1.5px dashed " + T.bluM, background: T.surface, color: T.blu, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginBottom: 8 }}>
+            {t("weigh.add_more")}
+          </button>
+        )}
       </>
     );
   };
@@ -481,46 +623,53 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   const waiting = live.filter(w => w.status === "Closed" && w.pending_unload);
   const closed = live.filter(w => w.status === "Closed" && !w.pending_unload).slice(0, 10);
 
-  const secondForm = (w) => (
-    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed " + T.b1 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 4 }}>{t(needGross ? "weigh.step_gross_title" : "weigh.step3_title")}</div>
-      {needGross && (
-        <>
-          <div style={{ fontSize: 11, color: T.t3, margin: "4px 0 8px" }}>{t("weigh.same_vehicle_check")}</div>
-          {/* Purani (23 Sep wali) khali-pehle entry me material pehle se ho
-              sakta hai — tab dobara chunna nahi, bas dikhao. */}
-          {(w.lines || []).length
-            ? <div style={{ fontSize: 11.5, color: T.t2, marginBottom: 8 }}>{(w.lines || []).map(l => l.material_name).join(" · ")}</div>
-            : picker(sf, setS)}
-        </>
-      )}
-      <div style={{ display: "grid", gridTemplateColumns: needGross ? "1fr 1fr" : "1fr", gap: 10, marginBottom: 8 }}>
-        <PhotoPick label={t(needGross ? "weigh.loaded_slip" : "weigh.empty_slip")} url={sf.slipUrl} onUrl={u => setS({ slipUrl: u })} onRead={onSecondSlip} reading={reading} />
-        {needGross && <PhotoPick label={t("weigh.vehicle_photo")} url={sf.vehUrl} onUrl={u => setS({ vehUrl: u })} />}
-      </div>
-      {sf.readMsg && <div style={{ fontSize: 11, color: sf.read ? T.grn : T.amb, margin: "6px 0" }}>{sf.read ? "✓ " : "⚠ "}{sf.readMsg}</div>}
-      <div style={{ display: "grid", gridTemplateColumns: needGross ? "1fr 1fr 1fr 1fr" : "1fr 1fr", gap: 8, marginTop: 8 }}>
-        <div><label style={lbl}>{t(needGross ? "weigh.gross_kg" : "weigh.tare_kg")}</label>
-          <input type="number" value={sf.kg} onChange={e => setS({ kg: e.target.value })} placeholder={needGross ? "18450" : "6150"} style={{ ...inp, fontWeight: 700, borderColor: T.bluM }} /></div>
-        <div><label style={lbl}>{t("weigh.slip_no")}</label>
-          <input value={sf.slipNo} onChange={e => setS({ slipNo: e.target.value })} style={inp} /></div>
-        {needGross && !(w.lines || []).length && vendorField(sf, setS)}
+  const secondForm = (w) => {
+    const warn = needGross ? challanWarn(sf, sf.kg) : null;
+    return (
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed " + T.b1 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 4 }}>{t(needGross ? "weigh.step_gross_title" : "weigh.step3_title")}</div>
         {needGross && (
-          <div><label style={lbl}>{t("weigh.challan_no")}</label>
-            <input value={sf.challan} onChange={e => setS({ challan: e.target.value })} style={inp} /></div>
+          <>
+            <div style={{ fontSize: 11, color: T.t3, margin: "4px 0 8px" }}>{t("weigh.same_vehicle_check")}</div>
+            {blockH(t("weigh.block_challan"), t("weigh.block_challan_hint"))}
+            {/* Purani (23 Sep wali) khali-pehle entry me material pehle se ho
+                sakta hai — tab dobara chunna nahi, bas dikhao. */}
+            {(w.lines || []).length
+              ? <div style={{ fontSize: 11.5, color: T.t2, marginBottom: 8 }}>{(w.lines || []).map(l => l.material_name).join(" · ")}</div>
+              : picker(sf, setS)}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+              {!(w.lines || []).length && vendorField(sf, setS)}
+              <div><label style={lbl}>{t("weigh.challan_no")}</label>
+                <input value={sf.challan} onChange={e => setS({ challan: e.target.value })} style={inp} /></div>
+            </div>
+            {blockH(t("weigh.block_scale"), t("weigh.block_scale_hint"))}
+          </>
         )}
-      </div>
-      {netPreview != null && (
-        <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: netPreview > 0 ? T.grn : T.red }}>
-          {t("weigh.net_preview", { net: fmtKg(netPreview) })}
+        <div style={{ display: "grid", gridTemplateColumns: needGross ? "1fr 1fr" : "1fr", gap: 10, marginBottom: 8 }}>
+          <PhotoPick label={t(needGross ? "weigh.loaded_slip" : "weigh.empty_slip")} url={sf.slipUrl} onUrl={u => setS({ slipUrl: u })} onRead={onSecondSlip} reading={reading} />
+          {needGross && <PhotoPick label={t("weigh.vehicle_photo")} url={sf.vehUrl} onUrl={u => setS({ vehUrl: u })} />}
         </div>
-      )}
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
-        <button type="button" onClick={() => { setSecondFor(null); setSf(blankSecond); }} style={btn(T.surface, T.t3, T.b1)}>{t("common.cancel")}</button>
-        <button type="button" onClick={saveSecond} disabled={busy} style={btn(busy ? "#9CA3AF" : T.grn, "#fff")}>{busy ? t("common.saving") : t(needGross ? "weigh.save_loaded" : "weigh.save_tare")}</button>
+        {sf.readMsg && <div style={{ fontSize: 11, color: sf.read ? T.grn : T.amb, margin: "6px 0" }}>{sf.read ? "✓ " : "⚠ "}{sf.readMsg}</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+          <div><label style={lbl}>{t(needGross ? "weigh.scale_gross_kg" : "weigh.tare_kg")}</label>
+            <input type="number" value={sf.kg} onChange={e => setS({ kg: e.target.value })} placeholder={needGross ? "18450" : "6150"} style={{ ...inp, fontWeight: 700, borderColor: T.bluM }} /></div>
+          <div><label style={lbl}>{t("weigh.slip_no")}</label>
+            <input value={sf.slipNo} onChange={e => setS({ slipNo: e.target.value })} style={inp} /></div>
+        </div>
+        {warnBox(warn)}
+        {netPreview != null && (
+          <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: netPreview > 0 ? T.grn : T.red }}>
+            {t("weigh.net_preview", { net: fmtKg(netPreview) })}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+          <button type="button" onClick={() => { setSecondFor(null); setSf(blankSecond); }} style={btn(T.surface, T.t3, T.b1)}>{t("common.cancel")}</button>
+          <button type="button" onClick={saveSecond} disabled={busy} style={btn(busy ? "#9CA3AF" : T.grn, "#fff")}>{busy ? t("common.saving") : t(needGross ? "weigh.save_loaded" : "weigh.save_tare")}</button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
+  const newWarn = newMode === "gross" ? challanWarn(nf, nf.kg) : null;
 
   return (
     <div>
@@ -568,25 +717,30 @@ export default function WeighbridgePanel({ dest, onChanged }) {
       ) : newMode === "gross" ? (
         <div style={{ background: T.surface, border: "1.5px solid " + T.bluM, borderLeft: "3px solid " + T.blu, borderRadius: 8, padding: 12, marginBottom: 14 }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 8 }}>{t("weigh.step1_title")}</div>
+          {blockH(t("weigh.block_challan"), t("weigh.block_challan_hint"))}
           {picker(nf, setN)}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+            {vendorField(nf, setN)}
+            <div><label style={lbl}>{t("weigh.challan_no")}</label>
+              <input value={nf.challan} onChange={e => setN({ challan: e.target.value })} style={inp} /></div>
+          </div>
+          {blockH(t("weigh.block_scale"), t("weigh.block_scale_hint"))}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
             <PhotoPick label={t("weigh.slip_photo")} url={nf.slipUrl} onUrl={u => setN({ slipUrl: u })} onRead={onFirstSlip} reading={reading} />
             <PhotoPick label={t("weigh.vehicle_photo")} url={nf.vehUrl} onUrl={u => setN({ vehUrl: u })} />
           </div>
           {nf.readMsg && <div style={{ fontSize: 11, color: nf.read ? T.grn : T.amb, marginBottom: 8 }}>{nf.read ? "✓ " : "⚠ "}{nf.readMsg}</div>}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
-            <div><label style={lbl}>{t("weigh.gross_kg")}</label>
+            <div><label style={lbl}>{t("weigh.scale_gross_kg")}</label>
               <input type="number" value={nf.kg} onChange={e => setN({ kg: e.target.value })} placeholder="18450" style={{ ...inp, fontWeight: 700, borderColor: T.bluM }} /></div>
             <div><label style={lbl}>{t("weigh.vehicle_no")}</label>
               <input value={nf.vehicle} onChange={e => setN({ vehicle: e.target.value.toUpperCase() })} placeholder={t("weigh.vehicle_no_ph")} style={inp} /></div>
             <div><label style={lbl}>{t("weigh.slip_no")}</label>
               <input value={nf.slipNo} onChange={e => setN({ slipNo: e.target.value })} style={inp} /></div>
-            {vendorField(nf, setN)}
-            <div><label style={lbl}>{t("weigh.challan_no")}</label>
-              <input value={nf.challan} onChange={e => setN({ challan: e.target.value })} style={inp} /></div>
-            <div><label style={lbl}>{t("weigh.weighbridge_name")}</label>
+            <div style={{ gridColumn: "1 / -1" }}><label style={lbl}>{t("weigh.weighbridge_name")}</label>
               <input value={nf.bridge} onChange={e => setN({ bridge: e.target.value })} style={inp} /></div>
           </div>
+          {warnBox(newWarn)}
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button type="button" onClick={() => { setNewMode(null); setNf(blankNew); }} style={btn(T.surface, T.t3, T.b1)}>{t("common.cancel")}</button>
             <button type="button" onClick={saveNew} disabled={busy} style={btn(busy ? "#9CA3AF" : T.grn, "#fff")}>{busy ? t("common.saving") : t("weigh.save_loaded")}</button>

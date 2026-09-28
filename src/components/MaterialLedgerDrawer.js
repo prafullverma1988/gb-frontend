@@ -101,7 +101,9 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
     const entries = [
       ...(material?.receipts || []).map(r => ({
         _t: "grn", date: r.received_date, ref: r.grn_number || "GRN",
-        party: r.vendor_name || "—", sub: r.challan_no ? `Challan ${r.challan_no}` : "",
+        party: r.vendor_name || "—",
+        // Tolai wali gadi bhi (28 Sep 2026) — "kaunsi gadi se kitna aaya"
+        sub: [r.challan_no ? `Challan ${r.challan_no}` : "", r.vehicle_no ? "⚖️ " + r.vehicle_no : ""].filter(Boolean).join(" · "),
         by: r.received_by || "", qty: Number(r.qty) || 0, grn_id: r.grn_id,
         open_issues: Number(r.open_issues) || 0,
       })),

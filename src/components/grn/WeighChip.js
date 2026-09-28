@@ -9,7 +9,9 @@ import { t } from "../../i18n";
 import { fmtKg, kgIn, kgPerUnit } from "./weigh";
 import { cld } from "../../utils/cloudinary";
 
-export default function WeighChip({ hit, unit, onUseNet }) {
+// more = isi order ki aur kitni gadiyan tuli hain (onMore par gadi-wise list);
+// line.is_short ho to ⚠ "challan se N% kam" — GRN karne wale ko yahin dikhe.
+export default function WeighChip({ hit, unit, onUseNet, more, onMore }) {
   const [open, setOpen] = useState(false);
   if (!hit) return null;
   const { line, trip } = hit;
@@ -42,6 +44,15 @@ export default function WeighChip({ hit, unit, onUseNet }) {
         </button>
         {!closed && (
           <span style={{ fontSize: 10, color: T.t4 }}>{t("weigh.chip_tare_pending")}</span>
+        )}
+        {line.is_short && line.short_pct != null && (
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: T.red }}>{t("weigh.chip_short", { pct: line.short_pct })}</span>
+        )}
+        {more > 0 && (
+          <button type="button" onClick={onMore}
+            style={{ padding: "2px 8px", borderRadius: 10, border: "1px solid " + T.b1, background: T.surface, color: T.t2, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            {t("weigh.chip_more", { n: more })}
+          </button>
         )}
         {canUseNet && (
           <button type="button" onClick={() => onUseNet(net.qty)}

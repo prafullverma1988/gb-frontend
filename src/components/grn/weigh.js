@@ -47,23 +47,45 @@ export async function loadWeighments(dest, status = "all") {
 
 // GRN form ke liye: jo lines abhi kisi GRN se nahi judi, unka index —
 // MR se, godown MR ke item se, ya (bina order ke maal ke liye) naam se.
+// byMr/… = pehli (sabse purani) gadi; allBy… = us order ki SAB tuli gadiyan;
+// trucks = har gadi jiska kuch maal abhi GRN me nahi utra — GRN "gadi-wise"
+// karne ke liye (28 Sep 2026).
 export function indexOpenLines(trips) {
   const byMr = {}, byWhItem = {}, byName = {}, byPoItem = {};
+  const allByMr = {}, allByWhItem = {}, allByName = {}, allByPoItem = {};
+  const trucks = [];
   for (const w of trips || []) {
     if (w.status === "Cancelled") continue;
-    for (const l of w.lines || []) {
-      if (l.grn_item_id) continue;
+    const open = (w.lines || []).filter((l) => !l.grn_item_id);
+    if (open.length) trucks.push({ trip: w, lines: open });
+    for (const l of open) {
       const hit = { line: l, trip: w };
-      if (l.mr_id) byMr[l.mr_id] = hit;
-      else if (l.po_item_id) byPoItem[l.po_item_id] = hit;
-      else if (l.wh_mr_item_id) byWhItem[l.wh_mr_item_id] = hit;
+      if (l.mr_id) { (allByMr[l.mr_id] ||= []).push(hit); if (!byMr[l.mr_id]) byMr[l.mr_id] = hit; }
+      else if (l.po_item_id) { (allByPoItem[l.po_item_id] ||= []).push(hit); if (!byPoItem[l.po_item_id]) byPoItem[l.po_item_id] = hit; }
+      else if (l.wh_mr_item_id) { (allByWhItem[l.wh_mr_item_id] ||= []).push(hit); if (!byWhItem[l.wh_mr_item_id]) byWhItem[l.wh_mr_item_id] = hit; }
       else {
         const k = String(l.material_name || "").trim().toLowerCase();
-        if (k && !byName[k]) byName[k] = hit;
+        if (k) { (allByName[k] ||= []).push(hit); if (!byName[k]) byName[k] = hit; }
       }
     }
   }
-  return { byMr, byWhItem, byName, byPoItem };
+  // Purani gadi pehle — jo pehle tuli, uska GRN pehle.
+  trucks.sort((a, b) => Number(a.trip.id) - Number(b.trip.id));
+  return { byMr, byWhItem, byName, byPoItem, allByMr, allByWhItem, allByName, allByPoItem, trucks };
+}
+
+// GRN ki row me kitna bharna hai — net aa gaya ho (aur order wazan me ho) to
+// net, warna is gadi ke challan ki qty (jab uski unit order jaisi ho). Kuch
+// na mile to null — aadmi khud bhare.
+export function suggestedQty(hit, unit) {
+  if (!hit) return null;
+  const { line, trip } = hit;
+  const closed = trip.status === "Closed" && Number(line.net_kg_share) > 0;
+  if (closed && kgPerUnit(unit)) return kgIn(line.net_kg_share, unit).qty;
+  const cUnit = String(line.challan_unit || "").trim() || line.order_unit;
+  const cQty = Number(line.challan_qty);
+  if (cQty > 0 && String(cUnit || "") === String(unit || "")) return cQty;
+  return null;
 }
 
 // Ek PO ki tolai — PO wale GRN (Procurement) ke liye. Server line ko PO ki
