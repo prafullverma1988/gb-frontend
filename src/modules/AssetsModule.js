@@ -57,6 +57,7 @@ const IcSheet  = (p) => <Ic {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2
 const IcTag    = (p) => <Ic {...p} d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L2 12V2h10l8.6 8.6a2 2 0 010 2.8zM7 7h.01" />;
 const IcChart  = (p) => <Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />;
 const IcRefresh = (p) => <Ic {...p} d="M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15" />;
+const IcHand   = (p) => <Ic {...p} d="M18 11V6a2 2 0 00-4 0v5M14 10V4a2 2 0 00-4 0v6M10 10.5V6a2 2 0 00-4 0v8M18 8a2 2 0 114 0v6a8 8 0 01-8 8h-2a8 8 0 01-8-8v-1a2 2 0 114 0" />;
 const IcCount  = (p) => <Ic {...p} d="M9 4H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2h-2M9 4a2 2 0 002 2h2a2 2 0 002-2M9 4a2 2 0 012-2h2a2 2 0 012 2M9 14l2 2 4-4" />;
 const IcTool   = (p) => <Ic {...p} d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />;
 const IcRupee  = (p) => <Ic {...p} d="M6 4h11M6 9h11M15.5 4c0 4.2-2.8 5-5.5 5H6l8 10" />;
@@ -396,6 +397,50 @@ function useMovePhotoPolicy(open) {
 }
 const photoMissing = (pol, photo) => !!(pol && pol.mode === "required" && !photo);
 
+// Accept par line ki apni photo — "mujhe IS haalat me mila". Voucher wali
+// photo bhejne waqt ki hai; ye lene waqt ki hai, isliye alag policy key.
+function useAcceptPhotoPolicy(open) {
+  const [pol, setPol] = useState(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    loadPhotoPolicy().then((x) => { if (alive) setPol(policyFor(x, "asset_accept")); });
+    return () => { alive = false; };
+  }, [open]);
+  return pol;
+}
+// need = toota accept ho raha hai aur photo nahi lagi. Server bhi yahi rokta
+// hai (assets.err_accept_photo_proof) — yahan laal isliye ki aadmi ko save
+// dabane se pehle dikh jaaye.
+const LinePhoto = ({ value, onChange, need, pol }) => {
+  const [busy, setBusy] = useState(false);
+  const [bad, setBad] = useState(false);
+  const pick = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { setBad(true); return; }
+    setBad(false); setBusy(true);
+    try { onChange(await uploadPhoto(f)); } catch (_) { setBad(true); }
+    setBusy(false);
+  };
+  if (value) {
+    return (
+      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <a href={value} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: T.grn, fontWeight: 700, textDecoration: "none" }}>{t("assets.photo_view")}</a>
+        <button type="button" onClick={() => onChange("")} style={{ background: "none", border: "none", color: T.t4, fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: 0 }}>×</button>
+      </span>
+    );
+  }
+  return (
+    <label style={{ ...inpSm, display: "flex", alignItems: "center", cursor: busy ? "wait" : "pointer",
+      color: bad ? T.red : need ? T.red : T.t3, borderColor: need || bad ? "#F1C2C6" : T.b2 }}>
+      {busy ? t("assets.uploading") : bad ? t("assets.upload_failed") : need ? t("assets.photo_required_label") : t("assets.photo_pick")}
+      <input {...fileInputProps(pol || { source: "camera" })} onChange={pick} disabled={busy} style={{ display: "none" }} />
+    </label>
+  );
+};
+
 // pol: Band = box hi nahi; Zaroori = label "Photo *"; sirf camera = mobile browser
 // seedha camera kholta hai (desktop par gallery rokne ka koi bharosemand tareeka
 // nahi — asli rok server par hai).
@@ -581,9 +626,11 @@ function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
             const f = sideText(v, "from"), to = sideText(v, "to");
             return (
               <Row key={v.id} cols="1.1fr 1.4fr 60px 70px" onClick={() => onOpenVoucher(v.id)}>
-                <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{v.voucher_no}</div>
-                  <div style={{ fontSize: 10.5, color: T.t4 }}>{typeLabel(v.type)} · {fmtD(v.date)}</div>
+                {/* Naam pehle, number baad me — "kya pada hai" ek nazar me
+                    dikhna chahiye (Prafull, 29 Sep 2026). */}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.item_names || v.voucher_no}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4 }}>{v.voucher_no} · {typeLabel(v.type)} · {fmtD(v.date)}</div>
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.main} → <b>{to.main}</b></div>
@@ -1648,6 +1695,8 @@ function VoucherDrawer({ id, onClose, onChanged }) {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const accPol = useAcceptPhotoPolicy(!!id);
+  const photoCol = !(accPol && accPol.mode === "off");
 
   const load = useCallback(async () => {
     setFailed("");
@@ -1659,7 +1708,7 @@ function VoucherDrawer({ id, onClose, onChanged }) {
 
   const startAccept = () => {
     const m = {};
-    for (const ln of v.items || []) m[ln.id] = { accepted_qty: String(ln.qty), accepted_condition: ln.item_condition || "good", remarks: "" };
+    for (const ln of v.items || []) m[ln.id] = { accepted_qty: String(ln.qty), accepted_condition: ln.item_condition || "good", remarks: "", photo_url: "" };
     setAcc(m); setMode("accept"); setError("");
   };
   const doAccept = async () => {
@@ -1669,7 +1718,11 @@ function VoucherDrawer({ id, onClose, onChanged }) {
       const a = acc[ln.id] || {};
       const q = Number(a.accepted_qty);
       if (!(q >= 0) || q > N(ln.qty)) { setError(t("assets.err_accept_qty", { item: lineLabel(ln) })); return; }
-      items.push({ id: ln.id, accepted_qty: q, accepted_condition: a.accepted_condition || ln.item_condition || "good", remarks: a.remarks || undefined });
+      const cond = a.accepted_condition || ln.item_condition || "good";
+      // Toote ka proof — server bhi rokta hai, par yahan roken to aadmi ka
+      // bhara hua form waapas nahi aata.
+      if (photoCol && cond === "damaged" && q > 0 && !a.photo_url) { setError(t("assets.err_accept_photo_proof", { item: lineLabel(ln) })); return; }
+      items.push({ id: ln.id, accepted_qty: q, accepted_condition: cond, remarks: a.remarks || undefined, photo_url: a.photo_url || undefined });
     }
     setBusy(true);
     const r = await api.post(`/assets/vouchers/${v.id}/accept`, { items });
@@ -1704,6 +1757,7 @@ function VoucherDrawer({ id, onClose, onChanged }) {
   const f = sideText(v, "from"), to = sideText(v, "to");
   const showAccepted = v && v.status === "accepted";
   const external = v && ["worker", "subcon"].includes(v.to_holder_type);
+  const accCols = photoCol ? "1.4fr 62px 84px 84px 104px 104px 1fr" : "1.6fr 70px 90px 90px 110px 1fr";
 
   const footer = !v ? <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
     : mode === "accept" ? <><Btn ghost onClick={() => setMode(null)}>{t("assets.back")}</Btn><Btn c={T.grn} icon={IcChk} onClick={doAccept} disabled={busy}>{busy ? t("assets.working") : t("assets.accept_confirm")}</Btn></>
@@ -1758,15 +1812,15 @@ function VoucherDrawer({ id, onClose, onChanged }) {
           </div>
 
           <Panel title={t("assets.lines")}>
-            <Scroll minWidth={mode === "accept" ? 640 : 520}>
-              <Row head cols={mode === "accept" ? "1.6fr 70px 90px 90px 110px 1fr" : `1.6fr 70px 90px ${external ? "110px " : ""}${showAccepted ? "110px" : ""}`}>
+            <Scroll minWidth={mode === "accept" ? (photoCol ? 780 : 640) : 520}>
+              <Row head cols={mode === "accept" ? accCols : `1.6fr 70px 90px ${external ? "110px " : ""}${showAccepted ? "110px" : ""}`}>
                 <span>{t("assets.item")}</span><span>{t("assets.qty")}</span><span>{t("assets.condition")}</span>
                 {mode !== "accept" && external && <span>{t("assets.rent")}</span>}
                 {mode !== "accept" && showAccepted && <span>{t("assets.accepted")}</span>}
-                {mode === "accept" && <><span>{t("assets.accept_qty")}</span><span>{t("assets.accept_cond")}</span><span>{t("assets.remarks")}</span></>}
+                {mode === "accept" && <><span>{t("assets.accept_qty")}</span><span>{t("assets.accept_cond")}</span>{photoCol && <span>{t("assets.photo")}</span>}<span>{t("assets.remarks")}</span></>}
               </Row>
               {(v.items || []).map((ln) => (
-                <Row key={ln.id} cols={mode === "accept" ? "1.6fr 70px 90px 90px 110px 1fr" : `1.6fr 70px 90px ${external ? "110px " : ""}${showAccepted ? "110px" : ""}`}>
+                <Row key={ln.id} cols={mode === "accept" ? accCols : `1.6fr 70px 90px ${external ? "110px " : ""}${showAccepted ? "110px" : ""}`}>
                   <div>
                     <div style={{ fontWeight: 600, color: T.t1 }}>{[ln.name, ln.spec].filter(Boolean).join(" ")}</div>
                     <div style={{ fontSize: 10.5, color: T.t4 }}>{[ln.code, trackLabel(ln.tracking_mode), ln.rate != null ? `${rupee(ln.rate)}/${ln.unit || ""}` : null, ln.remarks].filter(Boolean).join(" · ")}</div>
@@ -1778,6 +1832,8 @@ function VoucherDrawer({ id, onClose, onChanged }) {
                     <div>
                       <div style={{ fontWeight: 600, color: N(ln.accepted_qty) < N(ln.qty) ? T.amb : T.t1 }}>{fmtN(ln.accepted_qty)}</div>
                       {ln.accepted_condition && ln.accepted_condition !== ln.item_condition && <div style={{ fontSize: 10.5 }}><CondPill c={ln.accepted_condition} /></div>}
+                      {/* Lene wale ne jo photo lagayi thi — toote ka saboot. */}
+                      {ln.accept_photo_url && <a href={ln.accept_photo_url} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: T.ind, fontWeight: 700, textDecoration: "none" }}>{t("assets.accept_photo_view")}</a>}
                     </div>
                   )}
                   {mode === "accept" && (
@@ -1795,6 +1851,11 @@ function VoucherDrawer({ id, onClose, onChanged }) {
                         <option value="damaged">{t("assets.cond_damaged")}</option>
                         <option value="lost">{t("assets.cond_lost")}</option>
                       </select>
+                      {photoCol && (
+                        <LinePhoto pol={accPol} value={(acc[ln.id] || {}).photo_url || ""}
+                          need={(acc[ln.id] || {}).accepted_condition === "damaged" && N((acc[ln.id] || {}).accepted_qty) > 0}
+                          onChange={(u) => setAcc((p) => ({ ...p, [ln.id]: { ...p[ln.id], photo_url: u } }))} />
+                      )}
                       <input value={(acc[ln.id] || {}).remarks || ""} style={inpSm} placeholder={t("assets.remarks")}
                         onChange={(e) => setAcc((p) => ({ ...p, [ln.id]: { ...p[ln.id], remarks: e.target.value } }))} />
                     </>
@@ -1804,7 +1865,7 @@ function VoucherDrawer({ id, onClose, onChanged }) {
             </Scroll>
           </Panel>
 
-          {mode === "accept" && <Notice>{t("assets.accept_hint")}</Notice>}
+          {mode === "accept" && <Notice>{t("assets.accept_hint")}{photoCol ? " " + t("assets.accept_photo_hint") : ""}</Notice>}
           {mode === "reject" && (
             <div style={{ marginTop: 12 }}>
               <Field label={t("assets.reject_reason")} hint={t("assets.reject_hint")}>
@@ -1825,7 +1886,10 @@ function VoucherDrawer({ id, onClose, onChanged }) {
 // ══════════════════════════════════════════════════════════════════
 const newMoveLine = () => ({ key: "", qty: "", condition: "good", charge_mode: "free", rent_rate: "", rent_basis: "day", remarks: "" });
 
-function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
+// preset = maang se khula hua form: { request_id, request_no, warehouse_id,
+// project_id, holder_id, lines: [{ asset_item_id, qty }] }. Line uss store ki
+// holding se judti hai, isliye stock aane ke baad bharti hai.
+function IssueForm({ open, meta, pickers, me, canAll, preset, onClose, onSaved }) {
   const toast = useToast();
   const [wh, setWh] = useState("");
   const [date, setDate] = useState(todayStr());
@@ -1845,11 +1909,30 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
 
   useEffect(() => {
     if (!open) return;
+    const pw = preset && preset.warehouse_id && whOptions.some((w) => String(w.id) === String(preset.warehouse_id)) ? preset.warehouse_id : null;
     const def = whOptions.find((w) => w.is_default) || whOptions[0];
-    setWh(def ? String(def.id) : ""); setDate(todayStr()); setTo({ holder_type: "user" }); setLines([newMoveLine()]);
-    setRet(""); setRemarks(""); setPhoto(""); setError("");
+    setWh(pw ? String(pw) : def ? String(def.id) : ""); setDate(todayStr());
+    setTo(preset ? { holder_type: "user", project_id: preset.project_id, holder_id: preset.holder_id, custodian_user_id: preset.holder_id } : { holder_type: "user" });
+    setLines([newMoveLine()]);
+    setRet(preset && N(preset.days) ? new Date(Date.now() + N(preset.days) * 864e5).toLocaleDateString("en-CA") : "");
+    setRemarks(preset ? t("assets.req_from_request", { no: preset.request_no }) : ""); setPhoto(""); setError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, preset]);
+
+  // Maang ki lines — jo is store me hai utni hi bharti hai, baaki aadmi khud
+  // chun lega (store me nahi hai to line dikhani bekaar hai).
+  useEffect(() => {
+    if (!open || !preset || !Array.isArray(preset.lines) || stock == null) return;
+    const rows = [];
+    for (const pl of preset.lines) {
+      const h = (stock || []).find((s) => Number(s.asset_item_id) === Number(pl.asset_item_id) && N(s.qty_good) > 0);
+      if (!h) continue;
+      const q = Math.min(N(pl.qty), N(h.qty_good));
+      rows.push({ ...newMoveLine(), key: String(h.id), qty: h.tracking_mode === "serialized" ? "1" : String(q) });
+    }
+    if (rows.length) setLines(rows);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, preset, stock]);
 
   useEffect(() => {
     if (!open || !wh) { setStock(null); return; }
@@ -1889,6 +1972,7 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
     setBusy(true);
     const r = await api.post("/assets/vouchers", {
       type: "issue", date, from: { warehouse_id: Number(wh) }, to: siteLocBody(to), items,
+      request_id: preset ? preset.request_id : null,
       expected_return_date: ret || null, remarks: remarks || null, photo_url: photo || null,
     });
     setBusy(false);
@@ -1898,7 +1982,8 @@ function IssueForm({ open, meta, pickers, me, canAll, onClose, onSaved }) {
 
   const lineCols = external ? "1.8fr 80px 100px 1.6fr 1fr auto" : "1.8fr 80px 100px 1fr auto";
   return (
-    <Modal open={open} onClose={onClose} width={960} title={t("assets.issue_title")} sub={t("assets.issue_sub")}
+    <Modal open={open} onClose={onClose} width={960} title={t("assets.issue_title")}
+      sub={preset ? t("assets.req_from_request", { no: preset.request_no }) : t("assets.issue_sub")}
       footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy || !whOptions.length} icon={IcOut}>{busy ? t("assets.saving") : t("assets.issue_save")}</Btn></>}>
       {!whOptions.length && <Notice tone="warn">{t("assets.issue_no_warehouse")}</Notice>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
@@ -2577,7 +2662,9 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
     return () => { alive = false; };
   }, [fl, refreshKey]);
 
-  const cols = "120px 78px 88px 1.3fr 1.3fr 1fr 70px 90px 1fr";
+  // Voucher number se kisi ko kuch pata nahi chalta — "kya bheja hai" ka
+  // apna column (Prafull, 29 Sep 2026).
+  const cols = "118px 76px 84px 1.1fr 1.1fr 0.9fr 1.5fr 88px 0.9fr";
   return (
     <Panel title={t("assets.movements_title")}
       action={canCreate && (
@@ -2627,8 +2714,8 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
       {rows == null && <Spinner />}
       {rows && rows.length === 0 && <Empty>{t("assets.movements_empty")}</Empty>}
       {rows && rows.length > 0 && (
-        <Scroll minWidth={1000}>
-          <Row head cols={cols}><span>{t("assets.voucher")}</span><span>{t("assets.date")}</span><span>{t("assets.type")}</span><span>{t("assets.from")}</span><span>{t("assets.to")}</span><span>{t("assets.custodian")}</span><span>{t("assets.lines_qty")}</span><span>{t("assets.status")}</span><span>{t("assets.created_by")}</span></Row>
+        <Scroll minWidth={1140}>
+          <Row head cols={cols}><span>{t("assets.voucher")}</span><span>{t("assets.date")}</span><span>{t("assets.type")}</span><span>{t("assets.from")}</span><span>{t("assets.to")}</span><span>{t("assets.custodian")}</span><span>{t("assets.what_moved")}</span><span>{t("assets.status")}</span><span>{t("assets.created_by")}</span></Row>
           {rows.map((v) => {
             const f = sideText(v, "from"), to = sideText(v, "to");
             return (
@@ -2639,7 +2726,10 @@ function MovementsTab({ refreshKey, meta, pickers, canCreate, onIssue, onTransfe
                 <div style={{ minWidth: 0 }}><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.main}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{f.sub}</div></div>
                 <div style={{ minWidth: 0 }}><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{to.main}</div><div style={{ fontSize: 10.5, color: T.t4 }}>{to.sub}</div></div>
                 <span style={{ fontSize: 11.5 }}>{v.to_custodian_name || v.to_warehouse_name || "—"}</span>
-                <span>{N(v.line_count)} / {fmtN(v.total_qty)}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.t2 }}>{v.item_names || "—"}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4 }}>{t("assets.req_n_cheez", { n: N(v.line_count) })} · {fmtN(v.total_qty)}</div>
+                </div>
                 <span><StatusPill s={v.status} /></span>
                 <span style={{ fontSize: 11.5, color: T.t3 }}>{v.created_by_name || "—"}</span>
               </Row>
@@ -3233,6 +3323,315 @@ function CustodyTab({ refreshKey, meta, pickers, onOpenItem }) {
 // ══════════════════════════════════════════════════════════════════
 // MODULE
 // ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// MAANG (asset request) — site se store ko "ye chahiye"
+//
+// Prafull (29 Sep 2026): "site supervisor ya engineer store incharge se asset
+// ka request kar sake — kya saman, kis site ke liye, kitne din ke liye, kab
+// chahiye, priority."
+//
+// Maang voucher NAHI hai — isse stock nahi hilta. Ye "chahiye" ka likha hua
+// parcha hai. Store ka incharge isi par se Issue banata hai (voucher par
+// request_id lag jaata hai), aur tab dikhta hai "maanga kitna tha, gaya
+// kitna". Poora chala gaya to maang apne aap band; voucher cancel/reject hua
+// to dobara khul jaati hai.
+// ══════════════════════════════════════════════════════════════════
+const PRIO_TONE = { low: [T.slt, T.sltL], normal: [T.ind, T.indL], high: [T.amb, T.ambL], urgent: [T.red, T.redL] };
+const prioLabel = (k) => t("assets.prio_" + (PRIO_TONE[k] ? k : "normal"));
+const PrioPill = ({ p }) => { const [c, bg] = PRIO_TONE[p] || PRIO_TONE.normal; return <Pill label={prioLabel(p)} c={c} bg={bg} />; };
+const REQ_TONE = { open: [T.amb, T.ambL], partial: [T.ind, T.indL], done: [T.grn, T.grnL], rejected: [T.red, T.redL], cancelled: [T.slt, T.sltL] };
+const ReqPill = ({ s }) => { const [c, bg] = REQ_TONE[s] || REQ_TONE.open; return <Pill label={t("assets.req_st_" + (REQ_TONE[s] ? s : "open"))} c={c} bg={bg} />; };
+const reqWhen = (r) => [r.needed_from ? fmtD(r.needed_from) : "", N(r.days) ? t("assets.req_days_n", { n: N(r.days) }) : ""].filter(Boolean).join(" · ") || "—";
+
+const newReqLine = () => ({ mode: "existing", asset_item_id: "", item_text: "", qty: "", unit: "", remarks: "" });
+
+function NewRequestModal({ open, meta, pickers, items, me, onClose, onCreated }) {
+  const toast = useToast();
+  const [f, setF] = useState({});
+  const [lines, setLines] = useState([newReqLine()]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setF({ project_id: "", warehouse_id: "", needed_from: todayStr(), days: "", priority: "normal", purpose: "" });
+    setLines([newReqLine()]); setError("");
+  }, [open]);
+
+  const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const updLine = (i, v) => setLines((p) => p.map((l, j) => (j === i ? v : l)));
+
+  const save = async () => {
+    setError("");
+    if (!f.project_id) { setError(t("assets.err_req_project")); return; }
+    const body = [];
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      const qty = Number(l.qty);
+      if (l.mode === "existing" && !l.asset_item_id) { setError(t("assets.err_req_line_item", { n: i + 1 })); return; }
+      if (l.mode === "new" && !String(l.item_text).trim()) { setError(t("assets.err_req_line_item", { n: i + 1 })); return; }
+      if (!(qty > 0)) { setError(t("assets.err_req_line_qty", { n: i + 1 })); return; }
+      body.push(l.mode === "existing"
+        ? { asset_item_id: Number(l.asset_item_id), qty, remarks: l.remarks || null }
+        : { item_text: String(l.item_text).trim(), qty, unit: l.unit || null, remarks: l.remarks || null });
+    }
+    setBusy(true);
+    const r = await api.post("/assets/requests", {
+      project_id: Number(f.project_id), warehouse_id: f.warehouse_id ? Number(f.warehouse_id) : null,
+      needed_from: f.needed_from || null, days: f.days ? Number(f.days) : null,
+      priority: f.priority, purpose: f.purpose || null, items: body,
+    });
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.req_sent_ok")); onCreated(r.data); onClose(); }
+    else setError((r && r.message) || t("assets.save_failed"));
+  };
+
+  const cols = "1.8fr 80px 90px 1.2fr auto";
+  return (
+    <Modal open={open} onClose={onClose} width={900} title={t("assets.req_new")} sub={t("assets.req_new_sub")}
+      footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy} icon={IcOut}>{busy ? t("assets.saving") : t("assets.req_save")}</Btn></>}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
+        <Field label={t("assets.req_for_site")}>
+          <SearchSelect value={f.project_id} onChange={(k) => upd("project_id", k)} accent={T.ind}
+            options={(pickers.projects || []).map((p) => ({ id: p.id, name: p.name }))} placeholder={t("assets.select")} />
+        </Field>
+        <Field label={t("assets.req_from_store")} hint={t("assets.req_hint_store")}>
+          <select value={f.warehouse_id} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
+            <option value="">{t("assets.req_any_store")}</option>
+            {((meta && meta.warehouses) || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        </Field>
+        <Field label={t("assets.req_priority")}>
+          <select value={f.priority} onChange={(e) => upd("priority", e.target.value)} style={inp}>
+            {["low", "normal", "high", "urgent"].map((k) => <option key={k} value={k}>{prioLabel(k)}</option>)}
+          </select>
+        </Field>
+        <Field label={t("assets.req_when")}><input type="date" value={f.needed_from || ""} onChange={(e) => upd("needed_from", e.target.value)} style={inp} /></Field>
+        <Field label={t("assets.req_days")} hint={t("assets.req_days_hint")}>
+          <input value={f.days || ""} inputMode="numeric" style={inp} placeholder="15"
+            onChange={(e) => upd("days", e.target.value.replace(/[^0-9]/g, ""))} />
+        </Field>
+        <Field label={t("assets.req_purpose")}>
+          <input value={f.purpose || ""} onChange={(e) => upd("purpose", e.target.value)} style={inp} placeholder={t("assets.req_purpose_ph")} />
+        </Field>
+      </div>
+
+      <Panel title={t("assets.req_what")} action={<Btn size="sm" ghost icon={IcAdd} onClick={() => setLines((p) => [...p, newReqLine()])}>{t("assets.add_line")}</Btn>}>
+        <Row head cols={cols}><span>{t("assets.item")}</span><span>{t("assets.qty")}</span><span>{t("assets.unit")}</span><span>{t("assets.remarks")}</span><span></span></Row>
+        {lines.map((l, i) => (
+          <Row key={i} cols={cols}>
+            <div>
+              {l.mode === "existing" ? (
+                <SearchSelect value={l.asset_item_id} accent={T.ind} compact
+                  onChange={(k) => updLine(i, { ...l, asset_item_id: k })}
+                  options={(items || []).map((s) => ({ id: s.id, name: [s.name, s.spec].filter(Boolean).join(" ") }))}
+                  placeholder={t("assets.select_item")} />
+              ) : (
+                <input value={l.item_text} onChange={(e) => updLine(i, { ...l, item_text: e.target.value })} style={inpSm} placeholder={t("assets.req_item_text_ph")} />
+              )}
+              <button type="button" onClick={() => updLine(i, { ...newReqLine(), mode: l.mode === "existing" ? "new" : "existing", qty: l.qty, remarks: l.remarks })}
+                style={{ background: "none", border: "none", padding: "3px 0 0", color: T.ind, fontSize: 10.5, cursor: "pointer", fontFamily: "inherit" }}>
+                {l.mode === "existing" ? t("assets.req_item_new") : t("assets.req_item_existing")}
+              </button>
+            </div>
+            <input value={l.qty} inputMode="decimal" style={inpSm} onChange={(e) => updLine(i, { ...l, qty: e.target.value.replace(/[^0-9.]/g, "") })} />
+            <input value={l.mode === "new" ? l.unit : ((items || []).find((s) => String(s.id) === String(l.asset_item_id)) || {}).unit || ""}
+              disabled={l.mode === "existing"} style={inpSm} onChange={(e) => updLine(i, { ...l, unit: e.target.value })} />
+            <input value={l.remarks} onChange={(e) => updLine(i, { ...l, remarks: e.target.value })} style={inpSm} />
+            <Btn size="sm" ghost onClick={() => setLines((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : [newReqLine()]))}><IcTrash size={12} color={T.red} /></Btn>
+          </Row>
+        ))}
+      </Panel>
+      <Notice>{t("assets.req_new_note")}</Notice>
+      <ErrBox>{error}</ErrBox>
+    </Modal>
+  );
+}
+
+function RequestDrawer({ id, onClose, onChanged, onIssue, onOpenVoucher }) {
+  const toast = useToast();
+  const [r, setR] = useState(null);
+  const [failed, setFailed] = useState("");
+  const [mode, setMode] = useState(null);      // null | reject
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setFailed("");
+    const x = await api.get(`/assets/requests/${id}`).catch(() => null);
+    if (x && x.success) setR(x.data);
+    else { setR(null); setFailed((x && x.message) || t("assets.req_load_failed")); }
+  }, [id]);
+  useEffect(() => { setR(null); setMode(null); setReason(""); setError(""); load(); }, [load]);
+
+  const act = async (path, body, okMsg) => {
+    setBusy(true); setError("");
+    const x = await api.post(`/assets/requests/${r.id}/${path}`, body || {});
+    setBusy(false);
+    if (x && x.success) { toast.success(x.message || okMsg); setMode(null); setR(x.data); onChanged(); }
+    else setError((x && x.message) || t("assets.action_failed"));
+  };
+  const doReject = () => {
+    if (!reason.trim()) { setError(t("assets.err_req_reason")); return; }
+    act("reject", { reason: reason.trim() }, t("assets.req_rejected_ok"));
+  };
+
+  const footer = !r ? <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
+    : mode === "reject" ? <><Btn ghost onClick={() => setMode(null)}>{t("assets.back")}</Btn><Btn c={T.red} onClick={doReject} disabled={busy}>{busy ? t("assets.working") : t("assets.req_reject_btn")}</Btn></>
+    : <>
+        <Btn ghost onClick={onClose}>{t("assets.close")}</Btn>
+        {r.can_cancel && <Btn ghost disabled={busy} style={{ color: T.red }}
+          onClick={() => { if (window.confirm(t("assets.req_cancel_confirm", { no: r.request_no }))) act("cancel", {}, t("assets.req_cancelled_ok")); }}>{t("assets.req_cancel_btn")}</Btn>}
+        {r.can_close && <Btn ghost disabled={busy}
+          onClick={() => { if (window.confirm(t("assets.req_close_confirm", { no: r.request_no }))) act("close", {}, t("assets.req_closed_ok")); }}>{t("assets.req_close_btn")}</Btn>}
+        {r.can_reject && <Btn c={T.red} ghost style={{ color: T.red, borderColor: "#F1C2C6" }} onClick={() => { setMode("reject"); setError(""); }}>{t("assets.req_reject_btn")}</Btn>}
+        {r.can_issue && <Btn icon={IcOut} onClick={() => onIssue(r)}>{t("assets.req_issue_btn")}</Btn>}
+      </>;
+
+  const cols = "1.7fr 90px 90px 1.3fr";
+  return (
+    <Drawer open onClose={onClose} width={700}
+      title={r ? r.request_no : t("assets.req_no")}
+      head={r ? <><PrioPill p={r.priority} /><ReqPill s={r.status} /></> : null}
+      sub={r ? `${fmtD(r.created_at)} · ${t("assets.req_by")}: ${r.created_by_name || "—"}` : ""}
+      footer={footer}>
+      {!r && !failed && <Spinner />}
+      {failed && <Empty>{failed}</Empty>}
+      {r && (
+        <>
+          {r.status === "open" && <Notice tone="warn">{t("assets.req_open_note")}</Notice>}
+          {r.status === "partial" && <Notice tone="warn">{t("assets.req_partial_note")}</Notice>}
+          {r.status === "done" && <Notice>{t("assets.req_done_note")}</Notice>}
+          {r.status === "rejected" && <Notice tone="warn">{t("assets.req_rejected_note", { reason: r.reject_reason || "—" })}</Notice>}
+          {r.status === "cancelled" && <Notice>{t("assets.req_cancelled_note")}</Notice>}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
+            <KV k={t("assets.req_for_site")} v={r.project_name} />
+            <KV k={t("assets.req_from_store")} v={r.warehouse_name || t("assets.req_any_store")} />
+            <KV k={t("assets.req_when")} v={r.needed_from ? fmtD(r.needed_from) : null} />
+            <KV k={t("assets.req_days")} v={N(r.days) ? t("assets.req_days_n", { n: N(r.days) }) : null} />
+            <KV k={t("assets.req_purpose")} v={r.purpose} />
+          </div>
+
+          <Panel title={t("assets.req_what")}>
+            <Scroll minWidth={520}>
+              <Row head cols={cols}><span>{t("assets.item")}</span><span>{t("assets.req_asked")}</span><span>{t("assets.req_issued_qty")}</span><span>{t("assets.remarks")}</span></Row>
+              {(r.items || []).map((ln) => {
+                const short = N(ln.issued_qty) < N(ln.qty);
+                return (
+                  <Row key={ln.id} cols={cols}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: T.t1 }}>{ln.name ? [ln.name, ln.spec].filter(Boolean).join(" ") : ln.item_text}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4 }}>{ln.name ? [ln.code, trackLabel(ln.tracking_mode)].filter(Boolean).join(" · ") : t("assets.req_item_new")}</div>
+                    </div>
+                    <span style={{ fontWeight: 600 }}>{fmtN(ln.qty)} <span style={{ fontSize: 10.5, color: T.t4 }}>{ln.unit || ln.item_unit || ""}</span></span>
+                    <span style={{ fontWeight: 600, color: short ? T.amb : T.grn }}>{fmtN(ln.issued_qty)}</span>
+                    <span style={{ fontSize: 11.5, color: T.t3 }}>{ln.remarks || "—"}</span>
+                  </Row>
+                );
+              })}
+            </Scroll>
+          </Panel>
+
+          {(r.vouchers || []).length > 0 && (
+            <Panel title={t("assets.req_vouchers")} style={{ marginTop: 12 }}>
+              {r.vouchers.map((v) => (
+                <Row key={v.id} cols="110px 1fr 1.4fr 90px" onClick={() => onOpenVoucher(v.id)}>
+                  <span style={{ fontWeight: 600, color: T.t1 }}>{v.voucher_no}</span>
+                  <span style={{ fontSize: 11.5, color: T.t3 }}>{typeLabel(v.type)} · {fmtD(v.date)}</span>
+                  <span style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.item_names || "—"}</span>
+                  <span><StatusPill s={v.status} /></span>
+                </Row>
+              ))}
+            </Panel>
+          )}
+
+          {mode === "reject" && (
+            <div style={{ marginTop: 12 }}>
+              <Field label={t("assets.req_reject_reason")} hint={t("assets.req_reject_hint")}>
+                <textarea value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inp, minHeight: 70, resize: "vertical" }} placeholder={t("assets.req_reject_ph")} />
+              </Field>
+            </div>
+          )}
+          <ErrBox>{error}</ErrBox>
+        </>
+      )}
+    </Drawer>
+  );
+}
+
+function RequestsTab({ refreshKey, meta, pickers, onNew, onOpen }) {
+  const [box, setBox] = useState("");            // "" | mine | for_me
+  const [fl, setFl] = useState({ status: "open", project_id: "", priority: "" });
+  const [rows, setRows] = useState(null);
+  const upd = (k, v) => setFl((p) => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    let alive = true;
+    setRows(null);
+    api.get(`/assets/requests?${qs({ ...fl, mine: box === "mine" ? 1 : "", for_me: box === "for_me" ? 1 : "", limit: 300 })}`).then((x) => {
+      if (alive) setRows(x && x.success ? x.data || [] : []);
+    }).catch(() => { if (alive) setRows([]); });
+    return () => { alive = false; };
+  }, [fl, box, refreshKey]);
+
+  const cols = "1.5fr 1.1fr 1.6fr 130px 96px 96px 1fr";
+  return (
+    <Panel title={t("assets.req_title")} action={<Btn size="sm" icon={IcAdd} onClick={onNew}>{t("assets.req_new")}</Btn>}>
+      <div style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap", alignItems: "center" }}>
+        <Seg value={box} onChange={setBox}
+          options={[{ k: "", l: t("assets.req_all") }, { k: "mine", l: t("assets.req_mine") }, { k: "for_me", l: t("assets.req_for_me") }]} />
+        <select value={fl.status} onChange={(e) => upd("status", e.target.value)} style={{ ...inp, width: 150 }}>
+          <option value="open">{t("assets.req_st_open_filter")}</option>
+          <option value="">{t("assets.all_status")}</option>
+          <option value="done">{t("assets.req_st_done")}</option>
+          <option value="rejected">{t("assets.req_st_rejected")}</option>
+          <option value="cancelled">{t("assets.req_st_cancelled")}</option>
+        </select>
+        <select value={fl.priority} onChange={(e) => upd("priority", e.target.value)} style={{ ...inp, width: 150 }}>
+          <option value="">{t("assets.req_priority_all")}</option>
+          {["urgent", "high", "normal", "low"].map((k) => <option key={k} value={k}>{prioLabel(k)}</option>)}
+        </select>
+        <div style={{ width: 200 }}>
+          <SearchSelect value={fl.project_id} onChange={(k) => upd("project_id", k)} accent={T.ind}
+            options={[{ id: "", name: t("assets.all_projects") }, ...(pickers.projects || []).map((p) => ({ id: p.id, name: p.name }))]} placeholder={t("assets.all_projects")} />
+        </div>
+      </div>
+      {rows == null && <Spinner />}
+      {rows && rows.length === 0 && <Empty>{t("assets.req_empty")}</Empty>}
+      {rows && rows.length > 0 && (
+        <Scroll minWidth={1060}>
+          <Row head cols={cols}>
+            <span>{t("assets.req_no")}</span><span>{t("assets.req_for_site")}</span><span>{t("assets.req_what")}</span>
+            <span>{t("assets.req_when")}</span><span>{t("assets.req_priority")}</span><span>{t("assets.status")}</span><span>{t("assets.req_by")}</span>
+          </Row>
+          {rows.map((r) => (
+            <Row key={r.id} cols={cols} onClick={() => onOpen(r.id)}>
+              <div>
+                <div style={{ fontWeight: 600, color: T.t1 }}>{r.request_no}</div>
+                <div style={{ fontSize: 10.5, color: T.t4 }}>{fmtD(r.created_at)}</div>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.project_name || "—"}</div>
+                <div style={{ fontSize: 10.5, color: T.t4 }}>{r.warehouse_name || t("assets.req_any_store")}</div>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.t2 }}>{r.item_names || "—"}</div>
+                <div style={{ fontSize: 10.5, color: T.t4 }}>{t("assets.req_n_cheez", { n: N(r.line_count) })} · {fmtN(r.total_qty)}</div>
+              </div>
+              <span style={{ fontSize: 11.5, color: T.t3 }}>{reqWhen(r)}</span>
+              <span><PrioPill p={r.priority} /></span>
+              <span><ReqPill s={r.status} /></span>
+              <span style={{ fontSize: 11.5, color: T.t3 }}>{r.created_by_name || "—"}</span>
+            </Row>
+          ))}
+        </Scroll>
+      )}
+    </Panel>
+  );
+}
+
 function AssetsModule({ deepLink, onDeepLinkDone }) {
   const me = useMemo(() => getUser() || {}, []);
   const isAdmin = ["admin", "super_admin"].includes(String(me.role || "").toLowerCase());
@@ -3260,6 +3659,11 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
   const [catsOpen, setCatsOpen] = useState(false);
   const [inchOpen, setInchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [requestId, setRequestId] = useState(null);
+  const [newRequest, setNewRequest] = useState(false);
+  // Maang se "Issue karo" — form usi maang ke saath khulta hai.
+  const [issuePreset, setIssuePreset] = useState(null);
+  const [openReqCount, setOpenReqCount] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   // Export "abhi kya kahan pada hai" ki Excel deta hai. Ise wapas import nahi
   // karna — server bhi rok deta hai; qty sudhaarne ka rasta Ginti hai.
@@ -3280,6 +3684,8 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
       api.get("/assets/dashboard").catch(() => null),
       api.get("/assets/items").catch(() => null),
     ]);
+    api.get("/assets/requests?status=open&limit=300")
+      .then((r) => setOpenReqCount(r && r.success ? (r.data || []).length : 0)).catch(() => {});
     setMeta(m && m.success ? m.data : { categories: [], warehouses: [], incharges: [], my_warehouse_ids: [] });
     setPickers(p && p.success ? p.data || {} : {});
     setDash(d && d.success ? d.data : null);
@@ -3299,8 +3705,13 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
   useEffect(() => {
     try {
       if (!/^\/assets/.test(window.location.pathname)) return;
-      const id = new URLSearchParams(window.location.search).get("id");
+      const q = new URLSearchParams(window.location.search);
+      const id = q.get("id");
       if (id && /^\d+$/.test(id)) { setVoucherId(Number(id)); setTab("movements"); }
+      // Maang ki notification /assets?req=<id> par aati hai — wo voucher nahi
+      // hai, isliye alag param.
+      const rq = q.get("req");
+      if (rq && /^\d+$/.test(rq)) { setRequestId(Number(rq)); setTab("requests"); }
     } catch (_) { /* URL na padh paaye to kuch nahi */ }
   }, []);
 
@@ -3322,6 +3733,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
     { id: "dashboard", l: t("assets.tab_dashboard"), I: IcChart },
     { id: "register", l: t("assets.tab_register"), I: IcList },
     { id: "grn", l: t("assets.tab_grn"), I: IcIn },
+    { id: "requests", l: t("assets.tab_requests"), I: IcHand, badge: openReqCount || null },
     { id: "movements", l: t("assets.tab_movements"), I: IcTrns, badge: pendingCount || null },
     { id: "verify", l: t("assets.tab_verify"), I: IcCount, badge: openVerifCount || null },
     { id: "custody", l: t("assets.tab_custody"), I: IcUser },
@@ -3360,6 +3772,10 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
             onCats={() => setCatsOpen(true)} onIncharge={() => setInchOpen(true)} onImport={() => setImportOpen(true)} onAddAsset={() => setAddOpen(true)}
             onExport={doExport} exportErr={exportErr} />
         )}
+        {tab === "requests" && (
+          <RequestsTab refreshKey={refreshKey} meta={meta} pickers={pickers}
+            onNew={() => setNewRequest(true)} onOpen={setRequestId} />
+        )}
         {tab === "grn" && <GrnTab refreshKey={refreshKey} canCreate={canCreate} onNew={() => setGrnOpen(true)} onOpenVoucher={setVoucherId} />}
         {tab === "movements" && (
           <MovementsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canCreate}
@@ -3380,10 +3796,27 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
           onClose={() => setVerifyId(null)} onChanged={refresh}
           onOpenVoucher={(vid) => { setVerifyId(null); openVoucherInMovements(vid); }} />
       )}
+      {requestId && (
+        <RequestDrawer id={requestId} onClose={() => setRequestId(null)} onChanged={refresh}
+          onOpenVoucher={(vid) => { setRequestId(null); openVoucherInMovements(vid); }}
+          onIssue={(r) => {
+            setRequestId(null);
+            setIssuePreset({
+              request_id: r.id, request_no: r.request_no, warehouse_id: r.warehouse_id,
+              project_id: r.project_id, holder_id: r.created_by, days: r.days,
+              lines: (r.items || []).filter((x) => x.asset_item_id && N(x.qty) > N(x.issued_qty))
+                .map((x) => ({ asset_item_id: x.asset_item_id, qty: N(x.qty) - N(x.issued_qty) })),
+            });
+            setIssueOpen(true);
+          }} />
+      )}
+      <NewRequestModal open={newRequest} meta={meta} pickers={pickers} items={items} me={me}
+        onClose={() => setNewRequest(false)} onCreated={(d) => { refresh(); if (d && d.id) setRequestId(d.id); }} />
       {itemFull && <ItemDrawer item={itemFull} cats={cats} canEdit={canEdit} onClose={() => setOpenItem(null)} onChanged={refresh} onOpenVoucher={setVoucherId} />}
 
       <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} canAll={isAdmin || canApprove} onClose={() => setGrnOpen(false)} onSaved={refresh} />
-      <IssueForm open={issueOpen} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setIssueOpen(false)} onSaved={refresh} />
+      <IssueForm open={issueOpen} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} preset={issuePreset}
+        onClose={() => { setIssueOpen(false); setIssuePreset(null); }} onSaved={refresh} />
       <MoveForm open={!!moveKind} kind={moveKind || "transfer"} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setMoveKind(null)} onSaved={refresh} />
       <AddAssetForm open={addOpen} meta={meta} pickers={pickers} cats={cats} me={me} onClose={() => setAddOpen(false)} onSaved={refresh} />
       <RepairForm open={!!repairKind} kind={repairKind || "out"} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setRepairKind(null)} onSaved={refresh} />
