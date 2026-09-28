@@ -999,6 +999,11 @@ function PartyMasterSection() {
     "fuel":"fuel_vendor","fuel vendor":"fuel_vendor","diesel":"fuel_vendor","petrol pump":"fuel_vendor",
     "client":"client","subcontractor":"subcontractor","sub-contractor":"subcontractor","subcon":"subcontractor",
     "labour vendor":"labour_vendor","labor vendor":"labour_vendor","transporter":"transporter","consultant":"consultant","staff":"staff",
+    // Onsite (purana app) ke shabd — greenbox bhilai ka data wahin se aaya
+    // hai. Ye na hone se un party ka role chip hi nahi banta tha aur wo kisi
+    // role filter me nahi aati thin (backend utils/partyRoles.js me bhi yahi).
+    "customer":"client","contractor":"subcontractor","labour contractor":"subcontractor",
+    "labor contractor":"subcontractor","equipment supplier":"equipment_vendor",
   };
   const toRoleKey = (v) => {
     if (!v) return null;

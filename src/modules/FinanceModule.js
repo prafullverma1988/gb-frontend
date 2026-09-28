@@ -1089,6 +1089,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     "material vendor":"material_vendor","material supplier":"material_vendor","material_supplier":"material_vendor","supplier":"material_vendor","vendor":"material_vendor","other vendor":"material_vendor",
     "client":"client","subcontractor":"subcontractor","sub-contractor":"subcontractor","sub-con":"subcontractor","subcon":"subcontractor","contractor":"subcontractor",
     "labour vendor":"labour_vendor","labor vendor":"labour_vendor","transporter":"transporter","consultant":"consultant","staff":"staff",
+    // Onsite ke baaki shabd — greenbox bhilai ka data wahin se aaya hai
+    "customer":"client","labour contractor":"subcontractor","labor contractor":"subcontractor","equipment supplier":"equipment_vendor",
     // Machine hire — kept out of material_vendor on purpose: an equipment
     // vendor must not show up in the material-bill picker.
     "equipment":"equipment_vendor","equipment vendor":"equipment_vendor","machinery":"equipment_vendor",
