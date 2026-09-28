@@ -230,6 +230,15 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
                   <div style={{ fontSize: 12.5, color: "#92400E", lineHeight: 1.5 }}>{mr.closed_reason}</div>
                 </div>
               )}
+              {Number(mr.balance_closed_qty) > 0 && (
+                <div style={{ padding: "10px 12px", background: "#FEF3C7", border: `1px solid #FDE68A`, borderRadius: 8, marginBottom: 14 }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>
+                    {t("mrdetail.balance_closed", { qty: Number(mr.balance_closed_qty), unit: mr.unit || "" })}
+                    {mr.balance_closed_at && <span style={{ marginLeft: 6, fontWeight: 500, color: T.t4 }}>· {fmtDate(mr.balance_closed_at)}{mr.balance_closed_by ? " · " + mr.balance_closed_by : ""}</span>}
+                  </div>
+                  {mr.balance_closed_reason && <div style={{ fontSize: 12.5, color: "#92400E", lineHeight: 1.5 }}>{mr.balance_closed_reason}</div>}
+                </div>
+              )}
               {/* Full audit trail — kisne kya kab kiya */}
               <ActivityLog entity_type="material_request" entity_id={mr.id}/>
             </>

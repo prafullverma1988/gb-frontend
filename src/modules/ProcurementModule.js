@@ -2039,10 +2039,15 @@ function ProcurementModule(){
 
   // ── Counts ── (Closed MRs are excluded from all active tabs)
   const isClosed = m => m.mrStatus === "Closed";
+  // Aadhi aayi MR (50 me 40) ka BACHA hissa abhi bhi "order par" hai — wo
+  // Ordered tab me bhi dikhe (Received me bhi rehti hai, aaya hua hissa wahan).
+  // Pehle sirf Received me girti thi aur baaki 10 bag ka koi thikana nahi tha.
+  const isPartialOpen = m => m.matStatus==="PartialReceived" && !(m.pending_qty!=null && Number(m.pending_qty)<=0.0005);
+  const inOrdered = m => m.matStatus==="Ordered" || isPartialOpen(m);
   const mrTabCounts={
     Pending: mrs.filter(m=>!isClosed(m) && m.mrStatus==="Pending").length,
     Approved:mrs.filter(m=>!isClosed(m) && m.mrStatus==="Approved"&&m.matStatus==="Pending").length,
-    Ordered: mrs.filter(m=>!isClosed(m) && m.matStatus==="Ordered").length,
+    Ordered: mrs.filter(m=>!isClosed(m) && inOrdered(m)).length,
     Received:mrs.filter(m=>!isClosed(m) && (m.matStatus==="Received"||m.matStatus==="PartialReceived")).length,
     Rejected:mrs.filter(m=>!isClosed(m) && m.mrStatus==="Rejected").length,
     Closed:  mrs.filter(isClosed).length,
@@ -2056,7 +2061,7 @@ function ProcurementModule(){
     if(mrTab==="Closed"   &&!isClosed(m)) return false;
     if(mrTab==="Pending"  &&m.mrStatus!=="Pending") return false;
     if(mrTab==="Approved" &&!(m.mrStatus==="Approved"&&m.matStatus==="Pending")) return false;
-    if(mrTab==="Ordered"  &&m.matStatus!=="Ordered") return false;
+    if(mrTab==="Ordered"  &&!inOrdered(m)) return false;
     if(mrTab==="Received" &&!(m.matStatus==="Received"||m.matStatus==="PartialReceived")) return false;
     if(mrTab==="Rejected" &&m.mrStatus!=="Rejected") return false;
     if(mrProject!=="All"){
@@ -2082,7 +2087,7 @@ function ProcurementModule(){
         if(mrTab==="Closed"   &&m.mrStatus!=="Closed") return false;
         if(mrTab==="Pending"  &&m.mrStatus!=="Pending") return false;
         if(mrTab==="Approved" &&!(m.mrStatus==="Approved"&&m.matStatus==="Pending")) return false;
-        if(mrTab==="Ordered"  &&m.matStatus!=="Ordered") return false;
+        if(mrTab==="Ordered"  &&!inOrdered(m)) return false;
         if(mrTab==="Received" &&!(m.matStatus==="Received"||m.matStatus==="PartialReceived")) return false;
         if(mrTab==="Rejected" &&m.mrStatus!=="Rejected") return false;
         return true;
@@ -2216,6 +2221,23 @@ function ProcurementModule(){
       const r=await api.put("/procurement/mrs/"+m.id,{mr_status:"Closed",closed_reason:reason.trim()});
       if(r?.success===false){ window.alert(r.message||"Close failed"); return; }
       setMRs(p=>p.map(x=>x.id===m.id?{...x,mrStatus:"Closed",closed_reason:reason.trim()}:x));
+    }catch(e){ window.alert(e?.message||"Network error"); }
+  };
+  // Baaki band karo — sirf BACHA hissa (50 me 40 aaya, 10 nahi chahiye). Poori
+  // MR ka "Close" aaya hua 40 bhi Closed tab me le jaata; ye nahi.
+  const closeBalance=async(m)=>{
+    setRowMenu(null);
+    const left=Number(m.pending_qty)||0;
+    const reason=await window.promptAsync(t("procurement.close_balance_prompt", { id: m.mrNum||m.id, item: m.item, qty: left, unit: m.unit||"" }));
+    if(reason===null) return;
+    if(!reason.trim()){ window.alert(t("payroll.reason_zaroori_hai")); return; }
+    try{
+      const r=await api.patch("/procurement/mrs/"+m.id+"/close-balance",{reason:reason.trim()});
+      if(r?.success===false){ window.alert(r.message||"Close failed"); return; }
+      const d=r?.data||{};
+      setMRs(p=>p.map(x=>x.id===m.id?{...x,matStatus:"Received",mat_status:"Received",pending_qty:0,
+        receivedQty:d.received_qty!=null?d.received_qty:x.receivedQty, received_qty:d.received_qty!=null?d.received_qty:x.received_qty,
+        balance_closed_qty:d.closed_qty!=null?d.closed_qty:left, balance_closed_reason:reason.trim()}:x));
     }catch(e){ window.alert(e?.message||"Network error"); }
   };
   const saveGRN=async(poId,challan,rows,vendorOverride,issues)=>{
@@ -2442,7 +2464,7 @@ function ProcurementModule(){
 
             {/* Ordered tab — delivery (ETA) followup chips: Overdue / Today / 3d / 7d */}
             {mrTab==="Ordered"&&(()=>{
-              const ordered=mrs.filter(m=>!isClosed(m)&&m.matStatus==="Ordered");
+              const ordered=mrs.filter(m=>!isClosed(m)&&inOrdered(m));
               const cnt=chip=>ordered.filter(m=>_etaMatch(m.etaRaw,chip)).length;
               const chips=[
                 {k:"All",     l:t("common.all"),         c:T.t3},
@@ -2601,7 +2623,14 @@ function ProcurementModule(){
                         <div style={{fontSize:13,fontWeight:500,color:T.t1}}>{m.item}</div>
                         <div style={{fontSize:11,color:T.t3}}>{m.project}</div>
                       </div>
-                      <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{m.approvedQty||m.qty}</div>
+                      {isPartialOpen(m)?(
+                        <div>
+                          <div style={{fontSize:14,fontWeight:700,color:T.amb}}>{Number(m.pending_qty)||0}</div>
+                          <div style={{fontSize:9.5,color:T.amb,lineHeight:1.3}}>{t("procurement.partial_recv_of", { recv: Number(m.receivedQty)||0, qty: m.approvedQty||m.qty })}</div>
+                        </div>
+                      ):(
+                        <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{m.approvedQty||m.qty}</div>
+                      )}
                       <div style={{fontSize:12,color:T.t3}}>{m.unit}</div>
                       <div>
                         <div style={{fontSize:12,fontWeight:500,color:m.isFromWarehouse?T.cyn:T.pur,display:"flex",alignItems:"center",gap:4}}>
@@ -2621,11 +2650,19 @@ function ProcurementModule(){
                               <IcChk size={14} color={T.grn}/> {t("procurement.mark_received")}
                             </button>
                             <div style={{height:1,background:T.b1}}/>
+                            {isPartialOpen(m)?(
+                              <button onClick={(e)=>{e.stopPropagation();closeBalance(m);}}
+                                style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",background:"none",color:T.amb,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.ambL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                                <IcX size={13} color={T.amb}/> {t("procurement.close_balance")}
+                              </button>
+                            ):(
                             <button onClick={(e)=>{e.stopPropagation();closeMR(m);}}
                               style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",background:"none",color:T.red,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
                               onMouseEnter={e=>e.currentTarget.style.background=T.redL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                               <IcX size={13} color={T.red}/> {t("procurement.close_with_reason")}
                             </button>
+                            )}
                           </div>
                         </>)}
                       </div>
@@ -2664,6 +2701,7 @@ function ProcurementModule(){
                           <div style={{fontSize:14,fontWeight:700,color:isPartial?T.amb:T.grn}}>{isPartial ? recd : (m.receivedQty||m.qty)}</div>
                           <div style={{fontSize:10,color:T.t4}}>{m.unit}</div>
                           {isPartial&&<div style={{fontSize:9.5,color:T.amb}}>of {m.qty}</div>}
+                          {!isPartial&&Number(m.balance_closed_qty)>0&&<div style={{fontSize:9.5,color:T.t4}}>{t("procurement.balance_closed_n", { qty: Number(m.balance_closed_qty), unit: m.unit||"" })}</div>}
                         </div>
                         <div>
                           <div style={{fontSize:12,color:T.t2}}>{m.project}</div>
