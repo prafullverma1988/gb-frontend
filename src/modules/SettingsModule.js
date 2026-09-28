@@ -3732,6 +3732,13 @@ function WarehouseSettings() {
   // Dharam kata: net challan se itne % se zyada kam ho to "Short" issue ka
   // suggestion (routes/weighments.js). Default 1%.
   const [weighTol, setWeighTol] = useState("1");
+  // Kaante ke baaki switch (29 Sep 2026) — app ka photo-pehle form inhe maanta hai:
+  //   tare mode   'each' = khali gadi har baar tolo | 'stored' = kaante ka stored tare chalega
+  //   short auto  Short issue apne aap (warna tick ke saath aadmi banaye)
+  //   plate       gadi ki photo me number plate zaroori (default on)
+  const [weighTareMode, setWeighTareMode] = useState("each");
+  const [weighShortAuto, setWeighShortAuto] = useState(false);
+  const [weighPlateReq, setWeighPlateReq] = useState(true);
   // Photo policy yahan se nikal gayi — ab apna Photo Settings tab hai,
   // jahan har jagah ke teen control (zaroori / camera-only / location)
   // ek saath hain.
@@ -3746,6 +3753,9 @@ function WarehouseSettings() {
         setMrFlow(r.data.mr_fulfillment_mode || "procurement_driven");
         setHoldTtl(Number(r.data.mr_soft_hold_ttl_days) || 2);
         setWeighTol(r.data.weigh_short_tol_pct != null ? String(Number(r.data.weigh_short_tol_pct)) : "1");
+        setWeighTareMode(r.data.weigh_tare_mode === "stored" ? "stored" : "each");
+        setWeighShortAuto(Number(r.data.weigh_short_auto) === 1);
+        setWeighPlateReq(r.data.weigh_plate_required == null ? true : Number(r.data.weigh_plate_required) === 1);
       }
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
@@ -3760,6 +3770,9 @@ function WarehouseSettings() {
         mr_fulfillment_mode: mrFlow,
         mr_soft_hold_ttl_days: holdTtl,
         weigh_short_tol_pct: tol,
+        weigh_tare_mode: weighTareMode,
+        weigh_short_auto: weighShortAuto,
+        weigh_plate_required: weighPlateReq,
       });
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 1800);
@@ -3852,6 +3865,40 @@ function WarehouseSettings() {
           <span style={{ fontSize: 12.5, color: T.textMid }}>%</span>
         </div>
         <div style={{ fontSize: 11.5, color: T.textMid, marginTop: 8, lineHeight: 1.5 }}>{t("weigh.settings_hint")}</div>
+
+        {[
+          { title: t("weigh.set_tare_title"), value: weighTareMode, set: setWeighTareMode, opts: [
+            { v: "each", label: t("weigh.set_tare_each"), sub: t("weigh.set_tare_each_sub") },
+            { v: "stored", label: t("weigh.set_tare_stored"), sub: t("weigh.set_tare_stored_sub") },
+          ] },
+          { title: t("weigh.set_short_title"), value: weighShortAuto ? "auto" : "tick", set: (v) => setWeighShortAuto(v === "auto"), opts: [
+            { v: "tick", label: t("weigh.set_short_tick"), sub: null },
+            { v: "auto", label: t("weigh.set_short_auto"), sub: t("weigh.set_short_auto_sub") },
+          ] },
+        ].map((g) => (
+          <div key={g.title} style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text, marginBottom: 6 }}>{g.title}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {g.opts.map((o) => (
+                <label key={o.v} style={{ display: "flex", gap: 10, padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${g.value === o.v ? "#2563EB" : "#E5E7EB"}`, background: g.value === o.v ? "#EFF6FF" : "white", cursor: "pointer", alignItems: "flex-start" }}>
+                  <input type="radio" checked={g.value === o.v} onChange={() => g.set(o.v)} style={{ marginTop: 3, accentColor: "#2563EB" }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: g.value === o.v ? "#1D4ED8" : "#111827" }}>{o.label}</div>
+                    {o.sub && <div style={{ fontSize: 11.5, color: "#6B7280", marginTop: 2, lineHeight: 1.5 }}>{o.sub}</div>}
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <label style={{ display: "flex", gap: 10, marginTop: 14, padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${weighPlateReq ? "#2563EB" : "#E5E7EB"}`, background: weighPlateReq ? "#EFF6FF" : "white", cursor: "pointer", alignItems: "flex-start" }}>
+          <input type="checkbox" checked={weighPlateReq} onChange={(e) => setWeighPlateReq(e.target.checked)} style={{ marginTop: 3, accentColor: "#2563EB" }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: weighPlateReq ? "#1D4ED8" : "#111827" }}>{t("weigh.set_plate")}</div>
+            <div style={{ fontSize: 11.5, color: "#6B7280", marginTop: 2, lineHeight: 1.5 }}>{t("weigh.set_plate_sub")}</div>
+          </div>
+        </label>
       </SectionCard>
     </div>
   );

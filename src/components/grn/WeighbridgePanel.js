@@ -362,6 +362,9 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     : f.type === "slip_mismatch" ? t("weigh.flag_mismatch")
     : f.type === "open_trip" ? t("weigh.flag_open_trip", { what: f.same === "challan" ? t("weigh.challan_no") : t("weigh.vehicle_no") })
     : f.type === "stale_tare" ? t("weigh.flag_stale_tare", { h: f.hours })
+    // App ke photo-pehle form (29 Sep 2026) se aane wale nishaan — office ko bhi dikhein.
+    : f.type === "stored_tare" ? t("weigh.flag_stored_tare", { slip: f.slip_tare_kg != null ? f.slip_tare_kg : "—", ours: f.our_tare_kg != null ? f.our_tare_kg : "—" })
+    : f.type === "plate_mismatch" ? t("weigh.flag_plate_mismatch", { plate: f.plate || "—", vehicle: f.vehicle_no || "—" })
     : f.type === "short" ? t("weigh.flag_short") : null;
 
   const tripHead = (w) => {
@@ -383,8 +386,11 @@ export default function WeighbridgePanel({ dest, onChanged }) {
           {w.gross_kg != null && <>{t("weigh.gross_short")} {fmtKg(w.gross_kg)}</>}
           {w.tare_kg != null && <>{w.gross_kg != null ? " · " : ""}{t("weigh.tare_short")} {fmtKg(w.tare_kg)}</>}
           {w.net_kg != null && <> · {t("weigh.net_short")} <b style={{ color: T.grn }}>{fmtKg(w.net_kg)}</b></>}
-          {(w.gross_slip_no || w.tare_slip_no) && <> · {t("weigh.slip_no_short")} {w.gross_slip_no || w.tare_slip_no}</>}
+          {w.rst_no
+            ? <> · {t("weigh.rst_no")} {w.rst_no}</>
+            : (w.gross_slip_no || w.tare_slip_no) && <> · {t("weigh.slip_no_short")} {w.gross_slip_no || w.tare_slip_no}</>}
           {w.challan_no && <> · {t("weigh.challan_no")} {w.challan_no}</>}
+          {w.driver_name && <> · {t("weigh.driver")}: {w.driver_name}</>}
           {w.pending_unload && w.open_hours > 0 && <> · <span style={{ color: T.amb, fontWeight: 600 }}>{t("weigh.open_since", { h: w.open_hours })}</span></>}
         </div>
         {flags.length > 0 && (
