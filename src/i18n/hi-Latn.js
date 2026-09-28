@@ -10672,6 +10672,7 @@ const dict = {
   "warehouse.default_fifo":                                    "DEFAULT FIFO",
   "warehouse.default_tag":                                    "Default",
   "warehouse.delete_reverse":                                  "Delete & Reverse",
+  "warehouse.no_store_assigned":                               "Aapko abhi koi store assign nahi hai. Admin se Settings → Roles & Access me store lagwayein.",
   "warehouse.transfer_delete_confirm":                         "{id} ko delete karein?\n\nBhejne wale sire ka debit wapas hoga (store ka stock ya project ledger). Jo receive ho chuka hai wo lene wale sire se hatega (site ki GRN ya store ka stock) — lene wale store me wo kharch ho chuka ho to delete nahi hoga.\nYeh undo nahi ho sakta.",
   "warehouse.dikh_raha_receive_karne_par_grn":                 "dikh raha — receive karne par GRN banega",
   "warehouse.direct_grn":                                      "Direct GRN",

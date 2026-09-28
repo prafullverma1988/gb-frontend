@@ -1355,7 +1355,9 @@ export function NewTransferModal({stock,projects,onClose,onSaved,defaultFromWare
   const [warehouses,setWarehouses]=useState([]);
 
   useEffect(()=>{
-    api.get("/warehouse/warehouses").then(r=>{
+    // scope=all: "Kahan bhejna hai" me koi bhi store chuna ja sakta hai;
+    // "Kahan se" me sirf apne (can_access) — maal wahi se nikalta hai.
+    api.get("/warehouse/warehouses?scope=all").then(r=>{
       if(r?.success) setWarehouses((r.data||[]).filter(w=>w.is_active));
     }).catch(()=>{});
   },[]);
@@ -1419,7 +1421,8 @@ export function NewTransferModal({stock,projects,onClose,onSaved,defaultFromWare
   const addItem=()=>setItems(p=>[...p,{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
 
   const whOpts = warehouses.map(w=>({id:w.id,name:w.name}));
-  const sideOpts = (type)=> type==="warehouse" ? whOpts : projects;
+  const whOwnOpts = warehouses.filter(w=>w.can_access!==false).map(w=>({id:w.id,name:w.name}));
+  const sideOpts = (type, side)=> type==="warehouse" ? (side==="from" ? whOwnOpts : whOpts) : projects;
   const nameOf = (type,id)=> (type==="warehouse"?warehouses:projects).find(x=>String(x.id)===String(id))?.name;
 
   // Ek hi jagah se ek hi jagah par transfer ka matlab nahi.
@@ -1490,7 +1493,7 @@ export function NewTransferModal({stock,projects,onClose,onSaved,defaultFromWare
         <div>
           <SideToggle side="from"/>
           <Field label={t("warehouse.from_where")}>
-            <SearchSelect compact value={f.from_id} options={sideOpts(f.from_type)}
+            <SearchSelect compact value={f.from_id} options={sideOpts(f.from_type, "from")}
               onChange={v=>upd("from_id",v)}
               placeholder={f.from_type==="warehouse"?t("warehouse.source_godown_select_karo"):t("warehouse.source_project_select_karo")}/>
           </Field>
@@ -1498,7 +1501,7 @@ export function NewTransferModal({stock,projects,onClose,onSaved,defaultFromWare
         <div>
           <SideToggle side="to"/>
           <Field label={t("warehouse.to_where")}>
-            <SearchSelect compact value={f.to_id} options={sideOpts(f.to_type)}
+            <SearchSelect compact value={f.to_id} options={sideOpts(f.to_type, "to")}
               onChange={v=>upd("to_id",v)}
               placeholder={f.to_type==="warehouse"?t("warehouse.destination_godown_select_karo"):t("material_transfer.destination_project_select_karo")}/>
           </Field>
@@ -3400,6 +3403,8 @@ function WarehouseModule(){
   // company ka default. Chunav api.js me chipak jata hai, isliye
   // niche ki har call apne aap usi godown ki ban jati hai.
   const [warehouses,setWarehouses]=useState([]);
+  // List sach me aa gayi (network galti par "koi store nahi" na dikhe).
+  const [whLoaded,setWhLoaded]=useState(false);
   const [whId,setWhId]=useState(()=>getWarehouseId());
   const [whOverview,setWhOverview]=useState(null);
   const activeWh = warehouses.find(w=>String(w.id)===String(whId)) || null;
@@ -3409,6 +3414,7 @@ function WarehouseModule(){
     if(!r.success) return null;
     const list=r.data||[];
     setWarehouses(list);
+    setWhLoaded(true);
     const current=getWarehouseId();
     const valid=current&&list.some(w=>String(w.id)===String(current));
     const pick=valid?current:(r.my_warehouse_id||list[0]?.id||null);
@@ -3515,6 +3521,17 @@ function WarehouseModule(){
       <div style={{width:36,height:36,border:"3px solid #E2E8F0",borderTopColor:"#1565C0",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
       <div style={{fontSize:13,color:"#8896A6"}}>{t("warehouse.loading_warehouse")}</div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  // Store ab project ki tarah assign hote hain (Settings → Roles & Access).
+  // Ek bhi na mila ho to har tab me galti dikhane ke bajaye ek saaf baat.
+  if(whLoaded&&warehouses.length===0) return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",padding:24,background:T.bg}}>
+      <div style={{maxWidth:380,textAlign:"center",background:"#FFFFFF",border:"1px solid #E2E8F0",borderRadius:12,padding:"26px 22px"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><IcBox size={28} color="#94A3B8"/></div>
+        <div style={{fontSize:13.5,color:"#334155",lineHeight:1.55}}>{t("warehouse.no_store_assigned")}</div>
+      </div>
     </div>
   );
 

@@ -20,6 +20,10 @@ const IcLayers     = (p) => <Icon {...p} d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 
 const IcCalendar   = (p) => <Icon {...p} d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zM16 2v4M8 2v4M3 10h18" />;
 const IcBank       = (p) => <Icon {...p} d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" />;
 const IcBox        = (p) => <Icon {...p} d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />;
+const IcStore      = (p) => <Icon {...p} d="M3 21V9l9-6 9 6v12M7 21v-8h10v8M7 17h10" />;
+// Roles & Access me store ke column project se alag dikhein — halki "stone"
+// zameen aur dheema rang. Rang sajawat nahi, sirf pehchaan.
+const STORE_UI = { tint: "#F7F6F2", head: "#57534E", line: "#E7E5E4" };
 const IcCamera     = (p) => <Icon {...p} d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2zM12 17a4 4 0 100-8 4 4 0 000 8z" />;
 const IcDollar     = (p) => <Icon {...p} d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />;
 const IcBell       = (p) => <Icon {...p} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />;
@@ -482,7 +486,8 @@ function LocationsSettings() {
       const list = (r.success ? r.data : []).filter(g => !g.project_id && (g.kind === "office" || g.kind === "warehouse"));
       setRows(list);
     }).catch(()=>{}).finally(()=>setLoading(false));
-    api.get("/warehouse/warehouses").then(r => { if (r.success) setWhs(r.data || []); }).catch(()=>{});
+    // scope=all: ye company ki config hai — saare store (Roles & Access wala niyam yahan nahi).
+    api.get("/warehouse/warehouses?scope=all").then(r => { if (r.success) setWhs(r.data || []); }).catch(()=>{});
     api.get("/projects/team-members").then(r => { if (r.success) setStaff(r.data || []); }).catch(()=>{});
   };
   useEffect(load, []);
@@ -1069,11 +1074,14 @@ function RolesAccess() {
   // 403 aane par pehle users [] hi reh jaata tha aur har role card "0 users"
   // dikhata tha — admin ko lagta tha users gayab ho gaye. Ab saaf bataate hain.
   const [usersDenied, setUsersDenied] = useState(false);
+  // Company ke store — /settings/users ke saath aate hain. null = purana
+  // backend (stores bheja hi nahi) → store ka hissa na dikhe, na save ho.
+  const [allStores, setAllStores] = useState(null);
   const loadUsers = async () => {
     setUsersLoading(true);
     try {
       const res = await api.get("/settings/users");
-      if (res.success) { setUsers(res.data || []); setUsersDenied(false); }
+      if (res.success) { setUsers(res.data || []); setAllStores(Array.isArray(res.stores) ? res.stores : null); setUsersDenied(false); }
       else setUsersDenied(true);
     } catch(e) { setUsersDenied(true); }
     setUsersLoading(false);
@@ -1141,21 +1149,28 @@ function RolesAccess() {
   };
 
   // User form
-  const [userForm, setUserForm] = useState({ name: "", email: "", phone: "", role: "viewer", designation: "", password: "", projects: [] });
+  const [userForm, setUserForm] = useState({ name: "", email: "", phone: "", role: "viewer", designation: "", password: "", projects: [], warehouses: [] });
+  // Store: admin ko saare apne aap; incharge ko uska store hamesha (server
+  // bhi yahi maanta hai — utils/warehouseAccess.js). Isliye ye tick badle nahi ja sakte.
+  const activeStores = (allStores || []).filter(st => Number(st.is_active) !== 0);
+  const isAdminUser = (u) => ["admin", "super_admin"].includes(String(u?.role || "").toLowerCase());
+  const storeLocked = (u, st) => isAdminUser(u) || (u && Number(st.incharge_user_id) === Number(u.id));
+  const storeLockTip = (u, st) => isAdminUser(u) ? "Admin ko saare store apne aap milte hain" : "Store incharge — is store ka access hamesha rehta hai";
+  const hasStore = (u, st) => storeLocked(u, st) || (u.warehouses || []).includes(st.id);
   // Reverse-flow: search + link an existing unlinked staff-party.
   const [staffSearch, setStaffSearch] = useState("");
   const [staffResults, setStaffResults] = useState([]);
   const [linkedParty, setLinkedParty] = useState(null);
   const openCreateUser = () => {
     setEditingUser(null); setLinkedParty(null); setStaffSearch(""); setStaffResults([]);
-    setUserForm({ name: "", email: "", phone: "", role: selectedRole === "all" ? "viewer" : selectedRole, designation: "", password: "Welcome@123", projects: [], status: "Active" });
+    setUserForm({ name: "", email: "", phone: "", role: selectedRole === "all" ? "viewer" : selectedRole, designation: "", password: "Welcome@123", projects: [], warehouses: [], status: "Active" });
     setShowUserModal(true);
   };
   const openEditUser = (u) => {
     setEditingUser(u); setLinkedParty(null); setStaffSearch(""); setStaffResults([]);
     setUserForm({
       name: u.name, email: u.email, phone: u.phone || "", role: u.role,
-      designation: u.designation || "", password: "", projects: u.projects || [],
+      designation: u.designation || "", password: "", projects: u.projects || [], warehouses: u.warehouses || [],
       // status MUST be seeded — saveUser maps it to is_active. Without this
       // every edit silently sent is_active=0 and deactivated the user.
       status: (u.is_active === 0 || u.is_active === false) ? "Inactive" : "Active",
@@ -1202,6 +1217,7 @@ function RolesAccess() {
         designation: userForm.designation || "",
         is_active: userForm.status === "Active" ? 1 : 0,
         projects: userForm.projects || [],
+        ...(allStores ? { warehouses: userForm.warehouses || [] } : {}),
       });
     } else {
       const body = {
@@ -1211,6 +1227,7 @@ function RolesAccess() {
         designation: userForm.designation || "",
         password: userForm.password || "Welcome@123",
         projects: userForm.projects || [],
+        ...(allStores ? { warehouses: userForm.warehouses || [] } : {}),
       };
       // Reverse-flow — link to a pre-selected staff-party
       if (linkedParty) body.linked_party_id = linkedParty.id;
@@ -1222,6 +1239,9 @@ function RolesAccess() {
   };
   const toggleUserProject = (pid) => {
     setUserForm(p => ({ ...p, projects: (p.projects||[]).includes(pid) ? (p.projects||[]).filter(x => x !== pid) : [...(p.projects||[]), pid] }));
+  };
+  const toggleUserStore = (wid) => {
+    setUserForm(p => ({ ...p, warehouses: (p.warehouses||[]).includes(wid) ? (p.warehouses||[]).filter(x => x !== wid) : [...(p.warehouses||[]), wid] }));
   };
 
   // ── Users tab: khoj + tarteeb ────────────────────────────────────────
@@ -1253,6 +1273,14 @@ function RolesAccess() {
     }));
     setDirtyUsers(prev => { const n = new Set(prev); n.add(userId); return n; });
   };
+  const toggleStore = (userId, whId) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id !== userId) return u;
+      const has = (u.warehouses || []).includes(whId);
+      return { ...u, warehouses: has ? (u.warehouses || []).filter(x => x !== whId) : [...(u.warehouses || []), whId] };
+    }));
+    setDirtyUsers(prev => { const n = new Set(prev); n.add(userId); return n; });
+  };
 
   const saveProjectAccess = async () => {
     const targets = users.filter(u => dirtyUsers.has(u.id));
@@ -1260,11 +1288,11 @@ function RolesAccess() {
     setAccessSaving(true);
     try {
       for (const u of targets) {
-        await api.put("/settings/users/" + u.id, { projects: u.projects || [] });
+        await api.put("/settings/users/" + u.id, { projects: u.projects || [], ...(allStores ? { warehouses: u.warehouses || [] } : {}) });
       }
       await loadUsers();
       setDirtyUsers(new Set());
-      alert(`Project access save ho gaya — ${targets.length} user`);
+      alert(`Access save ho gaya — ${targets.length} user`);
     } catch (e) {
       alert("Save failed — dobara try karein");
     }
@@ -1547,7 +1575,7 @@ function RolesAccess() {
     { id: "permissions", label: "Permissions" },
     { id: "mobile", label: t("settings.mlay_tab") },
     { id: "users", label: `Users (${roleUsers.length})` },
-    { id: "projects", label: "Project Access" },
+    { id: "projects", label: allStores && allStores.length ? "Project & Store Access" : "Project Access" },
   ];
 
   return (
@@ -1796,6 +1824,20 @@ function RolesAccess() {
                 </td>
               );
             })}
+            {activeStores.length > 0 && <td style={{ width: 12, padding: 0 }} />}
+            {activeStores.map(st => {
+              const locked = storeLocked(u, st);
+              const has = hasStore(u, st);
+              return (
+                <td key={"st" + st.id} style={{ textAlign: "center", padding: "5px 2px", background: STORE_UI.tint }}>
+                  <button onClick={() => { if (!locked) toggleStore(u.id, st.id); }} title={locked ? storeLockTip(u, st) : undefined}
+                    style={{ width: 26, height: 26, borderRadius: 6, background: has ? T.greenSoft : T.card, border: `1.5px solid ${has ? T.green + "55" : STORE_UI.line}`, cursor: locked ? "default" : "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", position: "relative" }}>
+                    {has && <IcCheck size={13} color={T.green} strokeWidth={2.5} />}
+                    {locked && <span style={{ position: "absolute", right: -5, bottom: -5, background: T.card, borderRadius: 4, lineHeight: 0, padding: 1 }}><IcLock size={9} color={STORE_UI.head} strokeWidth={2.2} /></span>}
+                  </button>
+                </td>
+              );
+            })}
           </tr>
         );
         // "All Users" card => har role ka block; warna sirf selected role.
@@ -1837,7 +1879,7 @@ function RolesAccess() {
                          color: groupBy === mode ? "white" : T.textMid }}>{label}</button>
             ))}
             <span style={{ marginLeft: "auto", fontSize: 11.5, color: T.textLight, whiteSpace: "nowrap" }}>
-              {filteredProjects.length} of {allProjects.length} projects
+              {filteredProjects.length} of {allProjects.length} projects{activeStores.length ? ` · ${activeStores.length} store` : ""}
             </span>
             <SaveBtn label={accessSaving ? "Saving..." : (dirtyUsers.size ? `Save Access (${dirtyUsers.size})` : "Save Access")} onClick={saveProjectAccess} />
           </div>
@@ -1867,6 +1909,15 @@ function RolesAccess() {
                   <div style={{ overflowX: "auto", border: oneGroup ? "none" : `1.5px solid ${T.blue}`, borderTop: "none", borderRadius: "0 0 8px 8px", padding: oneGroup ? 0 : "0 8px 8px" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                       <thead>
+                        {activeStores.length > 0 && (
+                          <tr>
+                            <th colSpan={1 + g.list.length} style={{ padding: 0, border: "none" }} />
+                            <th style={{ width: 12, padding: 0, border: "none" }} />
+                            <th colSpan={activeStores.length} style={{ textAlign: "left", padding: "6px 8px 2px", background: STORE_UI.tint, borderRadius: "8px 8px 0 0", fontSize: 10.5, fontWeight: 700, color: STORE_UI.head, letterSpacing: 0.5, textTransform: "uppercase" }}>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><IcStore size={13} color={STORE_UI.head} /> Store</span>
+                            </th>
+                          </tr>
+                        )}
                         <tr>
                           <th style={{ textAlign: "left", padding: "8px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, minWidth: 140, position: "sticky", left: 0, background: T.card, zIndex: 1 }}>User / Project</th>
                           {/* Naam khada (vertical) sirf tab jab project zyada hon.
@@ -1884,6 +1935,17 @@ function RolesAccess() {
                               </button>
                             </th>
                           ))}
+                          {activeStores.length > 0 && <th style={{ width: 12, padding: 0, borderBottom: `2px solid ${T.border}` }} />}
+                          {activeStores.map(st => (
+                            <th key={"st" + st.id} style={{ textAlign: "center", padding: "8px 2px", borderBottom: `2px solid ${STORE_UI.line}`, minWidth: tallHead ? 48 : 96, background: STORE_UI.tint }}>
+                              <button onClick={() => { setProjPanel({ ...st, kind: "store" }); setPanelSearch(""); }} title={`${st.name} — kaun-kaun hai`}
+                                style={tallHead
+                                  ? { background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 10, fontWeight: 600, color: STORE_UI.head, writingMode: "vertical-rl", transform: "rotate(180deg)", height: 86, fontFamily: "inherit" }
+                                  : { background: "none", border: "none", padding: "0 4px", cursor: "pointer", fontSize: 11, fontWeight: 600, color: STORE_UI.head, fontFamily: "inherit", lineHeight: "14px", maxWidth: 110, whiteSpace: "normal" }}>
+                                {st.name.length > 20 ? st.name.substring(0, 20) + ".." : st.name}
+                              </button>
+                            </th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
@@ -1892,7 +1954,7 @@ function RolesAccess() {
                           return (
                             <Fragment key={gr.role?.id || "grp"}>
                               <tr>
-                                <td colSpan={1 + g.list.length} style={{ padding: "6px 10px", background: (gr.role?.colorBg || T.blueSoft), borderBottom: `1.5px solid ${T.border}`, position: "sticky", left: 0 }}>
+                                <td colSpan={1 + g.list.length + (activeStores.length ? activeStores.length + 1 : 0)} style={{ padding: "6px 10px", background: (gr.role?.colorBg || T.blueSoft), borderBottom: `1.5px solid ${T.border}`, position: "sticky", left: 0 }}>
                                   <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11, fontWeight: 700, color: rc, textTransform: "uppercase", letterSpacing: 0.4 }}>
                                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: rc }} />
                                     {gr.role?.name || "Role"} — {gr.list.length} {gr.list.length === 1 ? "user" : "users"}
@@ -1921,11 +1983,18 @@ function RolesAccess() {
           role ke hisaab se, khoj ke saath, aur har role par "sab chuno". */}
       <Modal open={!!projPanel} onClose={() => { setProjPanel(null); setPanelSearch(""); }}
         title={projPanel?.name || ""}
-        desc={[projPanel?.city, projPanel?.tender && `Tender ${projPanel.tender}`].filter(Boolean).join(" · ") || "Is project ke log"}
+        desc={projPanel?.kind === "store"
+          ? "Store — is store ke log"
+          : ([projPanel?.city, projPanel?.tender && `Tender ${projPanel.tender}`].filter(Boolean).join(" · ") || "Is project ke log")}
         width={520}>
         {projPanel && (() => {
           const q = panelSearch.trim().toLowerCase();
-          const hasAccess = u => (u.projects || []).includes(projPanel.id);
+          // Ek hi panel project aur store dono ke liye; store me admin/incharge
+          // ka tick badla nahi ja sakta.
+          const isStore = projPanel.kind === "store";
+          const hasAccess = u => isStore ? hasStore(u, projPanel) : (u.projects || []).includes(projPanel.id);
+          const isLocked = u => isStore && storeLocked(u, projPanel);
+          const flip = (u) => { if (isLocked(u)) return; isStore ? toggleStore(u.id, projPanel.id) : toggleAccess(u.id, projPanel.id); };
           const total = users.filter(hasAccess).length;
           const roleGroups = roles
             .map(r => ({ role: r, list: users.filter(u => userInRole(u, r.id) && (!q || String(u.name || "").toLowerCase().includes(q))) }))
@@ -1940,27 +2009,30 @@ function RolesAccess() {
                 style={{ width: "100%", padding: "8px 11px", borderRadius: 7, border: `1.5px solid ${panelSearch ? T.blue : T.border}`, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit", marginBottom: 12, background: panelSearch ? T.blueSoft : T.card }} />
               {roleGroups.length === 0 && <div style={{ padding: "24px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>Koi user nahi mila</div>}
               {roleGroups.map(g => {
-                const allOn = g.list.every(hasAccess);
+                // Taale wale (store ka admin/incharge) "sab chuno" me nahi ginte.
+                const free = g.list.filter(u => !isLocked(u));
+                const allOn = free.length ? free.every(hasAccess) : true;
                 return (
                   <div key={g.role.id} style={{ marginBottom: 14 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${T.borderLight}` }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: g.role.color }} />
                       <span style={{ fontSize: 11, fontWeight: 700, color: g.role.color, textTransform: "uppercase", letterSpacing: 0.4, flex: 1 }}>{g.role.name}</span>
-                      <button onClick={() => g.list.forEach(u => { if (hasAccess(u) === allOn) toggleAccess(u.id, projPanel.id); })}
+                      {free.length > 0 && <button onClick={() => free.forEach(u => { if (hasAccess(u) === allOn) flip(u); })}
                         style={{ background: "none", border: "none", padding: 0, color: T.blue, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                         {allOn ? "sab hatao" : "sab chuno"}
-                      </button>
+                      </button>}
                     </div>
                     {g.list.map(u => {
                       const on = hasAccess(u);
                       return (
-                        <button key={u.id} onClick={() => toggleAccess(u.id, projPanel.id)}
-                          style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "8px 0", background: "none", border: "none", borderBottom: `1px solid ${T.borderLight}`, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+                        <button key={u.id} onClick={() => flip(u)} title={isLocked(u) ? storeLockTip(u, projPanel) : undefined}
+                          style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "8px 0", background: "none", border: "none", borderBottom: `1px solid ${T.borderLight}`, cursor: isLocked(u) ? "default" : "pointer", textAlign: "left", fontFamily: "inherit" }}>
                           <span style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: on ? T.greenSoft : T.borderLight, border: `1.5px solid ${on ? T.green + "55" : "transparent"}`, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
                             {on && <IcCheck size={12} color={T.green} strokeWidth={2.5} />}
                           </span>
                           <span style={{ fontSize: 13, color: on ? T.text : T.textMid, flex: 1 }}>{u.name}</span>
-                          <span style={{ fontSize: 11, color: T.textLight }}>{(u.projects || []).length} projects</span>
+                          {isLocked(u) && <IcLock size={12} color={STORE_UI.head} />}
+                          <span style={{ fontSize: 11, color: T.textLight }}>{isStore ? `${activeStores.filter(st => hasStore(u, st)).length} store` : `${(u.projects || []).length} projects`}</span>
                         </button>
                       );
                     })}
@@ -2118,6 +2190,47 @@ function RolesAccess() {
             })}
           </div>
         </div>
+
+        {/* Store access — project se alag, halki zameen par */}
+        {allStores && activeStores.length > 0 && (
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${T.borderLight}` }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: STORE_UI.head, display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+              <IcStore size={14} color={STORE_UI.head} /> Store Access
+            </label>
+            {isAdminUser(userForm) ? (
+              <div style={{ fontSize: 12, color: T.textMid, background: STORE_UI.tint, border: `1px solid ${STORE_UI.line}`, borderRadius: 8, padding: "10px 12px" }}>
+                Admin ko saare store apne aap milte hain.
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                  <button onClick={() => setUserForm(p => ({ ...p, warehouses: activeStores.map(st => st.id) }))}
+                    style={{ padding: "5px 12px", borderRadius: 6, border: `1.5px solid ${T.blue}`, background: T.blueSoft, fontSize: 11, fontWeight: 600, color: T.blue, cursor: "pointer" }}>Select All</button>
+                  <button onClick={() => setUserForm(p => ({ ...p, warehouses: [] }))}
+                    style={{ padding: "5px 12px", borderRadius: 6, border: `1.5px solid ${T.border}`, background: "white", fontSize: 11, fontWeight: 600, color: T.textMid, cursor: "pointer" }}>Clear All</button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {activeStores.map(st => {
+                    const incharge = editingUser && Number(st.incharge_user_id) === Number(editingUser.id);
+                    const sel = incharge || (userForm.warehouses || []).includes(st.id);
+                    return (
+                      <button key={st.id} onClick={() => { if (!incharge) toggleUserStore(st.id); }} title={incharge ? "Store incharge — is store ka access hamesha rehta hai" : undefined}
+                        style={{ padding: "10px 12px", borderRadius: 8, border: `1.5px solid ${sel ? T.green : STORE_UI.line}`, background: sel ? T.greenSoft : STORE_UI.tint, cursor: incharge ? "default" : "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10, transition: "all 0.15s" }}>
+                        <div style={{ width: 20, height: 20, borderRadius: 5, background: sel ? T.green : T.card, border: sel ? "none" : `1px solid ${STORE_UI.line}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          {sel && <IcCheck size={12} color="white" strokeWidth={3} />}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>{st.name.length > 28 ? st.name.substring(0, 28) + ".." : st.name}</div>
+                          <div style={{ fontSize: 11, color: T.textLight }}>{incharge ? "Incharge — hamesha" : "Store"}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         <div style={{ height: 20 }} />
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>

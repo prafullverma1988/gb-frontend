@@ -10670,6 +10670,7 @@ const dict = {
   "warehouse.default_fifo":                                    "DEFAULT FIFO",
   "warehouse.default_tag":                                    "Default",
   "warehouse.delete_reverse":                                  "Delete & Reverse",
+  "warehouse.no_store_assigned":                               "No warehouse is assigned to you yet. Ask your admin to add one in Settings → Roles & Access.",
   "warehouse.transfer_delete_confirm":                         "Delete {id}?\n\nThe sending side's debit is reversed (warehouse stock or project ledger). Whatever was received is removed from the receiving side (site GRN or warehouse stock) — if it was already used in the receiving warehouse, the delete is refused.\nThis cannot be undone.",
   "warehouse.dikh_raha_receive_karne_par_grn":                 "visible — GRN will be created on receive",
   "warehouse.direct_grn":                                      "Direct GRN",
