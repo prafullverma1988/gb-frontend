@@ -365,6 +365,8 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     // App ke photo-pehle form (29 Sep 2026) se aane wale nishaan — office ko bhi dikhein.
     : f.type === "stored_tare" ? t("weigh.flag_stored_tare", { slip: f.slip_tare_kg != null ? f.slip_tare_kg : "—", ours: f.our_tare_kg != null ? f.our_tare_kg : "—" })
     : f.type === "plate_mismatch" ? t("weigh.flag_plate_mismatch", { plate: f.plate || "—", vehicle: f.vehicle_no || "—" })
+    // Site ki rec slip (app ka gadi-wise GRN, 29 Sep 2026) — wahi number doosri gadi par.
+    : f.type === "dup_rec_slip" ? t("weigh.flag_dup_rec_slip", { no: f.rec_slip_no || "—", grn: f.other_grn || "—" })
     : f.type === "short" ? t("weigh.flag_short") : null;
 
   const tripHead = (w) => {

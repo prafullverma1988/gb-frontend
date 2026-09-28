@@ -11039,6 +11039,7 @@ const dict = {
   "weigh.chip_short":                                         "⚠ challan se {pct}% kam",
   "weigh.driver":                                             "Driver ka naam",
   "weigh.finding_truck":                                      "Gadi dhoondh rahe hain…",
+  "weigh.flag_dup_rec_slip":                                  "Rec slip {no} pehle {grn} par aa chuki",
   "weigh.flag_open_trip":                                     "Yahi {what} pehle se khula hai — pichhli gadi site par utri kya?",
   "weigh.flag_plate_mismatch":                                "Gadi ki plate ({plate}) slip ke number ({vehicle}) se alag",
   "weigh.flag_stale_tare":                                    "Khali wazan {h} ghante purana",

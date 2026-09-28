@@ -11037,6 +11037,7 @@ const dict = {
   "weigh.chip_short":                                         "⚠ {pct}% short of the challan",
   "weigh.driver":                                             "Driver's name",
   "weigh.finding_truck":                                      "Finding the truck…",
+  "weigh.flag_dup_rec_slip":                                  "Rec slip {no} already used on {grn}",
   "weigh.flag_open_trip":                                     "This {what} is already open — did the earlier truck get unloaded?",
   "weigh.flag_plate_mismatch":                                "Vehicle plate ({plate}) differs from the slip's number ({vehicle})",
   "weigh.flag_stale_tare":                                    "Empty weight {h} h old",

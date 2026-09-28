@@ -74,17 +74,32 @@ export function indexOpenLines(trips) {
   return { byMr, byWhItem, byName, byPoItem, allByMr, allByWhItem, allByName, allByPoItem, trucks };
 }
 
-// GRN ki row me kitna bharna hai — net aa gaya ho (aur order wazan me ho) to
-// net, warna is gadi ke challan ki qty (jab uski unit order jaisi ho). Kuch
-// na mile to null — aadmi khud bhare.
+// Gadi ginne wali unit — order "10 Nos" = 10 gadi (29 Sep 2026).
+export function isGadiUnit(unit) {
+  return /^(nos|no|trip|trips|gadi|truck|trucks|load|loads|hywa|dumper|tipper)$/.test(
+    String(unit || "").trim().toLowerCase().replace(/\./g, ""));
+}
+
+// GRN ki row me kitna bharna hai (29 Sep 2026 se — app src/weighShared.js me wahi):
+//   order wazan me (Ton/kg/MT/quintal) → kaante ka net us unit me; net abhi nahi
+//     (khali tolna baaki) → challan ka wazan us unit me — net aate hi server GRN
+//     ki qty khud sudhar deta hai
+//   challan ki unit order jaisi (CFT, ya bags Nos me gine) → challan ki qty
+//   order gadi me (Nos) → 1 gadi
+// Kuch na mile to null — aadmi khud bhare. Bhara hua hamesha badla ja sakta hai.
 export function suggestedQty(hit, unit) {
   if (!hit) return null;
   const { line, trip } = hit;
-  const closed = trip.status === "Closed" && Number(line.net_kg_share) > 0;
-  if (closed && kgPerUnit(unit)) return kgIn(line.net_kg_share, unit).qty;
+  const k = kgPerUnit(unit);
   const cUnit = String(line.challan_unit || "").trim() || line.order_unit;
   const cQty = Number(line.challan_qty);
-  if (cQty > 0 && String(cUnit || "") === String(unit || "")) return cQty;
+  if (k) {
+    if (trip.status === "Closed" && Number(line.net_kg_share) > 0) return kgIn(line.net_kg_share, unit).qty;
+    const ck = kgPerUnit(cUnit);
+    return cQty > 0 && ck ? Math.round(((cQty * ck) / k) * 1000) / 1000 : null;
+  }
+  if (cQty > 0 && String(cUnit || "").toLowerCase() === String(unit || "").toLowerCase()) return cQty;
+  if (isGadiUnit(unit)) return 1;
   return null;
 }
 
