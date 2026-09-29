@@ -1459,8 +1459,9 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
             <span style={{fontSize:9.5,fontWeight:700,color:sc.c,background:sc.bg,padding:"2px 7px",borderRadius:10,border:"1px solid "+sc.bdr}}>{sc.label}</span>
           </div>
         </div>
-        {/* Project */}
-        <div style={{fontSize:11.5,color:T.t3,marginBottom:3,fontWeight:500}}>{mr.project_name||"—"}</div>
+        {/* Project — asset ki kharid (Assets → "Kharid ki maang") kisi site ki nahi,
+            STORE ki hoti hai; wahan "—" ki jagah store ka naam. */}
+        <div style={{fontSize:11.5,color:T.t3,marginBottom:3,fontWeight:500}}>{mr.project_name||(mr.asset_warehouse_id?t("procurement.asset_for_store",{name:mr.asset_warehouse_name||""}):"—")}</div>
         {/* Meta row */}
         <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:mr.notes?4:0,alignItems:"center"}}>
           <Credit label={t("common.requested_by")} name={mr.requested_by||"Site Team"} time={mr.created_at}/>

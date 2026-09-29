@@ -1494,14 +1494,9 @@ function ImportModal({ open, onClose, onDone }) {
 // ══════════════════════════════════════════════════════════════════
 // GRN — vendor se naya asset
 // ══════════════════════════════════════════════════════════════════
-const newGrnLine = () => ({ mode: "existing", asset_item_id: "", name: "", spec: "", unit: "Nos", tracking_mode: "bulk", category_id: "", code: "", qty: "", rate: "", po_item_id: "" });
+const newGrnLine = () => ({ mode: "existing", asset_item_id: "", name: "", spec: "", unit: "Nos", tracking_mode: "bulk", category_id: "", code: "", qty: "", rate: "" });
 
-// preset = kisi PO ka baaki maal ("Receive karo" se aata hai):
-// { po_id, po_number, vendor_name, vendor_party_id, warehouse_id, lines }.
-// Tab store, vendor aur lines pehle se bhari aati hain aur har line apni PO
-// line se judi rehti hai (po_item_id) — isse "kitna aana baaki hai" apne aap
-// ghat-ta hai aur MR "aa gaya" ho jaati hai.
-function GrnForm({ open, meta, pickers, cats, canAll, preset, onClose, onSaved }) {
+function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
   const toast = useToast();
   const [f, setF] = useState({});
   const [lines, setLines] = useState([newGrnLine()]);
@@ -1521,30 +1516,9 @@ function GrnForm({ open, meta, pickers, cats, canAll, preset, onClose, onSaved }
     const def = whOptions.find((w) => w.is_default) || whOptions[0];
     setF({ warehouse_id: def ? String(def.id) : "", date: todayStr(), party_id: "", vendor_name: "", invoice_no: "", invoice_date: "", remarks: "" });
     setLines([newGrnLine()]); setError(""); setVendorMode("party");
-    if (preset) {
-      setF((p) => ({
-        ...p,
-        warehouse_id: preset.warehouse_id ? String(preset.warehouse_id) : p.warehouse_id,
-        party_id: preset.vendor_party_id ? String(preset.vendor_party_id) : "",
-        vendor_name: preset.vendor_name || "",
-        remarks: t("assets.grn_from_order", { no: preset.po_number }),
-      }));
-      if (!preset.vendor_party_id && preset.vendor_name) setVendorMode("text");
-      setLines((preset.lines || []).map((x) => (x.asset_item_id ? {
-        ...newGrnLine(), mode: "existing", asset_item_id: String(x.asset_item_id),
-        qty: String(x.pending_qty), rate: x.rate != null ? String(x.rate) : "", po_item_id: String(x.po_item_id),
-      } : {
-        // PO par asset ki id nahi hai iska matlab register me entry banni baaki
-        // hai — aur wo sirf serialized par hota hai (bulk request bante hi ban
-        // jaata hai). Aadmi yahan badal bhi sakta hai.
-        ...newGrnLine(), mode: "new", name: x.description || "", unit: x.unit || x.item_unit || "Nos",
-        tracking_mode: "serialized", qty: String(x.pending_qty),
-        rate: x.rate != null ? String(x.rate) : "", po_item_id: String(x.po_item_id),
-      })));
-    }
     api.get("/assets/items?tracking=bulk").then((r) => setBulkItems(r && r.success ? r.data || [] : [])).catch(() => setBulkItems([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, meta, canAll, preset]);
+  }, [open, meta, canAll]);
 
   const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const updLine = (i, v) => setLines((p) => p.map((l, j) => (j === i ? v : l)));
@@ -1566,8 +1540,7 @@ function GrnForm({ open, meta, pickers, cats, canAll, preset, onClose, onSaved }
       if (l.mode === "new" && !l.name.trim()) { setError(t("assets.err_line_name", { n: i + 1 })); return; }
       if (!(qty > 0)) { setError(t("assets.err_line_qty", { n: i + 1 })); return; }
       if (l.mode === "new" && l.tracking_mode === "serialized" && !Number.isInteger(qty)) { setError(t("assets.err_line_serial_int", { n: i + 1 })); return; }
-      const base = { qty, rate: l.rate === "" ? null : Number(l.rate), condition: "good",
-        po_item_id: l.po_item_id ? Number(l.po_item_id) : undefined };
+      const base = { qty, rate: l.rate === "" ? null : Number(l.rate), condition: "good" };
       if (l.mode === "existing") items.push({ ...base, asset_item_id: Number(l.asset_item_id) });
       else items.push({
         ...base, name: l.name.trim(), spec: l.spec.trim() || null, unit: l.unit || "Nos", tracking_mode: l.tracking_mode,
@@ -1576,7 +1549,6 @@ function GrnForm({ open, meta, pickers, cats, canAll, preset, onClose, onSaved }
     }
     const body = {
       type: "grn", date: f.date || todayStr(), to: { warehouse_id: Number(f.warehouse_id) }, items,
-      po_id: preset ? preset.po_id : null,
       party_id: vendorMode === "party" && f.party_id ? Number(f.party_id) : null,
       vendor_name: vendorName,
       invoice_no: f.invoice_no || null, invoice_date: f.invoice_date || null, remarks: f.remarks || null,
@@ -1591,8 +1563,7 @@ function GrnForm({ open, meta, pickers, cats, canAll, preset, onClose, onSaved }
   const catOf = (id) => (cats || []).find((c) => String(c.id) === String(id));
 
   return (
-    <Modal open={open} onClose={onClose} width={920} title={t("assets.grn_new")}
-      sub={preset ? t("assets.grn_from_order", { no: preset.po_number }) : t("assets.grn_new_sub")}
+    <Modal open={open} onClose={onClose} width={920} title={t("assets.grn_new")} sub={t("assets.grn_new_sub")}
       footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy || !whOptions.length}>{busy ? t("assets.saving") : t("assets.grn_save")}</Btn></>}>
       {!whOptions.length && <Notice tone="warn">{t("assets.issue_no_warehouse")}</Notice>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
@@ -1832,6 +1803,121 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
   );
 }
 
+// Procurement ka order aaya — store me utaarna (phone ka AssetOrderReceive
+// jaisa). Aam GRN form me order bharne se vendor/store badle ja sakte the,
+// "+ Line" dikhta tha aur har line par naye item wale khaane — order se receive
+// me sirf ye chahiye: kya maanga tha, kitna aa chuka, ab kitna utra.
+// PO se (po_id + har line ka po_item_id) ya manual order se (mr_id, ek line).
+function OrderReceiveModal({ order, onClose, onSaved }) {
+  const toast = useToast();
+  const [f, setF] = useState({});
+  const [lines, setLines] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!order) return;
+    setF({ date: todayStr(), invoice_no: "", invoice_date: "" }); setError("");
+    setLines(order.lines.map((x) => ({
+      key: x.po_item_id || "mr" + x.mr_id,
+      name: x.asset_name ? lineLabel({ code: x.asset_code, name: x.asset_name, spec: x.asset_spec }) : x.description,
+      // Order par register ki entry nahi = serialized piece, jiska code abhi banega.
+      fresh: !x.asset_item_id, description: x.description, unit: x.unit || x.item_unit || "Nos",
+      ordered: N(x.quantity), got: N(x.received_qty), left: N(x.pending_qty),
+      recv: String(N(x.pending_qty)),
+      rate: x.rate != null && N(x.rate) > 0 ? String(Math.round(N(x.rate) * 100) / 100) : "",
+      asset_item_id: x.asset_item_id, po_item_id: x.po_item_id,
+    })));
+  }, [order]);
+
+  const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const setLine = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const over = (l) => N(l.recv) > l.left + 0.0005;
+  const take = lines.filter((l) => N(l.recv) > 0);
+  const anyOver = lines.some(over);
+  const total = take.reduce((s, l) => s + N(l.recv) * N(l.rate), 0);
+
+  if (!order) return null;
+
+  const save = async () => {
+    setError("");
+    if (!take.length) { setError(t("assets.recv_kuch_to_likho")); return; }
+    const bad = lines.find(over);
+    if (bad) { setError(t("assets.recv_zyada", { item: bad.name, n: fmtN(bad.left) })); return; }
+    setBusy(true);
+    const r = await api.post("/assets/vouchers", {
+      type: "grn", date: f.date || todayStr(), to: { warehouse_id: Number(order.warehouse_id) },
+      party_id: order.vendor_party_id || null, vendor_name: order.vendor_name || "",
+      invoice_no: f.invoice_no || null, invoice_date: f.invoice_date || null,
+      ...(order.kind === "mr" ? { mr_id: order.mr_id } : { po_id: order.po_id }),
+      remarks: t("assets.grn_from_order", { no: order.label }),
+      items: take.map((l) => ({
+        ...(l.asset_item_id ? { asset_item_id: Number(l.asset_item_id) } : { name: l.description, unit: l.unit, tracking_mode: "serialized" }),
+        qty: N(l.recv), rate: l.rate === "" ? null : Number(l.rate), condition: "good",
+        po_item_id: l.po_item_id ? Number(l.po_item_id) : undefined,
+      })),
+    });
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.grn_done", { no: (r.data && r.data.voucher_no) || "" })); onSaved(r.data); onClose(); }
+    else setError((r && r.message) || t("assets.save_failed"));
+  };
+
+  const cols = "1.7fr 70px 80px 70px 1.3fr 110px 110px";
+  return (
+    <Modal open onClose={onClose} width={900} title={t("assets.recv_title")} sub={`${order.label} · ${order.vendor_name || ""}`}
+      footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn>
+        <Btn onClick={save} disabled={busy || !take.length || anyOver} icon={IcIn}>{busy ? t("assets.saving") : t("assets.recv_save", { n: take.length })}</Btn></>}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, padding: "12px 14px", background: T.indL, border: `1px solid ${T.indM}`, borderRadius: 10, marginBottom: 14 }}>
+        <KV k={order.kind === "mr" ? t("assets.recv_manual") : t("assets.recv_po")} v={order.label} />
+        <KV k={t("assets.vendor")} v={order.vendor_name} />
+        <KV k={t("assets.recv_store")} v={order.warehouse_name} />
+        <KV k={t("assets.recv_kab_tak")} v={order.expected_delivery ? fmtD(order.expected_delivery) : null} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
+        <Field label={t("assets.recv_date")}><input type="date" value={f.date || ""} onChange={(e) => upd("date", e.target.value)} style={inp} /></Field>
+        <Field label={t("assets.recv_challan_no")}><input value={f.invoice_no || ""} onChange={(e) => upd("invoice_no", e.target.value)} style={inp} /></Field>
+        <Field label={t("assets.invoice_date")}><input type="date" value={f.invoice_date || ""} onChange={(e) => upd("invoice_date", e.target.value)} style={inp} /></Field>
+      </div>
+      <Panel title={t("assets.recv_kya_aaya")}>
+        <Scroll minWidth={780}>
+          <Row head cols={cols}>
+            <span>{t("assets.item")}</span><span>{t("assets.recv_order")}</span><span>{t("assets.recv_aa_chuka")}</span><span>{t("assets.recv_baaki")}</span>
+            <span>{t("assets.recv_abhi_aaya")}</span><span>{t("assets.recv_rate")}</span><span>{t("assets.amount")}</span>
+          </Row>
+          {lines.map((l) => (
+            <Row key={l.key} cols={cols}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, color: T.t1 }}>{l.name}</div>
+                <div style={{ fontSize: 10.5, color: T.t4 }}>{l.fresh ? t("assets.recv_naya_piece") : l.unit}</div>
+              </div>
+              <span style={{ fontWeight: 600 }}>{fmtN(l.ordered)}</span>
+              <span style={{ fontWeight: 600, color: T.grn }}>{fmtN(l.got)}</span>
+              <span style={{ fontWeight: 700, color: T.amb }}>{fmtN(l.left)}</span>
+              <div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input value={l.recv} inputMode="decimal" onChange={(e) => setLine(l.key, { recv: e.target.value.replace(/[^0-9.]/g, "") })}
+                    style={{ ...inpSm, width: 80, fontWeight: 700, borderColor: over(l) ? T.red : T.b2 }} />
+                  <Btn size="sm" ghost onClick={() => setLine(l.key, { recv: String(l.left) })}>{t("assets.recv_poora", { n: fmtN(l.left) })}</Btn>
+                </div>
+                {over(l) && <div style={{ fontSize: 10.5, color: T.red, marginTop: 3 }}>{t("assets.recv_zyada_short", { n: fmtN(l.left) })}</div>}
+                {N(l.recv) === 0 && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("assets.recv_nahi_aaya")}</div>}
+              </div>
+              <input value={l.rate} inputMode="decimal" placeholder="₹" onChange={(e) => setLine(l.key, { rate: e.target.value.replace(/[^0-9.]/g, "") })} style={inpSm} />
+              <span style={{ fontWeight: 600 }}>{rupee(N(l.recv) * N(l.rate))}</span>
+            </Row>
+          ))}
+          <div style={{ padding: "10px 14px", display: "flex", justifyContent: "flex-end", gap: 12, fontSize: 12.5 }}>
+            <span style={{ color: T.t3 }}>{t("assets.total_amount")}</span><b style={{ color: T.t1 }}>{rupee(total)}</b>
+          </div>
+        </Scroll>
+      </Panel>
+      {order.kind === "mr" && <Notice>{t("assets.recv_manual_hint")}</Notice>}
+      <div style={{ fontSize: 11, color: T.t4, marginTop: 10 }}>{t("assets.grn_finance_note")}</div>
+      <ErrBox>{error}</ErrBox>
+    </Modal>
+  );
+}
+
 // "Order ho chuka — aana baaki" + "Meri kharid ki maang". Dono GRN wale tab me
 // hain kyunki kaam wahi hai: maal aane ka intezaar aur aane par receive.
 function PurchasePanels({ refreshKey, canCreate, onNewBuy, onReceive }) {
@@ -1857,12 +1943,21 @@ function PurchasePanels({ refreshKey, canCreate, onNewBuy, onReceive }) {
     else toast.error((x && x.message) || t("assets.action_failed"));
   };
 
-  // Ek PO ka saara baaki maal ek hi GRN me — vendor aur challan wahi hote hain.
+  // Ek order = ek GRN. PO ka saara baaki saamaan ek saath (vendor aur challan
+  // wahi); MANUAL order (procurement ka bina-PO "Mark as Ordered") me har MR
+  // alag — procurement bhi har aisi MR ki apni GRN banata hai.
   const byPo = useMemo(() => {
     const m = new Map();
     for (const x of (ordered || [])) {
-      if (!m.has(x.po_id)) m.set(x.po_id, { po_id: x.po_id, po_number: x.po_number, vendor_name: x.vendor_name, vendor_party_id: x.vendor_party_id, expected_delivery: x.expected_delivery, warehouse_id: x.asset_warehouse_id, warehouse_name: x.warehouse_name, lines: [] });
-      m.get(x.po_id).lines.push(x);
+      const key = x.kind === "mr" ? "mr:" + x.mr_id : "po:" + x.po_id;
+      if (!m.has(key)) {
+        m.set(key, {
+          key, kind: x.kind, po_id: x.po_id, mr_id: x.mr_id, label: x.kind === "mr" ? x.mr_number : x.po_number,
+          vendor_name: x.vendor_name, vendor_party_id: x.vendor_party_id, expected_delivery: x.expected_delivery,
+          warehouse_id: x.asset_warehouse_id, warehouse_name: x.warehouse_name, lines: [],
+        });
+      }
+      m.get(key).lines.push(x);
     }
     return [...m.values()];
   }, [ordered]);
@@ -1882,8 +1977,11 @@ function PurchasePanels({ refreshKey, canCreate, onNewBuy, onReceive }) {
               <span>{t("assets.buy_ordered_qty")}</span><span>{t("assets.buy_pending")}</span><span>{t("assets.buy_expected")}</span><span></span>
             </Row>
             {byPo.map((po) => po.lines.map((x, i) => (
-              <Row key={x.po_item_id} cols={oCols}>
-                <span style={{ fontWeight: 600, color: T.t1 }}>{i === 0 ? po.po_number : ""}</span>
+              <Row key={x.po_item_id || "mr" + x.mr_id} cols={oCols}>
+                <div>
+                  {i === 0 && <div style={{ fontWeight: 600, color: T.t1 }}>{po.label}</div>}
+                  {i === 0 && po.kind === "mr" && <div style={{ fontSize: 10.5, color: T.t4 }}>{t("assets.recv_manual")}</div>}
+                </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.asset_name ? lineLabel({ code: x.asset_code, name: x.asset_name, spec: x.asset_spec }) : x.description}</div>
                   <div style={{ fontSize: 10.5, color: T.t4 }}>{[x.warehouse_name, x.mr_number].filter(Boolean).join(" · ")}</div>
@@ -3957,7 +4055,7 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
   const [importOpen, setImportOpen] = useState(false);
   // Kharid: nayi maang, aur kisi order ka baaki maal receive karna.
   const [buyOpen, setBuyOpen] = useState(false);
-  const [grnPreset, setGrnPreset] = useState(null);
+  const [recvOrder, setRecvOrder] = useState(null);
   const [requestId, setRequestId] = useState(null);
   const [newRequest, setNewRequest] = useState(false);
   // Maang se "Issue karo" — form usi maang ke saath khulta hai.
@@ -4077,9 +4175,9 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
         )}
         {tab === "grn" && (
           <GrnTab refreshKey={refreshKey} canCreate={canCreate} onOpenVoucher={setVoucherId}
-            onNew={() => { setGrnPreset(null); setGrnOpen(true); }}
+            onNew={() => setGrnOpen(true)}
             onNewBuy={() => setBuyOpen(true)}
-            onReceive={(po) => { setGrnPreset(po); setGrnOpen(true); }} />
+            onReceive={setRecvOrder} />
         )}
         {tab === "movements" && (
           <MovementsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canCreate}
@@ -4118,8 +4216,8 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
         onClose={() => setNewRequest(false)} onCreated={(d) => { refresh(); if (d && d.id) setRequestId(d.id); }} />
       {itemFull && <ItemDrawer item={itemFull} cats={cats} canEdit={canEdit} onClose={() => setOpenItem(null)} onChanged={refresh} onOpenVoucher={setVoucherId} />}
 
-      <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} canAll={isAdmin || canApprove} preset={grnPreset}
-        onClose={() => { setGrnOpen(false); setGrnPreset(null); }} onSaved={refresh} />
+      <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} canAll={isAdmin || canApprove} onClose={() => setGrnOpen(false)} onSaved={refresh} />
+      <OrderReceiveModal order={recvOrder} onClose={() => setRecvOrder(null)} onSaved={refresh} />
       <NewPurchaseModal open={buyOpen} meta={meta} pickers={pickers} cats={cats} canAll={isAdmin || canApprove}
         onClose={() => setBuyOpen(false)} onSaved={refresh} />
       <IssueForm open={issueOpen} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} preset={issuePreset}
