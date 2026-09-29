@@ -13,8 +13,9 @@
 // Sabse pehla aankda "Closing balance" wala hai, line-wise milaan nahi. Wo do
 // number ek hon to aage ka kaam sirf safai hai; alag hon to farak utna hi hai
 // jitni entry kahin gum hai — aur wahi asli sawaal hai.
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import api from "../../config/api";
+import SearchSelect from "../../components/SearchSelect";
 import { T } from "../shared/tokens";
 import { t } from "../../i18n";
 
@@ -446,7 +447,7 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
           )}
 
           {/* 3 — milaan */}
-          {step === 3 && result && <ResultView result={result} tab={tab} setTab={setTab} />}
+          {step === 3 && result && <ResultView result={result} tab={tab} setTab={setTab} accounts={accounts} />}
         </div>
 
         {/* Footer */}
@@ -466,7 +467,7 @@ export default function StatementImportWizard({ accounts, defaultAccountId, onCl
 }
 
 // ── Milaan ka nateeja ──────────────────────────────────────────────────
-function ResultView({ result, tab, setTab }) {
+function ResultView({ result, tab, setTab, accounts }) {
   const d = result;
   const bc = d.balance_check;
   const tabs = [
@@ -527,8 +528,13 @@ function ResultView({ result, tab, setTab }) {
       </div>
 
       <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
-        <div style={{ maxHeight: 380, overflowY: "auto" }}>
-          {tab === "stmt" && <ReviewCreate accountId={d.account.id} rows={d.only_in_statement} tol={d.tolerance_days} />}
+        <div style={{ maxHeight: "min(62vh, 600px)", overflowY: "auto" }}>
+          {/* Chhupao, hatao nahi — doosra tab dekh kar lauto to chuni hui
+              party / remark mite nahi (pehle mit jaate the) */}
+          <div style={{ display: tab === "stmt" ? "block" : "none" }}>
+            <ReviewCreate accountId={d.account.id} rows={d.only_in_statement} matched={d.matched}
+              accounts={accounts} tol={d.tolerance_days} />
+          </div>
           {tab === "books" && <Rows rows={d.only_in_books} kind="books" />}
           {tab === "ok" && <Rows rows={d.matched} kind="ok" />}
         </div>
@@ -548,18 +554,48 @@ function ResultView({ result, tab, setTab }) {
 
 // ── "Bank me hai, kitaab me nahi" — dekho, party chuno, entry banao ─────
 //
-// Yahi poore feature ka akela LIKHNE wala kadam hai, aur wo teen baaton par
+// Yahi poore feature ka akela LIKHNE wala kadam hai, aur wo in baaton par
 // khada hai:
 //   1. Party ka andaza server lagata hai (utils/partySuggest) — par lagata
-//      hi hai, chunta nahi. Dropdown me pehle se bhara aata hai, badal sakte
-//      ho, aur "maybe" par wo peela dikhta hai taaki bina dekhe na dab jaye.
-//   2. Bank ke apne charges/byaaj/ATM par party hoti hi nahi — un par
-//      "bank ka apna" ka tag hai aur party dropdown khaali rehta hai.
-//   3. Duplicate ke do guard server par hain. Screen unka nateeja dikhati
+//      hi hai, chunta nahi. Sirf "pakka" pehle se bhara aata hai, badal sakte
+//      ho, aur "shayad" par wo peela dikhta hai taaki bina dekhe na dab jaye.
+//      Andaza isi statement ki MILI hui lines se bhi seekhta hai (`learn`):
+//      jis UPI / khaata number par kitaab me pehle X tha, wahi X yahan.
+//   2. Chunne ki list khoj wali hai: Andaza, company ke khaate, party, staff.
+//      Company ka khaata chuna = paisa apne hi doosre khaate se aaya/gaya —
+//      server party ki jagah transfer ke do leg banata hai.
+//   3. Har line par remark — entry ke note me jaata hai. Bank ki narration
+//      description me hi rehti hai (agle statement ka andaza usi se seekhta hai).
+//   4. Bank ke apne charges/byaaj/ATM par "bank ka apna" ka tag hai. Picker
+//      khaali rehta hai par khula hai — ATM nikaasi ko Cash khaate me transfer
+//      chuna ja sakta hai.
+//   5. Duplicate ke do guard server par hain. Screen unka nateeja dikhati
 //      hai: "pehle se bani hai" par kuch nahi hota; "shaq hai" par ek button
 //      hai "Phir bhi banao", kyunki do baar ₹1,000 ek hi din sach bhi ho
 //      sakta hai — aur wo faisla aadmi ka hai, code ka nahi.
-function ReviewCreate({ accountId, rows, tol }) {
+const pickKey = (s) => (s.kind === "account" ? `a:${s.account_id}` : `p:${s.party_id}`);
+
+// Andaza kyun — server why_codes bhejta hai, yahan har bhasha me. Purana
+// server sirf `why` (Hinglish) bhejta tha — tab wahi.
+function whyText(s) {
+  const id = s.id_label || "";
+  const W = {
+    name_full: () => t("stmt.why_name_full"),
+    name_words: () => t("stmt.why_name_words"),
+    history: () => t("stmt.why_history"),
+    id_matched: () => t("stmt.why_id_matched", { id }),
+    id_party_master: () => t("stmt.why_id_party_master", { id }),
+    id_account_master: () => t("stmt.why_id_account_master", { id }),
+    id_history: () => t("stmt.why_id_history", { id }),
+    id_mixed: () => t("stmt.why_id_mixed"),
+  };
+  const parts = (s.why_codes || []).map((c) => W[c] && W[c]()).filter(Boolean);
+  const txt = parts.length ? parts.join(", ") : (s.why || "");
+  const ex = s.id_example || s.example;
+  return ex ? `${txt} — "${ex}"` : txt;
+}
+
+function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
   const [parties, setParties] = useState([]);
   const [draft, setDraft] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -571,9 +607,13 @@ function ReviewCreate({ accountId, rows, tol }) {
     let dead = false;
     (async () => {
       try {
+        // Mili lines ki party server txn_id se khud padhta hai — yahan sirf jodi
+        const learn = (matched || [])
+          .filter((m) => m && m.txn_id && m.statement && m.statement.description)
+          .map((m) => ({ description: m.statement.description, txn_id: m.txn_id }));
         const [pr, sg] = await Promise.all([
           api.get("/finance/parties"),
-          api.post(`/finance/accounts/${accountId}/statement/suggest`, { rows }),
+          api.post(`/finance/accounts/${accountId}/statement/suggest`, { rows, learn, include_accounts: true }),
         ]);
         if (dead) return;
         const plist = (pr && pr.success && Array.isArray(pr.data)) ? pr.data : [];
@@ -583,11 +623,11 @@ function ReviewCreate({ accountId, rows, tol }) {
           const s = sugg[i] || { suggestions: [], confidence: "none", bank_own: null };
           const top = s.suggestions[0];
           return {
-            ...r, include: true, force: false, outcome: null, txn_id: null,
+            ...r, include: true, force: false, outcome: null, txn_id: null, note: "",
             bank_own: s.bank_own, confidence: s.confidence, suggestions: s.suggestions,
             // Sirf "strong" pehle se bharta hai. "maybe" dikhata hai par
             // chunta nahi — galat party par entry do ledger ek saath bigaadti hai.
-            party_id: (!s.bank_own && top && s.confidence === "strong") ? String(top.party_id) : "",
+            pick: (!s.bank_own && top && s.confidence === "strong") ? pickKey(top) : "",
           };
         }));
       } catch (e) {
@@ -595,9 +635,23 @@ function ReviewCreate({ accountId, rows, tol }) {
       } finally { if (!dead) setLoading(false); }
     })();
     return () => { dead = true; };
-  }, [accountId, rows]);
+  }, [accountId, rows, matched]);
 
-  const upd = (i, patch) => setDraft((d) => d.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  // Sab line ke liye ek hi list (har line apna Andaza upar jodti hai). Khaate
+  // upar — gine-chune hain, aur transfer dhoondhne ke liye neeche scroll na karna pade.
+  const baseOpts = useMemo(() => {
+    const acc = (accounts || []).filter((a) => String(a.id) !== String(accountId)).map((a) => ({
+      key: `a:${a.id}`, label: a.name, sub: t("stmt.sub_transfer"), group: t("stmt.grp_accounts"), search: a.account_number || "",
+    }));
+    const po = (p, group) => ({ key: `p:${p.id}`, label: p.name, group, search: p.phone || "" });
+    return [
+      ...acc,
+      ...parties.filter((p) => !p.is_staff).map((p) => po(p, t("stmt.grp_parties"))),
+      ...parties.filter((p) => p.is_staff).map((p) => po(p, t("stmt.grp_staff"))),
+    ];
+  }, [accounts, accountId, parties]);
+
+  const upd = useCallback((i, patch) => setDraft((d) => d.map((x, j) => (j === i ? { ...x, ...patch } : x))), []);
   const pending = draft.filter((x) => x.include && x.outcome !== "created" && x.outcome !== "already_imported");
 
   const create = async (onlyForce) => {
@@ -610,7 +664,10 @@ function ReviewCreate({ accountId, rows, tol }) {
       const r = await api.post(`/finance/accounts/${accountId}/statement/create-entries`, {
         entries: pick.map((x) => ({
           date: x.date, amount: x.amount, dir: x.dir, description: x.description, ref: x.ref || null,
-          party_id: x.party_id ? Number(x.party_id) : null, force: !!x.force,
+          party_id: x.pick.startsWith("p:") ? Number(x.pick.slice(2)) : null,
+          transfer_account_id: x.pick.startsWith("a:") ? Number(x.pick.slice(2)) : null,
+          note: x.note.trim() || null,
+          force: !!x.force,
         })),
         // FIN-24: server ka duplicate-guard milaan wali hi ±din ki chhoot lagaye
         ...(Number.isFinite(Number(tol)) ? { tolerance_days: Number(tol) } : {}),
@@ -623,7 +680,8 @@ function ReviewCreate({ accountId, rows, tol }) {
       setDraft((d) => d.map((x) => {
         if (!pick.includes(x)) return x;
         const o = res[k++] || {};
-        return { ...x, outcome: o.outcome || "invalid", txn_id: o.txn_id || null, existing: o.existing_description || null };
+        return { ...x, outcome: o.outcome || "invalid", txn_id: o.txn_id || null,
+          existing: o.existing_description || null, other: o.other_account || null };
       }));
       setDone(r.data.summary);
     } catch (e) {
@@ -634,19 +692,13 @@ function ReviewCreate({ accountId, rows, tol }) {
   if (loading) return <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("stmt.suggest_loading")}</div>;
   if (!draft.length) return <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 12.5, color: T.t4 }}>{t("stmt.nothing_here")}</div>;
 
-  const BANK_OWN = { bank_charge: t("stmt.bank_own_charge"), bank_interest: t("stmt.bank_own_interest"), cash_withdrawal: t("stmt.bank_own_withdrawal") };
-  const CONF = { strong: [T.grn, T.grnL, t("stmt.sugg_strong")], maybe: [T.amb, T.ambL, t("stmt.sugg_maybe")], weak: [T.slt, T.sltL, t("stmt.sugg_weak")] };
-  const OUT = {
-    created: [T.grn, T.grnL, t("stmt.out_created")], already_imported: [T.slt, T.sltL, t("stmt.out_already")],
-    duplicate_suspect: [T.amb, T.ambL, t("stmt.out_dup")], invalid: [T.red, T.redL, t("stmt.out_invalid")],
-  };
-  const sel = { fontSize: 12, padding: "5px 8px", border: `1px solid ${T.b1}`, borderRadius: 6, background: T.surface, color: T.t1, maxWidth: 240 };
   const toCreate = pending.filter((x) => x.outcome !== "duplicate_suspect").length;
   const toForce = draft.filter((x) => x.outcome === "duplicate_suspect" && x.force).length;
 
   return (
     <div>
-      <div style={{ padding: "9px 13px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      {/* Button upar chipka rahe — 500 line neeche jaakar bhi dikhe */}
+      <div style={{ position: "sticky", top: 0, zIndex: 2, padding: "9px 13px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, color: T.t2, flex: 1, minWidth: 200 }}>{t("stmt.review_help")}</span>
         {toForce > 0 && (
           <button onClick={() => create(true)} disabled={busy}
@@ -665,62 +717,84 @@ function ReviewCreate({ accountId, rows, tol }) {
           {t("stmt.created_done", { c: done.created, a: done.already_imported, d: done.duplicate_suspect })}
         </div>
       )}
-      {draft.map((r, i) => {
-        const locked = r.outcome === "created" || r.outcome === "already_imported";
-        const top = r.suggestions && r.suggestions[0];
-        const conf = !r.bank_own && top ? CONF[r.confidence] : null;
-        return (
-          <div key={i} style={{ padding: "9px 13px", borderBottom: `1px solid ${T.b1}`, opacity: r.include || locked ? 1 : 0.5, background: locked ? T.surfaceB : T.surface }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <input type="checkbox" checked={r.include} disabled={locked} onChange={(e) => upd(i, { include: e.target.checked })} aria-label={t("stmt.include")} />
-              <span style={{ fontSize: 11.5, color: T.t3, width: 62, flexShrink: 0 }}>{dmy(r.date)}</span>
-              <span style={{ flex: 1, minWidth: 160, fontSize: 12.5, color: T.t1 }}>{r.description || "—"}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", color: r.dir === "in" ? T.grn : T.red }}>
-                {r.dir === "in" ? "+" : "−"}{inr(r.amount)}
-              </span>
-              {r.bank_own ? (
-                <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, background: T.sltL, color: T.slt, whiteSpace: "nowrap" }}>{BANK_OWN[r.bank_own] || r.bank_own}</span>
-              ) : (
-                <select value={r.party_id} disabled={locked} onChange={(e) => upd(i, { party_id: e.target.value })} style={{ ...sel, borderColor: conf && !r.party_id && r.confidence !== "strong" ? T.amb : T.b1 }} aria-label={t("stmt.party_pick")}>
-                  <option value="">{t("stmt.party_none")}</option>
-                  {r.suggestions && r.suggestions.length > 0 && (
-                    <optgroup label={t("stmt.party_suggested")}>
-                      {/* Score 1 se upar ja sakta hai (naam + history dono
-                          poore milen) — "120%" dikhana galat hai, 100 par rok do. */}
-                      {r.suggestions.map((s) => <option key={"s" + s.party_id} value={s.party_id}>{s.party_name} · {Math.min(100, Math.round(s.score * 100))}%</option>)}
-                    </optgroup>
-                  )}
-                  <optgroup label={t("stmt.party_all")}>
-                    {parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </optgroup>
-                </select>
-              )}
-              {conf && <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, background: conf[1], color: conf[0], whiteSpace: "nowrap" }}>{conf[2]}</span>}
-              {r.outcome && OUT[r.outcome] && (
-                <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, background: OUT[r.outcome][1], color: OUT[r.outcome][0], whiteSpace: "nowrap" }}>
-                  {OUT[r.outcome][2]}{r.txn_id ? ` #${r.txn_id}` : ""}
-                </span>
-              )}
-              {r.outcome === "duplicate_suspect" && (
-                <label style={{ fontSize: 11.5, color: T.amb, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                  <input type="checkbox" checked={r.force} onChange={(e) => upd(i, { force: e.target.checked })} /> {t("stmt.force_create")}
-                </label>
-              )}
-            </div>
-            {(top && !r.bank_own && r.confidence !== "none") && (
-              <div style={{ fontSize: 11, color: T.t4, marginTop: 3, paddingLeft: 26 }}>
-                {t("stmt.why_prefix")} {top.why}{top.example ? ` — "${top.example}"` : ""}
-              </div>
-            )}
-            {r.outcome === "duplicate_suspect" && r.existing && (
-              <div style={{ fontSize: 11, color: T.amb, marginTop: 3, paddingLeft: 26 }}>{t("stmt.dup_existing", { desc: r.existing })}</div>
-            )}
-          </div>
-        );
-      })}
+      {draft.map((r, i) => <ReviewRow key={i} r={r} i={i} baseOpts={baseOpts} upd={upd} />)}
     </div>
   );
 }
+
+// Ek line — memo, taaki ek line ka remark likhte waqt baaki 499 dobara na banein.
+const ReviewRow = React.memo(function ReviewRow({ r, i, baseOpts, upd }) {
+  const opts = useMemo(() => [
+    { key: "", label: t("stmt.party_none") },
+    ...(r.suggestions || []).map((s) => ({
+      key: pickKey(s), label: s.party_name, group: t("stmt.party_suggested"),
+      // Score 1 se upar ja sakta hai (naam + history dono poore milen) —
+      // "120%" dikhana galat hai, 100 par rok do.
+      sub: `${Math.min(100, Math.round(s.score * 100))}%${s.kind === "account" ? ` · ${t("stmt.sub_transfer")}` : ""}`,
+    })),
+    ...baseOpts,
+  ], [r.suggestions, baseOpts]);
+
+  const locked = r.outcome === "created" || r.outcome === "already_imported";
+  const top = r.suggestions && r.suggestions[0];
+  const BANK_OWN = { bank_charge: t("stmt.bank_own_charge"), bank_interest: t("stmt.bank_own_interest"), cash_withdrawal: t("stmt.bank_own_withdrawal") };
+  const CONF = { strong: [T.grn, T.grnL, t("stmt.sugg_strong")], maybe: [T.amb, T.ambL, t("stmt.sugg_maybe")], weak: [T.slt, T.sltL, t("stmt.sugg_weak")] };
+  const OUT = {
+    created: [T.grn, T.grnL, t("stmt.out_created")], already_imported: [T.slt, T.sltL, t("stmt.out_already")],
+    duplicate_suspect: [T.amb, T.ambL, t("stmt.out_dup")], invalid: [T.red, T.redL, t("stmt.out_invalid")],
+  };
+  const conf = !r.bank_own && top ? CONF[r.confidence] : null;
+  const warn = conf && !r.pick && r.confidence !== "strong";
+  const chip = (c, bg) => ({ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, background: bg, color: c, whiteSpace: "nowrap" });
+
+  return (
+    <div style={{ padding: "9px 13px", borderBottom: `1px solid ${T.b1}`, opacity: r.include || locked ? 1 : 0.5, background: locked ? T.surfaceB : T.surface }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <input type="checkbox" checked={r.include} disabled={locked} onChange={(e) => upd(i, { include: e.target.checked })} aria-label={t("stmt.include")} />
+        <span style={{ fontSize: 11.5, color: T.t3, width: 62, flexShrink: 0 }}>{dmy(r.date)}</span>
+        <span style={{ flex: 1, minWidth: 160, fontSize: 12.5, color: T.t1, wordBreak: "break-word" }}>{r.description || "—"}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", color: r.dir === "in" ? T.grn : T.red }}>
+          {r.dir === "in" ? "+" : "−"}{inr(r.amount)}
+        </span>
+        {r.bank_own && <span style={chip(T.slt, T.sltL)}>{BANK_OWN[r.bank_own] || r.bank_own}</span>}
+        <div style={{ width: 250, flexShrink: 0, borderRadius: 7, boxShadow: warn ? `0 0 0 1.5px ${T.amb}` : "none" }}>
+          <SearchSelect compact value={r.pick} options={opts} disabled={locked} theme={T}
+            onChange={(k) => upd(i, { pick: k })} placeholder={t("stmt.party_search_ph")} />
+        </div>
+        {conf && <span style={chip(conf[0], conf[1])}>{conf[2]}</span>}
+        {r.outcome && OUT[r.outcome] && (
+          <span style={chip(OUT[r.outcome][0], OUT[r.outcome][1])}>
+            {OUT[r.outcome][2]}{r.txn_id ? ` #${r.txn_id}` : ""}
+          </span>
+        )}
+        {r.outcome === "duplicate_suspect" && (
+          <label style={{ fontSize: 11.5, color: T.amb, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+            <input type="checkbox" checked={r.force} onChange={(e) => upd(i, { force: e.target.checked })} /> {t("stmt.force_create")}
+          </label>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: "4px 12px", alignItems: "center", flexWrap: "wrap", marginTop: 5, paddingLeft: 26 }}>
+        {locked ? (
+          r.note ? <span style={{ fontSize: 11.5, color: T.t3 }}>{r.note}</span> : null
+        ) : (
+          <input value={r.note} maxLength={500} onChange={(e) => upd(i, { note: e.target.value })}
+            placeholder={t("stmt.remark_ph")} aria-label={t("stmt.remark_ph")}
+            style={{ flex: "1 1 220px", maxWidth: 380, height: 28, fontSize: 11.5, padding: "0 9px", border: `1px solid ${T.b1}`, borderRadius: 6, background: T.surface, color: T.t1, boxSizing: "border-box", fontFamily: "inherit" }} />
+        )}
+        {top && !r.bank_own && r.confidence !== "none" && (
+          <span style={{ flex: "2 1 260px", fontSize: 11, color: T.t4, lineHeight: 1.5 }}>
+            {t("stmt.why_prefix")} <b style={{ fontWeight: 600, color: T.t3 }}>{top.party_name}</b> — {whyText(top)}
+          </span>
+        )}
+      </div>
+      {r.outcome === "duplicate_suspect" && r.existing && (
+        <div style={{ fontSize: 11, color: T.amb, marginTop: 3, paddingLeft: 26 }}>
+          {r.other ? t("stmt.dup_existing_other", { acct: r.other, desc: r.existing }) : t("stmt.dup_existing", { desc: r.existing })}
+        </div>
+      )}
+    </div>
+  );
+});
 
 function Rows({ rows, kind }) {
   if (!rows.length) {

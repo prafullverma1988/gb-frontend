@@ -17,6 +17,9 @@
 //     options={[{key:1,label:"One"},...]}            // or objects
 //     options={[{value:1,label:"One"},...]}          // value/label also OK
 //     options={[{id:1,name:"One"},...]}              // id/name also OK
+//     options={[{key:"a:1",label:"SBI",group:"Khaate",sub:"transfer",search:"0123"}]}
+//                           // group → heading jab group badle; sub → chhota grey text;
+//                           // search → sirf khoj ke liye (phone, khaata no.), dikhta nahi
 //     onChange={(key) => setSelected(key)}
 //     placeholder="Select a project..."
 //     accent="#2563EB"      // optional border / highlight color
@@ -27,7 +30,7 @@
 //     theme={{...}}         // optional color overrides
 //   />
 
-import { useState, useEffect, useRef } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../i18n";
 
@@ -71,19 +74,28 @@ export default function SearchSelect({
   const listRef = useRef(null);
 
   // Normalize options: strings | {key,label} | {value,label} | {id,name}
+  // (+ optional group / sub / search)
   const list = (Array.isArray(options) ? options : []).map((o) => {
     if (typeof o === "string" || typeof o === "number") {
       return { key: String(o), label: String(o) };
     }
-    if (o.key !== undefined) return { key: String(o.key), label: String(o.label ?? o.key) };
+    const extra = { group: o.group || null, sub: o.sub || null, search: o.search || null };
+    if (o.key !== undefined) return { key: String(o.key), label: String(o.label ?? o.key), ...extra };
     return {
       key: String(o.value ?? o.id ?? o.name ?? ""),
       label: String(o.label ?? o.name ?? o.value ?? o.id ?? ""),
+      ...extra,
     };
   });
 
-  const filtered = q.trim()
-    ? list.filter((o) => o.label.toLowerCase().includes(q.toLowerCase()))
+  // Har shabd kahin bhi mile — "ram sahu" se "Ram Kumar Sahu" bhi milta hai
+  // (pehle poora "ram sahu" ek saath chahiye tha). Label + sub + search me.
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const filtered = words.length
+    ? list.filter((o) => {
+        const hay = `${o.label} ${o.sub || ""} ${o.search || ""}`.toLowerCase();
+        return words.every((w) => hay.includes(w));
+      })
     : list;
   const selectedItem = list.find((o) => o.key === String(value ?? ""));
 
@@ -162,6 +174,12 @@ export default function SearchSelect({
       if (e.key === "ArrowDown" || e.key === "Enter") {
         e.preventDefault();
         openDrop();
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Chunne ke baad focus yahin rehta hai aur dabba band — dabaya gaya
+        // akshar hi khoj ka pehla akshar bane (pehle wo gum ho jaata tha)
+        e.preventDefault();
+        openDrop();
+        setQ(e.key);
       }
       return;
     }
@@ -192,9 +210,16 @@ export default function SearchSelect({
         disabled={disabled}
         value={open ? q : (selectedItem?.label ?? (value != null && value !== "" ? String(value) : ""))}
         onChange={(e) => {
-          setQ(e.target.value);
+          let v = e.target.value;
+          if (!open) {
+            // Band dabbe me paste — dikhta label hata kar sirf naya hissa khojo
+            // (openDrop khoj khaali karta hai, isliye setQ uske BAAD)
+            const shown = selectedItem ? selectedItem.label : "";
+            if (shown && v.startsWith(shown)) v = v.slice(shown.length);
+            openDrop();
+          }
+          setQ(v);
           setHi(-1);
-          if (!open) openDrop();
         }}
         onFocus={() => {
           if (!open) openDrop();
@@ -278,6 +303,7 @@ export default function SearchSelect({
               top: pos.top,
               left: pos.left,
               minWidth: pos.width,
+              maxWidth: Math.max(pos.width, window.innerWidth - pos.left - 8),
               background: T.surface,
               borderRadius: 8,
               border: `1.5px solid ${ac}`,
@@ -303,9 +329,28 @@ export default function SearchSelect({
             {filtered.map((opt, i) => {
               const isCur = opt.key === String(value ?? "");
               const isHi = i === hi;
+              // Heading tab jab group badle — chuna nahi ja sakta, data-opt nahi
+              // (arrow keys sirf options par chalti hain)
+              const head = opt.group && (i === 0 || filtered[i - 1].group !== opt.group);
               return (
+                <Fragment key={opt.key + ":" + i}>
+                {head && (
+                  <div
+                    style={{
+                      padding: "6px 12px 4px",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: T.t4,
+                      textTransform: "uppercase",
+                      letterSpacing: ".5px",
+                      background: T.surfaceB,
+                      borderBottom: `1px solid ${T.b1}`,
+                    }}
+                  >
+                    {opt.group}
+                  </div>
+                )}
                 <div
-                  key={opt.key + ":" + i}
                   data-opt={i}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -342,6 +387,11 @@ export default function SearchSelect({
                   >
                     {opt.label}
                   </span>
+                  {opt.sub && (
+                    <span style={{ fontSize: 11, fontWeight: 500, color: T.t4, whiteSpace: "nowrap", flexShrink: 0 }}>
+                      {opt.sub}
+                    </span>
+                  )}
                   {isCur && (
                     <svg
                       width={12}
@@ -357,6 +407,7 @@ export default function SearchSelect({
                     </svg>
                   )}
                 </div>
+                </Fragment>
               );
             })}
           </div>,
