@@ -13,7 +13,7 @@
 //
 // Cross-check tab is deliberately absent — that is E3.
 // ══════════════════════════════════════════════════════════════════════
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, createContext, useContext } from "react";
 import api, { API_BASE, getToken } from "../config/api";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
@@ -308,6 +308,223 @@ const placeOf = (s) => (!s ? "" : s.project_id
   : (s.warehouse_name || t("fuel.warehouse_set_nahi")));
 const placeKey = (s) => (s.project_id ? "p" + s.project_id : "w" + (s.warehouse_id || 0));
 const placeUnclear = (s) => !!s && (s.place_kind === "project_missing" || (!s.project_id && !s.warehouse_id));
+// ══════════════════════════════════════════════════════════════════
+// EK ENTRY KA POORA BYORA — side drawer
+// ------------------------------------------------------------------
+// Fuel ki koi bhi row — Overview, Refueling, Unbilled, Subcon, Diesel/Pump/
+// Barrel register, drum ka ledger — click karne par ye khulta hai: kahan se
+// kahan, paisa kahan tak pahuncha (unbilled / bill / cash / kharcha /
+// katauti), meter, parchi ka milaan, kisne darj ki, aur SAARI photo badi
+// karke (Prafull, 30 Sep 2026: "jab bhi user ko verify karna ho").
+//
+// Byora ek hi jagah se aata hai (GET /fuel/entries/:kind/:id) — har list apne
+// kaam ke thode khaane laati hai, drawer unpe nirbhar nahi.
+// ══════════════════════════════════════════════════════════════════
+const OpenEntryCtx = createContext(null);
+const rsx = (v) => "₹" + (Number(v) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+const fmtDay = (v) => {
+  if (!v) return "—";
+  const dt = new Date(v);
+  return isNaN(dt) ? String(v).slice(0, 10) : dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+};
+const useOpenEntry = () => useContext(OpenEntryCtx) || (() => {});
+
+const ROUTE_LABEL = {
+  pump_machine: () => t("fuel.pump_machine"),
+  pump_store: () => t("fuel.pump_barrel"),
+  pump_subcon: () => t("fuel.pump_subcon"),
+  store_machine: () => t("fuel.barrel_machine"),
+  store_subcon: () => t("fuel.barrel_subcon"),
+};
+const PAYABLE_PILL = {
+  unbilled: () => ({ l: t("fuel.payable_unbilled"), c: T.amb, bg: T.ambL }),
+  unpaid: () => ({ l: t("fuel.payable_unpaid"), c: T.amb, bg: T.ambL }),
+  partial: () => ({ l: t("fuel.payable_partial"), c: T.amb, bg: T.ambL }),
+  paid: () => ({ l: t("fuel.payable_paid"), c: T.grn, bg: T.grnL }),
+  cash: () => ({ l: t("common.cash"), c: T.grn, bg: T.grnL }),
+};
+
+function FuelEntryDrawer({ entry, onClose }) {
+  const [data, setData] = useState(null);
+  const [fail, setFail] = useState("");
+  const [shot, setShot] = useState(null);
+
+  useEffect(() => {
+    if (!entry) return undefined;
+    let dead = false;
+    setData(null); setFail(""); setShot(null);
+    api.get(`/fuel/entries/${entry.kind}/${entry.id}`)
+      .then((r) => { if (!dead) { if (r?.success) setData(r.data); else setFail(r?.message || t("fuel.d_load_fail")); } })
+      .catch((e) => { if (!dead) setFail(e?.message || t("fuel.d_load_fail")); });
+    return () => { dead = true; };
+  }, [entry]);
+
+  useEffect(() => {
+    if (!entry) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") { if (shot) setShot(null); else onClose(); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [entry, shot, onClose]);
+
+  if (!entry) return null;
+  const d = data;
+  const pill = d && d.payable_status ? (PAYABLE_PILL[d.payable_status] || PAYABLE_PILL.unbilled)() : null;
+  const Sec = ({ title, children }) => (
+    <div style={{ padding: "12px 18px", borderBottom: `1px solid ${T.b1}` }}>
+      <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 7 }}>{title}</div>
+      {children}
+    </div>
+  );
+  const KV = ({ k, v, strong }) => (v == null || v === "") ? null : (
+    <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, fontSize: 12, padding: "3px 0" }}>
+      <span style={{ color: T.t3 }}>{k}</span>
+      <span style={{ color: T.t1, fontWeight: strong ? 700 : 500, wordBreak: "break-word" }}>{v}</span>
+    </div>
+  );
+  const fromLabel = d ? (d.route.startsWith("pump") ? t("fuel.d_pump") : t("fuel.d_drum")) : "";
+  const fromName = d ? (d.route.startsWith("pump") ? d.vendor_name : d.store_name) : "";
+  const toName = d ? (d.route.endsWith("subcon")
+    ? [d.subcon_name, d.equipment_text].filter(Boolean).join(" — ")
+    : d.route === "pump_store" ? d.store_name
+    : [d.equipment_name, d.equipment_code ? `(${d.equipment_code})` : null].filter(Boolean).join(" ")) : "";
+  const toLabel = d ? (d.route.endsWith("subcon") ? t("fuel.d_subcon")
+    : d.route === "pump_store" ? t("fuel.d_drum") : t("fuel.d_machine")) : "";
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 10001 }}>
+      <BackClose onClose={onClose} />
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.25)" }} />
+      <aside style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 460, maxWidth: "100vw",
+        background: T.surface, boxShadow: "-8px 0 30px rgba(0,0,0,0.16)", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>{t("fuel.entry_ka_byora")}</span>
+              {d && <Pill label={(ROUTE_LABEL[d.route] || ROUTE_LABEL.pump_machine)()} c={T.ind} bg={T.indL} />}
+              {d && d.fuel_type === "petrol" && <Pill label={t("fuel.petrol")} c={T.amb} bg={T.ambL} />}
+              {pill && <Pill label={pill.l} c={pill.c} bg={pill.bg} />}
+            </div>
+            {d && <div style={{ fontSize: 11.5, color: T.t3, marginTop: 3 }}>{fmtDT(d.at)}</div>}
+          </div>
+          <button onClick={onClose} type="button" title={t("common.close")}
+            style={{ background: T.surfaceB, border: "none", borderRadius: 6, padding: 6, cursor: "pointer", display: "flex" }}>
+            <IcX size={15} color={T.t3} />
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {!d && !fail && <Empty>{t("common.loading")}</Empty>}
+          {fail && <div style={{ margin: 18, padding: "10px 12px", background: T.redL, color: T.red, borderRadius: 7, fontSize: 12, fontWeight: 600 }}>{fail}</div>}
+          {d && (
+            <>
+              <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.b1}` }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: T.t1 }}>{rsx(d.amount)}</div>
+                <div style={{ fontSize: 12, color: T.t3, marginTop: 2 }}>{fmtL(d.litres)} × ₹{fmtN(d.rate)}</div>
+              </div>
+
+              <Sec title={t("fuel.d_kahan_se_kahan")}>
+                <KV k={fromLabel} v={fromName || "—"} strong />
+                <KV k={toLabel} v={toName || "—"} strong />
+                <KV k={t("common.project")} v={d.project_name || t("fuel.company_level_koi_project_nahi")} />
+                <KV k={t("fuel.kis_kaam_ke_liye")} v={d.purpose} />
+                <KV k={t("fuel.d_sector")} v={d.sector} />
+              </Sec>
+
+              <Sec title={t("fuel.d_paisa")}>
+                {d.kind === "purchase" && (
+                  <>
+                    <KV k={t("common.payment")} v={d.payment_mode === "cash"
+                      ? (d.cash_source === "company" ? t("fuel.cash_company") : (d.paid_via_staff_name || t("fuel.cash_wallet")))
+                      : t("fuel.udhaar")} />
+                    {d.bill && (
+                      <>
+                        <KV k={t("fuel.d_bill")} v={t("fuel.d_bill_line", {
+                          id: d.bill.id, no: d.bill.no ? " · " + d.bill.no : "", date: fmtDay(d.bill.date), n: d.bill.entries })} strong />
+                        <KV k={t("fuel.d_bill_amount")} v={t("fuel.d_bill_paid_due", {
+                          amt: rsx(d.bill.amount), paid: rsx(Math.min(d.bill.settled, d.bill.amount)),
+                          due: rsx(Math.max(0, d.bill.amount - d.bill.settled)) })} />
+                      </>
+                    )}
+                    {!d.bill && d.payable_status === "unbilled" && <KV k={t("fuel.d_bill")} v={t("fuel.d_abhi_bill_nahi")} />}
+                  </>
+                )}
+                {d.kind === "issue" && !d.recovery && (
+                  <KV k={t("fuel.d_kharcha")} v={d.expense
+                    ? t("fuel.d_kharcha_line", { id: d.expense.id, amt: rsx(d.expense.amount),
+                        where: d.expense.project_name || t("fuel.company_level_koi_project_nahi") })
+                    : t("fuel.d_kharcha_nahi")} />
+                )}
+                {d.recovery && (
+                  <KV k={t("fuel.katauti")} v={t("fuel.d_katauti_line", {
+                    id: d.recovery.id, amt: rsx(d.recovery.amount), adj: rsx(d.recovery.adjusted) })} strong />
+                )}
+              </Sec>
+
+              {(d.route === "pump_machine" || d.route === "store_machine") && (
+                <Sec title={t("fuel.d_meter")}>
+                  {d.meter_reading != null
+                    ? <KV k={t("fuel.d_reading")} v={`${fmtN(d.meter_reading)} ${d.meter_unit === "km" ? "km" : t("fuel.d_ghante")}`} strong />
+                    : <KV k={t("fuel.d_reading")} v={t("fuel.d_meter_nahi", { why: d.meter_missing_label || "—" })} />}
+                </Sec>
+              )}
+
+              {d.kind === "purchase" && (d.slip_no || d.slip_read) && (
+                <Sec title={t("fuel.parchi_ka_milaan")}>
+                  <KV k={t("fuel.d_slip_no")} v={d.slip_no} />
+                  {d.slip_read && (
+                    <KV k={t("fuel.d_photo_se_padha")} v={[
+                      d.slip_read.litres != null ? fmtL(d.slip_read.litres) : null,
+                      d.slip_read.rate != null ? "₹" + fmtN(d.slip_read.rate) + "/L" : null,
+                      d.slip_read.amount != null ? rsx(d.slip_read.amount) : null,
+                    ].filter(Boolean).join(" · ")} />
+                  )}
+                  {d.slip_flag === "mismatch"
+                    ? <div style={{ marginTop: 5, padding: "7px 10px", background: T.ambL, borderRadius: 6, fontSize: 11.5, color: T.amb, fontWeight: 700 }}>
+                        {t("fuel.slip_se_alag")}{d.slip_note ? ` — ${d.slip_note}` : ""}
+                      </div>
+                    : d.slip_read && <div style={{ fontSize: 11, color: T.grn, fontWeight: 600, marginTop: 3 }}>{t("fuel.d_parchi_mil_gayi")}</div>}
+                </Sec>
+              )}
+
+              <Sec title={t("fuel.kisne_darj_ki")}>
+                <KV k={t("fuel.d_naam")} v={d.entered_by_name || "—"} strong />
+                <KV k={t("fuel.d_darj_hui")} v={fmtDT(d.created_at)} />
+                <KV k={t("common.note")} v={d.note} />
+              </Sec>
+
+              <Sec title={t("fuel.d_photos_n", { n: (d.photos || []).length })}>
+                {(d.photos || []).length === 0 && !d.photos_pending && (
+                  <div style={{ fontSize: 12, color: T.t4 }}>{t("fuel.d_koi_photo_nahi")}</div>
+                )}
+                {d.photos_pending > 0 && (
+                  <div style={{ fontSize: 11.5, color: T.amb, fontWeight: 600, marginBottom: 6 }}>
+                    {t("fuel.d_photos_pending", { n: d.photos_pending })}
+                  </div>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {(d.photos || []).map((u, i) => (
+                    <img key={i} src={cld(u, "view")} alt="" onClick={() => { setShot(u); }}
+                      style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 8,
+                        border: `1px solid ${T.b1}`, cursor: "zoom-in", background: T.surfaceB }} />
+                  ))}
+                </div>
+              </Sec>
+            </>
+          )}
+        </div>
+      </aside>
+
+      {shot && (
+        <div onClick={() => setShot(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 10002, background: "rgba(0,0,0,.85)",
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
+          <img src={cld(shot, "view")} alt="" style={{ maxWidth: "94vw", maxHeight: "94vh", borderRadius: 8 }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projects }) {
   const [path, setPath] = useState("pump_machine");
   const [f, setF] = useState({});
@@ -778,12 +995,13 @@ function RefuelForm({ open, onClose, onSaved, stores, equipment, vendors, projec
 // TABS
 // ══════════════════════════════════════════════════════════════════
 function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRefuel }) {
+  const openEntry = useOpenEntry();
   const lowStores = stores.filter((s) => s.below_reorder);
   const overNorm = byEquipment.filter((e) => e.variance_pct != null && e.variance_pct > 15);
 
   const recent = useMemo(() => {
-    const p = purchases.map((x) => ({ kind: "purchase", at: x.filled_at, litres: x.litres, amount: x.amount, who: x.vendor_party_name || x.vendor_name, where: x.store_name || x.equipment_name, mode: x.payment_mode }));
-    const i = issues.map((x) => ({ kind: "issue", at: x.issued_at, litres: x.litres, amount: x.amount, who: x.store_name, where: x.equipment_name }));
+    const p = purchases.map((x) => ({ id: x.id, kind: "purchase", at: x.filled_at, litres: x.litres, amount: x.amount, who: x.vendor_party_name || x.vendor_name, where: x.store_name || x.equipment_name, mode: x.payment_mode }));
+    const i = issues.map((x) => ({ id: x.id, kind: "issue", at: x.issued_at, litres: x.litres, amount: x.amount, who: x.store_name, where: x.equipment_name }));
     return [...p, ...i].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 12);
   }, [purchases, issues]);
 
@@ -829,7 +1047,7 @@ function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRe
                 <span>{t("fuel.kab")}</span><span>{t("fuel.kya")}</span><span>{t("fuel.kahan_se_kahan")}</span><span>{t("fuel.litres")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span>
               </Row>
               {recent.map((r, i) => (
-                <Row key={i} cols="90px 70px 1.4fr 1fr 90px">
+                <Row key={i} cols="90px 70px 1.4fr 1fr 90px" onClick={() => openEntry({ kind: r.kind, id: r.id })}>
                   <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r.at)}</span>
                   <span>{r.kind === "purchase"
                     ? <Pill label={t("fuel.kharida")} c={T.blu} bg={T.bluL} />
@@ -877,6 +1095,7 @@ function OverviewTab({ stores, purchases, issues, byEquipment, normMissing, onRe
 }
 
 function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteIssue }) {
+  const openEntry = useOpenEntry();
   const [kind, setKind] = useState("all");
   const rows = useMemo(() => {
     const p = purchases.map((x) => ({ ...x, _k: "purchase", _at: x.filled_at }));
@@ -904,7 +1123,7 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
             <span>{t("fuel.litres")}</span><span>{t("common.rate")}</span><span style={{ textAlign: "right" }}>{t("common.amount_2")}</span><span>{t("common.status")}</span><span />
           </Row>
           {rows.map((r) => (
-            <Row key={r._k + r.id} cols="105px 80px 1.3fr 1.2fr 80px 80px 95px 90px 40px">
+            <Row key={r._k + r.id} cols="105px 80px 1.3fr 1.2fr 80px 80px 95px 90px 40px" onClick={() => openEntry({ kind: r._k, id: r.id })}>
               <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r._at)}</span>
               <span>{r._k === "purchase"
                 ? <Pill label={r.destination === "store" ? t("fuel.barrel") : t("fuel.machine_2")} c={T.blu} bg={T.bluL} />
@@ -934,7 +1153,7 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
                         : <Pill label={r.payable_status === "partial" ? t("fuel.payable_partial") : t("fuel.payable_unpaid")} c={T.amb} bg={T.ambL} />}
               </span>
               <button type="button" title={t("common.delete")}
-                onClick={() => (r._k === "purchase" ? onDeletePurchase(r) : onDeleteIssue(r))}
+                onClick={(ev) => { ev.stopPropagation(); if (r._k === "purchase") onDeletePurchase(r); else onDeleteIssue(r); }}
                 style={{ background: "none", border: "none", cursor: "pointer", color: T.t4, padding: 3, display: "flex" }}>
                 <IcTrash size={13} color="currentColor" />
               </button>
@@ -1226,6 +1445,7 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
 // parchi ka rate chahiye, kyunki wahi bill vendor ko dena hai.
 // ══════════════════════════════════════════════════════════════════
 function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onReload }) {
+  const openEntry = useOpenEntry();
   const [rows, setRows] = useState(null);
   const [summary, setSummary] = useState([]);
   const [open, setOpen] = useState(false);
@@ -1372,7 +1592,8 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
                 : adj > 0.005 ? { l: t("fuel.thoda_adjust"), c: T.amb, bg: T.ambL }
                 : { l: t("fuel.khula_credit"), c: T.slt, bg: T.sltL };
               return (
-                <Row key={r.source + r.id} cols="110px 1.3fr 1.1fr 1.2fr 80px 80px 100px 120px 70px">
+                <Row key={r.source + r.id} cols="110px 1.3fr 1.1fr 1.2fr 80px 80px 100px 120px 70px"
+                  onClick={() => openEntry({ kind: r.source === "store" ? "issue" : "purchase", id: r.id })}>
                   <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r.at)}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{r.subcon_name || "—"}</span>
                   <span style={{ fontSize: 11.5, color: T.t2 }}>
@@ -1388,12 +1609,12 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
                   <span><Pill label={pill.l} c={pill.c} bg={pill.bg} /></span>
                   <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                     {(r.photos || []).length > 0 && (
-                      <a href={r.photos[0]} target="_blank" rel="noreferrer" title={t("fuel.photo")}
+                      <a href={r.photos[0]} target="_blank" rel="noreferrer" title={t("fuel.photo")} onClick={(ev) => ev.stopPropagation()}
                         style={{ display: "inline-flex", alignItems: "center", color: T.t3 }}>
                         <IcCamera size={15} />
                       </a>
                     )}
-                    <button type="button" onClick={() => remove(r)} title={t("common.delete")}
+                    <button type="button" onClick={(ev) => { ev.stopPropagation(); remove(r); }} title={t("common.delete")}
                       style={{ border: "none", background: "none", cursor: "pointer", color: T.t4, padding: 0 }}>
                       <IcTrash size={15} />
                     </button>
@@ -1536,6 +1757,7 @@ function SubconTab({ subcons, stores, vendors, projects, from, to, onRange, onRe
 // isliye unka bill nahi banta — unhe sirf "post" kiya jaata hai, aur tab
 // wo kharche me utarti hain (wallet se di gayi ho to us aadmi ke wallet se).
 function UnbilledTab({ onReload }) {
+  const openEntry = useOpenEntry();
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState({});      // { [vendorId]: true }
@@ -1663,8 +1885,8 @@ function UnbilledTab({ onReload }) {
                   <span>{t("fuel.photo")}</span>
                 </Row>
                 {g.entries.map((e) => (
-                  <Row key={e.id} cols="28px 92px 1fr 76px 68px 92px 90px 70px">
-                    <input type="checkbox" checked={!!ticked[e.id]} onChange={() => toggle(e.id)} />
+                  <Row key={e.id} cols="28px 92px 1fr 76px 68px 92px 90px 70px" onClick={() => openEntry({ kind: "purchase", id: e.id })}>
+                    <input type="checkbox" checked={!!ticked[e.id]} onChange={() => toggle(e.id)} onClick={(ev) => ev.stopPropagation()} />
                     <span>{String(e.filled_at || "").slice(0, 10)}</span>
                     <span>
                       {e.equipment_name || e.store_name || "—"}
@@ -1687,7 +1909,7 @@ function UnbilledTab({ onReload }) {
                     </span>
                     <span style={{ display: "flex", gap: 3 }}>
                       {(e.photos || []).slice(0, 3).map((u, i) => (
-                        <img key={i} src={cld(u, "thumb")} alt="" onClick={() => setShot(u)}
+                        <img key={i} src={cld(u, "thumb")} alt="" onClick={(ev) => { ev.stopPropagation(); setShot(u); }}
                           style={{ width: 26, height: 26, objectFit: "cover", borderRadius: 4,
                             border: `1px solid ${T.b1}`, cursor: "pointer" }} />
                       ))}
@@ -1930,6 +2152,7 @@ const KIND_STYLE = {
 const EMPTY_REG_F = { project_id: "", equipment_id: "", vendor_id: "", store_id: "", sector: "", flow: "", flagged: "" };
 
 function DieselRegister({ projects, equipment, vendors, stores, from, to, onRange }) {
+  const openEntry = useOpenEntry();
   const [f, setF] = useState(EMPTY_REG_F);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2017,7 +2240,8 @@ function DieselRegister({ projects, equipment, vendors, stores, from, to, onRang
                 {rows.map((r) => {
                   const k = KIND_STYLE[r.kind] || {};
                   return (
-                    <Row key={r.kind + r.source_id} cols={cols}>
+                    <Row key={r.kind + r.source_id} cols={cols}
+                      onClick={() => openEntry({ kind: r.kind === "barrel_to_machine" ? "issue" : "purchase", id: r.source_id })}>
                       <span style={{ fontSize: 11.5, color: T.t2 }}>{r.date}</span>
                       <span><Pill label={k.l} c={k.c} bg={k.bg} /></span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>
@@ -2364,6 +2588,7 @@ function BarrelRegister({ projects }) {
 }
 
 function BarrelLedgerPanel({ storeId, onClose }) {
+  const openEntry = useOpenEntry();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const params = useMemo(() => ({ store_id: storeId }), [storeId]);
@@ -2427,7 +2652,8 @@ function BarrelLedgerPanel({ storeId, onClose }) {
               {rows.map((r, i) => {
                 const k = KC[r.kind] || {};
                 return (
-                  <Row key={i} cols={cols}>
+                  <Row key={i} cols={cols}
+                    onClick={(r.kind === "purchase" || r.kind === "issue") && r.id ? () => openEntry({ kind: r.kind, id: r.id }) : undefined}>
                     <span style={{ fontSize: 11.5, color: T.t2 }}>{r.date}</span>
                     <span><Pill label={r.kind_label} c={k.c} bg={k.bg} /></span>
                     <span style={{ fontSize: 11.5, color: T.t2 }}>{r.party}</span>
@@ -2610,6 +2836,7 @@ function PumpRegister({ projects, from, to, onRange }) {
 }
 
 function PumpLedgerPanel({ vendorId, from, to, onClose }) {
+  const openEntry = useOpenEntry();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const params = useMemo(() => ({ vendor_id: vendorId, from, to }), [vendorId, from, to]);
@@ -2673,7 +2900,7 @@ function PumpLedgerPanel({ vendorId, from, to, onClose }) {
                 <span style={{ textAlign: "right" }}>{t("fuel.ab_tak_l")}</span><span style={{ textAlign: "right" }}>{t("fuel.ab_tak")}</span>
               </Row>
               {rows.map((r) => (
-                <Row key={r.purchase_id} cols={cols}>
+                <Row key={r.purchase_id} cols={cols} onClick={() => openEntry({ kind: "purchase", id: r.purchase_id })}>
                   <span style={{ fontSize: 11.5, color: T.t2 }}>{r.date}</span>
                   <span style={{ fontSize: 11.5, color: r.slip_no ? T.t2 : T.t4 }}>
                     {r.slip_no || t("fuel.bina_parchi_2")}
@@ -2916,6 +3143,7 @@ const DateRange = ({ from, to, onRange }) => (
 // LEDGER DRAWER
 // ══════════════════════════════════════════════════════════════════
 function LedgerModal({ store, onClose }) {
+  const openEntry = useOpenEntry();
   const [data, setData] = useState(null);
   useEffect(() => {
     if (!store) { setData(null); return; }
@@ -2941,7 +3169,8 @@ function LedgerModal({ store, onClose }) {
               ? `${r.from_project_name || r.from_warehouse_name || (r.from_project_id ? t("fuel.project_delete_ho_chuka") : t("fuel.warehouse_set_nahi"))} → ${r.to_project_name || r.to_warehouse_name || "—"}`
               : "";
             return (
-            <Row key={i} cols="110px 90px 1.4fr 90px 90px 100px">
+            <Row key={i} cols="110px 90px 1.4fr 90px 90px 100px"
+              onClick={(r.kind === "purchase" || r.kind === "issue") ? () => openEntry({ kind: r.kind, id: r.id }) : undefined}>
               <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r.at)}</span>
               <span>{r.kind === "purchase" ? <Pill label={t("fuel.aaya")} c={T.grn} bg={T.grnL} />
                 : r.kind === "issue" ? <Pill label={t("fuel.gaya")} c={T.slt} bg={T.sltL} />
@@ -2974,6 +3203,9 @@ function LedgerModal({ store, onClose }) {
 // ══════════════════════════════════════════════════════════════════
 function FuelModule() {
   const [tab, setTab] = useState("overview");
+  // Kisi bhi list ki entry par click → poora byora (FuelEntryDrawer).
+  const [openEntry, setOpenEntry] = useState(null);
+  const closeEntry = useCallback(() => setOpenEntry(null), []);
   const [loading, setLoading] = useState(true);
 
   const [stores, setStores] = useState([]);
@@ -3117,6 +3349,7 @@ function FuelModule() {
   );
 
   return (
+    <OpenEntryCtx.Provider value={setOpenEntry}>
     <div style={{ background: T.bg, height: "100%", display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
       <div style={{ padding: "12px 18px 8px", flexShrink: 0 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
@@ -3176,7 +3409,9 @@ function FuelModule() {
       <RefuelForm open={refuelOpen} onClose={() => setRefuelOpen(false)} onSaved={reloadAll}
         stores={stores} equipment={equipment} vendors={vendors} projects={projects} />
       <LedgerModal store={ledgerStore} onClose={() => setLedgerStore(null)} />
+      <FuelEntryDrawer entry={openEntry} onClose={closeEntry} />
     </div>
+    </OpenEntryCtx.Provider>
   );
 }
 
