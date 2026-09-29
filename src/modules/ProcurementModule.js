@@ -1789,7 +1789,13 @@ function ProcurementModule(){
     ...m,
     id:m.id, mrNum:m.mr_number,
     date:fmtDate(m.created_at),
-    project:m.project_name||"—", site:m.project_name||"—",
+    // Asset ki kharid (Assets → "Kharid ki maang") kisi site ke liye nahi, STORE
+    // ke liye hoti hai — project khaali rehta hai. "—" dikhta to lagta MR adhoori
+    // hai; isliye store ka naam, aur PO me delivery bhi wahi store.
+    project:m.project_name||(m.asset_warehouse_id?t("procurement.asset_for_store",{name:m.asset_warehouse_name||""}):"—"),
+    site:m.project_name||m.asset_warehouse_name||"—",
+    isAsset: !!m.asset_warehouse_id,
+    ...(m.asset_warehouse_id ? { delivery_site: m.asset_warehouse_name || "" } : {}),
     project_id:m.project_id||null,
     item:m.item_name, qty:parseFloat(m.quantity)||0, approvedQty:parseFloat(m.quantity)||0,
     unit:m.unit, requestedBy:m.requested_by||"—",
@@ -2973,7 +2979,11 @@ function ProcurementModule(){
           delivery_site: newPO.deliverySite,
           expected_delivery: validDate(newPO.delivery),
           linked_mr_ids,
-          items: newPO.items.map(it=>({description:it.desc,hsn_code:it.hsn,quantity:it.qty,unit:it.unit,rate:it.rate})),
+          // Har line apni MR ke saath — pehle yahan sirf naam jaata tha aur server
+          // naam milaa kar MR dhoondhta tha; line ka naam badla to jod toot jaata
+          // (asset ki kharid me tab store incharge ko "order ho chuka" dikhta hi
+          // nahi). Edit wala raasta ye pehle se bhejta hai.
+          items: newPO.items.map(it=>({description:it.desc,hsn_code:it.hsn,quantity:it.qty,unit:it.unit,rate:it.rate,linked_mr_id:it.linked_mr_id||null})),
           notes: newPO.notes||"",
           receiving_contacts: newPO.receivingContacts||[],
         });

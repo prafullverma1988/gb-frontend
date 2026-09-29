@@ -58,6 +58,7 @@ const IcTag    = (p) => <Ic {...p} d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L2 12V2h
 const IcChart  = (p) => <Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />;
 const IcRefresh = (p) => <Ic {...p} d="M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15" />;
 const IcHand   = (p) => <Ic {...p} d="M18 11V6a2 2 0 00-4 0v5M14 10V4a2 2 0 00-4 0v6M10 10.5V6a2 2 0 00-4 0v8M18 8a2 2 0 114 0v6a8 8 0 01-8 8h-2a8 8 0 01-8-8v-1a2 2 0 114 0" />;
+const IcCart   = (p) => <Ic {...p} d="M3 3h2l2.4 12.1a2 2 0 002 1.6h7.7a2 2 0 002-1.6L21 7H6M9 21h.01M18 21h.01" />;
 const IcCount  = (p) => <Ic {...p} d="M9 4H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2h-2M9 4a2 2 0 002 2h2a2 2 0 002-2M9 4a2 2 0 012-2h2a2 2 0 012 2M9 14l2 2 4-4" />;
 const IcTool   = (p) => <Ic {...p} d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />;
 const IcRupee  = (p) => <Ic {...p} d="M6 4h11M6 9h11M15.5 4c0 4.2-2.8 5-5.5 5H6l8 10" />;
@@ -1493,9 +1494,14 @@ function ImportModal({ open, onClose, onDone }) {
 // ══════════════════════════════════════════════════════════════════
 // GRN — vendor se naya asset
 // ══════════════════════════════════════════════════════════════════
-const newGrnLine = () => ({ mode: "existing", asset_item_id: "", name: "", spec: "", unit: "Nos", tracking_mode: "bulk", category_id: "", code: "", qty: "", rate: "" });
+const newGrnLine = () => ({ mode: "existing", asset_item_id: "", name: "", spec: "", unit: "Nos", tracking_mode: "bulk", category_id: "", code: "", qty: "", rate: "", po_item_id: "" });
 
-function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
+// preset = kisi PO ka baaki maal ("Receive karo" se aata hai):
+// { po_id, po_number, vendor_name, vendor_party_id, warehouse_id, lines }.
+// Tab store, vendor aur lines pehle se bhari aati hain aur har line apni PO
+// line se judi rehti hai (po_item_id) — isse "kitna aana baaki hai" apne aap
+// ghat-ta hai aur MR "aa gaya" ho jaati hai.
+function GrnForm({ open, meta, pickers, cats, canAll, preset, onClose, onSaved }) {
   const toast = useToast();
   const [f, setF] = useState({});
   const [lines, setLines] = useState([newGrnLine()]);
@@ -1515,9 +1521,30 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
     const def = whOptions.find((w) => w.is_default) || whOptions[0];
     setF({ warehouse_id: def ? String(def.id) : "", date: todayStr(), party_id: "", vendor_name: "", invoice_no: "", invoice_date: "", remarks: "" });
     setLines([newGrnLine()]); setError(""); setVendorMode("party");
+    if (preset) {
+      setF((p) => ({
+        ...p,
+        warehouse_id: preset.warehouse_id ? String(preset.warehouse_id) : p.warehouse_id,
+        party_id: preset.vendor_party_id ? String(preset.vendor_party_id) : "",
+        vendor_name: preset.vendor_name || "",
+        remarks: t("assets.grn_from_order", { no: preset.po_number }),
+      }));
+      if (!preset.vendor_party_id && preset.vendor_name) setVendorMode("text");
+      setLines((preset.lines || []).map((x) => (x.asset_item_id ? {
+        ...newGrnLine(), mode: "existing", asset_item_id: String(x.asset_item_id),
+        qty: String(x.pending_qty), rate: x.rate != null ? String(x.rate) : "", po_item_id: String(x.po_item_id),
+      } : {
+        // PO par asset ki id nahi hai iska matlab register me entry banni baaki
+        // hai — aur wo sirf serialized par hota hai (bulk request bante hi ban
+        // jaata hai). Aadmi yahan badal bhi sakta hai.
+        ...newGrnLine(), mode: "new", name: x.description || "", unit: x.unit || x.item_unit || "Nos",
+        tracking_mode: "serialized", qty: String(x.pending_qty),
+        rate: x.rate != null ? String(x.rate) : "", po_item_id: String(x.po_item_id),
+      })));
+    }
     api.get("/assets/items?tracking=bulk").then((r) => setBulkItems(r && r.success ? r.data || [] : [])).catch(() => setBulkItems([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, meta, canAll]);
+  }, [open, meta, canAll, preset]);
 
   const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const updLine = (i, v) => setLines((p) => p.map((l, j) => (j === i ? v : l)));
@@ -1539,7 +1566,8 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
       if (l.mode === "new" && !l.name.trim()) { setError(t("assets.err_line_name", { n: i + 1 })); return; }
       if (!(qty > 0)) { setError(t("assets.err_line_qty", { n: i + 1 })); return; }
       if (l.mode === "new" && l.tracking_mode === "serialized" && !Number.isInteger(qty)) { setError(t("assets.err_line_serial_int", { n: i + 1 })); return; }
-      const base = { qty, rate: l.rate === "" ? null : Number(l.rate), condition: "good" };
+      const base = { qty, rate: l.rate === "" ? null : Number(l.rate), condition: "good",
+        po_item_id: l.po_item_id ? Number(l.po_item_id) : undefined };
       if (l.mode === "existing") items.push({ ...base, asset_item_id: Number(l.asset_item_id) });
       else items.push({
         ...base, name: l.name.trim(), spec: l.spec.trim() || null, unit: l.unit || "Nos", tracking_mode: l.tracking_mode,
@@ -1548,6 +1576,7 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
     }
     const body = {
       type: "grn", date: f.date || todayStr(), to: { warehouse_id: Number(f.warehouse_id) }, items,
+      po_id: preset ? preset.po_id : null,
       party_id: vendorMode === "party" && f.party_id ? Number(f.party_id) : null,
       vendor_name: vendorName,
       invoice_no: f.invoice_no || null, invoice_date: f.invoice_date || null, remarks: f.remarks || null,
@@ -1562,7 +1591,8 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
   const catOf = (id) => (cats || []).find((c) => String(c.id) === String(id));
 
   return (
-    <Modal open={open} onClose={onClose} width={920} title={t("assets.grn_new")} sub={t("assets.grn_new_sub")}
+    <Modal open={open} onClose={onClose} width={920} title={t("assets.grn_new")}
+      sub={preset ? t("assets.grn_from_order", { no: preset.po_number }) : t("assets.grn_new_sub")}
       footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy || !whOptions.length}>{busy ? t("assets.saving") : t("assets.grn_save")}</Btn></>}>
       {!whOptions.length && <Notice tone="warn">{t("assets.issue_no_warehouse")}</Notice>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
@@ -1649,7 +1679,268 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
   );
 }
 
-function GrnTab({ refreshKey, canCreate, onNew, onOpenVoucher }) {
+// ══════════════════════════════════════════════════════════════════
+// ASSET KI KHARID — store incharge se procurement tak
+//
+// Prafull (29 Sep 2026): store incharge procurement se naya asset maange —
+// register se chun kar ya naya banakar; approval procurement ka; order bhi
+// wahin se; aur phir store incharge ko GRN par "order ho chuka" dikhe, ya
+// seedha receive bhi ho jaye.
+//
+// Screen Assets me hai par kaam Procurement ka hai: ye maang wahi purani
+// Material Request banti hai (bas us par "kaunsa asset" aur "kis store ke
+// liye" likha hota hai). Isliye yahan koi approve/order ka button nahi —
+// approval, PO, RFQ, receiving contact, billing sab Procurement me hi.
+// ══════════════════════════════════════════════════════════════════
+const newBuyLine = () => ({ mode: "existing", asset_item_id: "", name: "", spec: "", unit: "Nos", tracking_mode: "bulk", category_id: "", qty: "", rate: "" });
+
+// MR ki haalat ek shabd me — wahi seedhi (mr_status + mat_status) jo
+// Procurement dikhata hai.
+const buyStage = (r) => {
+  if (r.mr_status === "Rejected") return { l: t("assets.buy_stage_rejected"), c: T.red, bg: T.redL };
+  if (r.mr_status === "Closed") return { l: t("assets.buy_stage_closed"), c: T.slt, bg: T.sltL };
+  if (r.mat_status === "Received") return { l: t("assets.buy_stage_received"), c: T.grn, bg: T.grnL };
+  if (r.mat_status === "PartialReceived") return { l: t("assets.buy_stage_partial"), c: T.amb, bg: T.ambL };
+  if (r.mat_status === "Ordered" || r.linked_po_id) return { l: t("assets.buy_stage_ordered"), c: T.ind, bg: T.indL };
+  if (r.mr_status === "Approved") return { l: t("assets.buy_stage_approved"), c: T.blu, bg: T.bluL };
+  return { l: t("assets.buy_stage_pending"), c: T.amb, bg: T.ambL };
+};
+
+function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
+  const toast = useToast();
+  const [f, setF] = useState({});
+  const [lines, setLines] = useState([newBuyLine()]);
+  const [items, setItems] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const allWh = (meta && meta.warehouses) || [];
+  const myWhIds = (meta && meta.my_warehouse_ids) || [];
+  const whOptions = canAll ? allWh : allWh.filter((w) => myWhIds.includes(w.id));
+
+  useEffect(() => {
+    if (!open) return;
+    const def = whOptions.find((w) => w.is_default) || whOptions[0];
+    setF({ warehouse_id: def ? String(def.id) : "", project_id: "", required_date: "", notes: "" });
+    setLines([newBuyLine()]); setError("");
+    api.get("/assets/items").then((r) => setItems(r && r.success ? r.data || [] : [])).catch(() => setItems([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, meta, canAll]);
+
+  const upd = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const updLine = (i, v) => setLines((p) => p.map((l, j) => (j === i ? v : l)));
+  const total = lines.reduce((s, l) => s + N(l.qty) * N(l.rate), 0);
+  const catOf = (id) => (cats || []).find((c) => String(c.id) === String(id));
+
+  const save = async () => {
+    setError("");
+    if (!f.warehouse_id) { setError(t("assets.err_pr_warehouse")); return; }
+    const body = [];
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      const qty = Number(l.qty);
+      if (l.mode === "existing" && !l.asset_item_id) { setError(t("assets.err_line_item", { n: i + 1 })); return; }
+      if (l.mode === "new" && !String(l.name).trim()) { setError(t("assets.err_line_name", { n: i + 1 })); return; }
+      if (!(qty > 0)) { setError(t("assets.err_line_qty", { n: i + 1 })); return; }
+      body.push(l.mode === "existing"
+        ? { asset_item_id: Number(l.asset_item_id), qty, rate: l.rate === "" ? null : Number(l.rate) }
+        : { name: String(l.name).trim(), spec: String(l.spec || "").trim() || null, unit: l.unit || "Nos",
+            tracking_mode: l.tracking_mode, category_id: l.category_id || null, qty, rate: l.rate === "" ? null : Number(l.rate) });
+    }
+    setBusy(true);
+    const r = await api.post("/assets/purchase-requests", {
+      warehouse_id: Number(f.warehouse_id), project_id: f.project_id ? Number(f.project_id) : null,
+      required_date: f.required_date || null, notes: f.notes || null, items: body,
+    });
+    setBusy(false);
+    if (r && r.success) { toast.success(r.message || t("assets.buy_sent_ok")); onSaved(); onClose(); }
+    else setError((r && r.message) || t("assets.save_failed"));
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} width={920} title={t("assets.buy_new")} sub={t("assets.buy_new_sub")}
+      footer={<><Btn ghost onClick={onClose}>{t("assets.cancel")}</Btn><Btn onClick={save} disabled={busy || !whOptions.length} icon={IcCart}>{busy ? t("assets.saving") : t("assets.buy_save")}</Btn></>}>
+      {!whOptions.length && <Notice tone="warn">{t("assets.issue_no_warehouse")}</Notice>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
+        <Field label={t("assets.buy_for_store")}>
+          <select value={f.warehouse_id || ""} onChange={(e) => upd("warehouse_id", e.target.value)} style={inp}>
+            <option value="">{t("assets.select")}</option>
+            {whOptions.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        </Field>
+        <Field label={t("assets.buy_for_project")} hint={t("assets.buy_project_hint")}>
+          <SearchSelect value={f.project_id || ""} onChange={(k) => upd("project_id", k)} accent={T.ind}
+            options={[{ id: "", name: t("assets.buy_no_project") }, ...(pickers.projects || []).map((p) => ({ id: p.id, name: p.name }))]}
+            placeholder={t("assets.buy_no_project")} />
+        </Field>
+        <Field label={t("assets.buy_needed_by")}><input type="date" value={f.required_date || ""} onChange={(e) => upd("required_date", e.target.value)} style={inp} /></Field>
+        <Field label={t("assets.remarks")}><input value={f.notes || ""} onChange={(e) => upd("notes", e.target.value)} style={inp} /></Field>
+      </div>
+
+      <Panel title={t("assets.buy_what")} action={<Btn size="sm" ghost icon={IcAdd} onClick={() => setLines((p) => [...p, newBuyLine()])}>{t("assets.add_line")}</Btn>}>
+        {lines.map((l, i) => (
+          <div key={i} style={{ padding: "10px 14px", borderBottom: `1px solid ${T.b1}` }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.t3 }}>#{i + 1}</span>
+              <Seg value={l.mode} onChange={(m) => updLine(i, { ...l, mode: m })}
+                options={[{ k: "existing", l: t("assets.buy_from_register") }, { k: "new", l: t("assets.buy_new_item") }]} />
+              <span style={{ flex: 1 }} />
+              {lines.length > 1 && <Btn size="sm" ghost onClick={() => setLines((p) => p.filter((_, j) => j !== i))}><IcTrash size={12} color={T.red} /></Btn>}
+            </div>
+            {l.mode === "existing" ? (
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 90px 110px 110px", gap: 8 }}>
+                <Field label={t("assets.item")}>
+                  <SearchSelect value={l.asset_item_id || ""} onChange={(k) => updLine(i, { ...l, asset_item_id: k })} accent={T.ind}
+                    options={(items || []).map((b) => ({ id: b.id, name: lineLabel(b) }))} placeholder={t("assets.select_item")} />
+                </Field>
+                <Field label={t("assets.qty")}><input value={l.qty} inputMode="decimal" onChange={(e) => updLine(i, { ...l, qty: e.target.value.replace(/[^0-9.]/g, "") })} style={inp} /></Field>
+                <Field label={t("assets.buy_rate")}><input value={l.rate} inputMode="decimal" onChange={(e) => updLine(i, { ...l, rate: e.target.value.replace(/[^0-9.]/g, "") })} style={inp} placeholder="₹" /></Field>
+                <Field label={t("assets.amount")}><input value={rupee(N(l.qty) * N(l.rate))} readOnly style={{ ...inp, background: T.surfaceB, color: T.t3 }} /></Field>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 80px 110px 1fr 90px 110px", gap: 8 }}>
+                <Field label={t("assets.item_name")}><input value={l.name} onChange={(e) => updLine(i, { ...l, name: e.target.value })} style={inp} placeholder={t("assets.item_name_ph")} /></Field>
+                <Field label={t("assets.spec")}><input value={l.spec} onChange={(e) => updLine(i, { ...l, spec: e.target.value })} style={inp} placeholder={t("assets.spec_ph")} /></Field>
+                <Field label={t("assets.unit")}><input value={l.unit} onChange={(e) => updLine(i, { ...l, unit: e.target.value })} style={inp} list="assets-units-buy" /></Field>
+                <Field label={t("assets.tracking")}>
+                  <select value={l.tracking_mode} onChange={(e) => updLine(i, { ...l, tracking_mode: e.target.value })} style={inp}>
+                    <option value="bulk">{t("assets.tracking_bulk")}</option>
+                    <option value="serialized">{t("assets.tracking_serialized")}</option>
+                  </select>
+                </Field>
+                <Field label={t("assets.category")}>
+                  <select value={l.category_id} style={inp}
+                    onChange={(e) => { const c = catOf(e.target.value); updLine(i, { ...l, category_id: e.target.value, tracking_mode: c ? c.tracking_mode : l.tracking_mode, unit: c && c.default_unit ? c.default_unit : l.unit }); }}>
+                    <option value="">—</option>
+                    {(cats || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </Field>
+                <Field label={t("assets.qty")}><input value={l.qty} inputMode="decimal" onChange={(e) => updLine(i, { ...l, qty: e.target.value.replace(/[^0-9.]/g, "") })} style={inp} /></Field>
+                <Field label={t("assets.buy_rate")}><input value={l.rate} inputMode="decimal" onChange={(e) => updLine(i, { ...l, rate: e.target.value.replace(/[^0-9.]/g, "") })} style={inp} placeholder="₹" /></Field>
+              </div>
+            )}
+          </div>
+        ))}
+        <div style={{ padding: "10px 14px", display: "flex", justifyContent: "flex-end", gap: 12, fontSize: 12.5 }}>
+          <span style={{ color: T.t3 }}>{t("assets.buy_approx_total")}</span><b style={{ color: T.t1 }}>{rupee(total)}</b>
+        </div>
+      </Panel>
+      <Notice>{t("assets.buy_note")}</Notice>
+      <ErrBox>{error}</ErrBox>
+      <datalist id="assets-units-buy">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
+    </Modal>
+  );
+}
+
+// "Order ho chuka — aana baaki" + "Meri kharid ki maang". Dono GRN wale tab me
+// hain kyunki kaam wahi hai: maal aane ka intezaar aur aane par receive.
+function PurchasePanels({ refreshKey, canCreate, onNewBuy, onReceive }) {
+  const toast = useToast();
+  const [ordered, setOrdered] = useState(null);
+  const [mine, setMine] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    api.get("/assets/purchase-requests/ordered?mine=1").then((r) => setOrdered(r && r.success ? r.data || [] : [])).catch(() => setOrdered([]));
+    api.get("/assets/purchase-requests?mine=1&limit=100").then((r) => setMine(r && r.success ? r.data || [] : [])).catch(() => setMine([]));
+  }, []);
+  useEffect(() => { load(); }, [load, refreshKey]);
+
+  const close = async (r) => {
+    const reason = window.prompt(t("assets.buy_close_reason"), "");
+    if (reason == null) return;
+    if (!String(reason).trim()) { toast.error(t("assets.err_pr_reason")); return; }
+    setBusy(true);
+    const x = await api.post(`/assets/purchase-requests/${r.id}/cancel`, { reason: String(reason).trim() });
+    setBusy(false);
+    if (x && x.success) { toast.success(x.message || t("assets.buy_closed_ok")); load(); }
+    else toast.error((x && x.message) || t("assets.action_failed"));
+  };
+
+  // Ek PO ka saara baaki maal ek hi GRN me — vendor aur challan wahi hote hain.
+  const byPo = useMemo(() => {
+    const m = new Map();
+    for (const x of (ordered || [])) {
+      if (!m.has(x.po_id)) m.set(x.po_id, { po_id: x.po_id, po_number: x.po_number, vendor_name: x.vendor_name, vendor_party_id: x.vendor_party_id, expected_delivery: x.expected_delivery, warehouse_id: x.asset_warehouse_id, warehouse_name: x.warehouse_name, lines: [] });
+      m.get(x.po_id).lines.push(x);
+    }
+    return [...m.values()];
+  }, [ordered]);
+
+  const oCols = "120px 1.6fr 1fr 90px 90px 110px 96px";
+  const mCols = "110px 1.6fr 1fr 90px 110px 110px";
+  return (
+    <>
+      <Panel title={t("assets.buy_ordered_title")}
+        action={canCreate && <Btn size="sm" icon={IcCart} onClick={onNewBuy}>{t("assets.buy_new")}</Btn>}>
+        {ordered == null && <Spinner />}
+        {ordered && ordered.length === 0 && <Empty>{t("assets.buy_ordered_empty")}<br /><span style={{ fontSize: 11.5 }}>{t("assets.buy_ordered_hint")}</span></Empty>}
+        {ordered && ordered.length > 0 && (
+          <Scroll minWidth={900}>
+            <Row head cols={oCols}>
+              <span>{t("assets.buy_po")}</span><span>{t("assets.item")}</span><span>{t("assets.vendor")}</span>
+              <span>{t("assets.buy_ordered_qty")}</span><span>{t("assets.buy_pending")}</span><span>{t("assets.buy_expected")}</span><span></span>
+            </Row>
+            {byPo.map((po) => po.lines.map((x, i) => (
+              <Row key={x.po_item_id} cols={oCols}>
+                <span style={{ fontWeight: 600, color: T.t1 }}>{i === 0 ? po.po_number : ""}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.asset_name ? lineLabel({ code: x.asset_code, name: x.asset_name, spec: x.asset_spec }) : x.description}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4 }}>{[x.warehouse_name, x.mr_number].filter(Boolean).join(" · ")}</div>
+                </div>
+                <span style={{ fontSize: 11.5 }}>{i === 0 ? (po.vendor_name || "—") : ""}</span>
+                <span>{fmtN(x.quantity)} <span style={{ fontSize: 10.5, color: T.t4 }}>{x.unit || ""}</span></span>
+                <span style={{ fontWeight: 600, color: T.amb }}>{fmtN(x.pending_qty)}</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>{i === 0 ? (po.expected_delivery ? fmtD(po.expected_delivery) : "—") : ""}</span>
+                <span>{i === 0 && <Btn size="sm" onClick={() => onReceive(po)}>{t("assets.buy_receive")}</Btn>}</span>
+              </Row>
+            )))}
+          </Scroll>
+        )}
+      </Panel>
+
+      <div style={{ height: 14 }} />
+      <Panel title={t("assets.buy_my_title")}>
+        {mine == null && <Spinner />}
+        {mine && mine.length === 0 && <Empty>{t("assets.buy_my_empty")}</Empty>}
+        {mine && mine.length > 0 && (
+          <Scroll minWidth={840}>
+            <Row head cols={mCols}>
+              <span>{t("assets.req_no")}</span><span>{t("assets.item")}</span><span>{t("assets.buy_for_store")}</span>
+              <span>{t("assets.qty")}</span><span>{t("assets.buy_stage")}</span><span></span>
+            </Row>
+            {mine.map((r) => {
+              const st = buyStage(r);
+              return (
+                <Row key={r.id} cols={mCols}>
+                  <div>
+                    <div style={{ fontWeight: 600, color: T.t1 }}>{r.mr_number}</div>
+                    <div style={{ fontSize: 10.5, color: T.t4 }}>{fmtD(r.created_at)}</div>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.item_name}</div>
+                    <div style={{ fontSize: 10.5, color: T.t4 }}>{[r.po_number, r.po_vendor].filter(Boolean).join(" · ") || (r.rejected_reason || r.closed_reason || "")}</div>
+                  </div>
+                  <span style={{ fontSize: 11.5 }}>{r.warehouse_name || "—"}</span>
+                  <span>{fmtN(r.quantity)} <span style={{ fontSize: 10.5, color: T.t4 }}>{r.unit || ""}</span>
+                    {N(r.received_qty) > 0 && <div style={{ fontSize: 10.5, color: T.grn }}>{t("assets.buy_came_n", { n: fmtN(r.received_qty) })}</div>}
+                  </span>
+                  <span><Pill label={st.l} c={st.c} bg={st.bg} /></span>
+                  <span>{["Pending", "Requested"].includes(r.mr_status) && (
+                    <Btn size="sm" ghost disabled={busy} style={{ color: T.red }} onClick={() => close(r)}>{t("assets.buy_close")}</Btn>
+                  )}</span>
+                </Row>
+              );
+            })}
+          </Scroll>
+        )}
+      </Panel>
+      <div style={{ height: 14 }} />
+    </>
+  );
+}
+
+function GrnTab({ refreshKey, canCreate, onNew, onNewBuy, onReceive, onOpenVoucher }) {
   const [rows, setRows] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -1660,6 +1951,10 @@ function GrnTab({ refreshKey, canCreate, onNew, onOpenVoucher }) {
 
   const cols = "120px 80px 1.4fr 1fr 1fr 80px 1fr";
   return (
+    <>
+    {/* Kharid ka raasta GRN ke saath hi — dono ka kaam ek hai: maal aane ka
+        intezaar, aur aane par uthana. */}
+    <PurchasePanels refreshKey={refreshKey} canCreate={canCreate} onNewBuy={onNewBuy} onReceive={onReceive} />
     <Panel title={t("assets.grn_title")} action={canCreate && <Btn size="sm" icon={IcAdd} onClick={onNew}>{t("assets.grn_new")}</Btn>}>
       {rows == null && <Spinner />}
       {rows && rows.length === 0 && <Empty>{t("assets.grn_empty")}<br /><span style={{ fontSize: 11.5 }}>{t("assets.grn_empty_hint")}</span></Empty>}
@@ -1680,6 +1975,7 @@ function GrnTab({ refreshKey, canCreate, onNew, onOpenVoucher }) {
         </Scroll>
       )}
     </Panel>
+    </>
   );
 }
 
@@ -3659,6 +3955,9 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
   const [catsOpen, setCatsOpen] = useState(false);
   const [inchOpen, setInchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  // Kharid: nayi maang, aur kisi order ka baaki maal receive karna.
+  const [buyOpen, setBuyOpen] = useState(false);
+  const [grnPreset, setGrnPreset] = useState(null);
   const [requestId, setRequestId] = useState(null);
   const [newRequest, setNewRequest] = useState(false);
   // Maang se "Issue karo" — form usi maang ke saath khulta hai.
@@ -3776,7 +4075,12 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
           <RequestsTab refreshKey={refreshKey} meta={meta} pickers={pickers}
             onNew={() => setNewRequest(true)} onOpen={setRequestId} />
         )}
-        {tab === "grn" && <GrnTab refreshKey={refreshKey} canCreate={canCreate} onNew={() => setGrnOpen(true)} onOpenVoucher={setVoucherId} />}
+        {tab === "grn" && (
+          <GrnTab refreshKey={refreshKey} canCreate={canCreate} onOpenVoucher={setVoucherId}
+            onNew={() => { setGrnPreset(null); setGrnOpen(true); }}
+            onNewBuy={() => setBuyOpen(true)}
+            onReceive={(po) => { setGrnPreset(po); setGrnOpen(true); }} />
+        )}
         {tab === "movements" && (
           <MovementsTab refreshKey={refreshKey} meta={meta} pickers={pickers} canCreate={canCreate}
             onIssue={() => setIssueOpen(true)} onTransfer={() => setMoveKind("transfer")} onReturn={() => setMoveKind("return")}
@@ -3814,7 +4118,10 @@ function AssetsModule({ deepLink, onDeepLinkDone }) {
         onClose={() => setNewRequest(false)} onCreated={(d) => { refresh(); if (d && d.id) setRequestId(d.id); }} />
       {itemFull && <ItemDrawer item={itemFull} cats={cats} canEdit={canEdit} onClose={() => setOpenItem(null)} onChanged={refresh} onOpenVoucher={setVoucherId} />}
 
-      <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} canAll={isAdmin || canApprove} onClose={() => setGrnOpen(false)} onSaved={refresh} />
+      <GrnForm open={grnOpen} meta={meta} pickers={pickers} cats={cats} canAll={isAdmin || canApprove} preset={grnPreset}
+        onClose={() => { setGrnOpen(false); setGrnPreset(null); }} onSaved={refresh} />
+      <NewPurchaseModal open={buyOpen} meta={meta} pickers={pickers} cats={cats} canAll={isAdmin || canApprove}
+        onClose={() => setBuyOpen(false)} onSaved={refresh} />
       <IssueForm open={issueOpen} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} preset={issuePreset}
         onClose={() => { setIssueOpen(false); setIssuePreset(null); }} onSaved={refresh} />
       <MoveForm open={!!moveKind} kind={moveKind || "transfer"} meta={meta} pickers={pickers} me={me} canAll={isAdmin || canApprove} onClose={() => setMoveKind(null)} onSaved={refresh} />
