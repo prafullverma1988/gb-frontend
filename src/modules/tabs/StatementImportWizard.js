@@ -602,6 +602,8 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null);
+  // null = list; { onlyForce } = save se pehle ki preview khuli hai
+  const [preview, setPreview] = useState(null);
 
   useEffect(() => {
     let dead = false;
@@ -654,10 +656,24 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
   const upd = useCallback((i, patch) => setDraft((d) => d.map((x, j) => (j === i ? { ...x, ...patch } : x))), []);
   const pending = draft.filter((x) => x.include && x.outcome !== "created" && x.outcome !== "already_imported");
 
+  const pickFor = (onlyForce) => (onlyForce
+    ? draft.filter((x) => x.outcome === "duplicate_suspect" && x.force)
+    : pending.filter((x) => x.outcome !== "duplicate_suspect"));
+  // Preview me party / khaate ka NAAM — wahi list jo picker dikhata hai, plus
+  // har line ke apne Andaze (jinka naam baseOpts me na ho).
+  const nameOf = useCallback((k) => {
+    if (!k) return "";
+    const o = baseOpts.find((x) => x.key === k);
+    if (o) return o.label;
+    for (const r of draft) {
+      const sg = (r.suggestions || []).find((x) => pickKey(x) === k);
+      if (sg) return sg.party_name;
+    }
+    return k;
+  }, [baseOpts, draft]);
+
   const create = async (onlyForce) => {
-    const pick = onlyForce
-      ? draft.filter((x) => x.outcome === "duplicate_suspect" && x.force)
-      : pending.filter((x) => x.outcome !== "duplicate_suspect");
+    const pick = pickFor(onlyForce);
     if (!pick.length) return;
     setBusy(true); setErr("");
     try {
@@ -684,6 +700,7 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
           existing: o.existing_description || null, other: o.other_account || null };
       }));
       setDone(r.data.summary);
+      setPreview(null);
     } catch (e) {
       setErr(e.message || t("stmt.failed"));
     } finally { setBusy(false); }
@@ -695,20 +712,31 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
   const toCreate = pending.filter((x) => x.outcome !== "duplicate_suspect").length;
   const toForce = draft.filter((x) => x.outcome === "duplicate_suspect" && x.force).length;
 
+  if (preview) {
+    return (
+      <div>
+        {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL }}>{err}</div>}
+        <PreviewCreate rows={pickFor(preview.onlyForce)} nameOf={nameOf} force={preview.onlyForce} busy={busy}
+          onBack={() => { setPreview(null); setErr(""); }}
+          onConfirm={() => create(preview.onlyForce)} />
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* Button upar chipka rahe — 500 line neeche jaakar bhi dikhe */}
       <div style={{ position: "sticky", top: 0, zIndex: 2, padding: "9px 13px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, color: T.t2, flex: 1, minWidth: 200 }}>{t("stmt.review_help")}</span>
         {toForce > 0 && (
-          <button onClick={() => create(true)} disabled={busy}
+          <button onClick={() => { setErr(""); setPreview({ onlyForce: true }); }} disabled={busy}
             style={{ fontSize: 12, fontWeight: 600, padding: "6px 13px", borderRadius: 6, cursor: "pointer", border: `1px solid ${T.amb}`, background: T.ambL, color: T.amb }}>
             {t("stmt.force_create_n", { n: toForce })}
           </button>
         )}
-        <button onClick={() => create(false)} disabled={busy || !toCreate}
+        <button onClick={() => { setErr(""); setPreview({ onlyForce: false }); }} disabled={busy || !toCreate}
           style={{ fontSize: 12.5, fontWeight: 600, padding: "6px 15px", borderRadius: 6, cursor: busy || !toCreate ? "default" : "pointer", border: "none", background: busy || !toCreate ? T.b2 : T.blu, color: "#fff" }}>
-          {busy ? t("stmt.creating") : t("stmt.create_n", { n: toCreate })}
+          {busy ? t("stmt.creating") : t("stmt.preview_btn", { n: toCreate })}
         </button>
       </div>
       {err && <div style={{ padding: "8px 13px", fontSize: 12, color: T.red, background: T.redL }}>{err}</div>}
@@ -721,6 +749,120 @@ function ReviewCreate({ accountId, rows, matched, accounts, tol }) {
     </div>
   );
 }
+
+// ── Save se pehle ek nazar ──────────────────────────────────────────────
+// Prafull: "sabhi party select and notes dalne ke bad ek preview screen ana
+// chahiye sab sahi dala hai ki nahi preview ke bad jab user ok save kare tab
+// fr payment data party and account wise db me save ho". Isliye "entry banao"
+// ab seedha save nahi karta — pehle ye dikhata hai ki KIS party ke khaate me
+// kitna jayega, kaunsi line doosre khaate me transfer banegi, aur kaunsi bina
+// party ke (sirf bank khaate me) — phir hi save.
+function PreviewCreate({ rows, nameOf, force, busy, onBack, onConfirm }) {
+  const tot = { in: 0, out: 0 };
+  const grp = { p: {}, a: {} };
+  const none = { n: 0, in: 0, out: 0 };
+  for (const r of rows) {
+    const amt = Number(r.amount) || 0;
+    tot[r.dir === "in" ? "in" : "out"] += amt;
+    const k = r.pick || "";
+    const kind = k.startsWith("p:") ? "p" : k.startsWith("a:") ? "a" : null;
+    const bucket = kind ? (grp[kind][k] = grp[kind][k] || { key: k, name: nameOf(k), n: 0, in: 0, out: 0 }) : none;
+    bucket.n += 1;
+    bucket[r.dir === "in" ? "in" : "out"] += amt;
+  }
+  const byName = (o) => Object.values(o).sort((x, y) => (y.in + y.out) - (x.in + x.out));
+  const parties = byName(grp.p);
+  const transfers = byName(grp.a);
+
+  const th = { fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: 0.4, padding: "6px 13px", textAlign: "left" };
+  const td = { fontSize: 12.5, color: T.t1, padding: "6px 13px", borderTop: `1px solid ${T.b1}` };
+  const num = { ...td, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
+  const Group = ({ title, list }) => !list.length ? null : (
+    <div style={{ marginBottom: 12, border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead style={{ background: T.surfaceB }}>
+          <tr>
+            <th style={th}>{title}</th>
+            <th style={{ ...th, textAlign: "right" }}>{t("stmt.pv_col_count")}</th>
+            <th style={{ ...th, textAlign: "right" }}>{t("stmt.pv_col_in")}</th>
+            <th style={{ ...th, textAlign: "right" }}>{t("stmt.pv_col_out")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((g) => (
+            <tr key={g.key}>
+              <td style={{ ...td, fontWeight: 600 }}>{g.name}</td>
+              <td style={num}>{g.n}</td>
+              <td style={{ ...num, color: g.in ? T.grn : T.t4 }}>{g.in ? inr(g.in) : "—"}</td>
+              <td style={{ ...num, color: g.out ? T.red : T.t4 }}>{g.out ? inr(g.out) : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ position: "sticky", top: 0, zIndex: 2, padding: "11px 13px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}` }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>{t("stmt.preview_title")}</div>
+        <div style={{ fontSize: 12, color: T.t3, marginTop: 2 }}>
+          {t("stmt.preview_sub", { n: rows.length, in: inr(tot.in), out: inr(tot.out) })}
+        </div>
+        {force && <div style={{ fontSize: 11.5, color: T.amb, marginTop: 4 }}>{t("stmt.pv_force_note")}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
+          <button onClick={onBack} disabled={busy}
+            style={{ fontSize: 12.5, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: busy ? "default" : "pointer", border: `1px solid ${T.b2}`, background: T.surface, color: T.t2 }}>
+            {t("stmt.pv_back")}
+          </button>
+          <button onClick={onConfirm} disabled={busy || !rows.length}
+            style={{ fontSize: 12.5, fontWeight: 700, padding: "6px 16px", borderRadius: 6, cursor: busy ? "default" : "pointer", border: "none", background: busy ? T.b2 : T.grn, color: "#fff" }}>
+            {busy ? t("stmt.creating") : t("stmt.pv_confirm", { n: rows.length })}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ padding: "12px 13px" }}>
+        <Group title={t("stmt.pv_party")} list={parties} />
+        <Group title={t("stmt.pv_transfer")} list={transfers} />
+        {none.n > 0 && (
+          <div style={{ marginBottom: 12, padding: "9px 12px", borderRadius: 8, background: T.ambL, border: `1px solid ${T.amb}55`, fontSize: 12, color: T.t2, lineHeight: 1.5 }}>
+            <b style={{ color: T.amb }}>{t("stmt.pv_noparty")}: {none.n}</b>
+            {" · "}{none.in ? `+${inr(none.in)} ` : ""}{none.out ? `−${inr(none.out)}` : ""}
+            <div style={{ marginTop: 3 }}>{t("stmt.pv_noparty_warn", { n: none.n })}</div>
+          </div>
+        )}
+
+        <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: 0.4, margin: "4px 0 6px" }}>
+          {t("stmt.pv_all_lines")}
+        </div>
+        <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
+          {rows.map((r, i) => {
+            const k = r.pick || "";
+            return (
+              <div key={i} style={{ padding: "7px 12px", borderTop: i ? `1px solid ${T.b1}` : "none" }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11.5, color: T.t3, width: 62, flexShrink: 0 }}>{dmy(r.date)}</span>
+                  <span style={{ flex: 1, minWidth: 140, fontSize: 12, color: T.t2, wordBreak: "break-word" }}>{r.description || "—"}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", color: r.dir === "in" ? T.grn : T.red }}>
+                    {r.dir === "in" ? "+" : "−"}{inr(r.amount)}
+                  </span>
+                </div>
+                <div style={{ paddingLeft: 72, marginTop: 2, fontSize: 11.5, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {k
+                    ? <span style={{ color: T.blu, fontWeight: 600 }}>→ {nameOf(k)}{k.startsWith("a:") ? ` · ${t("stmt.sub_transfer")}` : ""}</span>
+                    : <span style={{ color: T.amb, fontWeight: 600 }}>→ {t("stmt.pv_noparty")}</span>}
+                  {r.note && r.note.trim() && <span style={{ color: T.t3 }}>“{r.note.trim()}”</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // Ek line — memo, taaki ek line ka remark likhte waqt baaki 499 dobara na banein.
 const ReviewRow = React.memo(function ReviewRow({ r, i, baseOpts, upd }) {

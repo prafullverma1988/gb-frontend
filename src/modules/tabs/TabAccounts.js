@@ -17,7 +17,7 @@
 // comment dekho). Aadha-chhana running balance ek galat number hai jo sahi
 // lagta hai, aur ye screen galat number pakadne ke liye hi bani hai.
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import api from "../../config/api";
+import api, { getUser } from "../../config/api";
 import { T, fmtN } from "../shared/tokens";
 import { Panel, PHead, Pill } from "../shared/ui";
 import StatementImportWizard from "./StatementImportWizard";
@@ -135,49 +135,225 @@ function BalanceChart({ months, accounts, selected }) {
 // button hai: dabaao aur wahi rows neeche ledger me khul jaati hain. "16
 // duplicate hain" padh kar unhe khud dhoondhna hi wo kaam tha jo kabhi nahi
 // hota — number bata dena kaafi nahi, rows saamne aani chahiye.
-function HealthPanel({ health, onShow, onPickAccount }) {
+// Insight type → uska title key (log me bhi yahi naam dikhta hai)
+const H_TITLE = {
+  one_sided: "acctledger.h_one_sided", negative: "acctledger.h_negative",
+  unbacked: "acctledger.h_unbacked", duplicates: "acctledger.h_dups",
+  zero_opening: "acctledger.h_zero_opening",
+};
+const whenOf = (d) => (d ? dmy(String(d).slice(0, 10)) : "");
+
+// ── Ek insight ki review — accountant "sahi hai" bhejta hai, admin yahin
+// approve / wapas karta hai. Approval drawer me JAAN-BOOJH KAR nahi (Prafull:
+// "approve option khata book ke andar hi rahe"). Server par role + key dono
+// dobara jaanche jaate hain — ye sirf dikhane ka faisla hai.
+function ReviewBox({ finding, canReview, canDecide, onDone }) {
+  const [mode, setMode] = useState(null);      // null | "submit" | "decide"
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const r = finding && finding.review;
+  const status = r ? r.status : null;
+
+  const send = async (path, body) => {
+    setBusy(true); setErr("");
+    try {
+      const res = await api.post(path, body);
+      if (!res || !res.success) throw new Error((res && res.message) || t("acctledger.rv_failed"));
+      setMode(null); setNote("");
+      onDone && onDone();
+    } catch (e) {
+      setErr(e.message || t("acctledger.rv_failed"));
+    } finally { setBusy(false); }
+  };
+
+  const chip = (c, bg, txt) => (
+    <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: bg, color: c, whiteSpace: "nowrap" }}>{txt}</span>
+  );
+  const btn = (kind) => ({
+    fontSize: 11.5, fontWeight: 600, padding: "5px 11px", borderRadius: 6, cursor: busy ? "default" : "pointer", whiteSpace: "nowrap",
+    border: kind === "primary" ? "none" : `1px solid ${kind === "danger" ? T.red : T.b2}`,
+    background: kind === "primary" ? T.blu : kind === "danger" ? T.redL : T.surface,
+    color: kind === "primary" ? "#fff" : kind === "danger" ? T.red : T.t2,
+    opacity: busy ? 0.6 : 1,
+  });
+  const noteInput = (ph) => (
+    <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} rows={2}
+      placeholder={ph} aria-label={ph}
+      style={{ width: "100%", boxSizing: "border-box", fontSize: 12, padding: "7px 9px", borderRadius: 6, border: `1px solid ${T.b1}`, fontFamily: "inherit", resize: "vertical", color: T.t1, background: T.surface }} />
+  );
+
+  if (!finding) return null;
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      {/* Pichhli review ki halat */}
+      {status === "submitted" && (
+        <div style={{ display: "flex", gap: 7, alignItems: "baseline", flexWrap: "wrap", fontSize: 11.5, color: T.t3 }}>
+          {chip(T.amb, T.ambL, t("acctledger.rv_pending"))}
+          <span><b style={{ color: T.t2 }}>{r.reviewed_by_name || "—"}</b> · {whenOf(r.reviewed_at)} — {r.review_note}</span>
+        </div>
+      )}
+      {status === "rejected" && (
+        <div style={{ display: "flex", gap: 7, alignItems: "baseline", flexWrap: "wrap", fontSize: 11.5, color: T.t3 }}>
+          {chip(T.red, T.redL, t("acctledger.rv_sent_back"))}
+          <span><b style={{ color: T.t2 }}>{r.decided_by_name || "—"}</b> · {whenOf(r.decided_at)} — {r.decision_note}</span>
+        </div>
+      )}
+
+      {/* Accountant: sahi hai → bhejo (khuli ya wapas aayi hui par) */}
+      {canReview && status !== "submitted" && mode !== "submit" && (
+        <button onClick={() => { setMode("submit"); setNote(""); setErr(""); }} style={{ ...btn(), marginTop: status ? 7 : 0 }}>
+          {t("acctledger.rv_mark_ok")}
+        </button>
+      )}
+      {mode === "submit" && (
+        <div style={{ marginTop: 7, display: "flex", flexDirection: "column", gap: 6 }}>
+          {noteInput(t("acctledger.rv_note_ph"))}
+          <div style={{ display: "flex", gap: 6 }}>
+            <button disabled={busy || note.trim().length < 3} style={btn("primary")}
+              onClick={() => send("/finance/accounts/health/reviews", { finding_key: finding.key, note: note.trim() })}>
+              {busy ? "…" : t("acctledger.rv_send")}
+            </button>
+            <button disabled={busy} style={btn()} onClick={() => setMode(null)}>{t("acctledger.rv_cancel")}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Admin: yahin approve / wapas bhejo */}
+      {canDecide && status === "submitted" && mode !== "decide" && (
+        <button onClick={() => { setMode("decide"); setNote(""); setErr(""); }} style={{ ...btn("primary"), marginTop: 7 }}>
+          {t("acctledger.rv_decide")}
+        </button>
+      )}
+      {mode === "decide" && (
+        <div style={{ marginTop: 7, display: "flex", flexDirection: "column", gap: 6 }}>
+          {noteInput(t("acctledger.rv_decision_ph"))}
+          <div style={{ display: "flex", gap: 6 }}>
+            <button disabled={busy} style={btn("primary")}
+              onClick={() => send(`/finance/accounts/health/reviews/${r.id}/decide`, { decision: "approve", note: note.trim() || null })}>
+              {t("acctledger.rv_approve")}
+            </button>
+            <button disabled={busy || !note.trim()} style={btn("danger")} title={!note.trim() ? t("acctledger.rv_reject_needs_note") : ""}
+              onClick={() => send(`/finance/accounts/health/reviews/${r.id}/decide`, { decision: "reject", note: note.trim() })}>
+              {t("acctledger.rv_reject")}
+            </button>
+            <button disabled={busy} style={btn()} onClick={() => setMode(null)}>{t("acctledger.rv_cancel")}</button>
+          </div>
+        </div>
+      )}
+      {err && <div style={{ marginTop: 5, fontSize: 11.5, color: T.red }}>{err}</div>}
+    </div>
+  );
+}
+
+// ── Review log — band hui insights bhi, hamesha ke liye ─────────────────
+function HealthLog() {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let dead = false;
+    api.get("/finance/accounts/health/log?limit=200")
+      .then((r) => { if (!dead) { if (r && r.success) setRows(r.data || []); else setErr((r && r.message) || t("acctledger.rv_failed")); } })
+      .catch((e) => { if (!dead) setErr(e.message || t("acctledger.rv_failed")); });
+    return () => { dead = true; };
+  }, []);
+  const ST = {
+    submitted: [T.amb, T.ambL, t("acctledger.rv_pending")],
+    approved: [T.grn, T.grnL, t("acctledger.rv_status_approved")],
+    rejected: [T.red, T.redL, t("acctledger.rv_sent_back")],
+  };
+  if (err) return <div style={{ padding: "11px 16px", fontSize: 12, color: T.red }}>{err}</div>;
+  if (!rows) return <div style={{ padding: "11px 16px", fontSize: 12, color: T.t4 }}>…</div>;
+  if (!rows.length) return <div style={{ padding: "11px 16px", fontSize: 12, color: T.t4 }}>{t("acctledger.rv_log_empty")}</div>;
+  return (
+    <div style={{ borderTop: `1px solid ${T.b1}` }}>
+      {rows.map((r) => {
+        const st = ST[r.status] || [T.slt, T.sltL, r.status];
+        const n = r.snapshot && Array.isArray(r.snapshot.ids) ? r.snapshot.ids.length : null;
+        return (
+          <div key={r.id} style={{ padding: "9px 16px", borderBottom: `1px solid ${T.b1}`, fontSize: 11.5, color: T.t3 }}>
+            <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap", marginBottom: 3 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>{t(H_TITLE[r.finding_type] || "acctledger.health_title")}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: st[1], color: st[0] }}>{st[2]}</span>
+              {n != null && <span style={{ color: T.t4 }}>{t("acctledger.rv_n_entries", { n })}</span>}
+              <span style={{ color: T.t4, marginLeft: "auto" }}>#{r.id}</span>
+            </div>
+            <div><b style={{ color: T.t2 }}>{r.reviewed_by_name || "—"}</b> · {whenOf(r.reviewed_at)} — {r.review_note}</div>
+            {r.decided_at && (
+              <div style={{ marginTop: 2 }}>
+                <b style={{ color: T.t2 }}>{r.decided_by_name || "—"}</b> · {whenOf(r.decided_at)}{r.decision_note ? ` — ${r.decision_note}` : ""}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function HealthPanel({ health, onShow, onPickAccount, onReload, role }) {
   const [open, setOpen] = useState(true);
+  const [showLog, setShowLog] = useState(false);
   if (!health) return null;
   const { transfer_legs: legs, unbacked_spend: un, duplicates: dup, zero_opening: zo, went_negative: neg } = health;
-  const items = [];
-  if (legs && legs.in_legs > 0 && legs.out_legs === 0) items.push({
-    sev: "high", title: t("acctledger.h_one_sided"),
+  // Server ki findings (key + review halat) type se jodte hain — dikhne ki
+  // shartein dono jagah ek jaisi hain (utils/healthFindings.js).
+  const fByType = {};
+  (health.findings || []).forEach((f) => { fByType[f.type] = f; });
+  const canReview = role === "admin" || role === "super_admin" || role === "accountant";
+  const canDecide = role === "admin" || role === "super_admin";
+
+  const all = [];
+  if (legs && legs.in_legs > 0 && legs.out_legs === 0) all.push({
+    type: "one_sided", sev: "high", title: t("acctledger.h_one_sided"),
     detail: t("acctledger.h_one_sided_d", { legs: legs.in_legs }),
     ids: legs.txn_ids || [],
   });
-  if (neg && neg.length) items.push({
-    sev: "high", title: t("acctledger.h_negative"),
+  if (neg && neg.length) all.push({
+    type: "negative", sev: "high", title: t("acctledger.h_negative"),
     detail: neg.map((a) => `${a.name} ${inr(a.min_balance)} (${dmy(a.at)})`).join(" · "),
     // Minus wale khaate ki koi ek row nahi hoti — girawat poore ledger me
     // failti hai. Isliye click us khaate ko akela chun deta hai, taaki uska
     // apna balance saaf dikhe.
     account: neg[0].id, accountLabel: neg[0].name,
   });
-  if (un && un.count) items.push({
-    sev: "med", title: t("acctledger.h_unbacked"),
+  if (un && un.count) all.push({
+    type: "unbacked", sev: "med", title: t("acctledger.h_unbacked"),
     detail: t("acctledger.h_unbacked_d", { n: un.count, amt: inr(un.amount) }),
     ids: un.txn_ids || [],
   });
-  if (dup && dup.groups && dup.groups.length) items.push({
-    sev: "med", title: t("acctledger.h_dups"),
+  if (dup && dup.groups && dup.groups.length) all.push({
+    type: "duplicates", sev: "med", title: t("acctledger.h_dups"),
     detail: t("acctledger.h_dups_d", { n: dup.groups.length, amt: inr(dup.extra_in + dup.extra_out) }),
     ids: dup.groups.reduce((a, g) => a.concat(g.ids || []), []),
   });
-  if (zo && zo.length) items.push({
-    sev: "low", title: t("acctledger.h_zero_opening"),
+  if (zo && zo.length) all.push({
+    type: "zero_opening", sev: "low", title: t("acctledger.h_zero_opening"),
     // Iski koi row nahi hoti — ye Settings ka kaam hai, isliye click bhi nahi.
     detail: `${zo.map((a) => a.name).join(", ")} — ${t("acctledger.h_zero_opening_d")}`,
   });
+  // Admin ne approve kar di = band. Log me rehti hai, list se hat jaati hai.
+  const items = all.filter((it) => !(fByType[it.type] && fByType[it.type].closed));
+  const closedN = all.length - items.length;
 
   const C = { high: T.red, med: T.amb, low: T.slt };
+  const linkBtn = { border: "none", background: "none", color: T.blu, fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: 0 };
   return (
     <Panel style={{ marginBottom: 10 }}>
       <PHead title={`${t("acctledger.health_title")}${items.length ? ` (${items.length})` : ""}`}
-        action={items.length ? (
-          <button onClick={() => setOpen(!open)} style={{ border: "none", background: "none", color: T.blu, fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
-            {open ? t("acctledger.hide") : t("acctledger.show")}
-          </button>
-        ) : null} />
+        action={
+          <span style={{ display: "flex", gap: 14, alignItems: "center" }}>
+            <button onClick={() => setShowLog(!showLog)} style={linkBtn}>
+              {showLog ? t("acctledger.rv_log_hide") : t("acctledger.rv_log")}{closedN ? ` · ${t("acctledger.rv_closed_n", { n: closedN })}` : ""}
+            </button>
+            {items.length ? (
+              <button onClick={() => setOpen(!open)} style={linkBtn}>
+                {open ? t("acctledger.hide") : t("acctledger.show")}
+              </button>
+            ) : null}
+          </span>
+        } />
       {!items.length ? (
         <div style={{ padding: "13px 16px", fontSize: 12.5, color: T.grn, display: "flex", alignItems: "center", gap: 7 }}>
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.4} strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>
@@ -193,6 +369,7 @@ function HealthPanel({ health, onShow, onPickAccount }) {
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 2 }}>{it.title}</div>
                   <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.5 }}>{it.detail}</div>
+                  <ReviewBox finding={fByType[it.type]} canReview={canReview} canDecide={canDecide} onDone={onReload} />
                 </div>
                 {can ? (
                   <button
@@ -212,6 +389,7 @@ function HealthPanel({ health, onShow, onPickAccount }) {
           })}
         </div>
       )}
+      {showLog && <HealthLog key={(health.findings || []).map((f) => (f.review ? f.review.id + f.review.status : "-")).join("|")} />}
     </Panel>
   );
 }
@@ -408,13 +586,18 @@ export default function TabAccounts() {
     return label;
   }, []);
 
+  // Review bhejne / approve karne ke baad insights dobara laani hain.
+  const [healthTick, setHealthTick] = useState(0);
+  const reloadHealth = useCallback(() => setHealthTick((n) => n + 1), []);
+  // Role sirf ye tay karta hai ki kaunsa button dikhe — asli rok server par hai.
+  const myRole = useMemo(() => ((getUser() || {}).role || ""), []);
   useEffect(() => {
     let dead = false;
     api.get("/finance/accounts/health")
       .then((r) => { if (!dead && r.success) setHealth(r.data); })
       .catch(() => { /* sehat panel na aaye to ledger phir bhi chalta rahe */ });
     return () => { dead = true; };
-  }, []);
+  }, [healthTick]);
 
   // Card list POORI hoti hai, chune hue khaaton ki nahi. /ledger sirf chune
   // hue khaate lauta ta hai, to usse card banate to ek khaata hatane par uska
@@ -557,7 +740,7 @@ export default function TabAccounts() {
         </div>
       </Panel>
 
-      <HealthPanel health={health} onShow={showThese} onPickAccount={pickAccount} />
+      <HealthPanel health={health} onShow={showThese} onPickAccount={pickAccount} onReload={reloadHealth} role={myRole} />
 
       <AskBox />
 
