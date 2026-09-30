@@ -9,13 +9,19 @@
 // "+ Naya contact" se naam+number haath se bhi bhara ja sakta hai — order
 // rukta nahi.
 //
+// Asset ki kharid kisi project ki nahi, STORE ki hoti hai (MR par project
+// khaali) — uske liye warehouseIds do: tab us store ka asset incharge /
+// storekeeper, aur jinhe store par access diya gaya hai wo aate hain, aur
+// store incharge pehle se chuna hua milta hai (badalna ho to ×). Pehle asset
+// ke order par ye list khaali aati thi (Prafull, 30 Sep 2026).
+//
 // Sirf control render hota hai, label nahi — har screen apne style ka label
 // upar laga leti hai (Fld / raw <label>).
 //
 // Usage:
 //   <ReceivingContacts projectIds={[12,15]} value={contacts}
 //                      onChange={setContacts} theme={T} compact/>
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import SearchSelect from "./SearchSelect";
 import api from "../config/api";
 import { t } from "../i18n";
@@ -45,7 +51,7 @@ const C = {
 const prettyRole = (r) => String(r || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
 export default function ReceivingContacts({
-  projectIds = [], value = [], onChange, theme, compact = false, disabled = false,
+  projectIds = [], warehouseIds = [], value = [], onChange, theme, compact = false, disabled = false,
 }) {
   const T = { ...C, ...(theme || {}) };
   const [team, setTeam]       = useState([]);
@@ -62,18 +68,43 @@ export default function ReceivingContacts({
     [projectIds]
   );
 
+  const whKey = useMemo(
+    () => [...new Set((warehouseIds || []).map(Number).filter(Boolean))].sort((a,b)=>a-b).join(","),
+    [warehouseIds]
+  );
+  // Store incharge ek baar hi default chunna jaata hai — user ne × se hata diya
+  // to dobara nahi lautta.
+  const seeded = useRef("");
+
   useEffect(() => {
-    if (!idKey) { setTeam([]); return; }
+    if (!idKey && !whKey) { setTeam([]); return; }
     let dead = false;
     setLoading(true);
-    api.get("/procurement/receiving-contacts?project_id=" + idKey)
+    const q = [idKey && "project_id=" + idKey, whKey && "warehouse_id=" + whKey].filter(Boolean).join("&");
+    api.get("/procurement/receiving-contacts?" + q)
       .then(r => { if (!dead && r?.success) setTeam(r.data || []); })
       .catch(() => {})
       .finally(() => { if (!dead) setLoading(false); });
     return () => { dead = true; };
-  }, [idKey]);
+  }, [idKey, whKey]);
 
   const picked  = Array.isArray(value) ? value : [];
+
+  // Store ka incharge pehle se chuna — receiving person compulsory hai aur
+  // maal wahi leta hai. Sirf tab jab abhi koi chuna na ho (PO edit me purane
+  // contacts ko haath nahi lagta) aur sirf store wale order par.
+  useEffect(() => {
+    if (!whKey || loading || disabled || seeded.current === whKey) return;
+    if (!team.length) return;
+    seeded.current = whKey;
+    if (picked.length) return;
+    const inc = team.filter(u => u.kind === "incharge" && u.phone_ok);
+    if (inc.length) {
+      onChange(inc.slice(0, MAX_RECEIVING_CONTACTS).map(u =>
+        ({ user_id: u.id, name: String(u.name).trim(), phone: normPhone10(u.phone), role: u.role, designation: u.designation || null })));
+    }
+  // eslint-disable-next-line
+  }, [team, loading, whKey]);
   const full    = picked.length >= MAX_RECEIVING_CONTACTS;
   const usedPh  = new Set(picked.map(c => normPhone10(c.phone)).filter(Boolean));
   const withPh  = team.filter(u => u.phone_ok && !usedPh.has(normPhone10(u.phone)));
@@ -137,10 +168,10 @@ export default function ReceivingContacts({
             value={pick}
             options={withPh.map(u => ({
               key: String(u.id),
-              label: u.name + " · " + (u.designation || prettyRole(u.role)) + " · " + normPhone10(u.phone),
+              label: u.name + " · " + (u.kind === "incharge" ? t("receiving_contacts.store_incharge") : (u.designation || prettyRole(u.role))) + " · " + normPhone10(u.phone),
             }))}
             onChange={addFromTeam}
-            placeholder={loading ? t("receiving_contacts.team_load_ho_rahi_hai") : (withPh.length ? t("receiving_contacts.project_team_se_chuno") : t("receiving_contacts.team_list_khaali"))}
+            placeholder={loading ? t("receiving_contacts.team_load_ho_rahi_hai") : (withPh.length ? (whKey && !idKey ? t("receiving_contacts.store_team_se_chuno") : t("receiving_contacts.project_team_se_chuno")) : t("receiving_contacts.team_list_khaali"))}
             disabled={loading || withPh.length === 0}
             compact={compact}
             theme={T}
@@ -174,11 +205,14 @@ export default function ReceivingContacts({
       )}
 
       {/* Kyun list khaali hai — user ko dhoondhna na pade */}
-      {!loading && !!idKey && team.length === 0 && (
+      {!loading && (!!idKey || !!whKey) && team.length === 0 && (
         <div style={{marginTop:6,padding:"6px 10px",background:T.ambL,border:"1px solid " + T.ambM,
           borderRadius:6,fontSize:10.5,color:T.amb,lineHeight:1.45}}>
-         {t("receiving_contacts.is_project_par_abhi_kisi_ko")}
+         {whKey && !idKey ? t("receiving_contacts.is_store_par_abhi_koi_nahi") : t("receiving_contacts.is_project_par_abhi_kisi_ko")}
         </div>
+      )}
+      {!loading && !!whKey && picked.length > 0 && picked.every(c => team.some(u => u.kind === "incharge" && String(u.id) === String(c.user_id))) && (
+        <div style={{marginTop:6,fontSize:10.5,color:T.t4,lineHeight:1.45}}>{t("receiving_contacts.store_incharge_pehle_se_chuna")}</div>
       )}
       {!loading && noPhone.length > 0 && (
         <div style={{marginTop:6,fontSize:10,color:T.t4,lineHeight:1.45}}>{t("receiving_contacts.bina_mobile_number_ke_isliye_list", { noPhone: noPhone.map(u => u.name).join(", ") })}</div>

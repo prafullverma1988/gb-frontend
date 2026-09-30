@@ -266,6 +266,8 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
   const [contacts,setContacts]=useState([]);
   // Bulk order kai projects ki MR le sakta hai — team un sabki milti hai.
   const contactProjectIds=items.map(m=>m.project_id).filter(Boolean);
+  // Asset ki kharid ki MR me project nahi, store hota hai — uski team wahan se.
+  const contactWarehouseIds=items.map(m=>m.asset_warehouse_id).filter(Boolean);
   // RFQ medium — multiple vendors invited to quote + optional bid end date
   const [rfqVendors,setRfqVendors]=useState([]);
   const [rfqVendorPick,setRfqVendorPick]=useState("");
@@ -550,7 +552,7 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
               <div style={{fontSize:10.5,color:T.t4,marginBottom:6,lineHeight:1.45}}>
                {t("procurement.site_par_maal_pahunchne_par_vendor")}
               </div>
-              <ReceivingContacts projectIds={contactProjectIds} value={contacts} onChange={setContacts} theme={T}/>
+              <ReceivingContacts projectIds={contactProjectIds} warehouseIds={contactWarehouseIds} value={contacts} onChange={setContacts} theme={T}/>
             </Fld>
             {vendor&&delivery&&hasReceivingContact(contacts)&&(
               <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,padding:"10px 12px"}}>
@@ -1261,6 +1263,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
           // preserve per-item project info round-trip
           project_id: it.project_id||null, project_name: it.project_name||"",
           delivery_site: it.delivery_site||"", linked_mr_id: it.linked_mr_id||null,
+          asset_warehouse_id: it.asset_warehouse_id||null,
         }))
       : prefillItems
         ?prefillItems.map(m=>solvePOLine({
@@ -1274,6 +1277,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
             project_name: m.project||m.project_name||"",
             delivery_site: m.delivery_site||m.project||"",
             linked_mr_id: m.id||null,
+            asset_warehouse_id: m.asset_warehouse_id||null,
           }))
         :[{desc:"",hsn:"",qty:"",unit:"",rate:"",total:"",_t:[],_d:"total",project_id:null,project_name:"",delivery_site:"",linked_mr_id:null}]
   });
@@ -1481,7 +1485,8 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
              {t("procurement.maal_site_par_aane_par_vendor")}
             </div>
             <ReceivingContacts theme={T} value={contacts} onChange={setContacts}
-              projectIds={[form.projectId,...form.items.map(it=>it.project_id)].filter(Boolean)}/>
+              projectIds={[form.projectId,...form.items.map(it=>it.project_id)].filter(Boolean)}
+              warehouseIds={form.items.map(it=>it.asset_warehouse_id).filter(Boolean)}/>
           </Fld>
         </div>
 

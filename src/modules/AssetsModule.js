@@ -27,11 +27,13 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import api, { API_BASE, getToken, getUser } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import GrnIssueBlock from "../components/GrnIssueBlock";
 import ImportFixPanel, { useImportFix, impNorm } from "../components/ImportFix";
 import { useToast } from "../components/Toast";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { loadPhotoPolicy, policyFor, fileInputProps } from "../utils/photoPolicy";
+import { cld } from "../utils/cloudinary";
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -397,6 +399,66 @@ function useMovePhotoPolicy(open) {
   return pol;
 }
 const photoMissing = (pol, photo) => !!(pol && pol.mode === "required" && !photo);
+
+// Koi bhi photo key ki policy — "mr" (kharid ki maang) aur "grn" (maal receive)
+// yahan se; asset ke liye alag setting nahi, Procurement wali hi chalti hai.
+function usePhotoPolicy(open, key) {
+  const [pol, setPol] = useState(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    loadPhotoPolicy().then((x) => { if (alive) setPol(policyFor(x, key)); });
+    return () => { alive = false; };
+  }, [open, key]);
+  return pol;
+}
+
+// Kai photo — Procurement ki MR / GRN jaisi. Thumbnail par click = poori photo;
+// × se hatao. pol "off" ho to box hi nahi; "required" ho to label par *.
+const PhotoStrip = ({ value, onChange, pol, max = 6, label, hint }) => {
+  const list = Array.isArray(value) ? value : [];
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (pol && pol.mode === "off") return null;
+  const required = !!pol && pol.mode === "required";
+  const pick = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { setError(t("assets.photo_too_big")); return; }
+    setError(""); setBusy(true);
+    try { onChange([...list, await uploadPhoto(f)]); }
+    catch (ex) { setError(ex.message || t("assets.upload_failed")); }
+    setBusy(false);
+  };
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>
+        {label || t("assets.photo")}{required ? " *" : ""}
+        {list.length > 0 && <span style={{ color: T.t4, fontWeight: 500, textTransform: "none" }}>{"  " + list.length + "/" + max}</span>}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {list.map((u, i) => (
+          <span key={u + i} style={{ position: "relative", width: 48, height: 48 }}>
+            <a href={u} target="_blank" rel="noreferrer">
+              <img src={cld(u, "thumb")} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8, border: `1.5px solid ${T.b2}`, display: "block" }} />
+            </a>
+            <button type="button" onClick={() => onChange(list.filter((_, j) => j !== i))} title={t("assets.remove")}
+              style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: 9, border: `1px solid ${T.b2}`, background: T.surface, color: T.t3, fontSize: 11, lineHeight: 1, cursor: "pointer", padding: 0, fontFamily: "inherit" }}>×</button>
+          </span>
+        ))}
+        {list.length < max && (
+          <label style={{ width: 48, height: 48, borderRadius: 8, border: `1.5px dashed ${required && !list.length ? T.red : T.b2}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: busy ? "wait" : "pointer", fontSize: 18, color: T.t3 }}>
+            {busy ? "…" : "📷"}
+            <input {...fileInputProps(pol || { source: "both" })} onChange={pick} disabled={busy} style={{ display: "none" }} />
+          </label>
+        )}
+      </div>
+      {hint && <div style={{ fontSize: 10.5, color: T.t4, marginTop: 5, lineHeight: 1.45 }}>{hint}</div>}
+      {error && <div style={{ fontSize: 10.5, color: T.red, marginTop: 4 }}>{error}</div>}
+    </div>
+  );
+};
 
 // Accept par line ki apni photo — "mujhe IS haalat me mila". Voucher wali
 // photo bhejne waqt ki hai; ye lene waqt ki hai, isliye alag policy key.
@@ -1498,6 +1560,10 @@ const newGrnLine = () => ({ mode: "existing", asset_item_id: "", name: "", spec:
 
 function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
   const toast = useToast();
+  // Photo + "issue marker" — material GRN jaisa (Settings → Photo Settings → "Maal receive (GRN)").
+  const polGrn = usePhotoPolicy(open, "grn");
+  const [photos, setPhotos] = useState([]);
+  const [issues, setIssues] = useState([]);
   const [f, setF] = useState({});
   const [lines, setLines] = useState([newGrnLine()]);
   const [bulkItems, setBulkItems] = useState([]);
@@ -1515,7 +1581,7 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
     if (!open) return;
     const def = whOptions.find((w) => w.is_default) || whOptions[0];
     setF({ warehouse_id: def ? String(def.id) : "", date: todayStr(), party_id: "", vendor_name: "", invoice_no: "", invoice_date: "", remarks: "" });
-    setLines([newGrnLine()]); setError(""); setVendorMode("party");
+    setLines([newGrnLine()]); setError(""); setVendorMode("party"); setPhotos([]); setIssues([]);
     api.get("/assets/items?tracking=bulk").then((r) => setBulkItems(r && r.success ? r.data || [] : [])).catch(() => setBulkItems([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, meta, canAll]);
@@ -1547,8 +1613,10 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
         category_id: l.category_id || null, code: l.tracking_mode === "serialized" && qty === 1 && l.code.trim() ? l.code.trim() : null,
       });
     }
+    if (polGrn && polGrn.mode === "required" && !photos.length) { setError(t("assets.err_grn_photo")); return; }
     const body = {
       type: "grn", date: f.date || todayStr(), to: { warehouse_id: Number(f.warehouse_id) }, items,
+      photo_urls: photos, photos_pending: 0, issues,
       party_id: vendorMode === "party" && f.party_id ? Number(f.party_id) : null,
       vendor_name: vendorName,
       invoice_no: f.invoice_no || null, invoice_date: f.invoice_date || null, remarks: f.remarks || null,
@@ -1643,6 +1711,10 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
           <span style={{ color: T.t3 }}>{t("assets.total_amount")}</span><b style={{ color: T.t1 }}>{rupee(total)}</b>
         </div>
       </Panel>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 14, marginTop: 14, alignItems: "start" }}>
+        <PhotoStrip value={photos} onChange={setPhotos} pol={polGrn} label={t("assets.grn_photo_label")} hint={t("assets.grn_photo_hint")} />
+        <GrnIssueBlock value={issues} onChange={setIssues} title={t("assets.grn_issue_title")} />
+      </div>
       <div style={{ fontSize: 11, color: T.t4, marginTop: 10 }}>{t("assets.grn_finance_note")}</div>
       <ErrBox>{error}</ErrBox>
       <datalist id="assets-units-grn">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
@@ -1663,7 +1735,7 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
 // liye" likha hota hai). Isliye yahan koi approve/order ka button nahi —
 // approval, PO, RFQ, receiving contact, billing sab Procurement me hi.
 // ══════════════════════════════════════════════════════════════════
-const newBuyLine = () => ({ mode: "existing", asset_item_id: "", name: "", spec: "", unit: "Nos", tracking_mode: "bulk", category_id: "", qty: "", rate: "" });
+const newBuyLine = () => ({ mode: "existing", asset_item_id: "", name: "", spec: "", unit: "Nos", tracking_mode: "bulk", category_id: "", qty: "", rate: "", photos: [] });
 
 // MR ki haalat ek shabd me — wahi seedhi (mr_status + mat_status) jo
 // Procurement dikhata hai.
@@ -1679,6 +1751,9 @@ const buyStage = (r) => {
 
 function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
   const toast = useToast();
+  // Har cheez ki apni MR, isliye photo bhi cheez ke saath — "kaunsa type chahiye"
+  // photo se saaf hota hai. Setting: Photo Settings → "Material request (MR)".
+  const polMr = usePhotoPolicy(open, "mr");
   const [f, setF] = useState({});
   const [lines, setLines] = useState([newBuyLine()]);
   const [items, setItems] = useState([]);
@@ -1713,9 +1788,11 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
       if (l.mode === "existing" && !l.asset_item_id) { setError(t("assets.err_line_item", { n: i + 1 })); return; }
       if (l.mode === "new" && !String(l.name).trim()) { setError(t("assets.err_line_name", { n: i + 1 })); return; }
       if (!(qty > 0)) { setError(t("assets.err_line_qty", { n: i + 1 })); return; }
+      if (polMr && polMr.mode === "required" && !(l.photos || []).length) { setError(t("assets.err_line_photo", { n: i + 1 })); return; }
+      const shots = { photo_urls: l.photos || [], photos_pending: 0 };
       body.push(l.mode === "existing"
-        ? { asset_item_id: Number(l.asset_item_id), qty, rate: l.rate === "" ? null : Number(l.rate) }
-        : { name: String(l.name).trim(), spec: String(l.spec || "").trim() || null, unit: l.unit || "Nos",
+        ? { ...shots, asset_item_id: Number(l.asset_item_id), qty, rate: l.rate === "" ? null : Number(l.rate) }
+        : { ...shots, name: String(l.name).trim(), spec: String(l.spec || "").trim() || null, unit: l.unit || "Nos",
             tracking_mode: l.tracking_mode, category_id: l.category_id || null, qty, rate: l.rate === "" ? null : Number(l.rate) });
     }
     setBusy(true);
@@ -1790,6 +1867,10 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
                 <Field label={t("assets.buy_rate")}><input value={l.rate} inputMode="decimal" onChange={(e) => updLine(i, { ...l, rate: e.target.value.replace(/[^0-9.]/g, "") })} style={inp} placeholder="₹" /></Field>
               </div>
             )}
+            <div style={{ marginTop: 10 }}>
+              <PhotoStrip value={l.photos} onChange={(p) => updLine(i, { ...l, photos: p })} pol={polMr} max={3}
+                label={t("assets.buy_line_photo")} hint={t("assets.buy_line_photo_hint")} />
+            </div>
           </div>
         ))}
         <div style={{ padding: "10px 14px", display: "flex", justifyContent: "flex-end", gap: 12, fontSize: 12.5 }}>
@@ -1810,6 +1891,11 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
 // PO se (po_id + har line ka po_item_id) ya manual order se (mr_id, ek line).
 function OrderReceiveModal({ order, onClose, onSaved }) {
   const toast = useToast();
+  // Material GRN jaisa: challan/saamaan ki photo aur "issue marker" (kam aaya,
+  // toota, galat cheez...). Setting: Photo Settings → "Maal receive (GRN)".
+  const polGrn = usePhotoPolicy(!!order, "grn");
+  const [photos, setPhotos] = useState([]);
+  const [issues, setIssues] = useState([]);
   const [f, setF] = useState({});
   const [lines, setLines] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -1817,8 +1903,10 @@ function OrderReceiveModal({ order, onClose, onSaved }) {
 
   useEffect(() => {
     if (!order) return;
-    setF({ date: todayStr(), invoice_no: "", invoice_date: "" }); setError("");
+    setF({ date: todayStr(), invoice_no: "", invoice_date: "" }); setError(""); setPhotos([]); setIssues([]);
     setLines(order.lines.map((x) => ({
+      // Jo photo maang ke saath lagi thi — receive karne wale ko dikhe ki kaunsa type maanga tha.
+      reqPhotos: x.req_photos || [],
       key: x.po_item_id || "mr" + x.mr_id,
       name: x.asset_name ? lineLabel({ code: x.asset_code, name: x.asset_name, spec: x.asset_spec }) : x.description,
       // Order par register ki entry nahi = serialized piece, jiska code abhi banega.
@@ -1842,6 +1930,7 @@ function OrderReceiveModal({ order, onClose, onSaved }) {
   const save = async () => {
     setError("");
     if (!take.length) { setError(t("assets.recv_kuch_to_likho")); return; }
+    if (polGrn && polGrn.mode === "required" && !photos.length) { setError(t("assets.err_grn_photo")); return; }
     const bad = lines.find(over);
     if (bad) { setError(t("assets.recv_zyada", { item: bad.name, n: fmtN(bad.left) })); return; }
     setBusy(true);
@@ -1851,6 +1940,7 @@ function OrderReceiveModal({ order, onClose, onSaved }) {
       invoice_no: f.invoice_no || null, invoice_date: f.invoice_date || null,
       ...(order.kind === "mr" ? { mr_id: order.mr_id } : { po_id: order.po_id }),
       remarks: t("assets.grn_from_order", { no: order.label }),
+      photo_urls: photos, photos_pending: 0, issues,
       items: take.map((l) => ({
         ...(l.asset_item_id ? { asset_item_id: Number(l.asset_item_id) } : { name: l.description, unit: l.unit, tracking_mode: "serialized" }),
         qty: N(l.recv), rate: l.rate === "" ? null : Number(l.rate), condition: "good",
@@ -1889,6 +1979,14 @@ function OrderReceiveModal({ order, onClose, onSaved }) {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, color: T.t1 }}>{l.name}</div>
                 <div style={{ fontSize: 10.5, color: T.t4 }}>{l.fresh ? t("assets.recv_naya_piece") : l.unit}</div>
+                {(l.reqPhotos || []).length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }} title={t("assets.recv_req_photo")}>
+                    {l.reqPhotos.slice(0, 3).map((u) => (
+                      <a key={u} href={u} target="_blank" rel="noreferrer"><img src={cld(u, "thumb")} alt="" style={{ width: 26, height: 26, objectFit: "cover", borderRadius: 5, border: `1px solid ${T.b2}`, display: "block" }} /></a>
+                    ))}
+                    <span style={{ fontSize: 10, color: T.t4 }}>{t("assets.recv_req_photo")}</span>
+                  </div>
+                )}
               </div>
               <span style={{ fontWeight: 600 }}>{fmtN(l.ordered)}</span>
               <span style={{ fontWeight: 600, color: T.grn }}>{fmtN(l.got)}</span>
@@ -1911,6 +2009,10 @@ function OrderReceiveModal({ order, onClose, onSaved }) {
           </div>
         </Scroll>
       </Panel>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 14, marginTop: 14, alignItems: "start" }}>
+        <PhotoStrip value={photos} onChange={setPhotos} pol={polGrn} label={t("assets.grn_photo_label")} hint={t("assets.grn_photo_hint")} />
+        <GrnIssueBlock value={issues} onChange={setIssues} title={t("assets.grn_issue_title")} />
+      </div>
       {order.kind === "mr" && <Notice>{t("assets.recv_manual_hint")}</Notice>}
       <div style={{ fontSize: 11, color: T.t4, marginTop: 10 }}>{t("assets.grn_finance_note")}</div>
       <ErrBox>{error}</ErrBox>
@@ -2018,6 +2120,13 @@ function PurchasePanels({ refreshKey, canCreate, onNewBuy, onReceive }) {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.item_name}</div>
                     <div style={{ fontSize: 10.5, color: T.t4 }}>{[r.po_number, r.po_vendor].filter(Boolean).join(" · ") || (r.rejected_reason || r.closed_reason || "")}</div>
+                    {(r.photos || []).length > 0 && (
+                      <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                        {r.photos.slice(0, 3).map((u) => (
+                          <a key={u} href={u} target="_blank" rel="noreferrer"><img src={cld(u, "thumb")} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 5, border: `1px solid ${T.b2}`, display: "block" }} /></a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <span style={{ fontSize: 11.5 }}>{r.warehouse_name || "—"}</span>
                   <span>{fmtN(r.quantity)} <span style={{ fontSize: 10.5, color: T.t4 }}>{r.unit || ""}</span>
@@ -2202,7 +2311,7 @@ function VoucherDrawer({ id, onClose, onChanged }) {
             {v.expected_return_date && <KV k={t("assets.expected_return")} v={fmtD(v.expected_return_date)} />}
             {v.accepted_at && <KV k={t("assets.accepted_at")} v={fmtD(v.accepted_at)} />}
             <KV k={t("assets.remarks")} v={v.remarks} />
-            {v.photo_url && <KV k={t("assets.photo")} v={<a href={v.photo_url} target="_blank" rel="noreferrer" style={{ color: T.ind }}>{t("assets.photo_view")}</a>} />}
+            {v.photo_url && !(v.type === "grn" && (v.grn_photos || []).length) && <KV k={t("assets.photo")} v={<a href={v.photo_url} target="_blank" rel="noreferrer" style={{ color: T.ind }}>{t("assets.photo_view")}</a>} />}
           </div>
 
           <Panel title={t("assets.lines")}>
@@ -2265,6 +2374,35 @@ function VoucherDrawer({ id, onClose, onChanged }) {
               <Field label={t("assets.reject_reason")} hint={t("assets.reject_hint")}>
                 <textarea value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inp, minHeight: 70, resize: "vertical" }} placeholder={t("assets.reject_reason_ph")} />
               </Field>
+            </div>
+          )}
+          {v.type === "grn" && ((v.grn_photos || []).length > 0 || N(v.grn_photos_pending) > 0) && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("assets.grn_photo_label")}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(v.grn_photos || []).map((u) => (
+                  <a key={u} href={u} target="_blank" rel="noreferrer"><img src={cld(u, "thumb")} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: `1.5px solid ${T.b2}`, display: "block" }} /></a>
+                ))}
+              </div>
+              {N(v.grn_photos_pending) > 0 && <div style={{ fontSize: 10.5, color: T.amb, marginTop: 5 }}>{t("assets.grn_photos_pending", { n: N(v.grn_photos_pending) })}</div>}
+            </div>
+          )}
+          {v.type === "grn" && (v.grn_issues || []).length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <Panel title={t("assets.grn_issues_title")}>
+                {v.grn_issues.map((iss) => (
+                  <Row key={iss.id} cols="90px 1fr 90px 50px">
+                    <span><Pill label={iss.issue_type} c={T.red} bg={T.redL} /></span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: T.t1, wordBreak: "break-word" }}>{iss.note}</div>
+                      <div style={{ fontSize: 10.5, color: T.t4 }}>{[iss.raised_by_name, fmtD(iss.created_at)].filter(Boolean).join(" · ")}{iss.resolution_note ? " · " + iss.resolution_note : ""}</div>
+                    </div>
+                    <span><Pill label={iss.status === "Resolved" ? t("assets.issue_resolved") : t("assets.issue_open")} c={iss.status === "Resolved" ? T.grn : T.amb} bg={iss.status === "Resolved" ? T.grnL : T.ambL} /></span>
+                    <span>{iss.photo_url && <a href={iss.photo_url} target="_blank" rel="noreferrer" style={{ color: T.ind, fontSize: 11.5, fontWeight: 700, textDecoration: "none" }}>{t("assets.photo_view")}</a>}</span>
+                  </Row>
+                ))}
+              </Panel>
+              <div style={{ fontSize: 10.5, color: T.t4, marginTop: 6 }}>{t("assets.grn_issue_hint")}</div>
             </div>
           )}
           {v.type === "grn" && <div style={{ fontSize: 11, color: T.t4, marginTop: 10 }}>{t("assets.grn_finance_note")}</div>}

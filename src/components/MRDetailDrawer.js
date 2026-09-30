@@ -15,6 +15,7 @@ import LibrarySelect from "./LibrarySelect";
 import ActivityLog from "./ActivityLog";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { cld } from "../utils/cloudinary";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -201,7 +202,7 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
                 <Tile label={t("common.material")} value={mr.item_name || mr.item || "—"}/>
                 <Tile label={t("common.quantity")} value={`${mr.quantity || mr.qty || "—"} ${mr.unit || ""}`}/>
-                <Tile label={t("common.project")} value={mr.project_name || "—"}/>
+                <Tile label={t("common.project")} value={mr.project_name || (mr.asset_warehouse_id ? t("procurement.asset_for_store", { name: mr.asset_warehouse_name || "" }) : "—")}/>
                 <Tile label={t("mrdetail.requested_by")} value={mr.requested_by || "—"}/>
                 {mr.required_date && <Tile label={t("common.required_by")} value={fmtDate(mr.required_date)}/>}
                 {mr.approx_amount > 0 && <Tile label={t("mrdetail.approx_amount")} value={`₹${Number(mr.approx_amount).toLocaleString("en-IN")}`}/>}
@@ -210,6 +211,24 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
                 {mr.challan_no && <Tile label={t("material_flow.challan_no")} value={mr.challan_no}/>}
                 {mr.received_qty != null && <Tile label={mr.received_qty_source === "name_match" ? t("mrdetail.received_qty_name_match") : t("mrdetail.received_qty")} value={`${mr.received_qty} ${mr.unit||""}`} c={T.grn}/>}
               </div>
+              {(() => {
+                // Maang ke saath lagi photo — Assets ki kharid me "kaunsa type chahiye" yahi batati hai.
+                let list = mr.photo_urls;
+                if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
+                if (!Array.isArray(list) || list.length === 0) return null;
+                return (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>{t("common.photos")}</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {list.map((u, i) => (
+                        <a key={i} href={cld(u, "view")} target="_blank" rel="noopener noreferrer">
+                          <img src={cld(u, "thumb")} alt="" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, display: "block" }}/>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               {(mr.notes || mr.note) && (
                 <div style={{ padding: "10px 12px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, marginBottom: 14 }}>
                   <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>{t("common.notes")}</div>

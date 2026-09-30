@@ -1534,6 +1534,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
                  {t("projects.maal_site_par_aane_par_vendor")}
                 </div>
                 <ReceivingContacts theme={T} compact projectIds={[mr.project_id]}
+                  warehouseIds={mr.asset_warehouse_id?[mr.asset_warehouse_id]:[]}
                   value={contacts} onChange={setContacts}/>
               </div>
               <div style={{display:"flex",gap:5}}>
