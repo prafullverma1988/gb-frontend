@@ -90,6 +90,7 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
   const [mode, setMode]       = useState("day");             // day | pending | approved
   const [appr, setAppr]       = useState({ pending: null, approved: null });
   const [rejOpen, setRejOpen] = useState(false);
+  const [labOpen, setLabOpen] = useState(null);   // labour ki kaunsi line khuli hai (naam-wise dropdown)
   const [rejText, setRejText] = useState("");
 
   // Pichhle 60 din ki DPR — sirf isliye ki tareekh ki patti par rang aa sake.
@@ -456,12 +457,45 @@ function TabSite({ project }) {   // approve ka haq ab canApproveDpr() se, role 
                       </div>
                     ))}
                 </div>
-                {(a.labour.rows || []).map((r, i) => (
-                  <div key={i} style={{ display: "flex", gap: 8, fontSize: 11.5, color: T.t3, marginTop: 5 }}>
-                    <span style={{ flex: 1 }}>{r.firm || t("site.company_ke_log")}</span>
-                    <span>{fq(r.count)}</span>
-                  </div>
-                ))}
+                {/* Har line dabao → kaun-kaun tha (naam-wise hazri). Subcon ki sirf
+                    ginti wali line me naam hote hi nahi — role × ginti dikhti hai. */}
+                {(a.labour.rows || []).map((r, i) => {
+                  const open = labOpen === i;
+                  return (
+                    <div key={i} style={{ marginTop: 5 }}>
+                      <div onClick={() => setLabOpen(open ? null : i)}
+                        style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 11.5, color: T.t3, cursor: "pointer", padding: "3px 0" }}>
+                        <span style={{ width: 10, fontSize: 9, color: T.t4 }}>{open ? "▼" : "▶"}</span>
+                        <span style={{ flex: 1 }}>{r.firm || t("site.company_ke_log")}</span>
+                        <span>{fq(r.count)}</span>
+                      </div>
+                      {open && (
+                        <div style={{ margin: "2px 0 6px 18px", padding: "6px 10px", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 7 }}>
+                          {(r.people || []).length > 0
+                            ? r.people.map((p, k) => (
+                                <div key={k} style={{ display: "flex", gap: 8, fontSize: 12, color: T.t2, padding: "3px 0", borderTop: k ? `1px solid ${T.b1}` : "none" }}>
+                                  <span style={{ flex: 1, fontWeight: 600, color: T.t1 }}>{p.name}</span>
+                                  <span style={{ color: T.t3 }}>{p.role || ""}</span>
+                                  <span style={{ minWidth: 52, textAlign: "right", color: p.status === "H" ? T.amb : T.grn, fontWeight: 600 }}>
+                                    {p.status === "H" ? t("site.labour_aadha_din") : t("site.labour_present")}
+                                  </span>
+                                </div>
+                              ))
+                            : (
+                              <>
+                                {(r.roles || []).map((x, k) => (
+                                  <div key={k} style={{ display: "flex", gap: 8, fontSize: 12, color: T.t2, padding: "3px 0" }}>
+                                    <span style={{ flex: 1 }}>{x.role}</span><span>× {fq(x.n)}</span>
+                                  </div>
+                                ))}
+                                <div style={{ fontSize: 11, color: T.t4, marginTop: 3 }}>{t("site.labour_sirf_ginti")}</div>
+                              </>
+                            )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {(a.hindrances || []).length > 0 && (
