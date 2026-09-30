@@ -11339,6 +11339,7 @@ const dict = {
   "acctledger.rv_log_empty": "अभी कोई रिव्यू नहीं",
   "acctledger.rv_status_approved": "अप्रूव · बंद",
   "acctledger.rv_n_entries": "{n} एंट्री",
+  "finance.paid_same_time_from_wallet": "{name} के वॉलेट से उसी वक़्त चुकाया",
 };
 
 export default dict;

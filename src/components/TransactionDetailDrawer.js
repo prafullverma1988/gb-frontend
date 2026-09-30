@@ -521,6 +521,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               <Tile label={t("common.date")}     value={fmtDate(rawDate)}/>
               <Tile label={t("common.status")}   value={txn.status || "—"} c={txn.status === "paid" ? T.grn : T.amb}/>
               <Tile label={t("common.party")}    value={txn.party_display || txn.party_name || txn.party || "—"}/>
+              {(txn.expense_head_name || txn.expenseHead) && <Tile label={t("common.category")} value={txn.expense_head_name || txn.expenseHead}/>}
               <Tile label={t("common.project")}  value={txn.project_name || txn.project || "—"}/>
               {cityInfo?.applicable && cityInfo.cities?.length > 0 && (
                 <div style={{ gridColumn: "1 / -1" }}>

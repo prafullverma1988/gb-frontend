@@ -5,8 +5,13 @@ import TransactionDetailDrawer from "../../components/TransactionDetailDrawer";
 import { T, fmt, fmtN } from "../shared/tokens";
 import { Pill, Panel, PHead, THead, AddBtn, SecBtn } from "../shared/ui";
 import { t } from "../../i18n";
+
 import { companyName } from "../../utils/companyName";
-import { txnIsCleared, partyRowSign, balanceLabel, isVendorType, round2 } from "../../utils/moneyRules";
+import { txnIsCleared, partyRowSign, isWalletCashPurchase, balanceLabel, isVendorType, round2 } from "../../utils/moneyRules";
+
+// Neeche ledger ke loop me `t` transaction ka naam hai, jo i18n ke t() ko
+// chhupa deta hai — isliye ye label bahar se.
+const paidSameTimeLabel = (name) => t("finance.paid_same_time_from_wallet", { name: name || "" });
 
 // balLabel ek CODE hai ("To Pay" | "To Receive" | "Advance Paid" | "Advance Received"
 // | "Settled" — utils/moneyRules.balanceLabel); screen par label t() se (FIN-31).
@@ -272,7 +277,10 @@ function TabParty({ projectId, projectName }) {
         const type = t.type || "";
         // Staff ke wallet se gaya paisa (kisi ko bhi, khud ko bhi) −1; baaki
         // type ke hisaab se — partyRowSign dekho.
-        const sgn = partyRowSign(t, p);
+        // Vendor se wallet par usi waqt kharida: pehle bill (CR), phir usi
+        // rakam ki payment (DR) — jod 0, khaata settled. DB me ek hi row hai.
+        const cashBuy = p.is_staff !== 1 && isWalletCashPurchase(t);
+        const sgn = cashBuy ? -1 : partyRowSign(t, p);
         running = round2(running + sgn * amt);
         txnRows.push({
           id: t.id,
@@ -291,6 +299,17 @@ function TabParty({ projectId, projectName }) {
           cr: sgn < 0,
           runBal: running,    // signed: >0 = party hume degi (Dr), <0 = hum denge (Cr)
         });
+        if (cashBuy) {
+          running = round2(running + amt);
+          txnRows.push({
+            id: `wp_${t.id}`, raw: t,
+            date: t.date ? new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "",
+            project: t.project_name || "",
+            note: paidSameTimeLabel(t.paid_via_staff_name),
+            type: "Party Payment",
+            amount: amt, sgn: 1, cr: false, runBal: running,
+          });
+        }
       }
       const net = running;
       const balance = Math.abs(net);

@@ -11340,6 +11340,7 @@ const dict = {
   "acctledger.rv_log_empty": "No reviews yet",
   "acctledger.rv_status_approved": "Approved · closed",
   "acctledger.rv_n_entries": "{n} entries",
+  "finance.paid_same_time_from_wallet": "Paid on the spot from {name}'s wallet",
 };
 
 export default dict;

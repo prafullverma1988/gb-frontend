@@ -4049,6 +4049,8 @@ function FinanceModule(){
       status:t.status||"paid",
       txnType:t.type||"",
       note:t.note||null,
+      // Kis cheez ke liye — Library → Expense Heads (party payment par bhi)
+      expenseHead:t.expense_head_name||null,
       to_account_name:t.to_account_name||null,
       mop:t.mop||"",
       entryBy:t.created_by_name||t.entry_by||"",
@@ -4318,6 +4320,12 @@ function FinanceModule(){
           // card, drawer, bot sab ek niyam par. Purane response (bina in
           // fields ke) par neeche wala fallback chalta hai.
           ledgerSign:(t.ledger_sign===0||t.ledger_sign)?Number(t.ledger_sign):null,
+          // Wallet se kiya kharida: server bill ke saath uski "usi waqt
+          // chukaaya" line bhi bhejta hai (synthetic_of = asli row). sort_id
+          // se wo bill ke theek baad aati hai; click par asli row khulti hai.
+          syntheticOf:t.synthetic_of??null,
+          sortId:t.sort_id!=null?Number(t.sort_id):null,
+          expenseHead:t.expense_head_name||null,
           counted:t.counted===0?false:true,
           notCountedReason:t.not_counted_reason||null,
           items:t.line_items||null,
@@ -4549,7 +4557,9 @@ function FinanceModule(){
       const da=a.dateRaw?new Date(a.dateRaw).getTime():(a.date?new Date(a.date).getTime():0);
       const db=b.dateRaw?new Date(b.dateRaw).getTime():(b.date?new Date(b.date).getTime():0);
       if(da!==db) return da-db;
-      return (a.id||0)-(b.id||0);
+      const ia=a.sortId!=null?a.sortId:Number(a.id), ib=b.sortId!=null?b.sortId:Number(b.id);
+      if(Number.isFinite(ia)&&Number.isFinite(ib)) return ia-ib;
+      return Number.isFinite(ia)?-1:Number.isFinite(ib)?1:0;
     });
     // ── P4 #66: Fix O(n²) reduce → O(n) mutable push ───────────
     // Old: `[...acc, {...t, runBal}]` allocated a new array AND copied
@@ -5301,7 +5311,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                             const balSfx  = (txn.runBal||0)===0 ? "" : (txn.runBal>0 ? "Dr" : "Cr");
                             const sgn = txn.ledSign||0;
                             return(
-                          <div onClick={()=>setSelTxn(txn)}
+                          <div onClick={()=>setSelTxn(txn.syntheticOf!=null?(ledgerRows.find(x=>x.id===txn.syntheticOf)||txn):txn)}
             style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"9px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",background:isExpanded?T.bluL+"44":"none",borderLeft:`3px solid ${sgn<0?T.grn:sgn>0?T.red:T.b2}33`,transition:"background 0.1s",opacity:txn.counted===false?0.55:1}}
                             onMouseEnter={e=>{if(!isExpanded)e.currentTarget.style.background=T.surfaceB;}}
                             onMouseLeave={e=>{if(!isExpanded)e.currentTarget.style.background="none";}}>
@@ -5583,7 +5593,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {/* 1. Date */}
                       <span style={{fontSize:11.5,color:T.t3,fontWeight:500,whiteSpace:"nowrap"}}>{txn.date}</span>
                       {/* 2. Type */}
-                      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,fontWeight:500,color:T.t2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}><span style={{width:6,height:6,borderRadius:"50%",background:meta.color,flexShrink:0}}/>{meta.label}</span>
+                      <span style={{display:"inline-flex",flexDirection:"column",minWidth:0,maxWidth:"100%"}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,fontWeight:500,color:T.t2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}><span style={{width:6,height:6,borderRadius:"50%",background:meta.color,flexShrink:0}}/>{meta.label}</span>
+                        {txn.expenseHead&&<span style={{fontSize:10,color:T.t4,paddingLeft:12,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={txn.expenseHead}>{txn.expenseHead}</span>}
+                      </span>
                       {/* 3. Party */}
                       <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{partyLabel}</span>
                       {/* 4. Site */}

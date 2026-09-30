@@ -54,8 +54,15 @@ export const partyRowSign = (r, party) => {
   //   account_id NULL → paisa staff ke paas hi raha (wallet me aaya) → +1
   if (isStaff && ty === "receipt") return r.account_id != null ? -1 : 1;
   if (isStaff) return ["receipt", "party_payment", "payment", "settle_out"].includes(ty) ? 1 : ty === "settle_in" ? -1 : 0;
+  // Library party se staff ne wallet se usi waqt kharida → kharida + chukaaya
+  // ek saath, is row ka jod 0 (utils/partyBalance.js). Screen par ise do line
+  // me dikhaya jaata hai — isWalletCashPurchase dekho.
+  if (isWalletCashPurchase(r)) return 0;
   return LEDGER_PLUS.has(ty) ? 1 : LEDGER_MINUS.has(ty) ? -1 : 0;
 };
+// Vendor ke khaate me wallet se kiya gaya kharida: ek hi DB row, do pehlu.
+export const isWalletCashPurchase = (r) =>
+  !!r && String(r.type || "") === "site_expense" && r.paid_via_staff_id != null && r.paid_via_staff_id !== "";
 
 // Vendor (hum dete hain) ya client (wo dete hain) — label signed balance se:
 // balance > 0 = party hume dene wali, < 0 = hum party ko dene wale.
