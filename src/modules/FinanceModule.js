@@ -633,8 +633,34 @@ const lineApprox=(r)=>{
 // the weight (auto-learning the unit + a proportional suggestion from this
 // material's last GRN). Primary (bundle) stays locked; alt (kg) is editable.
 // Switch OFF = a normal single-unit bill line, unchanged.
+// Band (locked) field ka nishaan — saada, halka, text ke rang ka. Pehle 🔒
+// emoji tha jo har OS par peela / chamkila dikhta tha (Prafull: "funcy hai,
+// clean and sober chahiye").
+const LockIc=({size=11,color=T.t4})=>(
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2}
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{flexShrink:0}}>
+    <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/>
+  </svg>
+);
+
+// Billing unit ki list Library → Units (UOM) se (uom_master). Value symbol
+// (Kg / Nos / MT / Bag) — wahi jo material, GRN aur bill me pehle se likha
+// jaata hai; naam ("Kilogram") sirf padhne ke liye. Ek baar laakar sab
+// bill lines me baanti jaati hai. Library khaali / na aaye to purani list.
+let _uomPromise=null;
+const loadLibraryUoms=()=>{
+  if(!_uomPromise){
+    _uomPromise=api.get("/library/uom")
+      .then(r=>(r&&r.success&&Array.isArray(r.data))?r.data:[])
+      .catch(()=>{ _uomPromise=null; return []; });
+  }
+  return _uomPromise;
+};
+
 function DualBillStrip({ row, onFields }){
-  const [learned,setLearned]=useState(null);      // {alt_unit, ratio}
+  const [learned,setLearned]=useState(null);      // {alt_unit, ratio, source: bill|grn}
+  const [uoms,setUoms]=useState([]);              // Library → Units
+  useEffect(()=>{ let alive=true; loadLibraryUoms().then(l=>{ if(alive) setUoms(l); }); return ()=>{alive=false;}; },[]);
   const on=!!row.altOn;
   const nameKey=(row.material||"").trim();
   const primaryQty=Number(row.qty)||0;
@@ -652,12 +678,38 @@ function DualBillStrip({ row, onFields }){
   // Alag unit ki pichhli line (Bundle→Kg) ka ratio Kg par nahi lagta (MAT-28)
   const learnedRatio=(learned&&String(learned.unit||"").trim().toLowerCase()===primaryUnit.trim().toLowerCase()&&String(learned.alt_unit||"").trim().toLowerCase()!==primaryUnit.trim().toLowerCase())?learned.ratio:null;
   const ratio=row.alt_ratio ?? learnedRatio ?? null;
-  const units=UNITS_CONST.filter(u=>u!==primaryUnit);
+  // Library ke symbol (dohre hata kar, received unit chhod kar). Library
+  // khaali ho to purani list. Line par pehle se lagi unit list me na ho to
+  // bhi dikhe, warna select chup-chaap pehla option dikha deta.
+  const lo=(x)=>String(x||"").trim().toLowerCase();
+  const unitOpts=useMemo(()=>{
+    const seen=new Set([lo(primaryUnit)]);
+    const out=[];
+    const push=(value,label)=>{ const k=lo(value); if(!k||seen.has(k)) return; seen.add(k); out.push({value,label}); };
+    if(uoms.length) uoms.forEach(u=>{ const sym=(u.symbol||u.name||"").trim(); const nm=(u.name||"").trim();
+      push(sym, nm&&lo(nm)!==lo(sym)?`${sym} — ${nm}`:sym); });
+    else UNITS_CONST.forEach(u=>push(u,u));
+    if(row.alt_unit) push(row.alt_unit,row.alt_unit);
+    if(learned?.alt_unit) push(learned.alt_unit,learned.alt_unit);
+    return out;
+  },[uoms,primaryUnit,row.alt_unit,learned]);
+  const units=unitOpts.map(o=>o.value);
   const suggest=(ratio&&primaryQty>0)?Math.round(primaryQty*ratio*100)/100:null;
+
+  // Pehle pichhli baar is material ki billing unit (bill, warna GRN), phir Kg,
+  // phir list ki pehli.
+  const kgOpt=units.find(u=>lo(u)==="kg");
+  const defUnit=row.alt_unit||learned?.alt_unit||kgOpt||units[0]||"";
+  // Switch ON ho aur unit khaali ho to wahi bhar do. Pehle select khaali
+  // value par bhi "Bag" dikhata tha, aur save par line chup-chaap received
+  // unit me chali jaati ("2 Nos × Bag ka rate").
+  useEffect(()=>{
+    if(on&&!row.alt_unit&&defUnit) onFields({altOn:true,alt_unit:defUnit});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[on,row.alt_unit,defUnit]);
 
   const toggle=()=>{
     if(on){ onFields({altOn:false,alt_qty:"",alt_unit:"",weight_source:null}); return; }
-    const defUnit=row.alt_unit||learned?.alt_unit||(units.includes("Kg")?"Kg":units[0]);
     onFields({
       altOn:true,
       alt_unit:defUnit,
@@ -685,7 +737,7 @@ function DualBillStrip({ row, onFields }){
       </button>
       {on&&(
         <div style={{display:"flex",alignItems:"center",gap:9,marginTop:7,flexWrap:"wrap"}}>
-          <span style={{fontSize:10.5,color:T.t3}}>{t("finance.received")} <b style={{color:T.t2}}>{primaryQty} {primaryUnit}</b> 🔒</span>
+          <span style={{fontSize:10.5,color:T.t3,display:"inline-flex",alignItems:"center",gap:4}}>{t("finance.received")} <b style={{color:T.t2}}>{primaryQty} {primaryUnit}</b><LockIc size={10}/></span>
           <span style={{fontSize:11,color:T.t4}}>{t("finance.bill_on")}</span>
           {/* The billing line lives here, not in the row above: on a dual-unit
               line the row's Qty column still shows the RECEIVED measure, so the
@@ -698,7 +750,8 @@ function DualBillStrip({ row, onFields }){
             style={sInp({width:100})}/>
           <select value={row.alt_unit||""} onChange={e=>onFields({altOn:true,alt_unit:e.target.value})}
             style={{padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface}}>
-            {units.map(u=><option key={u}>{u}</option>)}
+            {!row.alt_unit&&<option value="">—</option>}
+            {unitOpts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <span style={{fontSize:11,color:T.t3}}>× ₹</span>
           <input type="number" value={row.rate||""}
@@ -2115,13 +2168,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 <div>
                   {lbl("Client / Billed To *"+lockTag(partyLocked),T.grn)}
                   {partyLocked
-                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><LockIc/>{party||"—"}</div>
                     : <LibrarySelect type="client" value={party} onChange={setParty} placeholder={t("finance.select_client")} accent={T.grn}/>}
                 </div>
                 <div>
                   {lbl("Project"+lockTag(projectLocked))}
                   {projectLocked
-                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"—"}</div>
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><LockIc/>{project||"—"}</div>
                     : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder={t("common.select_project")}/>}
                 </div>
               </>
@@ -2138,20 +2191,20 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 <div>
                   {lbl("Delivery Date"+(isFromGRN?" (from GRN)":""))}
                   {isFromGRN
-                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{delivDate||"—"}</div>
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><LockIc/>{delivDate||"—"}</div>
                     : <input type="date" value={delivDate} onChange={e=>setDelivDate(e.target.value)}
                         style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>}
                 </div>
                 <div>
                   {lbl("Supplier / Party *"+lockTag(partyLocked))}
                   {partyLocked
-                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><LockIc/>{party||"—"}</div>
                     : <LibrarySelect type="supplier" value={party} onChange={setParty} placeholder={t("finance.select_supplier")}/>}
                 </div>
                 <div>
                   {lbl("Project"+lockTag(projectLocked))}
                   {projectLocked
-                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"—"}</div>
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><LockIc/>{project||"—"}</div>
                     : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder={t("common.select_project")}/>}
                 </div>
                 <div>
@@ -2176,13 +2229,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 <div>
                   {lbl("Contractor / Party *"+lockTag(partyLocked))}
                   {partyLocked
-                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><LockIc/>{party||"—"}</div>
                     : <LibrarySelect type="subcon" value={party} onChange={setParty} placeholder={t("finance.select_contractor")} accent={T.slt}/>}
                 </div>
                 <div>
                   {lbl("Project"+lockTag(projectLocked))}
                   {projectLocked
-                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"—"}</div>
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><LockIc/>{project||"—"}</div>
                     : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder={t("common.select_project")}/>}
                 </div>
               </>
@@ -2221,7 +2274,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 <div>
                   {lbl((type==="Payment Received"?"Received From *":type==="Payment Made"?"Paid To *":isSiteExpense?"Recipient (free text)":"Party *")+lockTag(partyLocked))}
                   {partyLocked ? (
-                    <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
+                    <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><LockIc/>{party||"—"}</div>
                   ) : isSiteExpense ? (
                     <input value={party} onChange={e=>setParty(e.target.value)}
                       placeholder={t("finance.e_g_site_supervisor_transport_tea")}
@@ -2278,7 +2331,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       locks to "Company / Office". Otherwise editable
                       SearchSelect with "Company / Office" + project list. */}
                   {projectLocked ? (
-                    <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||t("finance.company_office")}</div>
+                    <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><LockIc/>{project||t("finance.company_office")}</div>
                   ) : partyObj?.is_staff===1 ? (
                     <div style={{padding:"7px 9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,color:T.t3,display:"flex",alignItems:"center",gap:6}}>
                       <IcBank size={12} color={T.t4}/>
@@ -2534,7 +2587,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               {rows.map((row,idx)=>(
                 <div key={row.id} style={{background:idx%2===0?T.surface:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
                 <div style={{display:"grid",gridTemplateColumns:colTpl,gap:7,padding:"7px 12px",alignItems:"center"}}>
-                  <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}{row.fromGRN&&<span title={t("finance.locked_from_grn")} style={{marginLeft:3,fontSize:9}}>🔒</span>}</span>
+                  <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}{row.fromGRN&&<span title={t("finance.locked_from_grn")} style={{marginLeft:3,display:"inline-flex",verticalAlign:"middle"}}><LockIc size={9}/></span>}</span>
                   {/* Material — locked only for rows from GRN, new added rows editable */}
                   {row.fromGRN
                     ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.material||"—"}</div>
@@ -2559,9 +2612,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   {(()=>{
                     const lib=matLib.find(m=>(m.name||"").trim().toLowerCase()===(row.material||"").trim().toLowerCase());
                     const isLocked=row.fromGRN||!!row.material;
-                    const u=lib?.unit||row.unit||"—";
+                    // GRN se aayi line: qty GRN ki unit me hai, to wahi dikhe.
+                    // Pehle Library ki unit pehle aati thi — GSB 2 Nos aaya aur
+                    // "2 Kg" dikhta tha (Library me GSB = Kg). Save pehle bhi
+                    // row.unit (GRN) hi bhejta tha; galti sirf dikhne me thi.
+                    const u=row.fromGRN?(row.unit||lib?.unit||"—"):(lib?.unit||row.unit||"—");
                     return isLocked
-                      ?<div title={row.fromGRN?t("finance.locked_from_grn"):t("finance.locked_from_library_change_in_library")} style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11.5,color:T.t2,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"center",gap:3}}><span style={{fontSize:9}}>🔒</span>{u}</div>
+                      ?<div title={row.fromGRN?t("finance.locked_from_grn"):t("finance.locked_from_library_change_in_library")} style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11.5,color:T.t2,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"center",gap:3}}><LockIc size={10}/>{u}</div>
                       :<SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>;
                   })()}
                   <input type="number" value={row.rate} onChange={e=>updRow(row.id,"rate",e.target.value)} placeholder="0"
