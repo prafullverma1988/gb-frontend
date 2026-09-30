@@ -308,7 +308,10 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   if (!open) return null;
 
   const backendType = txn.txnType || txn.type_back || txn.type || "";
-  const meta = TYPE_META[backendType] || { label: txn.type || "Transaction", c: T.t3, bg: T.b1, in: null };
+  const baseMeta = TYPE_META[backendType] || { label: txn.type || "Transaction", c: T.t3, bg: T.b1, in: null };
+  // Subcon ko diya diesel — fuel module ki katauti (material_return + fuel).
+  const meta = (backendType === "material_return" && (txn.wallet_category === "fuel" || txn.display_type === "fuel_given" || txn.displayType === "fuel_given"))
+    ? { ...baseMeta, label: t("finance.fuel_given_label") } : baseMeta;
   const isBill = ["material_purchase", "subcon_expense", "site_expense", "sales_invoice"].includes(backendType);
   // hasDueDate: only true bills/invoices carry a separate due_date.
   // site_expense is a petty-cash event (immediate), not a credit-bill —

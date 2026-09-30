@@ -11360,6 +11360,7 @@ const dict = {
   "acctledger.rv_status_approved": "Approve · band",
   "acctledger.rv_n_entries": "{n} entry",
   "finance.paid_same_time_from_wallet": "{name} ke wallet se usi waqt chukaaya",
+  "finance.fuel_given_label": "Diesel diya (katauti)",
 };
 
 export default dict;
