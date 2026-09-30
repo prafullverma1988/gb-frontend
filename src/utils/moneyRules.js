@@ -48,6 +48,11 @@ export const partyRowSign = (r, party) => {
   const ty = String(r.type || "");
   const isStaff = Number(party && party.is_staff) === 1;
   if (isStaff && Number(r.paid_via_staff_id) === Number(party.id)) return -1;
+  // Staff ka receipt do ulti cheezein hoti hai, farak account se:
+  //   account_id set  → paisa company ke khaate me pahuncha (bank me jama /
+  //     Finance ka Payment Received) → uska bojh ghata → -1
+  //   account_id NULL → paisa staff ke paas hi raha (wallet me aaya) → +1
+  if (isStaff && ty === "receipt") return r.account_id != null ? -1 : 1;
   if (isStaff) return ["receipt", "party_payment", "payment", "settle_out"].includes(ty) ? 1 : ty === "settle_in" ? -1 : 0;
   return LEDGER_PLUS.has(ty) ? 1 : LEDGER_MINUS.has(ty) ? -1 : 0;
 };
