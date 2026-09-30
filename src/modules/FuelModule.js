@@ -465,6 +465,11 @@ function FuelEntryDrawer({ entry, onClose }) {
                   {d.meter_reading != null
                     ? <KV k={t("fuel.d_reading")} v={`${fmtN(d.meter_reading)} ${d.meter_unit === "km" ? "km" : t("fuel.d_ghante")}`} strong />
                     : <KV k={t("fuel.d_reading")} v={t("fuel.d_meter_nahi", { why: d.meter_missing_label || "—" })} />}
+                  {d.meter_flag && (
+                    <div style={{ marginTop: 6, padding: "7px 10px", background: T.ambL, borderRadius: 6, fontSize: 11.5, color: T.amb, fontWeight: 700 }}>
+                      {t("fuel.meter_shak")}{d.meter_note ? " — " + d.meter_note : ""}
+                    </div>
+                  )}
                 </Sec>
               )}
 
@@ -1134,6 +1139,7 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
               <span style={{ fontSize: 11.5, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r._k === "purchase" ? (r.store_name || r.equipment_name || "—") : (r.equipment_name || "—")}
                 {r._k === "purchase" && r.fuel_type === "petrol" && <b style={{ color: T.amb }}>{" · " + t("fuel.petrol")}</b>}
+                {r.meter_flag && <b title={r.meter_note || ""} style={{ color: T.amb }}>{" · " + t("fuel.meter_shak_chhota")}</b>}
               </span>
               <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{fmtL(r.litres)}</span>
               <span style={{ fontSize: 11.5, color: T.t3 }}>₹{fmtN(r._k === "purchase" ? r.rate : r.rate_used)}</span>
@@ -2980,7 +2986,14 @@ function ReportsTab({ byEquipment, byProject, from, to, onRange, projects, equip
 // dip. Sensor side telematics se aata hai (/fuel/sensor-checks) — GPS/fuel
 // sensor jud'ne ke baad hi; tab tak wo checks "Baaki hai" dikhte hain aur
 // khaali jagah bharne ko kuch gadha nahi jaata.
-function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
+function CrossCheckTab({ stores, byEquipment, purchases, issues, sensor, onReload }) {
+  const openEntry = useOpenEntry();
+  // Meter reading jispar shak hai — pichhli reading se kam ya namumkin badi.
+  // Entry rukti nahi (30 Sep 2026 se), isliye yahi jagah hai jahan use dekha jaata hai.
+  const meterFlagged = [
+    ...(purchases || []).filter((p) => p.meter_flag).map((p) => ({ ...p, _k: "purchase", _at: p.filled_at })),
+    ...(issues || []).filter((i) => i.meter_flag).map((i) => ({ ...i, _k: "issue", _at: i.issued_at })),
+  ].sort((a, b) => new Date(b._at) - new Date(a._at));
   // Jin entries par parchi padhi gayi thi aur ankde nahi mile — yahi wo
   // "Flagged entries" hai jo ab tak khaali rehti thi.
   const flagged = (purchases || []).filter((p) => p.slip_flag === "mismatch");
@@ -3090,6 +3103,33 @@ function CrossCheckTab({ stores, byEquipment, purchases, sensor, onReload }) {
           )}
         </Panel>
       )}
+
+      <Panel title={t("fuel.meter_shak_wali_entries", { n: meterFlagged.length })}>
+        {meterFlagged.length === 0 ? (
+          <Empty>{t("fuel.meter_shak_koi_nahi")}</Empty>
+        ) : (
+          <>
+            {meterFlagged.map((r) => (
+              <div key={r._k + r.id} onClick={() => openEntry({ kind: r._k, id: r.id })}
+                style={{ padding: "11px 0", borderBottom: "1px solid " + T.border, cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>
+                    {r.equipment_name || "—"}
+                    <span style={{ fontWeight: 500, color: T.t4, fontSize: 11.5 }}>
+                      {"  "}{fmtDT(r._at)} · {r._k === "purchase" ? (r.vendor_party_name || r.vendor_name || "") : (r.store_name || "")}
+                    </span>
+                  </span>
+                  <span style={{ fontSize: 12.5, fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                    {t("fuel.meter_n", { n: fmtN(r.meter_reading) })}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: T.amb, marginTop: 4 }}>{r.meter_note}</div>
+              </div>
+            ))}
+            <div style={{ fontSize: 11.5, color: T.t4, marginTop: 10 }}>{t("fuel.meter_shak_kaise_theek")}</div>
+          </>
+        )}
+      </Panel>
 
       {/* Parchi vs entry — ab ye khaali nahi rehta. Jis entry par AI ne parchi
           padhi thi aur ankde nahi mile, wo yahan khud aa jaati hai. */}
@@ -3397,7 +3437,7 @@ function FuelModule() {
             onRange={(f, t2) => { setFrom(f); setTo(t2); }} />
         )}
         {tab === "cc" && (
-          <CrossCheckTab stores={stores} byEquipment={byEquipment} purchases={purchases} sensor={sensor} onReload={loadCore} />
+          <CrossCheckTab stores={stores} byEquipment={byEquipment} purchases={purchases} issues={issues} sensor={sensor} onReload={loadCore} />
         )}
         {tab === "reports" && (
           <ReportsTab byEquipment={byEquipment} byProject={byProject} from={from} to={to}
