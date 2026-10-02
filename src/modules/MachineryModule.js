@@ -21,6 +21,15 @@ import api, { API_BASE, getToken } from "../config/api";
 import { t, Rich } from "../i18n";
 import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { BackClose } from "../utils/backNav";
+import CityPicker from "../components/CityPicker";
+import { canApproveAction } from "../utils/approvalAuthority";
+
+// Gadi number ka milan: space/dash/dot ka farak nahi ginna — backend bhi
+// theek yahi karta hai (utils/machineIdentity.js). Dono taraf ek jaisa na ho
+// to screen par "mil gaya" dikhta hai aur save par "pehle se hai" aata hai.
+const normReg = (s) => String(s == null ? "" : s).replace(/[\s.-]/g, "").toUpperCase();
+// City badalna (shifting) sirf admin/super-admin ka kaam — server par bhi wahi rok.
+const canShiftCity = () => canApproveAction({ roles: ["admin", "super_admin"] });
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -355,7 +364,7 @@ const KEY_DOCS = [
   { k: "puc", l: "PUC" },
 ];
 
-function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
+function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, setCities }) {
   const editing = !!machine;
   const [f, setF] = useState({});
   const [docs, setDocs] = useState({});
@@ -418,6 +427,10 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
       telematics_vendor_party_id: f.telematics_vendor_party_id || null,
       telematics_device_id: f.telematics_device_id || null,
       telematics_api_url: f.telematics_api_url || null,
+      // City sirf nayi machine ke saath jaati hai. Baad me badalna = shifting,
+      // wo apne raaste se hoti hai (sirf admin, aur log bhi banta hai) —
+      // isliye edit par server city ko chhuta hi nahi.
+      ...(editing ? {} : { city_id: f.city_id || null }),
     };
     if (f.telematics_api_key) body.telematics_api_key = f.telematics_api_key;
     if (!editing) {
@@ -467,6 +480,16 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed }) {
           </Field>
           <Field label={t("machinery.gadi_no_registration")} hint={t("machinery.yahi_do_machine_ko_sach_me")}>
             <input value={f.registration_no || ""} onChange={(e) => upd("registration_no", e.target.value)} placeholder={t("machinery.mp09_ab_1234")} style={inp} />
+          </Field>
+          {/* Machine city me rehti hai aur us city ke saare project par chalti
+              hai — isi se tay hota hai kis site wale ko ye machine dikhegi. */}
+          <Field label={t("machinery.city")} hint={editing ? t("machinery.city_shift_se_badlegi") : t("machinery.is_city_ke_sab_project_par")}>
+            {editing ? (
+              <input value={machine.city_name || t("machinery.city_nahi")} readOnly disabled style={{ ...inp, background: T.bg, color: T.t3 }} />
+            ) : (
+              <CityPicker value={f.city_id || ""} onChange={(v) => upd("city_id", v)} cities={cities || []} setCities={setCities}
+                placeholder={t("machinery.city_chuno")} selectStyle={inp} />
+            )}
           </Field>
           <Field label={t("common.code")}>
             <input value={f.code || ""} onChange={(e) => upd("code", e.target.value)} placeholder={t("machinery.eq_jcb_01")} style={inp} />
@@ -1522,7 +1545,7 @@ function MeterForm({ open, onClose, onSaved, machine, current }) {
 // ══════════════════════════════════════════════════════════════════
 // MACHINE DETAIL
 // ══════════════════════════════════════════════════════════════════
-function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
+function MachineDetail({ id, onBack, onChanged, onEdit, parties, cities }) {
   const [tab, setTab] = useState("ov");
   const [m, setM] = useState(null);
   const [timeline, setTimeline] = useState([]);
@@ -1531,6 +1554,9 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
   const [loading, setLoading] = useState(true);
   const [docOpen, setDocOpen] = useState(false);
   const [meterOpen, setMeterOpen] = useState(false);
+  // City badalna (shifting) — sirf admin; jawab me nayi city aur log.
+  const [cityOpen, setCityOpen] = useState(false);
+  const [cityLog, setCityLog] = useState([]);
   const [svcOpen, setSvcOpen] = useState(false);
   const [svcEdit, setSvcEdit] = useState(null);   // khuli service jise band karna hai
   const [svcTemplates, setSvcTemplates] = useState([]);
@@ -1612,7 +1638,10 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: T.t1 }}>{m.name}{m.code ? ` — ${m.code}` : ""}</div>
           <div style={{ fontSize: 11.5, color: T.t3, marginTop: 4, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-            {m.registration_no || <span style={{ color: T.amb }}>{t("machinery.registration_no_nahi_bhara")}</span>}
+            {m.registration_no
+              ? <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, color: T.ind, background: T.indL, border: `1px solid ${T.ind}22`, borderRadius: 5, padding: "1px 7px", fontVariantNumeric: "tabular-nums" }}>{m.registration_no}</span>
+              : <span style={{ color: T.amb }}>{t("machinery.registration_no_nahi_bhara")}</span>}
+            <Pill label={m.city_name || t("machinery.city_nahi")} c={m.city_name ? T.t2 : T.amb} bg={m.city_name ? T.sltL : T.ambL} />
             <Pill label={owned ? t("machinery.owned") : t("machinery.rented")} c={owned ? T.ind : T.t3} bg={owned ? T.indL : T.sltL} />
             {/* Workshop me padi machine ka status dikhna zaroori hai — warna
                 service kholne se jo badla, wo kahin dikhta hi nahi aur log
@@ -1632,6 +1661,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
             </div>
           )}
           <Btn ghost icon={IcGauge} onClick={() => setMeterOpen(true)}>{t("machinery.meter")}</Btn>
+          {canShiftCity() && <Btn ghost onClick={() => setCityOpen(true)}>{t("machinery.city_badlo")}</Btn>}
           {onEdit && <Btn ghost onClick={() => onEdit(m)}>{t("common.edit_2")}</Btn>}
         </div>
       </div>
@@ -1919,10 +1949,86 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties }) {
       <ServiceForm open={svcOpen} onClose={() => { setSvcOpen(false); setSvcEdit(null); }}
         machine={m} parties={parties} existing={svcEdit} templates={svcTemplates}
         onSaved={() => { load(true); onChanged && onChanged(); }} />
+      {/* Shifting — machine ek city se doosri me. Sirf admin (server par bhi
+          wahi rok), aur har shift log hota hai: kahan se kahan, kisne, kab. */}
+      <CityShiftModal open={cityOpen} onClose={() => setCityOpen(false)} machine={m} cities={cities || []}
+        log={cityLog} onLoadLog={setCityLog}
+        onSaved={() => { load(true); onChanged && onChanged(); }} />
     </div>
   );
 }
 
+
+// ══════════════════════════════════════════════════════════════════
+// CITY SHIFT — machine kis city me khadi hai
+// ══════════════════════════════════════════════════════════════════
+// Prafull ka niyam: shifting admin ya usse upar hi karega. City team apni
+// city ki machine hi dekhti hai, isliye doosri city ki machine maangne ka
+// sawaal hi nahi uthta. Har shift log hota hai — "machine kahan hai" ka
+// jawab tabhi bharosemand rehta hai.
+function CityShiftModal({ open, onClose, machine, cities, log, onLoadLog, onSaved }) {
+  const [to, setTo] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    if (!open || !machine) return;
+    setTo(machine.city_id ? String(machine.city_id) : "");
+    setNote(""); setErr("");
+    api.get(`/machinery/fleet/${machine.id}/city-log`)
+      .then((r) => onLoadLog(r && r.success ? r.data || [] : []))
+      .catch(() => onLoadLog([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, machine && machine.id]);
+
+  const save = async () => {
+    if (!to) { setErr(t("machinery.city_chuno")); return; }
+    setBusy(true); setErr("");
+    const r = await api.post(`/machinery/fleet/${machine.id}/city`, { city_id: Number(to), note: note.trim() || null });
+    setBusy(false);
+    if (!r || r.success === false) { setErr((r && r.message) || t("common.something_went_wrong")); return; }
+    onSaved(); onClose();
+  };
+
+  if (!machine) return null;
+  return (
+    <Modal open={open} onClose={onClose} width={520}
+      title={t("machinery.city_badlo")} sub={machine.name}
+      footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={busy}>{busy ? t("common.saving") : t("machinery.shift_karo")}</Btn></>}>
+      <Field label={t("machinery.abhi_kahan_hai")}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: machine.city_name ? T.t1 : T.amb }}>
+          {machine.city_name || t("machinery.city_nahi")}
+        </div>
+      </Field>
+      <div style={{ height: 10 }} />
+      <Field label={t("machinery.ab_kis_city_me")}>
+        <select value={to} onChange={(e) => setTo(e.target.value)} style={inp}>
+          <option value="">{t("machinery.city_chuno")}</option>
+          {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </Field>
+      <div style={{ height: 10 }} />
+      <Field label={t("machinery.wajah_optional")}>
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("machinery.e_g_bhilai_site_par_kaam_shuru")} style={inp} />
+      </Field>
+      {err && <Notice>{err}</Notice>}
+      {log && log.length > 0 && (
+        <div style={{ marginTop: 14, borderTop: `1px solid ${T.b1}`, paddingTop: 10 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: T.t2, marginBottom: 6 }}>{t("machinery.shifting_ka_itihaas")}</div>
+          {log.map((l) => (
+            <div key={l.id} style={{ fontSize: 11.5, color: T.t3, padding: "3px 0" }}>
+              {(l.from_city_name || t("machinery.city_nahi")) + " → " + (l.to_city_name || t("machinery.city_nahi"))}
+              <span style={{ color: T.t4 }}>{" · " + fmtD(l.created_at) + (l.moved_by_name ? " · " + l.moved_by_name : "")}</span>
+              {l.note ? <span style={{ color: T.t4 }}>{" · " + l.note}</span> : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
 // ══════════════════════════════════════════════════════════════════
 // MODULE
 // ══════════════════════════════════════════════════════════════════
@@ -3164,6 +3270,10 @@ function MachineryModule() {
   const [tele, setTele] = useState(null);
   // "Nayi machine banao" (GPS tab) se aaya naam/gadi no. — form me pehle se bhara.
   const [formSeed, setFormSeed] = useState(null);
+  // City: filter ki list + fleet ki chhanni (naam / gadi no.)
+  const [cities, setCities] = useState([]);
+  const [fCity, setFCity] = useState("");
+  const [fQ, setFQ] = useState("");
 
   // Reports ka apna date range — Fleet/Reminders par date ka koi matlab nahi,
   // aur report kholte hi poora itihaas maangna bhaari padta hai.
@@ -3175,7 +3285,7 @@ function MachineryModule() {
   // khuli ho to wo unmount ho kar apna tab bhool jaata hai.
   const load = useCallback(async (silent) => {
     if (!silent) setLoading(true);
-    const [f, d, g, p, ec, pr, te] = await Promise.all([
+    const [f, d, g, p, ec, pr, te, ct] = await Promise.all([
       api.get("/machinery/fleet").catch(() => null),
       api.get("/machinery/due").catch(() => null),
       api.get("/machinery/reports/gaps").catch(() => null),
@@ -3184,6 +3294,7 @@ function MachineryModule() {
       // Sirf Reports ke project filter ke liye — baaki tab ko iski zaroorat nahi.
       api.get("/projects").catch(() => null),
       api.get("/telematics/overview").catch(() => null),
+      api.get("/library/cities").catch(() => null),
     ]);
     // Preventive vs breakdown ab cost ke jawab me hi aata hai (MCH-24) — pehle alag
     // /reports/health call wahi hisaab dobara ginta tha. Purana backend ho (health
@@ -3199,6 +3310,7 @@ function MachineryModule() {
     setHealth(he?.success ? he.data : null);
     setProjects(pr?.success ? pr.data || [] : []);
     setTele(te?.success ? te.data : null);
+    setCities(ct?.success ? ct.data || [] : []);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -3213,6 +3325,20 @@ function MachineryModule() {
   };
 
   const owned = fleet.filter((m) => m.owned);
+  // Fleet ki chhanni: city + naam/gadi no. Number ki khoj me space/dash/dot
+  // ka farak nahi padta — site par log "CG04AB1234" bhi likhte hain aur
+  // "CG 04 AB 1234" bhi.
+  const fleetShown = useMemo(() => {
+    const q = fQ.trim().toLowerCase();
+    const qReg = normReg(fQ);
+    return fleet.filter((m) => {
+      if (fCity && String(m.city_id || "") !== String(fCity)) return false;
+      if (!q) return true;
+      if (String(m.name || "").toLowerCase().includes(q)) return true;
+      if (String(m.code || "").toLowerCase().includes(q)) return true;
+      return !!qReg && normReg(m.registration_no).includes(qReg);
+    });
+  }, [fleet, fCity, fQ]);
   const active = due.filter((d) => !d.snoozed);
   const expired = active.filter((d) => d.days < 0);
 
@@ -3250,7 +3376,7 @@ function MachineryModule() {
     <div style={{ background: T.bg, height: "100%", display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px 20px" }}>
         {openId ? (
-          <MachineDetail id={openId} onBack={() => setOpenId(null)} onChanged={() => load(true)} parties={parties}
+          <MachineDetail id={openId} onBack={() => setOpenId(null)} onChanged={() => load(true)} parties={parties} cities={cities}
             onEdit={(m) => { setEditMachine(m); setFormOpen(true); }} />
         ) : (
           <>
@@ -3302,21 +3428,52 @@ function MachineryModule() {
                 )}
                 {fleet.length > 0 && (
                   <>
-                    <Row head cols="1.7fr 92px 1fr 1.1fr 120px 110px">
-                      <span>{t("fuel.machine")}</span><span>{t("common.ownership")}</span><span>{t("machinery.current_meter")}</span><span>{t("common.documents")}</span><span>{t("machinery.health")}</span><span>{t("machinery.detail_poora")}</span>
+                    {/* City + naam/gadi no. ki chhanni — poori list rozana dekhne
+                        layak nahi rehti jab har city ki machine ek saath ho. */}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+                      <select value={fCity} onChange={(e) => setFCity(e.target.value)}
+                        style={{ padding: "7px 10px", borderRadius: 7, border: `1.5px solid ${fCity ? T.ind : T.b1}`, fontSize: 12, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none" }}>
+                        <option value="">{t("machinery.sab_city")}</option>
+                        {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      <input value={fQ} onChange={(e) => setFQ(e.target.value)} placeholder={t("machinery.naam_ya_gadi_no_se_khojo")}
+                        style={{ flex: 1, minWidth: 190, padding: "7px 11px", borderRadius: 7, border: `1.5px solid ${fQ ? T.ind : T.b1}`, fontSize: 12, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none" }} />
+                      <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.n_machine", { n: fleetShown.length })}</span>
+                      {(fCity || fQ) && (
+                        <button type="button" onClick={() => { setFCity(""); setFQ(""); }}
+                          style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, color: T.ind }}>
+                          {t("common.clear")}
+                        </button>
+                      )}
+                    </div>
+                    <Row head cols="1.7fr 100px 92px 0.9fr 1fr 110px 100px">
+                      <span>{t("fuel.machine")}</span><span>{t("machinery.city")}</span><span>{t("common.ownership")}</span><span>{t("machinery.current_meter")}</span><span>{t("common.documents")}</span><span>{t("machinery.health")}</span><span>{t("machinery.detail_poora")}</span>
                     </Row>
-                    {fleet.map((m) => {
+                    {fleetShown.length === 0 && (
+                      <Empty>{t("machinery.is_chhanni_me_koi_machine_nahi")}</Empty>
+                    )}
+                    {fleetShown.map((m) => {
                       const tone = m.doc_status ? expiryTone(m.doc_status.days) : null;
                       const bad = m.doc_status && m.doc_status.days < 0;
                       const soon = m.doc_status && m.doc_status.days >= 0 && m.doc_status.days <= 30;
                       return (
-                        <Row key={m.id} cols="1.7fr 92px 1fr 1.1fr 120px 110px" onClick={() => setOpenId(m.id)}>
+                        <Row key={m.id} cols="1.7fr 100px 92px 0.9fr 1fr 110px 100px" onClick={() => setOpenId(m.id)}>
                           <div>
-                            <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{m.name}{m.code ? ` — ${m.code}` : ""}</div>
+                            {/* Gadi number naam ke saath hi, alag rang me — fuel ki
+                                parchi number se milti hai, naam se nahi. */}
+                            <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1, display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                              <span>{m.name}{m.code ? ` — ${m.code}` : ""}</span>
+                              {m.registration_no
+                                ? <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3, color: T.ind, background: T.indL, border: `1px solid ${T.ind}22`, borderRadius: 5, padding: "1px 6px", fontVariantNumeric: "tabular-nums" }}>{m.registration_no}</span>
+                                : <span style={{ fontSize: 10, fontWeight: 700, color: T.amb, background: T.ambL, borderRadius: 5, padding: "1px 6px" }}>{t("machinery.gadi_no_nahi")}</span>}
+                            </div>
                             <div style={{ fontSize: 10.5, color: T.t4 }}>
-                              {m.registration_no || (m.owned ? t("machinery.reg_no_nahi") : m.default_vendor_name || "—")}
+                              {m.owned ? t("machinery.owned") : (m.default_vendor_name || t("machinery.rented"))}
                             </div>
                           </div>
+                          <span style={{ fontSize: 11.5, color: m.city_name ? T.t2 : T.amb }}>
+                            {m.city_name || t("machinery.city_nahi")}
+                          </span>
                           <span><Pill label={m.owned ? t("machinery.owned") : t("machinery.rented")} c={m.owned ? T.ind : T.t3} bg={m.owned ? T.indL : T.sltL} /></span>
                           <span>{m.owned ? <MeterCell meter={m.meter} unit={m.meter_unit} /> : <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.vendor_scope")}</span>}</span>
                           <span>
@@ -3404,7 +3561,7 @@ function MachineryModule() {
 
       <ImportWizard open={importOpen} onClose={() => setImportOpen(false)} onDone={() => load(true)} />
 
-      <MachineForm open={formOpen} machine={editMachine} parties={parties} seed={formSeed}
+      <MachineForm open={formOpen} machine={editMachine} parties={parties} seed={formSeed} cities={cities} setCities={setCities}
         onClose={() => { setFormOpen(false); setEditMachine(null); setFormSeed(null); }}
         onSaved={() => load(true)} />
     </div>
