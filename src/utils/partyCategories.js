@@ -17,7 +17,7 @@ import { t } from "../i18n";
 export const PCAT_MAX = 12;
 export const SYSTEM_KEYS = ["material_vendor", "equipment_vendor", "fuel_vendor", "client", "subcontractor",
   "labour_vendor", "transporter", "consultant", "staff"];
-const LOCKED = ["staff", "client", "subcontractor"];
+const LOCKED = ["staff"];   // Prafull, 2 Oct 2026: sirf Staff delete nahi hoti
 
 // Server na mile (purana backend / network) to wahi purane 9 naam.
 const DEFAULT_LABEL = {
