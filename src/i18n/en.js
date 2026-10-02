@@ -6405,6 +6405,8 @@ const dict = {
   "procurement.select_order_medium":                           "Select order medium",
   "procurement.selected_items":                                "Selected Items",
   "procurement.send_po_to_vendor":                             "Send PO to Vendor",
+  "procurement.copy_message":                                 "Copy message",
+  "procurement.message_copied":                               "Copied!",
   "procurement.send_to_vendor":                                "📤 Send to Vendor",
   "procurement.sent_via":                                      "✓ Sent via",
   "procurement.share_po_link":                                 "Share PO link",

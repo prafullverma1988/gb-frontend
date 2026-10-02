@@ -6404,6 +6404,8 @@ const dict = {
   "procurement.select_order_medium":                           "ऑर्डर मीडियम सिलेक्ट करो",
   "procurement.selected_items":                                "सिलेक्टेड आइटम्स",
   "procurement.send_po_to_vendor":                             "PO वेंडर को भेजो",
+  "procurement.copy_message":                                 "मैसेज कॉपी करो",
+  "procurement.message_copied":                               "कॉपी हो गया",
   "procurement.send_to_vendor":                                "📤 वेंडर को भेजो",
   "procurement.sent_via":                                      "✓ वाया भेजा गया",
   "procurement.share_po_link":                                 "PO लिंक शेयर करो",

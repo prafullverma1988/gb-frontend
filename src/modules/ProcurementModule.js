@@ -1664,10 +1664,10 @@ function SendToVendorModal({po,onClose,onSent,srcMr,vendorPhone:vPhone=""}){
   const [sending,setSending]=useState(false);
   const [sentVia,setSentVia]=useState(null);
   const sendingRef = useRef(false);
-  // Public PO link (vendor view)
-  const baseUrl = (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname))
-    ? "http://localhost:3000" : "https://gbuildcon.in";
-  const poLink = `${baseUrl}/po-view/${po.id}`;
+  // (2 Oct 2026) Pehle message ke aakhir me "View/confirm: gbuildcon.in/po-view/<id>"
+  // jaata tha — wo page kisi repo me hai hi nahi (purana domain), to vendor ko
+  // har PO par toota link milta tha. Link hata diya; "Copy Link" ki jagah ab
+  // poora message copy hota hai (kisi bhi app me paste karo).
   // Line ki MR par maang ki photo / asset ka spec ho to line ke neeche — WhatsApp
   // aur Email dono isi message se bante hain (Prafull, 2 Oct 2026: "PO mail pe bhi").
   const srcOf = (it) => (srcMr && it.linked_mr_id ? srcMr(it.linked_mr_id) : null);
@@ -1678,12 +1678,12 @@ function SendToVendorModal({po,onClose,onSent,srcMr,vendorPhone:vPhone=""}){
   const reqPhotoN = (po.items||[]).reduce((n,it)=>{ const m=srcOf(it); return n+(m?photoList(m.photo_urls).length:0); },0);
   // Receiving contacts message me isliye ki vendor ka driver site pahunch kar
   // seedha call kar sake — yahi is poore feature ka asli output hai.
-  const waMsg = `*Purchase Order ${po.poNum||"PO-"+po.id}*\nFrom: ${companyName()}\nProject: ${po.project}\nDelivery: ${po.deliverySite||po.project}\nExp Date: ${po.delivery||"TBD"}\n${contactsText(po.receivingContacts)}\nItems:\n${itemSummary}\n\nTotal: ₹${(po.amount||0).toLocaleString("en-IN")}\n\nView/confirm: ${poLink}`;
+  const waMsg = `*Purchase Order ${po.poNum||"PO-"+po.id}*\nFrom: ${companyName()}\nProject: ${po.project}\nDelivery: ${po.deliverySite||po.project}\nExp Date: ${po.delivery||"TBD"}\n${contactsText(po.receivingContacts)}\nItems:\n${itemSummary}\n\nTotal: ₹${(po.amount||0).toLocaleString("en-IN")}`;
   const emailSubj = `Purchase Order ${po.poNum||"PO-"+po.id} — ${companyName()}`;
   const emailBody = waMsg.replace(/\*/g,"");
 
   const open = (url, via) => { window.open(url, "_blank", "noopener"); setSentVia(via); };
-  const copyLink = () => { navigator.clipboard?.writeText(poLink); setCopied(true); setSentVia("copy_link"); setTimeout(()=>setCopied(false),1800); };
+  const copyMsg = () => { navigator.clipboard?.writeText(emailBody); setCopied(true); setSentVia("copy_link"); setTimeout(()=>setCopied(false),1800); };
 
   const markSent = async () => {
     if (sendingRef.current) return;
@@ -1705,7 +1705,7 @@ function SendToVendorModal({po,onClose,onSent,srcMr,vendorPhone:vPhone=""}){
       action:()=>open(`mailto:?subject=${encodeURIComponent(emailSubj)}&body=${encodeURIComponent(emailBody)}`,"email")},
     {label:t("procurement.print_pdf"), via:"pdf",      c:T.pur, bg:T.purL, Icon:IcShare,
       action:()=>{ window.print(); setSentVia("pdf"); }},
-    {label:copied?"Copied!":"Copy Link", via:"copy_link", c:T.slt, bg:T.sltL, Icon:IcCopy, action:copyLink},
+    {label:copied?t("procurement.message_copied"):t("procurement.copy_message"), via:"copy_link", c:T.slt, bg:T.sltL, Icon:IcCopy, action:copyMsg},
   ];
 
   return(
