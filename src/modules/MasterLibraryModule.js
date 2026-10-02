@@ -6,6 +6,8 @@ import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { readSheet, sheetToRows } from "../utils/sheetRows";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { loadPartyCategories, dropPartyCategoryCache, defaultCategories, partyCategoryKeys, catLabel,
+  selectionToPayload, toRoleKey, PCAT_MAX } from "../utils/partyCategories";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -975,49 +977,29 @@ function PartyMasterSection() {
   // Side-slide detail drawer — clicking a party row opens it.
   const [detailParty, setDetailParty] = useState(null);
 
-  // ── Multi-role support ──────────────────────────────────────────
-  // A party can hold several roles (Material Vendor + Subcon + Transporter).
-  // Staff is EXCLUSIVE — selecting it clears the others and vice-versa.
-  const ROLE_OPTIONS = [
-    { key: "material_vendor",  label: t("material_flow.material_vendor") },
-    { key: "equipment_vendor", label: t("master_library.equipment_vendor") },
-    // Diesel pump apna alag dhandha hai. Backend me ye role pehle se tha
-    // (utils/partyRoles.js), par yahan chip hi nahi tha — isliye koi pump
-    // ko Fuel Vendor tag kar hi nahi sakta tha aur sab material_vendor par
-    // pade rahe.
-    { key: "fuel_vendor",      label: t("master_library.fuel_vendor") },
-    { key: "client",           label: t("master_library.client") },
-    { key: "subcontractor",    label: t("common.subcontractor") },
-    { key: "labour_vendor",    label: t("common.labour_vendor") },
-    { key: "transporter",      label: t("master_library.transporter") },
-    { key: "consultant",       label: t("master_library.consultant") },
-    { key: "staff",            label: t("master_library.staff") },
-  ];
-  const ROLE_ALIAS = {
-    "material vendor":"material_vendor","material supplier":"material_vendor","supplier":"material_vendor","vendor":"material_vendor","other vendor":"material_vendor",
-    "equipment":"equipment_vendor","equipment vendor":"equipment_vendor","machinery":"equipment_vendor",
-    "fuel":"fuel_vendor","fuel vendor":"fuel_vendor","diesel":"fuel_vendor","petrol pump":"fuel_vendor",
-    "client":"client","subcontractor":"subcontractor","sub-contractor":"subcontractor","subcon":"subcontractor",
-    "labour vendor":"labour_vendor","labor vendor":"labour_vendor","transporter":"transporter","consultant":"consultant","staff":"staff",
-    // Onsite (purana app) ke shabd — greenbox bhilai ka data wahin se aaya
-    // hai. Ye na hone se un party ka role chip hi nahi banta tha aur wo kisi
-    // role filter me nahi aati thin (backend utils/partyRoles.js me bhi yahi).
-    "customer":"client","contractor":"subcontractor","labour contractor":"subcontractor",
-    "labor contractor":"subcontractor","equipment supplier":"equipment_vendor",
-  };
-  const toRoleKey = (v) => {
-    if (!v) return null;
-    const k = String(v).toLowerCase().trim();
-    return ROLE_ALIAS[k] || (ROLE_OPTIONS.some(o => o.key === k) ? k : null);
-  };
-  // Parse a party's stored roles (comma-string) + legacy type → key array.
+  // ── Category (multi) ────────────────────────────────────────────
+  // Ek party kai category me ho sakti hai (Material Vendor + Subcon +
+  // Transporter). Staff AKELI — use chuno to baaki hat jaati hain, aur ulta.
+  // Category ki list ab company ki apni hai (Library → Party Category): 9
+  // default (naam badla ho sakta hai, kuch hataayi ho sakti hain) + company
+  // ki apni. form.roles me category ki KEY rehti hai — default ke liye
+  // canonical role ("material_vendor"), apni ke liye "c<id>". Save par
+  // selectionToPayload use roles + category_ids me badalta hai.
+  // Server se list na aaye (purana backend) to wahi purane 9 chip, aur tab
+  // category_ids bheja hi nahi jaata (catsOk).
+  const [cats, setCats] = useState(defaultCategories);
+  const [catsOk, setCatsOk] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    loadPartyCategories(true).then(r => { if (alive) { setCats(r.list); setCatsOk(r.ok); } });
+    return () => { alive = false; };
+  }, []);
+  // Party ki category keys — khaali ho to Material Vendor (pehle jaisa).
   const parsePartyRoles = (p) => {
-    const set = [];
-    if (p?.roles) String(p.roles).split(",").forEach(r => { const c = toRoleKey(r); if (c && !set.includes(c)) set.push(c); });
-    if (set.length === 0) { const c = p?.is_staff ? "staff" : toRoleKey(p?.type); if (c) set.push(c); }
-    return set.length ? set : ["material_vendor"];
+    const keys = partyCategoryKeys(p, cats);
+    return keys.length ? keys : ["material_vendor"];
   };
-  // Toggle a role in the form; enforce staff-exclusivity.
+  // Toggle a category in the form; enforce staff-exclusivity.
   const toggleRole = (key) => setForm(p => {
     const cur = Array.isArray(p.roles) ? p.roles : [];
     let next;
@@ -1030,15 +1012,21 @@ function PartyMasterSection() {
     if (next.length === 0) next = ["material_vendor"];          // never empty
     // primary = first role → drives the `type`/staff logic
     const primary = next[0];
-    return { ...p, roles: next, type: primary === "staff" ? "Staff" : (ROLE_OPTIONS.find(o => o.key === primary)?.label || p.type) };
+    return { ...p, roles: next, type: primary === "staff" ? "Staff" : catLabel(primary, cats) };
   });
 
-  // "Material Vendor" is the canonical UI label. We still recognise legacy
-  // values ("Supplier" / "Material Supplier") so existing parties show up
-  // under the same chip without needing a DB migration. "Staff" is new —
-  // app users get a staff-party automatically; this is for off-app casual staff.
-  const types = ["All", "Material Vendor", "Equipment Vendor", "Fuel Vendor", "Client", "Subcontractor", "Labour Vendor", "Transporter", "Consultant", "Staff"];
-  const typeColors = { "Material Vendor": { c: T.blue, bg: T.blueSoft }, "Equipment Vendor": { c: T.rose, bg: T.roseSoft }, "Fuel Vendor": { c: T.amber, bg: T.amberSoft }, Supplier: { c: T.blue, bg: T.blueSoft }, "Material Supplier": { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, "Labour Vendor": { c: T.amber, bg: T.amberSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft }, Staff: { c: T.teal, bg: T.tealSoft }, staff: { c: T.teal, bg: T.tealSoft } };
+  // Rang base role se — apni category apne base type ka rang leti hai.
+  const ROLE_COLORS = { material_vendor: { c: T.blue, bg: T.blueSoft }, equipment_vendor: { c: T.rose, bg: T.roseSoft }, fuel_vendor: { c: T.amber, bg: T.amberSoft }, client: { c: T.green, bg: T.greenSoft }, subcontractor: { c: T.purple, bg: T.purpleSoft }, labour_vendor: { c: T.amber, bg: T.amberSoft }, transporter: { c: T.amber, bg: T.amberSoft }, consultant: { c: T.teal, bg: T.tealSoft }, staff: { c: T.teal, bg: T.tealSoft } };
+  const colorOf = (key) => {
+    const c = cats.find(x => x.key === key);
+    return ROLE_COLORS[c ? c.base_role : key] || { c: T.textMid, bg: T.borderLight };
+  };
+  const activeCats = cats.filter(c => c.is_active);
+  // Form ke chip: chalu category + jo is party par pehle se lagi hai (band ho
+  // chuki ho to bhi dikhe, warna hata hi na sako).
+  const formCats = cats.filter(c => c.is_active || (Array.isArray(form.roles) && form.roles.includes(c.key)));
+  // Filter: "Saari category" + har chalu category (company ka naam).
+  const typeOptions = [{ key: "All", label: t("master_library.pcat_all") }, ...activeCats.map(c => ({ key: c.key, label: c.label }))];
   const isStaffForm = Array.isArray(form.roles) ? form.roles.includes("staff") : form.type === "Staff";
 
   // Ginti parties se hi nikalti hai — library ka naam ho ya legacy free text,
@@ -1065,14 +1053,8 @@ function PartyMasterSection() {
 
   const filtered = parties.filter(p => {
     if (filterDesig !== "All" && String(p.designation || "").trim() !== filterDesig) return false;
-    // Role-aware filter: a multi-role party shows under EACH of its roles.
-    if (filterType === "Staff") {
-      if (!p.is_staff) return false;
-    } else if (filterType !== "All") {
-      const wantKey = toRoleKey(filterType);
-      const partyKeys = parsePartyRoles(p);
-      if (wantKey && !partyKeys.includes(wantKey)) return false;
-    }
+    // Category filter: kai category wali party HAR ek ke neeche dikhti hai.
+    if (filterType !== "All" && !partyCategoryKeys(p, cats).includes(filterType)) return false;
     const s = search.toLowerCase();
     if (s && !p.name?.toLowerCase().includes(s) && !(p.phone||"").includes(s) && !(p.city||"").toLowerCase().includes(s)) return false;
     return true;
@@ -1130,7 +1112,12 @@ function PartyMasterSection() {
         delete payload.wallet_limit; delete payload.negative_limit;
         // Send the multi-role array; backend stores comma-joined roles +
         // sets type=primary. `type` still included for older-backend safety.
-        payload.roles = Array.isArray(form.roles) && form.roles.length ? form.roles : [toRoleKey(form.type) || "material_vendor"];
+        // Apni category → category_ids, uska base type roles me.
+        const sel = Array.isArray(form.roles) && form.roles.length ? form.roles : [toRoleKey(form.type) || "material_vendor"];
+        const pick = selectionToPayload(sel, cats);
+        payload.roles = pick.roles.length ? pick.roles : ["material_vendor"];
+        if (catsOk) payload.category_ids = pick.category_ids;
+        else delete payload.category_ids;
       }
       if (editing) {
         const res = await api.put("/finance/parties/" + editing.id, payload);
@@ -1163,6 +1150,9 @@ function PartyMasterSection() {
     setParties(prev => prev.filter(p => p.id !== id));
   };
 
+  // Import ke Type me company ki chalu category (Staff ke bina) — server bhi
+  // wahi list deta hai (lists.types) aur wahi naam pehchanta hai.
+  const importTypeNames = activeCats.filter(c => c.base_role !== "staff").map(c => c.label);
   const partyTemplateConfig = {
     headers: ["Party Name", "Type", "Phone", "Email", "GSTIN", "City"],
     sampleRows: [
@@ -1171,8 +1161,10 @@ function PartyMasterSection() {
     ],
     filename: "gb_parties_export.csv",
     templateFilename: "gb_template_parties.csv",
-    instructions: "Party Name is required. Type: Material Vendor, Equipment Vendor, Fuel Vendor, Client, Subcontractor, Labour Vendor, Transporter, Consultant (blank = Material Vendor). Staff cannot be imported.",
-    mapRow: (p) => [p.name, p.type, p.phone, p.email, p.gstin, p.city],
+    instructions: t("master_library.party_import_instructions", { types: importTypeNames.join(", ") }),
+    // Export me pehli category ka naam — wahi file dobara import ho to party
+    // usi category me jaaye (apni category bhi).
+    mapRow: (p) => [p.name, partyCategoryKeys(p, cats).map(k => catLabel(k, cats))[0] || p.type, p.phone, p.email, p.gstin, p.city],
     importUrl: "/finance/parties/import",
     fields: [
       { key: "name", col: "Party Name", aliases: ["name", "party"], required: true },
@@ -1202,16 +1194,16 @@ function PartyMasterSection() {
         ) : null}
       </span>
     )},
-    { key: "type", label: t("master_library.roles"), minW: 180, render: r => {
-      // Multi-role: render one colored badge per role, separated by a " / "
-      // divider so multiple roles read as "Material Vendor / Transporter".
+    { key: "type", label: t("common.category"), minW: 180, render: r => {
+      // Multi-category: one colored badge per category, separated by a " / "
+      // divider so it reads as "Material Vendor / Transporter". Naam company
+      // ka (Library → Party Category me badla ho to wahi).
       const keys = parsePartyRoles(r);
-      const keyToLabel = { material_vendor:"Material Vendor", equipment_vendor:"Equipment Vendor", fuel_vendor:"Fuel Vendor", client:"Client", subcontractor:"Subcontractor", labour_vendor:"Labour Vendor", transporter:"Transporter", consultant:"Consultant", staff:"Staff" };
       return (
         <span style={{ display:"inline-flex", flexWrap:"wrap", alignItems:"center", gap:4 }}>
           {keys.map((k, i) => {
-            const label = keyToLabel[k] || k;
-            const tc = typeColors[label] || { c: T.textMid, bg: T.borderLight };
+            const label = catLabel(k, cats);
+            const tc = colorOf(k);
             return (
               <span key={k} style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
                 {i > 0 && <span style={{ color: T.textLight, fontWeight:700, fontSize:12 }}>/</span>}
@@ -1240,7 +1232,7 @@ function PartyMasterSection() {
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="parties" onAdd={openCreate} addLabel="Add Party"
         templateConfig={partyTemplateConfig} currentData={parties}
         filterEl={<>
-          <div style={{minWidth:180}}><SearchSelect value={filterType} options={types} onChange={setFilterType} placeholder={t("master_library.filter_type")}/></div>
+          <div style={{minWidth:180}}><SearchSelect value={filterType} options={typeOptions} onChange={setFilterType} placeholder={t("master_library.filter_type")}/></div>
           <div style={{minWidth:190}}><SearchSelect value={filterDesig} options={desigOptions} onChange={setFilterDesig} placeholder={t("master_library.filter_designation")}/></div>
         </>}
       />
@@ -1252,7 +1244,6 @@ function PartyMasterSection() {
       {detailParty && (() => {
         const p = detailParty;
         const roleKeys = parsePartyRoles(p);
-        const keyToLabel = { material_vendor:"Material Vendor", equipment_vendor:"Equipment Vendor", fuel_vendor:"Fuel Vendor", client:"Client", subcontractor:"Subcontractor", labour_vendor:"Labour Vendor", transporter:"Transporter", consultant:"Consultant", staff:"Staff" };
         const Row = ({ label, value, mono }) => (
           <div style={{ display:"flex", padding:"9px 0", borderBottom:`1px solid ${T.borderLight}` }}>
             <span style={{ width:130, flexShrink:0, fontSize:11.5, color:T.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:".3px" }}>{label}</span>
@@ -1271,8 +1262,8 @@ function PartyMasterSection() {
                   <div style={{ fontSize:17, fontWeight:700, color:T.text, lineHeight:1.25 }}>{p.name}</div>
                   <div style={{ display:"inline-flex", flexWrap:"wrap", alignItems:"center", gap:4, marginTop:7 }}>
                     {roleKeys.map((k,i) => {
-                      const label = keyToLabel[k] || k;
-                      const tc = typeColors[label] || { c:T.textMid, bg:T.borderLight };
+                      const label = catLabel(k, cats);
+                      const tc = colorOf(k);
                       return (
                         <span key={k} style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
                           {i>0 && <span style={{ color:T.textLight, fontWeight:700 }}>/</span>}
@@ -1345,18 +1336,18 @@ function PartyMasterSection() {
         <div style={{ marginBottom: 14 }}>
           <FormField label={t("finance.party_name")} value={form.name} onChange={v => upd("name", v)} placeholder={t("master_library.full_legal_name")} required disabled={editingLinkedStaff} />
         </div>
-        {/* ── Multi-role selector ── ek party kai roles me ho sakti hai ── */}
+        {/* ── Category selector ── ek party kai category me ho sakti hai ── */}
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 6 }}>
-           {t("master_library.roles")} <span style={{ color: T.red }}>*</span>
+           {t("common.category")} <span style={{ color: T.red }}>*</span>
             <span style={{ fontWeight: 400, color: T.textMid, fontSize: 11, marginLeft: 6 }}>
              {t("master_library.ek_se_zyada_select_kar_sakte")}
             </span>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {ROLE_OPTIONS.map(opt => {
+            {formCats.map(opt => {
               const active = Array.isArray(form.roles) && form.roles.includes(opt.key);
-              const col = typeColors[opt.label] || { c: T.blue, bg: T.blueSoft };
+              const col = colorOf(opt.key);
               const staffLocked = !!editing && (opt.key === "staff" ? !form.roles?.includes("staff") : form.roles?.includes("staff"));
               return (
                 <button key={opt.key} type="button"
@@ -1381,6 +1372,7 @@ function PartyMasterSection() {
              {t("master_library.staff_alag_category_hai_wallet_app")}
             </div>
           )}
+          <div style={{ fontSize: 10.5, color: T.textLight, marginTop: 6 }}>{t("master_library.pcat_form_hint")}</div>
         </div>
         {editingLinkedStaff ? (
           <div style={{ fontSize: 11, color: T.textMid, marginTop: -8, marginBottom: 12 }}>
@@ -1484,6 +1476,157 @@ function PartyMasterSection() {
         </>
         )}
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update Party" : (isStaffForm ? "Add Staff" : "Add Party")} />
+      </Modal>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 3a. PARTY CATEGORY
+// ═══════════════════════════════════════════════════════════════════════
+// Prafull: "abhi jitne hai usko default rakho, user add, edit ya delete kar
+// sake" — kul 12 tak, default milakar. 9 default (Material Vendor … Staff)
+// app ke logic me fix hain; unka naam badal sakte ho ya hata sakte ho
+// (Staff, Client, Subcontractor nahi hatte — server rokta hai). Apni nayi
+// category ka "base type" batata hai ki wo party app me kahan-kahan aayegi.
+// Niyam server par: gb-backend utils/partyCategories.js.
+function PartyCategorySection() {
+  const [items, setItems]     = useState([]);
+  const [max, setMax]         = useState(PCAT_MAX);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch]   = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [label, setLabel]     = useState("");
+  const [base, setBase]       = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [formErr, setFormErr] = useState("");
+  const [note, setNote]       = useState("");   // upar ka sandesh (12 poori / wapas chalu na hui)
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await api.get("/library/party-categories");
+      if (r.success) { setItems(r.data || []); setMax(r.max || PCAT_MAX); }
+    } catch (e) {}
+    setLoading(false);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  // Finance ke picker 1 minute ki yaad rakhte hain — badlav ke baad bhula do.
+  const changed = async () => { dropPartyCategoryCache(); await load(); };
+
+  const active = items.filter(c => c.is_active);
+  const deletedDefaults = items.filter(c => !c.is_active && c.is_system);
+  const atCap = active.length >= max;
+  const q = search.trim().toLowerCase();
+  // `name` sirf detail drawer ke title ke liye.
+  const filtered = (q ? active.filter(c => String(c.label).toLowerCase().includes(q)) : active).map(c => ({ ...c, name: c.label }));
+  // Base type = app ke fix role (Staff ke bina), naam company wala.
+  const baseOptions = items.filter(c => c.is_system && c.base_role !== "staff").map(c => ({ value: c.base_role, label: c.label }));
+  const baseLabel = (role) => (items.find(c => c.is_system && c.base_role === role) || {}).label || role;
+
+  const openCreate = () => {
+    if (atCap) { setNote(t("master_library.pcat_cap_reached", { max })); return; }
+    setNote(""); setEditing(null); setLabel(""); setBase(""); setFormErr(""); setShowModal(true);
+  };
+  const openEdit = (c) => { setNote(""); setEditing(c); setLabel(c.label); setBase(c.base_role); setFormErr(""); setShowModal(true); };
+
+  const save = async () => {
+    const nm = label.trim();
+    if (!nm || saving) return;
+    setSaving(true); setFormErr("");
+    try {
+      const body = editing && editing.is_system ? { label: nm } : { label: nm, base_role: base };
+      const res = editing
+        ? await api.put("/library/party-categories/" + editing.id, body)
+        : await api.post("/library/party-categories", body);
+      if (res.success) { setShowModal(false); await changed(); }
+      else setFormErr(res.message || t("common.something_went_wrong"));
+    } catch (e) { setFormErr(t("common.something_went_wrong")); }
+    finally { setSaving(false); }
+  };
+
+  const del = async (id) => {
+    const res = await api.del("/library/party-categories/" + id);
+    if (res.success) await changed();
+    else if (res.message) await window.confirmAsync(res.message);
+  };
+  const restore = async (c) => {
+    setNote("");
+    const res = await api.post("/library/party-categories/" + c.id + "/restore", {});
+    if (res.success) await changed();
+    else setNote(res.message || t("common.something_went_wrong"));
+  };
+
+  const columns = [
+    { key: "label", label: t("common.category"), minW: 220, render: r => (
+      <span style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ fontWeight: 600 }}>{r.label}</span>
+        {r.renamed ? <span style={{ fontSize: 11, color: T.textLight }}>{t("master_library.pcat_orig_name", { name: r.default_label })}</span> : null}
+      </span>
+    )},
+    { key: "base_role", label: t("master_library.pcat_col_base"), minW: 170, render: r => r.is_system ? (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <Badge text={t("master_library.pcat_default_badge")} color={T.textMid} bg={T.borderLight} />
+        {r.locked ? <span style={{ fontSize: 11, color: T.textLight }}>{t("master_library.pcat_locked_note")}</span> : null}
+      </span>
+    ) : <span style={{ fontSize: 12.5, color: T.textMid }}>{baseLabel(r.base_role)}</span> },
+    { key: "party_count", label: t("master_library.pcat_col_parties"), minW: 100, render: r => Number(r.party_count) > 0
+      ? <Badge text={String(r.party_count)} color={T.blue} bg={T.blueSoft} />
+      : <span style={{ fontSize: 12, color: T.textLight }}>—</span> },
+  ];
+
+  return (
+    <div>
+      <Toolbar search={search} setSearch={setSearch} count={filtered.length}
+        label={t("master_library.pcat_title")} onAdd={openCreate} addLabel={t("master_library.pcat_add")}
+        filterEl={<span style={{ fontSize: 12, fontWeight: 600, color: atCap ? T.amber : T.textLight, whiteSpace: "nowrap" }}>
+          {t("master_library.pcat_count", { n: active.length, max })}</span>} />
+      {!!note && (
+        <div style={{ marginBottom: 12, fontSize: 12.5, color: T.amber, background: T.amberSoft, border: `1px solid ${T.amber}33`, borderRadius: 8, padding: "8px 12px" }}>{note}</div>
+      )}
+      <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del}
+        emptyMsg={loading ? t("common.loading") : t("master_library.pcat_none")} />
+
+      {/* Hataayi hui default — 12 me jagah ho to wapas chalu. */}
+      {deletedDefaults.length > 0 && (
+        <div style={{ marginTop: 16, background: T.card, border: `1px solid ${T.border}`, borderRadius: T.radius, padding: "12px 14px" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{t("master_library.pcat_deleted_title")}</div>
+          <div style={{ fontSize: 12, color: T.textMid, marginTop: 2, marginBottom: 10 }}>{t("master_library.pcat_deleted_note")}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {deletedDefaults.map(c => (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 12px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.bg }}>
+                <span style={{ fontSize: 12.5, color: T.textMid }}>{c.label}</span>
+                <button type="button" onClick={() => restore(c)} disabled={atCap}
+                  title={atCap ? t("master_library.pcat_cap_reached", { max }) : undefined}
+                  style={{ padding: "4px 10px", borderRadius: 6, border: `1.5px solid ${T.blue}`, background: "white", color: T.blue, fontSize: 12, fontWeight: 600, cursor: atCap ? "not-allowed" : "pointer", opacity: atCap ? 0.5 : 1, fontFamily: T.font }}>
+                  {t("master_library.pcat_restore")}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Modal open={showModal} onClose={() => setShowModal(false)}
+        title={editing ? t("master_library.pcat_edit") : t("master_library.pcat_add")}
+        desc={editing ? t("master_library.pcat_rename_note") : t("master_library.pcat_add_note", { max })}
+        width={460}>
+        <FormField label={t("master_library.pcat_label")} value={label} onChange={setLabel} placeholder={t("master_library.pcat_label_ph")} required />
+        <div style={{ height: 12 }} />
+        {editing && editing.is_system ? (
+          <div style={{ fontSize: 12, color: T.textMid, background: T.borderLight, borderRadius: 7, padding: "8px 11px" }}>
+            {t("master_library.pcat_base_fixed")}
+          </div>
+        ) : (
+          <>
+            <FormSelect label={t("master_library.pcat_base")} value={base} onChange={setBase} options={baseOptions}
+              placeholder={t("master_library.pcat_base_ph")} required />
+            <div style={{ fontSize: 11.5, color: T.textMid, marginTop: 6 }}>{t("master_library.pcat_base_help")}</div>
+          </>
+        )}
+        {!!formErr && <div style={{ marginTop: 10, fontSize: 12.5, color: T.red, background: T.redSoft, borderRadius: 7, padding: "8px 11px" }}>{formErr}</div>}
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? t("common.saving") : (editing ? t("common.update") : t("common.create"))} />
       </Modal>
     </div>
   );
@@ -6946,6 +7089,7 @@ const masterSections = [
   { id: "boq_items",     get label() { return t("master_library.boq_item_library"); },    Icon: IcBox,       Comp: BoqItemLibrarySection,    section: null, countKey: null, color: T.purple },
   // ── PEOPLE ────────────────────────────────────────────────────────
   { id: "party",         get label() { return t("master_library.party_supplier"); },    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green },
+  { id: "party_category", get label() { return t("master_library.pcat_title"); },       Icon: IcLayers,    Comp: PartyCategorySection,     section: null, countKey: "party_categories", color: T.green },
   { id: "subcon",        get label() { return t("master_library.subcontractors"); },      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber },
   { id: "workers",       get label() { return t("master_library.workers"); },             Icon: IcHardHat,   Comp: WorkersSection,           section: null, countKey: "workers", color: T.blue },
   { id: "designation",   get label() { return t("master_library.staff_designation"); },   Icon: IcUsers,     Comp: DesignationSection,       section: null, countKey: null, color: T.indigo },
@@ -7031,6 +7175,7 @@ export default function MasterLibraryModule() {
               {activeSection === "materials" && t("master_library.central_material_database_with_rates_hsn")}
               {activeSection === "material_cat" && t("master_library.organize_materials_into_categories_and_subcategories")}
               {activeSection === "party" && t("master_library.suppliers_clients_transporters_and_other_business")}
+              {activeSection === "party_category" && t("master_library.pcat_section_desc")}
               {activeSection === "work_cat" && t("master_library.types_of_construction_work_with_base")}
               {activeSection === "subcon" && t("master_library.subcontractor_firms_trade_specialties_and_rate")}
               {activeSection === "boq" && t("master_library.project_wise_client_boq_with_cost")}

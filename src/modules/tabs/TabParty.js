@@ -8,6 +8,7 @@ import { t } from "../../i18n";
 
 import { companyName } from "../../utils/companyName";
 import { txnIsCleared, partyRowSign, isWalletCashPurchase, isWalletMaterialBuy, balanceLabel, isVendorType, round2 } from "../../utils/moneyRules";
+import { loadPartyCategories, partyCategoryKeys, catLabel } from "../../utils/partyCategories";
 
 // Neeche ledger ke loop me `t` transaction ka naam hai, jo i18n ke t() ko
 // chhupa deta hai — isliye ye label bahar se.
@@ -232,6 +233,15 @@ function TabParty({ projectId, projectName }) {
 
   useEffect(() => { reload(); }, [reload]);
 
+  // Party ka naam ke neeche type = company ki Party Category (Library → Party
+  // Category — badla hua naam / apni category). List na aaye to purana type.
+  const [pCats, setPCats] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    loadPartyCategories().then(r => { if (alive && r.ok) setPCats(r.list); });
+    return () => { alive = false; };
+  }, []);
+
   // FIN-21: party ka bakaya WAHI niyam jo Finance ka party card, uska ledger aur
   // bot lagate hain — har row ka sign party ki nazar se (utils/moneyRules
   // partyRowSign = backend GET /finance/parties/:id/ledger ka ledger_sign):
@@ -321,12 +331,13 @@ function TabParty({ projectId, projectName }) {
         id: p.id,
         name: p.name,
         type: p.type || "Other",
+        catText: pCats.length ? partyCategoryKeys(p, pCats).map(k => catLabel(k, pCats)).join(" / ") : "",
         isVendor,
         balance, balPositive, balLabel,
         txnRows,   // already chronological — oldest first for ledger
       };
     }).filter(Boolean).sort((a,b)=>b.balance-a.balance);
-  }, [allParties, projTxns]);
+  }, [allParties, projTxns, pCats]);
 
   // Khoj + tarteeb ke baad jo list screen par dikhti hai.
   const visibleParties = useMemo(() => {
@@ -536,7 +547,7 @@ function TabParty({ projectId, projectName }) {
                   <span style={{fontSize:13, fontWeight:700, color:p.balPositive?T.grn:T.red, flexShrink:0, fontVariantNumeric:"tabular-nums"}}>₹{fmt(p.balance)}</span>
                 </div>
                 <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
-                  <Pill label={p.type} c={ts.c} bg={ts.bg}/>
+                  <Pill label={p.catText || p.type} c={ts.c} bg={ts.bg}/>
                   <span style={{fontSize:10.5, color:T.t4}}>{balLabelText(p.balLabel)}</span>
                 </div>
               </div>
@@ -551,7 +562,7 @@ function TabParty({ projectId, projectName }) {
             <>
               <PHead title={`${selP.name}  ·  ${projectName||t("common.project")}`} action={<SecBtn label={t("mom.export_pdf")} onClick={()=>exportPartyLedgerPDF(selP, projectName)}/>}/>
               <div style={{padding:"8px 15px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", gap:20}}>
-                {[[t("common.type"),selP.type],[t("common.balance"),`₹${fmtN(selP.balance)}`],[t("common.status"),balLabelText(selP.balLabel)]].map(([l,v])=>(
+                {[[t("common.type"),selP.catText || selP.type],[t("common.balance"),`₹${fmtN(selP.balance)}`],[t("common.status"),balLabelText(selP.balLabel)]].map(([l,v])=>(
                   <div key={l} style={{display:"flex", gap:6, alignItems:"center"}}>
                     <span style={{fontSize:11, color:T.t4}}>{l}:</span>
                     <span style={{fontSize:12.5, fontWeight:600, color:T.t1}}>{v}</span>

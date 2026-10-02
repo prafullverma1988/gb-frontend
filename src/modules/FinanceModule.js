@@ -14,6 +14,7 @@ import TabAccounts from "./tabs/TabAccounts";
 import { isoDate, todayISO, daysAgoISO } from "../utils/today";
 import { cashMoveOf, isTransferIn, round2, partyTypeBucket, PARTY_TYPE_BUCKETS } from "../utils/moneyRules";
 import { BackClose } from "../utils/backNav";
+import { loadPartyCategories, defaultCategories, partyCategoryKeys, catLabel, selectionToPayload } from "../utils/partyCategories";
 
 // A party holds multiple roles: `roles` is the canonical comma list and
 // `type` is only the primary one. Matching on `type` alone dropped equipment
@@ -1230,7 +1231,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [showNewParty,setShowNewParty]=useState(false);
   const [extraParties,setExtraParties]=useState([]);
   const saveNewParty=async(p)=>{
-    const payload={name:p.name,type:p.type,phone:p.phone||null,
+    const payload={name:p.name,type:p.type,roles:p.roles,phone:p.phone||null,
+      ...(p.category_ids?{category_ids:p.category_ids}:{}),
       opening_balance:p.balance||0,balance_type:p.balType||null};
     try{
       let r=await api.post("/finance/parties",payload);
@@ -3012,10 +3014,21 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
 
 // ─── ADD PARTY MODAL ─────────────────────────────────────────
 function AddPartyModal({onClose,onAdd}){
-  const PARTY_TYPES=["Client","Material Supplier","Sub-Con","Other Vendor","Labour Contractor"];
+  // Party Type = company ki chalu Party Category (Library → Party Category),
+  // Staff ke bina (staff Library ke Staff form se banta hai). Apni category
+  // chuno to uska base type roles me jaata hai — Sales Invoice / Material Bill
+  // ke picker usi se party dhoondhte hain. List na aaye to purane 9 default.
+  const [cats,setCats]=useState(defaultCategories);
+  const [catsOk,setCatsOk]=useState(false);
+  useEffect(()=>{
+    let alive=true;
+    loadPartyCategories().then(r=>{ if(alive){ setCats(r.list); setCatsOk(r.ok); } });
+    return ()=>{alive=false;};
+  },[]);
+  const PARTY_TYPES=cats.filter(c=>c.is_active&&c.base_role!=="staff");
   const BAL_TYPES=["To Receive","To Pay","Advance Paid","Advance Received","Nil"];
   const [name,setName]=useState("");
-  const [type,setType]=useState(PARTY_TYPES[0]);
+  const [type,setType]=useState("client");
   const [balType,setBalType]=useState(BAL_TYPES[0]);
   const [balance,setBalance]=useState("");
   const [phone,setPhone]=useState("");
@@ -3027,7 +3040,12 @@ function AddPartyModal({onClose,onAdd}){
     letterSpacing:".3px",display:"block",marginBottom:4}}>{t}</label>;
   const handleSave=()=>{
     if(!name.trim()) return;
-    const newParty={id:Date.now(),name:name.trim(),type,balType,balance:Number(balance)||0,phone};
+    // Chuni category list me na rahi ho (hata di gayi) to pehli chalu wali.
+    const key=PARTY_TYPES.some(c=>c.key===type)?type:(PARTY_TYPES[0]?.key||"client");
+    const pick=selectionToPayload([key],cats);
+    const newParty={id:Date.now(),name:name.trim(),type:pick.roles[0]||"client",roles:pick.roles,
+      ...(catsOk?{category_ids:pick.category_ids}:{}),
+      balType,balance:Number(balance)||0,phone};
     onAdd(newParty);
     setSaved(true);
     setTimeout(()=>{setSaved(false);onClose();},800);
@@ -3060,9 +3078,9 @@ function AddPartyModal({onClose,onAdd}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11}}>
           <div>
             {lbl("Party Type *")}
-            <select value={type} onChange={e=>setType(e.target.value)}
+            <select value={PARTY_TYPES.some(c=>c.key===type)?type:(PARTY_TYPES[0]?.key||"")} onChange={e=>setType(e.target.value)}
               style={inp({cursor:"pointer"})}>
-              {PARTY_TYPES.map(t=><option key={t}>{t}</option>)}
+              {PARTY_TYPES.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </div>
           <div>
@@ -3950,6 +3968,20 @@ function FinanceModule(){
   };
   // Filter chips (one per tab)
   const [chipParty,setChipParty]=useState("All");
+  // Party Category (Library → Party Category) — party ke neeche ka naam aur
+  // type filter company ki category se. List na aaye (purana backend) to
+  // filter purane bucket (Client / Vendor / …) par chalta hai.
+  const [pCats,setPCats]=useState([]);
+  const [pCatsOk,setPCatsOk]=useState(false);
+  useEffect(()=>{
+    let alive=true;
+    loadPartyCategories(true).then(r=>{ if(alive){ setPCats(r.list); setPCatsOk(r.ok); } });
+    return ()=>{alive=false;};
+  },[]);
+  const partyCatText=(p)=>{
+    const keys=partyCategoryKeys(p,pCats);
+    return keys.length?keys.map(k=>catLabel(k,pCats)).join(" / "):(p.type||"");
+  };
   // Party list ki tarteeb — project ke Party tab jaisi hi. "az" default hai
   // (list pehle se naam-wise aati thi), "bal" par sabse zyada bakaya upar.
   const [partySort,setPartySort]=useState("az");   // "az" | "bal"
@@ -4058,6 +4090,11 @@ function FinanceModule(){
       // include internal users (their wallet party row is_staff=1).
       is_staff: p.is_staff === 1 ? 1 : 0,
       user_id: p.user_id || null,
+      // roles ke bina CreateTransactionModal ka _phasRole sirf primary `type`
+      // dekhta tha — vendor + subcon wali party Sub-Con Bill me aati hi nahi
+      // thi. category_ids = Party Category ka naam/filter.
+      roles: p.roles || null,
+      category_ids: p.category_ids || null,
     };
   };
 
@@ -4460,7 +4497,13 @@ function FinanceModule(){
   // already carries balance (abs) + balType (from the signed live_balance).
   const partiesWithBalance=masterParties;
   // Type filter bucket se (partyTypeBucket) — DB ke 'vendor' / 'Material Supplier' / 'labour_vendor' sab sahi jagah.
-  const filteredParties=partiesWithBalance.filter(p=>chipParty==="All"||partyTypeBucket(p.type,p.is_staff)===chipParty);
+  // Category mode: kai category wali party har ek ke neeche; "__none" = jiski koi category nahi.
+  const filteredParties=partiesWithBalance.filter(p=>{
+    if(chipParty==="All") return true;
+    if(!pCatsOk) return partyTypeBucket(p.type,p.is_staff)===chipParty;
+    const keys=partyCategoryKeys(p,pCats);
+    return chipParty==="__none"?keys.length===0:keys.includes(chipParty);
+  });
   // Jo list sach me screen par dikhti hai — type filter ke baad khoj aur
   // tarteeb. Header ka count filteredParties par hi rehta hai (pehle jaisa).
   const visibleParties=useMemo(()=>{
@@ -5190,7 +5233,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   </div>
                   <select value={chipParty} onChange={e=>setChipParty(e.target.value)} title={t("finance.filter_by_type")}
                     style={{height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${chipParty!=="All"?T.blu:T.b1}`,fontSize:11.5,color:chipParty!=="All"?T.blu:T.t2,background:chipParty!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
-                    {["All",...PARTY_TYPE_BUCKETS].map(o=><option key={o} value={o}>{o==="All"?t("finance.all_types"):t("finance.ptype_"+o)}</option>)}
+                    {pCatsOk
+                      ? [<option key="All" value="All">{t("finance.all_types")}</option>,
+                         ...pCats.filter(c=>c.is_active).map(c=><option key={c.key} value={c.key}>{c.label}</option>),
+                         <option key="__none" value="__none">{t("finance.ptype_other")}</option>]
+                      : ["All",...PARTY_TYPE_BUCKETS].map(o=><option key={o} value={o}>{o==="All"?t("finance.all_types"):t("finance.ptype_"+o)}</option>)}
                   </select>
                   {[["az",t("party.sort_a_z")],["bal","₹"]].map(([mode,label])=>(
                     <button key={mode} onClick={()=>setPartySort(mode)}
@@ -5224,7 +5271,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:12.5,fontWeight:600,color:isS?T.blu:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
                           {/* Type as a subtle muted label (no heavy chip — avatar colour already hints the type) */}
-                          <div style={{fontSize:10.5,color:T.t4,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.type}</div>
+                          <div style={{fontSize:10.5,color:T.t4,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{partyCatText(p)}</div>
                         </div>
                         <div style={{textAlign:"right",flexShrink:0}}>
                           <div style={{fontSize:12.5,fontWeight:700,color:["To Pay","Advance Received"].includes(p.balType)?T.red:T.grn}}>₹{fmt(p.balance)}</div>
@@ -5277,7 +5324,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     <div style={{width:38,height:38,borderRadius:"50%",background:dTc+"1A",color:dTc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{dInitials}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:14,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selParty.name}</div>
-                      <div style={{fontSize:11,color:T.t4}}>{selParty.type} · {ledgerRows.length} transactions</div>
+                      <div style={{fontSize:11,color:T.t4}}>{partyCatText(selParty)} · {ledgerRows.length} transactions</div>
                     </div>
                     <span style={{fontSize:11,color:T.grn,fontWeight:600,whiteSpace:"nowrap"}}>{t("finance.cr_fmtn", { fmtN: fmtN(totalCR) })}</span>
                     <span style={{fontSize:11,color:T.red,fontWeight:600,whiteSpace:"nowrap"}}>{t("finance.dr_fmtn", { fmtN: fmtN(totalDR) })}</span>
@@ -6794,7 +6841,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
           onClose={()=>setShowAddParty(false)}
           onAdd={async(p)=>{
             try{
-              const res=await api.post("/finance/parties",{name:p.name,type:p.type,opening_balance:p.balance||0,balance_type:p.balType,phone:p.phone,city:p.city||""});
+              const res=await api.post("/finance/parties",{name:p.name,type:p.type,roles:p.roles,
+                ...(p.category_ids?{category_ids:p.category_ids}:{}),
+                opening_balance:p.balance||0,balance_type:p.balType,phone:p.phone,city:p.city||""});
               if(res.success&&res.data){
                 // Re-fetch so the row shows the live (signed) balance + derived
                 // label, not the opening magnitude.
