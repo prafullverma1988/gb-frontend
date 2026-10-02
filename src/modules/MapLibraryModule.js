@@ -106,6 +106,20 @@ const partsOfLine = (pts, gaps) => {
   out.push(arr.slice(from));
   return out.filter((p) => p.length);
 };
+// Har tukde ki apni lambai (metre, 2 dashamlav) — server ke pathLengthParts
+// jaisa: haversine, tukda-tukda, gap nahi. Tooti line ke hover card me "Ye
+// tukda" isi se (Prafull 2026-10-02: "hover pe jitna jis line ka length hai").
+const R_EARTH = 6371000;
+const segMetres = (a, b) => {
+  const r = (d) => (d * Math.PI) / 180;
+  const s = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
+  return 2 * R_EARTH * Math.asin(Math.min(1, Math.sqrt(s)));
+};
+const partLengths = (pts, gaps) => partsOfLine(pts, gaps).map((p) => {
+  let m = 0;
+  for (let i = 1; i < p.length; i++) m += segMetres(p[i - 1], p[i]);
+  return Math.round(m * 100) / 100;
+});
 // Kitne point hain us hisaab se asli shakl: 1 point ki "line" pin hai,
 // 2 point ka "rakba" line hai. Map aur export dono isi se chalte hain.
 const shapeOf = (kind, n) => {
@@ -398,10 +412,17 @@ function HoverCard({ x, y, card }) {
     </div>
   );
 }
-function cardOf(it, where) {
+// pi = tooti line ka kaunsa tukda hover hua (null = poori marking). Marking
+// ek hi hai — naam, file, folder wahi; sirf lambai us tukde ki aur poori ki.
+function cardOf(it, where, pi) {
   const rows = [];
   const len = Number(it.lenM) || 0;
+  const pl = it.kind === "line" && pi != null ? partLengths(cleanPts(it), it.gaps) : [];
   if (it.kind === "area") { const a = fmtArea(it.areaSqm); if (a) rows.push([t("map_library.rakba"), a]); }
+  else if (pl.length > 1 && pl[pi] != null) {
+    const all = len > 0 ? len : pl.reduce((m, x) => m + x, 0);
+    rows.push([t("map_library.lambai"), t("map_library.hv_tukda_poori", { part: fmtLen(pl[pi]) || "0 m", all: fmtLen(all) || "0 m" })]);
+  }
   else if (it.kind !== "point" && fmtLen(len)) rows.push([t("map_library.lambai"), fmtLen(len)]);
   if (it.kind !== "point" && it.kind !== "area" && it.startCh != null) {
     rows.push([t("map_library.chainage"), len > 0 ? `${fmtCh(it.startCh)} – ${fmtCh(Number(it.startCh) + len)}` : fmtCh(it.startCh)]);
@@ -456,9 +477,10 @@ function MapPreview({ items, onPick, whereOf, height = 380 }) {
     layersRef.current = [];
     setHover(null);
     // Har shape par hover = card, mouse ke saath chalta hai.
-    const hoverOn = (ov, it) => {
+    // pi = tooti line ka tukda (card me usi ki lambai)
+    const hoverOn = (ov, it, pi) => {
       const at = (e) => (e && e.domEvent ? { x: e.domEvent.clientX, y: e.domEvent.clientY } : null);
-      ov.addListener("mouseover", (e) => { const q = at(e); setHover({ x: q ? q.x : 0, y: q ? q.y : 0, card: cardOf(it, whereRef.current ? whereRef.current(it) : null) }); });
+      ov.addListener("mouseover", (e) => { const q = at(e); setHover({ x: q ? q.x : 0, y: q ? q.y : 0, card: cardOf(it, whereRef.current ? whereRef.current(it) : null, pi) }); });
       ov.addListener("mousemove", (e) => { const q = at(e); if (q) setHover((h) => (h ? { ...h, x: q.x, y: q.y } : h)); });
       ov.addListener("mouseout", () => setHover(null));
     };
@@ -477,11 +499,12 @@ function MapPreview({ items, onPick, whereOf, height = 380 }) {
         const ast = styleOf("area", it.atype || "other");
         ov = new g.maps.Polygon({ map, paths: pts, strokeColor: ast.colour, strokeOpacity: 0.9, strokeWeight: 2, fillColor: ast.colour, fillOpacity: ast.fill_opacity ?? 0.22 });
       } else {
-        // Tooti hui line: har tukde ki apni lakeer, aur click sab par ek jaisa.
-        partsOfLine(pts, it.gaps).forEach((part) => {
+        // Tooti hui line: har tukde ki apni lakeer, click sab par ek jaisa (wahi
+        // marking khulti hai), hover par card me usi tukde ki lambai.
+        partsOfLine(pts, it.gaps).forEach((part, pi) => {
           const ln = new g.maps.Polyline({ map, path: part, ...lineOpts(g, styleOf("line", it.atype || "other")) });
           ln.addListener("click", () => { if (pickRef.current) pickRef.current(it.id); });
-          hoverOn(ln, it);
+          hoverOn(ln, it, pi);
           layersRef.current.push(ln);
         });
         return;
@@ -1146,6 +1169,11 @@ function MapLibraryModule() {
       if (Number(it.dia_mm) > 0) facts.push([t("map_library.dia"), `${it.dia_mm} mm`]);
       if (it.kind === "area") facts.push([t("map_library.rakba"), fmtArea(it.areaSqm) || "—"]);
       else if (it.kind !== "point") facts.push([t("map_library.lambai"), fmtLen(it.lenM) || "—"]);
+      // Tooti line: har tukde ki apni lambai — "120 m + 180 m"
+      if (it.kind === "line") {
+        const pl = partLengths(cleanPts(it), it.gaps);
+        if (pl.length > 1) facts.push([t("map_library.hv_tukde"), pl.map((m) => fmtLen(m) || "0 m").join(" + ")]);
+      }
       if (it.kind !== "point" && it.kind !== "area" && it.startCh != null) {
         const len = Number(it.lenM) || 0;
         facts.push([t("map_library.chainage"), len > 0 ? `${fmtCh(it.startCh)} – ${fmtCh(Number(it.startCh) + len)}` : fmtCh(it.startCh)]);

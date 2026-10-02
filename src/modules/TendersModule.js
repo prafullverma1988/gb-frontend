@@ -4106,6 +4106,17 @@ function pathLenM(pts) {
   }
   return m;
 }
+// Tooti line ("Tod do"): hover kis TUKDE par hai, card me usi ki lambai —
+// "Ye tukda: 120 m · Poori line: 300 m" (Prafull 2026-10-02). Naap server ke
+// pathLengthParts jaisa: har tukda alag, 2 dashamlav. Bina gap = null (card
+// bilkul pehle jaisa).
+const partLenText = (coords, gaps, pi, total) => {
+  if (pi == null) return null;
+  const pl = partsOfLine(coords, gaps).map((p) => Math.round(pathLenM(p) * 100) / 100);
+  if (pl.length < 2 || pl[pi] == null) return null;
+  const all = Number(total) > 0 ? Number(total) : pl.reduce((m, x) => m + x, 0);
+  return t("tenders.hv_tukda_poori", { part: fmtKm(pl[pi]), all: fmtKm(all) });
+};
 
 // Draw menu ki list — component ke bahar, taaki har render par dobara na
 // bane. Culvert/HDD teeno section me aa sakte hain: culvert ka span ek
@@ -4194,6 +4205,10 @@ function MapTab({tenderId, sites}) {
   // KML ke baad bulk (kmlLink). linkTaskRef savePending ke closure ke liye.
   const [linkTask, setLinkTask] = useState(null);
   const linkTaskRef = useRef(null);
+  // Nayi line ki save-chaabi (client_key). Net toota → "Save nahi hua" →
+  // phir Save: pehli koshish server tak pahunch chuki ho to server wahi row
+  // (aur saath bani naali) lautata hai, doosri nahi banti. Wahi shakl = wahi chaabi.
+  const pendKeyRef = useRef(null);
   const [pickFor, setPickFor] = useState(null);   // {mode:"line"|"task", row?|aid?}
   const [kmlLink, setKmlLink] = useState(null);   // {features:[{take,qty,...}], work_id}
   const [taskMark, setTaskMark] = useState(null);  // {q, wtype} — "task se mark karo" ka chunav
@@ -4230,11 +4245,12 @@ function MapTab({tenderId, sites}) {
   // Hover card ka matter — hamari apni line/pin ke liye. Upar hamari
   // baatein (naapi lambai, chainage, kitna ho gaya), neeche PM ki likhi
   // jaankari (attrs) — wahi table jo department ki KMZ me hoti hai.
-  const cardFor = useCallback((it) => {
+  // pi = tooti line ka kaunsa tukda hover hua (null = poori line)
+  const cardFor = useCallback((it, pi) => {
     const rows = [];
     const pr = (progress?.lines || []).find(l => l.id === it.id) || {};
     if (it.kind === "line") {
-      rows.push([t("tenders.hv_naapi_lambai"), fmtKm(it.length_m)]);
+      rows.push([t("tenders.hv_naapi_lambai"), partLenText(it.geometry || [], it.gaps, pi, it.length_m) || fmtKm(it.length_m)]);
       if (it.start_chainage_m != null)
         rows.push([t("tenders.hv_chainage"), `${chFmt(Number(it.start_chainage_m))} → ${chFmt(Number(it.start_chainage_m) + Number(it.length_m || 0))}`]);
       if (Number(it.width_m) > 0) rows.push([t("tenders.hv_chaudai"), `${it.width_m} m`]);
@@ -4578,12 +4594,13 @@ function MapTab({tenderId, sites}) {
             }
           });
         }
-        parts.forEach((part) => {
+        parts.forEach((part, pi) => {
           // Rang, motai aur seedhi/dashed/dotted — sab Map library se.
           const pl = new g.maps.Polyline({ path: part, ...lineOpts(g, styleOf("line", it.atype)), map: mapRef.current });
           // Click = stretch ka dashboard. (Pehle sirf ek toast tha.)
           pl.addListener("click", ()=>openStretch(it.id));
-          hoverOn(pl, ()=>cardFor(it));
+          // Hover = usi tukde ki lambai (tooti line par), baaki card wahi.
+          hoverOn(pl, ()=>cardFor(it, pi));
           shapesRef.current.push(pl);
         });
         // Chainage ke nishaan — sirf un lines par jinka shuruaati chainage
@@ -4685,9 +4702,10 @@ function MapTab({tenderId, sites}) {
         const coords = f.geometry || [];
         if (!coords.length) continue;
         const col = st.colour || st.icon_colour || "#64748B";
-        const card = () => ({
+        const card = (pi) => ({
           title: f.name || L.name, sub: `${L.name} · ${t("tenders.ref_layer")}`, colour: col,
-          rows: f.kind === "line" && Number(f.length_m) > 0 ? [[t("tenders.hv_naapi_lambai"), fmtKm(f.length_m)]] : [],
+          rows: f.kind === "line" && Number(f.length_m) > 0
+            ? [[t("tenders.hv_naapi_lambai"), partLenText(coords, f.gaps, pi, f.length_m) || fmtKm(f.length_m)]] : [],
           attrs: Array.isArray(f.attrs) ? f.attrs : [], notes: "", hint: L.file_name || "",
         });
         if (f.kind === "point") {
@@ -4706,10 +4724,10 @@ function MapTab({tenderId, sites}) {
           hoverOn(pg, card); refShapesRef.current.push(pg);
           coords.forEach(c=>bounds.extend(c)); any = true;
         } else {
-          partsOfLine(coords, f.gaps).forEach((part) => {
+          partsOfLine(coords, f.gaps).forEach((part, pi) => {
             const pl = new g.maps.Polyline({ path: part, map: mapRef.current, zIndex: 1,
               strokeColor: col, strokeWeight: st.width || 2, strokeOpacity: st.opacity ?? 0.9 });
-            hoverOn(pl, card); refShapesRef.current.push(pl);
+            hoverOn(pl, () => card(pi)); refShapesRef.current.push(pl);
           });
           coords.forEach(c=>bounds.extend(c)); any = true;
         }
@@ -4888,8 +4906,12 @@ function MapTab({tenderId, sites}) {
     if (!pending) return;
     if (pending.edit) return saveEdit();
     if (!pending.project_id) { toast.error("Site chuno — kis site ki line hai"); return; }
+    const sig = JSON.stringify([pending.kind, pending.coords]);
+    if (!pendKeyRef.current || pendKeyRef.current.sig !== sig)
+      pendKeyRef.current = { sig, key: `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}` };
     setBusy(true);
     const res = await api.post(`/tenders/${tenderId}/alignments`, {
+      client_key: pendKeyRef.current.key,
       project_id: Number(pending.project_id), name: pending.name || undefined,
       kind: pending.kind, atype: pending.atype, geometry: pending.coords,
       width_m: Number(pending.width_m) > 0 ? Number(pending.width_m) : undefined,

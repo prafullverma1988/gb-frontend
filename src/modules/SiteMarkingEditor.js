@@ -125,6 +125,122 @@ const chainageTicks = (pts, gaps, every, startCh) => {
   return out;
 };
 
+// ── "Kahin dobara to nahi?" — mobile ke lineCheck.js ka aaina ────────
+// RATNA KHANIJ (Sep 2026): ek hi sadak par poori lambai do lakeer. Teen
+// jaanch, sab sirf salaah — faisla aadmi ka:
+//   • retraceOf — line aakhir me apne hi raaste par wapas mudi?
+//   • overlapOf — nayi line kisi bani line ke upar hi chal rahi hai?
+//   • joinExtends — "Aage ka hissa?" sirf jab nayi line sach me aage badhe.
+// Itne paas = "wahi raasta" (sadak ki aadhi chaudai + GPS ki aam galti).
+const NEAR_M = 10;
+// Nayi line ka itna hissa purani ke paas = wahi line dobara.
+const OVERLAP_FRAC = 0.6;
+// Isse chhoti wapsi par chetavni nahi — sire ka jitter hai, galti nahi.
+const RETRACE_MIN_M = 25;
+const RETRACE_SKIP_M = 30;   // apne hi padosi point "wapsi" nahi — itna peechhe tak chhodo
+const RETRACE_SHARE = 0.8;   // wapsi ka itna hissa purane raaste ke paas ho
+const cutsOf = (gaps, n) => (Array.isArray(gaps) ? gaps : []).map(Number)
+  .filter((i) => Number.isInteger(i) && i > 0 && i < n)
+  .filter((v, i, a) => a.indexOf(v) === i).sort((x, y) => x - y);
+const ptSegM = (p, a, b) => {
+  const mx = 111320 * Math.cos(rad(p.lat)), my = 110540;
+  const ax = (a.lng - p.lng) * mx, ay = (a.lat - p.lat) * my;
+  const dx = (b.lng - a.lng) * mx, dy = (b.lat - a.lat) * my;
+  const L2 = dx * dx + dy * dy;
+  const f = L2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0;
+  return Math.hypot(ax + dx * f, ay + dy * f);
+};
+// Tukdon ke andar ke segment — Tod do ki chhalaang raasta nahi.
+const segsOf = (pts, gaps) => {
+  const out = [];
+  partsOf(pts, gaps).forEach((p) => {
+    if (p.length === 1) out.push([p[0], p[0]]);
+    for (let i = 1; i < p.length; i++) out.push([p[i - 1], p[i]]);
+  });
+  return out;
+};
+const distToSegs = (p, segs) => { let m = Infinity; for (const [a, b] of segs) { const d = ptSegM(p, a, b); if (d < m) m = d; } return m; };
+const overlapShare = (newPts, newGaps, oldPts, oldGaps) => {
+  const segs = segsOf(oldPts, oldGaps);
+  if (!segs.length) return 0;
+  let tot = 0, near = 0;
+  partsOf(newPts, newGaps).forEach((part) => {
+    for (let i = 1; i < part.length; i++) {
+      const a = part[i - 1], b = part[i], L = segM(a, b);
+      if (!(L > 0)) continue;
+      // Lamba segment (click se do door ke point) beech me bhi jaancho.
+      const k = Math.min(50, Math.max(1, Math.ceil(L / NEAR_M)));
+      for (let j = 0; j < k; j++) {
+        const f = (j + 0.5) / k;
+        if (distToSegs({ lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f }, segs) <= NEAR_M) near += L / k;
+      }
+      tot += L;
+    }
+  });
+  return tot > 0 ? near / tot : 0;
+};
+// olds: [{ name, pts, gaps }] → sabse zyada chadhi hui (OVERLAP_FRAC paar) ya null
+const overlapOf = (newPts, newGaps, olds) => {
+  if (!Array.isArray(newPts) || newPts.length < 2) return null;
+  let best = null;
+  for (const o of olds || []) {
+    if (!o || !Array.isArray(o.pts) || o.pts.length < 2) continue;
+    const share = overlapShare(newPts, newGaps, o.pts, o.gaps);
+    if (share >= OVERLAP_FRAC && (!best || share > best.share)) best = { item: o, share };
+  }
+  return best;
+};
+// "Aage ka hissa?" — nayi line ka doosra sira purani se saaf bahar (jodne ki
+// doori se door) ho aur nayi line zyadatar purani ke upar na chale. Wahi
+// stretch dobara khinchne par jodna A→B→A aur dugni lambai banata tha.
+// nearEnd: nayi line ka kaunsa sira purani se mil raha hai — 'first' | 'last'
+const joinExtends = (newPts, newGaps, oldPts, oldGaps, nearEnd, joinM) => {
+  if (!Array.isArray(newPts) || newPts.length < 2) return false;
+  const segs = segsOf(oldPts, oldGaps);
+  if (!segs.length) return false;
+  const far = nearEnd === "last" ? newPts[0] : newPts[newPts.length - 1];
+  if (!(distToSegs(far, segs) > joinM)) return false;
+  return overlapShare(newPts, newGaps, oldPts, oldGaps) < OVERLAP_FRAC;
+};
+// Line aakhir me apne hi raaste par wapas mudi? → null | { at, tailM }
+// (line ko 0..at tak rakhna; tailM = wapsi ki lambai)
+const retraceOf = (pts, gaps) => {
+  const n = Array.isArray(pts) ? pts.length : 0;
+  if (n < 4) return null;
+  const cut = new Set(cutsOf(gaps, n));
+  const cum = [0];
+  for (let i = 1; i < n; i++) cum[i] = cum[i - 1] + (cut.has(i) ? 0 : segM(pts[i - 1], pts[i]));
+  const backOnPath = (i) => {
+    let p = i;
+    while (p > 0 && cum[i] - cum[p] < RETRACE_SKIP_M) p--;
+    if (cum[i] - cum[p] < RETRACE_SKIP_M) return false;
+    for (let j = 1; j <= p; j++) if (!cut.has(j) && ptSegM(pts[i], pts[j - 1], pts[j]) <= NEAR_M) return true;
+    return false;
+  };
+  let on = 0, all = 0, s = -1;
+  for (let i = n - 1; i >= 1; i--) {
+    const L = cut.has(i) ? 0 : segM(pts[i - 1], pts[i]);
+    const back = backOnPath(i);
+    all += L; if (back) on += L;
+    if (back && all > 0 && on / all >= RETRACE_SHARE) s = i;
+    if (all - on > 2 * RETRACE_SKIP_M && on < all * RETRACE_SHARE) break;
+  }
+  if (s < 1) return null;
+  let a = s;
+  while (a > 0 && cum[s] - cum[a] < 2 * RETRACE_SKIP_M) a--;
+  let at = a, far = -1;
+  for (let i = a; i <= s; i++) { const d = segM(pts[a], pts[i]); if (d > far) { far = d; at = i; } }
+  const tailM = cum[n - 1] - cum[at];
+  if (at < 1 || tailM < RETRACE_MIN_M) return null;
+  return { at, tailM: Math.round(tailM * 10) / 10 };
+};
+// Wapsi ka hissa hatao: 0..at tak; jo Tod-do nishan aakhri tukde ko 2 point bhi nahi chhodta wo bhi gaya.
+const trimTail = (pts, gaps, at) => {
+  const keep = (Array.isArray(pts) ? pts : []).slice(0, Math.max(0, at) + 1);
+  return { pts: keep, gaps: cutsOf(gaps, keep.length).filter((i) => i <= keep.length - 2) };
+};
+const partLens = (pts, gaps) => partsOf(pts, gaps).map((p) => Math.round(pathM(p) * 100) / 100);
+
 // ── TYPES (backend ke LINE/POINT/AREA_TYPES) ──────────────────────
 const TYPES = {
   line: ["inlet", "outlet", "rising", "gravity", "drain", "road", "other"],
@@ -613,6 +729,14 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
   // Save / done
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(null);
+  // "Phir bhi save karo" isi line (geometry) ke liye yaad — dobara na poochhe.
+  const overlapOkRef = useRef(null);
+  // Save ki chaabi (client_key) — net toota aur phir Save dabaya to server
+  // wahi row lautata hai, doosri nahi banti. Wahi line = wahi chaabi.
+  const saveKeyRef = useRef(null);
+  // "Wapsi ka hissa hatao" ne kitna kaata; sudhaar se pehle ke Tod-do nishan.
+  const [trimmedM, setTrimmedM] = useState(0);
+  const origBrkRef = useRef(null);
   const [linkTasks, setLinkTasks] = useState(null);
   const [linked, setLinked] = useState(null);
 
@@ -794,7 +918,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
   };
 
   const beginDraw = () => {
-    setErr(""); origPtsRef.current = null; setPickOpen(false);
+    setErr(""); origPtsRef.current = null; origBrkRef.current = null; setTrimmedM(0); setPickOpen(false);
     setSnapNote(false); setRedo([]);
     setStep("draw");
   };
@@ -858,12 +982,45 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
       .map((x) => String(x.file || "").trim()).filter(Boolean))];
   }, [lib, folderSel]);
 
+  // Line ki pehchan — chaabi aur "Phir bhi save karo" dono isi par tikte hain.
+  const geomSig = () => JSON.stringify([kind, ptsRef.current.map((p) => [p.lat, p.lng]), brkRef.current]);
+  const keyFor = () => {
+    const sig = geomSig();
+    if (!saveKeyRef.current || saveKeyRef.current.sig !== sig) saveKeyRef.current = { sig, key: newKey() };
+    return saveKeyRef.current.key;
+  };
+  // Nayi line kisi BANI line ke upar? Haan to naam le kar poochho — "Phir
+  // bhi save karo" ya "Wapas" (naksha par). Library: usi folder + file ki
+  // lines. Kaam wala mode: usi type ki (aur dusre kaam ki nahi) — ek sadak
+  // par road, naali, pipe teen alag line hona aam baat hai.
+  const overlapGate = (olds, again) => {
+    if (kind !== "line" || overlapOkRef.current === geomSig()) return false;
+    const hit = overlapOf(ptsRef.current, brkRef.current, olds);
+    if (!hit) return false;
+    setAsk({
+      msg: t("map_draw.overlap_puchho", { name: hit.item.name || "", p: Math.round(hit.share * 100) }),
+      yes: t("map_draw.phir_bhi_save"), no: t("map_draw.naksha_par_wapas"),
+      onYes: () => { overlapOkRef.current = geomSig(); again(); },
+      onNo: () => setStep("draw"),
+    });
+    return true;
+  };
+
   const saveFree = async () => {
     const nm = name.trim() || (kind === "line" ? t("map_library.kind_line") : kind === "area" ? t("map_library.kind_area") : t("map_library.kind_point"));
     if (folderSel === "new" && !newFolder.trim()) { setErr(t("map_draw.folder_naam_daalo")); return; }
+    {
+      const low = (v) => String(v || "").trim().toLowerCase();
+      const fid = folderSel && folderSel !== "new" ? Number(folderSel) : null;
+      const fi = low(fileName.trim() || nm);
+      const olds = folderSel === "new" ? [] : ((lib && lib.items) || [])
+        .filter((x) => x.kind === "line" && (fid == null ? x.folder_id == null : Number(x.folder_id) === fid) && low(x.file || x.name) === fi)
+        .map((x) => ({ name: x.name, pts: x.pts, gaps: x.gaps }));
+      if (overlapGate(olds, saveFree)) return;
+    }
     const kept = ptsRef.current;
     const body = {
-      client_key: newKey(), name: nm, kind, atype: atype || "other",
+      client_key: keyFor(), name: nm, kind, atype: atype || "other",
       dia_mm: kind === "line" && Number(diaMm) > 0 ? Number(diaMm) : undefined,
       pts: kept.map((p) => ({ lat: p.lat, lng: p.lng })),
       lenM: kind === "point" ? 0 : lenM,
@@ -898,13 +1055,19 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
       const ga = Array.isArray(a.gaps) ? a.gaps.map(Number).filter((i) => i > 0) : [];
       const mb = brkRef.current.slice();
       const revB = (arr, n) => arr.map((i) => n - i).filter((i) => i > 0 && i < n).sort((x, y) => x - y);
+      // end = nayi line ka kaunsa sira purani se mil raha hai
       const c = [
-        { d: segM(nf, el), merged: () => [...g, ...kept], gaps: () => [...ga, ...mb.map((i) => i + g.length)] },
-        { d: segM(nl, ef), merged: () => [...kept, ...g], gaps: () => [...mb, ...ga.map((i) => i + kept.length)] },
-        { d: segM(nl, el), merged: () => [...g, ...rev()], gaps: () => [...ga, ...revB(mb, kept.length).map((i) => i + g.length)] },
-        { d: segM(nf, ef), merged: () => [...rev(), ...g], gaps: () => [...revB(mb, kept.length), ...ga.map((i) => i + kept.length)] },
+        { d: segM(nf, el), end: "first", merged: () => [...g, ...kept], gaps: () => [...ga, ...mb.map((i) => i + g.length)] },
+        { d: segM(nl, ef), end: "last", merged: () => [...kept, ...g], gaps: () => [...mb, ...ga.map((i) => i + kept.length)] },
+        { d: segM(nl, el), end: "last", merged: () => [...g, ...rev()], gaps: () => [...ga, ...revB(mb, kept.length).map((i) => i + g.length)] },
+        { d: segM(nf, ef), end: "first", merged: () => [...rev(), ...g], gaps: () => [...revB(mb, kept.length), ...ga.map((i) => i + kept.length)] },
       ];
-      for (const x of c) if (Number.isFinite(x.d) && x.d <= JOIN_M && (!best || x.d < best.d)) best = { ...x, a };
+      for (const x of c) {
+        if (!(Number.isFinite(x.d) && x.d <= JOIN_M && (!best || x.d < best.d))) continue;
+        // Sirf asli aage ka hissa — wahi stretch dobara ho to jodna nahi.
+        if (!joinExtends(kept, mb, g, a.gaps, x.end, JOIN_M)) continue;
+        best = { ...x, a };
+      }
     }
     return best;
   };
@@ -922,6 +1085,13 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
   };
   const saveTask = async (skipJoin) => {
     if (!tenderReady) { setErr(t("map_draw.pehle_project_chuno")); return; }
+    {
+      const olds = (existing || [])
+        .filter((a) => a.kind === "line" && (a.atype || "other") === (atype || "other")
+          && !(selTask && a.task_id && Number(a.task_id) !== Number(selTask.id)))
+        .map((a) => ({ name: a.name, pts: geoOf(a), gaps: a.gaps }));
+      if (overlapGate(olds, () => saveTask(skipJoin))) return;
+    }
     if (!skipJoin) {
       const cont = contOf();
       if (cont) {
@@ -949,6 +1119,8 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
       props: atype === "road" && drainSide && Number(drainW) > 0 ? { drain_width_m: Number(drainW) } : undefined,
       source: "draw",
       capture_meta: { points_tapped: kept.length, user_qty_m: Number(userQty) > 0 ? Number(userQty) : undefined, via: "web" },
+      // Wahi line dobara bheji (jawab raaste me gum hua) = wahi chaabi → server wahi row lautata hai.
+      client_key: keyFor(),
     };
     const r = await api.post(`/tenders/${tenderId}/alignments`, body).catch(() => null);
     setSaving(false);
@@ -981,7 +1153,7 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
   };
 
   const resetDrawing = () => {
-    setPts([]); setBrk([]); setRedo([]); setSnapNote(false); origPtsRef.current = null;
+    setPts([]); setBrk([]); setRedo([]); setSnapNote(false); origPtsRef.current = null; origBrkRef.current = null; setTrimmedM(0);
     setUserQty(""); setName(""); setSaved(null); setLinked(null); setLinkTasks(null); setSplitDone(null); setErr("");
   };
   const continueSameTask = () => {
@@ -1357,8 +1529,10 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
         <Btn size="sm" onClick={undo} disabled={!pts.length && !breaks.length}>{t("map_draw.undo")}</Btn>
         <Btn size="sm" onClick={redoPt} disabled={!redo.length}>{t("map_draw.redo")}</Btn>
-        {kind === "line" && (breaks.length > 0 || pts.length >= minPts) && (
-          curPartPts === 0
+        {/* Line par Tod do shuru se dikhta hai (2 point tak band) — phone jaisa;
+            pehle 2 point se pehle chhupa rehta tha aur dhoondhe nahi milta tha. */}
+        {kind === "line" && (
+          breaks.length > 0 && curPartPts === 0
             ? <Btn size="sm" tone="green" onClick={joinBack} title={t("map_draw.jod_do_hint")}>{t("map_draw.jod_do")}</Btn>
             : <Btn size="sm" tone="amber" onClick={breakHere} disabled={curPartPts < minPts} title={t("map_draw.tod_do_hint")}>{t("map_draw.tod_do")}</Btn>
         )}
@@ -1382,6 +1556,23 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
     </>
   );
 
+  // ── Wapas mudi line ── save screen par hi dikhe; kaatna aadmi ka faisla.
+  const retrace = useMemo(() => (step === "save" && kind === "line" ? retraceOf(pts, breaks) : null), [step, kind, pts, breaks]);
+  const trimRetrace = () => {
+    if (!retrace) return;
+    if (!origPtsRef.current) { origPtsRef.current = ptsRef.current.slice(); origBrkRef.current = brkRef.current.slice(); }
+    const out = trimTail(ptsRef.current, brkRef.current, retrace.at);
+    setPts(out.pts); setBrk(out.gaps); setRedo([]);
+    setTrimmedM((m) => Math.round((m + retrace.tailM) * 10) / 10);
+  };
+  // Sudhaar (lambai ya wapsi) se pehle wali line — Tod-do ke nishan samet.
+  const restoreLine = () => {
+    if (!origPtsRef.current) return;
+    setPts(origPtsRef.current);
+    if (origBrkRef.current) setBrk(origBrkRef.current);
+    origPtsRef.current = null; origBrkRef.current = null; setTrimmedM(0);
+  };
+
   const lengthFix = () => {
     const isLine = kind === "line";
     const toM = (q, u) => (/km/i.test(String(u || "")) ? Number(q) * 1000 : Number(q));
@@ -1393,10 +1584,9 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
     const canFix = isLine && target != null && Math.abs(delta) >= 0.5 && Math.abs(delta) <= Math.max(50, lenM * 0.2) && pts.length >= 2;
     const tooBig = isLine && target != null && Math.abs(delta) > Math.max(50, lenM * 0.2);
     const fix = (where) => {
-      if (!origPtsRef.current) origPtsRef.current = ptsRef.current.slice();
+      if (!origPtsRef.current) { origPtsRef.current = ptsRef.current.slice(); origBrkRef.current = brkRef.current.slice(); }
       setPts(adjustLength(ptsRef.current, delta, where)); setRedo([]);
     };
-    const restore = () => { if (!origPtsRef.current) return; setPts(origPtsRef.current); origPtsRef.current = null; };
     return (
       <div style={{ ...card, borderColor: canFix ? T.ambM : T.b1 }}>
         <div style={lbl}>{kind === "area" ? t("map_draw.aapke_hisaab_rakba") : t("map_draw.aapke_hisaab_lambai")}</div>
@@ -1422,20 +1612,40 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
           </>
         )}
         {tooBig && <div style={{ fontSize: 11, color: T.amb, marginTop: 8 }}>{t("map_draw.farak_bada", { d: fmtM(Math.abs(delta)) })}</div>}
-        {origPtsRef.current && <Btn size="sm" onClick={restore} style={{ marginTop: 8 }}>{t("map_draw.pehli_line_wapas")}</Btn>}
+        {origPtsRef.current && <Btn size="sm" onClick={restoreLine} style={{ marginTop: 8 }}>{t("map_draw.pehli_line_wapas")}</Btn>}
         <div style={noteS}>{t("map_draw.milaan_ke_liye_note")}</div>
       </div>
     );
   };
 
   const summary = (
-    <div style={card}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: T.t1, marginBottom: 3 }}>{name || kindLabel(kind)}</div>
-      <div style={{ fontSize: 12.5, color: T.t3 }}>
-        {kind !== "point" ? `${fmtM(lenM)} · ` : ""}{kind === "area" ? `${fmtArea(areaSqm)} · ` : ""}{t("map_draw.points_n", { n: pts.length })}
-        {breaks.length > 0 ? ` · ${t("map_draw.n_tukde_gap", { n: breaks.length + 1 })}` : ""}
+    <>
+      <div style={card}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.t1, marginBottom: 3 }}>{name || kindLabel(kind)}</div>
+        <div style={{ fontSize: 12.5, color: T.t3 }}>
+          {kind !== "point" ? `${fmtM(lenM)} · ` : ""}{kind === "area" ? `${fmtArea(areaSqm)} · ` : ""}{t("map_draw.points_n", { n: pts.length })}
+          {breaks.length > 0 ? ` · ${t("map_draw.n_tukde_gap", { n: breaks.length + 1 })}` : ""}
+        </div>
+        {/* Tooti line: har tukde ki apni lambai */}
+        {kind === "line" && breaks.length > 0 && (
+          <div style={{ fontSize: 11.5, color: T.t4, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>{partLens(pts, breaks).map(fmtM).join(" + ")}</div>
+        )}
       </div>
-    </div>
+      {/* Line aakhir me apne hi raaste par wapas mudi — kaatne ki salaah */}
+      {retrace && (
+        <div style={{ ...card, background: T.ambL, borderColor: T.ambM }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>{t("map_draw.wapsi_title")}</div>
+          <div style={{ fontSize: 12, color: T.t2, marginTop: 4, lineHeight: 1.5 }}>{t("map_draw.wapsi_note", { d: fmtM(retrace.tailM) })}</div>
+          <Btn tone="amber" onClick={trimRetrace} style={{ marginTop: 8 }}>{t("map_draw.wapsi_hatao")}</Btn>
+        </div>
+      )}
+      {!retrace && trimmedM > 0 && (
+        <div style={{ ...card, borderColor: T.grnM }}>
+          <div style={{ fontSize: 12.5, color: T.grn, fontWeight: 600 }}>{t("map_draw.wapsi_hata_di", { d: fmtM(trimmedM), len: fmtM(lenM) })}</div>
+          <Btn size="sm" onClick={restoreLine} style={{ marginTop: 6 }}>{t("map_draw.pehli_line_wapas")}</Btn>
+        </div>
+      )}
+    </>
   );
 
   const saveFreePanel = (
