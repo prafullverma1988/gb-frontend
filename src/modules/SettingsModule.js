@@ -43,6 +43,7 @@ const IcX          = (p) => <Icon {...p} d="M18 6L6 18M6 6l12 12" />;
 const IcPhone      = (p) => <Icon {...p} d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.362 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0122 16.92z" />;
 const IcFolder     = (p) => <Icon {...p} d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />;
 const IcLayout     = (p) => <Icon {...p} d="M3 3h18v18H3zM3 9h18M9 21V9" />;
+const IcScale      = (p) => <Icon {...p} d="M12 3v18M7 21h10M5 7h14M5 7l-3 6a3 3 0 006 0zM19 7l-3 6a3 3 0 006 0z" />;
 
 // ─── BALANCED THEME TOKENS ───────────────────────────────────────────
 const T = {
@@ -3838,20 +3839,13 @@ function UIPreferences() {
 // ═══════════════════════════════════════════════════════════════════════
 // WAREHOUSE SETTINGS — procurement mode, GRN photo policy, MR flow
 // ═══════════════════════════════════════════════════════════════════════
-function WarehouseSettings() {
+function WarehouseSettings({ onGoto }) {
   const [whProcMode, setWhProcMode] = useState("direct"); // direct | via_procurement
   const [mrFlow, setMrFlow] = useState("procurement_driven"); // procurement_driven | warehouse_driven
   const [holdTtl, setHoldTtl] = useState(2);
-  // Dharam kata: net challan se itne % se zyada kam ho to "Short" issue ka
-  // suggestion (routes/weighments.js). Default 1%.
-  const [weighTol, setWeighTol] = useState("1");
-  // Kaante ke baaki switch (29 Sep 2026) — app ka photo-pehle form inhe maanta hai:
-  //   tare mode   'each' = khali gadi har baar tolo | 'stored' = kaante ka stored tare chalega
-  //   short auto  Short issue apne aap (warna tick ke saath aadmi banaye)
-  //   plate       gadi ki photo me number plate zaroori (default on)
-  const [weighTareMode, setWeighTareMode] = useState("each");
-  const [weighShortAuto, setWeighShortAuto] = useState(false);
-  const [weighPlateReq, setWeighPlateReq] = useState(true);
+  // Dharam kaante (weighbridge) ki settings 2 Oct 2026 ko yahan se apne tab
+  // "Weighbridge (Kaanta)" me gayin — neeche WeighbridgeSettings. Yahan sirf
+  // wahan jaane ka link, taaki purani jagah dhoondhne wala bhatke nahi.
   // Photo policy yahan se nikal gayi — ab apna Photo Settings tab hai,
   // jahan har jagah ke teen control (zaroori / camera-only / location)
   // ek saath hain.
@@ -3865,27 +3859,17 @@ function WarehouseSettings() {
         setWhProcMode(r.data.warehouse_procurement_mode || "direct");
         setMrFlow(r.data.mr_fulfillment_mode || "procurement_driven");
         setHoldTtl(Number(r.data.mr_soft_hold_ttl_days) || 2);
-        setWeighTol(r.data.weigh_short_tol_pct != null ? String(Number(r.data.weigh_short_tol_pct)) : "1");
-        setWeighTareMode(r.data.weigh_tare_mode === "stored" ? "stored" : "each");
-        setWeighShortAuto(Number(r.data.weigh_short_auto) === 1);
-        setWeighPlateReq(r.data.weigh_plate_required == null ? true : Number(r.data.weigh_plate_required) === 1);
       }
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const save = async () => {
-    const tol = Number(weighTol);
-    if (weighTol === "" || !isFinite(tol) || tol < 0 || tol > 50) { window.alert(t("weigh.tol_range")); return; }
     setSaving(true);
     try {
       await api.put("/settings/company", {
         warehouse_procurement_mode: whProcMode,
         mr_fulfillment_mode: mrFlow,
         mr_soft_hold_ttl_days: holdTtl,
-        weigh_short_tol_pct: tol,
-        weigh_tare_mode: weighTareMode,
-        weigh_short_auto: weighShortAuto,
-        weigh_plate_required: weighPlateReq,
       });
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 1800);
@@ -3964,52 +3948,156 @@ function WarehouseSettings() {
         </div>
       </SectionCard>
 
-      <SectionCard title={t("weigh.settings_title")} desc={t("weigh.settings_desc")}
-        action={
-          <button onClick={save} disabled={saving}
-            style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : T.blue, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
-            {savedTick ? t("weigh.saved") : saving ? t("common.saving") : t("common.save")}
-          </button>
-        }>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "12px 16px", borderRadius: T.radius, border: `1px solid ${T.border}`, background: T.card, marginBottom: 20 }}>
+        <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.5 }}>{t("weigh.settings_moved")}</div>
+        <button onClick={() => onGoto && onGoto("weighbridge")}
+          style={{ padding: "7px 14px", borderRadius: 8, background: T.blueSoft, color: T.blue, border: `1px solid ${T.blue}33`, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+          {t("weigh.settings_open")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// WEIGHBRIDGE (KAANTA) SETTINGS — kaante ki entry ke company niyam
+// ═══════════════════════════════════════════════════════════════════════
+// 2 Oct 2026 tak ye ek card tha "Warehouse Settings" ke andar (Short
+// tolerance + teen switch). Prafull (2 Oct): "kaanta setting me weighbridge ka
+// setting banao. 1) usame challan qty tab on or off ka option — ... SaaS ke
+// liye jaroori". Ab apna tab, aur do naye switch:
+//   challan qty   Band / Marzi (default) / Zaroori — kaante ki entry ka
+//                 "Challan par likha" khaana (app + web; Zaroori server bhi rokta)
+//   stale hours   khali wazan kitne ghante baad purana (⚠) — khaali = 12
+// Baaki wahi purane: Short ka %, Short issue apne aap, stored tare, plate.
+// Server: PUT /settings/company (sirf admin) → companies.weigh_*; padhta hai
+// routes/weighments.js weighSettings(), aur app/web ka kaante wala form
+// GET /weighments ke saath ye settings paata hai.
+function WeighbridgeSettings() {
+  const [cq, setCq] = useState("optional");          // off | optional | required
+  const [tol, setTol] = useState("1");
+  const [shortAuto, setShortAuto] = useState(false);
+  const [tareMode, setTareMode] = useState("each");   // each | stored
+  const [staleH, setStaleH] = useState("");           // "" = server ka default (12)
+  const [plateReq, setPlateReq] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
+
+  useEffect(() => {
+    api.get("/settings/company").then(r => {
+      if (r?.success && r.data) {
+        const d = r.data;
+        setCq(["off", "optional", "required"].includes(d.weigh_challan_qty) ? d.weigh_challan_qty : "optional");
+        setTol(d.weigh_short_tol_pct != null ? String(Number(d.weigh_short_tol_pct)) : "1");
+        setShortAuto(Number(d.weigh_short_auto) === 1);
+        setTareMode(d.weigh_tare_mode === "stored" ? "stored" : "each");
+        setStaleH(d.weigh_stale_tare_hours != null ? String(d.weigh_stale_tare_hours) : "");
+        setPlateReq(d.weigh_plate_required == null ? true : Number(d.weigh_plate_required) === 1);
+      }
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    const tolN = Number(tol);
+    if (tol === "" || !isFinite(tolN) || tolN < 0 || tolN > 50) { window.alert(t("weigh.tol_range")); return; }
+    const h = String(staleH).trim() === "" ? null : Number(staleH);
+    if (h != null && (!Number.isInteger(h) || h < 1 || h > 168)) { window.alert(t("weigh.stale_range")); return; }
+    setSaving(true);
+    try {
+      const r = await api.put("/settings/company", {
+        weigh_challan_qty: cq,
+        weigh_short_tol_pct: tolN,
+        weigh_short_auto: shortAuto,
+        weigh_tare_mode: tareMode,
+        weigh_stale_tare_hours: h,
+        weigh_plate_required: plateReq,
+      });
+      if (r?.success === false) window.alert(r.message || t("common.something_went_wrong"));
+      else { setSavedTick(true); setTimeout(() => setSavedTick(false), 1800); }
+    } catch (e) { window.alert(e?.message || t("common.something_went_wrong")); }
+    setSaving(false);
+  };
+
+  if (loading) return <div style={{ padding: 30, fontSize: 13, color: T.textLight }}>{t("common.loading")}</div>;
+
+  const SaveBtn = (
+    <button onClick={save} disabled={saving}
+      style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : T.blue, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
+      {savedTick ? t("weigh.saved") : saving ? t("common.saving") : t("common.save")}
+    </button>
+  );
+  // Ek sawaal, kai jawab — har jawab ke neeche ek line me uska matlab.
+  const choices = (value, set, opts) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {opts.map((o) => (
+        <label key={o.v} style={{ display: "flex", gap: 10, padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${value === o.v ? T.blue : T.border}`, background: value === o.v ? T.blueSoft : T.card, cursor: "pointer", alignItems: "flex-start" }}>
+          <input type="radio" checked={value === o.v} onChange={() => set(o.v)} style={{ marginTop: 3, accentColor: T.blue }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: value === o.v ? T.blue : T.text }}>{o.label}</div>
+            {o.sub && <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 2, lineHeight: 1.5 }}>{o.sub}</div>}
+          </div>
+        </label>
+      ))}
+    </div>
+  );
+  const numInput = (value, set, attrs) => (
+    <input type="number" value={value} onChange={e => set(e.target.value)} {...attrs}
+      style={{ width: 80, padding: "7px 9px", borderRadius: 7, border: `1.5px solid ${T.border}`, fontSize: 13, outline: "none", fontFamily: "inherit" }} />
+  );
+
+  return (
+    <div>
+      <SectionCard title={t("weigh.set_cq_title")} desc={t("weigh.set_cq_desc")} action={SaveBtn}>
+        <div style={{ paddingTop: 4 }}>
+          {choices(cq, setCq, [
+            { v: "off", label: t("weigh.set_cq_off"), sub: t("weigh.set_cq_off_sub") },
+            { v: "optional", label: t("weigh.set_cq_optional"), sub: t("weigh.set_cq_optional_sub") },
+            { v: "required", label: t("weigh.set_cq_required"), sub: t("weigh.set_cq_required_sub") },
+          ])}
+        </div>
+      </SectionCard>
+
+      <SectionCard title={t("weigh.settings_title")} desc={t("weigh.settings_desc")} action={SaveBtn}>
+        {/* Band me challan ki qty hi nahi, to Short ka % ban hi nahi sakta — settings rehti hain, asar nahi. */}
+        {cq === "off" && (
+          <div style={{ margin: "4px 0 10px", padding: "9px 12px", borderRadius: 8, background: T.amberSoft, border: `1px solid ${T.amber}33`, fontSize: 12, color: T.textMid, lineHeight: 1.5 }}>
+            {t("weigh.set_cq_short_note")}
+          </div>
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 4, flexWrap: "wrap" }}>
           <label style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>{t("weigh.settings_label")}</label>
-          <input type="number" min="0" max="50" step="0.1" value={weighTol} onChange={e => setWeighTol(e.target.value)}
-            style={{ width: 80, padding: "7px 9px", borderRadius: 7, border: `1.5px solid ${T.border}`, fontSize: 13, outline: "none", fontFamily: "inherit" }}/>
+          {numInput(tol, setTol, { min: "0", max: "50", step: "0.1" })}
           <span style={{ fontSize: 12.5, color: T.textMid }}>%</span>
         </div>
         <div style={{ fontSize: 11.5, color: T.textMid, marginTop: 8, lineHeight: 1.5 }}>{t("weigh.settings_hint")}</div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text, margin: "14px 0 6px" }}>{t("weigh.set_short_title")}</div>
+        {choices(shortAuto ? "auto" : "tick", (v) => setShortAuto(v === "auto"), [
+          { v: "tick", label: t("weigh.set_short_tick"), sub: null },
+          { v: "auto", label: t("weigh.set_short_auto"), sub: t("weigh.set_short_auto_sub") },
+        ])}
+      </SectionCard>
 
-        {[
-          { title: t("weigh.set_tare_title"), value: weighTareMode, set: setWeighTareMode, opts: [
+      <SectionCard title={t("weigh.set_tare_title")} action={SaveBtn}>
+        <div style={{ paddingTop: 4 }}>
+          {choices(tareMode, setTareMode, [
             { v: "each", label: t("weigh.set_tare_each"), sub: t("weigh.set_tare_each_sub") },
             { v: "stored", label: t("weigh.set_tare_stored"), sub: t("weigh.set_tare_stored_sub") },
-          ] },
-          { title: t("weigh.set_short_title"), value: weighShortAuto ? "auto" : "tick", set: (v) => setWeighShortAuto(v === "auto"), opts: [
-            { v: "tick", label: t("weigh.set_short_tick"), sub: null },
-            { v: "auto", label: t("weigh.set_short_auto"), sub: t("weigh.set_short_auto_sub") },
-          ] },
-        ].map((g) => (
-          <div key={g.title} style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text, marginBottom: 6 }}>{g.title}</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {g.opts.map((o) => (
-                <label key={o.v} style={{ display: "flex", gap: 10, padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${g.value === o.v ? "#2563EB" : "#E5E7EB"}`, background: g.value === o.v ? "#EFF6FF" : "white", cursor: "pointer", alignItems: "flex-start" }}>
-                  <input type="radio" checked={g.value === o.v} onChange={() => g.set(o.v)} style={{ marginTop: 3, accentColor: "#2563EB" }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: g.value === o.v ? "#1D4ED8" : "#111827" }}>{o.label}</div>
-                    {o.sub && <div style={{ fontSize: 11.5, color: "#6B7280", marginTop: 2, lineHeight: 1.5 }}>{o.sub}</div>}
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-        ))}
+          ])}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+          <label style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>{t("weigh.set_stale_label")}</label>
+          {numInput(staleH, setStaleH, { min: "1", max: "168", step: "1", placeholder: "12" })}
+        </div>
+        <div style={{ fontSize: 11.5, color: T.textMid, marginTop: 8, lineHeight: 1.5 }}>{t("weigh.set_stale_hint")}</div>
+      </SectionCard>
 
-        <label style={{ display: "flex", gap: 10, marginTop: 14, padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${weighPlateReq ? "#2563EB" : "#E5E7EB"}`, background: weighPlateReq ? "#EFF6FF" : "white", cursor: "pointer", alignItems: "flex-start" }}>
-          <input type="checkbox" checked={weighPlateReq} onChange={(e) => setWeighPlateReq(e.target.checked)} style={{ marginTop: 3, accentColor: "#2563EB" }} />
+      <SectionCard title={t("weigh.set_plate_title")} action={SaveBtn}>
+        <label style={{ display: "flex", gap: 10, marginTop: 4, padding: "10px 12px", borderRadius: 9, border: `1.5px solid ${plateReq ? T.blue : T.border}`, background: plateReq ? T.blueSoft : T.card, cursor: "pointer", alignItems: "flex-start" }}>
+          <input type="checkbox" checked={plateReq} onChange={(e) => setPlateReq(e.target.checked)} style={{ marginTop: 3, accentColor: T.blue }} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: weighPlateReq ? "#1D4ED8" : "#111827" }}>{t("weigh.set_plate")}</div>
-            <div style={{ fontSize: 11.5, color: "#6B7280", marginTop: 2, lineHeight: 1.5 }}>{t("weigh.set_plate_sub")}</div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: plateReq ? T.blue : T.text }}>{t("weigh.set_plate")}</div>
+            <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 2, lineHeight: 1.5 }}>{t("weigh.set_plate_sub")}</div>
           </div>
         </label>
       </SectionCard>
@@ -4801,6 +4889,8 @@ const settingsSections = [
   { id: "material",      label: "Material Settings",    Icon: IcBox,       Comp: MaterialSettings,       section: null },
   { id: "finance",       label: "Finance Settings",     Icon: IcDollar,    Comp: FinanceSettings,        section: null },
   { id: "warehouse",     label: "Warehouse Settings",   Icon: IcBox,       Comp: WarehouseSettings,      section: null },
+  // Kaante ki settings apne tab me (2 Oct 2026) — naam t() se, baaki sidebar abhi English hai.
+  { id: "weighbridge",   labelKey: "weigh.settings_tab", Icon: IcScale,     Comp: WeighbridgeSettings,    section: null },
   { id: "wallet",        label: "Wallet Settings",      Icon: IcDollar,    Comp: WalletSettings,         section: null },
   { id: "notifications", label: "Notifications",        Icon: IcBell,      Comp: NotificationSettings,   section: "SYSTEM" },
   { id: "sequences",     label: "Number Sequences",     Icon: IcHash,      Comp: NumberSequences,        section: null },
@@ -4812,7 +4902,9 @@ const settingsSections = [
 export default function SettingsModule({ initialSection = "company" } = {}) {
   const [activeSection, setActiveSection] = useState(initialSection);
   const ActiveComp = settingsSections.find(s => s.id === activeSection)?.Comp || CompanySettings;
-  const activeLabel = settingsSections.find(s => s.id === activeSection)?.label || "Settings";
+  const labelOf = (s) => (s.labelKey ? t(s.labelKey) : s.label);
+  const activeSec = settingsSections.find(s => s.id === activeSection);
+  const activeLabel = activeSec ? labelOf(activeSec) : "Settings";
   const descMap = {
     recyclebin: "Permanently hataye gaye project/tender — 30 din tak wapas laye ja sakte hain",
     profile: "Manage your personal account and password",
@@ -4825,6 +4917,7 @@ export default function SettingsModule({ initialSection = "company" } = {}) {
     bank: "Manage bank accounts and payment methods", material: "Configure material stock and inventory rules",
     finance: "Tax, invoicing, duplicate-payment guard and financial controls",
     warehouse: "Procurement mode, GRN photo policy and MR fulfillment flow",
+    weighbridge: t("weigh.settings_tab_desc"),
     wallet: "Staff wallet photo policy + auto-approve limits",
     notifications: "Choose which in-app notifications you receive",
     sequences: "Configure auto-numbering for transactions", audit: "Audit trail and data retention settings",
@@ -4852,7 +4945,7 @@ export default function SettingsModule({ initialSection = "company" } = {}) {
                   <div style={{ width: 30, height: 30, borderRadius: 7, background: isActive ? T.blue + "15" : T.borderLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <item.Icon size={16} color={isActive ? T.blue : T.textLight} />
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: isActive ? 650 : 450, color: isActive ? T.blue : T.textMid }}>{item.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: isActive ? 650 : 450, color: isActive ? T.blue : T.textMid }}>{labelOf(item)}</span>
                 </button>
               </div>
             );

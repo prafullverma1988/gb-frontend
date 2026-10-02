@@ -25,7 +25,7 @@ import uploadManager from "../../utils/uploadManager";
 import { loadPhotoPolicy, policyFor } from "../../utils/photoPolicy";
 import { T } from "../../modules/shared/tokens";
 import { t } from "../../i18n";
-import { challanUnits, fmtKg, kgIn, kgPerUnit, loadWeighments } from "./weigh";
+import { challanUnits, destParam, fmtKg, kgIn, kgPerUnit, loadWeighments } from "./weigh";
 import { loadOrderedLines, loadPoLines } from "./grnData";
 import { cld } from "../../utils/cloudinary";
 
@@ -37,6 +37,7 @@ const STATUS = { InTransit: [T.amb, T.ambL, "weigh.in_transit"], Received: [T.bl
 // Cancel ki jaldi wali wajah — tap se bhar jaati hai, phir badal bhi sakte ho.
 const CANCEL_REASONS = ["weigh.cancel_r1", "weigh.cancel_r2", "weigh.cancel_r3", "weigh.cancel_r4", "weigh.cancel_r5"];
 // Khali wazan itna purana ho to ⚠ (server ka STALE_TARE_HOURS bhi yahi).
+// Default hai — company ka apna ghanta settings.stale_tare_hours me aata hai.
 const STALE_H = 12;
 
 // adding/pm/swapFor sirf picker ki UI ke liye: adder khula hai, kaunsa
@@ -118,6 +119,9 @@ const Thumbs = ({ list }) => {
 
 export default function WeighbridgePanel({ dest, onChanged }) {
   const [trips, setTrips] = useState([]);
+  // Company ki weighbridge settings (Settings → "Weighbridge (Kaanta)") —
+  // GET /weighments list ke saath aati hain. Purana server na bheje to default.
+  const [settings, setSettings] = useState({ challan_qty: "optional", stale_tare_hours: STALE_H });
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pol, setPol] = useState(null);
@@ -140,7 +144,11 @@ export default function WeighbridgePanel({ dest, onChanged }) {
 
   const reload = async () => {
     setLoading(true);
-    const [tr, ls, pl, gone] = await Promise.all([loadWeighments(dest, "all"), loadOrderedLines(dest), loadPoLines(dest), loadWeighments(dest, "cancelled")]);
+    const [all, ls, pl, gone] = await Promise.all([
+      api.get(`/weighments?status=all&${destParam(dest)}`).catch(() => null),
+      loadOrderedLines(dest), loadPoLines(dest), loadWeighments(dest, "cancelled")]);
+    const tr = all && all.success ? (all.data || []) : [];
+    if (all && all.settings) setSettings(s => ({ ...s, ...all.settings }));
     // Purana server ?status=cancelled nahi jaanta aur sab entry lauta deta hai —
     // deploy ke beech bhi log me sirf sach me cancel hui entry aaye.
     setCancelled(gone.filter(w => w.status === "Cancelled"));
@@ -167,6 +175,16 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   };
 
   const photoMissing = (key, url) => policyFor(pol, key).mode === "required" && !url;
+  // "Challan par likha" qty (2 Oct 2026, company setting): Band = khaana hi
+  // nahi (net barabar baanta jaata hai, Short % nahi), Marzi = aaj jaisa, Zaroori =
+  // har material par qty bina Save nahi (server bhi rokta hai).
+  const cqOff = settings.challan_qty === "off";
+  const cqReq = settings.challan_qty === "required";
+  const staleH = Number(settings.stale_tare_hours) > 0 ? Number(settings.stale_tare_hours) : STALE_H;
+  const noQtyMsg = (payloadLines) => {
+    const miss = cqReq ? payloadLines.find(l => !(Number(l.challan_qty) > 0)) : null;
+    return miss ? t("weigh.need_challan_qty", { material: miss.material_name }) : null;
+  };
 
   // Order chuna hai to vendor usi order ka — gadi usi ne bheji hai. Badalne
   // par GRN kisi aur party ke khaate me chala jaata (server bhi rokta hai).
@@ -178,10 +196,10 @@ export default function WeighbridgePanel({ dest, onChanged }) {
       wh_mr_id: l.kind === "wh" ? l.whMrId : null,
       wh_mr_item_id: l.kind === "wh" ? l.whMrItemId : null,
       material_name: l.material, order_unit: l.unit,
-      challan_qty: st.picked[l.key]?.challanQty || null,
-      challan_unit: st.picked[l.key]?.challanUnit || l.unit || null,
+      challan_qty: cqOff ? null : (st.picked[l.key]?.challanQty || null),
+      challan_unit: cqOff ? null : (st.picked[l.key]?.challanUnit || l.unit || null),
     })),
-    ...st.free.map(x => ({ material_name: x.name, order_unit: x.unit, challan_qty: x.qty || null })),
+    ...st.free.map(x => ({ material_name: x.name, order_unit: x.unit, challan_qty: cqOff ? null : (x.qty || null) })),
   ];
   // Ek material + ek vendor ke order, kram me: jisme baaki hai wo pehle, phir
   // sabse purana (MR/godown MR pehle, phir PO). Pehla = apne aap juda hua order.
@@ -194,6 +212,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   // Challan ki qty aur kaante ka wazan do alag cheezein hain — aadmi kaante ka
   // wazan challan wale khaane me daal de to yahin pakdo (28 Sep 2026).
   const challanKgOf = (st) => {
+    if (cqOff) return null;   // Band: challan ki qty li hi nahi jaati
     let sum = 0, any = false;
     for (const key of Object.keys(st.picked)) {
       const p = st.picked[key]; const k = kgPerUnit(p.challanUnit); const q = Number(p.challanQty);
@@ -243,6 +262,8 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     const isG = newMode === "gross";
     const payloadLines = isG ? payloadLinesOf(nf) : [];
     if (isG && !payloadLines.length) { alert(t("weigh.need_material")); return; }
+    const qtyMsg = noQtyMsg(payloadLines);
+    if (qtyMsg) { alert(qtyMsg); return; }
     if (!(Number(nf.kg) > 0)) { alert(t(isG ? "weigh.need_gross" : "weigh.need_tare")); return; }
     // Khali gadi ki pehchaan sirf number hai — bina number bhari gadi is
     // entry se kabhi nahi milegi.
@@ -293,6 +314,8 @@ export default function WeighbridgePanel({ dest, onChanged }) {
     if (!secondTrip) return;
     const payloadLines = needGross ? payloadLinesOf(sf) : [];
     if (needGross && !(secondTrip.lines || []).length && !payloadLines.length) { alert(t("weigh.need_material")); return; }
+    const qtyMsg = noQtyMsg(payloadLines);
+    if (qtyMsg) { alert(qtyMsg); return; }
     if (!(Number(sf.kg) > 0)) { alert(t(needGross ? "weigh.need_gross" : "weigh.need_tare")); return; }
     if (!needGross && Number(sf.kg) >= Number(secondTrip.gross_kg)) { alert(t("weigh.tare_gt_gross")); return; }
     if (needGross && Number(sf.kg) <= Number(secondTrip.tare_kg)) { alert(t("weigh.tare_gt_gross")); return; }
@@ -407,7 +430,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
   // Khali tul chuki gadi ka poora byora — bhar kar aane par isi se milaana
   // hai: kab tuli, kisne toli, slip, photo. Ye entry ab badalti nahi.
   const tareSummary = (w, withPhotos) => {
-    const stale = hoursSince(w.tare_at) > STALE_H;
+    const stale = hoursSince(w.tare_at) > staleH;
     return (
       <div style={{ marginTop: 7, padding: "8px 10px", borderRadius: 7, background: stale ? T.ambL : T.surfaceB, border: "1px solid " + (stale ? T.ambM : T.b1) }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: T.t1 }}>
@@ -492,17 +515,19 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                     )}
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ fontSize: 10, color: T.t3, whiteSpace: "nowrap" }}>{t("weigh.challan_written")}</span>
-                  <input type="number" value={p.challanQty || ""} placeholder="0"
-                    onChange={e => setPick(key, { challanQty: e.target.value })}
-                    style={{ ...inp, width: 80, padding: "5px 7px", fontSize: 11.5 }} />
-                  <select value={p.challanUnit || l.unit || "Ton"}
-                    onChange={e => setPick(key, { challanUnit: e.target.value })}
-                    style={{ ...inp, padding: "5px 4px", fontSize: 11, width: 66 }}>
-                    {challanUnits(l.unit).map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
-                </div>
+                {cqOff ? <span /> : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <span style={{ fontSize: 10, color: T.t3, whiteSpace: "nowrap" }}>{t("weigh.challan_written")}{cqReq ? " *" : ""}</span>
+                    <input type="number" value={p.challanQty || ""} placeholder="0"
+                      onChange={e => setPick(key, { challanQty: e.target.value })}
+                      style={{ ...inp, width: 80, padding: "5px 7px", fontSize: 11.5 }} />
+                    <select value={p.challanUnit || l.unit || "Ton"}
+                      onChange={e => setPick(key, { challanUnit: e.target.value })}
+                      style={{ ...inp, padding: "5px 4px", fontSize: 11, width: 66 }}>
+                      {challanUnits(l.unit).map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  </div>
+                )}
                 <button type="button" onClick={() => removeLine(key)} style={{ border: "none", background: "none", color: T.red, fontSize: 16, lineHeight: 1, cursor: "pointer", padding: 0 }}>×</button>
               </div>
               {st.swapFor === key && alts.length > 0 && (
@@ -515,7 +540,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                   ))}
                 </div>
               )}
-              {kgPerUnit(p.challanUnit) && !kgPerUnit(l.unit) && (
+              {!cqOff && kgPerUnit(p.challanUnit) && !kgPerUnit(l.unit) && (
                 <div style={{ fontSize: 10, color: T.t4, marginTop: 3 }}>{t("weigh.unit_note", { unit: l.unit })}</div>
               )}
             </div>
@@ -526,7 +551,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
         {st.free.map((x, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid " + T.ambM, background: T.ambL, borderRadius: 7, padding: "6px 10px", marginBottom: 6, fontSize: 11.5 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <b>✓ {x.name}</b> <span style={{ color: T.t3 }}>· {t("weigh.free_material")} · {t("weigh.challan_written")}: {x.qty ? `${x.qty} ${x.unit}` : "—"}</span>
+              <b>✓ {x.name}</b> <span style={{ color: T.t3 }}>· {t("weigh.free_material")}{cqOff ? "" : ` · ${t("weigh.challan_written")}: ${x.qty ? `${x.qty} ${x.unit}` : "—"}`}</span>
             </div>
             <button type="button" onClick={() => upd({ free: st.free.filter((_, j) => j !== i) })}
               style={{ border: "none", background: "none", color: T.red, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0 }}>×</button>
@@ -556,7 +581,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                 )}
               </>
             ) : st.pm === "__free__" ? (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px auto auto", gap: 6, alignItems: "end" }}>
+              <div style={{ display: "grid", gridTemplateColumns: cqOff ? "1fr 80px auto auto" : "1fr 80px 80px auto auto", gap: 6, alignItems: "end" }}>
                 {/* Naam material library se — unit uske saath apne aap. */}
                 <div>
                   <label style={lbl}>{t("weigh.free_material")}</label>
@@ -567,10 +592,13 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                     {(lib || []).map(m => <option key={m.id || m.name} value={m.name} />)}
                   </datalist>
                 </div>
-                <div>
-                  <label style={lbl}>{t("weigh.challan_written")}</label>
-                  <input type="number" value={st.freeQty || ""} onChange={e => upd({ freeQty: e.target.value })} style={inp} />
-                </div>
+                {/* Band me qty ka khaana nahi — unit wahi rehti hai, wo material ki apni unit hai. */}
+                {!cqOff && (
+                  <div>
+                    <label style={lbl}>{t("weigh.challan_written")}{cqReq ? " *" : ""}</label>
+                    <input type="number" value={st.freeQty || ""} onChange={e => upd({ freeQty: e.target.value })} style={inp} />
+                  </div>
+                )}
                 <div>
                   <label style={lbl}>{t("common.unit")}</label>
                   <select value={st.freeUnit} onChange={e => upd({ freeUnit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
@@ -578,9 +606,10 @@ export default function WeighbridgePanel({ dest, onChanged }) {
                   </select>
                 </div>
                 <button type="button" onClick={() => upd({ pm: null })} style={{ ...btn(T.surface, T.t3, T.b1), height: 33 }}>{t("weigh.cancel_back")}</button>
-                <button type="button" disabled={!st.freeName.trim()}
-                  onClick={() => upd({ free: [...st.free, { name: st.freeName.trim(), unit: st.freeUnit, qty: st.freeQty || "" }], freeName: "", freeQty: "", pm: null, adding: false })}
-                  style={{ ...btn(T.blu, "#fff"), height: 33, opacity: st.freeName.trim() ? 1 : 0.5 }}>{t("weigh.add_free")}</button>
+                {/* Zaroori me qty ke bina jodna hi nahi — jud jaane ke baad qty badalne ka khaana nahi hai. */}
+                <button type="button" disabled={!st.freeName.trim() || (cqReq && !(Number(st.freeQty) > 0))}
+                  onClick={() => upd({ free: [...st.free, { name: st.freeName.trim(), unit: st.freeUnit, qty: cqOff ? "" : (st.freeQty || "") }], freeName: "", freeQty: "", pm: null, adding: false })}
+                  style={{ ...btn(T.blu, "#fff"), height: 33, opacity: st.freeName.trim() && !(cqReq && !(Number(st.freeQty) > 0)) ? 1 : 0.5 }}>{t("weigh.add_free")}</button>
               </div>
             ) : (
               <>
@@ -639,7 +668,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
         {needGross && (
           <>
             <div style={{ fontSize: 11, color: T.t3, margin: "4px 0 8px" }}>{t("weigh.same_vehicle_check")}</div>
-            {blockH(t("weigh.block_challan"), t("weigh.block_challan_hint"))}
+            {blockH(t("weigh.block_challan"), cqOff ? null : t("weigh.block_challan_hint"))}
             {/* Purani (23 Sep wali) khali-pehle entry me material pehle se ho
                 sakta hai — tab dobara chunna nahi, bas dikhao. */}
             {(w.lines || []).length
@@ -725,7 +754,7 @@ export default function WeighbridgePanel({ dest, onChanged }) {
       ) : newMode === "gross" ? (
         <div style={{ background: T.surface, border: "1.5px solid " + T.bluM, borderLeft: "3px solid " + T.blu, borderRadius: 8, padding: 12, marginBottom: 14 }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 8 }}>{t("weigh.step1_title")}</div>
-          {blockH(t("weigh.block_challan"), t("weigh.block_challan_hint"))}
+          {blockH(t("weigh.block_challan"), cqOff ? null : t("weigh.block_challan_hint"))}
           {picker(nf, setN)}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
             {vendorField(nf, setN)}
