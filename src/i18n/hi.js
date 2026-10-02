@@ -5342,6 +5342,8 @@ const dict = {
   "mrdetail.status_edit_se_nahi_badalta":                      "स्टेटस यहाँ से नहीं बदलता: Approve/Reject अप्रूवर करता है (Material Approvals), और मटेरियल का स्टेटस Order / Receive (GRN) / Mark Used से अपने आप बदलता है। MR बंद करनी हो तो Close इस्तेमाल करो।",
   "mrdetail.unit":                                             "यूनिट *",
   "mrdetail.used":                                             "यूज़्ड",
+  "mrdetail.vendor_ko_photo_bhejo":                            "वेंडर को फोटो भेजो (वॉट्सऐप)",
+  "mrdetail.vendor_ko_photo_bhejo_hint":                       "नाम, स्पेक और फोटो के लिंक वॉट्सऐप पर जाते हैं — MR का वेंडर पार्टी लिस्ट में हो तो उसकी चैट सीधे खुलती है।",
   "mrdetail.vendor_material_supplier":                         "वेंडर (मटेरियल सप्लायर)",
 
   // ── notification_bell ───────────────────────────────────────
@@ -6231,6 +6233,7 @@ const dict = {
   "procurement.locked_locked":                                 "लॉक्ड: {locked}",
   "procurement.locked_quotes":                                 "लॉक्ड कोट्स",
   "procurement.maal_site_par_aane_par_vendor":                 "मटेरियल साइट पर आने पर वेंडर किसे कॉल करेगा — नाम और नंबर PO के साथ वेंडर तक जाएगा।",
+  "procurement.maang_ki_photo_saath_jaayegi":                  "माँग की {n} फोटो का लिंक भी मैसेज में जाएगा।",
   "procurement.manual_order":                                  "मैनुअल ऑर्डर",
   "procurement.mark_as_ordered":                               "ऑर्डर्ड मार्क करो",
   "procurement.mark_as_received":                              "रिसीव्ड मार्क करो",

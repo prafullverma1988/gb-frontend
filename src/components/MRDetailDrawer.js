@@ -8,6 +8,9 @@
 //   onClose    — close drawer
 //   onChanged  — called after a successful edit / delete so parent reloads
 //   isAdmin    — boolean; non-admins only see read-only details
+//   vendors    — party list (Procurement ka dbVendors) — "Vendor ko photo bhejo"
+//                me MR ke vendor ka number yahin se milta hai (na mile to WhatsApp
+//                me chat khud chuno)
 
 import { useState, useEffect, useRef } from "react";
 import api from "../config/api";
@@ -16,6 +19,8 @@ import ActivityLog from "./ActivityLog";
 import { t } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
+import { companyName } from "../utils/companyName";
+import { requirementText, waUrl, vendorPhone } from "../utils/vendorShare";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -48,7 +53,7 @@ const isoDate = (d) => {
   try { const dt = new Date(d); if (isNaN(dt)) return ""; return dt.toISOString().slice(0, 10); } catch { return ""; }
 };
 
-export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true }) {
+export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true, vendors = [] }) {
   const open = !!mr;
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
@@ -226,6 +231,15 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
                         </a>
                       ))}
                     </div>
+                    {/* Photo + naam + spec seedha vendor ko WhatsApp par (Prafull, 2 Oct
+                        2026) — order se pehle "ye type chahiye" poochhna ho ya baad me.
+                        MR ka vendor party list me mile to uski chat seedhi khulti hai. */}
+                    <button type="button"
+                      onClick={() => window.open(waUrl(requirementText(mr, companyName()), vendorPhone(vendors, mr.po_vendor_name || mr.linked_vendor)), "_blank", "noopener")}
+                      title={t("mrdetail.vendor_ko_photo_bhejo_hint")}
+                      style={{ marginTop: 8, padding: "6px 12px", borderRadius: 6, border: "1px solid #25D366", background: "#E8FDF1", color: "#15803D", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                      {t("mrdetail.vendor_ko_photo_bhejo")}
+                    </button>
                   </div>
                 );
               })()}

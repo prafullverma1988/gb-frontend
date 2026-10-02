@@ -5343,6 +5343,8 @@ const dict = {
   "mrdetail.status_edit_se_nahi_badalta":                      "Status is not changed here: the approver does Approve/Reject (Material Approvals), and material status changes on its own through Order / Receive (GRN) / Mark Used. To stop an MR, use Close.",
   "mrdetail.unit":                                             "Unit *",
   "mrdetail.used":                                             "Used",
+  "mrdetail.vendor_ko_photo_bhejo":                            "Send photos to vendor (WhatsApp)",
+  "mrdetail.vendor_ko_photo_bhejo_hint":                       "Sends the item name, spec and photo links on WhatsApp — opens the vendor's chat directly if the MR vendor is in the party list.",
   "mrdetail.vendor_material_supplier":                         "Vendor (Material Supplier)",
 
   // ── notification_bell ───────────────────────────────────────
@@ -6232,6 +6234,7 @@ const dict = {
   "procurement.locked_locked":                                 "Locked: {locked}",
   "procurement.locked_quotes":                                 "Locked Quotes",
   "procurement.maal_site_par_aane_par_vendor":                 "Who should the vendor call upon material arrival at the site — name and number will be sent to the vendor with the PO.",
+  "procurement.maang_ki_photo_saath_jaayegi":                  "Links to {n} request photo(s) will also go in the message.",
   "procurement.manual_order":                                  "Manual Order",
   "procurement.mark_as_ordered":                               "Mark as Ordered",
   "procurement.mark_as_received":                              "Mark as Received",

@@ -12,6 +12,7 @@ import { t, Rich } from "../i18n";
 import { isoDate } from "../utils/today";
 import { BackClose } from "../utils/backNav";
 import { cld } from "../utils/cloudinary";
+import { itemName, specOf, photoLinks } from "../utils/vendorShare";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -1420,14 +1421,22 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
   // person ka number jaata tha aur na MR "Ordered" hoti thi. Ab dono ek hi
   // form se hote hain (mobile OrderSheet jaisa), isliye message me contact
   // bhi jaata hai aur stage bhi sach bolta hai.
+  // Maang ki photo ke link aur asset ka spec bhi — vendor ko dikhe kaunsa type
+  // chahiye (Prafull, 2 Oct 2026).
+  const waName=itemName(mr)||mr.item_name;
   const buildWaMsg=()=>encodeURIComponent(
     `*Material Order Request*\n\n`+
-    `Item: ${mr.item_name}\n`+
+    `Item: ${waName}\n`+
+    (specOf(waName,mr)?`Spec: ${specOf(waName,mr)}\n`:"")+
     `Qty: ${mr.quantity} ${mr.unit}\n`+
-    `Project: ${mr.project_name||"—"}\n`+
+    // Asset ki kharid STORE ki hoti hai — "Project: —" ki jagah store (phone ke OrderSheet jaisa).
+    (mr.asset_warehouse_id&&!mr.project_id
+      ? (mr.asset_warehouse_name?`Store: ${mr.asset_warehouse_name}\n`:"")
+      : `Project: ${mr.project_name||"—"}\n`)+
     `MR No: ${mr.mr_number||"—"}\n`+
     (manualDelivery?`Required by: ${fmtDate(manualDelivery)}\n`:(mr.required_date?`Required by: ${fmtDate(mr.required_date)}\n`:""))+
     (mr.notes?`Notes: ${mr.notes}\n`:"")+
+    photoLinks(mr).map(u=>`Photo: ${u}\n`).join("")+
     (contacts.length
       ? `\nReceiving contact at site:\n`+contacts.map(c=>`• ${c.name}${(c.designation||c.role)?` (${c.designation||c.role})`:""} — ${c.phone}`).join("\n")+"\n"
       : "")

@@ -13,6 +13,7 @@ import { t, Rich } from "../i18n";
 import { companyName } from "../utils/companyName";
 import { todayISO } from "../utils/today";
 import { BackClose } from "../utils/backNav";
+import { itemName, vendorLines, photoList, waUrl, vendorPhone } from "../utils/vendorShare";
 
 // Vendor ko jaane wale message ka contacts wala hissa — WhatsApp / Email /
 // PO share, sab ek hi shakl me bhejein. Backend ka contactsWaBlock isi ka
@@ -371,12 +372,16 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
     }
   };
 
-  // Build WA message when manual selected
+  // Build WA message when manual selected. Har line ke neeche maang ki photo
+  // ke link aur asset ka spec — vendor ko dikhe kaunsa type chahiye (Prafull,
+  // 2 Oct 2026: "manual order me whatsapp ke sath chala jaye").
   const buildWA=()=>{
     const lines=items.map(i=>{
       const taken = Number(whTake[i.id]||0);
       const remaining = Math.max(0, Number(i.approvedQty||i.qty) - taken);
-      return remaining>0 ? `• ${i.item} — ${remaining} ${i.unit} (${i.project})` : null;
+      if(!(remaining>0)) return null;
+      const name=itemName(i)||i.item;
+      return [`• ${name} — ${remaining} ${i.unit} (${i.project})`, ...vendorLines(name,i,"   ")].join("\n");
     }).filter(Boolean).join("\n");
     return `Order\n${lines}\nDelivery by: ${delivery||"TBD"}\n${contactsText(contacts)}\nPlease confirm. — Admin`;
   };
@@ -558,7 +563,7 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
               <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,padding:"10px 12px"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                   <span style={{fontSize:11,fontWeight:600,color:T.grn}}>{t("crm.whatsapp_template")}</span>
-                  <button onClick={()=>{const num=prompt(t("procurement.vendor_phone_10_digits"));if(num)window.open(`https://wa.me/91${num.replace(/\D/g,"")}?text=${encodeURIComponent(buildWA())}`);}}
+                  <button onClick={()=>{const num=prompt(t("procurement.vendor_phone_10_digits"),vendorPhone(dbVendors,vendor));if(num)window.open(waUrl(buildWA(),num));}}
                     style={{display:"flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:5,background:"#25D366",border:"none",color:"white",fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
                     <IcWA size={11} color="white"/> {t("common.send")}
                   </button>
@@ -1654,7 +1659,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
 // ── SEND TO VENDOR MODAL ─────────────────────────────────────────────
 // PO ko vendor tak bhejne ke options (PDF / WhatsApp / Email / Copy)
 // Confirm karne par PO order_status='Ordered' ban jata hai
-function SendToVendorModal({po,onClose,onSent}){
+function SendToVendorModal({po,onClose,onSent,srcMr,vendorPhone:vPhone=""}){
   const [copied,setCopied]=useState(false);
   const [sending,setSending]=useState(false);
   const [sentVia,setSentVia]=useState(null);
@@ -1663,7 +1668,14 @@ function SendToVendorModal({po,onClose,onSent}){
   const baseUrl = (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname))
     ? "http://localhost:3000" : "https://gbuildcon.in";
   const poLink = `${baseUrl}/po-view/${po.id}`;
-  const itemSummary = (po.items||[]).map(it=>`${it.desc||"Item"} - ${it.qty}${it.unit?` ${it.unit}`:""} @ ₹${it.rate}`).join("\n");
+  // Line ki MR par maang ki photo / asset ka spec ho to line ke neeche — WhatsApp
+  // aur Email dono isi message se bante hain (Prafull, 2 Oct 2026: "PO mail pe bhi").
+  const srcOf = (it) => (srcMr && it.linked_mr_id ? srcMr(it.linked_mr_id) : null);
+  const itemSummary = (po.items||[]).map(it=>[
+    `${it.desc||"Item"} - ${it.qty}${it.unit?` ${it.unit}`:""} @ ₹${it.rate}`,
+    ...vendorLines(it.desc||"", srcOf(it), "   "),
+  ].join("\n")).join("\n");
+  const reqPhotoN = (po.items||[]).reduce((n,it)=>{ const m=srcOf(it); return n+(m?photoList(m.photo_urls).length:0); },0);
   // Receiving contacts message me isliye ki vendor ka driver site pahunch kar
   // seedha call kar sake — yahi is poore feature ka asli output hai.
   const waMsg = `*Purchase Order ${po.poNum||"PO-"+po.id}*\nFrom: ${companyName()}\nProject: ${po.project}\nDelivery: ${po.deliverySite||po.project}\nExp Date: ${po.delivery||"TBD"}\n${contactsText(po.receivingContacts)}\nItems:\n${itemSummary}\n\nTotal: ₹${(po.amount||0).toLocaleString("en-IN")}\n\nView/confirm: ${poLink}`;
@@ -1688,7 +1700,7 @@ function SendToVendorModal({po,onClose,onSent}){
 
   const channels = [
     {label:t("common.whatsapp"),  via:"whatsapp", c:"#25D366", bg:"#E8FDF1", Icon:IcWA,
-      action:()=>open(`https://wa.me/?text=${encodeURIComponent(waMsg)}`,"whatsapp")},
+      action:()=>open(waUrl(waMsg,vPhone),"whatsapp")},
     {label:t("common.email"),     via:"email",    c:T.blu, bg:T.bluL, Icon:IcMail,
       action:()=>open(`mailto:?subject=${encodeURIComponent(emailSubj)}&body=${encodeURIComponent(emailBody)}`,"email")},
     {label:t("procurement.print_pdf"), via:"pdf",      c:T.pur, bg:T.purL, Icon:IcShare,
@@ -1711,6 +1723,9 @@ function SendToVendorModal({po,onClose,onSent}){
             <div><span style={{color:T.t4}}>{t("procurement.items")} </span><b style={{color:T.t1}}>{(po.items||[]).length}</b></div>
             <div><span style={{color:T.t4}}>{t("common.total_2")} </span><b style={{color:T.t1}}>₹{(po.amount||0).toLocaleString("en-IN")}</b></div>
             <div style={{gridColumn:"1 / 3"}}><span style={{color:T.t4}}>{t("procurement.delivery")} </span><b style={{color:T.t1}}>{po.deliverySite}</b> · <span style={{color:T.t4}}>by</span> <b style={{color:T.t1}}>{po.delivery||"TBD"}</b></div>
+            {reqPhotoN>0&&(
+              <div style={{gridColumn:"1 / 3",color:T.t3}}>{t("procurement.maang_ki_photo_saath_jaayegi",{n:reqPhotoN})}</div>
+            )}
             <div style={{gridColumn:"1 / 3"}}>
               <span style={{color:T.t4}}>{t("procurement.receiving")} </span>
               {(po.receivingContacts||[]).length
@@ -1865,6 +1880,10 @@ function ProcurementModule(){
       project_name:  it.project_name || "",
       delivery_site: it.delivery_site|| "",
       linked_mr_id:  it.linked_mr_id || null,
+      // Asset ki kharid ka store — PO Edit me Receiving Person ka dropdown isi
+      // se store ki team laata hai (asset PO ka project 0 hota hai; pehle Edit
+      // par ye yahan girta tha aur dropdown khaali aata tha).
+      asset_warehouse_id: it.asset_warehouse_id || null,
     })),
   });
   const mapRFQ=r=>{
@@ -2150,13 +2169,21 @@ function ProcurementModule(){
   const createPOFromRFQ=(rfq)=>{
     if(!rfq?.locked){alert(t("procurement.pehle_ek_vendor_ka_quote_lock"));return;}
     const winner=rfq.vendors.find(v=>v.name===rfq.locked);
-    const prefill=rfq.items.map((it,i)=>({
-      id:it.linked_mr_id||null,           // MR back-link (null for manual RFQ items)
-      item:it.desc, qty:it.qty, approvedQty:it.qty, unit:it.unit,
-      project_id:rfq.project_id||null,
-      project:(rfq.project&&rfq.project!=="—")?rfq.project:"",
-      rate:winner?.rates?.[i]?.rate??null,
-    }));
+    const prefill=rfq.items.map((it,i)=>{
+      // Asset ki kharid ki MR ka store — RFQ ki line par nahi hota, MR par hota
+      // hai. Iske bina RFQ se bane PO me Receiving Person ka dropdown khaali aata
+      // tha (asset MR ka project hi nahi hota, to project ki team bhi nahi).
+      const src=it.linked_mr_id?mrs.find(m=>String(m.id)===String(it.linked_mr_id)):null;
+      return {
+        id:it.linked_mr_id||null,           // MR back-link (null for manual RFQ items)
+        item:it.desc, qty:it.qty, approvedQty:it.qty, unit:it.unit,
+        project_id:rfq.project_id||null,
+        project:(rfq.project&&rfq.project!=="—")?rfq.project:"",
+        rate:winner?.rates?.[i]?.rate??null,
+        asset_warehouse_id:src?.asset_warehouse_id||null,
+        ...(src?.asset_warehouse_id?{site:src.asset_warehouse_name||"",delivery_site:src.asset_warehouse_name||""}:{}),
+      };
+    });
     setCreatePOVendor(rfq.locked);
     setCreatePOPrefill(prefill);
     setShowCreatePO(true);
@@ -2908,7 +2935,10 @@ function ProcurementModule(){
           } else alert(res.message||"Cancel failed");
         }}/>}
       {shareTarget&&<ShareModal rfq={{id:shareTarget.id,project:shareTarget.project,vendors:VENDORS.slice(0,3).map(n=>({name:n,status:"Pending",rates:[]}))}} onClose={()=>setShareTarget(null)}/>}
+      {/* srcMr: line ki MR (maang ki photo, asset ka spec); vendorPhone: party list se — dono message me jaate hain */}
       {sendToVendorTarget&&<SendToVendorModal po={sendToVendorTarget}
+        srcMr={(id)=>mrs.find(m=>String(m.id)===String(id))||null}
+        vendorPhone={vendorPhone(dbVendors,sendToVendorTarget.vendor)}
         onClose={()=>setSendToVendorTarget(null)}
         onSent={()=>{
           // Update local state — flip orderStatus to Ordered
@@ -2938,6 +2968,7 @@ function ProcurementModule(){
       {/* MR detail drawer — opens on row click in any MR tab. Admin can edit/delete. */}
       <MRDetailDrawer
         mr={selMR}
+        vendors={dbVendors}
         onClose={()=>setSelMR(null)}
         onChanged={async()=>{
           // Reload MRs from server so the row reflects changes

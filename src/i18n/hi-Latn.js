@@ -5345,6 +5345,8 @@ const dict = {
   "mrdetail.status_edit_se_nahi_badalta":                      "Status yahan se nahi badalta: Approve/Reject approver karta hai (Material Approvals), aur material ka status Order / Receive (GRN) / Mark Used se apne aap badalta hai. MR band karni ho to Close use karo.",
   "mrdetail.unit":                                             "Unit *",
   "mrdetail.used":                                             "Used",
+  "mrdetail.vendor_ko_photo_bhejo":                            "Vendor ko photo bhejo (WhatsApp)",
+  "mrdetail.vendor_ko_photo_bhejo_hint":                       "Naam, spec aur photo ke link WhatsApp par jaate hain — MR ka vendor party list me ho to uski chat seedhi khulti hai.",
   "mrdetail.vendor_material_supplier":                         "Vendor (Material Supplier)",
 
   // ── notification_bell ───────────────────────────────────────
@@ -6234,6 +6236,7 @@ const dict = {
   "procurement.locked_locked":                                 "Locked: {locked}",
   "procurement.locked_quotes":                                 "Locked Quotes",
   "procurement.maal_site_par_aane_par_vendor":                 "Material site par aane par vendor kise call karega — naam aur number PO ke saath vendor tak jaayega.",
+  "procurement.maang_ki_photo_saath_jaayegi":                  "Maang ki {n} photo ka link bhi message me jaayega.",
   "procurement.manual_order":                                  "Manual Order",
   "procurement.mark_as_ordered":                               "Ordered mark karo",
   "procurement.mark_as_received":                              "Received mark karo",
