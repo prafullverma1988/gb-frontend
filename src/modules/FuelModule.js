@@ -17,6 +17,7 @@ import { useState, useEffect, useCallback, useMemo, createContext, useContext } 
 import api, { API_BASE, getToken } from "../config/api";
 import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
+import { can, currentUser } from "../utils/perms";
 import { cld } from "../utils/cloudinary";
 
 // ── ICONS ─────────────────────────────────────────────────────────
@@ -1171,10 +1172,217 @@ function RefuelingTab({ purchases, issues, onRefuel, onDeletePurchase, onDeleteI
   );
 }
 
-function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
+// ══════════════════════════════════════════════════════════════════
+// DIPSTICK KI REQUEST — "Stock adjust karo" / "Hatao" → admin ka faisla → log
+// ------------------------------------------------------------------
+// Prafull (2 Oct 2026): dipstick ke baad stock badalta hi nahi tha, aur galat
+// reading hatane ka raasta nahi tha. Ab dono kaam note ke saath REQUEST se
+// hote hain; admin isi module me approve/reject karta hai (approval drawer me
+// nahi) aur dono taraf ghanti jaati hai. Adjust SIRF litre ka — koi paisa,
+// koi expense nahi; reading ka difference register me dikhta rehta hai.
+// Server: POST /fuel/stock-checks/:id/requests · GET /fuel/dip-requests ·
+// POST /fuel/dip-requests/:id/decide. Asli rok server par hai — yahan sirf
+// wo button chhupate hain jo dabane par mana hi hota.
+// ══════════════════════════════════════════════════════════════════
+const signedL = (n) => `${Number(n) > 0 ? "+" : ""}${fmtN(n)} L`;
+const canRequestDip = () => can("Fuel", "create") || can("Fuel", "edit");
+const canDecideDip = () => ["admin", "super_admin"].includes(currentUser().role);
+
+// Reading wali row ek shakl me — drum ka Ledger (storeLedger) aur Barrel
+// Register ka ledger (barrelLedger) farq shakl ki row dete hain.
+const dipReading = (r) => ({
+  check_id: r.check_id, at: r.at,
+  physical_l: r.physical_l, book_l: r.book_l,
+  variance_l: r.variance_l != null ? r.variance_l : r.litres,
+  is_shift: !!r.is_shift_reading, adjusted: !!r.adjusted,
+  adjust_req: r.adjust_req || null, delete_req: r.delete_req || null,
+});
+
+// Reading ki row ke neeche ki patti: request ki halat + "Stock adjust karo" / "Hatao".
+function DipActions({ row, onAsk }) {
+  const d = dipReading(row);
+  if (!d.check_id) return null;
+  const may = canRequestDip();
+  const adjPending = d.adjust_req && d.adjust_req.status === "submitted";
+  const delPending = d.delete_req && d.delete_req.status === "submitted";
+  const backAdj = d.adjust_req && d.adjust_req.status === "rejected" ? d.adjust_req : null;
+  const backDel = d.delete_req && d.delete_req.status === "rejected" ? d.delete_req : null;
+  // Ek reading se ek hi baar adjust; difference 0 ho to adjust karne ko kuch nahi.
+  const canAdjust = may && !d.adjusted && !adjPending && Math.abs(Number(d.variance_l) || 0) >= 0.01;
+  // Shift ke waqt li reading shift ka hissa hai — wo nahi hat'ti (server bhi rokta hai).
+  const canDelete = may && !d.is_shift && !delPending;
+  const shiftNote = may && d.is_shift;
+  if (!d.adjusted && !adjPending && !delPending && !backAdj && !backDel && !canAdjust && !canDelete && !shiftNote) return null;
+  const muted = { fontSize: 10.5, color: T.t3 };
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "5px 15px 7px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB }}>
+      {d.adjusted && <Pill label={t("fuel.dip_adjust_hua_pill", { litres: d.adjust_req && d.adjust_req.adj_litres != null ? signedL(d.adjust_req.adj_litres) : "" })} c={T.grn} bg={T.grnL} />}
+      {adjPending && <Pill label={t("fuel.dip_adjust_pending")} c={T.amb} bg={T.ambL} />}
+      {delPending && <Pill label={t("fuel.dip_delete_pending")} c={T.amb} bg={T.ambL} />}
+      {backAdj && <span style={muted}>{t("fuel.dip_adjust_wapas", { name: backAdj.decided_by_name || "—", reason: backAdj.decision_note || "—" })}</span>}
+      {backDel && <span style={muted}>{t("fuel.dip_delete_wapas", { name: backDel.decided_by_name || "—", reason: backDel.decision_note || "—" })}</span>}
+      {shiftNote && <span style={{ ...muted, color: T.t4 }}>{t("fuel.dip_shift_nahi_hategi_short")}</span>}
+      <span style={{ flex: 1 }} />
+      {canAdjust && <Btn size="sm" ghost onClick={() => onAsk("adjust", d)}>{t("fuel.stock_adjust_karo")}</Btn>}
+      {canDelete && <Btn size="sm" ghost onClick={() => onAsk("delete", d)}>{t("fuel.dip_hatao")}</Btn>}
+    </div>
+  );
+}
+
+// Request bhejne ka modal — note zaroori; kya hoga wo saaf likha.
+function DipRequestModal({ ask, storeName, onClose, onDone }) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { setNote(""); setError(""); }, [ask]);
+  if (!ask) return null;
+  const { kind, d } = ask;
+  const send = async () => {
+    if (note.trim().length < 3) { setError(t("fuel.dip_note_likho")); return; }
+    setBusy(true); setError("");
+    try {
+      const r = await api.post(`/fuel/stock-checks/${d.check_id}/requests`, { kind, note: note.trim() });
+      if (r?.success) {
+        if (window.toast && r.message) window.toast.success(r.message);
+        onDone();
+      } else setError(r?.message || t("fuel.dip_request_nahi_gayi"));
+    } catch (e) { setError(e?.message || t("common.network_error")); }
+    setBusy(false);
+  };
+  const box = (c, bg, bd) => ({ padding: "10px 13px", borderRadius: 7, background: bg, border: `1px solid ${bd}`, fontSize: 12, color: c, lineHeight: 1.5 });
+  return (
+    <Modal open onClose={onClose} width={540}
+      title={kind === "adjust" ? t("fuel.stock_adjust_karo") : t("fuel.dip_delete_title")}
+      sub={`${storeName || ""} · ${fmtDT(d.at)}`}
+      footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
+        <Btn onClick={send} disabled={busy || note.trim().length < 3}>{busy ? t("common.saving") : t("fuel.dip_request_bhejo")}</Btn></>}>
+      <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>
+          {t("fuel.dip_reading_summary", { physical: fmtL(d.physical_l), book: fmtL(d.book_l), diff: signedL(d.variance_l) })}
+        </div>
+        {kind === "adjust" ? (
+          <div style={box(T.ind, T.indL, T.indM)}>{t("fuel.dip_adjust_explain", { physical: fmtL(d.physical_l) })}</div>
+        ) : (
+          <div style={box(T.t2, T.surfaceB, T.b1)}>{t("fuel.dip_delete_explain")}</div>
+        )}
+        {kind === "delete" && d.adjusted && (
+          <div style={box(T.amb, T.ambL, T.ambM)}>
+            {t("fuel.dip_delete_adjust_warn", { litres: d.adjust_req && d.adjust_req.adj_litres != null ? signedL(d.adjust_req.adj_litres) : "" })}
+          </div>
+        )}
+        <Field label={t("fuel.dip_note_label")}>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000}
+            style={{ ...inp, resize: "vertical" }} />
+        </Field>
+        {error && <div style={{ padding: "8px 12px", background: T.redL, color: T.red, fontSize: 12, borderRadius: 6, fontWeight: 600 }}>{error}</div>}
+      </div>
+    </Modal>
+  );
+}
+
+const DIP_ST = {
+  submitted: { c: T.amb, bg: T.ambL, k: "fuel.dip_st_pending" },
+  approved:  { c: T.grn, bg: T.grnL, k: "fuel.dip_st_approved" },
+  rejected:  { c: T.red, bg: T.redL, k: "fuel.dip_st_rejected" },
+  cancelled: { c: T.slt, bg: T.sltL, k: "fuel.dip_st_cancelled" },
+};
+
+// Ek request — kisne, kab, note; faisla kisne, kab, kyun. Admin ko pending par
+// yahin Approve / Reject.
+function DipRequestCard({ r, canDecide, onDecided }) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const st = DIP_ST[r.status] || DIP_ST.cancelled;
+  const decide = async (decision) => {
+    setError("");
+    if (decision === "reject" && !note.trim()) { setError(t("fuel.dip_reject_wajah_likho")); return; }
+    if (decision === "approve") {
+      const msg = r.kind === "delete" ? t("fuel.dip_delete_confirm")
+        : t("fuel.dip_adjust_confirm", { drum: r.store_name || "", litres: signedL(r.adjust_now_l != null ? r.adjust_now_l : r.variance_l) });
+      if (!(await window.confirmAsync(msg))) return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.post(`/fuel/dip-requests/${r.id}/decide`, { decision, note: note.trim() || null });
+      if (res?.success) {
+        if (window.toast && res.message) window.toast.success(res.message);
+        onDecided && onDecided();
+      } else setError(res?.message || t("fuel.dip_faisla_nahi_hua"));
+    } catch (e) { setError(e?.message || t("common.network_error")); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, fontSize: 11.5, color: T.t3, lineHeight: 1.5 }}>
+      <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap", marginBottom: 3 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{r.store_name || "—"}</span>
+        <Pill label={t(r.kind === "adjust" ? "fuel.dip_kind_adjust" : "fuel.dip_kind_delete")} c={T.ind} bg={T.indL} />
+        <Pill label={t(st.k)} c={st.c} bg={st.bg} />
+        <span style={{ color: T.t4, marginLeft: "auto" }}>#{r.id}</span>
+      </div>
+      <div>{t("fuel.dip_log_reading", { at: fmtDT(r.checked_at), physical: fmtL(r.physical_l), book: fmtL(r.book_l), diff: signedL(r.variance_l) })}</div>
+      <div style={{ marginTop: 2 }}><b style={{ color: T.t2 }}>{r.requested_by_name || "—"}</b> · {fmtDT(r.requested_at)} — {r.note}</div>
+      {r.decided_at && (
+        <div style={{ marginTop: 2 }}>
+          <b style={{ color: T.t2 }}>{r.decided_by_name || "—"}</b> · {fmtDT(r.decided_at)}{r.decision_note ? ` — ${r.decision_note}` : ""}
+        </div>
+      )}
+      {r.status === "approved" && r.kind === "adjust" && r.adj_litres != null && (
+        <div style={{ marginTop: 3, color: T.grn, fontWeight: 600 }}>{t("fuel.dip_log_adjusted", { litres: signedL(r.adj_litres), rate: fmtN(r.adj_rate) })}</div>
+      )}
+      {r.status === "submitted" && r.kind === "adjust" && r.adjust_now_l != null && (
+        <div style={{ marginTop: 3, color: T.amb, fontWeight: 600 }}>{t("fuel.dip_log_adjust_now", { litres: signedL(r.adjust_now_l) })}</div>
+      )}
+      {canDecide && r.status === "submitted" && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 7, flexWrap: "wrap" }}>
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000}
+            placeholder={t("fuel.dip_decision_ph")} style={{ ...inp, flex: 1, minWidth: 220, padding: "6px 9px", fontSize: 12 }} />
+          <Btn size="sm" c={T.grn} disabled={busy} onClick={() => decide("approve")}>{t("fuel.dip_approve")}</Btn>
+          <Btn size="sm" c={T.red} disabled={busy} onClick={() => decide("reject")}>{t("fuel.dip_reject")}</Btn>
+        </div>
+      )}
+      {error && <div style={{ marginTop: 5, color: T.red, fontWeight: 600 }}>{error}</div>}
+    </div>
+  );
+}
+
+// Dipstick log — har request, faisla hui bhi; nayi pehle.
+function DipLogModal({ open, onClose, onChanged }) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!open) { setRows(null); return undefined; }
+    let dead = false;
+    setError("");
+    api.get("/fuel/dip-requests?limit=300")
+      .then((r) => { if (!dead) { if (r?.success) setRows(r.data || []); else setError(r?.message || t("common.network_error")); } })
+      .catch((e) => { if (!dead) setError(e?.message || t("common.network_error")); });
+    return () => { dead = true; };
+  }, [open, tick]);
+  const decideOk = canDecideDip();
+  return (
+    <Modal open={open} onClose={onClose} width={760} title={t("fuel.dip_log")} sub={t("fuel.dip_log_sub")}>
+      {error && <Empty>{error}</Empty>}
+      {!error && !rows && <Empty>{t("common.loading")}</Empty>}
+      {rows && rows.length === 0 && <Empty>{t("fuel.dip_log_empty")}</Empty>}
+      {rows && rows.length > 0 && (
+        <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
+          {rows.map((r) => (
+            <DipRequestCard key={r.id} r={r} canDecide={decideOk}
+              onDecided={() => { setTick((x) => x + 1); onChanged && onChanged(); }} />
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel, dipPending = [] }) {
   const [newOpen, setNewOpen] = useState(false);
   const [dipFor, setDipFor] = useState(null);
   const [shiftFor, setShiftFor] = useState(null);
+  const [logOpen, setLogOpen] = useState(false);
   const [places, setPlaces] = useState({ projects: [], warehouses: [], can_shift: false });
   const [f, setF] = useState({});
   const [busy, setBusy] = useState(false);
@@ -1296,9 +1504,19 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
   );
   const onlyWarehouse = places.warehouses.length === 1 ? String(places.warehouses[0].id) : "";
 
+  const decideOk = canDecideDip();
   return (
     <>
+      {/* Faisla baaki dipstick requests — admin yahin Approve / Reject karta hai
+          (ghanti isi module ki taraf laati hai). Baaki sab ko sirf dikhti hain. */}
+      {dipPending.length > 0 && (
+        <Panel title={t("fuel.dip_pending_title", { n: dipPending.length })} style={{ marginBottom: 12, borderColor: T.ambM }}
+          action={decideOk ? null : <span style={{ fontSize: 11, color: T.t4 }}>{t("fuel.dip_admin_faisla_karega")}</span>}>
+          {dipPending.map((r) => <DipRequestCard key={r.id} r={r} canDecide={decideOk} onDecided={onReload} />)}
+        </Panel>
+      )}
       <Panel title={t("fuel.barrel_stock")} action={<div style={{ display: "flex", gap: 8 }}>
+        <Btn size="sm" ghost onClick={() => setLogOpen(true)}>{t("fuel.dip_log")}</Btn>
         <Btn size="sm" ghost icon={IcAdd} onClick={() => { setF({}); setError(""); setNewOpen(true); }}>{t("fuel.naya_barrel")}</Btn>
         <Btn size="sm" icon={IcDrop} onClick={onRefuel}>{t("fuel.refuelling_entry")}</Btn>
       </div>}>
@@ -1435,6 +1653,8 @@ function BarrelTab({ stores, projects, onReload, onOpenLedger, onRefuel }) {
         </div>
         )}
       </Modal>
+
+      <DipLogModal open={logOpen} onClose={() => setLogOpen(false)} onChanged={onReload} />
     </>
   );
 }
@@ -2496,6 +2716,7 @@ function BarrelRegister({ projects }) {
     { key: "capacity_l", label: t("fuel.capacity_l_2"), w: 11 },
     { key: "litres_in", label: t("fuel.aaya_l"), w: 10 },
     { key: "litres_out", label: t("fuel.gaya_l"), w: 10 },
+    { key: "litres_adj", label: t("fuel.adjust_l"), w: 10, excel: (r) => r.litres_adj || "" },
     { key: "litres", label: t("fuel.bacha_l"), w: 10 },
     { key: "fill_pct", label: t("fuel.bhara"), w: 9, excel: (r) => r.fill_pct ?? "" },
     { key: "avg_rate", label: t("fuel.avg_rate"), w: 10, excel: (r) => r.avg_rate ?? "" },
@@ -2531,6 +2752,7 @@ function BarrelRegister({ projects }) {
             <div style={{ display: "flex", gap: 18, padding: "9px 15px", background: T.indL, borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11.5, color: T.t2 }}><Rich k="fuel.abhi_bacha_fmtl_fmtc" params={{ fmtL: fmtL(tot.litres), fmtC: fmtC(tot.value) }} /></span>
               <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.aaya_fmtl_gaya_fmtl2", { fmtL: fmtL(tot.litres_in), fmtL2: fmtL(tot.litres_out) })}</span>
+              {tot.litres_adj ? <span style={{ fontSize: 11.5, color: T.ind }}>{t("fuel.dip_adjust_total", { litres: signedL(tot.litres_adj) })}</span> : null}
               {tot.below_reorder > 0 && (
                 <span style={{ fontSize: 11.5, color: T.amb, fontWeight: 600 }}>{t("fuel.below_reorder_barrel_me_stock_kam", { below_reorder: tot.below_reorder })}</span>
               )}
@@ -2561,6 +2783,8 @@ function BarrelRegister({ projects }) {
                     <span style={{ fontSize: 11.5, color: T.t3, textAlign: "right" }}>{fmtN(r.litres_out)}</span>
                     <span style={{ fontSize: 12.5, fontWeight: 700, textAlign: "right", color: r.below_reorder ? T.amb : T.t1 }}>
                       {fmtN(r.litres)}
+                      {/* Aaya − gaya ≠ bacha ho to wajah yahin: dipstick se adjust */}
+                      {r.litres_adj ? <div style={{ fontSize: 10, fontWeight: 500, color: T.ind }}>{t("fuel.dip_adjust_sub", { litres: signedL(r.litres_adj) })}</div> : null}
                     </span>
                     <span style={{ fontSize: 11.5, textAlign: "right", color: r.below_reorder ? T.amb : T.t3 }}>
                       {r.fill_pct != null ? r.fill_pct + "%" : "—"}
@@ -2576,6 +2800,8 @@ function BarrelRegister({ projects }) {
                       {r.last_check
                         ? <span style={{ color: T.t3 }}><Rich k="fuel.last_check_farqv_rfmtn_l" params={{ last_check: r.last_check, v: " ", r: r.last_variance_l > 0 ? "+" : "", fmtN: fmtN(r.last_variance_l) }} /></span>
                         : <span style={{ color: T.t4 }}>{t("fuel.kabhi_nahi_hua")}</span>}
+                      {/* Difference dikhta rahe, par ye bhi ki wo kitaab me utar chuka */}
+                      {r.last_check_adjusted && <div style={{ fontSize: 10, color: T.grn, fontWeight: 600 }}>{t("fuel.dip_adjusted_tag")}</div>}
                     </span>
                   </Row>
                 ))}
@@ -2598,6 +2824,9 @@ function BarrelLedgerPanel({ storeId, onClose }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const params = useMemo(() => ({ store_id: storeId }), [storeId]);
+  // Dipstick reading par request — bhejne ke baad register dobara.
+  const [ask, setAsk] = useState(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let dead = false;
@@ -2607,7 +2836,7 @@ function BarrelLedgerPanel({ storeId, onClose }) {
       .catch(() => { if (!dead) setData(null); })
       .finally(() => { if (!dead) setLoading(false); });
     return () => { dead = true; };
-  }, [params]);
+  }, [params, tick]);
 
   const rows = data?.rows || [];
   const tot = data?.totals || {};
@@ -2619,13 +2848,15 @@ function BarrelLedgerPanel({ storeId, onClose }) {
     { key: "out_l", label: t("fuel.gaya_l"), w: 10, excel: (r) => r.out_l ?? "" },
     { key: "rate", label: t("common.rate"), w: 9, excel: (r) => r.rate ?? "" },
     { key: "amount", label: t("common.amount_2"), w: 12, excel: (r) => (r.amount == null ? "" : Math.round(r.amount)) },
+    { key: "adjust_l", label: t("fuel.adjust_l"), w: 10, excel: (r) => r.adjust_l ?? "" },
     { key: "balance_l", label: t("fuel.bacha_l"), w: 10 },
     { key: "variance_l", label: t("fuel.dipstick_farq_l"), w: 14, excel: (r) => r.variance_l ?? "" },
     { key: "slip_no", label: t("fuel.parchi"), w: 12 },
     { key: "by_name", label: t("fuel.kisne"), w: 16 },
   ];
   const cols = "78px 78px 1.4fr 72px 72px 62px 92px 78px 1fr";
-  const KC = { purchase: { c: T.grn, bg: T.grnL }, issue: { c: T.blu, bg: T.bluL }, check: { c: T.slt, bg: T.sltL } };
+  const KC = { purchase: { c: T.grn, bg: T.grnL }, issue: { c: T.blu, bg: T.bluL }, check: { c: T.slt, bg: T.sltL },
+    adjust: { c: T.ind, bg: T.indL } };
 
   return (
     <Panel
@@ -2646,6 +2877,7 @@ function BarrelLedgerPanel({ storeId, onClose }) {
             <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.gaya")} <b style={{ color: T.t1 }}>{fmtL(tot.litres_out)}</b></span>
             <span style={{ fontSize: 11.5, color: T.t2 }}>{t("fuel.bacha")} <b style={{ color: T.t1 }}>{fmtL(tot.closing_l)}</b></span>
             {tot.checks > 0 && <span style={{ fontSize: 11.5, color: T.t3 }}>{tot.checks} dipstick</span>}
+            {tot.adjust_l ? <span style={{ fontSize: 11.5, color: T.ind }}>{t("fuel.dip_adjust_total", { litres: signedL(tot.adjust_l) })}</span> : null}
           </div>
           <div style={{ overflowX: "auto" }}>
             <div style={{ minWidth: 940 }}>
@@ -2658,7 +2890,8 @@ function BarrelLedgerPanel({ storeId, onClose }) {
               {rows.map((r, i) => {
                 const k = KC[r.kind] || {};
                 return (
-                  <Row key={i} cols={cols}
+                  <div key={i}>
+                  <Row cols={cols}
                     onClick={(r.kind === "purchase" || r.kind === "issue") && r.id ? () => openEntry({ kind: r.kind, id: r.id }) : undefined}>
                     <span style={{ fontSize: 11.5, color: T.t2 }}>{r.date}</span>
                     <span><Pill label={r.kind_label} c={k.c} bg={k.bg} /></span>
@@ -2675,10 +2908,16 @@ function BarrelLedgerPanel({ storeId, onClose }) {
                     <span style={{ fontSize: 10.5, color: T.t3 }}>
                       {r.kind === "check"
                         ? <><Rich k="fuel.physical_fmtn_vs_kitaab_fmtn2_v" params={{ fmtN: fmtN(r.physical_l), fmtN2: fmtN(r.book_l), v: " ", r: r.variance_l > 0 ? "+" : "", fmtN3: fmtN(r.variance_l) }} /></>
+                        : r.kind === "adjust"
+                        ? <span style={{ color: T.ind, fontWeight: 600 }}>{t("fuel.dip_adjust_note", { litres: signedL(r.adjust_l) })}</span>
                         : [r.slip_no ? "slip " + r.slip_no : "", r.payment !== "—" ? r.payment : "", r.by_name]
                             .filter(Boolean).join(" · ")}
                     </span>
                   </Row>
+                  {(r.kind === "check" || r.kind === "shift") && (
+                    <DipActions row={r} onAsk={(kind, d) => setAsk({ kind, d })} />
+                  )}
+                  </div>
                 );
               })}
             </div>
@@ -2688,6 +2927,8 @@ function BarrelLedgerPanel({ storeId, onClose }) {
           </div>
         </>
       )}
+      <DipRequestModal ask={ask} storeName={data?.store?.name} onClose={() => setAsk(null)}
+        onDone={() => { setAsk(null); setTick((x) => x + 1); }} />
     </Panel>
   );
 }
@@ -3182,17 +3423,21 @@ const DateRange = ({ from, to, onRange }) => (
 // ══════════════════════════════════════════════════════════════════
 // LEDGER DRAWER
 // ══════════════════════════════════════════════════════════════════
-function LedgerModal({ store, onClose }) {
+function LedgerModal({ store, onClose, onChanged }) {
   const openEntry = useOpenEntry();
   const [data, setData] = useState(null);
+  // Dipstick reading par request ka modal + bhejne ke baad ledger dobara.
+  const [ask, setAsk] = useState(null);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!store) { setData(null); return; }
     api.get(`/fuel/stores/${store.id}/ledger`)
       .then((r) => setData(r?.success ? r.data : null))
       .catch(() => setData(null));
-  }, [store]);
+  }, [store, tick]);
 
   return (
+    <>
     <Modal open={!!store} onClose={onClose} width={860}
       title={store ? `${store.name} — ledger` : ""}
       sub={data ? `${fmtL(data.state.litres)} @ ₹${fmtN(data.state.avg_rate)}/L · value ${fmtC(data.state.value)}` : t("common.loading")}>
@@ -3205,36 +3450,47 @@ function LedgerModal({ store, onClose }) {
           </Row>
           {data.rows.map((r, i) => {
             const measured = r.kind === "check" || r.kind === "shift";
+            const adjust = r.kind === "adjust";
             const fromTo = r.kind === "shift"
               ? `${r.from_project_name || r.from_warehouse_name || (r.from_project_id ? t("fuel.project_delete_ho_chuka") : t("fuel.warehouse_set_nahi"))} → ${r.to_project_name || r.to_warehouse_name || "—"}`
               : "";
             return (
-            <Row key={i} cols="110px 90px 1.4fr 90px 90px 100px"
+            <div key={i}>
+            <Row cols="110px 90px 1.4fr 90px 90px 100px"
               onClick={(r.kind === "purchase" || r.kind === "issue") ? () => openEntry({ kind: r.kind, id: r.id }) : undefined}>
               <span style={{ fontSize: 11, color: T.t3 }}>{fmtDT(r.at)}</span>
               <span>{r.kind === "purchase" ? <Pill label={t("fuel.aaya")} c={T.grn} bg={T.grnL} />
                 : r.kind === "issue" ? <Pill label={t("fuel.gaya")} c={T.slt} bg={T.sltL} />
                 : r.kind === "shift" ? <Pill label={t("fuel.shift")} c={T.ind} bg={T.indL} />
+                : adjust ? <Pill label={t("fuel.dip_adjust_row")} c={T.ind} bg={T.indL} />
                 : <Pill label={t("fuel.dipstick")} c={T.amb} bg={T.ambL} />}</span>
               <span style={{ fontSize: 11.5, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                title={r.kind === "shift" ? fromTo : undefined}>
+                title={r.kind === "shift" ? fromTo : adjust ? (r.request_note || undefined) : undefined}>
                 {r.kind === "shift"
                   ? t("fuel.shift_row_detail", { fromTo, physical: fmtL(r.physical_l), book: fmtL(r.book_l) })
                   : r.kind === "check"
                   ? `naapa ${fmtL(r.physical_l)} · kitaab ${fmtL(r.book_l)}`
+                  : adjust
+                  ? t("fuel.dip_adjust_kaun", { physical: fmtL(r.physical_l), name: r.by_name || "—" })
                   : (r.party_name || "—")}
               </span>
-              <span style={{ fontSize: 12, fontWeight: measured ? 400 : 600, color: measured ? (Number(r.litres) === 0 ? T.t3 : T.amb) : T.t1 }}>
-                {measured ? `${Number(r.litres) > 0 ? "+" : ""}${fmtN(r.litres)} L` : fmtL(r.litres)}
+              <span style={{ fontSize: 12, fontWeight: measured ? 400 : 600, color: measured ? (Number(r.litres) === 0 ? T.t3 : T.amb) : adjust ? T.ind : T.t1 }}>
+                {measured || adjust ? signedL(r.litres) : fmtL(r.litres)}
               </span>
-              <span style={{ fontSize: 11.5, color: T.t3 }}>{r.rate != null ? `₹${fmtN(r.rate)}` : "—"}</span>
+              {/* Adjust sirf litre ka hai — rate/paisa dikhana galat sandesh deta */}
+              <span style={{ fontSize: 11.5, color: T.t3 }}>{r.rate != null && !adjust ? `₹${fmtN(r.rate)}` : "—"}</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>{fmtL(r.balance_l)}</span>
             </Row>
+            {measured && <DipActions row={r} onAsk={(kind, d) => setAsk({ kind, d })} />}
+            </div>
             );
           })}
         </div>
       )}
     </Modal>
+    <DipRequestModal ask={ask} storeName={store && store.name} onClose={() => setAsk(null)}
+      onDone={() => { setAsk(null); setTick((x) => x + 1); onChanged && onChanged(); }} />
+    </>
   );
 }
 
@@ -3259,6 +3515,8 @@ function FuelModule() {
   const [byProject, setByProject] = useState([]);
   const [byVendor, setByVendor] = useState([]);
   const [sensor, setSensor] = useState(null);
+  // Faisla baaki dipstick requests — Barrel Stock tab ka badge + panel.
+  const [dipPending, setDipPending] = useState([]);
 
   const [refuelOpen, setRefuelOpen] = useState(false);
   const [ledgerStore, setLedgerStore] = useState(null);
@@ -3269,16 +3527,18 @@ function FuelModule() {
   const [to, setTo] = useState(todayStr());
 
   const loadCore = useCallback(async () => {
-    const [s, p, i, sc] = await Promise.all([
+    const [s, p, i, sc, dp] = await Promise.all([
       api.get("/fuel/stores").catch(() => null),
       api.get("/fuel/purchases").catch(() => null),
       api.get("/fuel/issues").catch(() => null),
       api.get("/fuel/sensor-checks").catch(() => null),
+      api.get("/fuel/dip-requests?status=submitted&limit=100").catch(() => null),
     ]);
     setStores(s?.success ? s.data || [] : []);
     setPurchases(p?.success ? p.data || [] : []);
     setIssues(i?.success ? i.data || [] : []);
     setSensor(sc?.success ? sc.data : null);
+    setDipPending(dp?.success ? dp.data || [] : []);
   }, []);
 
   const loadReports = useCallback(async () => {
@@ -3356,7 +3616,10 @@ function FuelModule() {
   const TABS = [
     { id: "overview",  l: t("common.overview"),      I: IcGauge },
     { id: "refueling", l: t("fuel.refueling"),     I: IcDrop, badge: purchases.length + issues.length || null },
-    { id: "barrel",    l: t("fuel.barrel_stock_2"),  I: IcDrum, badge: stores.filter((s) => s.below_reorder).length || null, bc: T.amb },
+    // Do alag ginti: kam stock wale drum (amber) aur faisla baaki dipstick
+    // requests (indigo) — admin ki ghanti isi tab ki taraf laati hai.
+    { id: "barrel",    l: t("fuel.barrel_stock_2"),  I: IcDrum, badge: stores.filter((s) => s.below_reorder).length || null, bc: T.amb,
+      badge2: dipPending.length || null, bc2: T.ind },
     // Unbilled vendor ledger ke theek pehle — kaam ka kram wahi hai:
     // pehle bill banao, tabhi ledger me kuch aata hai.
     // Subcon ko diya diesel barrel ke theek baad — wo wahin se nikalta hai,
@@ -3404,6 +3667,7 @@ function FuelModule() {
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "11px 13px", border: "none", background: "none", fontSize: 12.5, fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? "white" : "rgba(255,255,255,0.45)", cursor: "pointer", borderBottom: tab === t.id ? `2px solid ${T.ind}` : "2px solid transparent", transition: "all .15s", whiteSpace: "nowrap", fontFamily: "inherit" }}>
               <t.I size={13} color="currentColor" />{t.l}
               {t.badge > 0 && <span style={{ background: t.bc || T.ind, color: "white", fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 10, minWidth: 16, textAlign: "center" }}>{t.badge}</span>}
+              {t.badge2 > 0 && <span style={{ background: t.bc2 || T.ind, color: "white", fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 10, minWidth: 16, textAlign: "center" }}>{t.badge2}</span>}
             </button>
           ))}
         </div>
@@ -3422,7 +3686,7 @@ function FuelModule() {
             onDeleteIssue={(r) => del(`/fuel/issues/${r.id}`, `${fmtL(r.litres)} ka issue`)} />
         )}
         {tab === "barrel" && (
-          <BarrelTab stores={stores} projects={projects} onReload={reloadAll}
+          <BarrelTab stores={stores} projects={projects} onReload={reloadAll} dipPending={dipPending}
             onOpenLedger={setLedgerStore} onRefuel={() => setRefuelOpen(true)} />
         )}
         {tab === "subcon" && (
@@ -3448,7 +3712,7 @@ function FuelModule() {
 
       <RefuelForm open={refuelOpen} onClose={() => setRefuelOpen(false)} onSaved={reloadAll}
         stores={stores} equipment={equipment} vendors={vendors} projects={projects} />
-      <LedgerModal store={ledgerStore} onClose={() => setLedgerStore(null)} />
+      <LedgerModal store={ledgerStore} onClose={() => setLedgerStore(null)} onChanged={reloadAll} />
       <FuelEntryDrawer entry={openEntry} onClose={closeEntry} />
     </div>
     </OpenEntryCtx.Provider>
