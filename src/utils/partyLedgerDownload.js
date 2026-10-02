@@ -21,13 +21,16 @@ import { LEDGER_PLUS, LEDGER_MINUS, balanceLabel } from "./moneyRules";
 // (client party) me wo aata hi nahi — tab type se (sales_invoice +1, receipt −1).
 export const fromApiRow = (r) => ({
   id: r.id,
+  // Wallet-kharide bill ki "usi waqt chukaaya" line = bill id + 0.5 (server)
+  sortId: r.sort_id != null ? Number(r.sort_id) : null,
   day: String(r.date || "").slice(0, 10),
   amount: parseFloat(r.amount) || 0,
   sign: (r.ledger_sign === 0 || r.ledger_sign) ? Number(r.ledger_sign)
     : (r.wallet_spend === 1 ? -1 : LEDGER_PLUS.has(r.type) ? 1 : LEDGER_MINUS.has(r.type) ? -1 : 0),
   counted: r.counted !== 0,
   reason: r.not_counted_reason || null,
-  type: r.type || "",
+  // Wallet ke "Material" tab ka kharida — "Material Purchase" (screen / PDF jaisa)
+  type: r.display_type === "wallet_material" ? "material_purchase" : (r.type || ""),
   invoiceNo: r.invoice_no || null,
   project: r.project_name || "",
   particulars: String(r.note || r.description || "").trim(),
@@ -37,12 +40,13 @@ export const fromApiRow = (r) => ({
 // FinanceModule ke getLedgerRows wali row (ledSign pehle se lagi hui) → statement row.
 export const fromScreenRow = (r) => ({
   id: r.id,
+  sortId: r.sortId != null ? Number(r.sortId) : null,
   day: String(r.dateRaw || "").slice(0, 10),
   amount: Number(r.amount) || 0,
   sign: r.ledSign || 0,
   counted: r.counted !== false,
   reason: r.notCountedReason || null,
-  type: r.txnType || "",
+  type: r.displayType === "wallet_material" ? "material_purchase" : (r.txnType || ""),
   invoiceNo: r.invoiceNo || null,
   project: r.project || "",
   particulars: String(r.note || r.sub || "").trim(),
@@ -53,12 +57,15 @@ const paise = (v) => Math.round((Number(v) || 0) * 100);
 
 // rows = fromApiRow / fromScreenRow ki rows (kisi bhi kram me), opening = signed.
 export function ledgerStatement(rows, openingBalance, { from = null, to = null } = {}) {
+  // Kram backend ledgerRowOrder jaisa: din, phir sortId ?? id — "usi waqt
+  // chukaaya" line apne bill ke theek baad (pehle din ke aakhir me jaati thi).
   const list = [...rows].sort((a, b) => {
     if (a.day !== b.day) return a.day < b.day ? -1 : 1;
-    const na = typeof a.id === "number", nb = typeof b.id === "number";
-    if (na && nb) return a.id - b.id;
+    const ia = a.sortId != null ? a.sortId : a.id, ib = b.sortId != null ? b.sortId : b.id;
+    const na = typeof ia === "number", nb = typeof ib === "number";
+    if (na && nb) return ia - ib;
     if (na !== nb) return na ? -1 : 1;
-    return String(a.id).localeCompare(String(b.id));
+    return String(ia).localeCompare(String(ib));
   });
   let bal = paise(openingBalance);
   for (const x of list) if (from && x.day < from) bal += x.sign * paise(x.amount);

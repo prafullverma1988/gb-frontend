@@ -7,7 +7,7 @@ import { Pill, Panel, PHead, THead, AddBtn, SecBtn } from "../shared/ui";
 import { t } from "../../i18n";
 
 import { companyName } from "../../utils/companyName";
-import { txnIsCleared, partyRowSign, isWalletCashPurchase, balanceLabel, isVendorType, round2 } from "../../utils/moneyRules";
+import { txnIsCleared, partyRowSign, isWalletCashPurchase, isWalletMaterialBuy, balanceLabel, isVendorType, round2 } from "../../utils/moneyRules";
 
 // Neeche ledger ke loop me `t` transaction ka naam hai, jo i18n ke t() ko
 // chhupa deta hai — isliye ye label bahar se.
@@ -293,7 +293,9 @@ function TabParty({ projectId, projectName }) {
           // ("Payment Made — party — project") which would duplicate the
           // Type / Project / (party-already-selected) columns. Empty → "—".
           note: (t.note || "").trim(),
-          type: (type === "settle_in" || type === "settle_out") ? "Settlement" : type.replace(/_/g," ").replace(/\b\w/g, c=>c.toUpperCase()),
+          // Wallet ke "Material" tab ka kharida → "Material Purchase" (Finance ledger jaisa)
+          type: (type === "settle_in" || type === "settle_out") ? "Settlement"
+            : (isWalletMaterialBuy(t) ? "material_purchase" : type).replace(/_/g," ").replace(/\b\w/g, c=>c.toUpperCase()),
           amount: amt,
           sgn,                // +1 DR column, −1 CR column, 0 dono "—"
           cr: sgn < 0,

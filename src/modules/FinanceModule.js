@@ -1085,8 +1085,11 @@ function txnMatchesSearch(raw, { texts = [], amount = null, ds = null }) {
 const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
 // Subcon ko diya diesel (fuel ki katauti) — type material_return, par "Material
 // Return" padhna galat lagta; server display_type="fuel_given" bhejta hai.
+// Wallet ke mobile "Material" tab se kharida material — type site_expense, par
+// khaate me "Material Purchase" (server display_type="wallet_material").
+// Ledger ki row, Type filter aur Excel — teeno yahi label padhte hain.
 const ledgerLabelOf=(txn)=>txn.displayType==="fuel_given"?t("finance.fuel_given_label")
-  :(LEDGER_TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction");
+  :(LEDGER_TYPE_LABELS[txn.displayType==="wallet_material"?"material_purchase":txn.txnType]||txn.type||txn.txnType||"Transaction");
 const ledgerProjOf=(txn)=>txn.project||txn.project_name||"";
 // f = {q, type, proj, from, to}
 const ledgerFilterOn=(f)=>!!((f.q||"").trim()||f.type!=="All"||f.proj!=="All"||f.from||f.to);
@@ -5357,8 +5360,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           return(<>
                           {/* Type label from txnType */}
                           {(()=>{
-                            const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","ra_bill":"RA Bill","emd_forfeit":"EMD Forfeit","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
-                            const typeLabel=TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
+                            // Wahi label jo Type filter / Excel (ledgerLabelOf) — pehle yahan apni
+                            // copy thi, to filter me "Material Purchase" aur row par "Site Expense".
+                            const typeLabel=ledgerLabelOf(txn);
                             const siteLabel=txn.project||txn.project_name||"";
                             // ONLY user-typed note. `sub` (= auto-generated description
                             // "Payment Made — party — project") would just duplicate

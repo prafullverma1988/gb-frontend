@@ -63,6 +63,15 @@ export const partyRowSign = (r, party) => {
 // Vendor ke khaate me wallet se kiya gaya kharida: ek hi DB row, do pehlu.
 export const isWalletCashPurchase = (r) =>
   !!r && String(r.type || "") === "site_expense" && r.paid_via_staff_id != null && r.paid_via_staff_id !== "";
+// Wallet se kharida MATERIAL — mobile "Material" tab (line items ke saath) ya
+// import ki "material" category. Khaate me "Material Purchase" padhe, "Site
+// Expense" nahi. Backend utils/partyLedger.js isWalletMaterialBuy ki copy.
+export const isWalletMaterialBuy = (r) => {
+  if (!isWalletCashPurchase(r)) return false;
+  if (r.wallet_category === "material") return true;
+  const items = Array.isArray(r.line_items) ? r.line_items : (Array.isArray(r.items) ? r.items : []);
+  return r.wallet_category === "site_exp" && items.length > 0;
+};
 
 // Vendor (hum dete hain) ya client (wo dete hain) — label signed balance se:
 // balance > 0 = party hume dene wali, < 0 = hum party ko dene wale.

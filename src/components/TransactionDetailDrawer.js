@@ -310,8 +310,11 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   const backendType = txn.txnType || txn.type_back || txn.type || "";
   const baseMeta = TYPE_META[backendType] || { label: txn.type || "Transaction", c: T.t3, bg: T.b1, in: null };
   // Subcon ko diya diesel — fuel module ki katauti (material_return + fuel).
+  // Party ledger se khula wallet ka "Material" kharida (display_type) — ledger jaisa naam.
   const meta = (backendType === "material_return" && (txn.wallet_category === "fuel" || txn.display_type === "fuel_given" || txn.displayType === "fuel_given"))
-    ? { ...baseMeta, label: t("finance.fuel_given_label") } : baseMeta;
+    ? { ...baseMeta, label: t("finance.fuel_given_label") }
+    : (backendType === "site_expense" && (txn.display_type === "wallet_material" || txn.displayType === "wallet_material"))
+      ? { ...baseMeta, label: TYPE_META.material_purchase.label } : baseMeta;
   const isBill = ["material_purchase", "subcon_expense", "site_expense", "sales_invoice"].includes(backendType);
   // hasDueDate: only true bills/invoices carry a separate due_date.
   // site_expense is a petty-cash event (immediate), not a credit-bill —
