@@ -9,6 +9,8 @@ import { t, Rich } from "../i18n";
 import { BackClose } from "../utils/backNav";
 import { WarehouseLedgerTab, WarehouseLedgerDrawer } from "./WarehouseLedger";
 import { AllGodownsView } from "./WarehouseConsolidated";
+import { WarehouseGintiTab, DisposalModal, DisposalsPanel } from "./WarehouseGinti";
+import { can } from "../utils/perms";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -143,6 +145,22 @@ const Empty=({label,sub})=>(
   </div>
 );
 
+// Kharab / Kabad / Repair me — kaam ke stock (qty) se alag ginti (3 Oct 2026).
+// Sirf jo 0 se zyada hai wahi chip; issue in me se nahi hota.
+const BucketChips=({m,style={}})=>{
+  const list=[
+    Number(m.qty_damaged)>0&&[t("warehouse.gt_chip_damaged",{n:fmtN(m.qty_damaged)}),T.amb,T.ambL],
+    Number(m.qty_scrap)>0&&[t("warehouse.gt_chip_scrap",{n:fmtN(m.qty_scrap)}),T.slt,T.sltL],
+    Number(m.qty_repair)>0&&[t("warehouse.gt_chip_repair",{n:fmtN(m.qty_repair)}),T.pur,T.purL],
+  ].filter(Boolean);
+  if(!list.length) return null;
+  return(
+    <span style={{display:"inline-flex",gap:4,flexWrap:"wrap",...style}}>
+      {list.map(([l,c,bg])=><span key={l} style={{fontSize:9.5,fontWeight:700,color:c,background:bg,borderRadius:8,padding:"1px 6px",whiteSpace:"nowrap"}}>{l}</span>)}
+    </span>
+  );
+};
+
 // ── MODAL SHELL ───────────────────────────────────────────────────
 const ModalShell=({title,sub,onClose,children,width=520,footer})=>(
   <>
@@ -215,6 +233,10 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
     setSaving(true);
     try{
       const body={...f,qty:Number(f.qty)||0,min_qty:Number(f.min_qty)||0,max_qty:Number(f.max_qty)||0,rate:Number(f.rate)||0};
+      // Edit par qty nahi bhejte — stock sirf document (GRN / issue / transfer /
+      // Ginti / nikasi) se badalta hai; form khulne ke waqt ki purani qty wapas
+      // likhna beech ki entry mita deta (server bhi ab qty nahi leta).
+      if(editing) delete body.qty;
       const res=editing
         ?await api.patch(`/warehouse/materials/${material.id}`,body)
         :await api.post("/warehouse/materials",body);
@@ -1718,6 +1740,15 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
             <div><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{t("fuel.value")}</div>
               <div style={{fontSize:18,fontWeight:700,color:T.blu}}>₹{fmt(material.value)}</div></div>
           </div>
+          {/* Teen alag ginti (3 Oct 2026): Theek = upar wala stock (issue isi se),
+              Kharab / Kabad store me pade par kaam ke nahi, Repair me = vendor ke paas. */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginTop:10,paddingTop:10,borderTop:`1px dashed ${T.b1}`}}>
+            {[[t("warehouse.gt_b_good"),material.qty,T.grn],[t("warehouse.gt_b_damaged"),material.qty_damaged,T.amb],
+              [t("warehouse.gt_b_scrap"),material.qty_scrap,T.slt],[t("warehouse.gt_b_repair_in"),material.qty_repair,T.pur]].map(([l,v,c])=>(
+              <div key={l}><div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{l}</div>
+                <div style={{fontSize:14,fontWeight:700,color:Number(v)>0?c:T.t4}}>{fmtN(Number(v)||0)} <span style={{fontSize:10,fontWeight:400,color:T.t4}}>{material.unit}</span></div></div>
+            ))}
+          </div>
         </div>
 
         <div style={{padding:"10px 18px",borderBottom:`1px solid ${T.b1}`,flexShrink:0,display:"flex",gap:7,flexWrap:"wrap"}}>
@@ -1821,7 +1852,7 @@ function WarehousesTab({data,activeId,onOpen}){
   );
 }
 
-function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,onQuickRequest}){
+function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,onQuickRequest,onDispose}){
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("All");
   const [showLow,setShowLow]=useState(false);
@@ -1943,6 +1974,10 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
             </button>
           ))}
         </div>
+        {/* Kharab / Kabad / Repair maal nikalna — approval se (3 Oct 2026) */}
+        {onDispose&&stock.some(m=>Number(m.qty_damaged)>0||Number(m.qty_scrap)>0||Number(m.qty_repair)>0)&&(
+          <GhostBtn onClick={onDispose} c={T.amb}>{t("warehouse.gt_dispose_btn")}</GhostBtn>
+        )}
         <Btn onClick={onAddMaterial} c={T.blu} icon={IcAdd} size="sm">{t("warehouse.new_material")}</Btn>
       </div>
 
@@ -2014,6 +2049,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                             {m.minQty?`min ${fmtN(m.minQty)}`:"—"}
                             {m.maxQty?` / ${fmtN(m.maxQty)}`:""}
                           </span>
+                          <BucketChips m={m}/>
                         </div>
                       </div>
 
@@ -2119,6 +2155,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                             {h.label!=="OK"&&<span style={{fontSize:8.5,color:h.c,fontWeight:700,background:h.bg,padding:"1px 5px",borderRadius:5,marginLeft:"auto"}}>{h.label==="Out"?"OUT":h.label.toUpperCase()}</span>}
                           </div>
 
+                          <BucketChips m={m} style={{marginBottom:6}}/>
                           {/* stock bar */}
                           <div style={{position:"relative",height:4,background:T.b1,borderRadius:2,marginBottom:8}}>
                             <div style={{position:"absolute",left:0,top:0,height:"100%",width:pct+"%",background:barColor,borderRadius:2}}/>
@@ -2181,6 +2218,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,o
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:12.5,fontWeight:500,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.name}</div>
                     {v.label!=="Slow"&&<span style={{fontSize:9,color:v.c,fontWeight:700}}>{v.icon} {v.label}</span>}
+                    <BucketChips m={m}/>
                   </div>
                 </div>
                 <span style={{fontSize:11,color:T.t3}}>{m.category}</span>
@@ -3299,6 +3337,9 @@ function WarehouseModule(){
   const [orderMR,setOrderMR]=useState(null);       // Tab 1: place order modal target
   const [grnMR,setGrnMR]=useState(null);           // Tab 1: receive GRN modal target
   const [issueDetail,setIssueDetail]=useState(null);
+  const [disposeOpen,setDisposeOpen]=useState(false);   // Kharab / Kabad nikalo
+  const [dispSeq,setDispSeq]=useState(0);               // nikasi list dobara laao
+  const [gintiPending,setGintiPending]=useState(0);     // approval baaki ginti — tab ka badge
 
   // Current user (for admin-only actions)
   const meUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
@@ -3310,6 +3351,10 @@ function WarehouseModule(){
   // ka edit diya gaya hai usko apne hi warehouse ki MR par button nahi milta
   // tha — jabki server use haan kehta.
   const canApproveMR = canApproveAction({ perm: ["Warehouse", "edit"] }, meUser);
+  // Ginti / nikasi (3 Oct 2026): banana = Warehouse create; approve = admin ya
+  // Warehouse ka Approve tick — STRICT (row hi nahi = nahi), server jaisa.
+  const canGintiCreate = can("Warehouse", "create", meUser);
+  const canGintiApprove = canApproveAction({ perm: ["Warehouse", "approve", { strict: true }] }, meUser);
 
   // Approve / Reject — inline buttons on Pending MR rows (shown when canApproveMR).
   // BOTH warehouse-internal (project_id=NULL) AND procurement-linked (project_id
@@ -3447,7 +3492,7 @@ function WarehouseModule(){
         api.get("/settings/company").catch(()=>({success:false})),
       ]);
       if(settRes.success&&settRes.data) setProcMode(settRes.data.warehouse_procurement_mode||"direct");
-      if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,value:m.stock_value!=null?Number(m.stock_value)||0:(Number(m.qty)||0)*(Number(m.rate)||0),qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0})));
+      if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,value:m.stock_value!=null?Number(m.stock_value)||0:(Number(m.qty)||0)*(Number(m.rate)||0),qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0,qty_damaged:Number(m.qty_damaged)||0,qty_scrap:Number(m.qty_scrap)||0,qty_repair:Number(m.qty_repair)||0})));
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
       if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
       if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":(m.warehouse_name?`${m.warehouse_name} ${t("warehouse.internal_request")}`:"Warehouse (internal)")),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
@@ -3455,6 +3500,7 @@ function WarehouseModule(){
       if(pRes.success) setProjects((pRes.data||[]).map(p=>({id:p.id,name:p.name})));
       if(uRes.success) setUsers((uRes.data||[]).map(u=>({id:u.id,name:u.name})));
       if(libRes.success) setLibrary((libRes.data||[]).map(m=>({id:m.id,name:m.name,unit:m.unit||"Nos",category:m.category_name||"",rate:Number(m.last_rate||m.base_rate||0)})));
+      api.get("/warehouse/counts?status=pending").then(r=>setGintiPending(r.success?(r.data||[]).length:0)).catch(()=>{});
     }catch(e){console.error("Warehouse load error:",e);}
     setLoading(false);
   },[loadWarehouses]);
@@ -3507,6 +3553,7 @@ function WarehouseModule(){
     ...(warehouses.length>1?[{id:"godown", l:t("warehouse.warehouses_tab"), I:IcIn, badge:null, bc:T.blu}]:[]),
     {id:"stock",  l:t("common.stock"),         I:IcBox,  badge:lowStock.length>0?lowStock.length:null, bc:T.red},
     {id:"ledger", l:t("warehouse.ledger_tab"), I:IcHist, badge:null},
+    {id:"ginti",  l:t("warehouse.gt_tab"),     I:IcChk,  badge:gintiPending>0?gintiPending:null, bc:T.amb},
     {id:"grn",    l:t("material.material_in"),   I:IcIn,   badge:pendingInMRs>0?pendingInMRs:null, bc:T.pur},
     {id:"issue",  l:t("warehouse.material_out"),  I:IcOut,  badge:pendingOutMRs>0?pendingOutMRs:null, bc:T.cyn},
     {id:"mr",     l:t("common.requests"),      I:IcMR,   badge:pendingMRs>0?pendingMRs:null, bc:T.amb},
@@ -3603,7 +3650,12 @@ function WarehouseModule(){
         {tab==="godown"&&<AllGodownsView activeId={whId}
           godownsView={<WarehousesTab data={whOverview} activeId={whId} onOpen={switchWarehouse}/>}
           onGoto={id=>{switchWarehouse(id);setTab("stock");}}/>}
-        {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})} onAddStock={m=>setAddStockTarget(m)} onIssue={m=>setIssueTarget(m)} onQuickRequest={m=>{setMrPrefill({name:m.name,unit:m.unit});setMrNewOpen(true);}}/>}
+        {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})} onAddStock={m=>setAddStockTarget(m)} onIssue={m=>setIssueTarget(m)} onQuickRequest={m=>{setMrPrefill({name:m.name,unit:m.unit});setMrNewOpen(true);}}
+          onDispose={canGintiCreate?()=>setDisposeOpen(true):null}/>}
+        {/* Kharab / Kabad nikasi ki list (approve yahin) + "Repair me" — key=whId: store badla to dobara */}
+        {tab==="stock"&&<DisposalsPanel key={whId} refreshKey={dispSeq} canApprove={canGintiApprove} meId={meUser?.id}
+          isAdmin={["admin","super_admin"].includes((meUser?.role||"").toLowerCase())} onChanged={()=>loadAll()}/>}
+        {tab==="ginti"&&<WarehouseGintiTab key={whId} stock={stock} canCreate={canGintiCreate} canApprove={canGintiApprove} onStockChanged={()=>loadAll()}/>}
         {/* key=whId: godown badla to khaata usi godown ka dobara aaye */}
         {tab==="ledger"&&<WarehouseLedgerTab key={whId} onOpen={m=>setLedgerMat(m)}/>}
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
@@ -3679,6 +3731,10 @@ function WarehouseModule(){
       )}
       {matModalOpen&&(
         <MaterialFormModal material={matModalOpen.material} library={library} onClose={()=>setMatModalOpen(null)} onSaved={()=>loadAll()}/>
+      )}
+      {disposeOpen&&(
+        <DisposalModal stock={stock} onClose={()=>setDisposeOpen(false)}
+          onSaved={(m)=>{setDispSeq(n=>n+1);if(m)alert(m);}}/>
       )}
       {addStockTarget&&(
         <AddStockModal material={addStockTarget} onClose={()=>setAddStockTarget(null)} onSaved={()=>loadAll()}/>

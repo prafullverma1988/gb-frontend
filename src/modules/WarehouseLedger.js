@@ -47,12 +47,39 @@ const kindMeta = (k) => ({
   transfer_in:  { c: T.pur, label: t("warehouse.ledger_k_tr_in") },
   issue:        { c: T.amb, label: t("warehouse.ledger_k_issue") },
   transfer_out: { c: T.pur, label: t("warehouse.ledger_k_tr_out") },
+  // Ginti aur nikasi (3 Oct 2026) — khaata sirf kaam ka (theek) stock ginta hai.
+  count:         { c: T.cyn, label: t("warehouse.ledger_k_count") },
+  damaged_fixed: { c: T.grn, label: t("warehouse.ledger_k_damaged_fixed") },
+  repair_fixed:  { c: T.grn, label: t("warehouse.ledger_k_repair_fixed") },
   before:       { c: T.t3,  label: t("warehouse.ledger_k_before") },
 }[k] || { c: T.t3, label: k });
+
+// Ginti ki line ka poora haal: "Kharab 2 · Kabad 1 · Gum 1 · Nasht 0 · Zyada 0".
+const countBreakdown = (b) => !b ? "" : [
+  t("warehouse.ledger_bd_damaged", { n: fmtQ(b.damaged) }), t("warehouse.ledger_bd_scrap", { n: fmtQ(b.scrap) }),
+  t("warehouse.ledger_bd_lost", { n: fmtQ(b.lost) }), t("warehouse.ledger_bd_destroyed", { n: fmtQ(b.destroyed) }),
+  t("warehouse.ledger_bd_excess", { n: fmtQ(b.excess) }),
+].join(" · ");
+// Pehli line — kahan se / kahan ko. Ginti aur nikasi ki koi party nahi, unka naam hi.
+const partyLine = (e) => {
+  if (e.kind === "count") return t("warehouse.ledger_count_label", { no: e.ref });
+  if (e.kind === "damaged_fixed") return t("warehouse.ledger_damaged_fixed_label", { no: e.ref });
+  if (e.kind === "repair_fixed") return t("warehouse.ledger_repair_fixed_label", { no: e.ref }) + (e.party ? " · " + e.party : "");
+  return e.party || "—";
+};
 
 // Entry ki doosri line — "kaun" wali baat.
 const whoLine = (e) => {
   const bits = [];
+  if (e.kind === "count") {
+    bits.push(countBreakdown(e.breakdown));
+    if (e.by) bits.push(t("warehouse.ledger_approved_by", { name: e.by }));
+    return bits.join(" · ");
+  }
+  if (e.kind === "damaged_fixed" || e.kind === "repair_fixed") {
+    if (e.by) bits.push(t("warehouse.ledger_approved_by", { name: e.by }));
+    return bits.join(" · ");
+  }
   if (e.challan) bits.push(t("warehouse.ledger_challan", { no: e.challan }));
   if (e.po_no) bits.push(t("warehouse.ledger_po", { no: e.po_no }));
   if (e.kind === "issue") {
@@ -253,7 +280,7 @@ export function WarehouseLedgerDrawer({ material, godownName, onClose }) {
               <div key={i} style={{ display: "grid", gridTemplateColumns: GRID, gap: 6, padding: "8px 16px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", borderLeft: `3px solid ${km.c}`, background: i % 2 ? T.surfaceB : T.surface }}>
                 <div style={{ fontSize: 10.5, color: T.t3 }}>{e._before ? "—" : fmtDate(e.date)}</div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.party || "—"}</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e._before ? (e.party || "—") : partyLine(e)}</div>
                   <div style={{ fontSize: 9.5, color: T.t4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {!e._before && <span style={{ fontFamily: "monospace", color: km.c, fontWeight: 700 }}>{e.ref}</span>}
                     {!e._before && <span style={{ color: km.c }}> · {km.label}</span>}
