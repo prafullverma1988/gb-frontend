@@ -1783,7 +1783,7 @@ function WarehousesTab({data,activeId,onOpen}){
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13.5,fontWeight:700,color:T.t1,display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
                     {w.name}
-                    {w.is_default?<span style={{fontSize:9,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:10,padding:"1px 7px"}}>{t("warehouse.default_tag")}</span>:null}
+                    {/* "Default" ka nishaan nahi (3 Oct 2026) — user ke liye koi store pehle se chuna nahi jaata */}
                     {on?<span style={{fontSize:9,fontWeight:700,color:"white",background:T.blu,borderRadius:10,padding:"1px 7px"}}>{t("warehouse.khula_hua")}</span>:null}
                   </div>
                   <div style={{fontSize:10.5,color:T.t4,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.address||"—"}</div>
@@ -3416,8 +3416,12 @@ function WarehouseModule(){
     setWarehouses(list);
     setWhLoaded(true);
     const current=getWarehouseId();
-    const valid=current&&list.some(w=>String(w.id)===String(current));
-    const pick=valid?current:(r.my_warehouse_id||list[0]?.id||null);
+    // Band store kabhi na khule — pehle yaad rakha hua (ya list ka pehla) band
+    // store bhi chun liya jaata tha, aur poora module ek chhupe store par chalta
+    // (3 Oct 2026, Settings se store band hone ke baad).
+    const live=list.filter(w=>Number(w.is_active??1)!==0);
+    const valid=current&&live.some(w=>String(w.id)===String(current));
+    const pick=valid?current:(r.my_warehouse_id||live[0]?.id||null);
     if(pick&&String(pick)!==String(current)) setWarehouseId(pick);
     setWhId(pick?String(pick):null);
     return pick;

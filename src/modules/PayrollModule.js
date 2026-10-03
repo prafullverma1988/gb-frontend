@@ -184,7 +184,10 @@ function GeofenceAdminTab({isAdmin}){
     if(!await window.confirmAsync(t("payroll.reject_this_auto_detected_location_it"))) return;
     try{
       const r=await api.del(`/geofences/${id}?hard=1`);
+      // Location kisi store se judi ho aur store me stock pada ho to server
+      // mana karta hai (409) — wahi message dikhao, chup mat raho.
       if(r.success) await reload();
+      else if(r.message) alert(r.message);
     }catch(e){ alert(e.message); }
   };
 
@@ -235,7 +238,11 @@ function GeofenceAdminTab({isAdmin}){
   };
   const remove=async(id)=>{
     if(!await window.confirmAsync(t("payroll.soft_delete_this_geofence_will_not"))) return;
-    try{ await api.del(`/geofences/${id}`); await reload(); }
+    try{
+      const r=await api.del(`/geofences/${id}`);
+      if(!r.success && r.message) alert(r.message);
+      await reload();
+    }
     catch(e){ alert(e.message); }
   };
   const toggleActive=async(f)=>{

@@ -92,6 +92,11 @@ const fmtD = (raw) => {
   return d.getDate() + " " + MONTHS[d.getMonth()] + " " + String(d.getFullYear()).slice(2);
 };
 const isoDate = (raw) => (raw ? String(raw).slice(0, 10) : "");
+// Store pehle se tabhi chunte hain jab chunne ko EK hi ho (3 Oct 2026). Pehle
+// har form company ka default (ya list ka pehla) store bhar deta tha — RATNA me
+// default ek bina-location "orrange office" tha, aur site se lauti pipe chup-
+// chaap wahin chali gayi. Ab "Select karo" se shuru; list wahi jo picker me dikhti hai.
+const soleStoreId = (list) => ((list || []).length === 1 ? String(list[0].id) : "");
 const todayStr = () => new Date().toLocaleDateString("en-CA");
 const qs = (params) => Object.entries(params || {})
   .filter(([, v]) => v !== "" && v != null)
@@ -210,6 +215,13 @@ const StatCard = ({ label, value, sub, color, icon: Icon, onClick }) => (
   </div>
 );
 
+// Ek store ka ankda: theek + toota ek number, toota ho to halka "(N kharab)".
+const StoreQty = ({ good, damaged }) => (
+  <span style={{ fontWeight: 600, color: T.t1 }}>
+    {fmtN(N(good) + N(damaged))}
+    {N(damaged) > 0 && <span style={{ fontWeight: 400, fontSize: 11, color: T.t4, marginLeft: 5 }}>{t("assets.n_kharab", { n: fmtN(damaged) })}</span>}
+  </span>
+);
 const Pill = ({ label, c, bg }) => (
   <span style={{ display: "inline-block", background: bg, color: c, fontSize: 9.5, fontWeight: 700, padding: "3px 8px", borderRadius: 8, whiteSpace: "nowrap" }}>{label}</span>
 );
@@ -734,59 +746,22 @@ function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
           <Panel title={t("assets.wh_items_title")}>
             {(dash.by_item || []).length === 0 && <Empty>{t("assets.wh_items_empty")}</Empty>}
             {(dash.by_item || []).length > 0 && (
-              <Scroll minWidth={560}>
-                <Row head cols="96px 1.5fr 70px 70px 76px">
-                  <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.good")}</span><span>{t("assets.damaged")}</span><span>{t("assets.total")}</span>
+              <Scroll minWidth={460}>
+                {/* Ek store chuna hai to EK hi ankda: is store me kitna (theek + toota),
+                    toota ho to saath me halka "(N kharab)". Pehle Good · Damaged ·
+                    Total the — aur Total poori company ka tha, to "1 · 0 · 83" padh
+                    kar log samajhte 83 isi store me hai (RATNA, WeeFool pipe). */}
+                <Row head cols="96px 1.5fr 120px">
+                  <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.in_this_store")}</span>
                 </Row>
                 {(dash.by_item || []).map((r) => (
-                  <Row key={r.id} cols="96px 1.5fr 70px 70px 76px">
+                  <Row key={r.id} cols="96px 1.5fr 120px">
                     <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>{r.code || "—"}</span>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
                       <div style={{ fontSize: 10.5, color: T.t4 }}>{[r.spec, r.unit, r.category].filter(Boolean).join(" · ")}</div>
                     </div>
-                    <span style={{ fontWeight: 600 }}>{fmtN(r.qty_good)}</span>
-                    <span style={{ color: N(r.qty_damaged) ? T.amb : T.t4 }}>{fmtN(r.qty_damaged)}</span>
-                    <span style={{ color: T.t3 }}>{fmtN(r.total_qty)}</span>
-                  </Row>
-                ))}
-              </Scroll>
-            )}
-          </Panel>
-          <Panel title={t("assets.wh_cats_title")}>
-            {(dash.by_category || []).length === 0 && <Empty>{t("assets.wh_items_empty")}</Empty>}
-            {(dash.by_category || []).length > 0 && (
-              <Row head cols="1.6fr 60px 70px 70px"><span>{t("assets.category")}</span><span>{t("assets.items")}</span><span>{t("assets.qty")}</span><span>{t("assets.damaged")}</span></Row>
-            )}
-            {(dash.by_category || []).map((r, i) => (
-              <Row key={r.category_id || "x" + i} cols="1.6fr 60px 70px 70px">
-                <span style={{ fontWeight: 600, color: T.t1 }}>{r.category || "—"}</span>
-                <span>{fmtN(r.items)}</span><span>{fmtN(r.qty)}</span>
-                <span style={{ color: N(r.damaged_qty) ? T.amb : T.t4 }}>{fmtN(r.damaged_qty)}</span>
-              </Row>
-            ))}
-          </Panel>
-        </div>
-      ) : (<>
-      {scoped ? (
-        <div style={two}>
-          <Panel title={t("assets.wh_items_title")}>
-            {(dash.by_item || []).length === 0 && <Empty>{t("assets.wh_items_empty")}</Empty>}
-            {(dash.by_item || []).length > 0 && (
-              <Scroll minWidth={560}>
-                <Row head cols="96px 1.5fr 70px 70px 76px">
-                  <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.good")}</span><span>{t("assets.damaged")}</span><span>{t("assets.total")}</span>
-                </Row>
-                {(dash.by_item || []).map((r) => (
-                  <Row key={r.id} cols="96px 1.5fr 70px 70px 76px">
-                    <span style={{ fontSize: 11.5, color: T.t3, fontFamily: "monospace" }}>{r.code || "—"}</span>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
-                      <div style={{ fontSize: 10.5, color: T.t4 }}>{[r.spec, r.unit, r.category].filter(Boolean).join(" · ")}</div>
-                    </div>
-                    <span style={{ fontWeight: 600 }}>{fmtN(r.qty_good)}</span>
-                    <span style={{ color: N(r.qty_damaged) ? T.amb : T.t4 }}>{fmtN(r.qty_damaged)}</span>
-                    <span style={{ color: T.t3 }}>{fmtN(r.total_qty)}</span>
+                    <StoreQty good={r.qty_good} damaged={r.qty_damaged} />
                   </Row>
                 ))}
               </Scroll>
@@ -870,8 +845,6 @@ function DashboardTab({ dash: companyDash, warehouses, onOpenVoucher, onGo }) {
 
       </>)}
 
-      </>)}
-
       <Panel title={t("assets.recent_title")}>
         {(dash.recent || []).length === 0 && <Empty>{t("assets.recent_empty")}</Empty>}
         {(dash.recent || []).length > 0 && (
@@ -930,7 +903,10 @@ function RegisterTab({ items, cats, warehouses, canEdit, canCreate, onOpenItem, 
       (!s || [i.code, i.name, i.spec, i.category].some((x) => String(x || "").toLowerCase().includes(s))));
   }, [base, q, tracking, cat]);
 
-  const cols = scoped ? "100px 1.6fr 1fr 60px 84px 96px 64px 64px 64px" : "100px 1.6fr 1fr 60px 84px 96px 64px 64px 64px 64px";
+  // Store chuna ho to ek hi ankda "Is store me"; poori company ka jod sirf
+  // "Sab store" view me, "Poori company me" naam se (3 Oct 2026). Wo jod ab
+  // server holdings se banata hai (store + site + repair + raaste me).
+  const cols = scoped ? "100px 1.6fr 1fr 60px 84px 96px 110px" : "100px 1.6fr 1fr 60px 84px 96px 96px 64px 64px 64px";
   return (
     <Panel title={t("assets.register_title", { n: rows.length })}
       action={
@@ -971,8 +947,8 @@ function RegisterTab({ items, cats, warehouses, canEdit, canCreate, onOpenItem, 
             <span>{t("assets.code")}</span><span>{t("assets.item")}</span><span>{t("assets.spec")}</span><span>{t("assets.unit")}</span>
             <span>{t("assets.type")}</span><span>{t("assets.status")}</span>
             {scoped
-              ? <><span>{t("assets.good")}</span><span>{t("assets.damaged")}</span><span>{t("assets.total")}</span></>
-              : <><span>{t("assets.total")}</span><span>{t("assets.in_store")}</span><span>{t("assets.deployed")}</span><span>{t("assets.damaged")}</span></>}
+              ? <span>{t("assets.in_this_store")}</span>
+              : <><span>{t("assets.in_company")}</span><span>{t("assets.in_store")}</span><span>{t("assets.deployed")}</span><span>{t("assets.damaged")}</span></>}
           </Row>
           {rows.map((i) => (
             <Row key={i.id} cols={cols} onClick={() => onOpenItem(i)}>
@@ -986,11 +962,7 @@ function RegisterTab({ items, cats, warehouses, canEdit, canCreate, onOpenItem, 
                     bg={["damaged", "lost", "scrapped"].includes(i.status) ? T.redL : i.status === "repair" ? T.ambL : i.status === "issued" ? T.bluL : T.grnL} />
                 : <span style={{ color: T.t4 }}>—</span>}</span>
               {scoped ? (
-                <>
-                  <span style={{ fontWeight: 600 }}>{fmtN(i.here_good)}</span>
-                  <span style={{ color: N(i.here_damaged) ? T.amb : T.t4 }}>{fmtN(i.here_damaged)}</span>
-                  <span style={{ color: T.t3 }}>{fmtN(i.total_qty)}</span>
-                </>
+                <StoreQty good={i.here_good} damaged={i.here_damaged} />
               ) : (
                 <>
                   <span style={{ fontWeight: 600 }}>{fmtN(i.total_qty)}</span>
@@ -1337,7 +1309,7 @@ function InchargesModal({ open, meta, users, onClose, onChanged }) {
         const mine = list.filter((i) => i.warehouse_id === w.id);
         return (
           <Panel key={w.id} style={{ marginBottom: 12 }}
-            title={<span>{w.name}{w.is_default ? <span style={{ fontSize: 10, color: T.t4, marginLeft: 6 }}>({t("assets.default")})</span> : null}</span>}
+            title={w.name}
             action={<span style={{ fontSize: 11, color: T.t3 }}>{t("assets.storekeeper")}: <b>{w.incharge_name || "—"}</b></span>}>
             {mine.length === 0 && <div style={{ padding: "10px 14px", fontSize: 11.5, color: T.t4 }}>{t("assets.incharge_none")}</div>}
             {mine.map((i) => (
@@ -1579,8 +1551,7 @@ function GrnForm({ open, meta, pickers, cats, canAll, onClose, onSaved }) {
 
   useEffect(() => {
     if (!open) return;
-    const def = whOptions.find((w) => w.is_default) || whOptions[0];
-    setF({ warehouse_id: def ? String(def.id) : "", date: todayStr(), party_id: "", vendor_name: "", invoice_no: "", invoice_date: "", remarks: "" });
+    setF({ warehouse_id: soleStoreId(whOptions), date: todayStr(), party_id: "", vendor_name: "", invoice_no: "", invoice_date: "", remarks: "" });
     setLines([newGrnLine()]); setError(""); setVendorMode("party"); setPhotos([]); setIssues([]);
     api.get("/assets/items?tracking=bulk").then((r) => setBulkItems(r && r.success ? r.data || [] : [])).catch(() => setBulkItems([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1766,8 +1737,7 @@ function NewPurchaseModal({ open, meta, pickers, cats, canAll, onClose, onSaved 
 
   useEffect(() => {
     if (!open) return;
-    const def = whOptions.find((w) => w.is_default) || whOptions[0];
-    setF({ warehouse_id: def ? String(def.id) : "", project_id: "", required_date: "", notes: "" });
+    setF({ warehouse_id: soleStoreId(whOptions), project_id: "", required_date: "", notes: "" });
     setLines([newBuyLine()]); setError("");
     api.get("/assets/items").then((r) => setItems(r && r.success ? r.data || [] : [])).catch(() => setItems([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2442,8 +2412,7 @@ function IssueForm({ open, meta, pickers, me, canAll, preset, onClose, onSaved }
   useEffect(() => {
     if (!open) return;
     const pw = preset && preset.warehouse_id && whOptions.some((w) => String(w.id) === String(preset.warehouse_id)) ? preset.warehouse_id : null;
-    const def = whOptions.find((w) => w.is_default) || whOptions[0];
-    setWh(pw ? String(pw) : def ? String(def.id) : ""); setDate(todayStr());
+    setWh(pw ? String(pw) : soleStoreId(whOptions)); setDate(todayStr());
     setTo(preset ? { holder_type: "user", project_id: preset.project_id, holder_id: preset.holder_id, custodian_user_id: preset.holder_id } : { holder_type: "user" });
     setLines([newMoveLine()]);
     setRet(preset && N(preset.days) ? new Date(Date.now() + N(preset.days) * 864e5).toLocaleDateString("en-CA") : "");
@@ -2610,11 +2579,10 @@ function AddAssetForm({ open, meta, pickers, cats, me, onClose, onSaved }) {
   const stores = (meta && meta.warehouses) || [];
   useEffect(() => {
     if (!open) return;
-    const def = stores.find((w) => w.is_default) || stores[0];
     setMode("new"); setWhere("store"); setSite({ holder_type: "user" }); setRent(newRent()); setError("");
     setF({
       name: "", spec: "", unit: "Nos", tracking_mode: "bulk", category_id: "", code: "", asset_item_id: "",
-      qty: "", condition: "good", warehouse_id: def ? String(def.id) : "",
+      qty: "", condition: "good", warehouse_id: soleStoreId(stores),
       purchase_date: "", purchase_cost: "", vendor_name: "", remarks: "",
     });
     api.get("/assets/items?tracking=bulk").then((r) => setBulkItems(r && r.success ? r.data || [] : [])).catch(() => setBulkItems([]));
@@ -2789,8 +2757,9 @@ function MoveForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved }) {
 
   useEffect(() => {
     if (!open) return;
-    const def = all.find((w) => w.is_default) || all[0];
-    setCust(String(me.id || "")); setFrom(""); setDate(todayStr()); setToWh(kind === "return" && def ? String(def.id) : ""); setToSite({ holder_type: "user" });
+    // Wapsi ka store bhi khud chuno — AST-RET-001 (RATNA) isi pehle se bhare
+    // default se bina-location store me chala gaya tha.
+    setCust(String(me.id || "")); setFrom(""); setDate(todayStr()); setToWh(kind === "return" ? soleStoreId(all) : ""); setToSite({ holder_type: "user" });
     setSrc(kind !== "return" && myWh.length ? "store" : "custody");
     setLines([newMoveLine()]); setRet(""); setRemarks(""); setPhoto(""); setError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2993,8 +2962,7 @@ function RepairForm({ open, kind, meta, pickers, me, canAll, onClose, onSaved })
 
   useEffect(() => {
     if (!open) return;
-    const def = myWh.find((w) => w.is_default) || myWh[0];
-    setParty(""); setFrom(""); setToWh(def ? String(def.id) : ""); setDate(todayStr());
+    setParty(""); setFrom(""); setToWh(soleStoreId(myWh)); setDate(todayStr());
     setLines([newMoveLine()]); setCost(""); setInvoice(""); setRemarks(""); setPhoto(""); setError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, kind]);
@@ -3298,8 +3266,7 @@ function NewVerificationModal({ open, meta, pickers, me, onClose, onCreated, onO
   const all = (meta && meta.warehouses) || [];
   useEffect(() => {
     if (!open) return;
-    const def = all.find((w) => w.is_default) || all[0];
-    setWhere("warehouse"); setWh(def ? String(def.id) : ""); setSite({ holder_type: "user" });
+    setWhere("warehouse"); setWh(soleStoreId(all)); setSite({ holder_type: "user" });
     setDate(todayStr()); setRemarks(""); setError(""); setExisting(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, meta]);

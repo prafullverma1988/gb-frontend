@@ -481,6 +481,9 @@ function LocationsSettings() {
   // abhi nahi hai). Isse save naya godown nahi banata, purane ko jodta hai.
   const blank = { id: null, whId: null, kind: "office", label: "", address: "", lat: "", lng: "", radius: 100, incharge: "" };
   const [rows, setRows] = useState([]);
+  // Location list sach me aayi ya nahi — na aayi ho to har store "bina
+  // location" na dikhe (neeche orphanWhs).
+  const [geoLoaded, setGeoLoaded] = useState(false);
   // Warehouse ka stock-side jodidar (wh_warehouses) — yahin se uska
   // incharge tay hota hai. Geofence attendance ke liye hai, incharge
   // stock ke liye; add dono ka ek hi jagah se hota hai.
@@ -498,6 +501,7 @@ function LocationsSettings() {
       // Company-level locations only (no project) — offices + warehouses
       const list = (r.success ? r.data : []).filter(g => !g.project_id && (g.kind === "office" || g.kind === "warehouse"));
       setRows(list);
+      setGeoLoaded(!!r.success);
     }).catch(()=>{}).finally(()=>setLoading(false));
     // scope=all: ye company ki config hai — saare store (Roles & Access wala niyam yahan nahi).
     api.get("/warehouse/warehouses?scope=all").then(r => { if (r.success) setWhs(r.data || []); }).catch(()=>{});
@@ -506,16 +510,38 @@ function LocationsSettings() {
   useEffect(load, []);
 
   // Geofence row ka warehouse jodidar (backend boot par khud jod deta hai).
-  const whFor = (g) => whs.find(w => String(w.geofence_id) === String(g.id)) || null;
+  // Chalu store pehle — ek hi location se pehle koi band store bhi juda ho sakta hai.
+  const whFor = (g) => whs.find(w => String(w.geofence_id) === String(g.id) && Number(w.is_active) !== 0)
+    || whs.find(w => String(w.geofence_id) === String(g.id)) || null;
 
   // Jo godown Settings me kabhi nahi dikhte the: multi-warehouse ke backfill
   // ne purane `location` naamon se ye bana diye the, inka koi geofence nahi
   // hai — aur aksar company ka DEFAULT yahi hota hai, yaani asli stock isi me
   // pada rehta hai. Inhe chhupa dena hi wo dikkat thi jise ye list theek karti
   // hai: aadmi Settings dekh kar samajhta tha sab theek hai.
-  const orphanWhs = (whs || []).filter(w => !w.geofence_id && w.is_active !== 0);
+  //
+  // 3 Oct 2026: wo store bhi jinki location thi par HAT gayi (ya band hai, ya
+  // is list me hai hi nahi) — geofence_id bhara hai par aisi koi chalu location
+  // yahan nahi. Location hatane par pehle store chalu reh jaata tha, aksar
+  // default bankar; RATNA ka "orrange office" yahi tha — har form use pehle se
+  // chun leta tha aur Settings me wo kahin nahi dikhta tha.
+  const liveGeo = new Set(rows.filter(g => Number(g.active) !== 0).map(g => String(g.id)));
+  const orphanWhs = (whs || []).filter(w => Number(w.is_active) !== 0
+    && (!w.geofence_id || (geoLoaded && !liveGeo.has(String(w.geofence_id)))));
   const rowsFor = (w) => (Number(w.stock_items) || 0) + (Number(w.grn_count) || 0)
     + (Number(w.issue_count) || 0) + (Number(w.mr_count) || 0);
+  // Store ko ABHI kya pakde hue hai — server ginta hai (hold_*: stock wali
+  // material line, asset, pending entry). Purani history (kabhi GRN bani thi)
+  // store ko band hone se nahi rokti. Purana backend ye nahi bhejta — tab
+  // pehle wali history ginti hi rok hai.
+  const holdsKnown = (w) => w.holds_anything !== undefined;
+  const blocked = (w) => (holdsKnown(w) ? !!w.holds_anything : rowsFor(w) > 0);
+  const holdsText = (w) => [
+    Number(w.hold_stock_lines) > 0 ? t("settings.wh_hold_stock_lines", { n: Number(w.hold_stock_lines) }) : "",
+    Number(w.hold_asset_qty) > 0 ? t("settings.wh_hold_asset_qty", { n: Number(w.hold_asset_qty) }) : "",
+    Number(w.hold_wh_docs) > 0 ? t("settings.wh_hold_wh_docs", { n: Number(w.hold_wh_docs) }) : "",
+    Number(w.hold_asset_docs) > 0 ? t("settings.wh_hold_asset_docs", { n: Number(w.hold_asset_docs) }) : "",
+  ].filter(Boolean).join(", ");
 
   const useCurrentLoc = () => {
     if (!navigator.geolocation) { setMsg("GPS not available"); return; }
@@ -576,17 +602,25 @@ function LocationsSettings() {
                                   incharge: w.incharge_user_id ? String(w.incharge_user_id) : "" });
 
   // Hataana nahi, band karna — jisme stock ka kaam pada ho use haath nahi lagate.
+  // Server bhi yahi rokta hai (409, saath me kya pada hai).
   const closeWh = async (w) => {
-    if (rowsFor(w) > 0) { setMsg(t("settings.wh_cant_close")); return; }
+    if (blocked(w)) { setMsg(t("settings.wh_cant_close")); return; }
     if (!await window.confirmAsync(t("settings.wh_close_confirm", { name: w.name }))) return;
     const r = await api.patch("/warehouse/warehouses/" + w.id, { is_active: 0 }).catch(()=>({success:false}));
     if (r.success) load(); else setMsg(r.message || t("settings.wh_close_failed"));
   };
 
+  // Location hatane par uska store bhi band hota hai (server, ek saath). Store me
+  // abhi stock / asset / pending entry ho to server mana karta hai — wahi
+  // message dikhao; pehle ye chup-chaap kuch nahi karta tha.
   const del = async (g) => {
-    if (!await window.confirmAsync(`Delete "${g.label}"?`)) return;
+    const wf = whFor(g);
+    const ask = wf && Number(wf.is_active) !== 0
+      ? t("settings.loc_delete_confirm_store", { name: g.label, store: wf.name })
+      : t("settings.loc_delete_confirm", { name: g.label });
+    if (!await window.confirmAsync(ask)) return;
     const r = await api.del("/geofences/" + g.id + "?hard=1").catch(()=>({success:false}));
-    if (r.success) load();
+    if (r.success) load(); else alert(r.message || t("settings.loc_delete_failed"));
   };
 
   const L = { fontSize:10, fontWeight:700, color:T.textLight, textTransform:"uppercase", letterSpacing:".4px", display:"block", marginBottom:4 };
@@ -607,14 +641,17 @@ function LocationsSettings() {
             <div key={"wh" + w.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 13px", border:`1px solid ${T.amber}55`, borderRadius:9, marginBottom:8, background:"white" }}>
               <span style={{ fontSize:11, fontWeight:700, color:T.amber, background:T.amber+"15", padding:"3px 9px", borderRadius:12, whiteSpace:"nowrap" }}>📦 Warehouse</span>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:T.text }}>
-                  {w.name}
-                  {w.is_default ? <span style={{ marginLeft:7, fontSize:10, fontWeight:700, color:T.blue, background:T.blueSoft, padding:"2px 7px", borderRadius:10 }}>{t("settings.wh_default")}</span> : null}
-                </div>
+                {/* "Default" ka nishaan ab nahi dikhate (3 Oct 2026, Prafull): koi
+                    form ya dashboard store pehle se nahi chunta, to user ke liye
+                    iska koi matlab nahi bacha. is_default backend ka andar ka
+                    fallback hai (utils/warehouseMaster.js). */}
+                <div style={{ fontSize:13, fontWeight:700, color:T.text }}>{w.name}</div>
                 <div style={{ fontSize:11, color:T.textMid, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{w.address || "—"}</div>
                 <div style={{ fontSize:10.5, color:T.amber, fontWeight:600, marginTop:1 }}>⚠ {t("settings.wh_no_location")}</div>
                 <div style={{ fontSize:10.5, color:T.textLight, marginTop:1 }}>
-                  {rowsFor(w) > 0 ? t("settings.wh_has_work", { n: rowsFor(w) }) : t("settings.wh_empty")}
+                  {holdsKnown(w)
+                    ? (w.holds_anything ? t("settings.wh_holds_now", { what: holdsText(w) }) : t("settings.wh_empty"))
+                    : (rowsFor(w) > 0 ? t("settings.wh_has_work", { n: rowsFor(w) }) : t("settings.wh_empty"))}
                   {w.incharge_name ? " · 👤 " + w.incharge_name : ""}
                 </div>
               </div>
@@ -628,10 +665,7 @@ function LocationsSettings() {
               <div key={g.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 13px", border:`1px solid ${T.border}`, borderRadius:9, marginBottom:8, background:"white" }}>
                 <span style={{ fontSize:11, fontWeight:700, color:k.c, background:k.c+"15", padding:"3px 9px", borderRadius:12, whiteSpace:"nowrap" }}>{k.label}</span>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:T.text }}>
-                    {g.label}
-                    {whFor(g)?.is_default ? <span style={{ marginLeft:7, fontSize:10, fontWeight:700, color:T.blue, background:T.blueSoft, padding:"2px 7px", borderRadius:10 }}>{t("settings.wh_default")}</span> : null}
-                  </div>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.text }}>{g.label}</div>
                   <div style={{ fontSize:11, color:T.textMid, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.address || "—"}</div>
                   <div style={{ fontSize:10.5, color:T.textLight, marginTop:1 }}>📍 {Number(g.center_lat).toFixed(5)}, {Number(g.center_lng).toFixed(5)} · {g.radius_m}m</div>
                   {g.kind === "warehouse" && (
