@@ -189,6 +189,43 @@ const inp = { width: "100%", padding: "9px 11px", borderRadius: 7, border: `1.5p
   fontSize: 13, outline: "none", fontFamily: "inherit", color: T.t1, background: T.surface, boxSizing: "border-box" };
 const lblS = { fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 };
 
+// ── Capacity aur gaadi ki khoj (4 Oct 2026) ──────────────────────
+// Trip gaadi ki capacity = number + unit (cft / cum / ton); server saath me
+// "500 cft" text (capacity) bhi bhejta hai. Khoj ka niyam server ke
+// /trucks?all=1 jaisa: har shabd gaadi number (space / dash / dot ke bina),
+// naam, vendor, capacity ya card ke naam me kahin mile ("sharma 500").
+const CAP_UNITS = ["cft", "cum", "ton"];
+const normReg = (v) => String(v == null ? "" : v).replace(/[\s.-]/g, "").toUpperCase();
+const capOf = (r) => (r && (r.capacity || (r.capacity_qty != null ? (Number(r.capacity_qty) + " " + (r.capacity_unit || "")).trim() : ""))) || "";
+function matchTruck(r, q) {
+  const toks = String(q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!toks.length) return true;
+  const hay = [r.name, r.code, r.registration_no, r.vendor_name || r.default_vendor_name, capOf(r), r.rate_card_name]
+    .map(x => String(x || "").toLowerCase());
+  const regs = [normReg(r.registration_no), normReg(r.name)];
+  return toks.every(tok => hay.some(h => h.includes(tok)) || (!!normReg(tok) && regs.some(x => x.includes(normReg(tok)))));
+}
+// Khaana → { empty } (kuch nahi bhara) · { bad } · { ok, qty, unit }.
+function capCheck(qty, unit) {
+  const s = String(qty == null ? "" : qty).trim();
+  if (!s && !unit) return { empty: true };
+  const n = Number(s);
+  if (!s || !Number.isFinite(n) || n <= 0 || !CAP_UNITS.includes(unit)) return { bad: true };
+  return { ok: true, qty: n, unit };
+}
+function CapacityInput({ qty, unit, onQty, onUnit, bad }) {
+  return (
+    <div style={{ display: "flex", gap: 6 }}>
+      <input value={qty} inputMode="decimal" placeholder="500" onChange={e => onQty(e.target.value.replace(/[^0-9.]/g, ""))}
+        style={{ ...inp, flex: 1, minWidth: 0, borderColor: bad ? T.red : T.b1 }} />
+      <select value={unit} onChange={e => onUnit(e.target.value)} style={{ ...inp, width: 84, flexShrink: 0, borderColor: bad ? T.red : T.b1 }}>
+        <option value="">{t("trip_tracking.cap_unit")}</option>
+        {CAP_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+      </select>
+    </div>
+  );
+}
+
 // ── Naksha: doori (haversine) — lambai server nikalta hai, ye sirf dikhane ko ──
 const segM = (a, b) => {
   const R = 6371000, rad = (d) => (d * Math.PI) / 180;
@@ -246,12 +283,15 @@ function TabTripTracking({ projectId }) {
   }, [projectId]);
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
-  // Vendor-wise km rate card (3 Oct 2026). null = server purana (404) ya
-  // ijazat nahi — tab "Rate card" sub-tab dikhta hi nahi.
+  // Naam wale rate card (4 Oct 2026) + purane vendor card (legacy, abhi bhi
+  // fallback). null = server purana (404) ya ijazat nahi — tab "Rate card"
+  // sub-tab dikhta hi nahi.
   const [cards, setCards] = useState(null);
   const loadCards = useCallback(() => {
-    api.get("/trips/rate-cards")
-      .then(r => setCards(r && r.success ? (Array.isArray(r.data) ? r.data : []) : null))
+    api.get("/trips/rate-templates")
+      .then(r => setCards(r && r.success
+        ? { list: Array.isArray(r.data) ? r.data : [], legacy: Array.isArray(r.legacy_cards) ? r.legacy_cards : [] }
+        : null))
       .catch(() => setCards(null));
   }, []);
   useEffect(() => { loadCards(); }, [loadCards]);
@@ -282,7 +322,7 @@ function TabTripTracking({ projectId }) {
       {curSub === "monitor"  && <MonitorTab projectId={projectId} onChange={loadSummary} />}
       {curSub === "routes"   && <RoutesTab projectId={projectId} />}
       {curSub === "trucks"   && <TrucksTab />}
-      {curSub === "ratecard" && <RateCardTab cards={cards} onChange={loadCards} />}
+      {curSub === "ratecard" && <RateCardTab data={cards} onChange={loadCards} />}
       {curSub === "reports"  && <ReportsTab projectId={projectId} />}
       {curSub === "billing"  && <BillingTab projectId={projectId} />}
     </div>
@@ -408,8 +448,8 @@ function MonitorTab({ projectId, onChange }) {
                     <span style={{ fontSize: 11.5, color: T.t2 }}>{fmtClock(item4.load_at)}</span>
                     <span style={{ fontSize: 11.5, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{item4.travel_min != null ? t("trip_tracking.n_min", { n: item4.travel_min }) : "—"}</span>
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>
-                      {item4.billing_snap === "monthly"
-                        ? <span style={{ fontSize: 11, fontWeight: 600, color: T.t4 }}>{t("trip_tracking.bill_monthly")}</span>
+                      {item4.billing_snap === "monthly" || item4.billing_snap === "own"
+                        ? <span style={{ fontSize: 11, fontWeight: 600, color: T.t4 }}>{BILLING[item4.billing_snap].label}</span>
                         : (item4.amount != null ? rs(item4.amount) : "—")}
                       {item4.km_billed != null && <span style={{ display: "block", fontSize: 10.5, fontWeight: 500, color: T.t4 }}>{t("trip_tracking.n_km", { n: fmtKm(item4.km_billed) })}</span>}
                     </span>
@@ -460,6 +500,7 @@ function MonitorTab({ projectId, onChange }) {
                           <div>{t("trip_tracking.vendor_t_rate_t2", { t: item4.vendor_name || "—", t2:
                             item4.billing_snap === "km" ? t("trip_tracking.rate_km_card")
                               : item4.billing_snap === "monthly" ? t("trip_tracking.rate_monthly")
+                              : item4.billing_snap === "own" ? t("trip_tracking.rate_own")
                               : item4.rate_snap != null ? rs(item4.rate_snap) : t("trip_tracking.rate_pending") })}</div>
                           {item4.delay_reason && <div style={{ color: T.amb }}>{t("trip_tracking.delay_delay_reason", { delay_reason: delayReasonLabel(item4.delay_reason) })}</div>}
                           {item4.review_note && <div style={{ color: T.t3 }}>{t("trip_tracking.review_note_review_note", { review_note: item4.review_note })}</div>}
@@ -559,9 +600,9 @@ function RoutesTab({ projectId }) {
       )}
       {!loading && list.length > 0 && (
         <>
-          <THead cols="1.6fr 100px 120px 110px 90px 70px" headers={[t("trip_tracking.hdr_route"), t("trip_tracking.hdr_lead_km"), t("trip_tracking.rate_trip"), t("trip_tracking.hdr_exp_time"), t("trip_tracking.hdr_status"), ""]} />
+          <THead cols="1.8fr 100px 110px 90px 70px" headers={[t("trip_tracking.hdr_route"), t("trip_tracking.hdr_lead_km"), t("trip_tracking.hdr_exp_time"), t("trip_tracking.hdr_status"), ""]} />
           {list.map(r => (
-            <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1.6fr 100px 120px 110px 90px 70px",
+            <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1.8fr 100px 110px 90px 70px",
               padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
               <div>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>
@@ -569,11 +610,11 @@ function RoutesTab({ projectId }) {
                   {Array.isArray(r.route_geometry) && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: T.grn }}>{t("trip_tracking.naksha_tag")}</span>}
                 </div>
                 {r.default_task_name && <div style={{ fontSize: 10.5, color: T.t4 }}>{r.default_task_name}</div>}
+                {/* Route par ab rate nahi (4 Oct 2026) — paisa gaadi ke rate card se.
+                    Purana rate sirf bina card wali Per trip gaadi par lagta hai. */}
+                {r.rate_per_trip != null && <div style={{ fontSize: 10.5, color: T.t4 }}>{t("trip_tracking.purana_rate_route", { rate: rs(r.rate_per_trip) })}</div>}
               </div>
               <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{r.lead_km != null ? r.lead_km : "—"}</span>
-              <span style={{ fontSize: 12 }}>
-                {r.rate_per_trip != null ? <span style={{ color: T.t1, fontVariantNumeric: "tabular-nums" }}>{rs(r.rate_per_trip)}</span> : <Pill label={t("trip_tracking.rate_pending")} c={T.amb} bg={T.ambL} />}
-              </span>
               <span style={{ fontSize: 11.5, color: T.t2 }}>{r.expected_travel_min != null ? t("trip_tracking.n_min", { n: r.expected_travel_min }) : "—"}</span>
               <span>{r.is_active ? <Pill label={t("common.active")} c={T.grn} bg={T.grnL} /> : <Pill label={t("subcon.inactive")} c={T.t3} bg={T.sltL} />}</span>
               {canEq("edit") ? <button onClick={() => setForm(r)} type="button" style={{ justifySelf: "end", fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button> : <span />}
@@ -589,7 +630,6 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
   const [f, setF] = useState({
     name: route?.name || "",
     lead_km: route?.lead_km != null ? String(route.lead_km) : "",
-    rate_per_trip: route?.rate_per_trip != null ? String(route.rate_per_trip) : "",
     expected_travel_min: route?.expected_travel_min != null ? String(route.expected_travel_min) : "",
     tolerance_min: route?.tolerance_min != null ? String(route.tolerance_min) : "10",
     expected_cycle_min: route?.expected_cycle_min != null ? String(route.expected_cycle_min) : "",
@@ -665,7 +705,9 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
       load_lat: a ? a.lat : numf(f.load_lat), load_lng: a ? a.lng : numf(f.load_lng),
       unload_lat: b ? b.lat : numf(f.unload_lat), unload_lng: b ? b.lng : numf(f.unload_lng),
       load_radius: f.load_radius, unload_radius: f.load_radius,
-      lead_km: numf(f.lead_km), rate_per_trip: numf(f.rate_per_trip),
+      // Route par rate nahi (4 Oct 2026) — rate_per_trip bheja hi nahi, to
+      // purane route ka rate jaisa tha waisa rehta hai (server PUT sirf aaye khaane badalta hai).
+      lead_km: numf(f.lead_km),
       expected_travel_min: numf(f.expected_travel_min) != null ? Math.round(numf(f.expected_travel_min)) : null,
       tolerance_min: numf(f.tolerance_min) != null ? Math.round(numf(f.tolerance_min)) : 10,
       expected_cycle_min: numf(f.expected_cycle_min) != null ? Math.round(numf(f.expected_cycle_min)) : null,
@@ -676,14 +718,6 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
     let r;
     if (route) {
       r = await api.put("/trips/routes/" + route.id, body);
-      // Rate bhara hai to har save par backfill (AST-14): server sirf khaali-rate
-      // wali unbilled trips (raste wali bhi) chhoota hai, isliye dobara bulana safe.
-      // Pehle iska jawab phenk diya jaata tha — rate chadha ya nahi, kisi ko
-      // pata nahi chalta. Route to save ho chuka, bas bata do.
-      if (r && r.success !== false && numf(f.rate_per_trip) != null) {
-        const b = await api.post("/trips/routes/" + route.id + "/backfill-rate", { rate: numf(f.rate_per_trip) });
-        if (!b || b.success === false) window.alert(t("trip_tracking.backfill_fail", { msg: (b && b.message) || t("trip_tracking.action_fail") }));
-      }
     } else {
       r = await api.post("/trips/routes", body);
     }
@@ -695,11 +729,14 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
   return (
     <div style={{ padding: "14px 15px", borderBottom: `1px solid ${T.b1}`, background: T.bluL + "55" }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 10 }}>{route ? t("trip_tracking.edit_route") : t("trip_tracking.new_route")}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
         <div><div style={lblS}>{t("trip_tracking.route_name")}</div><input value={f.name} onChange={e => upd("name", e.target.value)} placeholder={t("trip_tracking.quarry_site_a")} style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.lead_km")} <span style={{ color: T.t4, fontWeight: 400 }}>{t("trip_tracking.haul_road")}</span></div><input value={f.lead_km} onChange={e => { upd("lead_km", e.target.value.replace(/[^0-9.]/g, "")); setLeadAuto(false); }} placeholder="0" style={inp} /></div>
-        <div><div style={lblS}>{t("trip_tracking.rate_trip")} <span style={{ color: T.t4, fontWeight: 400 }}>{t("trip_tracking.blank_pending")}</span></div><input value={f.rate_per_trip} onChange={e => upd("rate_per_trip", e.target.value.replace(/[^0-9.]/g, ""))} placeholder="800" style={inp} /></div>
       </div>
+      {/* Route sirf jagah aur samay hai (4 Oct 2026) — paisa gaadi ke rate card se. */}
+      {route && route.rate_per_trip != null && (
+        <div style={{ fontSize: 11, color: T.t4, marginTop: 5 }}>{t("trip_tracking.purana_rate_route", { rate: rs(route.rate_per_trip) })}</div>
+      )}
       {mapKm != null && (
         leadPct != null && Math.abs(leadPct) > 5
           ? <div style={{ fontSize: 11, color: T.amb, fontWeight: 700, marginTop: 5 }}>{t("trip_tracking.lead_farak", { map: mapKm.toFixed(2), lead: leadNum, pct: (leadPct > 0 ? "+" : "") + Math.round(leadPct) })}</div>
@@ -773,6 +810,9 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
 // ka bill kaise banta hai (Km rate / Per trip / Mahina). Nayi gaadi par
 // vendor aur billing dono zaroori — bina vendor ke trip ka bill kisi ke naam
 // nahi banta. Apni gaadi yahan nahi banti, wo Machinery → Fleet se aati hai.
+// 4 Oct 2026: "Apni gaadi" = poori Machinery fleet (?own=1 — Dumper / JCB
+// bhi), har gaadi ki capacity aur rate card, aur upar ek khoj (number /
+// vendor / capacity) + capacity ki chhanni. Trip gaadi ki capacity zaroori.
 const ownTruck = (r) => (r.trip_billing ? r.trip_billing === "own" : String(r.ownership || "").toLowerCase() === "owned");
 const truckVendorId = (r) => (r.vendor_id != null ? r.vendor_id : (r.default_vendor_id != null ? r.default_vendor_id : null));
 
@@ -780,19 +820,24 @@ function TrucksTab() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [parties, setParties] = useState([]);
-  // vendor id → rate card bana hai? (/trips/vendors). Purane server par null.
-  const [cardOf, setCardOf] = useState(null);
   const [form, setForm] = useState(null); // null | {} nayi | truck (edit)
+  const [q, setQ] = useState("");
+  const [fCap, setFCap] = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       api.get("/trips/trucks").catch(() => null),
-      api.get("/trips/vendors").catch(() => null),
+      api.get("/trips/trucks?own=1").catch(() => null),
     ]).then(([a, b]) => {
-      setList(a && a.success && Array.isArray(a.data) ? a.data : []);
-      const vs = b && b.success ? (Array.isArray(b.data) ? b.data : (b.data && b.data.vendors) || []) : null;
-      setCardOf(vs ? Object.fromEntries(vs.map(v => [String(v.id), !!v.has_rate_card])) : null);
+      const rows = a && a.success && Array.isArray(a.data) ? a.data : [];
+      const own = b && b.success && Array.isArray(b.data) ? b.data : null;
+      // Naya server: trip gaadi pehli list se, "Apni gaadi" poori fleet (?own=1).
+      // Purana server (is_trip_vehicle nahi bhejta): pehle jaisi ek list.
+      if (own && rows.some(r => r && "is_trip_vehicle" in r)) {
+        const seen = new Set();
+        setList([...rows.filter(r => r.is_trip_vehicle), ...own].filter(r => (seen.has(r.id) ? false : (seen.add(r.id), true))));
+      } else setList(rows);
       setLoading(false);
     });
   }, []);
@@ -804,8 +849,10 @@ function TrucksTab() {
   // Naya server har row par trip_billing bhejta hai — tabhi gaadi badalne
   // (PUT) ka raasta hai. Purane par Edit dikhana = 404.
   const newApi = list.some(r => r && "trip_billing" in r);
+  const caps = [...new Set(list.map(capOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const shown = list.filter(r => (!fCap || capOf(r) === fCap) && matchTruck(r, q));
   const gmap = {};
-  list.forEach(r => {
+  shown.forEach(r => {
     const own = ownTruck(r);
     const vid = own ? null : truckVendorId(r);
     const key = own ? "own" : (vid != null ? "v" + vid : "none");
@@ -818,7 +865,8 @@ function TrucksTab() {
   // Apni gaadi upar (app me bhi pehli chip wahi), phir vendor A–Z, bina vendor wali aakhir me.
   const rank = (g) => (g.own ? 0 : g.key === "none" ? 2 : 1);
   const groups = Object.values(gmap).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-  const COLS = "1.3fr 110px 1.3fr 100px 110px 90px";
+  const COLS = "1.2fr 90px 100px 1.1fr 1.1fr 80px 100px 64px";
+  const fltS = { ...inp, width: "auto", padding: "7px 10px", fontSize: 12 };
 
   return (
     <Panel>
@@ -828,44 +876,63 @@ function TrucksTab() {
       </div>
       {form && <TruckForm key={form.id || "new"} truck={form.id ? form : null} parties={parties}
         onCancel={() => setForm(null)} onSaved={() => { setForm(null); load(); }} />}
+      {!loading && list.length > 0 && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "9px 15px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("trip_tracking.gaadi_khoj_ph")}
+            style={{ ...fltS, flex: 1, minWidth: 220, borderColor: q ? T.ind : T.b1 }} />
+          {caps.length > 0 && (
+            <select value={fCap} onChange={e => setFCap(e.target.value)} style={{ ...fltS, borderColor: fCap ? T.ind : T.b1 }}>
+              <option value="">{t("trip_tracking.sab_capacity")}</option>
+              {caps.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
+          <span style={{ fontSize: 11.5, color: T.t4 }}>{t("trip_tracking.n_gaadi", { n: shown.length })}</span>
+          {(q || fCap) && <MiniBtn onClick={() => { setQ(""); setFCap(""); }}>{t("common.clear")}</MiniBtn>}
+        </div>
+      )}
       {loading && <div style={{ textAlign: "center", padding: "30px 0", color: T.t4, fontSize: 13 }}>{t("common.loading_2")}</div>}
       {!loading && list.length === 0 && <div style={{ textAlign: "center", padding: "34px 20px", color: T.t4, fontSize: 13 }}>{t("trip_tracking.abhi_koi_truck_nahi")}</div>}
-      {!loading && list.length > 0 && (
+      {!loading && list.length > 0 && shown.length === 0 && <div style={{ textAlign: "center", padding: "30px 20px", color: T.t4, fontSize: 13 }}>{t("trip_tracking.khoj_me_koi_gaadi_nahi")}</div>}
+      {!loading && shown.length > 0 && (
         <>
-          <THead cols={COLS} headers={[t("trip_tracking.hdr_registration"), t("trip_tracking.hdr_billing"), t("trip_tracking.hdr_driver"), t("trip_tracking.hdr_today_trips"), t("trip_tracking.hdr_status"), ""]} />
-          {groups.map(g => {
-            const needsCard = !g.own && g.vendor_id != null && g.rows.some(r => r.trip_billing === "km");
-            const hasCard = cardOf && cardOf[String(g.vendor_id)];
-            return (
-              <div key={g.key}>
-                <div style={{ padding: "8px 15px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{g.name}</span>
-                  <span style={{ fontSize: 11, color: T.t4 }}>{t("trip_tracking.n_gaadi", { n: g.rows.length })}</span>
-                  {/* Km wali gaadi ho aur vendor ka rate card na ho to uski trip ka amount RATE PENDING rehta hai. */}
-                  {cardOf && needsCard && (hasCard
-                    ? <Pill label={t("trip_tracking.rate_card_hai")} c={T.grn} bg={T.grnL} />
-                    : <Pill label={t("trip_tracking.rate_card_nahi")} c={T.amb} bg={T.ambL} />)}
-                  {g.own && <span style={{ fontSize: 10.5, color: T.t4 }}>{t("trip_tracking.apni_gaadi_fleet_se")}</span>}
-                </div>
-                {g.rows.map(item5 => {
-                  const bm = BILLING[item5.trip_billing] || BILLING[ownTruck(item5) ? "own" : "trip"];
-                  const canEdit = newApi && canEq("edit") && !ownTruck(item5);
-                  return (
-                    <div key={item5.id} style={{ display: "grid", gridTemplateColumns: COLS, padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>{item5.registration_no || item5.name}</span>
-                      <span><Pill label={bm.label} c={bm.c} bg={bm.bg} /></span>
-                      <span style={{ fontSize: 11.5, color: T.t2 }}>{item5.last_driver_name || "—"}</span>
-                      <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{Number(item5.today_trip_count || 0)}</span>
-                      <span>{Number(item5.open_trip_count) > 0 ? <Pill label={t("trip_tracking.in_transit")} c={T.amb} bg={T.ambL} /> : <Pill label={t("common.idle")} c={T.t3} bg={T.sltL} />}</span>
-                      {canEdit
-                        ? <button onClick={() => setForm(item5)} type="button" style={{ justifySelf: "end", fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button>
-                        : <span />}
-                    </div>
-                  );
-                })}
+          <THead cols={COLS} headers={[t("trip_tracking.hdr_registration"), t("trip_tracking.hdr_capacity"), t("trip_tracking.hdr_billing"), t("trip_tracking.hdr_rate_card"), t("trip_tracking.hdr_driver"), t("trip_tracking.hdr_today_trips"), t("trip_tracking.hdr_status"), ""]} />
+          {groups.map(g => (
+            <div key={g.key}>
+              <div style={{ padding: "8px 15px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{g.name}</span>
+                <span style={{ fontSize: 11, color: T.t4 }}>{t("trip_tracking.n_gaadi", { n: g.rows.length })}</span>
+                {g.own && <span style={{ fontSize: 10.5, color: T.t4 }}>{t("trip_tracking.apni_gaadi_fleet_bill_nahi")}</span>}
               </div>
-            );
-          })}
+              {g.rows.map(item5 => {
+                const own = ownTruck(item5);
+                const bm = BILLING[item5.trip_billing] || BILLING[own ? "own" : "trip"];
+                const canEdit = newApi && canEq("edit") && !own;
+                const cap = capOf(item5);
+                return (
+                  <div key={item5.id} style={{ display: "grid", gridTemplateColumns: COLS, padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: T.t1 }}>{item5.registration_no || item5.name}</span>
+                      {item5.registration_no && item5.name && item5.name !== item5.registration_no && <span style={{ display: "block", fontSize: 10.5, color: T.t4 }}>{item5.name}</span>}
+                    </span>
+                    <span style={{ fontSize: 11.5, color: cap ? T.t2 : T.t4, fontVariantNumeric: "tabular-nums" }}>{cap || "—"}</span>
+                    <span><Pill label={bm.label} c={bm.c} bg={bm.bg} /></span>
+                    <span style={{ minWidth: 0 }}>
+                      {own || item5.trip_billing === "monthly" ? <span style={{ fontSize: 11.5, color: T.t4 }}>—</span>
+                        : item5.rate_card_name ? <Pill label={item5.rate_card_name} c={T.ind} bg={T.indL} />
+                        : newApi && "rate_card_id" in item5 ? <Pill label={t("trip_tracking.card_nahi")} c={T.amb} bg={T.ambL} />
+                        : <span style={{ fontSize: 11.5, color: T.t4 }}>—</span>}
+                    </span>
+                    <span style={{ fontSize: 11.5, color: T.t2 }}>{item5.last_driver_name || "—"}</span>
+                    <span style={{ fontSize: 12, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{Number(item5.today_trip_count || 0)}</span>
+                    <span>{Number(item5.open_trip_count) > 0 ? <Pill label={t("trip_tracking.in_transit")} c={T.amb} bg={T.ambL} /> : <Pill label={t("common.idle")} c={T.t3} bg={T.sltL} />}</span>
+                    {canEdit
+                      ? <button onClick={() => setForm(item5)} type="button" style={{ justifySelf: "end", fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button>
+                      : <span />}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </>
       )}
     </Panel>
@@ -878,15 +945,23 @@ function TruckForm({ truck, parties, onCancel, onSaved }) {
   const [vendorId, setVendorId] = useState(truck && truckVendorId(truck) != null ? truckVendorId(truck) : "");
   // Nayi gaadi par billing khaali — km aur per-trip ka farak paisa badalta hai, aadmi khud chune.
   const [billing, setBilling] = useState(truck && ["km", "trip", "monthly"].includes(truck.trip_billing) ? truck.trip_billing : "");
+  const [capQty, setCapQty] = useState(truck && truck.capacity_qty != null ? String(Number(truck.capacity_qty)) : "");
+  const [capUnit, setCapUnit] = useState(truck && truck.capacity_unit ? truck.capacity_unit : "");
   const [driver, setDriver] = useState("");
   const [saving, setSaving] = useState(false);
+  const [tried, setTried] = useState(false);
+  const cap = capCheck(capQty, capUnit);
 
   const save = async () => {
+    setTried(true);
     if (!reg.trim()) { window.alert(t("trip_tracking.registration_number_daalein")); return; }
     if (!vendorId) { window.alert(t("trip_tracking.vendor_select_karo")); return; }
     if (!billing) { window.alert(t("trip_tracking.billing_select_karo")); return; }
+    // Capacity zaroori (4 Oct 2026) — rate card isi se gaadi chunta hai.
+    if (!cap.ok) { window.alert(t("trip_tracking.cap_zaroori")); return; }
     setSaving(true);
-    const body = { registration_no: reg.trim(), vendor_id: Number(vendorId), trip_billing: billing };
+    const body = { registration_no: reg.trim(), vendor_id: Number(vendorId), trip_billing: billing,
+      capacity_qty: cap.qty, capacity_unit: cap.unit };
     const r = editing
       ? await api.put("/trips/trucks/" + truck.id, body)
       // default_vendor_id + ownership purane server ke liye (wo vendor_id /
@@ -894,13 +969,15 @@ function TruckForm({ truck, parties, onCancel, onSaved }) {
       : await api.post("/trips/trucks", { ...body, default_vendor_id: Number(vendorId), ownership: "rented", ...(driver.trim() ? { driver_name: driver.trim() } : {}) });
     setSaving(false);
     if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.truck_save_fail")); return; }
+    // Billing / vendor badalne se card gaadi ke tareeke / vendor ka nahi raha — server ne hata diya.
+    if (r.data && r.data.rate_card_cleared) window.alert(t("trip_tracking.card_hat_gaya"));
     onSaved();
   };
 
   return (
     <div style={{ padding: "12px 15px", borderBottom: `1px solid ${T.b1}`, background: T.bluL + "55" }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 10 }}>{editing ? t("trip_tracking.edit_truck") : t("trip_tracking.add_truck")}</div>
-      <div style={{ display: "grid", gridTemplateColumns: editing ? "1.2fr 1.5fr 1.2fr" : "1.2fr 1.5fr 1.2fr 1.2fr", gap: 10, alignItems: "end" }}>
+      <div style={{ display: "grid", gridTemplateColumns: editing ? "1.1fr 1.4fr 1.1fr 1.2fr" : "1.1fr 1.4fr 1.1fr 1.2fr 1.1fr", gap: 10, alignItems: "end" }}>
         <div><div style={lblS}>{t("trip_tracking.registration_no")}</div><input value={reg} onChange={e => setReg(e.target.value)} placeholder={t("trip_tracking.cg04_ab_1234")} style={inp} /></div>
         <div><div style={lblS}>{t("trip_tracking.vendor_req")}</div>
           <select value={vendorId} onChange={e => setVendorId(e.target.value ? Number(e.target.value) : "")} style={inp}>
@@ -913,10 +990,16 @@ function TruckForm({ truck, parties, onCancel, onSaved }) {
             {["km", "trip", "monthly"].map(k => <option key={k} value={k}>{BILLING[k].label}</option>)}
           </select>
         </div>
+        <div><div style={lblS}>{t("trip_tracking.capacity_req")}</div>
+          <CapacityInput qty={capQty} unit={capUnit} onQty={setCapQty} onUnit={setCapUnit} bad={tried && !cap.ok} />
+        </div>
         {!editing && (
           <div><div style={lblS}>{t("trip_tracking.driver_optional")}</div><input value={driver} onChange={e => setDriver(e.target.value)} maxLength={80} style={inp} /></div>
         )}
       </div>
+      {editing && truck.capacity && truck.capacity_qty == null && (
+        <div style={{ fontSize: 11, color: T.t4, marginTop: 5 }}>{t("trip_tracking.cap_purana_likha", { text: truck.capacity })}</div>
+      )}
       {billing && <div style={{ fontSize: 11.5, color: T.t2, marginTop: 7 }}>{BILLING[billing].hint}</div>}
       <div style={{ fontSize: 11, color: T.t4, marginTop: 4 }}>{t("trip_tracking.apni_gaadi_fleet_se")}</div>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
@@ -928,14 +1011,18 @@ function TruckForm({ truck, parties, onCancel, onSaved }) {
 }
 
 // ── RATE CARD ────────────────────────────────────────────────────
-// Vendor-wise km rate card (3 Oct 2026). Ek vendor ka ek card; badlo to
-// wahi card badalta hai, aur har km trip apne waqt ke card ki copy
-// (rate_card_snap) rakhti hai — purani trip ka amount card badalne se nahi
+// Naam wala rate card (4 Oct 2026; pehle vendor-wise ek card tha). Card ka
+// naam ("500 cft", "Hyva — per trip"), Kiska ("Sab vendor" ya ek vendor),
+// capacity (marzi) aur tareeka: Km slab (1st km, 2nd km … isse aage har km —
+// wahi purana editor aur ganit) ya Per trip (fixed ₹). Save ke baad "Gaadi
+// select karo": card kis gaadi par lage — ek gaadi par ek hi card, doosre card
+// wali gaadi chuno to wo is card par aa jaati hai; card lagte hi gaadi ka
+// billing card ke tareeke ka. Har trip apne waqt ke card ki copy
+// (rate_card_snap) rakhti hai — card badalne se purani trip ka amount nahi
 // hilta. Prafull: "entry aur report non-technical aadmi ke liye aasaan ho" —
-// isliye rows waise hi bolti hain jaise vendor bolta hai ("1st km ₹ …,
-// 2nd km ₹ …"), aur saath me chalta-phirta example: km daalo, turant dikhe
-// kitna banega aur kaise. Badalne ka haq server ke rateGate jaisa —
-// Equipment Edit ya Finance Create.
+// isliye rows waise hi bolti hain jaise vendor bolta hai, aur saath me
+// chalta-phirta example. Badalne ka haq server ke rateGate jaisa — Equipment
+// Edit ya Finance Create.
 const canEditRates = () => canEq("edit") || canBillTrips();
 const RC_MAX = 20;
 const RC_ROUND = {
@@ -947,104 +1034,149 @@ const RC_METHOD = {
   slab:       { get label() { return t("trip_tracking.rc_m_slab"); }, get hint() { return t("trip_tracking.rc_m_slab_hint"); } },
   cumulative: { get label() { return t("trip_tracking.rc_m_cum"); },  get hint() { return t("trip_tracking.rc_m_cum_hint"); } },
 };
+const RT_KIND = {
+  km:   { get label() { return t("trip_tracking.rt_kind_km"); },   get hint() { return t("trip_tracking.rt_kind_km_hint"); } },
+  trip: { get label() { return t("trip_tracking.rt_kind_trip"); }, get hint() { return t("trip_tracking.rt_kind_trip_hint"); } },
+};
 // Server se aaya card — rates JSON text ho sakta hai, paisa string.
 const normCard = (c) => ({ ...c, rates: parseRates(c.rates), onward_rate: Number(c.onward_rate) || 0,
   method: c.method === "cumulative" ? "cumulative" : "slab", round_mode: RC_ROUND[c.round_mode] ? c.round_mode : "nearest" });
+const slabText = (c) => {
+  const shown = c.rates.slice(0, 5).map((r, i) => nth(i + 1) + " " + rs2(r));
+  if (c.rates.length > 5) shown.push("… +" + (c.rates.length - 5));
+  shown.push(t("trip_tracking.rc_onward_short", { rate: rs2(c.onward_rate) }));
+  return shown.join(" · ");
+};
+const kiskaOf = (c, parties) => (c.vendor_id == null ? t("trip_tracking.rt_sab_vendor")
+  : c.vendor_name || ((parties || []).find(p => String(p.id) === String(c.vendor_id)) || {}).name || "#" + c.vendor_id);
 
-function RateCardTab({ cards, onChange }) {
+function RateCardTab({ data, onChange }) {
   const [parties, setParties] = useState([]);
-  const [trucks, setTrucks] = useState([]);
-  const [edit, setEdit] = useState(null); // null | card (badlo) | { vendor_id? } (naya)
+  const [trucks, setTrucks] = useState(null);
+  const [edit, setEdit] = useState(null);   // null | {} naya | card (badlo) | { _seed } (purane vendor card se)
+  const [pick, setPick] = useState(null);   // card jiski gaadi select ho rahi hain
   const [busyId, setBusyId] = useState(null);
+  const [flash, setFlash] = useState("");
   const canRates = canEditRates();
 
-  useEffect(() => {
-    api.get("/finance/parties").then(r => setParties(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setParties([]));
+  const loadTrucks = useCallback(() => {
     api.get("/trips/trucks").then(r => setTrucks(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setTrucks([]));
   }, []);
+  useEffect(() => {
+    api.get("/finance/parties").then(r => setParties(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setParties([]));
+    loadTrucks();
+  }, [loadTrucks]);
 
-  const nameOf = (vid, given) => given || (parties.find(p => String(p.id) === String(vid)) || {}).name || "#" + vid;
-  const list = (cards || []).filter(c => Number(c.is_active) !== 0).map(normCard)
-    .sort((a, b) => nameOf(a.vendor_id, a.vendor_name).localeCompare(nameOf(b.vendor_id, b.vendor_name)));
-  const has = new Set(list.map(c => String(c.vendor_id)));
-  // Km wali gaadi hai par vendor ka card nahi — un trips ka amount RATE PENDING
-  // rehta hai aur bill me nahi aata. Ye pehle dikhna chahiye, bill ke din nahi.
-  const missing = {};
-  trucks.forEach(r => {
-    const vid = truckVendorId(r);
-    if (r.trip_billing === "km" && vid != null && !has.has(String(vid))) missing[vid] = r.vendor_name || r.default_vendor_name || nameOf(vid);
-  });
-  const missingIds = Object.keys(missing);
+  const list = (data.list || []).map(c => (c.kind === "trip" ? c : normCard(c)));
+  const legacy = (data.legacy || []).map(normCard);
+  const legacyVendor = new Set(legacy.map(c => String(c.vendor_id)));
+  // Trip gaadi jinpar card nahi aur billing Km / Per trip — Km ki trip RATE
+  // PENDING (vendor ka purana card ho to wo lagta hai), Per trip par route ka
+  // purana rate (ho to). Ye bill ke din nahi, pehle dikhna chahiye.
+  const noCard = (trucks || []).filter(r => r.is_trip_vehicle && ["km", "trip"].includes(r.trip_billing) && !r.rate_card_id);
 
   const remove = async (c) => {
-    if (!window.confirm(t("trip_tracking.rc_hatao_confirm", { vendor: nameOf(c.vendor_id, c.vendor_name) }))) return;
-    setBusyId(c.vendor_id);
-    const r = await api.del("/trips/rate-cards/" + c.vendor_id);
+    if (!window.confirm(t("trip_tracking.rt_hatao_confirm", { name: c.name, n: c.vehicles || 0 }))) return;
+    setBusyId(c.id); setFlash("");
+    const r = await api.del("/trips/rate-templates/" + c.id);
     setBusyId(null);
     if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.action_fail")); return; }
-    onChange();
+    onChange(); loadTrucks();
   };
-
-  const slabText = (c) => {
-    const shown = c.rates.slice(0, 5).map((r, i) => nth(i + 1) + " " + rs2(r));
-    if (c.rates.length > 5) shown.push("… +" + (c.rates.length - 5));
-    shown.push(t("trip_tracking.rc_onward_short", { rate: rs2(c.onward_rate) }));
-    return shown.join(" · ");
-  };
+  const fromLegacy = (c) => setEdit({ _seed: { name: kiskaOf(c, parties), vendor_id: c.vendor_id, kind: "km",
+    method: c.method, rates: c.rates, onward_rate: c.onward_rate, round_mode: c.round_mode, note: c.note } });
 
   return (
     <div>
-      {missingIds.length > 0 && (
+      {flash && <div style={{ border: `1px solid ${T.grn}44`, background: T.grnL, borderRadius: 8, padding: "9px 13px", marginBottom: 12, fontSize: 12, color: T.grn, fontWeight: 600 }}>{flash}</div>}
+
+      {noCard.length > 0 && (
         <div style={{ border: `1px solid ${T.ambM}`, background: T.ambL, borderRadius: 8, padding: "10px 13px", marginBottom: 12, fontSize: 12, color: T.t2, lineHeight: 1.55 }}>
-          <div style={{ fontWeight: 700, color: T.amb, marginBottom: 4 }}>{t("trip_tracking.rc_missing_title")}</div>
-          <div>{t("trip_tracking.rc_missing", { list: Object.values(missing).join(", ") })}</div>
-          {canRates && (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-              {missingIds.map(vid => (
-                <MiniBtn key={vid} onClick={() => setEdit({ vendor_id: Number(vid) })}>{t("trip_tracking.rc_banao_for", { vendor: missing[vid] })}</MiniBtn>
-              ))}
+          <div style={{ fontWeight: 700, color: T.amb, marginBottom: 4 }}>{t("trip_tracking.rt_card_nahi_n", { n: noCard.length })}</div>
+          <div>{t("trip_tracking.rt_card_nahi_hint")}</div>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
+            {noCard.slice(0, 24).map(r => (
+              <span key={r.id} style={{ fontSize: 11, fontWeight: 700, color: T.t1, background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 5, padding: "2px 7px" }}>
+                {r.registration_no || r.name}
+                <span style={{ fontWeight: 500, color: T.t4 }}> · {(BILLING[r.trip_billing] || {}).label}{r.trip_billing === "km" && legacyVendor.has(String(truckVendorId(r))) ? " · " + t("trip_tracking.rt_purana_card_lagta") : ""}</span>
+              </span>
+            ))}
+            {noCard.length > 24 && <span style={{ fontSize: 11, color: T.t4, alignSelf: "center" }}>+{noCard.length - 24}</span>}
+          </div>
+        </div>
+      )}
+
+      {legacy.length > 0 && (
+        <div style={{ border: `1px solid ${T.b1}`, background: T.surface, borderRadius: 8, padding: "10px 13px", marginBottom: 12, fontSize: 12, color: T.t2, lineHeight: 1.55 }}>
+          <div style={{ fontWeight: 700, color: T.t1, marginBottom: 2 }}>{t("trip_tracking.rt_purane_card")}</div>
+          <div style={{ color: T.t3, marginBottom: 6 }}>{t("trip_tracking.rt_purane_card_hint")}</div>
+          {legacy.map(c => (
+            <div key={c.vendor_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0", borderTop: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 700, color: T.t1, minWidth: 140 }}>{kiskaOf(c, parties)}</span>
+              <span style={{ flex: 1, fontSize: 11.5, color: T.t3, fontVariantNumeric: "tabular-nums" }}>{RC_METHOD[c.method].label} · {slabText(c)}</span>
+              {canRates && <MiniBtn onClick={() => { setPick(null); fromLegacy(c); }}>{t("trip_tracking.rt_isi_se_banao")}</MiniBtn>}
             </div>
-          )}
+          ))}
         </div>
       )}
 
       <Panel>
         <div style={{ padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.rc_list", { list: list.length ? `(${list.length})` : "" })}</span>
-          {canRates && <AddBtn label={t("trip_tracking.rc_new")} onClick={() => setEdit(e => (e && !e._edit ? null : {}))} />}
+          {canRates && <AddBtn label={t("trip_tracking.rc_new")} onClick={() => { setPick(null); setFlash(""); setEdit(e => (e && !e.id && !e._seed ? null : {})); }} />}
         </div>
 
         {edit && (
-          <RateCardEditor key={(edit._edit ? "e-" : "n-") + (edit.vendor_id || "")} card={edit} cards={list} parties={parties}
-            onCancel={() => setEdit(null)} onSaved={() => { setEdit(null); onChange(); }} />
+          <RateCardEditor key={edit.id ? "e-" + edit.id : (edit._seed ? "s-" + edit._seed.vendor_id : "n")} card={edit} parties={parties}
+            onCancel={() => setEdit(null)}
+            onSaved={(saved, isNew) => {
+              setEdit(null); onChange();
+              if (saved && saved.trips_updated) setFlash(t("trip_tracking.rt_saved_trips", { name: saved.name, n: saved.trips_updated }));
+              // Naya card bana — ab uski gaadi select karo.
+              if (isNew && saved) setPick(saved);
+            }} />
+        )}
+        {pick && (
+          <VehiclePicker key={"p-" + pick.id} tpl={pick} trucks={trucks} parties={parties}
+            onCancel={() => setPick(null)}
+            onSaved={(res) => {
+              setFlash(t("trip_tracking.gs_saved", { name: pick.name, n: res.assigned || 0, trips: res.trips_updated || 0 }));
+              setPick(null); onChange(); loadTrucks();
+            }} />
         )}
 
-        {list.length === 0 && !edit && (
+        {list.length === 0 && !edit && !pick && (
           <div style={{ textAlign: "center", padding: "34px 20px", color: T.t4, fontSize: 13, lineHeight: 1.6 }}>
-            {canRates ? t("trip_tracking.rc_empty_can") : t("trip_tracking.rc_empty")}
+            {canRates ? t("trip_tracking.rt_empty_can") : t("trip_tracking.rc_empty")}
           </div>
         )}
         {list.length > 0 && (
           <>
-            <THead cols="1.3fr 2.2fr 130px 120px" headers={[t("common.vendor"), t("trip_tracking.rc_hdr_rates"), t("trip_tracking.rc_hdr_example"), ""]} />
+            <THead cols="1.3fr 2fr 90px 200px" headers={[t("trip_tracking.rt_hdr_card"), t("trip_tracking.rt_hdr_rate"), t("trip_tracking.rt_hdr_gaadi"), ""]} />
             {list.map(c => (
-              <div key={c.vendor_id} style={{ display: "grid", gridTemplateColumns: "1.3fr 2.2fr 130px 120px", padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 8 }}>
+              <div key={c.id} style={{ display: "grid", gridTemplateColumns: "1.3fr 2fr 90px 200px", padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 8 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nameOf(c.vendor_id, c.vendor_name)}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
+                  <div style={{ fontSize: 11, color: T.t3, marginTop: 1 }}>{kiskaOf(c, parties)}</div>
                   <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
-                    <Pill label={RC_METHOD[c.method].label} c={T.ind} bg={T.indL} />
-                    <Pill label={RC_ROUND[c.round_mode].label} c={T.t3} bg={T.sltL} />
+                    <Pill label={RT_KIND[c.kind === "trip" ? "trip" : "km"].label} c={T.ind} bg={T.indL} />
+                    {c.capacity && <Pill label={c.capacity} c={T.t3} bg={T.sltL} />}
                   </div>
                 </div>
                 <div style={{ fontSize: 11.5, color: T.t2, lineHeight: 1.5, fontVariantNumeric: "tabular-nums" }}>
-                  {slabText(c)}
+                  {c.kind === "trip"
+                    ? <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.rt_per_trip_amt", { amt: rs2(c.trip_rate) })}</span>
+                    : <>
+                        {slabText(c)}
+                        <div style={{ fontSize: 10.5, color: T.t4 }}>{RC_METHOD[c.method].label} · {RC_ROUND[c.round_mode].label} · {t("trip_tracking.rc_ex_10", { amt: rs2(rcAmount(c, 10)) })}</div>
+                      </>}
                   {c.note && <div style={{ fontSize: 10.5, color: T.t4 }}>{c.note}</div>}
                 </div>
-                {/* Ek nazar me andaza — 10 km par kitna banta hai. */}
-                <span style={{ fontSize: 12, color: T.t1, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{t("trip_tracking.rc_ex_10", { amt: rs2(rcAmount(c, 10)) })}</span>
-                <span style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                  {canRates && <button type="button" onClick={() => setEdit({ ...c, _edit: true })} style={{ fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button>}
-                  {canRates && <button type="button" disabled={busyId === c.vendor_id} onClick={() => remove(c)} style={{ fontSize: 11.5, color: T.red, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("trip_tracking.rc_hatao")}</button>}
+                <span style={{ fontSize: 12, fontWeight: 700, color: Number(c.vehicles) ? T.t1 : T.t4, fontVariantNumeric: "tabular-nums" }}>{t("trip_tracking.n_gaadi", { n: Number(c.vehicles) || 0 })}</span>
+                <span style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  {canRates && <button type="button" onClick={() => { setPick(null); setFlash(""); setEdit(c); }} style={{ fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button>}
+                  {canRates && <button type="button" disabled={!trucks} onClick={() => { setEdit(null); setFlash(""); setPick(c); }} style={{ fontSize: 11.5, color: T.ind, background: "none", border: "none", cursor: "pointer", fontWeight: 700, fontFamily: "inherit" }}>{t("trip_tracking.gs_button")}</button>}
+                  {canRates && <button type="button" disabled={busyId === c.id} onClick={() => remove(c)} style={{ fontSize: 11.5, color: T.red, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("trip_tracking.rc_hatao")}</button>}
                 </span>
               </div>
             ))}
@@ -1066,44 +1198,37 @@ function RupeeInput({ value, onChange, bad, autoFocus }) {
   );
 }
 
-function RateCardEditor({ card, cards, parties, onCancel, onSaved }) {
-  const editing = !!(card && card._edit);
-  const from = editing ? card : null;
-  const [vendorId, setVendorId] = useState(card && card.vendor_id != null ? String(card.vendor_id) : "");
-  const [method, setMethod] = useState(from ? from.method : "slab");
-  const [rates, setRates] = useState(from && from.rates.length ? from.rates.map(String) : ["", "", ""]);
-  const [onward, setOnward] = useState(from ? String(from.onward_rate) : "");
-  const [round, setRound] = useState(from ? from.round_mode : "nearest");
+function RateCardEditor({ card, parties, onCancel, onSaved }) {
+  const editing = !!(card && card.id);
+  const seed = card && card._seed ? card._seed : null;
+  const from = editing ? card : seed;
+  const [name, setName] = useState(from && from.name ? from.name : "");
+  const [vendorId, setVendorId] = useState(from && from.vendor_id != null ? String(from.vendor_id) : "");
+  const [kind, setKind] = useState(from && from.kind === "trip" ? "trip" : "km");
+  const [capQty, setCapQty] = useState(editing && card.capacity_qty != null ? String(Number(card.capacity_qty)) : "");
+  const [capUnit, setCapUnit] = useState(editing && card.capacity_unit ? card.capacity_unit : "");
+  const kmFrom = from && from.kind !== "trip" ? from : null;
+  const [method, setMethod] = useState(kmFrom ? kmFrom.method : "slab");
+  const [rates, setRates] = useState(kmFrom && kmFrom.rates && kmFrom.rates.length ? kmFrom.rates.map(String) : ["", "", ""]);
+  const [onward, setOnward] = useState(kmFrom && kmFrom.onward_rate != null ? String(kmFrom.onward_rate) : "");
+  const [round, setRound] = useState(kmFrom && RC_ROUND[kmFrom.round_mode] ? kmFrom.round_mode : "nearest");
+  const [tripRate, setTripRate] = useState(from && from.kind === "trip" && from.trip_rate != null ? String(from.trip_rate) : "");
   const [note, setNote] = useState(from ? from.note || "" : "");
   const [exKm, setExKm] = useState("9.7");
+  const [exTrips, setExTrips] = useState("10");
   const [focusIdx, setFocusIdx] = useState(null);
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Naye card me aisa vendor chuna jiska card pehle se hai → wahi card khol do
-  // (ek vendor = ek card; save karne par wahi badlega, doosra nahi banega).
-  // Us card se bhare khane, phir bina card wala vendor chuna → khane khaali,
-  // warna pichhle vendor ke rate chupchaap naye vendor par save ho jaate.
-  const [loadedFrom, setLoadedFrom] = useState(null);
-  const existing = !editing && vendorId ? cards.find(c => String(c.vendor_id) === String(vendorId)) : null;
-  const pickVendor = (v) => {
-    setVendorId(v);
-    const ex = v ? cards.find(c => String(c.vendor_id) === String(v)) : null;
-    if (ex) {
-      setMethod(ex.method); setRates(ex.rates.length ? ex.rates.map(String) : [""]);
-      setOnward(String(ex.onward_rate)); setRound(ex.round_mode); setNote(ex.note || "");
-      setLoadedFrom(v);
-    } else if (loadedFrom) {
-      setMethod("slab"); setRates(["", "", ""]); setOnward(""); setRound("nearest"); setNote("");
-      setLoadedFrom(null);
-    }
-  };
-
   const numOk = (v) => v !== "" && v != null && Number.isFinite(Number(v)) && Number(v) >= 0;
+  const cap = capCheck(capQty, capUnit);
   const badRate = rates.map(r => !numOk(r));
   const badOnward = !numOk(onward);
+  const badTrip = !numOk(tripRate);
   const firstBad = badRate.indexOf(true);
-  const err = !vendorId ? t("trip_tracking.rc_err_vendor")
+  const err = !name.trim() ? t("trip_tracking.rt_err_naam")
+    : cap.bad ? t("trip_tracking.cap_galat")
+    : kind === "trip" ? (badTrip ? t("trip_tracking.rt_err_trip_rate") : null)
     : firstBad >= 0 ? t("trip_tracking.rc_err_rate", { nth: nth(firstBad + 1) })
     : badOnward ? t("trip_tracking.rc_err_onward") : null;
   const complete = firstBad < 0 && !badOnward;
@@ -1138,143 +1263,303 @@ function RateCardEditor({ card, cards, parties, onCancel, onSaved }) {
       formula = parts.join(" + ");
     }
   }
+  const exTripN = exTrips !== "" && Number.isFinite(Number(exTrips)) && Number(exTrips) >= 0 ? Number(exTrips) : null;
 
   const save = async () => {
     setTried(true);
     if (err) return;
     setSaving(true);
-    const r = await api.put("/trips/rate-cards/" + vendorId, {
-      method, rates: rates.map(Number), onward_rate: Number(onward), round_mode: round, note: note.trim() || null,
-    });
+    const body = {
+      name: name.trim(), vendor_id: vendorId ? Number(vendorId) : null, kind,
+      capacity_qty: cap.ok ? cap.qty : null, capacity_unit: cap.ok ? cap.unit : null, note: note.trim() || null,
+      ...(kind === "km"
+        ? { method, rates: rates.map(Number), onward_rate: Number(onward), round_mode: round }
+        : { trip_rate: Number(tripRate) }),
+    };
+    const r = editing ? await api.put("/trips/rate-templates/" + card.id, body) : await api.post("/trips/rate-templates", body);
     setSaving(false);
     if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.save_fail")); return; }
-    onSaved();
+    onSaved(r.data, !editing);
   };
 
   const optCard = (on) => ({ display: "flex", gap: 9, alignItems: "flex-start", padding: "9px 11px", borderRadius: 8, cursor: "pointer",
     border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface, flex: "1 1 0", minWidth: 150 });
   const secT = { fontSize: 11.5, fontWeight: 700, color: T.t2, margin: "14px 0 6px" };
-  const vendorName = (parties.find(p => String(p.id) === String(vendorId)) || {}).name || (card && card.vendor_name) || (vendorId ? "#" + vendorId : "");
 
   return (
     <div style={{ padding: "14px 15px", borderBottom: `1px solid ${T.b1}`, background: T.bluL + "55" }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 10 }}>
-        {editing ? t("trip_tracking.rc_edit_title", { vendor: vendorName }) : t("trip_tracking.rc_new")}
+        {editing ? t("trip_tracking.rt_edit_title", { name: card.name }) : t("trip_tracking.rc_new")}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(250px, 1fr)", gap: 18, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1.3fr 1fr", gap: 10 }}>
+        <div><div style={lblS}>{t("trip_tracking.rt_naam_req")}</div>
+          <input value={name} onChange={e => setName(e.target.value)} maxLength={80} placeholder={t("trip_tracking.rt_naam_ph")}
+            style={{ ...inp, borderColor: tried && !name.trim() ? T.red : T.b1 }} /></div>
+        <div><div style={lblS}>{t("trip_tracking.rt_kiska")}</div>
+          <select value={vendorId} onChange={e => setVendorId(e.target.value)} style={inp}>
+            <option value="">{t("trip_tracking.rt_sab_vendor")}</option>
+            {parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select></div>
+        <div><div style={lblS}>{t("trip_tracking.rt_capacity_opt")}</div>
+          <CapacityInput qty={capQty} unit={capUnit} onQty={setCapQty} onUnit={setCapUnit} bad={tried && cap.bad} /></div>
+      </div>
+      <div style={{ fontSize: 11, color: T.t4, marginTop: 5 }}>{vendorId ? t("trip_tracking.rt_kiska_vendor_hint") : t("trip_tracking.rt_kiska_sab_hint")}</div>
+
+      <div style={secT}>{t("trip_tracking.rt_tareeka")}</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {["km", "trip"].map(k => (
+          <label key={k} style={optCard(kind === k)}>
+            <input type="radio" name="rt_kind" checked={kind === k} onChange={() => setKind(k)} style={{ marginTop: 2, accentColor: T.ind }} />
+            <span>
+              <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{RT_KIND[k].label}</span>
+              <span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 1, lineHeight: 1.45 }}>{RT_KIND[k].hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(250px, 1fr)", gap: 18, alignItems: "start", marginTop: 4 }}>
         {/* ── Baayan: card bharna ── */}
         <div>
-          <div style={lblS}>{t("trip_tracking.vendor_req")}</div>
-          {editing ? (
-            <input value={vendorName} readOnly disabled style={{ ...inp, background: T.surfaceB, color: T.t2 }} />
+          {kind === "trip" ? (
+            <>
+              <div style={secT}>{t("trip_tracking.rt_per_trip_rate")}</div>
+              <RupeeInput value={tripRate} bad={tried && badTrip} onChange={setTripRate} />
+              <div style={{ fontSize: 11, color: T.t4, marginTop: 5 }}>{t("trip_tracking.rt_per_trip_hint")}</div>
+            </>
           ) : (
-            <select value={vendorId} onChange={e => pickVendor(e.target.value)}
-              style={{ ...inp, borderColor: tried && !vendorId ? T.red : T.b1 }}>
-              <option value="">{t("trip_tracking.vendor_chuniye")}</option>
-              {parties.map(p => (
-                <option key={p.id} value={p.id}>{p.name}{cards.some(c => String(c.vendor_id) === String(p.id)) ? " — " + t("trip_tracking.rc_card_bana_hai") : ""}</option>
-              ))}
-            </select>
-          )}
-          {existing && <div style={{ fontSize: 11, color: T.amb, marginTop: 5, fontWeight: 600 }}>{t("trip_tracking.rc_pehle_se_hai")}</div>}
+            <>
+              <div style={secT}>{t("trip_tracking.rc_method")}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {["slab", "cumulative"].map(k => (
+                  <label key={k} style={optCard(method === k)}>
+                    <input type="radio" name="rc_method" checked={method === k} onChange={() => setMethod(k)} style={{ marginTop: 2, accentColor: T.ind }} />
+                    <span>
+                      <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{RC_METHOD[k].label}</span>
+                      <span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 1, lineHeight: 1.45 }}>{RC_METHOD[k].hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
 
-          <div style={secT}>{t("trip_tracking.rc_method")}</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {["slab", "cumulative"].map(k => (
-              <label key={k} style={optCard(method === k)}>
-                <input type="radio" name="rc_method" checked={method === k} onChange={() => setMethod(k)} style={{ marginTop: 2, accentColor: T.ind }} />
-                <span>
-                  <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{RC_METHOD[k].label}</span>
-                  <span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 1, lineHeight: 1.45 }}>{RC_METHOD[k].hint}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-
-          <div style={secT}>{t("trip_tracking.rc_rates")}</div>
-          <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, background: T.surface, overflow: "hidden" }}>
-            {rates.map((r, i) => {
-              const last = i === rates.length - 1;
-              return (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: `1px solid ${T.b1}` }}>
-                  <span style={{ width: 120, fontSize: 12.5, fontWeight: 600, color: T.t2 }}>{t("trip_tracking.rc_nth_km", { nth: nth(i + 1) })}</span>
-                  <RupeeInput value={r} bad={tried && badRate[i]} autoFocus={i === focusIdx}
-                    onChange={v => setRates(rs => rs.map((x, j) => (j === i ? v : x)))} />
-                  <span style={{ flex: 1 }} />
-                  {last && rates.length > 1 && (
-                    <button type="button" title={t("trip_tracking.rc_remove_km")} onClick={() => { setRates(rs => rs.slice(0, -1)); setFocusIdx(null); }}
-                      style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer", fontSize: 13, lineHeight: 1, fontFamily: "inherit" }}>✕</button>
-                  )}
+              <div style={secT}>{t("trip_tracking.rc_rates")}</div>
+              <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, background: T.surface, overflow: "hidden" }}>
+                {rates.map((r, i) => {
+                  const last = i === rates.length - 1;
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: `1px solid ${T.b1}` }}>
+                      <span style={{ width: 120, fontSize: 12.5, fontWeight: 600, color: T.t2 }}>{t("trip_tracking.rc_nth_km", { nth: nth(i + 1) })}</span>
+                      <RupeeInput value={r} bad={tried && badRate[i]} autoFocus={i === focusIdx}
+                        onChange={v => setRates(rs => rs.map((x, j) => (j === i ? v : x)))} />
+                      <span style={{ flex: 1 }} />
+                      {last && rates.length > 1 && (
+                        <button type="button" title={t("trip_tracking.rc_remove_km")} onClick={() => { setRates(rs => rs.slice(0, -1)); setFocusIdx(null); }}
+                          style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer", fontSize: 13, lineHeight: 1, fontFamily: "inherit" }}>✕</button>
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={{ padding: "7px 12px", borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 10 }}>
+                  <button type="button" disabled={rates.length >= RC_MAX}
+                    onClick={() => { setFocusIdx(rates.length); setRates(rs => [...rs, ""]); }}
+                    style={{ padding: "6px 12px", borderRadius: 7, border: `1.5px dashed ${rates.length >= RC_MAX ? T.b1 : T.ind}`, background: T.surface,
+                      color: rates.length >= RC_MAX ? T.t4 : T.ind, fontSize: 12, fontWeight: 700, cursor: rates.length >= RC_MAX ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+                    {t("trip_tracking.rc_add_km")}
+                  </button>
+                  {rates.length >= RC_MAX && <span style={{ fontSize: 11, color: T.t4 }}>{t("trip_tracking.rc_max", { n: RC_MAX })}</span>}
                 </div>
-              );
-            })}
-            <div style={{ padding: "7px 12px", borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 10 }}>
-              <button type="button" disabled={rates.length >= RC_MAX}
-                onClick={() => { setFocusIdx(rates.length); setRates(rs => [...rs, ""]); }}
-                style={{ padding: "6px 12px", borderRadius: 7, border: `1.5px dashed ${rates.length >= RC_MAX ? T.b1 : T.ind}`, background: T.surface,
-                  color: rates.length >= RC_MAX ? T.t4 : T.ind, fontSize: 12, fontWeight: 700, cursor: rates.length >= RC_MAX ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
-                {t("trip_tracking.rc_add_km")}
-              </button>
-              {rates.length >= RC_MAX && <span style={{ fontSize: 11, color: T.t4 }}>{t("trip_tracking.rc_max", { n: RC_MAX })}</span>}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: T.surfaceB }}>
-              <span style={{ width: 120 }}>
-                <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.rc_onward")}</span>
-                <span style={{ display: "block", fontSize: 10.5, color: T.t4 }}>{t("trip_tracking.rc_onward_from", { nth: nth(rates.length + 1) })}</span>
-              </span>
-              <RupeeInput value={onward} bad={tried && badOnward} onChange={setOnward} />
-            </div>
-          </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: T.surfaceB }}>
+                  <span style={{ width: 120 }}>
+                    <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.rc_onward")}</span>
+                    <span style={{ display: "block", fontSize: 10.5, color: T.t4 }}>{t("trip_tracking.rc_onward_from", { nth: nth(rates.length + 1) })}</span>
+                  </span>
+                  <RupeeInput value={onward} bad={tried && badOnward} onChange={setOnward} />
+                </div>
+              </div>
 
-          <div style={secT}>{t("trip_tracking.rc_round")}</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {Object.keys(RC_ROUND).map(k => (
-              <label key={k} style={optCard(round === k)}>
-                <input type="radio" name="rc_round" checked={round === k} onChange={() => setRound(k)} style={{ marginTop: 2, accentColor: T.ind }} />
-                <span>
-                  <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{RC_ROUND[k].label}</span>
-                  <span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 1, fontVariantNumeric: "tabular-nums" }}>{RC_ROUND[k].hint}</span>
-                </span>
-              </label>
-            ))}
-          </div>
+              <div style={secT}>{t("trip_tracking.rc_round")}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {Object.keys(RC_ROUND).map(k => (
+                  <label key={k} style={optCard(round === k)}>
+                    <input type="radio" name="rc_round" checked={round === k} onChange={() => setRound(k)} style={{ marginTop: 2, accentColor: T.ind }} />
+                    <span>
+                      <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{RC_ROUND[k].label}</span>
+                      <span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 1, fontVariantNumeric: "tabular-nums" }}>{RC_ROUND[k].hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
 
           <div style={secT}>{t("trip_tracking.rc_note")}</div>
           <input value={note} onChange={e => setNote(e.target.value)} maxLength={300} placeholder={t("trip_tracking.rc_note_ph")} style={inp} />
         </div>
 
         {/* ── Daayan: chalta-phirta example ── */}
-        <div style={{ border: `1px solid ${T.b1}`, borderRadius: 10, background: T.surface, padding: 14, position: "sticky", top: 8 }}>
+        <div style={{ border: `1px solid ${T.b1}`, borderRadius: 10, background: T.surface, padding: 14, position: "sticky", top: 8, marginTop: 14 }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.rc_ex_title")}</div>
-          <div style={{ fontSize: 11, color: T.t4, margin: "2px 0 10px", lineHeight: 1.45 }}>{t("trip_tracking.rc_ex_sub")}</div>
-          <div style={lblS}>{t("trip_tracking.rc_ex_km")}</div>
-          <input value={exKm} inputMode="decimal" onChange={e => setExKm(e.target.value.replace(/[^0-9.]/g, ""))} style={{ ...inp, width: 120, fontVariantNumeric: "tabular-nums" }} />
-          <div style={{ marginTop: 12, fontSize: 12.5, color: T.t2, lineHeight: 1.7, fontVariantNumeric: "tabular-nums" }}>
-            {!exOk && <div style={{ color: T.t4 }}>{t("trip_tracking.rc_ex_km_daalo")}</div>}
-            {exOk && !complete && <div style={{ color: T.amb, fontWeight: 600 }}>{t("trip_tracking.rc_ex_fill")}</div>}
-            {exOk && complete && (
-              <>
-                <div>{t("trip_tracking.rc_ex_round", { km: fmtKm(Number(exKm)), k: fmtKm(K), how: RC_ROUND[round].how })}</div>
-                {K > 0
-                  ? <div style={{ color: T.t1 }}>{formula} = <b>{rs2(amt)}</b></div>
-                  : <div style={{ color: T.t4 }}>{t("trip_tracking.rc_ex_zero")}</div>}
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.b1}`, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-                  <span style={{ fontSize: 11.5, color: T.t3, fontWeight: 600 }}>{t("trip_tracking.rc_ex_banega", { method: RC_METHOD[method].label })}</span>
-                  <span style={{ fontSize: 20, fontWeight: 800, color: T.ind }}>{rs2(amt)}</span>
-                </div>
-                {K > 0 && other !== amt && (
-                  <div style={{ fontSize: 11, color: T.t4, marginTop: 4 }}>{t("trip_tracking.rc_ex_other", { method: RC_METHOD[method === "slab" ? "cumulative" : "slab"].label, amt: rs2(other) })}</div>
+          <div style={{ fontSize: 11, color: T.t4, margin: "2px 0 10px", lineHeight: 1.45 }}>{kind === "trip" ? t("trip_tracking.rt_ex_trip_sub") : t("trip_tracking.rc_ex_sub")}</div>
+          {kind === "trip" ? (
+            <>
+              <div style={lblS}>{t("trip_tracking.rt_ex_trips")}</div>
+              <input value={exTrips} inputMode="numeric" onChange={e => setExTrips(e.target.value.replace(/[^0-9]/g, ""))} style={{ ...inp, width: 120, fontVariantNumeric: "tabular-nums" }} />
+              <div style={{ marginTop: 12, fontSize: 12.5, color: T.t2, lineHeight: 1.7, fontVariantNumeric: "tabular-nums" }}>
+                {badTrip || exTripN == null
+                  ? <div style={{ color: T.amb, fontWeight: 600 }}>{t("trip_tracking.rt_ex_trip_fill")}</div>
+                  : <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                      <span>{t("trip_tracking.rt_ex_trip_line", { n: exTripN, rate: rs2(tripRate) })}</span>
+                      <span style={{ fontSize: 20, fontWeight: 800, color: T.ind }}>{rs2(r2(exTripN * Number(tripRate)))}</span>
+                    </div>}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={lblS}>{t("trip_tracking.rc_ex_km")}</div>
+              <input value={exKm} inputMode="decimal" onChange={e => setExKm(e.target.value.replace(/[^0-9.]/g, ""))} style={{ ...inp, width: 120, fontVariantNumeric: "tabular-nums" }} />
+              <div style={{ marginTop: 12, fontSize: 12.5, color: T.t2, lineHeight: 1.7, fontVariantNumeric: "tabular-nums" }}>
+                {!exOk && <div style={{ color: T.t4 }}>{t("trip_tracking.rc_ex_km_daalo")}</div>}
+                {exOk && !complete && <div style={{ color: T.amb, fontWeight: 600 }}>{t("trip_tracking.rc_ex_fill")}</div>}
+                {exOk && complete && (
+                  <>
+                    <div>{t("trip_tracking.rc_ex_round", { km: fmtKm(Number(exKm)), k: fmtKm(K), how: RC_ROUND[round].how })}</div>
+                    {K > 0
+                      ? <div style={{ color: T.t1 }}>{formula} = <b>{rs2(amt)}</b></div>
+                      : <div style={{ color: T.t4 }}>{t("trip_tracking.rc_ex_zero")}</div>}
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.b1}`, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ fontSize: 11.5, color: T.t3, fontWeight: 600 }}>{t("trip_tracking.rc_ex_banega", { method: RC_METHOD[method].label })}</span>
+                      <span style={{ fontSize: 20, fontWeight: 800, color: T.ind }}>{rs2(amt)}</span>
+                    </div>
+                    {K > 0 && other !== amt && (
+                      <div style={{ fontSize: 11, color: T.t4, marginTop: 4 }}>{t("trip_tracking.rc_ex_other", { method: RC_METHOD[method === "slab" ? "cumulative" : "slab"].label, amt: rs2(other) })}</div>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {tried && err && <div style={{ marginTop: 12, fontSize: 12, color: T.red, fontWeight: 600 }}>{err}</div>}
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", marginTop: 12 }}>
+        {!editing && <span style={{ fontSize: 11, color: T.t4, marginRight: "auto" }}>{t("trip_tracking.rt_save_ke_baad_gaadi")}</span>}
         <button onClick={onCancel} type="button" style={{ padding: "8px 14px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
         <button onClick={save} disabled={saving} type="button" style={{ padding: "8px 18px", borderRadius: 7, border: "none", background: saving ? T.b1 : T.ind, color: saving ? T.t4 : "white", fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit" }}>{saving ? t("common.saving_2") : t("trip_tracking.rc_save")}</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Gaadi select karo ─────────────────────────────────────────────
+// Card kis gaadi par lage. Sirf chalu trip gaadi; vendor wale card par sirf
+// usi vendor ki. Chhanni: vendor (Sab vendor card par), capacity (card ki
+// capacity pehle se chuni), aur khoj. Save se pehle server se poochte hain
+// (preview) — kaunsi gaadi kis card se aa rahi hai, kiska billing badlega
+// (Mahina wali gaadi bhi), kaunsi hat rahi hai — aur wahi dikha kar pakka.
+function VehiclePicker({ tpl, trucks, parties, onCancel, onSaved }) {
+  const kindLbl = RT_KIND[tpl.kind === "trip" ? "trip" : "km"].label;
+  const cands = (trucks || []).filter(r => r.is_trip_vehicle && Number(r.is_active) !== 0
+    && (tpl.vendor_id == null || String(truckVendorId(r)) === String(tpl.vendor_id)))
+    .sort((a, b) => String(a.registration_no || a.name || "").localeCompare(String(b.registration_no || b.name || "")));
+  const [sel, setSel] = useState(() => new Set(cands.filter(r => Number(r.rate_card_id) === Number(tpl.id)).map(r => r.id)));
+  const caps = [...new Set(cands.map(capOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const [fCap, setFCap] = useState(tpl.capacity && caps.includes(tpl.capacity) ? tpl.capacity : "");
+  const [fVendor, setFVendor] = useState("");
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const vendorOpts = tpl.vendor_id == null
+    ? [...new Map(cands.filter(r => truckVendorId(r) != null).map(r => [String(truckVendorId(r)), r.vendor_name || r.default_vendor_name || "#" + truckVendorId(r)])).entries()]
+      .sort((a, b) => a[1].localeCompare(b[1]))
+    : [];
+  const hasNoVendor = tpl.vendor_id == null && cands.some(r => truckVendorId(r) == null);
+  const shown = cands.filter(r => (!fCap || capOf(r) === fCap)
+    && (!fVendor || (fVendor === "none" ? truckVendorId(r) == null : String(truckVendorId(r)) === fVendor))
+    && matchTruck(r, q));
+  const allOn = shown.length > 0 && shown.every(r => sel.has(r.id));
+  const toggle = (id) => setSel(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toggleAll = () => setSel(s => { const n = new Set(s); shown.forEach(r => (allOn ? n.delete(r.id) : n.add(r.id))); return n; });
+  const regOf = (id) => { const r = (trucks || []).find(x => x.id === id); return r ? (r.registration_no || r.name) : "#" + id; };
+
+  const save = async () => {
+    const ids = [...sel];
+    setBusy(true);
+    const p = await api.put(`/trips/rate-templates/${tpl.id}/vehicles?preview=1`, { vehicle_ids: ids });
+    if (!p || p.success === false) { setBusy(false); window.alert((p && p.message) || t("trip_tracking.save_fail")); return; }
+    const d = p.data || {};
+    const lines = [];
+    (d.moved_from || []).forEach(m => lines.push(t("trip_tracking.gs_moved_line", { reg: regOf(m.vehicle_id), name: m.from_name || "—" })));
+    const mon = (d.billing_changes || []).filter(b => b.from === "monthly");
+    const otherB = (d.billing_changes || []).filter(b => b.from !== "monthly");
+    if (mon.length) lines.push(t("trip_tracking.gs_monthly_line", { list: mon.map(b => regOf(b.vehicle_id)).join(", "), kind: kindLbl }));
+    if (otherB.length) lines.push(t("trip_tracking.gs_billing_line", { n: otherB.length, kind: kindLbl }));
+    if (d.removed) lines.push(t("trip_tracking.gs_removed_line", { n: d.removed }));
+    if (lines.length && !window.confirm(t("trip_tracking.gs_confirm_title", { name: tpl.name }) + "\n\n" + lines.join("\n") + "\n\n" + t("trip_tracking.gs_confirm_q"))) {
+      setBusy(false); return;
+    }
+    const r = await api.put(`/trips/rate-templates/${tpl.id}/vehicles`, { vehicle_ids: ids });
+    setBusy(false);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.save_fail")); return; }
+    onSaved(r.data || {});
+  };
+
+  const fltS = { ...inp, width: "auto", padding: "7px 10px", fontSize: 12 };
+  return (
+    <div style={{ padding: "14px 15px", borderBottom: `1px solid ${T.b1}`, background: T.indL + "66" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.gs_title", { name: tpl.name })}</div>
+      <div style={{ fontSize: 11, color: T.t3, marginTop: 2, lineHeight: 1.5 }}>
+        {kiskaOf(tpl, parties)} · {kindLbl}{tpl.capacity ? " · " + tpl.capacity : ""} — {t("trip_tracking.gs_hint", { kind: kindLbl })}
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "10px 0 8px", flexWrap: "wrap" }}>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("trip_tracking.gaadi_khoj_ph")}
+          style={{ ...fltS, flex: 1, minWidth: 200, borderColor: q ? T.ind : T.b1 }} />
+        {tpl.vendor_id == null && (vendorOpts.length > 0 || hasNoVendor) && (
+          <select value={fVendor} onChange={e => setFVendor(e.target.value)} style={{ ...fltS, borderColor: fVendor ? T.ind : T.b1 }}>
+            <option value="">{t("trip_tracking.rt_sab_vendor")}</option>
+            {vendorOpts.map(([id, nm]) => <option key={id} value={id}>{nm}</option>)}
+            {hasNoVendor && <option value="none">{t("trip_tracking.vendor_nahi")}</option>}
+          </select>
+        )}
+        {caps.length > 0 && (
+          <select value={fCap} onChange={e => setFCap(e.target.value)} style={{ ...fltS, borderColor: fCap ? T.ind : T.b1 }}>
+            <option value="">{t("trip_tracking.sab_capacity")}</option>
+            {caps.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
+      </div>
+      <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, background: T.surface, maxHeight: 360, overflowY: "auto" }}>
+        {!trucks && <div style={{ padding: 18, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("common.loading_2")}</div>}
+        {trucks && cands.length === 0 && <div style={{ padding: 18, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("trip_tracking.gs_koi_gaadi_nahi")}</div>}
+        {trucks && cands.length > 0 && shown.length === 0 && <div style={{ padding: 18, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("trip_tracking.khoj_me_koi_gaadi_nahi")}</div>}
+        {shown.length > 0 && (
+          <label style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 12px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, cursor: "pointer", position: "sticky", top: 0 }}>
+            <input type="checkbox" checked={allOn} onChange={toggleAll} style={{ accentColor: T.ind }} />
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: T.t2 }}>{t("trip_tracking.gs_sab_dikh_rahi", { n: shown.length })}</span>
+          </label>
+        )}
+        {shown.map(r => {
+          const on = sel.has(r.id);
+          const elsewhere = r.rate_card_id && Number(r.rate_card_id) !== Number(tpl.id);
+          const bm = BILLING[r.trip_billing] || BILLING.trip;
+          return (
+            <label key={r.id} style={{ display: "grid", gridTemplateColumns: "22px 1.2fr 1.2fr 90px 1.4fr 90px", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: `1px solid ${T.b1}`, cursor: "pointer", background: on ? T.indL + "88" : "transparent" }}>
+              <input type="checkbox" checked={on} onChange={() => toggle(r.id)} style={{ accentColor: T.ind }} />
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{r.registration_no || r.name}</span>
+              <span style={{ fontSize: 11.5, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.vendor_name || r.default_vendor_name || t("trip_tracking.vendor_nahi")}</span>
+              <span style={{ fontSize: 11.5, color: capOf(r) ? T.t2 : T.t4 }}>{capOf(r) || "—"}</span>
+              <span style={{ fontSize: 11, color: elsewhere ? T.amb : T.t4, fontWeight: elsewhere ? 700 : 500 }}>
+                {elsewhere ? t("trip_tracking.gs_pehle_par", { name: r.rate_card_name || "—" })
+                  : Number(r.rate_card_id) === Number(tpl.id) ? t("trip_tracking.gs_is_card_par") : ""}
+              </span>
+              <span><Pill label={bm.label} c={bm.c} bg={bm.bg} /></span>
+            </label>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", marginTop: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: T.t2, marginRight: "auto" }}>{t("trip_tracking.gs_n_select", { n: sel.size })}</span>
+        <button onClick={onCancel} type="button" style={{ padding: "8px 14px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
+        <button onClick={save} disabled={busy || !trucks} type="button" style={{ padding: "8px 18px", borderRadius: 7, border: "none", background: busy ? T.b1 : T.ind, color: busy ? T.t4 : "white", fontSize: 12, fontWeight: 700, cursor: busy ? "wait" : "pointer", fontFamily: "inherit" }}>{busy ? t("common.saving_2") : t("trip_tracking.gs_save")}</button>
       </div>
     </div>
   );

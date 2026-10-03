@@ -690,9 +690,18 @@ const SEARCH_ITEMS=[
   {id:"settings",  get label() { return t("common.settings"); },      icon:"M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0", sc:"Alt+S", section:"Reports"},
 ];
 
+// Ctrl+K gaadi khoj (4 Oct 2026): 2+ akshar par fleet + trip gaadi bhi —
+// gaadi number (space/dash ke bina) ya naam se (/machinery/lookup). Chunne par
+// Machinery khulta hai: fleet machine → uski detail, trip gaadi → "Trip
+// vehicles" tab khoj ke saath. Hand-off sessionStorage + event se — wahi do
+// naam MachineryModule padhta hai (pehle se khula ho to event se).
+const MACH_OPEN_KEY="sanchalan_machinery_open", MACH_OPEN_EVENT="sanchalan:machinery-open";
+const TRUCK_ICON="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z";
+
 function QuickSearch({onNavigate, onClose}){
   const [q,setQ]=useState("");
   const [idx,setIdx]=useState(0);
+  const [veh,setVeh]=useState([]);
   const inputRef=useRef(null);
 
   const filtered=q.trim()
@@ -700,16 +709,36 @@ function QuickSearch({onNavigate, onClose}){
     :SEARCH_ITEMS;
 
   useEffect(()=>{
+    const s=q.trim();
+    if(s.length<2){setVeh([]);return;}
+    let alive=true;
+    const tm=setTimeout(()=>{
+      api.get("/machinery/lookup?q="+encodeURIComponent(s))
+        .then(r=>{if(alive)setVeh(r&&r.success&&Array.isArray(r.data)?r.data:[]);})
+        .catch(()=>{if(alive)setVeh([]);});
+    },250);
+    return()=>{alive=false;clearTimeout(tm);};
+  },[q]);
+
+  const openVehicle=(v)=>{
+    try{sessionStorage.setItem(MACH_OPEN_KEY,JSON.stringify({kind:v.kind,id:v.id,q:v.registration_no||v.name}));}catch(_){}
+    onNavigate("machinery");
+    setTimeout(()=>window.dispatchEvent(new Event(MACH_OPEN_EVENT)),0);
+  };
+  const total=filtered.length+veh.length;
+  const pickAt=(i)=>{ if(i<filtered.length)onNavigate(filtered[i].id); else if(veh[i-filtered.length])openVehicle(veh[i-filtered.length]); };
+
+  useEffect(()=>{
     inputRef.current?.focus();
     const handler=(e)=>{
-      if(e.key==="ArrowDown"){e.preventDefault();setIdx(i=>Math.min(i+1,filtered.length-1));}
+      if(e.key==="ArrowDown"){e.preventDefault();setIdx(i=>Math.min(i+1,total-1));}
       if(e.key==="ArrowUp"){e.preventDefault();setIdx(i=>Math.max(i-1,0));}
-      if(e.key==="Enter"&&filtered[idx]){onNavigate(filtered[idx].id);}
+      if(e.key==="Enter"&&idx<total){pickAt(idx);}
       if(e.key==="Escape"){onClose();}
     };
     window.addEventListener("keydown",handler);
     return()=>window.removeEventListener("keydown",handler);
-  },[filtered,idx]);
+  });
 
   useEffect(()=>setIdx(0),[q]);
 
@@ -726,7 +755,7 @@ function QuickSearch({onNavigate, onClose}){
       </div>
       {/* Results */}
       <div style={{maxHeight:360,overflowY:"auto",padding:"6px 0"}}>
-        {filtered.length===0&&<div style={{padding:"28px 0",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:13}}>{t("app.no_results_for_q", { q })}</div>}
+        {total===0&&<div style={{padding:"28px 0",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:13}}>{t("app.no_results_for_q", { q })}</div>}
         {filtered.map((item,i)=>(
           <div key={item.id} onClick={()=>onNavigate(item.id)}
             style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",cursor:"pointer",background:i===idx?"rgba(59,130,246,0.2)":"none",transition:"background 0.1s",borderLeft:i===idx?"3px solid #3B82F6":"3px solid transparent"}}
@@ -741,6 +770,25 @@ function QuickSearch({onNavigate, onClose}){
             <span style={{fontSize:9.5,color:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.06)",padding:"2px 7px",borderRadius:5}}>{item.sc}</span>
           </div>
         ))}
+        {veh.length>0&&<div style={{padding:"8px 16px 4px",fontSize:10,fontWeight:700,letterSpacing:".5px",textTransform:"uppercase",color:"rgba(255,255,255,0.35)"}}>{t("app.qs_gaadi")}</div>}
+        {veh.map((v,j)=>{
+          const i=filtered.length+j;
+          const sub=[v.kind==="trip"?(v.vendor_name||t("app.qs_trip_gaadi")):t("app.qs_fleet"),v.capacity].filter(Boolean).join(" · ");
+          return(
+            <div key={"v"+v.id} onClick={()=>openVehicle(v)}
+              style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",cursor:"pointer",background:i===idx?"rgba(59,130,246,0.2)":"none",transition:"background 0.1s",borderLeft:i===idx?"3px solid #3B82F6":"3px solid transparent"}}
+              onMouseEnter={()=>setIdx(i)}>
+              <span style={{width:30,height:30,borderRadius:8,background:"rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={i===idx?"#60A5FA":"rgba(255,255,255,0.45)"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={TRUCK_ICON}/></svg>
+              </span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:i===idx?"white":"rgba(255,255,255,0.75)"}}>{v.registration_no||v.name}{v.registration_no&&v.name&&v.name!==v.registration_no?<span style={{fontWeight:500,color:"rgba(255,255,255,0.4)"}}>{" · "+v.name}</span>:null}</div>
+                <div style={{fontSize:10.5,color:"rgba(255,255,255,0.3)",marginTop:1}}>{sub}</div>
+              </div>
+              <span style={{fontSize:9.5,color:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.06)",padding:"2px 7px",borderRadius:5}}>{v.kind==="trip"?t("app.qs_trip_vehicles"):t("app.qs_detail")}</span>
+            </div>
+          );
+        })}
       </div>
       {/* Footer */}
       <div style={{padding:"8px 16px",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",gap:14,alignItems:"center"}}>

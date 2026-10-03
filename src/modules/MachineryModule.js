@@ -34,6 +34,9 @@ const canShiftCity = () => canApproveAction({ roles: ["admin", "super_admin"] })
 // Gaadi hatana bhi wahi admin ka kaam (Prafull, 3 Oct 2026: alag approval
 // nahi, admin seedha wajah likh kar hatata hai). Server live role dekhta hai.
 const canRemoveMachine = () => canApproveAction({ roles: ["admin", "super_admin"] });
+// Ctrl+K (App.js) → Machinery: kaunsi gaadi kholni hai. Wahi do naam App.js me.
+const MACH_OPEN_KEY = "sanchalan_machinery_open";
+const MACH_OPEN_EVENT = "sanchalan:machinery-open";
 // Naya endpoint purane server par 404 "Route … not found" deta hai — wo
 // developer ki bhasha hai. Deploy ke beech ka chhota waqt hai, user ko seedha
 // bata do ki update aana baaki hai.
@@ -244,6 +247,31 @@ const Field = ({ label, children, hint, span }) => (
   </div>
 );
 
+// ── Capacity (4 Oct 2026) ────────────────────────────────────────
+// Number + unit (cft / cum / ton). Trip gaadi par zaroori (rate card isi se
+// gaadi chunta hai), "+ Machine" par marzi — JCB jaisi machine me bucket hi
+// nahi. Server "500 cft" text (capacity) bhi saath likhta hai.
+const CAP_UNITS = ["cft", "cum", "ton"];
+// → { empty } (kuch nahi bhara) · { bad } · { ok, qty, unit }
+const capCheck = (qty, unit) => {
+  const s = String(qty == null ? "" : qty).trim();
+  if (!s && !unit) return { empty: true };
+  const n = Number(s);
+  if (!s || !Number.isFinite(n) || n <= 0 || !CAP_UNITS.includes(unit)) return { bad: true };
+  return { ok: true, qty: n, unit };
+};
+const capOf = (r) => (r && (r.capacity || (r.capacity_qty != null ? (Number(r.capacity_qty) + " " + (r.capacity_unit || "")).trim() : ""))) || "";
+const CapInput = ({ qty, unit, onQty, onUnit, bad }) => (
+  <div style={{ display: "flex", gap: 6 }}>
+    <input value={qty == null ? "" : qty} inputMode="decimal" placeholder="500" onChange={(e) => onQty(e.target.value.replace(/[^0-9.]/g, ""))}
+      style={{ ...inp, flex: 1, minWidth: 0, borderColor: bad ? T.red : T.b1 }} />
+    <select value={unit || ""} onChange={(e) => onUnit(e.target.value)} style={{ ...inp, width: 86, flexShrink: 0, borderColor: bad ? T.red : T.b1 }}>
+      <option value="">{t("machinery.cap_unit")}</option>
+      {CAP_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+    </select>
+  </div>
+);
+
 // Kaagaz ki copy. Upload turant hota hai aur URL state me aa jaata hai, isliye
 // machine save karte waqt file pehle se chadhi hoti hai — background queue par
 // bharosa karke save karne se aadhi machines bina copy ke reh jaati.
@@ -400,6 +428,8 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
       // Masked key wapas bhejna asli key ko mita dega — isliye box khaali
       // shuru hota hai aur "set hai" alag se dikhaya jaata hai.
       telematics_api_key: "",
+      // DECIMAL "500.00" aata hai — box me "500".
+      capacity_qty: machine.capacity_qty != null && machine.capacity_qty !== "" ? String(Number(machine.capacity_qty)) : "",
     } : {
       ownership: "owned", measurement_mode: "hourly", meter_unit: "hours",
       fuel_responsibility: "rent_included", opening_read_at: todayStr(),
@@ -415,6 +445,8 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
   const save = async () => {
     setError("");
     if (!String(f.name || "").trim()) { setError(t("machinery.machine_ka_naam_zaroori_hai")); setTab("id"); return; }
+    const cap = capCheck(f.capacity_qty, f.capacity_unit);
+    if (cap.bad) { setError(t("machinery.cap_galat")); setTab("id"); return; }
     // Jis kaagaz ki koi bhi detail bhari hai par valid-till nahi, wo chup-chaap
     // girne se accha hai ki abhi rok diya jaye.
     const docList = [];
@@ -429,7 +461,12 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
 
     const body = {
       name: String(f.name).trim(), code: f.code || null,
-      type: f.type || null, machine_type: f.machine_type || null, capacity: f.capacity || null,
+      type: f.type || null, machine_type: f.machine_type || null,
+      // Capacity number + unit; server text khud likhta hai. Number khaali
+      // chhoda to purana likha text waisa hi — par jo text pehle number se hi
+      // bana tha (capacity_qty tha) wo bhi saath mitao, warna "500 cft" atka rehta.
+      capacity_qty: cap.ok ? cap.qty : null, capacity_unit: cap.ok ? cap.unit : null,
+      capacity: cap.empty && machine && machine.capacity_qty != null ? null : (f.capacity || null),
       ownership: f.ownership || "rented", registration_no: f.registration_no || null,
       make: f.make || null, model: f.model || null, year: f.year || null,
       chassis_no: f.chassis_no || null, engine_no: f.engine_no || null,
@@ -520,6 +557,12 @@ function MachineForm({ open, onClose, onSaved, machine, parties, seed, cities, s
           </Field>
           <Field label={t("machinery.machine_type")}>
             <input value={f.machine_type || ""} onChange={(e) => upd("machine_type", e.target.value)} placeholder={t("machinery.excavator_tipper_roller")} style={inp} />
+          </Field>
+          <Field label={t("machinery.capacity_opt")}
+            hint={machine && machine.capacity && machine.capacity_qty == null
+              ? t("machinery.cap_purana_likha", { text: machine.capacity }) : t("machinery.capacity_opt_hint")}>
+            <CapInput qty={f.capacity_qty} unit={f.capacity_unit} onQty={(v) => upd("capacity_qty", v)} onUnit={(v) => upd("capacity_unit", v)}
+              bad={capCheck(f.capacity_qty, f.capacity_unit).bad && String(f.capacity_qty || "") !== "" && !!f.capacity_unit} />
           </Field>
           <Field label={t("machinery.meter_kis_cheez_ka")}>
             <select value={f.meter_unit || "hours"} onChange={(e) => upd("meter_unit", e.target.value)} style={inp}>
@@ -2134,6 +2177,8 @@ function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
   const [reg, setReg] = useState("");
   const [vendor, setVendor] = useState(null);
   const [billing, setBilling] = useState("");
+  const [capQty, setCapQty] = useState("");
+  const [capUnit, setCapUnit] = useState("");
   const [driver, setDriver] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -2141,6 +2186,8 @@ function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
   useEffect(() => {
     if (!open) return;
     setReg((vehicle && vehicle.registration_no) || "");
+    setCapQty(vehicle && vehicle.capacity_qty != null ? String(Number(vehicle.capacity_qty)) : "");
+    setCapUnit((vehicle && vehicle.capacity_unit) || "");
     setVendor(vehicle && vehicle.vendor_id ? String(vehicle.vendor_id) : null);
     // Nayi gaadi par billing jaan-boojh kar khaali — km aur per-trip ka farak
     // paisa badal deta hai, ye aadmi khud soch kar chune.
@@ -2152,14 +2199,20 @@ function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
     if (!reg.trim()) { setErr(t("machinery.tv_err_reg")); return; }
     if (!vendor) { setErr(t("machinery.tv_err_vendor")); return; }
     if (!billing) { setErr(t("machinery.tv_err_billing")); return; }
+    // Capacity zaroori (4 Oct 2026) — rate card isi se gaadi chunta hai.
+    const cap = capCheck(capQty, capUnit);
+    if (!cap.ok) { setErr(t("machinery.tv_err_capacity")); return; }
     setBusy(true); setErr("");
-    const body = { registration_no: reg.trim(), vendor_id: Number(vendor), trip_billing: billing };
+    const body = { registration_no: reg.trim(), vendor_id: Number(vendor), trip_billing: billing,
+      capacity_qty: cap.qty, capacity_unit: cap.unit };
     const r = editing
       ? await api.put(`/trips/trucks/${vehicle.id}`, body)
       : await api.post("/trips/trucks", { ...body, ...(driver.trim() ? { driver_name: driver.trim() } : {}) });
     setBusy(false);
     if (!r || r.success === false) { setErr(srvMsg(r)); return; }
     onClose();
+    // Billing / vendor badalne se card gaadi ka nahi raha — server ne hata diya.
+    if (r.data && r.data.rate_card_cleared) window.alert(t("machinery.tv_card_hat_gaya"));
     if (onSaved) onSaved();
   };
 
@@ -2176,6 +2229,10 @@ function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
         <Field label={t("machinery.tv_f_vendor")}>
           <PartyPicker value={vendor} onChange={setVendor} parties={parties || []} roles={TRIP_VENDOR_ROLES}
             placeholder={t("machinery.tv_f_vendor_ph")} />
+        </Field>
+        <Field label={t("machinery.tv_f_capacity")}
+          hint={editing && vehicle.capacity && vehicle.capacity_qty == null ? t("machinery.cap_purana_likha", { text: vehicle.capacity }) : t("machinery.tv_f_capacity_hint")}>
+          <CapInput qty={capQty} unit={capUnit} onQty={setCapQty} onUnit={setCapUnit} />
         </Field>
       </div>
       <div style={{ height: 12 }} />
@@ -2209,8 +2266,19 @@ function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
   );
 }
 
-function TripVehiclesTab({ tv, from, to, onRange, onReload, parties }) {
+// Khoj (4 Oct 2026): har shabd gaadi number (space / dash / dot ke bina),
+// naam, vendor, capacity ya rate card ke naam me — Trip Tracking jaisa.
+const matchTv = (v, vendorName, q) => {
+  const toks = String(q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!toks.length) return true;
+  const hay = [v.name, v.registration_no, vendorName, capOf(v), v.rate_card_name].map((x) => String(x || "").toLowerCase());
+  const regs = [normReg(v.registration_no), normReg(v.name)];
+  return toks.every((tok) => hay.some((h) => h.includes(tok)) || (!!normReg(tok) && regs.some((x) => x.includes(normReg(tok)))));
+};
+
+function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ }) {
   const [openV, setOpenV] = useState({});          // vendor ka dabba khula / band
+  const [fCap, setFCap] = useState("");            // capacity ki chhanni
   const [showRemoved, setShowRemoved] = useState(false);
   const [form, setForm] = useState(null);          // null | {} nayi | gaadi (edit)
   const [removing, setRemoving] = useState(null);
@@ -2223,12 +2291,17 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties }) {
   // Gaadi ka vendor beech me badla ho to server use PURANE vendor ke dabbe me
   // bhi bhejta hai (vendor_changed, sirf us vendor ki trips ke saath) — wahan
   // ki trips/₹ us vendor ke hain, par gaadi uski ginti me nahi aati.
-  const { groups, hidden, vendorName } = useMemo(() => {
+  const filtering = !!(String(q || "").trim() || fCap);
+  const { groups, hidden, vendorName, caps } = useMemo(() => {
     const hiddenIds = new Set();
+    const capSet = new Set();
     const names = new Map((tv.rows || []).map((g) => [g.vendor_id == null ? null : Number(g.vendor_id), g.vendor_name]));
     const gs = (tv.rows || []).map((g) => {
       const all = Array.isArray(g.vehicles) ? g.vehicles : [];
-      const vehicles = all.filter((v) => showRemoved || Number(v.is_active) !== 0);
+      all.forEach((v) => { if (capOf(v)) capSet.add(capOf(v)); });
+      const gName = g.vendor_name || t("machinery.tv_vendor_nahi");
+      const vehicles = all.filter((v) => (showRemoved || Number(v.is_active) !== 0)
+        && (!fCap || capOf(v) === fCap) && matchTv(v, gName, q));
       // Hatayi hui gaadi ki trips bhi paisa hain — chhupi hon to bata do.
       if (!showRemoved) all.filter((v) => Number(v.is_active) === 0 && Number(v.trips) > 0).forEach((v) => hiddenIds.add(v.id));
       const sum = { vehicles: vehicles.filter((v) => !v.vendor_changed).length };
@@ -2244,8 +2317,9 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties }) {
       .sort((a, b) => a.name.localeCompare(b.name));
     const vendorName = (vid) => (vid == null ? t("machinery.tv_vendor_nahi")
       : names.get(Number(vid)) || ((parties || []).find((p) => String(p.id) === String(vid)) || {}).name || "#" + vid);
-    return { groups: gs, hidden: hiddenIds.size, vendorName };
-  }, [tv.rows, showRemoved, parties]);
+    return { groups: gs, hidden: hiddenIds.size, vendorName,
+      caps: [...capSet].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) };
+  }, [tv.rows, showRemoved, parties, q, fCap]);
 
   const all = groups.reduce((a, g) => ({
     vehicles: a.vehicles + g.sum.vehicles, trips: a.trips + g.sum.trips, amount: a.amount + g.sum.amount,
@@ -2272,10 +2346,29 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties }) {
         <span style={{ flex: 1 }} />
         {canAdd && <Btn size="sm" icon={IcAdd} onClick={() => setForm({})}>{t("machinery.tv_add")}</Btn>}
       </div>
+      {/* Khoj — gaadi number, vendor ya capacity (Ctrl+K se aaye to pehle se bhari) */}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+        <input value={q || ""} onChange={(e) => onQ(e.target.value)} placeholder={t("machinery.tv_khoj_ph")}
+          style={{ flex: 1, minWidth: 220, padding: "7px 11px", borderRadius: 7, border: `1.5px solid ${q ? T.ind : T.b1}`, fontSize: 12, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none" }} />
+        {caps.length > 0 && (
+          <select value={fCap} onChange={(e) => setFCap(e.target.value)}
+            style={{ padding: "7px 10px", borderRadius: 7, border: `1.5px solid ${fCap ? T.ind : T.b1}`, fontSize: 12, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none" }}>
+            <option value="">{t("machinery.tv_sab_capacity")}</option>
+            {caps.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
+        {filtering && (
+          <button type="button" onClick={() => { onQ(""); setFCap(""); }}
+            style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, color: T.ind }}>
+            {t("common.clear")}
+          </button>
+        )}
+      </div>
 
       {tv.state === "error" && <Empty>{t("machinery.tv_load_fail")}</Empty>}
 
-      {tv.state === "ok" && groups.length === 0 && (
+      {tv.state === "ok" && groups.length === 0 && filtering && <Empty>{t("machinery.tv_khoj_me_nahi")}</Empty>}
+      {tv.state === "ok" && groups.length === 0 && !filtering && (
         <div style={{ textAlign: "center", padding: "50px 20px", background: T.surface, borderRadius: 8, border: `1px solid ${T.b1}` }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: T.t3, marginBottom: 4 }}>{t("machinery.tv_empty")}</div>
           <div style={{ fontSize: 12, color: T.t4 }}>{t("machinery.tv_empty_hint")}</div>
@@ -2292,7 +2385,8 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties }) {
           </div>
 
           {groups.map((g) => {
-            const isOpen = !!openV[g.key];
+            // Khoj chal rahi ho to dabba khud khula — mili gaadi dikhe.
+            const isOpen = filtering || !!openV[g.key];
             return (
               <div key={g.key} style={{ background: T.surface, borderRadius: 8, border: `1px solid ${T.b1}`, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                 {/* Vendor ki patti — dabao to gaadiyan khulti hain */}
@@ -2336,6 +2430,14 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties }) {
                             <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
                               <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, color: T.ind, background: T.indL, border: `1px solid ${T.ind}22`, borderRadius: 5, padding: "1px 7px", fontVariantNumeric: "tabular-nums" }}>{v.registration_no || "—"}</span>
                               {removed && <Pill label={t("machinery.tv_removed")} c={T.t3} bg={T.sltL} />}
+                              {/* Capacity aur rate card (4 Oct 2026). Km / Per trip gaadi bina card = amber. */}
+                              <span style={{ flexBasis: "100%", display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 10.5, color: capOf(v) ? T.t3 : T.t4 }}>{capOf(v) || t("machinery.tv_cap_nahi")}</span>
+                                {v.rate_card_name
+                                  ? <Pill label={v.rate_card_name} c={T.ind} bg={T.indL} />
+                                  : (["km", "trip"].includes(v.trip_billing) && "rate_card_id" in v && !removed
+                                    ? <Pill label={t("machinery.tv_card_nahi")} c={T.amb} bg={T.ambL} /> : null)}
+                              </span>
                               {v.vendor_changed && (
                                 <span style={{ flexBasis: "100%", fontSize: 10, color: T.t4 }}>{t("machinery.tv_vendor_badla", { name: vendorName(v.current_vendor_id) })}</span>
                               )}
@@ -3640,6 +3742,9 @@ function MachineryModule() {
   const [tvFrom, setTvFrom] = useState(repMonthStart.toLocaleDateString("en-CA"));
   const [tvTo, setTvTo] = useState(new Date().toLocaleDateString("en-CA"));
   const [tv, setTv] = useState({ state: "loading", rows: [] });
+  // Trip vehicles ki khoj — yahan isliye ki Ctrl+K (App.js) number bhar kar
+  // seedha is tab par la sake.
+  const [tvQ, setTvQ] = useState("");
   const loadTv = useCallback(async () => {
     const r = await api.get(`/trips/vehicles-summary?from=${tvFrom}&to=${tvTo}`).catch(() => null);
     setTv((p) => {
@@ -3683,6 +3788,23 @@ function MachineryModule() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // Ctrl+K se gaadi chuni (4 Oct 2026): shell (App.js) sessionStorage me
+  // { kind, id, q } likh kar Machinery kholta hai aur event bhejta hai —
+  // module pehle se khula ho to bhi pakad le. Fleet machine → uski detail;
+  // trip gaadi → Trip vehicles tab, khoj me number bhara.
+  useEffect(() => {
+    const take = () => {
+      let h = null;
+      try { h = JSON.parse(sessionStorage.getItem(MACH_OPEN_KEY) || "null"); sessionStorage.removeItem(MACH_OPEN_KEY); } catch (_) { h = null; }
+      if (!h || !h.id) return;
+      if (h.kind === "trip") { setOpenId(null); setTvQ(String(h.q || "")); setTab("tripv"); }
+      else { setTab("fleet"); setOpenId(Number(h.id)); }
+    };
+    take();
+    window.addEventListener(MACH_OPEN_EVENT, take);
+    return () => window.removeEventListener(MACH_OPEN_EVENT, take);
+  }, []);
+
   const snooze = async (row) => {
     const till = new Date(); till.setDate(till.getDate() + 7);
     const r = await api.post("/machinery/due/snooze", {
@@ -3704,6 +3826,7 @@ function MachineryModule() {
       if (!q) return true;
       if (String(m.name || "").toLowerCase().includes(q)) return true;
       if (String(m.code || "").toLowerCase().includes(q)) return true;
+      if (capOf(m).toLowerCase().includes(q)) return true;    // "500 cft" se bhi (4 Oct 2026)
       return !!qReg && normReg(m.registration_no).includes(qReg);
     });
   }, [fleet, fCity, fQ]);
@@ -3772,7 +3895,7 @@ function MachineryModule() {
             </div>
 
             {curTab === "tripv" && (
-              <TripVehiclesTab tv={tv} from={tvFrom} to={tvTo} parties={parties} onReload={loadTv}
+              <TripVehiclesTab tv={tv} from={tvFrom} to={tvTo} parties={parties} onReload={loadTv} q={tvQ} onQ={setTvQ}
                 onRange={(f, t2) => { setTvFrom(f); setTvTo(t2); }} />
             )}
 
@@ -3851,6 +3974,7 @@ function MachineryModule() {
                             </div>
                             <div style={{ fontSize: 10.5, color: T.t4 }}>
                               {m.owned ? t("machinery.owned") : (m.default_vendor_name || t("machinery.rented"))}
+                              {capOf(m) ? " · " + capOf(m) : ""}
                             </div>
                           </div>
                           <span style={{ fontSize: 11.5, color: m.city_name ? T.t2 : T.amb }}>
