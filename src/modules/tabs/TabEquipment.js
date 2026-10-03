@@ -4,6 +4,7 @@ import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
 import TabTripTracking from "./TabTripTracking";
 import { t } from "../../i18n";
+import { can } from "../../utils/perms";
 
 // Route keys as the backend stores them (routes/equipment.js PAYMENT_ROUTES).
 // "site_exp" used to fall through unlabelled and render as raw text.
@@ -18,6 +19,11 @@ const ROUTE_LABEL = {
 const STATUS_LABEL = { get "On Site"() { return t("equipment.on_site"); }, get "Returned"() { return t("equipment.returned"); } };
 
 function TabEquipment({ projectId }) {
+  // Usage log aur equipment request server par Equipment ka CREATE maangte
+  // hain (routes/equipment.js). Bina tick ke button dikhta tha aur dabane par
+  // 403 — ab wahi button chhupta hai. (Entry wala tick abhi sirf Trip Tracking
+  // ka hai; ye dono baad me Entry par jaayenge.)
+  const canEqCreate = can("Equipment", "create");
   // Top-level view toggle: existing Equipment sections vs Trip Tracking.
   const [view, setView] = useState("equipment");
   const [rows,    setRows]    = useState([]);
@@ -335,7 +341,7 @@ function TabEquipment({ projectId }) {
       <Panel style={{ marginBottom: 12 }}>
         <SectionHeader title={t("equipment.usage_log")} open={openUsage} onToggle={() => setOpenUsage(v => !v)}
           count={usageRows.length}
-          action={<AddBtn label={t("equipment.log_usage")} onClick={() => { setLogForm(emptyLog); setLogErr(""); setShowLogModal(true); }} />} />
+          action={canEqCreate ? <AddBtn label={t("equipment.log_usage")} onClick={() => { setLogForm(emptyLog); setLogErr(""); setShowLogModal(true); }} /> : null} />
         {openUsage && (
           <div>
             {usageLoading && <div style={{ textAlign: "center", padding: "30px 0", color: T.t4, fontSize: 13 }}>{t("equipment.loading_usage")}</div>}
@@ -376,7 +382,7 @@ function TabEquipment({ projectId }) {
       <Panel style={{ marginBottom: 12 }}>
         <SectionHeader title={t("equipment.equipment_requests")} open={openReqs} onToggle={() => setOpenReqs(v => !v)}
           count={reqList.length}
-          action={<AddBtn label={t("equipment.request_equipment")} onClick={() => setShowReqForm(v => !v)} />} />
+          action={canEqCreate ? <AddBtn label={t("equipment.request_equipment")} onClick={() => setShowReqForm(v => !v)} /> : null} />
         {openReqs && (
           <div>
             {showReqForm && (

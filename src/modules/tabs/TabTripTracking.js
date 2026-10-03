@@ -2,13 +2,60 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import api from "../../config/api";
 import { T, fmtN, localYMD } from "../shared/tokens";
 import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
-import { canApproveAction } from "../../utils/approvalAuthority";
+import { currentUser } from "../../utils/perms";
 import { t, Rich } from "../../i18n";
 import { cld } from "../../utils/cloudinary";
 
-// Flagged trip ka faisla server par admin / super_admin / PM tak hi seemit
-// hai (routes/trips.js → POST /:id/review, requireRole). Screen par bhi wahi.
-const canReviewTrip = () => canApproveAction({ roles: ["admin", "super_admin", "project_manager"] });
+// ── Kaun kya kar sakta hai (is tab ka apna — module independence) ──
+// 3 Oct 2026 se Trip Tracking Roles & Access ki "Equipment" row se chalta hai
+// (pehle Machinery). Niyam wahi jo server routes/trips.js lagata hai — button
+// sirf use dikhe jo dabaa sake, warna 403:
+//   Create  = naya route / naya truck      Edit = route badalna
+//   Entry   = loading / unloading (mobile) + apni trip 10 min me cancel
+//   Approve = review, manual close, doosre ki trip cancel — Admin / PM role se
+//             hamesha, baaki ko Equipment ka Approve tick chahiye
+//   Bill    = Finance ka Create (Finance ki row hi nahi = band)
+// Asli rok server par hai; yahan sirf chhupana hai.
+const TRIP_MOD = "Equipment";
+const roleOf = (u) => String(u?.role || "").toLowerCase().replace(/[\s-]+/g, "_");
+const isAdminU = (u) => ["admin", "super_admin"].includes(roleOf(u));
+const eqRow = (u) => (u?.module_permissions || {})[TRIP_MOD];
+// View/Create/Edit/Delete: purana niyam — row nahi to khula (Viewer sirf dekhe).
+function canEq(action, u = currentUser()) {
+  if (isAdminU(u)) return true;
+  const row = eqRow(u);
+  if (!row) return roleOf(u) !== "viewer" || action === "view";
+  return !!row[action];
+}
+// Entry: purane cache wale user object me `entry` hota hi nahi (undefined) —
+// agle permission refresh (≤60 s) tak button dikhao, faisla server kare.
+function canTripEntry(u = currentUser()) {
+  if (isAdminU(u)) return true;
+  const row = eqRow(u);
+  if (!row) return roleOf(u) !== "viewer";
+  return row.entry === undefined ? true : !!row.entry;
+}
+function canApproveTrip(u = currentUser()) {
+  if (["admin", "super_admin", "project_manager"].includes(roleOf(u))) return true;
+  const row = eqRow(u);
+  return !!row && row.approve === true;
+}
+function canBillTrips(u = currentUser()) {
+  if (isAdminU(u)) return true;
+  const fin = (u?.module_permissions || {}).Finance;
+  return !!fin && fin.create === true;
+}
+// Cancel: approver kisi ki bhi (remark ke saath); Entry wala sirf APNI raste
+// wali trip, load ke 10 min ke andar. Ghadi ka thoda farak ho to server bata dega.
+function canCancelTrip(trip, u = currentUser()) {
+  if (canApproveTrip(u)) return true;
+  if (!canTripEntry(u) || !trip || trip.status !== "in_transit") return false;
+  if (trip.load_by == null || !trip.load_at) return true;
+  if (Number(trip.load_by) !== Number(u?.id)) return false;
+  const at = new Date(String(trip.load_at).replace(" ", "T"));
+  if (isNaN(at.getTime())) return true;
+  return (Date.now() - at.getTime()) / 60000 <= 10;
+}
 
 // ════════════════════════════════════════════════════════════════
 // TabTripTracking — web management view for the Trip Tracking module
@@ -286,27 +333,35 @@ function MonitorTab({ projectId, onChange }) {
                         </div>
                       </div>
 
-                      {(item4.verify_status === "flagged" || item4.status === "in_transit") && (
-                        <div>
-                          <input value={notes[item4.id] || ""} onChange={e => setNotes(n => ({ ...n, [item4.id]: e.target.value }))}
-                            placeholder={item4.status === "in_transit" ? t("trip_tracking.remark_cancel_manual_close_ke_liye") : t("trip_tracking.note_reject_ke_liye_zaroori")}
-                            style={{ ...inp, marginBottom: 8 }} />
-                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                            {item4.verify_status === "flagged" && item4.status !== "in_transit" && canReviewTrip() && (
-                              <>
-                                <BtnOutline label={t("common.reject_2")} color={T.red} busy={busyId === item4.id} onClick={() => act(item4, "reject")} />
-                                <BtnSolid label={t("common.approve_2")} color={T.grn} busy={busyId === item4.id} onClick={() => act(item4, "approve")} />
-                              </>
-                            )}
-                            {item4.status === "in_transit" && (
-                              <>
-                                <BtnOutline label={t("trip_tracking.cancel_trip")} color={T.red} busy={busyId === item4.id} onClick={() => stuckAct(item4, "cancel")} />
-                                <BtnOutline label={t("trip_tracking.manual_close_2")} color={T.amb} busy={busyId === item4.id} onClick={() => stuckAct(item4, "close")} />
-                              </>
-                            )}
+                      {(() => {
+                        // Jo button server maanega wahi — koi na bache to remark ka dabba bhi nahi.
+                        const approver = canApproveTrip();
+                        const canReview = item4.verify_status === "flagged" && item4.status !== "in_transit" && approver;
+                        const canCancel = item4.status === "in_transit" && canCancelTrip(item4);
+                        const canClose = item4.status === "in_transit" && approver;
+                        if (!canReview && !canCancel && !canClose) {
+                          return item4.verify_status === "flagged" && item4.status !== "in_transit"
+                            ? <div style={{ fontSize: 11.5, color: T.t4 }}>{t("trip_tracking.review_approver_karega")}</div>
+                            : null;
+                        }
+                        return (
+                          <div>
+                            <input value={notes[item4.id] || ""} onChange={e => setNotes(n => ({ ...n, [item4.id]: e.target.value }))}
+                              placeholder={item4.status === "in_transit" ? (canClose ? t("trip_tracking.remark_cancel_manual_close_ke_liye") : t("trip_tracking.remark_cancel_ke_liye")) : t("trip_tracking.note_reject_ke_liye_zaroori")}
+                              style={{ ...inp, marginBottom: 8 }} />
+                            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                              {canReview && (
+                                <>
+                                  <BtnOutline label={t("common.reject_2")} color={T.red} busy={busyId === item4.id} onClick={() => act(item4, "reject")} />
+                                  <BtnSolid label={t("common.approve_2")} color={T.grn} busy={busyId === item4.id} onClick={() => act(item4, "approve")} />
+                                </>
+                              )}
+                              {canCancel && <BtnOutline label={t("trip_tracking.cancel_trip")} color={T.red} busy={busyId === item4.id} onClick={() => stuckAct(item4, "cancel")} />}
+                              {canClose && <BtnOutline label={t("trip_tracking.manual_close_2")} color={T.amb} busy={busyId === item4.id} onClick={() => stuckAct(item4, "close")} />}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -343,7 +398,7 @@ function RoutesTab({ projectId }) {
     <Panel>
       <div style={{ padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.routes_leads_list", { list: list.length ? `(${list.length})` : "" })}</span>
-        <AddBtn label={t("trip_tracking.new_route")} onClick={() => setForm({})} />
+        {canEq("create") && <AddBtn label={t("trip_tracking.new_route")} onClick={() => setForm({})} />}
       </div>
 
       {form && <RouteForm projectId={projectId} tasks={tasks} route={form.id ? form : null}
@@ -351,7 +406,7 @@ function RoutesTab({ projectId }) {
 
       {loading && <div style={{ textAlign: "center", padding: "30px 0", color: T.t4, fontSize: 13 }}>{t("common.loading_2")}</div>}
       {!loading && list.length === 0 && !form && (
-        <div style={{ textAlign: "center", padding: "34px 20px", color: T.t4, fontSize: 13 }}>{t("trip_tracking.abhi_koi_route_nahi_new_route")}</div>
+        <div style={{ textAlign: "center", padding: "34px 20px", color: T.t4, fontSize: 13 }}>{canEq("create") ? t("trip_tracking.abhi_koi_route_nahi_new_route") : t("trip_tracking.abhi_koi_route_nahi")}</div>
       )}
       {!loading && list.length > 0 && (
         <>
@@ -372,7 +427,7 @@ function RoutesTab({ projectId }) {
               </span>
               <span style={{ fontSize: 11.5, color: T.t2 }}>{r.expected_travel_min != null ? t("trip_tracking.n_min", { n: r.expected_travel_min }) : "—"}</span>
               <span>{r.is_active ? <Pill label={t("common.active")} c={T.grn} bg={T.grnL} /> : <Pill label={t("subcon.inactive")} c={T.t3} bg={T.sltL} />}</span>
-              <button onClick={() => setForm(r)} type="button" style={{ justifySelf: "end", fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button>
+              {canEq("edit") ? <button onClick={() => setForm(r)} type="button" style={{ justifySelf: "end", fontSize: 11.5, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>{t("common.edit_2")}</button> : <span />}
             </div>
           ))}
         </>
@@ -474,8 +529,11 @@ function RouteForm({ projectId, tasks, route, onCancel, onSaved }) {
       r = await api.put("/trips/routes/" + route.id, body);
       // Rate bhara hai to har save par backfill (AST-14): server sirf khaali-rate
       // wali unbilled trips (raste wali bhi) chhoota hai, isliye dobara bulana safe.
+      // Pehle iska jawab phenk diya jaata tha — rate chadha ya nahi, kisi ko
+      // pata nahi chalta. Route to save ho chuka, bas bata do.
       if (r && r.success !== false && numf(f.rate_per_trip) != null) {
-        await api.post("/trips/routes/" + route.id + "/backfill-rate", { rate: numf(f.rate_per_trip) });
+        const b = await api.post("/trips/routes/" + route.id + "/backfill-rate", { rate: numf(f.rate_per_trip) });
+        if (!b || b.success === false) window.alert(t("trip_tracking.backfill_fail", { msg: (b && b.message) || t("trip_tracking.action_fail") }));
       }
     } else {
       r = await api.post("/trips/routes", body);
@@ -594,7 +652,7 @@ function TrucksTab() {
     <Panel>
       <div style={{ padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.trucks_list", { list: list.length ? `(${list.length})` : "" })}</span>
-        <AddBtn label={t("trip_tracking.add_truck")} onClick={() => setAdd(v => !v)} />
+        {canEq("create") && <AddBtn label={t("trip_tracking.add_truck")} onClick={() => setAdd(v => !v)} />}
       </div>
       {add && (
         <div style={{ padding: "12px 15px", borderBottom: `1px solid ${T.b1}`, background: T.bluL + "55", display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr auto", gap: 10, alignItems: "end" }}>
@@ -760,7 +818,9 @@ function BillingTab({ projectId }) {
                 </div>
                 <div style={{ fontSize: 10.5, color: T.t4, marginTop: 8 }}>{t("trip_tracking.sirf_verified_approved_trips_billed_trips")}</div>
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-                  <button onClick={generate} disabled={generating} type="button" style={{ padding: "9px 20px", borderRadius: 7, border: "none", background: generating ? T.b1 : T.blu, color: generating ? T.t4 : "white", fontSize: 12.5, fontWeight: 700, cursor: generating ? "not-allowed" : "pointer", fontFamily: "inherit" }}>{generating ? t("trip_tracking.generating") : t("trip_tracking.generate_bill")}</button>
+                  {canBillTrips()
+                    ? <button onClick={generate} disabled={generating} type="button" style={{ padding: "9px 20px", borderRadius: 7, border: "none", background: generating ? T.b1 : T.blu, color: generating ? T.t4 : "white", fontSize: 12.5, fontWeight: 700, cursor: generating ? "not-allowed" : "pointer", fontFamily: "inherit" }}>{generating ? t("trip_tracking.generating") : t("trip_tracking.generate_bill")}</button>
+                    : <span style={{ fontSize: 11.5, color: T.t4 }}>{t("trip_tracking.bill_finance_create_chahiye")}</span>}
                 </div>
               </div>
             )}

@@ -128,12 +128,16 @@ function ToggleRow({ icon, label, desc, value, onChange }) {
 // View: har module me screen/tab chhupta hai ("app"); jin me server data bhi
 // rokta hai wo "server" — wahan VIEW hataane par API se bhi kuch nahi milta
 // (14 Sep 2026). Party/godown/machine jaise dropdown khule rehte hain.
+// Entry (3 Oct 2026): rozana ka kaam darj karna — abhi sirf Equipment row par
+// (Trip Tracking ki loading/unloading, routes/trips.js). Equipment ka Approve
+// bhi ab server padhta hai — trip review / manual close / doosre ki trip cancel.
 const PERM_LIVE = {
   view:    { "*": "app", "CRM": "server", "Township CRM": "server", "Tenders": "server", "Team & HR": "server", "Machinery": "server", "Equipment": "server", "Subcon": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Procurement": "server", "Warehouse": "server", "Material": "server", "Assets": "server", "Financial Reports": "server", "Users & Roles": "server", "Attendance": "server", "Overview": "server", "Transaction": "server", "Mapping": "server", "Pulse": "server", "Reports": "server" },
   create:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Material": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Files": "server", "Budget": "server", "Site / DPR": "server" },
   edit:    { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Procurement": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Tasks": "server", "To Do": "server", "Budget": "server" },
   delete:  { "Attendance": "server", "CRM": "server", "Design": "server", "Equipment": "server", "Estimate": "server", "Finance": "server", "Fuel": "server", "Library": "server", "MOM": "server", "Machinery": "server", "Projects": "server", "Subcon": "server", "Team & HR": "server", "Tenders": "server", "Township CRM": "server", "Users & Roles": "server", "Warehouse": "server", "Mapping": "server", "Tasks": "server", "To Do": "server" },
-  approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Projects": "server", "Site / DPR": "server" },
+  entry:   { "Equipment": "server" },
+  approve: { "Attendance": "server", "Finance": "server", "Procurement": "server", "Team & HR": "server", "Warehouse": "server", "Mapping": "server", "Assets": "server", "Projects": "server", "Site / DPR": "server", "Equipment": "server" },
   export:  { "Mapping": "app" },
 };
 // Module ka apna naam pehle, "*" sirf tab jab uske liye kuch likha na ho.
@@ -278,10 +282,18 @@ const PERM_HELP = {
     create: "Hazri lagana", edit: "Lagi hui hazri badalna", delete: "Hazri hatana",
     approve: "Attendance review approve karna", export: "Attendance sheet nikalna",
   },
+  // Trip Tracking 3 Oct 2026 se isi row se chalta hai (pehle Machinery se), aur
+  // Create / Entry ka matlab alag ho gaya — isliye ye text t() se aata hai
+  // (function = padhte waqt jo bhasha chal rahi ho). Sirf jis row me `entry`
+  // likha hai wahan Entry ka box khulta hai — baaki sab par "–" (permNA).
   "Equipment": {
     view: "Project ke andar Equipment tab nahi dikhega — project par lagi machine aur uska hisaab.",
-    create: "Project par machine lagana, usage darj karna", edit: "Usage/entry badalna",
-    delete: "Entry hatana", approve: "Equipment bill approve karna", export: "Equipment register nikalna",
+    create: () => t("settings.perm_eq_create"),
+    entry: () => t("settings.perm_eq_entry"),
+    edit: () => t("settings.perm_eq_edit"),
+    delete: () => t("settings.perm_eq_delete"),
+    approve: () => t("settings.perm_eq_approve"),
+    export: "Equipment register nikalna",
   },
 };
 
@@ -289,7 +301,7 @@ const PERM_HELP = {
 // lagti hai ya nahi.
 function permTip(moduleName, action) {
   const h = PERM_HELP[moduleName] || {};
-  const base = h[action];
+  const base = typeof h[action] === "function" ? h[action]() : h[action];
   if (base === "—") return `${action.toUpperCase()} — is row par lagoo nahi hota.`;
   const head = base || `${moduleName} me ${action}`;
   const live = permLive(moduleName, action);
@@ -1356,15 +1368,25 @@ function RolesAccess() {
   // ON karne par sab zero milta.
   const modules = [...ALL_MODULE_ITEMS, ...PROJECT_TAB_ITEMS].map(name => ({ name }));
 
-  const allPerms = ["view", "create", "edit", "delete", "approve", "export"];
+  // "entry" = rozana ka kaam darj karna (create = naya master/setup banana).
+  // Column create ke turant baad, taaki dono ka farak saath dikhe.
+  const allPerms = ["view", "create", "entry", "edit", "delete", "approve", "export"];
   // In rows par sirf dekhna aur nikalna hota hai — create/edit/delete/approve
   // ka koi matlab nahi.
   // Kaunsa box is row par lagoo hi nahi hota — yahi PERM_HELP me "—" se
   // likha hai, to wahi ek jagah se dono cheezein chalti hain: bujha box
   // aur uska hover text.
-  const permNA = (name, p) => (PERM_HELP[name] || {})[p] === "—";
+  // Entry ulta chalta hai: jis row ke PERM_HELP me `entry` likha hi nahi
+  // (aaj Equipment ke siwa sab), wahan wo lagoo nahi — naye module apne aap
+  // bujhe rehte hain jab tak koi jaan-boojh kar unka Entry na jode.
+  const permNA = (name, p) => {
+    const h = PERM_HELP[name] || {};
+    if (p === "entry") return !h.entry || h.entry === "—";
+    return h[p] === "—";
+  };
   const permColors = {
     view: { bg: T.blueSoft, text: T.blue }, create: { bg: T.greenSoft, text: T.green },
+    entry: { bg: T.tealSoft, text: T.teal },
     edit: { bg: T.amberSoft, text: T.amber }, delete: { bg: T.redSoft, text: T.red },
     approve: { bg: T.purpleSoft, text: T.purple }, export: { bg: "#F0FDF4", text: "#166534" },
   };
@@ -1373,11 +1395,11 @@ function RolesAccess() {
     admin: Object.fromEntries(modules.map(m => [m.name, allPerms])),
     project_manager: {
       Projects:["view","create","edit"], Design:["view","create","edit"], Finance:["view","create"], Procurement:["view","create","edit"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:["view","create","edit"], MOM:["view","create","edit"], "Township CRM":["view","create","edit"], Tenders:["view","create","edit"], Reports:["view"], Library:["view"], Settings:[],
-      Overview:["view"], Estimate:["view","create","edit"], Budget:["view"], Party:["view","create","edit"], Transaction:["view","create"], "To Do":["view","create","edit"], Tasks:["view","create","edit"], Material:["view","create","edit"], Subcon:["view","create","edit"], Attendance:["view","create","edit"], Equipment:["view","create","edit"], Files:["view","create","edit"], "Site / DPR":["view","create","edit"],
+      Overview:["view"], Estimate:["view","create","edit"], Budget:["view"], Party:["view","create","edit"], Transaction:["view","create"], "To Do":["view","create","edit"], Tasks:["view","create","edit"], Material:["view","create","edit"], Subcon:["view","create","edit"], Attendance:["view","create","edit"], Equipment:["view","create","entry","edit"], Files:["view","create","edit"], "Site / DPR":["view","create","edit"],
     },
     supervisor: {
       Projects:["view"], Design:["view"], Finance:["view"], Procurement:["view","create"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:[], MOM:["view"], "Township CRM":["view"], Tenders:["view"], Reports:["view"], Library:["view"], Settings:[],
-      Overview:["view"], Estimate:[], Budget:[], Party:["view"], Transaction:[], "To Do":["view","create","edit"], Tasks:["view","create","edit"], Material:["view","create"], Subcon:["view"], Attendance:["view","create","edit"], Equipment:["view"], Files:["view","create"], "Site / DPR":["view","create","edit"],
+      Overview:["view"], Estimate:[], Budget:[], Party:["view"], Transaction:[], "To Do":["view","create","edit"], Tasks:["view","create","edit"], Material:["view","create"], Subcon:["view"], Attendance:["view","create","edit"], Equipment:["view","entry"], Files:["view","create"], "Site / DPR":["view","create","edit"],
     },
     accountant: {
       Projects:["view"], Design:[], Finance:["view","create","edit","approve"], Procurement:["view"], Warehouse:["view"], "Team & HR":["view","create","edit"], CRM:["view"], MOM:["view"], "Township CRM":["view"], Tenders:["view","create","edit"], Reports:["view"], Library:["view"], Settings:[],
@@ -1421,14 +1443,20 @@ function RolesAccess() {
       setPermMatrix(prev => {
         const next = { ...prev };
         for (const dbRole of res.data) {
-          // Match by slug: "Project Manager" → "project_manager"
-          const key = slugOf(dbRole.name);
+          // Match by slug: "Project Manager" → "project_manager". DB me
+          // supervisor ka role "Site Supervisor" naam se hai (slug
+          // site_supervisor) par card ki id "supervisor" hai — pehle uski DB
+          // ticks kabhi card tak nahi pahunchti thin: matrix hardcoded default
+          // dikhata aur Save wahi default DB me likh deta (asli ticks mit jaate).
+          const raw = slugOf(dbRole.name);
+          const key = raw === "site_supervisor" && !res.data.some(r => slugOf(r.name) === "supervisor") ? "supervisor" : raw;
           if (next[key] === undefined) next[key] = {};
           const modMap = {};
           for (const p of (dbRole.permissions || [])) {
             const perms = [];
             if (p.can_view)    perms.push("view");
             if (p.can_create)  perms.push("create");
+            if (p.can_entry)   perms.push("entry");
             if (p.can_edit)    perms.push("edit");
             if (p.can_delete)  perms.push("delete");
             if (p.can_approve) perms.push("approve");
@@ -1473,6 +1501,8 @@ function RolesAccess() {
       module: m.name,
       can_view:    (perms[m.name]||[]).includes("view")    ? 1 : 0,
       can_create:  (perms[m.name]||[]).includes("create")  ? 1 : 0,
+      // ENTRY — purana backend is field ko chhod deta hai, naya padhta hai.
+      can_entry:   (perms[m.name]||[]).includes("entry")   ? 1 : 0,
       can_edit:    (perms[m.name]||[]).includes("edit")    ? 1 : 0,
       can_delete:  (perms[m.name]||[]).includes("delete")  ? 1 : 0,
       can_approve: (perms[m.name]||[]).includes("approve") ? 1 : 0,
