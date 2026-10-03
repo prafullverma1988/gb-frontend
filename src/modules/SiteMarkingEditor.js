@@ -130,11 +130,19 @@ const chainageTicks = (pts, gaps, every, startCh) => {
 // jaanch, sab sirf salaah — faisla aadmi ka:
 //   • retraceOf — line aakhir me apne hi raaste par wapas mudi?
 //   • overlapOf — nayi line kisi bani line ke upar hi chal rahi hai?
+//     (sirf UPAR — saath-saath chalti naali ya sadak ki doosri taraf nahi)
 //   • joinExtends — "Aage ka hissa?" sirf jab nayi line sach me aage badhe.
-// Itne paas = "wahi raasta" (sadak ki aadhi chaudai + GPS ki aam galti).
+// Itne paas = "saath chalti hai" (sadak ki aadhi chaudai + GPS ki aam galti).
 const NEAR_M = 10;
-// Nayi line ka itna hissa purani ke paas = wahi line dobara.
+// Nayi line ka itna hissa purani ke saath chale…
 const OVERLAP_FRAC = 0.6;
+// …AUR upar ho: saath wale hisse ka kam se kam ek-chauthai purani ke 3 m
+// andar. Road aur dono taraf naali (Prafull, 3 Oct 2026: "dono taraf nali
+// me to 3 line") 4–8 m door saath chalti hain — wo dohri line nahi. Chauthai
+// (median nahi) taaki asli dohri line ka ek bhatka point (Sector 15 Rd 2:
+// 3 me se 1 point 6.2 m door) use bacha na le.
+const SAME_M = 3;
+const SAME_Q = 0.25;
 // Isse chhoti wapsi par chetavni nahi — sire ka jitter hai, galti nahi.
 const RETRACE_MIN_M = 25;
 const RETRACE_SKIP_M = 30;   // apne hi padosi point "wapsi" nahi — itna peechhe tak chhodo
@@ -160,10 +168,21 @@ const segsOf = (pts, gaps) => {
   return out;
 };
 const distToSegs = (p, segs) => { let m = Infinity; for (const [a, b] of segs) { const d = ptSegM(p, a, b); if (d < m) m = d; } return m; };
-const overlapShare = (newPts, newGaps, oldPts, oldGaps) => {
+// Lambai ke hisaab se q-th doori (0.5 = beech ki doori).
+const quantileM = (smp, q) => {
+  const tot = smp.reduce((s, x) => s + x.w, 0);
+  if (!(tot > 0)) return Infinity;
+  const sorted = [...smp].sort((x, y) => x.d - y.d);
+  let acc = 0;
+  for (const x of sorted) { acc += x.w; if (acc >= tot * q) return x.d; }
+  return sorted[sorted.length - 1].d;
+};
+// share: nayi line ka kitna hissa purani ke NEAR_M andar (saath chalti hai);
+// nearQ / mid: saath wale hisse ki chauthai / beech ki doori (upar ya bagal me).
+const alongOf = (newPts, newGaps, oldPts, oldGaps) => {
   const segs = segsOf(oldPts, oldGaps);
-  if (!segs.length) return 0;
-  let tot = 0, near = 0;
+  if (!segs.length) return { share: 0, nearQ: Infinity, mid: Infinity };
+  const smp = [];
   partsOf(newPts, newGaps).forEach((part) => {
     for (let i = 1; i < part.length; i++) {
       const a = part[i - 1], b = part[i], L = segM(a, b);
@@ -172,21 +191,26 @@ const overlapShare = (newPts, newGaps, oldPts, oldGaps) => {
       const k = Math.min(50, Math.max(1, Math.ceil(L / NEAR_M)));
       for (let j = 0; j < k; j++) {
         const f = (j + 0.5) / k;
-        if (distToSegs({ lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f }, segs) <= NEAR_M) near += L / k;
+        smp.push({ w: L / k, d: distToSegs({ lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f }, segs) });
       }
-      tot += L;
     }
   });
-  return tot > 0 ? near / tot : 0;
+  const tot = smp.reduce((s, x) => s + x.w, 0);
+  const near = smp.filter((x) => x.d <= NEAR_M);
+  const share = tot > 0 ? near.reduce((s, x) => s + x.w, 0) / tot : 0;
+  return { share, nearQ: quantileM(near, SAME_Q), mid: quantileM(near, 0.5) };
 };
-// olds: [{ name, pts, gaps }] → sabse zyada chadhi hui (OVERLAP_FRAC paar) ya null
+const overlapShare = (newPts, newGaps, oldPts, oldGaps) => alongOf(newPts, newGaps, oldPts, oldGaps).share;
+// olds: [{ name, pts, gaps }] → sabse zyada chadhi hui (OVERLAP_FRAC paar aur
+// SAME_M ke andar) ya null. gapM = beech ki doori, sawaal me dikhti hai.
 const overlapOf = (newPts, newGaps, olds) => {
   if (!Array.isArray(newPts) || newPts.length < 2) return null;
   let best = null;
   for (const o of olds || []) {
     if (!o || !Array.isArray(o.pts) || o.pts.length < 2) continue;
-    const share = overlapShare(newPts, newGaps, o.pts, o.gaps);
-    if (share >= OVERLAP_FRAC && (!best || share > best.share)) best = { item: o, share };
+    const r = alongOf(newPts, newGaps, o.pts, o.gaps);
+    if (r.share < OVERLAP_FRAC || r.nearQ > SAME_M) continue;
+    if (!best || r.share > best.share) best = { item: o, share: r.share, gapM: Math.round(r.mid * 10) / 10 };
   }
   return best;
 };
@@ -991,14 +1015,14 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
   };
   // Nayi line kisi BANI line ke upar? Haan to naam le kar poochho — "Phir
   // bhi save karo" ya "Wapas" (naksha par). Library: usi folder + file ki
-  // lines. Kaam wala mode: usi type ki (aur dusre kaam ki nahi) — ek sadak
-  // par road, naali, pipe teen alag line hona aam baat hai.
+  // lines. Kaam wala mode: dusre kaam ki nahi. Dono jagah sirf usi TYPE ki —
+  // ek sadak par road, naali, pipe teen alag line hona aam baat hai.
   const overlapGate = (olds, again) => {
     if (kind !== "line" || overlapOkRef.current === geomSig()) return false;
     const hit = overlapOf(ptsRef.current, brkRef.current, olds);
     if (!hit) return false;
     setAsk({
-      msg: t("map_draw.overlap_puchho", { name: hit.item.name || "", p: Math.round(hit.share * 100) }),
+      msg: t("map_draw.overlap_puchho", { name: hit.item.name || "", p: Math.round(hit.share * 100), d: hit.gapM }),
       yes: t("map_draw.phir_bhi_save"), no: t("map_draw.naksha_par_wapas"),
       onYes: () => { overlapOkRef.current = geomSig(); again(); },
       onNo: () => setStep("draw"),
@@ -1014,7 +1038,8 @@ export default function SiteMarkingEditor({ lib, loadMaps, onClose, onSaved }) {
       const fid = folderSel && folderSel !== "new" ? Number(folderSel) : null;
       const fi = low(fileName.trim() || nm);
       const olds = folderSel === "new" ? [] : ((lib && lib.items) || [])
-        .filter((x) => x.kind === "line" && (fid == null ? x.folder_id == null : Number(x.folder_id) === fid) && low(x.file || x.name) === fi)
+        .filter((x) => x.kind === "line" && (fid == null ? x.folder_id == null : Number(x.folder_id) === fid) && low(x.file || x.name) === fi
+          && (x.atype || "other") === (atype || "other"))
         .map((x) => ({ name: x.name, pts: x.pts, gaps: x.gaps }));
       if (overlapGate(olds, saveFree)) return;
     }

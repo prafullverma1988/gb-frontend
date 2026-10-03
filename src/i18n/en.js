@@ -4359,7 +4359,7 @@ const dict = {
   "map_draw.title_setup":                                     "What to mark",
   "map_draw.tod_do":                                          "Break here",
   "map_draw.tod_do_hint":                                     "End this segment here — the next point starts a new segment (e.g. across a road). The gap is not counted in length.",
-  "map_draw.overlap_puchho":                                  "This line runs over the existing \"{name}\" — {p}% of it is within 10 m of it. Did you draw the same path again? If saved, the map shows two lines and the length doubles.",
+  "map_draw.overlap_puchho":                                  "This line runs right over the existing \"{name}\" — {p}% of it runs along it, about {d} m apart. Did you draw the same path again? If saved, the map shows two lines and the length doubles. If it is a drain, pick \"Drain\" in Type; if it is the other side of the road, choose \"Save anyway\".",
   "map_draw.phir_bhi_save":                                   "Save anyway",
   "map_draw.wapsi_title":                                     "The line turns back over its own path at the end",
   "map_draw.wapsi_note":                                      "The last {d} runs over the path already drawn. If kept, the map shows two lines and the length comes out too long.",
