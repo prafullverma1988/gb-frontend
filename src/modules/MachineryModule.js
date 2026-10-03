@@ -2711,16 +2711,16 @@ function VehiclePicker({ tpl, trucks, parties, onlyBaaki, onCancel, onSaved }) {
     if (mon.length) lines.push(t("trip_tracking.gs_monthly_line", { list: mon.map((b) => regOf(b.vehicle_id)).join(", "), kind: kindLbl }));
     if (otherB.length) lines.push(t("trip_tracking.gs_billing_line", { n: otherB.length, kind: kindLbl }));
     if (d.removed) lines.push(t("trip_tracking.gs_removed_line", { n: d.removed }));
-    if (lines.length) {
-      const pend = bc.filter((b) => b.from === "pending");
+    // "Rate baaki" gaadi — card ke tareeke par aana to hona hi hai, par kitni
+    // RATE PENDING trip ka paisa banne wala hai ye save se PEHLE dikhe.
+    const pend = bc.filter((b) => b.from === "pending");
+    if (pend.length) {
       const byV = d.trips_by_vehicle || {};
-      if (pend.length) {
-        lines.push(t("trip_tracking.gs_pending_line", { n: pend.length, kind: kindLbl,
-          m: pend.reduce((a, b) => a + (Number(byV[b.vehicle_id]) || 0), 0) }));
-      }
-      if (!window.confirm(t("trip_tracking.gs_confirm_title", { name: tpl.name }) + "\n\n" + lines.join("\n") + "\n\n" + t("trip_tracking.gs_confirm_q"))) {
-        setBusy(false); return;
-      }
+      lines.push(t("trip_tracking.gs_pending_line", { n: pend.length, kind: kindLbl,
+        m: pend.reduce((a, b) => a + (Number(byV[b.vehicle_id]) || 0), 0) }));
+    }
+    if (lines.length && !window.confirm(t("trip_tracking.gs_confirm_title", { name: tpl.name }) + "\n\n" + lines.join("\n") + "\n\n" + t("trip_tracking.gs_confirm_q"))) {
+      setBusy(false); return;
     }
     const r = await api.put(`/trips/rate-templates/${tpl.id}/vehicles`, { vehicle_ids: ids });
     setBusy(false);
@@ -2854,13 +2854,11 @@ function RatePendingBlock({ cards, canRates, onGaadi, onPick, onNewCard }) {
 // ── Gaadi-wise "Card lagao" ──────────────────────────────────────
 // Trip vehicles ki row par "Card nahi" ya card ka chip (ya amber dabbe ki
 // gaadi) dabao. Is gaadi ke laayak chalu card (Sab vendor ya isi vendor ka)
-// ya "Card hatao". Server ka endpoint wahi poori-list wala (PUT
-// /rate-templates/:id/vehicles) — isliye card ki abhi ki gaadi + ye gaadi
-// bhejte hain; hatane par card ki list me se ye gaadi nikaal kar. Card chunte
-// hi server se preview: billing kya ho jaayega, pehle kis card par thi, aur
-// kitni RATE PENDING trip ko paisa milega.
-const idsWith = (c, vid) => [...new Set([...(c.vehicle_ids || []).map(Number), Number(vid)])];
-const idsWithout = (c, vid) => (c.vehicle_ids || []).map(Number).filter((x) => x !== Number(vid));
+// ya "Card hatao". Server: PATCH /trips/trucks/:id/rate-card { rate_card_id }
+// — sirf YE gaadi badalti hai (poori-list wala endpoint yahan galat tha:
+// screen ki purani list se beech me kisi aur ki lagayi gaadi chupchaap hat
+// jaati). Card chunte hi server se preview (?preview=1): pehle kis card par
+// thi, billing kya ho jaayega, aur kitni RATE PENDING trip ko paisa milega.
 function CardPickModal({ vehicle, cards, parties, onClose, onSaved }) {
   const vid = vehicle.vendor_id == null ? null : Number(vehicle.vendor_id);
   const all = (cards && cards.list) || [];
@@ -2878,7 +2876,7 @@ function CardPickModal({ vehicle, cards, parties, onClose, onSaved }) {
     if (!target || Number(target.id) === cur) return undefined;
     let alive = true;
     setPv({ busy: true });
-    api.put(`/trips/rate-templates/${target.id}/vehicles?preview=1`, { vehicle_ids: idsWith(target, vehicle.id) })
+    api.patch(`/trips/trucks/${vehicle.id}/rate-card?preview=1`, { rate_card_id: target.id })
       .then((r) => { if (alive) setPv(r && r.success !== false ? { data: r.data || {} } : { err: srvMsg(r) }); })
       .catch(() => { if (alive) setPv({ err: t("common.something_went_wrong") }); });
     return () => { alive = false; };
@@ -2887,9 +2885,7 @@ function CardPickModal({ vehicle, cards, parties, onClose, onSaved }) {
   const changed = sel !== (cur ? String(cur) : "") && (sel === "hatao" ? !!curCard : !!target);
   const save = async () => {
     setBusy(true);
-    const r = sel === "hatao"
-      ? await api.put(`/trips/rate-templates/${cur}/vehicles`, { vehicle_ids: idsWithout(curCard, vehicle.id) })
-      : await api.put(`/trips/rate-templates/${target.id}/vehicles`, { vehicle_ids: idsWith(target, vehicle.id) });
+    const r = await api.patch(`/trips/trucks/${vehicle.id}/rate-card`, { rate_card_id: sel === "hatao" ? null : target.id });
     setBusy(false);
     if (!r || r.success === false) { window.alert(srvMsg(r)); return; }
     onSaved(sel === "hatao" ? t("machinery.cp_hataya", { reg })
@@ -2897,9 +2893,10 @@ function CardPickModal({ vehicle, cards, parties, onClose, onSaved }) {
   };
 
   const d = pv && pv.data;
-  const bc = d ? (d.billing_changes || []).find((b) => Number(b.vehicle_id) === Number(vehicle.id)) : null;
-  const mv = d ? (d.moved_from || []).find((m) => Number(m.vehicle_id) === Number(vehicle.id)) : null;
-  const m = d ? Number((d.trips_by_vehicle || {})[vehicle.id]) || 0 : 0;
+  // Server ka abhi ka sach: pehle kis card par thi (from), billing kya se kya.
+  const mv = d && d.from && target && Number(d.from.id) !== Number(target.id) ? d.from : null;
+  const bc = d && d.billing && d.billing.from !== d.billing.to ? d.billing : null;
+  const m = d ? Number(d.trips_to_price) || 0 : 0;
   const optS = (on) => ({ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 11px", borderRadius: 8, cursor: "pointer",
     border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface });
   const bm = billingMeta(vehicle.trip_billing);
@@ -2945,7 +2942,7 @@ function CardPickModal({ vehicle, cards, parties, onClose, onSaved }) {
           {pv && pv.err && <div style={{ color: T.red, fontWeight: 600 }}>{pv.err}</div>}
           {d && (
             <>
-              {mv && <div>{t("machinery.cp_moved_line", { name: mv.from_name || "—" })}</div>}
+              {mv && <div>{t("machinery.cp_moved_line", { name: mv.name || "—" })}</div>}
               {bc && <div>{t("machinery.cp_billing_line", { from: billingMeta(bc.from).l, to: billingMeta(bc.to).l })}</div>}
               {m > 0
                 ? <div style={{ fontWeight: 700, color: T.grn }}>{t("machinery.cp_trips_line", { m })}</div>
