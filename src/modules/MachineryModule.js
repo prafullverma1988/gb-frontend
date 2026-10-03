@@ -23,7 +23,7 @@ import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { BackClose } from "../utils/backNav";
 import CityPicker from "../components/CityPicker";
 import { canApproveAction } from "../utils/approvalAuthority";
-import { can } from "../utils/perms";
+import { can, canAny } from "../utils/perms";
 
 // Gadi number ka milan: space/dash/dot ka farak nahi ginna — backend bhi
 // theek yahi karta hai (utils/machineIdentity.js). Dono taraf ek jaisa na ho
@@ -2151,13 +2151,18 @@ function RemoveMachineModal({ open, onClose, machine, onRemoved }) {
 //
 // Bill kaise banta hai (server ka trip_billing, purani gaadi ka bhi
 // "effective" roop aata hai): km = vendor ka rate card, trip = route ka
-// rate, monthly = mahine ka kiraya (trip sirf record), own = apni gaadi.
+// rate, monthly = mahine ka kiraya (trip sirf record), own = apni gaadi,
+// pending = "Rate baaki" (4 Oct 2026 — site par phone se judi gaadi, rate
+// office tay karega; card lagne tak trip RATE PENDING).
 const TRIP_BILLING = {
   km:      { get l() { return t("machinery.tv_bill_km"); },      get hint() { return t("machinery.tv_bill_km_hint"); },      c: T.ind, bg: T.indL },
   trip:    { get l() { return t("machinery.tv_bill_trip"); },    get hint() { return t("machinery.tv_bill_trip_hint"); },    c: T.blu, bg: T.bluL },
   monthly: { get l() { return t("machinery.tv_bill_monthly"); }, get hint() { return t("machinery.tv_bill_monthly_hint"); }, c: T.amb, bg: T.ambL },
+  pending: { get l() { return t("machinery.tv_bill_pending"); }, get hint() { return t("machinery.tv_bill_pending_hint"); }, c: T.amb, bg: T.ambL },
   own:     { get l() { return t("machinery.tv_bill_own"); },     c: T.slt, bg: T.sltL },
 };
+// Form me chunne layak (own nahi — apni gaadi Fleet se aati hai).
+const TV_BILL_CHOICES = ["km", "trip", "monthly", "pending"];
 const billingMeta = (k) => TRIP_BILLING[k] || TRIP_BILLING.trip;
 // Trip ki gaadi ka vendor aksar "transporter" role me hota hai.
 const TRIP_VENDOR_ROLES = ["transporter", ...HIRE_VENDOR_ROLES];
@@ -2191,7 +2196,7 @@ function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
     setVendor(vehicle && vehicle.vendor_id ? String(vehicle.vendor_id) : null);
     // Nayi gaadi par billing jaan-boojh kar khaali — km aur per-trip ka farak
     // paisa badal deta hai, ye aadmi khud soch kar chune.
-    setBilling(vehicle && ["km", "trip", "monthly"].includes(vehicle.trip_billing) ? vehicle.trip_billing : "");
+    setBilling(vehicle && TV_BILL_CHOICES.includes(vehicle.trip_billing) ? vehicle.trip_billing : "");
     setDriver(""); setErr(""); setBusy(false);
   }, [open, vehicle]);
 
@@ -2238,7 +2243,7 @@ function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
       <div style={{ height: 12 }} />
       <Field label={t("machinery.tv_f_billing")}>
         <div style={{ display: "grid", gap: 7 }}>
-          {["km", "trip", "monthly"].map((k) => {
+          {TV_BILL_CHOICES.map((k) => {
             const m = TRIP_BILLING[k];
             const on = billing === k;
             return (
@@ -2276,17 +2281,848 @@ const matchTv = (v, vendorName, q) => {
   return toks.every((tok) => hay.some((h) => h.includes(tok)) || (!!normReg(tok) && regs.some((x) => x.includes(normReg(tok)))));
 };
 
-function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ }) {
+// ══════════════════════════════════════════════════════════════════
+// RATE CARD — Trip vehicles ka "Rate card" hissa (4 Oct 2026)
+//
+// Prafull: rate OFFICE tay karta hai, aur office Machinery → Trip vehicles
+// me kaam karta hai (company level) — Trip Tracking project ke andar hai,
+// wahan ab card sirf dikhta hai. Isliye card banana / badalna / hatana,
+// "Gaadi select karo" aur gaadi-wise "Card lagao" yahan hain (Trip Tracking
+// se yahan laaye gaye — module independence: wahan se hataye, copy nahi).
+// Naam wala card ("500 cft", "Hyva — per trip"), Kiska ("Sab vendor" ya ek
+// vendor), capacity (marzi) aur tareeka: Km slab (1st km, 2nd km … isse aage
+// har km) ya Per trip (fixed ₹). Ek gaadi par ek card; card lagte hi gaadi ka
+// billing card ke tareeke ka — "Rate baaki" (phone se judi, rate office tay
+// karega) gaadi bhi, aur uski RATE PENDING trips usi card se bharti hain. Har
+// trip apne waqt ke card ki copy rakhti hai. Badalne ka haq server ke
+// rateGate jaisa — Equipment Edit ya Finance Create.
+// ══════════════════════════════════════════════════════════════════
+const canEditRates = () => can("Equipment", "edit") || canAny("Finance", "create", { strict: true });
+
+// ── Km rate card ka ganit ───────────────────────────────────────
+// Server ke utils/tripKm.js (roundKm / amountForKm) jaisa hi — yahan sirf
+// DIKHANE ke liye (editor ka example, list ka "10 km = ₹"). Asli amount server
+// banata hai; dono ka ganit alag hua to screen ka ₹ aur bill ka ₹ alag aayega.
+//   rates [100, 80, 70], aage 60, 10 km → Slab se ₹600, Jod kar ₹670.
+const r2 = (n) => Math.round(n * 100) / 100;
+// nearest = poora km (0.5 upar) · up = hamesha upar · none = jaisa hai (2 decimal)
+function rcRoundKm(km, mode) {
+  const k = Number(km);
+  if (!Number.isFinite(k) || k <= 0) return 0;
+  if (mode === "up") return Math.ceil(k);
+  if (mode === "none") return r2(k);
+  return Math.round(k);
+}
+// i-th km ka rate (1 se ginti): slab me ho to uska, warna "isse aage" wala.
+function rcRateAt(card, i) {
+  const rates = card.rates || [];
+  return Number(i <= rates.length ? rates[i - 1] : card.onward_rate) || 0;
+}
+// slab:       K ka slab (K ≤ slab rows → ceil(K) wala rate, warna aage wala) × K
+// cumulative: har poore km ka apna rate jodo + bache hisse × agle km ka rate
+function rcAmount(card, km) {
+  const K = Number(km);
+  if (!card || !Number.isFinite(K) || K <= 0) return 0;
+  const n = (card.rates || []).length;
+  if (card.method === "cumulative") {
+    const whole = Math.floor(K);
+    let sum = 0;
+    for (let i = 1; i <= Math.min(whole, n); i++) sum += rcRateAt(card, i);
+    sum += Math.max(0, whole - n) * (Number(card.onward_rate) || 0);
+    const frac = K - whole;
+    if (frac > 0) sum += frac * rcRateAt(card, whole + 1);
+    return r2(sum);
+  }
+  return r2(rcRateAt(card, K <= n ? Math.ceil(K) : n + 1) * K);
+}
+// 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st
+const nth = (n) => {
+  const h = n % 100;
+  if (h >= 11 && h <= 13) return n + "th";
+  return n + ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
+};
+// Server rates JSON text bhi bhej sakta hai, array bhi.
+const parseRates = (v) => {
+  try { const a = Array.isArray(v) ? v : JSON.parse(v || "[]"); return Array.isArray(a) ? a.map(Number) : []; }
+  catch { return []; }
+};
+// Rate card ke rate paise me bhi ho sakte hain (₹12.50) — wahan gol nahi karte.
+const rs2 = (v) => "₹" + (Number(v) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+const fmtKm = (v) => (Number(v) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+const RC_MAX = 20;
+const RC_ROUND = {
+  nearest: { get label() { return t("trip_tracking.rc_r_nearest"); }, get hint() { return t("trip_tracking.rc_r_nearest_hint"); }, get how() { return t("trip_tracking.rc_how_nearest"); } },
+  up:      { get label() { return t("trip_tracking.rc_r_up"); },      get hint() { return t("trip_tracking.rc_r_up_hint"); },      get how() { return t("trip_tracking.rc_how_up"); } },
+  none:    { get label() { return t("trip_tracking.rc_r_none"); },    get hint() { return t("trip_tracking.rc_r_none_hint"); },    get how() { return t("trip_tracking.rc_how_none"); } },
+};
+const RC_METHOD = {
+  slab:       { get label() { return t("trip_tracking.rc_m_slab"); }, get hint() { return t("trip_tracking.rc_m_slab_hint"); } },
+  cumulative: { get label() { return t("trip_tracking.rc_m_cum"); },  get hint() { return t("trip_tracking.rc_m_cum_hint"); } },
+};
+const RT_KIND = {
+  km:   { get label() { return t("trip_tracking.rt_kind_km"); },   get hint() { return t("trip_tracking.rt_kind_km_hint"); } },
+  trip: { get label() { return t("trip_tracking.rt_kind_trip"); }, get hint() { return t("trip_tracking.rt_kind_trip_hint"); } },
+};
+const kindLabel = (k) => RT_KIND[k === "trip" ? "trip" : "km"].label;
+// Server se aaya card — rates JSON text ho sakta hai, paisa string.
+const normCard = (c) => ({ ...c, rates: parseRates(c.rates), onward_rate: Number(c.onward_rate) || 0,
+  method: c.method === "cumulative" ? "cumulative" : "slab", round_mode: RC_ROUND[c.round_mode] ? c.round_mode : "nearest" });
+const slabText = (c) => {
+  const shown = c.rates.slice(0, 5).map((r, i) => nth(i + 1) + " " + rs2(r));
+  if (c.rates.length > 5) shown.push("… +" + (c.rates.length - 5));
+  shown.push(t("trip_tracking.rc_onward_short", { rate: rs2(c.onward_rate) }));
+  return shown.join(" · ");
+};
+// Card ke rate ki ek line — Per trip ka ₹, ya km slab.
+const rateLine = (c) => (c.kind === "trip" ? t("trip_tracking.rt_per_trip_amt", { amt: rs2(c.trip_rate) }) : slabText(normCard(c)));
+const kiskaOf = (c, parties) => (c.vendor_id == null ? t("trip_tracking.rt_sab_vendor")
+  : c.vendor_name || ((parties || []).find((p) => String(p.id) === String(c.vendor_id)) || {}).name || "#" + c.vendor_id);
+// /trips/trucks ki row — naya server vendor_id, purana default_vendor_id.
+const truckVendorId = (r) => (r.vendor_id != null ? r.vendor_id : (r.default_vendor_id != null ? r.default_vendor_id : null));
+// "Rate tay karna baaki" wali gaadi: chalu card nahi aur billing Rate baaki / Km / Per trip.
+const rateBaaki = (r) => !r.rate_card_id && ["pending", "km", "trip"].includes(r.trip_billing);
+const rcLbl = { fontSize: 10.5, color: T.t4, marginBottom: 4, fontWeight: 600 };
+const linkBtn = (c) => ({ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: 700, color: c });
+
+function RupeeInput({ value, onChange, bad, autoFocus }) {
+  return (
+    <div style={{ position: "relative", width: 140, flexShrink: 0 }}>
+      <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: T.t3, pointerEvents: "none" }}>₹</span>
+      <input value={value} inputMode="decimal" autoFocus={autoFocus} placeholder="0"
+        onChange={(e) => onChange(e.target.value.replace(/[^0-9.]/g, ""))}
+        style={{ ...inp, paddingLeft: 24, fontVariantNumeric: "tabular-nums", borderColor: bad ? T.red : T.b1, background: bad ? T.redL : T.surface }} />
+    </div>
+  );
+}
+
+// ── Card banao / badlo ───────────────────────────────────────────
+// Prafull: "entry aur report non-technical aadmi ke liye aasaan ho" — rows
+// waise hi bolti hain jaise vendor bolta hai, aur saath me chalta-phirta example.
+function RateCardEditor({ card, parties, onCancel, onSaved }) {
+  const editing = !!(card && card.id);
+  const seed = card && card._seed ? card._seed : null;
+  const from = editing ? card : seed;
+  const [name, setName] = useState(from && from.name ? from.name : "");
+  const [vendorId, setVendorId] = useState(from && from.vendor_id != null ? String(from.vendor_id) : "");
+  const [kind, setKind] = useState(from && from.kind === "trip" ? "trip" : "km");
+  const [capQty, setCapQty] = useState(editing && card.capacity_qty != null ? String(Number(card.capacity_qty)) : "");
+  const [capUnit, setCapUnit] = useState(editing && card.capacity_unit ? card.capacity_unit : "");
+  const kmFrom = from && from.kind !== "trip" ? from : null;
+  const [method, setMethod] = useState(kmFrom ? kmFrom.method : "slab");
+  const [rates, setRates] = useState(kmFrom && kmFrom.rates && kmFrom.rates.length ? kmFrom.rates.map(String) : ["", "", ""]);
+  const [onward, setOnward] = useState(kmFrom && kmFrom.onward_rate != null ? String(kmFrom.onward_rate) : "");
+  const [round, setRound] = useState(kmFrom && RC_ROUND[kmFrom.round_mode] ? kmFrom.round_mode : "nearest");
+  const [tripRate, setTripRate] = useState(from && from.kind === "trip" && from.trip_rate != null ? String(from.trip_rate) : "");
+  const [note, setNote] = useState(from ? from.note || "" : "");
+  const [exKm, setExKm] = useState("9.7");
+  const [exTrips, setExTrips] = useState("10");
+  const [focusIdx, setFocusIdx] = useState(null);
+  const [tried, setTried] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const numOk = (v) => v !== "" && v != null && Number.isFinite(Number(v)) && Number(v) >= 0;
+  const cap = capCheck(capQty, capUnit);
+  const badRate = rates.map((r) => !numOk(r));
+  const badOnward = !numOk(onward);
+  const badTrip = !numOk(tripRate);
+  const firstBad = badRate.indexOf(true);
+  const err = !name.trim() ? t("trip_tracking.rt_err_naam")
+    : cap.bad ? t("trip_tracking.cap_galat")
+    : kind === "trip" ? (badTrip ? t("trip_tracking.rt_err_trip_rate") : null)
+    : firstBad >= 0 ? t("trip_tracking.rc_err_rate", { nth: nth(firstBad + 1) })
+    : badOnward ? t("trip_tracking.rc_err_onward") : null;
+  const complete = firstBad < 0 && !badOnward;
+  const live = complete ? { method, rates: rates.map(Number), onward_rate: Number(onward) } : null;
+
+  // ── Example: km daalo → round → ₹, aur ganit khol kar ──
+  const exOk = exKm !== "" && Number.isFinite(Number(exKm)) && Number(exKm) >= 0;
+  const K = exOk ? rcRoundKm(Number(exKm), round) : null;
+  const amt = live && K != null ? rcAmount(live, K) : null;
+  const other = live && K != null ? rcAmount({ ...live, method: method === "slab" ? "cumulative" : "slab" }, K) : null;
+  let formula = "";
+  if (live && K != null && K > 0) {
+    const n = live.rates.length;
+    if (method === "slab") {
+      formula = K <= n
+        ? t("trip_tracking.rc_f_slab", { k: fmtKm(K), rate: rs2(rcRateAt(live, Math.ceil(K))), nth: nth(Math.ceil(K)) })
+        : t("trip_tracking.rc_f_slab_onward", { k: fmtKm(K), rate: rs2(live.onward_rate) });
+    } else {
+      const whole = Math.floor(K);
+      const inSlab = Math.min(whole, n);
+      const parts = [];
+      if (inSlab > 5) {
+        let sum = 0;
+        for (let i = 1; i <= inSlab; i++) sum += rcRateAt(live, i);
+        parts.push(t("trip_tracking.rc_f_sum", { b: nth(inSlab), amt: rs2(sum) }));
+      } else {
+        for (let i = 1; i <= inSlab; i++) parts.push(rs2(rcRateAt(live, i)));
+      }
+      if (whole > n) parts.push(rs2(live.onward_rate) + " × " + (whole - n));
+      const frac = r2(K - whole);
+      if (frac > 0) parts.push(rs2(rcRateAt(live, whole + 1)) + " × " + fmtKm(frac));
+      formula = parts.join(" + ");
+    }
+  }
+  const exTripN = exTrips !== "" && Number.isFinite(Number(exTrips)) && Number(exTrips) >= 0 ? Number(exTrips) : null;
+
+  const save = async () => {
+    setTried(true);
+    if (err) return;
+    // Tareeka badla (Km slab ↔ Per trip) → card wali saari gaadi ka billing
+    // bhi badlega (server ek saath karta hai) — pehle pooch lo.
+    const onCard = editing ? (card.vehicles_total != null ? Number(card.vehicles_total) : Number(card.vehicles) || 0) : 0;
+    if (editing && card.kind !== kind && onCard > 0
+      && !window.confirm(t("trip_tracking.rt_kind_badal_confirm", { n: onCard, kind: RT_KIND[kind].label }))) return;
+    setSaving(true);
+    const body = {
+      name: name.trim(), vendor_id: vendorId ? Number(vendorId) : null, kind,
+      capacity_qty: cap.ok ? cap.qty : null, capacity_unit: cap.ok ? cap.unit : null, note: note.trim() || null,
+      ...(kind === "km"
+        ? { method, rates: rates.map(Number), onward_rate: Number(onward), round_mode: round }
+        : { trip_rate: Number(tripRate) }),
+    };
+    const r = editing ? await api.put("/trips/rate-templates/" + card.id, body) : await api.post("/trips/rate-templates", body);
+    setSaving(false);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.save_fail")); return; }
+    onSaved(r.data, !editing);
+  };
+
+  const optCard = (on) => ({ display: "flex", gap: 9, alignItems: "flex-start", padding: "9px 11px", borderRadius: 8, cursor: "pointer",
+    border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface, flex: "1 1 0", minWidth: 150 });
+  const secT = { fontSize: 11.5, fontWeight: 700, color: T.t2, margin: "14px 0 6px" };
+
+  return (
+    <div style={{ padding: "14px 15px", borderBottom: `1px solid ${T.b1}`, background: T.bluL + "55" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 10 }}>
+        {editing ? t("trip_tracking.rt_edit_title", { name: card.name }) : t("trip_tracking.rc_new")}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1.3fr 1fr", gap: 10 }}>
+        <div><div style={rcLbl}>{t("trip_tracking.rt_naam_req")}</div>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder={t("trip_tracking.rt_naam_ph")}
+            style={{ ...inp, borderColor: tried && !name.trim() ? T.red : T.b1 }} /></div>
+        <div><div style={rcLbl}>{t("trip_tracking.rt_kiska")}</div>
+          <select value={vendorId} onChange={(e) => setVendorId(e.target.value)} style={inp}>
+            <option value="">{t("trip_tracking.rt_sab_vendor")}</option>
+            {(parties || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select></div>
+        <div><div style={rcLbl}>{t("trip_tracking.rt_capacity_opt")}</div>
+          <CapInput qty={capQty} unit={capUnit} onQty={setCapQty} onUnit={setCapUnit} bad={tried && cap.bad} /></div>
+      </div>
+      <div style={{ fontSize: 11, color: T.t4, marginTop: 5 }}>{vendorId ? t("trip_tracking.rt_kiska_vendor_hint") : t("trip_tracking.rt_kiska_sab_hint")}</div>
+
+      <div style={secT}>{t("trip_tracking.rt_tareeka")}</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {["km", "trip"].map((k) => (
+          <label key={k} style={optCard(kind === k)}>
+            <input type="radio" name="rt_kind" checked={kind === k} onChange={() => setKind(k)} style={{ marginTop: 2, accentColor: T.ind }} />
+            <span>
+              <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{RT_KIND[k].label}</span>
+              <span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 1, lineHeight: 1.45 }}>{RT_KIND[k].hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(250px, 1fr)", gap: 18, alignItems: "start", marginTop: 4 }}>
+        {/* ── Baayan: card bharna ── */}
+        <div>
+          {kind === "trip" ? (
+            <>
+              <div style={secT}>{t("trip_tracking.rt_per_trip_rate")}</div>
+              <RupeeInput value={tripRate} bad={tried && badTrip} onChange={setTripRate} />
+              <div style={{ fontSize: 11, color: T.t4, marginTop: 5 }}>{t("trip_tracking.rt_per_trip_hint")}</div>
+            </>
+          ) : (
+            <>
+              <div style={secT}>{t("trip_tracking.rc_method")}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {["slab", "cumulative"].map((k) => (
+                  <label key={k} style={optCard(method === k)}>
+                    <input type="radio" name="rc_method" checked={method === k} onChange={() => setMethod(k)} style={{ marginTop: 2, accentColor: T.ind }} />
+                    <span>
+                      <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{RC_METHOD[k].label}</span>
+                      <span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 1, lineHeight: 1.45 }}>{RC_METHOD[k].hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <div style={secT}>{t("trip_tracking.rc_rates")}</div>
+              <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, background: T.surface, overflow: "hidden" }}>
+                {rates.map((r, i) => {
+                  const last = i === rates.length - 1;
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: `1px solid ${T.b1}` }}>
+                      <span style={{ width: 120, fontSize: 12.5, fontWeight: 600, color: T.t2 }}>{t("trip_tracking.rc_nth_km", { nth: nth(i + 1) })}</span>
+                      <RupeeInput value={r} bad={tried && badRate[i]} autoFocus={i === focusIdx}
+                        onChange={(v) => setRates((rs) => rs.map((x, j) => (j === i ? v : x)))} />
+                      <span style={{ flex: 1 }} />
+                      {last && rates.length > 1 && (
+                        <button type="button" title={t("trip_tracking.rc_remove_km")} onClick={() => { setRates((rs) => rs.slice(0, -1)); setFocusIdx(null); }}
+                          style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer", fontSize: 13, lineHeight: 1, fontFamily: "inherit" }}>✕</button>
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={{ padding: "7px 12px", borderBottom: `1px solid ${T.b1}`, display: "flex", alignItems: "center", gap: 10 }}>
+                  <button type="button" disabled={rates.length >= RC_MAX}
+                    onClick={() => { setFocusIdx(rates.length); setRates((rs) => [...rs, ""]); }}
+                    style={{ padding: "6px 12px", borderRadius: 7, border: `1.5px dashed ${rates.length >= RC_MAX ? T.b1 : T.ind}`, background: T.surface,
+                      color: rates.length >= RC_MAX ? T.t4 : T.ind, fontSize: 12, fontWeight: 700, cursor: rates.length >= RC_MAX ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+                    {t("trip_tracking.rc_add_km")}
+                  </button>
+                  {rates.length >= RC_MAX && <span style={{ fontSize: 11, color: T.t4 }}>{t("trip_tracking.rc_max", { n: RC_MAX })}</span>}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: T.surfaceB }}>
+                  <span style={{ width: 120 }}>
+                    <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.rc_onward")}</span>
+                    <span style={{ display: "block", fontSize: 10.5, color: T.t4 }}>{t("trip_tracking.rc_onward_from", { nth: nth(rates.length + 1) })}</span>
+                  </span>
+                  <RupeeInput value={onward} bad={tried && badOnward} onChange={setOnward} />
+                </div>
+              </div>
+
+              <div style={secT}>{t("trip_tracking.rc_round")}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {Object.keys(RC_ROUND).map((k) => (
+                  <label key={k} style={optCard(round === k)}>
+                    <input type="radio" name="rc_round" checked={round === k} onChange={() => setRound(k)} style={{ marginTop: 2, accentColor: T.ind }} />
+                    <span>
+                      <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{RC_ROUND[k].label}</span>
+                      <span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 1, fontVariantNumeric: "tabular-nums" }}>{RC_ROUND[k].hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div style={secT}>{t("trip_tracking.rc_note")}</div>
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder={t("trip_tracking.rc_note_ph")} style={inp} />
+        </div>
+
+        {/* ── Daayan: chalta-phirta example ── */}
+        <div style={{ border: `1px solid ${T.b1}`, borderRadius: 10, background: T.surface, padding: 14, position: "sticky", top: 8, marginTop: 14 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.rc_ex_title")}</div>
+          <div style={{ fontSize: 11, color: T.t4, margin: "2px 0 10px", lineHeight: 1.45 }}>{kind === "trip" ? t("trip_tracking.rt_ex_trip_sub") : t("trip_tracking.rc_ex_sub")}</div>
+          {kind === "trip" ? (
+            <>
+              <div style={rcLbl}>{t("trip_tracking.rt_ex_trips")}</div>
+              <input value={exTrips} inputMode="numeric" onChange={(e) => setExTrips(e.target.value.replace(/[^0-9]/g, ""))} style={{ ...inp, width: 120, fontVariantNumeric: "tabular-nums" }} />
+              <div style={{ marginTop: 12, fontSize: 12.5, color: T.t2, lineHeight: 1.7, fontVariantNumeric: "tabular-nums" }}>
+                {badTrip || exTripN == null
+                  ? <div style={{ color: T.amb, fontWeight: 600 }}>{t("trip_tracking.rt_ex_trip_fill")}</div>
+                  : <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                      <span>{t("trip_tracking.rt_ex_trip_line", { n: exTripN, rate: rs2(tripRate) })}</span>
+                      <span style={{ fontSize: 20, fontWeight: 800, color: T.ind }}>{rs2(r2(exTripN * Number(tripRate)))}</span>
+                    </div>}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={rcLbl}>{t("trip_tracking.rc_ex_km")}</div>
+              <input value={exKm} inputMode="decimal" onChange={(e) => setExKm(e.target.value.replace(/[^0-9.]/g, ""))} style={{ ...inp, width: 120, fontVariantNumeric: "tabular-nums" }} />
+              <div style={{ marginTop: 12, fontSize: 12.5, color: T.t2, lineHeight: 1.7, fontVariantNumeric: "tabular-nums" }}>
+                {!exOk && <div style={{ color: T.t4 }}>{t("trip_tracking.rc_ex_km_daalo")}</div>}
+                {exOk && !complete && <div style={{ color: T.amb, fontWeight: 600 }}>{t("trip_tracking.rc_ex_fill")}</div>}
+                {exOk && complete && (
+                  <>
+                    <div>{t("trip_tracking.rc_ex_round", { km: fmtKm(Number(exKm)), k: fmtKm(K), how: RC_ROUND[round].how })}</div>
+                    {K > 0
+                      ? <div style={{ color: T.t1 }}>{formula} = <b>{rs2(amt)}</b></div>
+                      : <div style={{ color: T.t4 }}>{t("trip_tracking.rc_ex_zero")}</div>}
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.b1}`, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ fontSize: 11.5, color: T.t3, fontWeight: 600 }}>{t("trip_tracking.rc_ex_banega", { method: RC_METHOD[method].label })}</span>
+                      <span style={{ fontSize: 20, fontWeight: 800, color: T.ind }}>{rs2(amt)}</span>
+                    </div>
+                    {K > 0 && other !== amt && (
+                      <div style={{ fontSize: 11, color: T.t4, marginTop: 4 }}>{t("trip_tracking.rc_ex_other", { method: RC_METHOD[method === "slab" ? "cumulative" : "slab"].label, amt: rs2(other) })}</div>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {tried && err && <div style={{ marginTop: 12, fontSize: 12, color: T.red, fontWeight: 600 }}>{err}</div>}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", marginTop: 12 }}>
+        {!editing && <span style={{ fontSize: 11, color: T.t4, marginRight: "auto" }}>{t("trip_tracking.rt_save_ke_baad_gaadi")}</span>}
+        <Btn ghost onClick={onCancel}>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={saving}>{saving ? t("common.saving_2") : t("trip_tracking.rc_save")}</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ── Gaadi select karo ─────────────────────────────────────────────
+// Card kis gaadi par lage. Sirf chalu trip gaadi; vendor wale card par sirf
+// usi vendor ki. Chhanni: vendor (Sab vendor card par), capacity (card ki
+// capacity pehle se chuni), khoj, aur "Sirf rate baaki gaadi" (amber dabbe se
+// aaye to pehle se on). Save se pehle server se poochte hain (preview) —
+// kaunsi gaadi kis card se aa rahi hai, kiska billing badlega (Mahina wali
+// gaadi bhi), kaunsi hat rahi hai — aur wahi dikha kar pakka. "Rate baaki"
+// gaadi ka card ke tareeke par aana to hona hi hai — wo akela poochne ki
+// wajah nahi, bas confirm khule to saath me likha aata hai.
+function VehiclePicker({ tpl, trucks, parties, onlyBaaki, onCancel, onSaved }) {
+  const kindLbl = kindLabel(tpl.kind);
+  const cands = (trucks || []).filter((r) => r.is_trip_vehicle && Number(r.is_active) !== 0
+    && (tpl.vendor_id == null || String(truckVendorId(r)) === String(tpl.vendor_id)))
+    .sort((a, b) => String(a.registration_no || a.name || "").localeCompare(String(b.registration_no || b.name || "")));
+  // Bina vendor wali gaadi par card nahi lagta (uska bill kisi ke naam nahi
+  // banta — server 400 deta hai): dikhti hai par tick band, saath me wajah.
+  const noVendor = (r) => truckVendorId(r) == null;
+  const [sel, setSel] = useState(() => new Set(cands.filter((r) => Number(r.rate_card_id) === Number(tpl.id) && !noVendor(r)).map((r) => r.id)));
+  const caps = [...new Set(cands.map(capOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const [fCap, setFCap] = useState(tpl.capacity && caps.includes(tpl.capacity) && !onlyBaaki ? tpl.capacity : "");
+  const [fVendor, setFVendor] = useState("");
+  const [fBaaki, setFBaaki] = useState(!!onlyBaaki);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const vName = (r) => r.vendor_name || r.default_vendor_name || "";
+  const vendorOpts = tpl.vendor_id == null
+    ? [...new Map(cands.filter((r) => truckVendorId(r) != null).map((r) => [String(truckVendorId(r)), vName(r) || "#" + truckVendorId(r)])).entries()]
+      .sort((a, b) => a[1].localeCompare(b[1]))
+    : [];
+  const hasNoVendor = tpl.vendor_id == null && cands.some((r) => truckVendorId(r) == null);
+  const shown = cands.filter((r) => (!fCap || capOf(r) === fCap)
+    && (!fBaaki || rateBaaki(r))
+    && (!fVendor || (fVendor === "none" ? truckVendorId(r) == null : String(truckVendorId(r)) === fVendor))
+    && matchTv(r, vName(r), q));
+  const pickable = shown.filter((r) => !noVendor(r));
+  const allOn = pickable.length > 0 && pickable.every((r) => sel.has(r.id));
+  const toggle = (id) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toggleAll = () => setSel((s) => { const n = new Set(s); pickable.forEach((r) => (allOn ? n.delete(r.id) : n.add(r.id))); return n; });
+  const regOf = (id) => { const r = (trucks || []).find((x) => x.id === id); return r ? (r.registration_no || r.name) : "#" + id; };
+
+  const save = async () => {
+    const ids = [...sel];
+    setBusy(true);
+    const p = await api.put(`/trips/rate-templates/${tpl.id}/vehicles?preview=1`, { vehicle_ids: ids });
+    if (!p || p.success === false) { setBusy(false); window.alert((p && p.message) || t("trip_tracking.save_fail")); return; }
+    const d = p.data || {};
+    const lines = [];
+    (d.moved_from || []).forEach((m) => lines.push(t("trip_tracking.gs_moved_line", { reg: regOf(m.vehicle_id), name: m.from_name || "—" })));
+    const bc = d.billing_changes || [];
+    const mon = bc.filter((b) => b.from === "monthly");
+    const otherB = bc.filter((b) => b.from !== "monthly" && b.from !== "pending");
+    if (mon.length) lines.push(t("trip_tracking.gs_monthly_line", { list: mon.map((b) => regOf(b.vehicle_id)).join(", "), kind: kindLbl }));
+    if (otherB.length) lines.push(t("trip_tracking.gs_billing_line", { n: otherB.length, kind: kindLbl }));
+    if (d.removed) lines.push(t("trip_tracking.gs_removed_line", { n: d.removed }));
+    if (lines.length) {
+      const pend = bc.filter((b) => b.from === "pending");
+      const byV = d.trips_by_vehicle || {};
+      if (pend.length) {
+        lines.push(t("trip_tracking.gs_pending_line", { n: pend.length, kind: kindLbl,
+          m: pend.reduce((a, b) => a + (Number(byV[b.vehicle_id]) || 0), 0) }));
+      }
+      if (!window.confirm(t("trip_tracking.gs_confirm_title", { name: tpl.name }) + "\n\n" + lines.join("\n") + "\n\n" + t("trip_tracking.gs_confirm_q"))) {
+        setBusy(false); return;
+      }
+    }
+    const r = await api.put(`/trips/rate-templates/${tpl.id}/vehicles`, { vehicle_ids: ids });
+    setBusy(false);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.save_fail")); return; }
+    onSaved(r.data || {});
+  };
+
+  const fltS = { ...inp, width: "auto", padding: "7px 10px", fontSize: 12 };
+  return (
+    <div style={{ padding: "14px 15px", borderBottom: `1px solid ${T.b1}`, background: T.indL + "66" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.gs_title", { name: tpl.name })}</div>
+      <div style={{ fontSize: 11, color: T.t3, marginTop: 2, lineHeight: 1.5 }}>
+        {kiskaOf(tpl, parties)} · {kindLbl}{tpl.capacity ? " · " + tpl.capacity : ""} — {t("trip_tracking.gs_hint", { kind: kindLbl })}
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "10px 0 8px", flexWrap: "wrap" }}>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("machinery.tv_khoj_ph")}
+          style={{ ...fltS, flex: 1, minWidth: 200, borderColor: q ? T.ind : T.b1 }} />
+        {tpl.vendor_id == null && (vendorOpts.length > 0 || hasNoVendor) && (
+          <select value={fVendor} onChange={(e) => setFVendor(e.target.value)} style={{ ...fltS, borderColor: fVendor ? T.ind : T.b1 }}>
+            <option value="">{t("trip_tracking.rt_sab_vendor")}</option>
+            {vendorOpts.map(([id, nm]) => <option key={id} value={id}>{nm}</option>)}
+            {hasNoVendor && <option value="none">{t("machinery.tv_vendor_nahi")}</option>}
+          </select>
+        )}
+        {caps.length > 0 && (
+          <select value={fCap} onChange={(e) => setFCap(e.target.value)} style={{ ...fltS, borderColor: fCap ? T.ind : T.b1 }}>
+            <option value="">{t("machinery.tv_sab_capacity")}</option>
+            {caps.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: fBaaki ? T.amb : T.t2, fontWeight: fBaaki ? 700 : 500, cursor: "pointer" }}>
+          <input type="checkbox" checked={fBaaki} onChange={(e) => setFBaaki(e.target.checked)} style={{ accentColor: T.amb }} />
+          {t("trip_tracking.gs_sirf_baaki")}
+        </label>
+      </div>
+      <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, background: T.surface, maxHeight: 360, overflowY: "auto" }}>
+        {!trucks && <div style={{ padding: 18, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("common.loading_2")}</div>}
+        {trucks && cands.length === 0 && <div style={{ padding: 18, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("trip_tracking.gs_koi_gaadi_nahi")}</div>}
+        {trucks && cands.length > 0 && shown.length === 0 && <div style={{ padding: 18, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("machinery.tv_khoj_me_nahi")}</div>}
+        {pickable.length > 0 && (
+          <label style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 12px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, cursor: "pointer", position: "sticky", top: 0 }}>
+            <input type="checkbox" checked={allOn} onChange={toggleAll} style={{ accentColor: T.ind }} />
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: T.t2 }}>{t("trip_tracking.gs_sab_dikh_rahi", { n: pickable.length })}</span>
+          </label>
+        )}
+        {shown.map((r) => {
+          const on = sel.has(r.id);
+          const blocked = noVendor(r);
+          const elsewhere = r.rate_card_id && Number(r.rate_card_id) !== Number(tpl.id);
+          const bm = billingMeta(r.trip_billing);
+          return (
+            <label key={r.id} style={{ display: "grid", gridTemplateColumns: "22px 1.2fr 1.2fr 90px 1.4fr 90px", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: `1px solid ${T.b1}`, cursor: blocked ? "not-allowed" : "pointer", background: on ? T.indL + "88" : "transparent", opacity: blocked ? 0.6 : 1 }}>
+              <input type="checkbox" checked={on} disabled={blocked} onChange={() => toggle(r.id)} style={{ accentColor: T.ind }} />
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{r.registration_no || r.name}</span>
+              <span style={{ fontSize: 11.5, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{vName(r) || t("machinery.tv_vendor_nahi")}</span>
+              <span style={{ fontSize: 11.5, color: capOf(r) ? T.t2 : T.t4 }}>{capOf(r) || "—"}</span>
+              <span style={{ fontSize: 11, color: blocked || elsewhere ? T.amb : T.t4, fontWeight: blocked || elsewhere ? 700 : 500 }}>
+                {blocked ? t("trip_tracking.gs_bina_vendor")
+                  : elsewhere ? t("trip_tracking.gs_pehle_par", { name: r.rate_card_name || "—" })
+                  : Number(r.rate_card_id) === Number(tpl.id) ? t("trip_tracking.gs_is_card_par") : ""}
+              </span>
+              <span><Pill label={bm.l} c={bm.c} bg={bm.bg} /></span>
+            </label>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", marginTop: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: T.t2, marginRight: "auto" }}>{t("trip_tracking.gs_n_select", { n: sel.size })}</span>
+        <Btn ghost onClick={onCancel}>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={busy || !trucks}>{busy ? t("common.saving_2") : t("trip_tracking.gs_save")}</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ── "Rate tay karna baaki" — amber dabba ─────────────────────────
+// Server ki rate_pending_list (GET /trips/rate-templates): user ki city ki
+// chalu trip gaadi jinpar koi card nahi aur billing "Rate baaki" (phone se
+// judi — rate office tay karega) ya Km rate / Per trip. Inki trip RATE
+// PENDING rehti hai, bill me nahi aati — ye bill ke din nahi, pehle dikhe.
+// Gaadi dabao = us gaadi ka "Card lagao"; "Gaadi select karo" = card chuno,
+// uski picker sirf rate-baaki gaadi chhaant kar khulti hai. Card hi nahi to
+// "Pehle rate card banao".
+function RatePendingBlock({ cards, canRates, onGaadi, onPick, onNewCard }) {
+  const [cardId, setCardId] = useState("");
+  const list = (cards && cards.pending) || [];
+  if (!list.length) return null;
+  const all = cards.list || [];
+  const legacyVendor = new Set((cards.legacy || []).map((c) => String(c.vendor_id)));
+  const chosen = all.length === 1 ? all[0] : all.find((c) => String(c.id) === String(cardId)) || null;
+  const SHOW = 30;
+  return (
+    <div style={{ border: `1px solid ${T.amb}55`, background: T.ambL, borderRadius: 10, padding: "10px 13px", marginBottom: 12, fontSize: 12, color: T.t2, lineHeight: 1.55 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 700, color: T.amb, flex: 1, minWidth: 200 }}>{t("trip_tracking.rp_title", { n: cards.pendingN || list.length })}</span>
+        {canRates && (all.length === 0
+          ? <Btn size="sm" ghost onClick={onNewCard}>{t("trip_tracking.rp_pehle_card_banao")}</Btn>
+          : <>
+              {all.length > 1 && (
+                <select value={cardId} onChange={(e) => setCardId(e.target.value)} style={{ ...inp, width: "auto", padding: "5px 8px", fontSize: 11.5 }}>
+                  <option value="">{t("trip_tracking.rp_card_select")}</option>
+                  {all.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              )}
+              <Btn size="sm" disabled={!chosen} onClick={() => chosen && onPick(chosen)}>{t("trip_tracking.gs_button")}</Btn>
+            </>)}
+      </div>
+      <div style={{ marginTop: 3 }}>{t("trip_tracking.rp_hint")}</div>
+      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
+        {list.slice(0, SHOW).map((r) => {
+          const bits = [r.vendor_name || t("machinery.tv_vendor_nahi"), r.capacity || t("machinery.tv_cap_nahi"), billingMeta(r.trip_billing).l];
+          if (r.trip_billing === "km" && legacyVendor.has(String(r.vendor_id))) bits.push(t("trip_tracking.rt_purana_card_lagta"));
+          const body = (
+            <>
+              <span style={{ fontWeight: 700, color: T.t1 }}>{r.registration_no || r.name}</span>
+              <span style={{ fontWeight: 500, color: T.t4 }}> · {bits.join(" · ")}</span>
+              {Number(r.pending_trips) > 0 && <span style={{ fontWeight: 700, color: T.amb }}> · {t("trip_tracking.rp_trips", { n: Number(r.pending_trips) })}</span>}
+            </>
+          );
+          const chipS = { fontSize: 11, background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 5, padding: "2px 7px", fontFamily: "inherit", textAlign: "left" };
+          return canRates
+            ? <button key={r.id} type="button" title={t("machinery.tv_card_click")} onClick={() => onGaadi(r)} style={{ ...chipS, cursor: "pointer" }}>{body}</button>
+            : <span key={r.id} style={chipS}>{body}</span>;
+        })}
+        {list.length > SHOW && <span style={{ fontSize: 11, color: T.t4, alignSelf: "center" }}>+{list.length - SHOW}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ── Gaadi-wise "Card lagao" ──────────────────────────────────────
+// Trip vehicles ki row par "Card nahi" ya card ka chip (ya amber dabbe ki
+// gaadi) dabao. Is gaadi ke laayak chalu card (Sab vendor ya isi vendor ka)
+// ya "Card hatao". Server ka endpoint wahi poori-list wala (PUT
+// /rate-templates/:id/vehicles) — isliye card ki abhi ki gaadi + ye gaadi
+// bhejte hain; hatane par card ki list me se ye gaadi nikaal kar. Card chunte
+// hi server se preview: billing kya ho jaayega, pehle kis card par thi, aur
+// kitni RATE PENDING trip ko paisa milega.
+const idsWith = (c, vid) => [...new Set([...(c.vehicle_ids || []).map(Number), Number(vid)])];
+const idsWithout = (c, vid) => (c.vehicle_ids || []).map(Number).filter((x) => x !== Number(vid));
+function CardPickModal({ vehicle, cards, parties, onClose, onSaved }) {
+  const vid = vehicle.vendor_id == null ? null : Number(vehicle.vendor_id);
+  const all = (cards && cards.list) || [];
+  const fits = vid == null ? [] : all.filter((c) => c.vendor_id == null || Number(c.vendor_id) === vid);
+  const cur = vehicle.rate_card_id ? Number(vehicle.rate_card_id) : null;
+  const curCard = cur ? all.find((c) => Number(c.id) === cur) || null : null;
+  const [sel, setSel] = useState(cur ? String(cur) : "");      // card id | "hatao"
+  const [pv, setPv] = useState(null);                          // null | { busy } | { data } | { err }
+  const [busy, setBusy] = useState(false);
+  const target = sel && sel !== "hatao" ? fits.find((c) => String(c.id) === sel) || null : null;
+  const reg = vehicle.registration_no || vehicle.name || "#" + vehicle.id;
+
+  useEffect(() => {
+    setPv(null);
+    if (!target || Number(target.id) === cur) return undefined;
+    let alive = true;
+    setPv({ busy: true });
+    api.put(`/trips/rate-templates/${target.id}/vehicles?preview=1`, { vehicle_ids: idsWith(target, vehicle.id) })
+      .then((r) => { if (alive) setPv(r && r.success !== false ? { data: r.data || {} } : { err: srvMsg(r) }); })
+      .catch(() => { if (alive) setPv({ err: t("common.something_went_wrong") }); });
+    return () => { alive = false; };
+  }, [target, cur, vehicle.id]);
+
+  const changed = sel !== (cur ? String(cur) : "") && (sel === "hatao" ? !!curCard : !!target);
+  const save = async () => {
+    setBusy(true);
+    const r = sel === "hatao"
+      ? await api.put(`/trips/rate-templates/${cur}/vehicles`, { vehicle_ids: idsWithout(curCard, vehicle.id) })
+      : await api.put(`/trips/rate-templates/${target.id}/vehicles`, { vehicle_ids: idsWith(target, vehicle.id) });
+    setBusy(false);
+    if (!r || r.success === false) { window.alert(srvMsg(r)); return; }
+    onSaved(sel === "hatao" ? t("machinery.cp_hataya", { reg })
+      : t("machinery.cp_saved", { reg, name: target.name, trips: (r.data && r.data.trips_updated) || 0 }));
+  };
+
+  const d = pv && pv.data;
+  const bc = d ? (d.billing_changes || []).find((b) => Number(b.vehicle_id) === Number(vehicle.id)) : null;
+  const mv = d ? (d.moved_from || []).find((m) => Number(m.vehicle_id) === Number(vehicle.id)) : null;
+  const m = d ? Number((d.trips_by_vehicle || {})[vehicle.id]) || 0 : 0;
+  const optS = (on) => ({ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 11px", borderRadius: 8, cursor: "pointer",
+    border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface });
+  const bm = billingMeta(vehicle.trip_billing);
+
+  return (
+    <Modal open onClose={onClose} width={560} title={t("machinery.cp_title", { reg })}
+      sub={[vehicle.vendor_name || t("machinery.tv_vendor_nahi"), vehicle.capacity || t("machinery.tv_cap_nahi"), bm.l].join(" · ")}
+      footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={busy || !changed || (!!target && !!pv && (pv.busy || !!pv.err))}>{busy ? t("common.saving") : t("trip_tracking.gs_save")}</Btn></>}>
+      {vid == null && <Notice>{t("trip_tracking.gs_bina_vendor")}</Notice>}
+      {vid != null && fits.length === 0 && <Notice>{t("machinery.cp_koi_card_nahi")}</Notice>}
+      <div style={{ display: "grid", gap: 7 }}>
+        {fits.map((c) => {
+          const on = sel === String(c.id);
+          return (
+            <label key={c.id} style={optS(on)}>
+              <input type="radio" name="cp_card" checked={on} onChange={() => setSel(String(c.id))} style={{ marginTop: 2, accentColor: T.ind }} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{c.name}</span>
+                  <Pill label={kindLabel(c.kind)} c={T.ind} bg={T.indL} />
+                  {c.capacity && <Pill label={c.capacity} c={T.t3} bg={T.sltL} />}
+                  {Number(c.id) === cur && <span style={{ fontSize: 10.5, color: T.grn, fontWeight: 700 }}>{t("machinery.cp_is_par")}</span>}
+                </span>
+                <span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>{kiskaOf(c, parties)} · {rateLine(c)}</span>
+              </span>
+            </label>
+          );
+        })}
+        {curCard && (
+          <label style={optS(sel === "hatao")}>
+            <input type="radio" name="cp_card" checked={sel === "hatao"} onChange={() => setSel("hatao")} style={{ marginTop: 2, accentColor: T.red }} />
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: T.red }}>{t("machinery.cp_card_hatao")}</span>
+          </label>
+        )}
+      </div>
+      {sel === "hatao" && curCard && (
+        <div style={{ marginTop: 12, fontSize: 12, color: T.t2, lineHeight: 1.55 }}>{t("machinery.cp_hatao_line", { name: curCard.name })}</div>
+      )}
+      {target && Number(target.id) !== cur && (
+        <div style={{ marginTop: 12, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "9px 12px", fontSize: 12, color: T.t2, lineHeight: 1.7, background: T.surfaceB }}>
+          {pv && pv.busy && <div style={{ color: T.t4 }}>{t("common.loading_2")}</div>}
+          {pv && pv.err && <div style={{ color: T.red, fontWeight: 600 }}>{pv.err}</div>}
+          {d && (
+            <>
+              {mv && <div>{t("machinery.cp_moved_line", { name: mv.from_name || "—" })}</div>}
+              {bc && <div>{t("machinery.cp_billing_line", { from: billingMeta(bc.from).l, to: billingMeta(bc.to).l })}</div>}
+              {m > 0
+                ? <div style={{ fontWeight: 700, color: T.grn }}>{t("machinery.cp_trips_line", { m })}</div>
+                : <div style={{ color: T.t4 }}>{t("machinery.cp_no_trips")}</div>}
+            </>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// ── Rate card view (Trip vehicles → "Rate card") ─────────────────
+// Card ki list (naam, kiska, tareeka, rate, kitni gaadi), "Naya rate card",
+// editor, "Gaadi select karo", amber "Rate tay karna baaki" aur purane vendor
+// card — Trip Tracking ka purana Rate card tab hu-ba-hu, ab yahan.
+function RateCardView({ cards, trucks, parties, canRates, edit, onEdit, pick, onPick, flash, onFlash, onChanged, onGaadi }) {
+  const [busyId, setBusyId] = useState(null);
+  const list = (cards.list || []).map((c) => (c.kind === "trip" ? c : normCard(c)));
+  const legacy = (cards.legacy || []).map(normCard);
+  const COLS = "1.3fr 2fr 90px 200px";
+
+  const remove = async (c) => {
+    // Ginti har city ki (vehicles_total) — server sab city ki gaadi se card hatata hai.
+    const n = c.vehicles_total != null ? Number(c.vehicles_total) : Number(c.vehicles) || 0;
+    if (!window.confirm(t("trip_tracking.rt_hatao_confirm", { name: c.name, n }))) return;
+    setBusyId(c.id); onFlash("");
+    const r = await api.del("/trips/rate-templates/" + c.id);
+    setBusyId(null);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.action_fail")); return; }
+    onChanged();
+  };
+  const fromLegacy = (c) => onEdit({ _seed: { name: kiskaOf(c, parties), vendor_id: c.vendor_id, kind: "km",
+    method: c.method, rates: c.rates, onward_rate: c.onward_rate, round_mode: c.round_mode, note: c.note } });
+
+  return (
+    <div>
+      {flash && <div style={{ border: `1px solid ${T.grn}44`, background: T.grnL, borderRadius: 8, padding: "9px 13px", marginBottom: 12, fontSize: 12, color: T.grn, fontWeight: 600 }}>{flash}</div>}
+
+      <RatePendingBlock cards={cards} canRates={canRates} onGaadi={onGaadi}
+        onPick={(c) => { onEdit(null); onFlash(""); onPick({ tpl: c, baaki: true }); }}
+        onNewCard={() => { onPick(null); onFlash(""); onEdit({}); }} />
+
+      {legacy.length > 0 && (
+        <div style={{ border: `1px solid ${T.b1}`, background: T.surface, borderRadius: 10, padding: "10px 13px", marginBottom: 12, fontSize: 12, color: T.t2, lineHeight: 1.55 }}>
+          <div style={{ fontWeight: 700, color: T.t1, marginBottom: 2 }}>{t("trip_tracking.rt_purane_card")}</div>
+          <div style={{ color: T.t3, marginBottom: 6 }}>{t("trip_tracking.rt_purane_card_hint")}</div>
+          {legacy.map((c) => (
+            <div key={c.vendor_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0", borderTop: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 700, color: T.t1, minWidth: 140 }}>{kiskaOf(c, parties)}</span>
+              <span style={{ flex: 1, fontSize: 11.5, color: T.t3, fontVariantNumeric: "tabular-nums" }}>{RC_METHOD[c.method].label} · {slabText(c)}</span>
+              {canRates && <Btn size="sm" ghost onClick={() => { onPick(null); fromLegacy(c); }}>{t("trip_tracking.rt_isi_se_banao")}</Btn>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Panel title={t("trip_tracking.rc_list", { list: list.length ? `(${list.length})` : "" })}
+        action={canRates && <Btn size="sm" icon={IcAdd} onClick={() => { onPick(null); onFlash(""); onEdit(edit && !edit.id && !edit._seed ? null : {}); }}>{t("trip_tracking.rc_new")}</Btn>}>
+        {edit && (
+          <RateCardEditor key={edit.id ? "e-" + edit.id : (edit._seed ? "s-" + edit._seed.vendor_id : "n")} card={edit} parties={parties}
+            onCancel={() => onEdit(null)}
+            onSaved={(saved, isNew) => {
+              onEdit(null); onChanged();
+              if (saved && saved.trips_updated) onFlash(t("trip_tracking.rt_saved_trips", { name: saved.name, n: saved.trips_updated }));
+              // Naya card bana — ab uski gaadi select karo.
+              if (isNew && saved) onPick({ tpl: saved, baaki: false });
+            }} />
+        )}
+        {/* Picker gaadi ki taaza list aane ke BAAD hi — pehle se lagi gaadi usi se tick hoti hain. */}
+        {pick && !trucks && <Empty>{t("common.loading_2")}</Empty>}
+        {pick && trucks && (
+          <VehiclePicker key={"p-" + pick.tpl.id + (pick.baaki ? "-b" : "")} tpl={pick.tpl} trucks={trucks} parties={parties} onlyBaaki={pick.baaki}
+            onCancel={() => onPick(null)}
+            onSaved={(res) => {
+              onFlash(t("trip_tracking.gs_saved", { name: pick.tpl.name, n: res.assigned || 0, trips: res.trips_updated || 0 }));
+              onPick(null); onChanged();
+            }} />
+        )}
+
+        {list.length === 0 && !edit && !pick && (
+          <Empty>{canRates ? t("trip_tracking.rt_empty_can") : t("trip_tracking.rc_empty")}</Empty>
+        )}
+        {list.length > 0 && (
+          <>
+            <Row head cols={COLS}>
+              <span>{t("trip_tracking.rt_hdr_card")}</span><span>{t("trip_tracking.rt_hdr_rate")}</span><span>{t("trip_tracking.rt_hdr_gaadi")}</span><span />
+            </Row>
+            {list.map((c) => (
+              <Row key={c.id} cols={COLS}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
+                  <div style={{ fontSize: 11, color: T.t3, marginTop: 1 }}>{kiskaOf(c, parties)}</div>
+                  <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
+                    <Pill label={kindLabel(c.kind)} c={T.ind} bg={T.indL} />
+                    {c.capacity && <Pill label={c.capacity} c={T.t3} bg={T.sltL} />}
+                  </div>
+                </div>
+                <div style={{ fontSize: 11.5, color: T.t2, lineHeight: 1.5, fontVariantNumeric: "tabular-nums" }}>
+                  {c.kind === "trip"
+                    ? <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.rt_per_trip_amt", { amt: rs2(c.trip_rate) })}</span>
+                    : <>
+                        {slabText(c)}
+                        <div style={{ fontSize: 10.5, color: T.t4 }}>{RC_METHOD[c.method].label} · {RC_ROUND[c.round_mode].label} · {t("trip_tracking.rc_ex_10", { amt: rs2(rcAmount(c, 10)) })}</div>
+                      </>}
+                  {c.note && <div style={{ fontSize: 10.5, color: T.t4 }}>{c.note}</div>}
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 700, color: Number(c.vehicles) ? T.t1 : T.t4, fontVariantNumeric: "tabular-nums" }}>{t("trip_tracking.n_gaadi", { n: Number(c.vehicles) || 0 })}</span>
+                <span style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  {canRates && <button type="button" onClick={() => { onPick(null); onFlash(""); onEdit(c); }} style={linkBtn(T.blu)}>{t("common.edit_2")}</button>}
+                  {canRates && <button type="button" disabled={!trucks} onClick={() => { onEdit(null); onFlash(""); onPick({ tpl: c, baaki: false }); }} style={linkBtn(T.ind)}>{t("trip_tracking.gs_button")}</button>}
+                  {canRates && <button type="button" disabled={busyId === c.id} onClick={() => remove(c)} style={linkBtn(T.red)}>{t("trip_tracking.rc_hatao")}</button>}
+                </span>
+              </Row>
+            ))}
+          </>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+// Upar "Gaadi" | "Rate card" (4 Oct 2026): Gaadi = vendor-wise gaadi aur unki
+// trip ka hisaab (pehle jaisa) + gaadi-wise "Card lagao"; Rate card = card ki
+// poori sambhaal (Trip Tracking se yahan aayi). Rate card ka switch tabhi jab
+// server /rate-templates deta hai (purana server / ijazat nahi = sirf Gaadi).
+function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, view, onView }) {
   const [openV, setOpenV] = useState({});          // vendor ka dabba khula / band
   const [fCap, setFCap] = useState("");            // capacity ki chhanni
   const [showRemoved, setShowRemoved] = useState(false);
   const [form, setForm] = useState(null);          // null | {} nayi | gaadi (edit)
   const [removing, setRemoving] = useState(null);
   // Server ke gate jaise: nayi gaadi = Equipment Create, badlo = Equipment
-  // Edit (routes/trips.js), hatao = sirf admin.
+  // Edit (routes/trips.js), hatao = sirf admin, card = rateGate (Equipment
+  // Edit ya Finance Create).
   const canAdd = can("Equipment", "create");
   const canEdit = can("Equipment", "edit");
   const canRemove = canRemoveMachine();
+  const canRates = canEditRates();
+
+  // Rate card + "Rate tay karna baaki" list. null = aa rahe / purana server.
+  const [cards, setCards] = useState(null);
+  const loadCards = useCallback(() => {
+    api.get("/trips/rate-templates")
+      .then((r) => setCards(r && r.success ? {
+        list: Array.isArray(r.data) ? r.data : [],
+        legacy: Array.isArray(r.legacy_cards) ? r.legacy_cards : [],
+        pending: Array.isArray(r.rate_pending_list) ? r.rate_pending_list : [],
+        pendingN: Number(r.rate_pending_vehicles) || 0,
+      } : null))
+      .catch(() => setCards(null));
+  }, []);
+  useEffect(() => { loadCards(); }, [loadCards]);
+  // "Gaadi select karo" ki list (/trips/trucks) — Rate card khulne par.
+  const [trucks, setTrucks] = useState(null);
+  const loadTrucks = useCallback(() => {
+    api.get("/trips/trucks").then((r) => setTrucks(r && r.success && Array.isArray(r.data) ? r.data : [])).catch(() => setTrucks([]));
+  }, []);
+  const curView = cards && view === "ratecard" ? "ratecard" : "gaadi";
+  useEffect(() => { if (curView === "ratecard") loadTrucks(); }, [curView, loadTrucks]);
+  const [edit, setEdit] = useState(null);          // card editor: null | {} | card | { _seed }
+  const [pick, setPick] = useState(null);          // { tpl, baaki } — "Gaadi select karo"
+  const [flash, setFlash] = useState("");
+  const [cardFor, setCardFor] = useState(null);    // gaadi-wise "Card lagao"
+  // Save ke baad sab dobara. Gaadi ki list (trucks) bhi — purani list par
+  // "Gaadi select karo" khula to card ki abhi lagi gaadi untick dikhti aur
+  // save use card se hata deta (endpoint poori list leta hai).
+  const refresh = () => { onReload(); loadCards(); setTrucks(null); if (curView === "ratecard") loadTrucks(); };
+  const openPick = (c) => { setEdit(null); setFlash(""); setPick({ tpl: c, baaki: true }); onView("ratecard"); };
+  const openNewCard = () => { setPick(null); setFlash(""); setEdit({}); onView("ratecard"); };
+  // Gaadi ki row → "Card lagao" ke liye ek shakal (vendor = gaadi ka abhi ka vendor).
+  const vehOf = (v, g) => ({
+    id: v.id, name: v.name, registration_no: v.registration_no,
+    vendor_id: "current_vendor_id" in v ? v.current_vendor_id : g.vendor_id, vendor_name: g.vendor_id == null ? null : g.name,
+    capacity: capOf(v), trip_billing: v.trip_billing, rate_card_id: v.rate_card_id || null, rate_card_name: v.rate_card_name || null,
+  });
+  const editOf = (v, g) => ({ ...v, vendor_id: "current_vendor_id" in v ? v.current_vendor_id : g.vendor_id });
 
   // Gaadi ka vendor beech me badla ho to server use PURANE vendor ke dabbe me
   // bhi bhejta hai (vendor_changed, sirf us vendor ki trips ke saath) — wahan
@@ -2329,9 +3165,42 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ }) {
     <span style={{ fontSize: 12, color: T.t2, textAlign: "right", fontVariantNumeric: "tabular-nums", ...extra }}>{v}</span>
   );
 
+  const switcher = cards && (
+    <div style={{ display: "inline-flex", border: `1.5px solid ${T.b1}`, borderRadius: 9, overflow: "hidden", marginBottom: 12, background: T.surface }}>
+      {[["gaadi", t("machinery.tv_view_gaadi")], ["ratecard", t("machinery.tv_view_ratecard")]].map(([k, l]) => (
+        <button key={k} type="button" onClick={() => onView(k)}
+          style={{ padding: "7px 18px", border: "none", borderRight: k === "gaadi" ? `1px solid ${T.b1}` : "none", cursor: "pointer", fontFamily: "inherit",
+            fontSize: 12, fontWeight: 700, background: curView === k ? T.indL : "transparent", color: curView === k ? T.ind : T.t3,
+            display: "inline-flex", alignItems: "center", gap: 6 }}>
+          {l}
+          {k === "ratecard" && cards.pendingN > 0 && <span style={{ fontSize: 10, background: T.ambL, color: T.amb, borderRadius: 8, padding: "1px 6px", fontWeight: 700 }}>{cards.pendingN}</span>}
+        </button>
+      ))}
+    </div>
+  );
+  const cardModal = cardFor && cards && (
+    <CardPickModal vehicle={cardFor} cards={cards} parties={parties} onClose={() => setCardFor(null)}
+      onSaved={(msg) => { setCardFor(null); setFlash(msg); refresh(); }} />
+  );
+
+  if (curView === "ratecard") {
+    return (
+      <div>
+        {switcher}
+        <RateCardView cards={cards} trucks={trucks} parties={parties} canRates={canRates}
+          edit={edit} onEdit={setEdit} pick={pick} onPick={setPick} flash={flash} onFlash={setFlash}
+          onChanged={refresh} onGaadi={(r) => setCardFor(r)} />
+        {cardModal}
+      </div>
+    );
+  }
+
   return (
     <div>
+      {switcher}
       <Notice>{t("machinery.tv_note")}</Notice>
+      {flash && <div style={{ border: `1px solid ${T.grn}44`, background: T.grnL, borderRadius: 8, padding: "9px 13px", marginBottom: 12, fontSize: 12, color: T.grn, fontWeight: 600 }}>{flash}</div>}
+      <RatePendingBlock cards={cards} canRates={canRates} onGaadi={(r) => setCardFor(r)} onPick={openPick} onNewCard={openNewCard} />
 
       {/* Chhanni — Unbilled Material jaisi patti */}
       <div style={{ background: T.surface, borderRadius: 8, border: `1px solid ${T.b1}`, padding: "8px 12px", marginBottom: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -2403,9 +3272,11 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ }) {
                   {g.sum.flagged > 0 && <TvChip c={T.red} bg={T.redL}>{t("machinery.tv_n_flagged", { n: g.sum.flagged })}</TvChip>}
                   {g.sum.in_transit > 0 && <TvChip c={T.amb} bg={T.ambL}>{t("machinery.tv_n_transit", { n: g.sum.in_transit })}</TvChip>}
                   {g.sum.unbilled > 0 && <TvChip c={T.ind} bg={T.indL}>{t("machinery.tv_n_unbilled", { n: g.sum.unbilled })}</TvChip>}
-                  {/* Amount khaali trips — km vendor ka card nahi ho to yahi sabse bada kaaran. */}
+                  {/* Amount khaali trips — "Rate baaki" gaadi (rate office tay karega) ya
+                      km vendor ka card nahi — yahi sabse bade kaaran. */}
                   {g.sum.rate_pending > 0 && (
-                    <span title={g.has_rate_card === false && g.vehicles.some((v) => v.trip_billing === "km") ? t("machinery.tv_rate_pending_card") : t("machinery.tv_rate_pending_route")}>
+                    <span title={g.vehicles.some((v) => v.trip_billing === "pending") ? t("machinery.tv_rate_pending_baaki")
+                      : g.has_rate_card === false && g.vehicles.some((v) => v.trip_billing === "km") ? t("machinery.tv_rate_pending_card") : t("machinery.tv_rate_pending_route")}>
                       <TvChip c={T.amb} bg={T.ambL}>{t("machinery.tv_n_rate_pending", { n: g.sum.rate_pending })}</TvChip>
                     </span>
                   )}
@@ -2425,18 +3296,35 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ }) {
                       {g.vehicles.map((v) => {
                         const removed = Number(v.is_active) === 0;
                         const bm = billingMeta(v.trip_billing);
+                        // Badle hue vendor wali row par Edit / card nahi — gaadi apne abhi ke vendor ke dabbe me hai.
+                        const live = !removed && !v.vendor_changed;
+                        const cardable = !!cards && canRates && live;
+                        const chipBtn = (child, onClick, title) => (
+                          <button type="button" title={title} onClick={onClick}
+                            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", display: "inline-flex" }}>{child}</button>
+                        );
                         return (
                           <div key={v.id} style={{ display: "grid", gridTemplateColumns: TV_COLS, gap: 6, padding: "8px 8px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", opacity: removed ? 0.6 : 1 }}>
                             <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
                               <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, color: T.ind, background: T.indL, border: `1px solid ${T.ind}22`, borderRadius: 5, padding: "1px 7px", fontVariantNumeric: "tabular-nums" }}>{v.registration_no || "—"}</span>
                               {removed && <Pill label={t("machinery.tv_removed")} c={T.t3} bg={T.sltL} />}
-                              {/* Capacity aur rate card (4 Oct 2026). Km / Per trip gaadi bina card = amber. */}
+                              {/* Capacity aur rate card (4 Oct 2026). Km / Per trip / Rate baaki gaadi bina
+                                  card = amber. Card ka chip dabao = "Card lagao" (rateGate wale ko);
+                                  "Capacity nahi" dabao = Edit (capacity wahin bharti hai). */}
                               <span style={{ flexBasis: "100%", display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
-                                <span style={{ fontSize: 10.5, color: capOf(v) ? T.t3 : T.t4 }}>{capOf(v) || t("machinery.tv_cap_nahi")}</span>
+                                {capOf(v)
+                                  ? <span style={{ fontSize: 10.5, color: T.t3 }}>{capOf(v)}</span>
+                                  : (live && canEdit
+                                    ? <button type="button" title={t("machinery.tv_cap_click")} onClick={() => setForm(editOf(v, g))}
+                                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 10.5, color: T.amb, fontWeight: 600, textDecoration: "underline dotted" }}>{t("machinery.tv_cap_nahi")}</button>
+                                    : <span style={{ fontSize: 10.5, color: T.t4 }}>{t("machinery.tv_cap_nahi")}</span>)}
                                 {v.rate_card_name
-                                  ? <Pill label={v.rate_card_name} c={T.ind} bg={T.indL} />
-                                  : (["km", "trip"].includes(v.trip_billing) && "rate_card_id" in v && !removed
-                                    ? <Pill label={t("machinery.tv_card_nahi")} c={T.amb} bg={T.ambL} /> : null)}
+                                  ? (cardable ? chipBtn(<Pill label={v.rate_card_name} c={T.ind} bg={T.indL} />, () => setCardFor(vehOf(v, g)), t("machinery.tv_card_click"))
+                                    : <Pill label={v.rate_card_name} c={T.ind} bg={T.indL} />)
+                                  : (["km", "trip", "pending"].includes(v.trip_billing) && "rate_card_id" in v && !removed
+                                    ? (cardable ? chipBtn(<Pill label={t("machinery.tv_card_nahi")} c={T.amb} bg={T.ambL} />, () => setCardFor(vehOf(v, g)), t("machinery.tv_card_click"))
+                                      : <Pill label={t("machinery.tv_card_nahi")} c={T.amb} bg={T.ambL} />)
+                                    : null)}
                               </span>
                               {v.vendor_changed && (
                                 <span style={{ flexBasis: "100%", fontSize: 10, color: T.t4 }}>{t("machinery.tv_vendor_badla", { name: vendorName(v.current_vendor_id) })}</span>
@@ -2460,8 +3348,8 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ }) {
                               {/* Badle hue vendor wali row par Edit / Hatao nahi — gaadi apne abhi
                                   ke vendor ke dabbe me bhi hai, wahin se. Warna Edit purana vendor
                                   wapas save kar deta. */}
-                              {!removed && !v.vendor_changed && canEdit && (
-                                <Btn size="sm" ghost onClick={() => setForm({ ...v, vendor_id: "current_vendor_id" in v ? v.current_vendor_id : g.vendor_id })}>{t("common.edit_2")}</Btn>
+                              {live && canEdit && (
+                                <Btn size="sm" ghost onClick={() => setForm(editOf(v, g))}>{t("common.edit_2")}</Btn>
                               )}
                               {!removed && !v.vendor_changed && canRemove && <Btn size="sm" ghost style={{ color: T.red }} onClick={() => setRemoving(v)}>{t("machinery.tv_hatao")}</Btn>}
                             </span>
@@ -2477,9 +3365,10 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ }) {
         </div>
       )}
 
-      <TripVehicleForm open={!!form} vehicle={form} parties={parties} onClose={() => setForm(null)} onSaved={onReload} />
+      <TripVehicleForm open={!!form} vehicle={form} parties={parties} onClose={() => setForm(null)} onSaved={refresh} />
       <RemoveMachineModal open={!!removing} onClose={() => setRemoving(null)}
-        machine={removing ? { id: removing.id, name: removing.registration_no } : null} onRemoved={onReload} />
+        machine={removing ? { id: removing.id, name: removing.registration_no } : null} onRemoved={refresh} />
+      {cardModal}
     </div>
   );
 }
@@ -3745,6 +4634,8 @@ function MachineryModule() {
   // Trip vehicles ki khoj — yahan isliye ki Ctrl+K (App.js) number bhar kar
   // seedha is tab par la sake.
   const [tvQ, setTvQ] = useState("");
+  // "Gaadi" | "Rate card" (4 Oct 2026) — yahan isliye ki Ctrl+K hamesha Gaadi par laaye.
+  const [tvView, setTvView] = useState("gaadi");
   const loadTv = useCallback(async () => {
     const r = await api.get(`/trips/vehicles-summary?from=${tvFrom}&to=${tvTo}`).catch(() => null);
     setTv((p) => {
@@ -3799,7 +4690,7 @@ function MachineryModule() {
       // Purana (15 s se zyada) hand-off nahi — kabhi navigation ruk gaya ho to
       // baad me Machinery kholne par achanak koi aur machine na khule.
       if (!h || !h.id || !(Date.now() - Number(h.at || 0) < 15000)) return;
-      if (h.kind === "trip") { setOpenId(null); setTvQ(String(h.q || "")); setTab("tripv"); }
+      if (h.kind === "trip") { setOpenId(null); setTvQ(String(h.q || "")); setTvView("gaadi"); setTab("tripv"); }
       else { setTab("fleet"); setOpenId(Number(h.id)); }
     };
     take();
@@ -3898,6 +4789,7 @@ function MachineryModule() {
 
             {curTab === "tripv" && (
               <TripVehiclesTab tv={tv} from={tvFrom} to={tvTo} parties={parties} onReload={loadTv} q={tvQ} onQ={setTvQ}
+                view={tvView} onView={setTvView}
                 onRange={(f, t2) => { setTvFrom(f); setTvTo(t2); }} />
             )}
 
