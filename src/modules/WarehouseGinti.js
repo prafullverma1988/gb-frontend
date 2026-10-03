@@ -36,7 +36,9 @@ const T = {
   slt: "#64748B", sltL: "#F1F5F9",
 };
 const EPS = 0.0005;
-const n3 = (v) => Math.round((Number(v) || 0) * 1000) / 1000;
+// Qty 2 dashamlav — server bhi wahi kaat'ta hai (wh_materials.qty DECIMAL(12,2)),
+// isliye live jaanch aur server ka faisla ek hi number par hote hain.
+const n2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const fmtQ = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 const inr = (n) => "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
 const fmtDate = (d) => {
@@ -73,19 +75,19 @@ function lineState(sys, e) {
   if (raw.every(blank)) return { counted: false };
   const v = raw.map((x) => (blank(x) ? 0 : Number(x)));
   if (v.some((x) => !Number.isFinite(x) || x < 0)) return { counted: true, err: { k: "bad" } };
-  const [cg, cd, cs, lost, nasht] = v.map(n3);
-  const sysT = n3(sys.g + sys.d + sys.s), cntT = n3(cg + cd + cs);
-  const short = n3(sysT - cntT), expl = n3(lost + nasht);
-  const excess = Math.max(0, n3(cntT - sysT));
+  const [cg, cd, cs, lost, nasht] = v.map(n2);
+  const sysT = n2(sys.g + sys.d + sys.s), cntT = n2(cg + cd + cs);
+  const short = n2(sysT - cntT), expl = n2(lost + nasht);
+  const excess = Math.max(0, n2(cntT - sysT));
   let err = null;
   if (short > EPS) {
-    if (expl + EPS < short) err = { k: "unexplained", n: n3(short - expl) };
+    if (expl + EPS < short) err = { k: "unexplained", n: n2(short - expl) };
     else if (expl > short + EPS) err = { k: "over", n: expl, short };
   } else if (expl > EPS) err = { k: "no_short" };
   const differs = Math.abs(cg - sys.g) > EPS || Math.abs(cd - sys.d) > EPS || Math.abs(cs - sys.s) > EPS
     || lost > EPS || nasht > EPS || excess > EPS;
   if (!err && differs && !String(e.note || "").trim()) err = { k: "note" };
-  return { counted: true, err, net: n3(cntT - sysT), differs };
+  return { counted: true, err, net: n2(cntT - sysT), differs };
 }
 const errText = (er, unit) => !er ? "" : ({
   bad: t("warehouse.gt_hint_bad"),
@@ -266,7 +268,7 @@ function CountSheet({ id, canApprove, onClose, onChanged }) {
   const [q, setQ] = useState("");
   const [onlyDiff, setOnlyDiff] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);         // { bad, text, mid? }
+  const [msg, setMsg] = useState(null);         // { bad, text, mids? }
 
   const apply = (d) => {
     setC(d);
@@ -285,6 +287,19 @@ function CountSheet({ id, canApprove, onClose, onChanged }) {
     const r = await api.get(`/warehouse/counts/${id}`);
     if (r.success && r.data) apply(r.data); else setMsg({ bad: true, text: r.message || t("warehouse.gt_fail") });
   }, [id]);
+  // Save / bhejna ruka (400 / 409) to ginti dobara laao — store ke naye System
+  // number dikhen — par aadmi ka bhara hua mat mitao: badli line wapas upar
+  // rakh do (badli hi rehti hain, agli Save naye System ke saath jaati hai).
+  const reloadKeep = async () => {
+    const keepVals = vals, keepDirty = dirty, keepNote = note;
+    const r = await api.get(`/warehouse/counts/${id}`);
+    if (!r.success || !r.data) return;
+    apply(r.data);
+    if (r.data.status !== "draft") return;
+    setVals((o) => { const n = { ...o }; for (const mid of keepDirty) if (keepVals[mid]) n[mid] = keepVals[mid]; return n; });
+    setDirty(new Set(keepDirty));
+    setNote(keepNote);
+  };
   useEffect(() => { load(); }, [load]);
 
   const editable = !!c && c.status === "draft" && !!c.can_edit;
@@ -295,8 +310,8 @@ function CountSheet({ id, canApprove, onClose, onChanged }) {
   const sysOf = (i) => {
     const useCur = c && c.status === "draft" && (dirty.has(String(i.material_id)) || i.cnt_good == null) && i.cur_good != null;
     return useCur
-      ? { g: n3(i.cur_good), d: n3(i.cur_damaged), s: n3(i.cur_scrap) }
-      : { g: n3(i.sys_good), d: n3(i.sys_damaged), s: n3(i.sys_scrap) };
+      ? { g: n2(i.cur_good), d: n2(i.cur_damaged), s: n2(i.cur_scrap) }
+      : { g: n2(i.sys_good), d: n2(i.sys_damaged), s: n2(i.sys_scrap) };
   };
   const set = (mid, k, v) => {
     setVals((o) => ({ ...o, [mid]: { ...(o[mid] || {}), [k]: v } }));
@@ -316,19 +331,30 @@ function CountSheet({ id, canApprove, onClose, onChanged }) {
   const shown = items.filter((i) => (!ql || String(i.material_name || "").toLowerCase().includes(ql))
     && (!onlyDiff || (states[i.material_id] && states[i.material_id].differs)));
 
+  // seen_* = is line par screen ka System — server dekhta hai ki store tab se
+  // hila to nahi (409 count_moved). Qty 2 dashamlav par.
   const body = () => [...dirty].map((mid) => {
     const e = vals[mid] || {};
     const none = [e.g, e.d, e.s, e.lost, e.nasht].every(blank);
-    const nv = (x) => (none ? null : blank(x) ? 0 : Number(x));
+    const nv = (x) => (none ? null : blank(x) ? 0 : n2(x));
+    const line = items.find((i) => String(i.material_id) === String(mid));
+    const seen = line ? sysOf(line) : null;
     return { material_id: Number(mid), cnt_good: nv(e.g), cnt_damaged: nv(e.d), cnt_scrap: nv(e.s),
-      lost_qty: nv(e.lost), destroyed_qty: nv(e.nasht), note: (e.note || "").trim() || null };
+      lost_qty: nv(e.lost), destroyed_qty: nv(e.nasht), note: (e.note || "").trim() || null,
+      ...(seen ? { seen_good: seen.g, seen_damaged: seen.d, seen_scrap: seen.s } : {}) };
   });
+  const badIds = (r) => (r.data && Array.isArray(r.data.moved_material_ids) ? r.data.moved_material_ids
+    : r.data && r.data.material_id != null ? [r.data.material_id] : []);
   const save = async (quiet) => {
     if (!dirty.size && note === (c.remarks || "")) { if (!quiet) setMsg({ text: t("warehouse.gt_nothing_changed") }); return true; }
     setBusy(true); setMsg(null);
     const r = await api.put(`/warehouse/counts/${c.id}/items`, { items: body(), remarks: note });
     setBusy(false);
-    if (!r.success || !r.data) { setMsg({ bad: true, text: r.message || t("warehouse.gt_fail"), mid: r.data && r.data.material_id }); return false; }
+    if (!r.success || !r.data) {
+      setMsg({ bad: true, text: r.message || t("warehouse.gt_fail"), mids: badIds(r) });
+      await reloadKeep();
+      return false;
+    }
     apply(r.data);
     if (!quiet) setMsg({ text: r.message || t("warehouse.gt_saved") });
     return true;
@@ -338,7 +364,11 @@ function CountSheet({ id, canApprove, onClose, onChanged }) {
     setBusy(true); setMsg(null);
     const r = await api.post(`/warehouse/counts/${c.id}/${path}`, bodyObj || {});
     setBusy(false);
-    if (!r.success) return setMsg({ bad: true, text: r.message || t("warehouse.gt_fail") });
+    if (!r.success) {
+      setMsg({ bad: true, text: r.message || t("warehouse.gt_fail"), mids: badIds(r) });
+      await reloadKeep();   // naye System number / status ke saath
+      return;
+    }
     if (r.data) apply(r.data);
     setMsg({ text: r.message || "" });
     onChanged && onChanged();
@@ -407,7 +437,7 @@ function CountSheet({ id, canApprove, onClose, onChanged }) {
                 const e = vals[i.material_id] || {};
                 const s = states[i.material_id] || { counted: false };
                 const sys = sysOf(i);
-                const hl = msg && msg.bad && Number(msg.mid) === Number(i.material_id);
+                const hl = msg && msg.bad && (msg.mids || []).map(Number).includes(Number(i.material_id));
                 const cell = (k) => (
                   <input type="number" min="0" inputMode="decimal" value={e[k] ?? ""} disabled={!editable} placeholder="—"
                     onChange={(ev) => set(i.material_id, k, ev.target.value)}
@@ -479,7 +509,7 @@ function CountSheet({ id, canApprove, onClose, onChanged }) {
     </>
   );
 }
-const fmtNum = (v) => String(n3(v));
+const fmtNum = (v) => String(n2(v));
 const Banner = ({ tone, children }) => {
   const m = { amb: [T.ambL, T.amb], red: [T.redL, T.red], blu: [T.bluL, T.blu] }[tone];
   return <div style={{ margin: "8px 20px 0", padding: "8px 11px", borderRadius: 7, background: m[0], color: m[1], fontSize: 12, fontWeight: 600 }}>{children}</div>;
@@ -578,10 +608,10 @@ export function DisposalModal({ stock, onClose, onSaved }) {
 
   // Ek material ki do line ek hi bucket se — dono ka jod bucket se zyada na ho.
   const used = {};
-  for (const l of lines) if (l.mid && l.bucket) used[l.mid + "|" + l.bucket] = (used[l.mid + "|" + l.bucket] || 0) + (Number(l.qty) || 0);
+  for (const l of lines) if (l.mid && l.bucket) used[l.mid + "|" + l.bucket] = n2((used[l.mid + "|" + l.bucket] || 0) + n2(l.qty));
   const lineErr = (l) => {
     const m = byId.get(String(l.mid));
-    if (!m || !l.bucket || !l.action || !(Number(l.qty) > 0)) return t("warehouse.gt_d_incomplete");
+    if (!m || !l.bucket || !l.action || !(n2(l.qty) > 0)) return t("warehouse.gt_d_incomplete");
     if (used[l.mid + "|" + l.bucket] > bucketQty(m, l.bucket) + EPS) return t("warehouse.gt_d_over", { have: fmtQ(bucketQty(m, l.bucket)), unit: m.unit || "" });
     if (l.action === "repair_out" && !l.party_id && !l.party_name.trim()) return t("warehouse.gt_d_vendor");
     return "";
@@ -594,7 +624,7 @@ export function DisposalModal({ stock, onClose, onSaved }) {
     const r = await api.post("/warehouse/disposals", {
       remarks: remarks.trim() || null,
       items: lines.map((l) => ({
-        material_id: Number(l.mid), from_bucket: l.bucket, action: l.action, qty: Number(l.qty),
+        material_id: Number(l.mid), from_bucket: l.bucket, action: l.action, qty: n2(l.qty),
         sale_amount: l.action === "sold" && !blank(l.sale) ? Number(l.sale) : null,
         party_id: l.action === "repair_out" ? Number(l.party_id) || null : null,
         party_name: l.action === "sold" || (l.action === "repair_out" && !l.party_id) ? l.party_name.trim() || null : null,
