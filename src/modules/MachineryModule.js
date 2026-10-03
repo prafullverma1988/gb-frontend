@@ -23,6 +23,7 @@ import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { BackClose } from "../utils/backNav";
 import CityPicker from "../components/CityPicker";
 import { canApproveAction } from "../utils/approvalAuthority";
+import { can } from "../utils/perms";
 
 // Gadi number ka milan: space/dash/dot ka farak nahi ginna — backend bhi
 // theek yahi karta hai (utils/machineIdentity.js). Dono taraf ek jaisa na ho
@@ -30,6 +31,15 @@ import { canApproveAction } from "../utils/approvalAuthority";
 const normReg = (s) => String(s == null ? "" : s).replace(/[\s.-]/g, "").toUpperCase();
 // City badalna (shifting) sirf admin/super-admin ka kaam — server par bhi wahi rok.
 const canShiftCity = () => canApproveAction({ roles: ["admin", "super_admin"] });
+// Gaadi hatana bhi wahi admin ka kaam (Prafull, 3 Oct 2026: alag approval
+// nahi, admin seedha wajah likh kar hatata hai). Server live role dekhta hai.
+const canRemoveMachine = () => canApproveAction({ roles: ["admin", "super_admin"] });
+// Naya endpoint purane server par 404 "Route … not found" deta hai — wo
+// developer ki bhasha hai. Deploy ke beech ka chhota waqt hai, user ko seedha
+// bata do ki update aana baaki hai.
+const srvMsg = (r) => (r && r._status === 404 && /^Route /.test(String(r.message || ""))
+  ? t("machinery.server_update_baaki")
+  : (r && r.message) || t("common.something_went_wrong"));
 
 // ── ICONS ─────────────────────────────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -49,6 +59,7 @@ const IcAdd    = (p) => <Ic {...p} d="M12 5v14M5 12h14" />;
 const IcX      = (p) => <Ic {...p} d="M18 6L6 18M6 6l12 12" />;
 const IcAlert  = (p) => <Ic {...p} d="M10.3 3.9L1.8 18a2 2 0 001.7 3h16.9a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0zM12 9v4M12 17h.01" />;
 const IcSignal = (p) => <Ic {...p} d="M5 12.55a11 11 0 0114.08 0M8.53 15.5a6 6 0 016.95 0M12 19h.01" />;
+const IcRoute  = (p) => <Ic {...p} d="M6 21a2 2 0 100-4 2 2 0 000 4zM18 7a2 2 0 100-4 2 2 0 000 4zM6 17V9a4 4 0 014-4h6M18 7v8a4 4 0 01-4 4H8" />;
 
 // ── THEME ─────────────────────────────────────────────────────────
 const T = {
@@ -211,6 +222,10 @@ const Empty = ({ children }) => (
 
 const Notice = ({ children }) => (
   <div style={{ border: `1px solid ${T.indM}`, background: T.indL, borderRadius: 10, padding: "10px 13px", fontSize: 11.5, color: "#3B369E", lineHeight: 1.55, marginBottom: 14 }}>{children}</div>
+);
+// Server ne mana kiya (409, 403…) — laal, taaki "jaankari" wale neele dabbe se alag dikhe.
+const ErrBox = ({ children }) => (
+  <div style={{ marginTop: 12, border: `1px solid ${T.red}33`, background: T.redL, color: T.red, borderRadius: 8, padding: "9px 12px", fontSize: 11.5, fontWeight: 600, lineHeight: 1.5 }}>{children}</div>
 );
 
 const inp = {
@@ -1545,7 +1560,7 @@ function MeterForm({ open, onClose, onSaved, machine, current }) {
 // ══════════════════════════════════════════════════════════════════
 // MACHINE DETAIL
 // ══════════════════════════════════════════════════════════════════
-function MachineDetail({ id, onBack, onChanged, onEdit, parties, cities }) {
+function MachineDetail({ id, onBack, onChanged, onEdit, onRemoved, canRemove, parties, cities }) {
   const [tab, setTab] = useState("ov");
   const [m, setM] = useState(null);
   const [timeline, setTimeline] = useState([]);
@@ -1557,6 +1572,9 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties, cities }) {
   // City badalna (shifting) — sirf admin; jawab me nayi city aur log.
   const [cityOpen, setCityOpen] = useState(false);
   const [cityLog, setCityLog] = useState([]);
+  // Gaadi hatao — wahi admin, wajah zaroori. Hatne ke baad detail khulti hi
+  // nahi (server sirf chalu machine deta hai), isliye seedha list par wapas.
+  const [removeOpen, setRemoveOpen] = useState(false);
   const [svcOpen, setSvcOpen] = useState(false);
   const [svcEdit, setSvcEdit] = useState(null);   // khuli service jise band karna hai
   const [svcTemplates, setSvcTemplates] = useState([]);
@@ -1662,6 +1680,7 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties, cities }) {
           )}
           <Btn ghost icon={IcGauge} onClick={() => setMeterOpen(true)}>{t("machinery.meter")}</Btn>
           {canShiftCity() && <Btn ghost onClick={() => setCityOpen(true)}>{t("machinery.city_badlo")}</Btn>}
+          {canRemove && canRemoveMachine() && <Btn ghost onClick={() => setRemoveOpen(true)} style={{ color: T.red }}>{t("machinery.gaadi_hatao")}</Btn>}
           {onEdit && <Btn ghost onClick={() => onEdit(m)}>{t("common.edit_2")}</Btn>}
         </div>
       </div>
@@ -1954,6 +1973,8 @@ function MachineDetail({ id, onBack, onChanged, onEdit, parties, cities }) {
       <CityShiftModal open={cityOpen} onClose={() => setCityOpen(false)} machine={m} cities={cities || []}
         log={cityLog} onLoadLog={setCityLog}
         onSaved={() => { load(true); onChanged && onChanged(); }} />
+      <RemoveMachineModal open={removeOpen} onClose={() => setRemoveOpen(false)} machine={m}
+        onRemoved={() => { onRemoved ? onRemoved() : onBack(); }} />
     </div>
   );
 }
@@ -2029,6 +2050,307 @@ function CityShiftModal({ open, onClose, machine, cities, log, onLoadLog, onSave
     </Modal>
   );
 }
+
+// ══════════════════════════════════════════════════════════════════
+// GAADI HATAO — fleet / trip list se nikalna (3 Oct 2026)
+// ══════════════════════════════════════════════════════════════════
+// Prafull: alag approval nahi — admin wajah likh kar seedha hatata hai.
+// Record mitta nahi (server is_active=0 karta hai): purani trips, fuel aur
+// service waise hi rehte hain, aur wajah + kisne + kab darj hota hai. Gaadi
+// raste me ho (trip khuli) to server 409 open_trip deta hai — uska message
+// jaisa ka taisa dikhate hain, wahi batata hai ki pehle kya karna hai.
+function RemoveMachineModal({ open, onClose, machine, onRemoved }) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => { if (open) { setReason(""); setErr(""); setBusy(false); } }, [open]);
+
+  const save = async () => {
+    const why = reason.trim();
+    if (why.length < 3) { setErr(t("machinery.hatao_wajah_min")); return; }
+    setBusy(true); setErr("");
+    const r = await api.post(`/machinery/fleet/${machine.id}/remove`, { reason: why });
+    setBusy(false);
+    if (!r || r.success === false) { setErr(srvMsg(r)); return; }
+    onClose();
+    if (onRemoved) onRemoved();
+  };
+
+  if (!machine) return null;
+  const sub = [machine.name, machine.registration_no].filter(Boolean)
+    .filter((v, i, a) => a.indexOf(v) === i).join(" · ");
+  return (
+    <Modal open={open} onClose={onClose} width={500} title={t("machinery.gaadi_hatao")} sub={sub}
+      footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
+        <Btn c={T.red} onClick={save} disabled={busy}>{busy ? t("machinery.hata_rahe_hain") : t("machinery.haan_hatao")}</Btn></>}>
+      <Notice>{t("machinery.hatao_note")}</Notice>
+      <Field label={t("machinery.hatao_wajah")} hint={t("machinery.hatao_wajah_hint")}>
+        <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={300}
+          placeholder={t("machinery.hatao_wajah_ph")} style={{ ...inp, resize: "vertical" }} />
+      </Field>
+      {err && <ErrBox>{err}</ErrBox>}
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TRIP VEHICLES — vendor / kiraye ki trip wali gaadiyan (3 Oct 2026)
+// ══════════════════════════════════════════════════════════════════
+// Ye gaadiyan Fleet list me nahi aatin (server hi chhaant deta hai): Fleet
+// apni machine ki list hai, aur dumper-tipper ki lambi vendor list usme
+// asli machine dhak deti thi. Yahan Finance ke "Unbilled Material" jaisa —
+// vendor ka dabba → uski gaadiyan → trips / km / ₹. Nayi gaadi yahin se ya
+// Trip Tracking (web + app) se banti hai; apni gaadi Fleet se hi aati hai.
+//
+// Bill kaise banta hai (server ka trip_billing, purani gaadi ka bhi
+// "effective" roop aata hai): km = vendor ka rate card, trip = route ka
+// rate, monthly = mahine ka kiraya (trip sirf record), own = apni gaadi.
+const TRIP_BILLING = {
+  km:      { get l() { return t("machinery.tv_bill_km"); },      get hint() { return t("machinery.tv_bill_km_hint"); },      c: T.ind, bg: T.indL },
+  trip:    { get l() { return t("machinery.tv_bill_trip"); },    get hint() { return t("machinery.tv_bill_trip_hint"); },    c: T.blu, bg: T.bluL },
+  monthly: { get l() { return t("machinery.tv_bill_monthly"); }, get hint() { return t("machinery.tv_bill_monthly_hint"); }, c: T.amb, bg: T.ambL },
+  own:     { get l() { return t("machinery.tv_bill_own"); },     c: T.slt, bg: T.sltL },
+};
+const billingMeta = (k) => TRIP_BILLING[k] || TRIP_BILLING.trip;
+// Trip ki gaadi ka vendor aksar "transporter" role me hota hai.
+const TRIP_VENDOR_ROLES = ["transporter", ...HIRE_VENDOR_ROLES];
+// Vendor ke dabbe ka jod in khanon par — server ke totals par nahi, taaki
+// "hatayi hui" chhupi hon to upar ka jod neeche ki rows se hi mile.
+const TV_SUMS = ["trips", "km_billed", "amount", "billed", "unbilled", "flagged", "in_transit"];
+const TV_COLS = "minmax(130px,1.4fr) 86px 52px 62px 96px 54px 66px 60px 72px 132px";
+
+const TvChip = ({ c, bg, children }) => (
+  <span style={{ fontSize: 10.5, color: c, fontWeight: 700, background: bg, padding: "3px 9px", borderRadius: 20, border: `1px solid ${c}33`, whiteSpace: "nowrap" }}>{children}</span>
+);
+
+function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
+  const editing = !!(vehicle && vehicle.id);
+  const [reg, setReg] = useState("");
+  const [vendor, setVendor] = useState(null);
+  const [billing, setBilling] = useState("");
+  const [driver, setDriver] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setReg((vehicle && vehicle.registration_no) || "");
+    setVendor(vehicle && vehicle.vendor_id ? String(vehicle.vendor_id) : null);
+    // Nayi gaadi par billing jaan-boojh kar khaali — km aur per-trip ka farak
+    // paisa badal deta hai, ye aadmi khud soch kar chune.
+    setBilling(vehicle && ["km", "trip", "monthly"].includes(vehicle.trip_billing) ? vehicle.trip_billing : "");
+    setDriver(""); setErr(""); setBusy(false);
+  }, [open, vehicle]);
+
+  const save = async () => {
+    if (!reg.trim()) { setErr(t("machinery.tv_err_reg")); return; }
+    if (!vendor) { setErr(t("machinery.tv_err_vendor")); return; }
+    if (!billing) { setErr(t("machinery.tv_err_billing")); return; }
+    setBusy(true); setErr("");
+    const body = { registration_no: reg.trim(), vendor_id: Number(vendor), trip_billing: billing };
+    const r = editing
+      ? await api.put(`/trips/trucks/${vehicle.id}`, body)
+      : await api.post("/trips/trucks", { ...body, ...(driver.trim() ? { driver_name: driver.trim() } : {}) });
+    setBusy(false);
+    if (!r || r.success === false) { setErr(srvMsg(r)); return; }
+    onClose();
+    if (onSaved) onSaved();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} width={560}
+      title={editing ? t("machinery.tv_edit_title") : t("machinery.tv_add_title")}
+      sub={editing ? vehicle.registration_no : t("machinery.tv_add_sub")}
+      footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={busy}>{busy ? t("common.saving") : t("common.save")}</Btn></>}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label={t("machinery.tv_f_reg")}>
+          <input value={reg} onChange={(e) => setReg(e.target.value)} placeholder={t("machinery.tv_f_reg_ph")} style={inp} />
+        </Field>
+        <Field label={t("machinery.tv_f_vendor")}>
+          <PartyPicker value={vendor} onChange={setVendor} parties={parties || []} roles={TRIP_VENDOR_ROLES}
+            placeholder={t("machinery.tv_f_vendor_ph")} />
+        </Field>
+      </div>
+      <div style={{ height: 12 }} />
+      <Field label={t("machinery.tv_f_billing")}>
+        <div style={{ display: "grid", gap: 7 }}>
+          {["km", "trip", "monthly"].map((k) => {
+            const m = TRIP_BILLING[k];
+            const on = billing === k;
+            return (
+              <label key={k} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 11px", borderRadius: 8, cursor: "pointer", border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface }}>
+                <input type="radio" name="tv_billing" checked={on} onChange={() => setBilling(k)} style={{ marginTop: 2, accentColor: T.ind }} />
+                <span>
+                  <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{m.l}</span>
+                  <span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 1, lineHeight: 1.45 }}>{m.hint}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </Field>
+      {!editing && (
+        <>
+          <div style={{ height: 12 }} />
+          <Field label={t("machinery.tv_f_driver")}>
+            <input value={driver} onChange={(e) => setDriver(e.target.value)} maxLength={80} style={inp} />
+          </Field>
+        </>
+      )}
+      {err && <ErrBox>{err}</ErrBox>}
+    </Modal>
+  );
+}
+
+function TripVehiclesTab({ tv, from, to, onRange, onReload, parties }) {
+  const [openV, setOpenV] = useState({});          // vendor ka dabba khula / band
+  const [showRemoved, setShowRemoved] = useState(false);
+  const [form, setForm] = useState(null);          // null | {} nayi | gaadi (edit)
+  const [removing, setRemoving] = useState(null);
+  // Server ke gate jaise: nayi gaadi = Equipment Create, badlo = Equipment
+  // Edit (routes/trips.js), hatao = sirf admin.
+  const canAdd = can("Equipment", "create");
+  const canEdit = can("Equipment", "edit");
+  const canRemove = canRemoveMachine();
+
+  const { groups, hidden } = useMemo(() => {
+    let hiddenN = 0;
+    const gs = (tv.rows || []).map((g) => {
+      const all = Array.isArray(g.vehicles) ? g.vehicles : [];
+      const vehicles = all.filter((v) => showRemoved || Number(v.is_active) !== 0);
+      // Hatayi hui gaadi ki trips bhi paisa hain — chhupi hon to bata do.
+      if (!showRemoved) hiddenN += all.filter((v) => Number(v.is_active) === 0 && Number(v.trips) > 0).length;
+      const sum = { vehicles: vehicles.length };
+      TV_SUMS.forEach((k) => { sum[k] = vehicles.reduce((a, v) => a + (Number(v[k]) || 0), 0); });
+      return {
+        key: g.vendor_id == null ? "none" : String(g.vendor_id),
+        vendor_id: g.vendor_id,
+        name: g.vendor_name || t("machinery.tv_vendor_nahi"),
+        vehicles, sum,
+      };
+    }).filter((g) => g.vehicles.length > 0)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return { groups: gs, hidden: hiddenN };
+  }, [tv.rows, showRemoved]);
+
+  const all = groups.reduce((a, g) => ({
+    vehicles: a.vehicles + g.sum.vehicles, trips: a.trips + g.sum.trips, amount: a.amount + g.sum.amount,
+  }), { vehicles: 0, trips: 0, amount: 0 });
+  const dateS = { height: 30, padding: "0 8px", borderRadius: 6, border: `1.5px solid ${T.b1}`, fontSize: 12, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none" };
+  const num = (v, extra) => (
+    <span style={{ fontSize: 12, color: T.t2, textAlign: "right", fontVariantNumeric: "tabular-nums", ...extra }}>{v}</span>
+  );
+
+  return (
+    <div>
+      <Notice>{t("machinery.tv_note")}</Notice>
+
+      {/* Chhanni — Unbilled Material jaisi patti */}
+      <div style={{ background: T.surface, borderRadius: 8, border: `1px solid ${T.b1}`, padding: "8px 12px", marginBottom: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: T.t2 }}>{t("common.from")}</span>
+        <input type="date" value={from} max={to} onChange={(e) => e.target.value && onRange(e.target.value, to)} style={dateS} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: T.t2 }}>{t("common.to")}</span>
+        <input type="date" value={to} min={from} onChange={(e) => e.target.value && onRange(from, e.target.value)} style={dateS} />
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.t2, cursor: "pointer", marginLeft: 6 }}>
+          <input type="checkbox" checked={showRemoved} onChange={(e) => setShowRemoved(e.target.checked)} style={{ accentColor: T.ind }} />
+          {t("machinery.tv_show_removed")}
+        </label>
+        <span style={{ flex: 1 }} />
+        {canAdd && <Btn size="sm" icon={IcAdd} onClick={() => setForm({})}>{t("machinery.tv_add")}</Btn>}
+      </div>
+
+      {tv.state === "error" && <Empty>{t("machinery.tv_load_fail")}</Empty>}
+
+      {tv.state === "ok" && groups.length === 0 && (
+        <div style={{ textAlign: "center", padding: "50px 20px", background: T.surface, borderRadius: 8, border: `1px solid ${T.b1}` }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.t3, marginBottom: 4 }}>{t("machinery.tv_empty")}</div>
+          <div style={{ fontSize: 12, color: T.t4 }}>{t("machinery.tv_empty_hint")}</div>
+        </div>
+      )}
+
+      {groups.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "0 2px 2px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11.5, color: T.t4, fontWeight: 500 }}>
+              {t("machinery.tv_count", { v: groups.length, n: all.vehicles, trips: all.trips, amt: rupee(all.amount) })}
+            </span>
+            {hidden > 0 && <span style={{ fontSize: 11, color: T.amb, fontWeight: 600 }}>{t("machinery.tv_hidden_trips", { n: hidden })}</span>}
+          </div>
+
+          {groups.map((g) => {
+            const isOpen = !!openV[g.key];
+            return (
+              <div key={g.key} style={{ background: T.surface, borderRadius: 8, border: `1px solid ${T.b1}`, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                {/* Vendor ki patti — dabao to gaadiyan khulti hain */}
+                <div onClick={() => setOpenV((p) => ({ ...p, [g.key]: !p[g.key] }))}
+                  style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", transition: "background 0.1s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = T.surfaceB; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = T.surface; }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
+                    <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>
+                      {t("machinery.tv_vendor_sub", { n: g.sum.vehicles, trips: g.sum.trips, km: fmtN(g.sum.km_billed) })}
+                    </div>
+                  </div>
+                  {g.sum.flagged > 0 && <TvChip c={T.red} bg={T.redL}>{t("machinery.tv_n_flagged", { n: g.sum.flagged })}</TvChip>}
+                  {g.sum.in_transit > 0 && <TvChip c={T.amb} bg={T.ambL}>{t("machinery.tv_n_transit", { n: g.sum.in_transit })}</TvChip>}
+                  {g.sum.unbilled > 0 && <TvChip c={T.ind} bg={T.indL}>{t("machinery.tv_n_unbilled", { n: g.sum.unbilled })}</TvChip>}
+                  <span style={{ fontSize: 13.5, fontWeight: 800, color: T.t1, fontVariantNumeric: "tabular-nums", minWidth: 86, textAlign: "right" }}>{rupee(g.sum.amount)}</span>
+                  <span style={{ color: T.t4, fontSize: 14, transform: isOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s", display: "inline-block" }}>⌄</span>
+                </div>
+
+                {isOpen && (
+                  <div style={{ borderTop: `1px solid ${T.b1}`, background: T.surfaceB, padding: "10px 14px", overflowX: "auto" }}>
+                    <div style={{ minWidth: 860 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: TV_COLS, gap: 6, padding: "6px 8px", background: T.surface, borderRadius: 6, border: `1px solid ${T.b1}`, alignItems: "center" }}>
+                        {[t("machinery.tv_h_vehicle"), t("machinery.tv_h_billing"), t("machinery.tv_h_trips"), t("machinery.tv_h_km"), t("machinery.tv_h_amount"),
+                          t("machinery.tv_h_billed"), t("machinery.tv_h_unbilled"), t("machinery.tv_h_flagged"), t("machinery.tv_h_last"), ""].map((h, i) => (
+                          <span key={i} style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", textAlign: i >= 2 && i <= 7 ? "right" : "left" }}>{h}</span>
+                        ))}
+                      </div>
+                      {g.vehicles.map((v) => {
+                        const removed = Number(v.is_active) === 0;
+                        const bm = billingMeta(v.trip_billing);
+                        return (
+                          <div key={v.id} style={{ display: "grid", gridTemplateColumns: TV_COLS, gap: 6, padding: "8px 8px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", opacity: removed ? 0.6 : 1 }}>
+                            <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
+                              <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, color: T.ind, background: T.indL, border: `1px solid ${T.ind}22`, borderRadius: 5, padding: "1px 7px", fontVariantNumeric: "tabular-nums" }}>{v.registration_no || "—"}</span>
+                              {removed && <Pill label={t("machinery.tv_removed")} c={T.t3} bg={T.sltL} />}
+                            </span>
+                            <span><Pill label={bm.l} c={bm.c} bg={bm.bg} /></span>
+                            {num(Number(v.trips) || 0)}
+                            {num(v.km_billed != null ? fmtN(v.km_billed) : "—")}
+                            {/* Mahine wali gaadi ka trip par amount banta hi nahi — ₹0 nahi, khaali. */}
+                            {num(v.trip_billing === "monthly" ? "—" : rupee(v.amount), { fontWeight: 700, color: T.t1 })}
+                            {num(Number(v.billed) || 0)}
+                            {num(Number(v.unbilled) || 0, Number(v.unbilled) > 0 ? { color: T.ind, fontWeight: 700 } : null)}
+                            {num(Number(v.flagged) || 0, Number(v.flagged) > 0 ? { color: T.red, fontWeight: 700 } : null)}
+                            <span style={{ fontSize: 10.5, color: T.t4 }}>{fmtD(v.last_trip_at)}</span>
+                            <span style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                              {!removed && canEdit && <Btn size="sm" ghost onClick={() => setForm({ ...v, vendor_id: g.vendor_id })}>{t("common.edit_2")}</Btn>}
+                              {!removed && canRemove && <Btn size="sm" ghost style={{ color: T.red }} onClick={() => setRemoving(v)}>{t("machinery.tv_hatao")}</Btn>}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <TripVehicleForm open={!!form} vehicle={form} parties={parties} onClose={() => setForm(null)} onSaved={onReload} />
+      <RemoveMachineModal open={!!removing} onClose={() => setRemoving(null)}
+        machine={removing ? { id: removing.id, name: removing.registration_no } : null} onRemoved={onReload} />
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════
 // MODULE
 // ══════════════════════════════════════════════════════════════════
@@ -3281,6 +3603,21 @@ function MachineryModule() {
   const [repFrom, setRepFrom] = useState(repMonthStart.toLocaleDateString("en-CA"));
   const [repTo, setRepTo] = useState(new Date().toLocaleDateString("en-CA"));
 
+  // Trip vehicles tab — apna date range (mahine ki shuruaat se aaj tak).
+  // state: loading → ok | missing | error. "missing" = purana server (404) ya
+  // ijazat nahi (403) — tab tab dikhta hi nahi, baaki screen pehle jaisi.
+  const [tvFrom, setTvFrom] = useState(repMonthStart.toLocaleDateString("en-CA"));
+  const [tvTo, setTvTo] = useState(new Date().toLocaleDateString("en-CA"));
+  const [tv, setTv] = useState({ state: "loading", rows: [] });
+  const loadTv = useCallback(async () => {
+    const r = await api.get(`/trips/vehicles-summary?from=${tvFrom}&to=${tvTo}`).catch(() => null);
+    setTv((p) => {
+      if (r && r.success) return { state: "ok", rows: Array.isArray(r.data) ? r.data : [] };
+      return p.state === "ok" || p.state === "error" ? { state: "error", rows: [] } : { state: "missing", rows: [] };
+    });
+  }, [tvFrom, tvTo]);
+  useEffect(() => { loadTv(); }, [loadTv]);
+
   // silent = background refresh. Spinner sirf pehli baar; warna machine detail
   // khuli ho to wo unmount ho kar apna tab bhool jaata hai.
   const load = useCallback(async (silent) => {
@@ -3356,6 +3693,8 @@ function MachineryModule() {
 
   const TABS = [
     { id: "fleet", l: t("machinery.fleet"), I: IcTruck },
+    // Vendor / kiraye ki trip gaadiyan — server naya ho tabhi.
+    ...(tv.state === "ok" || tv.state === "error" ? [{ id: "tripv", l: t("machinery.tv_tab"), I: IcRoute }] : []),
     { id: "due", l: t("machinery.reminders"), I: IcBell, badge: active.length || null },
     // Badge = kitni vendor units abhi kisi machine se judi nahi — wahi is
     // tab ka asli kaam hai. Account hi na ho to badge ka koi matlab nahi.
@@ -3363,6 +3702,9 @@ function MachineryModule() {
     { id: "insights", l: t("machinery.insights"), I: IcSpark },
     { id: "reports", l: t("common.reports"), I: IcChart },
   ];
+  // Chuna hua tab list se gayab ho jaaye (trip vehicles ka server jawab na de)
+  // to khaali screen nahi — Fleet.
+  const curTab = TABS.some((x) => x.id === tab) ? tab : "fleet";
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", flexDirection: "column", gap: 14 }}>
@@ -3377,7 +3719,11 @@ function MachineryModule() {
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px 20px" }}>
         {openId ? (
           <MachineDetail id={openId} onBack={() => setOpenId(null)} onChanged={() => load(true)} parties={parties} cities={cities}
-            onEdit={(m) => { setEditMachine(m); setFormOpen(true); }} />
+            onEdit={(m) => { setEditMachine(m); setFormOpen(true); }}
+            // Hatane ka endpoint naye server ke saath aata hai — trip vehicles ka
+            // jawab aaya matlab server naya hai; purane par button hi nahi.
+            canRemove={tv.state === "ok" || tv.state === "error"}
+            onRemoved={() => { setOpenId(null); load(true); }} />
         ) : (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
@@ -3387,19 +3733,24 @@ function MachineryModule() {
             <div style={{ display: "flex", gap: 2, borderBottom: `1.5px solid ${T.b1}`, marginBottom: 16 }}>
               {TABS.map((x) => (
                 <button key={x.id} type="button" onClick={() => setTab(x.id)}
-                  style={{ padding: "9px 15px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "none", background: "none", fontFamily: "inherit", marginBottom: "-1.5px", display: "flex", alignItems: "center", gap: 6, color: tab === x.id ? T.ind : T.t3, borderBottom: `2px solid ${tab === x.id ? T.ind : "transparent"}` }}>
+                  style={{ padding: "9px 15px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "none", background: "none", fontFamily: "inherit", marginBottom: "-1.5px", display: "flex", alignItems: "center", gap: 6, color: curTab === x.id ? T.ind : T.t3, borderBottom: `2px solid ${curTab === x.id ? T.ind : "transparent"}` }}>
                   <x.I size={13} color="currentColor" />{x.l}
                   {x.badge > 0 && <span style={{ fontSize: 10, background: T.redL, color: T.red, borderRadius: 8, padding: "1px 6px", fontWeight: 700 }}>{x.badge}</span>}
                 </button>
               ))}
             </div>
 
-            {tab === "reports" && (
+            {curTab === "tripv" && (
+              <TripVehiclesTab tv={tv} from={tvFrom} to={tvTo} parties={parties} onReload={loadTv}
+                onRange={(f, t2) => { setTvFrom(f); setTvTo(t2); }} />
+            )}
+
+            {curTab === "reports" && (
               <ReportsTab fleet={fleet} projects={projects} from={repFrom} to={repTo}
                 onRange={(f, t2) => { setRepFrom(f); setRepTo(t2); }} />
             )}
 
-            {tab === "gps" && (
+            {curTab === "gps" && (
               <TelematicsTab data={tele} onReload={load}
                 onNewMachine={(u) => {
                   // Naam me se vendor ka tenant-prefix (RKU_ jaisa) hata kar
@@ -3414,7 +3765,7 @@ function MachineryModule() {
                 }} />
             )}
 
-            {tab === "fleet" && (
+            {curTab === "fleet" && (
               <Panel title={t("machinery.fleet")} action={
                 <div style={{ display: "flex", gap: 7 }}>
                   <Btn size="sm" ghost onClick={() => setImportOpen(true)}>{t("machinery.excel_import")}</Btn>
@@ -3498,7 +3849,7 @@ function MachineryModule() {
               </Panel>
             )}
 
-            {tab === "due" && (
+            {curTab === "due" && (
               <>
                 <Notice>
                  {t("machinery.kaagaz_ki_expiry_par_bell_apne")}
@@ -3535,7 +3886,7 @@ function MachineryModule() {
               </>
             )}
 
-            {tab === "insights" && (
+            {curTab === "insights" && (
               <div style={{ display: "grid", gap: 12 }}>
                 <CostReport econ={econ} health={health} />
                 <Panel title={t("machinery.abhi_kya_kami_hai")} style={{ marginTop: 2 }}>
