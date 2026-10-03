@@ -37,7 +37,10 @@ const canRemoveMachine = () => canApproveAction({ roles: ["admin", "super_admin"
 // Naya endpoint purane server par 404 "Route … not found" deta hai — wo
 // developer ki bhasha hai. Deploy ke beech ka chhota waqt hai, user ko seedha
 // bata do ki update aana baaki hai.
-const srvMsg = (r) => (r && r._status === 404 && /^Route /.test(String(r.message || ""))
+// (_status yahan aksar khaali hota hai — 404 ki body me success:false hota hai
+// aur api client tab body jaisi ki taisi lauta deta hai; isliye message se pehchaan.)
+const ROUTE_404 = /^Route [A-Z]+ \S+ not found/;
+const srvMsg = (r) => (r && ROUTE_404.test(String(r.message || ""))
   ? t("machinery.server_update_baaki")
   : (r && r.message) || t("common.something_went_wrong"));
 
@@ -2117,7 +2120,9 @@ const billingMeta = (k) => TRIP_BILLING[k] || TRIP_BILLING.trip;
 const TRIP_VENDOR_ROLES = ["transporter", ...HIRE_VENDOR_ROLES];
 // Vendor ke dabbe ka jod in khanon par — server ke totals par nahi, taaki
 // "hatayi hui" chhupi hon to upar ka jod neeche ki rows se hi mile.
-const TV_SUMS = ["trips", "km_billed", "amount", "billed", "unbilled", "flagged", "in_transit"];
+// rate_pending = bill ke laayak trip jiska amount khaali (km vendor ka rate
+// card nahi / route ka rate nahi) — ₹0 dikh kar "kuch dena nahi" na lage.
+const TV_SUMS = ["trips", "km_billed", "amount", "billed", "unbilled", "rate_pending", "flagged", "in_transit"];
 const TV_COLS = "minmax(130px,1.4fr) 86px 52px 62px 96px 54px 66px 60px 72px 132px";
 
 const TvChip = ({ c, bg, children }) => (
@@ -2215,25 +2220,32 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties }) {
   const canEdit = can("Equipment", "edit");
   const canRemove = canRemoveMachine();
 
-  const { groups, hidden } = useMemo(() => {
-    let hiddenN = 0;
+  // Gaadi ka vendor beech me badla ho to server use PURANE vendor ke dabbe me
+  // bhi bhejta hai (vendor_changed, sirf us vendor ki trips ke saath) — wahan
+  // ki trips/₹ us vendor ke hain, par gaadi uski ginti me nahi aati.
+  const { groups, hidden, vendorName } = useMemo(() => {
+    const hiddenIds = new Set();
+    const names = new Map((tv.rows || []).map((g) => [g.vendor_id == null ? null : Number(g.vendor_id), g.vendor_name]));
     const gs = (tv.rows || []).map((g) => {
       const all = Array.isArray(g.vehicles) ? g.vehicles : [];
       const vehicles = all.filter((v) => showRemoved || Number(v.is_active) !== 0);
       // Hatayi hui gaadi ki trips bhi paisa hain — chhupi hon to bata do.
-      if (!showRemoved) hiddenN += all.filter((v) => Number(v.is_active) === 0 && Number(v.trips) > 0).length;
-      const sum = { vehicles: vehicles.length };
+      if (!showRemoved) all.filter((v) => Number(v.is_active) === 0 && Number(v.trips) > 0).forEach((v) => hiddenIds.add(v.id));
+      const sum = { vehicles: vehicles.filter((v) => !v.vendor_changed).length };
       TV_SUMS.forEach((k) => { sum[k] = vehicles.reduce((a, v) => a + (Number(v[k]) || 0), 0); });
       return {
         key: g.vendor_id == null ? "none" : String(g.vendor_id),
         vendor_id: g.vendor_id,
         name: g.vendor_name || t("machinery.tv_vendor_nahi"),
+        has_rate_card: g.has_rate_card,
         vehicles, sum,
       };
     }).filter((g) => g.vehicles.length > 0)
       .sort((a, b) => a.name.localeCompare(b.name));
-    return { groups: gs, hidden: hiddenN };
-  }, [tv.rows, showRemoved]);
+    const vendorName = (vid) => (vid == null ? t("machinery.tv_vendor_nahi")
+      : names.get(Number(vid)) || ((parties || []).find((p) => String(p.id) === String(vid)) || {}).name || "#" + vid);
+    return { groups: gs, hidden: hiddenIds.size, vendorName };
+  }, [tv.rows, showRemoved, parties]);
 
   const all = groups.reduce((a, g) => ({
     vehicles: a.vehicles + g.sum.vehicles, trips: a.trips + g.sum.trips, amount: a.amount + g.sum.amount,
@@ -2297,6 +2309,12 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties }) {
                   {g.sum.flagged > 0 && <TvChip c={T.red} bg={T.redL}>{t("machinery.tv_n_flagged", { n: g.sum.flagged })}</TvChip>}
                   {g.sum.in_transit > 0 && <TvChip c={T.amb} bg={T.ambL}>{t("machinery.tv_n_transit", { n: g.sum.in_transit })}</TvChip>}
                   {g.sum.unbilled > 0 && <TvChip c={T.ind} bg={T.indL}>{t("machinery.tv_n_unbilled", { n: g.sum.unbilled })}</TvChip>}
+                  {/* Amount khaali trips — km vendor ka card nahi ho to yahi sabse bada kaaran. */}
+                  {g.sum.rate_pending > 0 && (
+                    <span title={g.has_rate_card === false && g.vehicles.some((v) => v.trip_billing === "km") ? t("machinery.tv_rate_pending_card") : t("machinery.tv_rate_pending_route")}>
+                      <TvChip c={T.amb} bg={T.ambL}>{t("machinery.tv_n_rate_pending", { n: g.sum.rate_pending })}</TvChip>
+                    </span>
+                  )}
                   <span style={{ fontSize: 13.5, fontWeight: 800, color: T.t1, fontVariantNumeric: "tabular-nums", minWidth: 86, textAlign: "right" }}>{rupee(g.sum.amount)}</span>
                   <span style={{ color: T.t4, fontSize: 14, transform: isOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s", display: "inline-block" }}>⌄</span>
                 </div>
@@ -2318,19 +2336,32 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties }) {
                             <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
                               <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, color: T.ind, background: T.indL, border: `1px solid ${T.ind}22`, borderRadius: 5, padding: "1px 7px", fontVariantNumeric: "tabular-nums" }}>{v.registration_no || "—"}</span>
                               {removed && <Pill label={t("machinery.tv_removed")} c={T.t3} bg={T.sltL} />}
+                              {v.vendor_changed && (
+                                <span style={{ flexBasis: "100%", fontSize: 10, color: T.t4 }}>{t("machinery.tv_vendor_badla", { name: vendorName(v.current_vendor_id) })}</span>
+                              )}
                             </span>
                             <span><Pill label={bm.l} c={bm.c} bg={bm.bg} /></span>
                             {num(Number(v.trips) || 0)}
                             {num(v.km_billed != null ? fmtN(v.km_billed) : "—")}
                             {/* Mahine wali gaadi ka trip par amount banta hi nahi — ₹0 nahi, khaali. */}
-                            {num(v.trip_billing === "monthly" ? "—" : rupee(v.amount), { fontWeight: 700, color: T.t1 })}
+                            <span style={{ fontSize: 12, textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: T.t1 }}>
+                              {v.trip_billing === "monthly" ? "—" : rupee(v.amount)}
+                              {Number(v.rate_pending) > 0 && (
+                                <span style={{ display: "block", fontSize: 10, fontWeight: 600, color: T.amb }}>{t("machinery.tv_n_rate_pending", { n: Number(v.rate_pending) })}</span>
+                              )}
+                            </span>
                             {num(Number(v.billed) || 0)}
                             {num(Number(v.unbilled) || 0, Number(v.unbilled) > 0 ? { color: T.ind, fontWeight: 700 } : null)}
                             {num(Number(v.flagged) || 0, Number(v.flagged) > 0 ? { color: T.red, fontWeight: 700 } : null)}
                             <span style={{ fontSize: 10.5, color: T.t4 }}>{fmtD(v.last_trip_at)}</span>
                             <span style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                              {!removed && canEdit && <Btn size="sm" ghost onClick={() => setForm({ ...v, vendor_id: g.vendor_id })}>{t("common.edit_2")}</Btn>}
-                              {!removed && canRemove && <Btn size="sm" ghost style={{ color: T.red }} onClick={() => setRemoving(v)}>{t("machinery.tv_hatao")}</Btn>}
+                              {/* Badle hue vendor wali row par Edit / Hatao nahi — gaadi apne abhi
+                                  ke vendor ke dabbe me bhi hai, wahin se. Warna Edit purana vendor
+                                  wapas save kar deta. */}
+                              {!removed && !v.vendor_changed && canEdit && (
+                                <Btn size="sm" ghost onClick={() => setForm({ ...v, vendor_id: "current_vendor_id" in v ? v.current_vendor_id : g.vendor_id })}>{t("common.edit_2")}</Btn>
+                              )}
+                              {!removed && !v.vendor_changed && canRemove && <Btn size="sm" ghost style={{ color: T.red }} onClick={() => setRemoving(v)}>{t("machinery.tv_hatao")}</Btn>}
                             </span>
                           </div>
                         );

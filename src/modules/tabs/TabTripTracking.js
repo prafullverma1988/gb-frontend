@@ -1368,16 +1368,22 @@ function BillingTab({ projectId }) {
     window.alert(t("trip_tracking.bill_ban_gaya", { id: r.data.id, amount: rs(r.data.total_amount) }));
     setPreview(null); setVendorId(""); loadBills();
   };
-  // Route-wise km — preview ki trips se jod kar (server breakdown me km_billed
-  // de to wahi). Purane server par trips me km hi nahi → sab 0, screen pehle jaisi.
+  // Naya server breakdown ko route + billing (km / trip) se baant kar deta hai —
+  // har line ka apna b.billing, b.km_billed. Purana server sirf route-wise
+  // deta tha; tab preview ki trips se route ka andaza (neeche kmOfRoute).
+  // kmOfRoute["route|billing"] me us line ke trip amounts bhi — per-trip line
+  // me rate beech me badla ho to "N × rate" ek jhootha ausat ban jaata.
   const kmOfRoute = {};
   let totalKm = 0;
   ((preview && preview.trips) || []).forEach(tr => {
-    const k = tr.route_id || 0;
-    const o = kmOfRoute[k] || (kmOfRoute[k] = { km: 0, kmTrips: 0, amts: new Set() });
-    if (tr.km_billed != null) { o.km += Number(tr.km_billed) || 0; totalKm += Number(tr.km_billed) || 0; }
-    if (tr.billing_snap === "km") o.kmTrips += 1;
-    o.amts.add(Number(tr.amount) || 0);
+    const keys = [String(tr.route_id || 0), (tr.route_id || 0) + "|" + (tr.billing_snap === "km" ? "km" : "trip")];
+    keys.forEach(k => {
+      const o = kmOfRoute[k] || (kmOfRoute[k] = { km: 0, kmTrips: 0, amts: new Set() });
+      if (tr.km_billed != null) o.km += Number(tr.km_billed) || 0;
+      if (tr.billing_snap === "km") o.kmTrips += 1;
+      o.amts.add(Number(tr.amount) || 0);
+    });
+    if (tr.km_billed != null) totalKm += Number(tr.km_billed) || 0;
   });
   const toggleBill = async (b) => {
     if (expanded && expanded.billId === b.id) { setExpanded(null); return; }
@@ -1410,14 +1416,19 @@ function BillingTab({ projectId }) {
                   // Km wali trips ka rate har trip par alag hota hai (doori se) —
                   // wahan "N × rate" jhooth hai, isliye "trips · km · ₹".
                   // (Har trip ka amount ek jaisa ho to "N × rate" hi sach hai.)
-                  const k = kmOfRoute[b.route_id || 0];
-                  const kmRow = !!k && (k.kmTrips > 0 || Number(b.km_trips) > 0 || (k.km > 0 && k.amts.size > 1));
+                  const k = b.billing ? kmOfRoute[(b.route_id || 0) + "|" + b.billing] : kmOfRoute[String(b.route_id || 0)];
+                  const kmRow = b.billing
+                    ? b.billing === "km"
+                    : !!k && (k.kmTrips > 0 || Number(b.km_trips) > 0 || (k.km > 0 && k.amts.size > 1));
+                  const mixedRate = !!k && k.amts.size > 1;
                   return (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
                       <span style={{ color: T.t2 }}>
                         {kmRow
-                          ? t("trip_tracking.bp_route_km", { route: b.route_name, trips: b.trips, km: fmtKm(b.km_billed != null ? b.km_billed : k.km) })
-                          : <>{b.route_name} · {b.trips} × {rs(rate)}</>}
+                          ? t("trip_tracking.bp_route_km", { route: b.route_name, trips: b.trips, km: fmtKm(b.km_billed != null ? b.km_billed : (k ? k.km : 0)) })
+                          : mixedRate
+                            ? <>{b.route_name} · {t("trip_tracking.n_trips", { n: b.trips })}</>
+                            : <>{b.route_name} · {b.trips} × {rs(rate)}</>}
                       </span>
                       <span style={{ color: T.t1, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{rs(b.amount)}</span>
                     </div>
