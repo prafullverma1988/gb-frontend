@@ -694,11 +694,14 @@ const SEARCH_ITEMS=[
 // gaadi number (space/dash ke bina) ya naam se (/machinery/lookup). Chunne par
 // Machinery khulta hai: fleet machine → uski detail, trip gaadi → "Trip
 // vehicles" tab khoj ke saath. Hand-off sessionStorage + event se — wahi do
-// naam MachineryModule padhta hai (pehle se khula ho to event se).
+// naam MachineryModule padhta hai (pehle se khula ho to event se). Gaadi
+// sirf usko dikhti hai jo Machinery khol sakta hai (sidebar wala hi niyam,
+// navAllowed) — warna Machinery khulti hi nahi aur hand-off atka rehta.
+// Hand-off par samay (at) — module 15 s se purana hand-off nahi maanta.
 const MACH_OPEN_KEY="sanchalan_machinery_open", MACH_OPEN_EVENT="sanchalan:machinery-open";
 const TRUCK_ICON="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 19a2 2 0 100-4 2 2 0 000 4zM18.5 19a2 2 0 100-4 2 2 0 000 4z";
 
-function QuickSearch({onNavigate, onClose}){
+function QuickSearch({onNavigate, onClose, canMachinery}){
   const [q,setQ]=useState("");
   const [idx,setIdx]=useState(0);
   const [veh,setVeh]=useState([]);
@@ -710,7 +713,7 @@ function QuickSearch({onNavigate, onClose}){
 
   useEffect(()=>{
     const s=q.trim();
-    if(s.length<2){setVeh([]);return;}
+    if(!canMachinery||s.length<2){setVeh([]);return;}
     let alive=true;
     const tm=setTimeout(()=>{
       api.get("/machinery/lookup?q="+encodeURIComponent(s))
@@ -718,10 +721,11 @@ function QuickSearch({onNavigate, onClose}){
         .catch(()=>{if(alive)setVeh([]);});
     },250);
     return()=>{alive=false;clearTimeout(tm);};
-  },[q]);
+  },[q,canMachinery]);
 
   const openVehicle=(v)=>{
-    try{sessionStorage.setItem(MACH_OPEN_KEY,JSON.stringify({kind:v.kind,id:v.id,q:v.registration_no||v.name}));}catch(_){}
+    if(!canMachinery){try{sessionStorage.removeItem(MACH_OPEN_KEY);}catch(_){} return;}
+    try{sessionStorage.setItem(MACH_OPEN_KEY,JSON.stringify({kind:v.kind,id:v.id,q:v.registration_no||v.name,at:Date.now()}));}catch(_){}
     onNavigate("machinery");
     setTimeout(()=>window.dispatchEvent(new Event(MACH_OPEN_EVENT)),0);
   };
@@ -2338,7 +2342,7 @@ function App(){
         </div>
       </div>
       {/* Quick Search Modal */}
-      {showSearch&&<QuickSearch onNavigate={(id)=>{setNav(id);setShowSearch(false);}} onClose={()=>setShowSearch(false)}/>}
+      {showSearch&&<QuickSearch canMachinery={navAllowed("machinery",user,enabledModules)} onNavigate={(id)=>{setNav(id);setShowSearch(false);}} onClose={()=>setShowSearch(false)}/>}
       {/* Shortcut Cheatsheet Modal */}
       {showCheatsheet&&<ShortcutCheatsheet onClose={()=>setShowCheatsheet(false)}/>}
       {/* Floating Sahayak AI — reachable from every module without hunting the

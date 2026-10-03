@@ -3796,7 +3796,9 @@ function MachineryModule() {
     const take = () => {
       let h = null;
       try { h = JSON.parse(sessionStorage.getItem(MACH_OPEN_KEY) || "null"); sessionStorage.removeItem(MACH_OPEN_KEY); } catch (_) { h = null; }
-      if (!h || !h.id) return;
+      // Purana (15 s se zyada) hand-off nahi — kabhi navigation ruk gaya ho to
+      // baad me Machinery kholne par achanak koi aur machine na khule.
+      if (!h || !h.id || !(Date.now() - Number(h.at || 0) < 15000)) return;
       if (h.kind === "trip") { setOpenId(null); setTvQ(String(h.q || "")); setTab("tripv"); }
       else { setTab("fleet"); setOpenId(Number(h.id)); }
     };

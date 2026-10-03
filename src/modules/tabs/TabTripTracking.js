@@ -1076,7 +1076,9 @@ function RateCardTab({ data, onChange }) {
   const noCard = (trucks || []).filter(r => r.is_trip_vehicle && ["km", "trip"].includes(r.trip_billing) && !r.rate_card_id);
 
   const remove = async (c) => {
-    if (!window.confirm(t("trip_tracking.rt_hatao_confirm", { name: c.name, n: c.vehicles || 0 }))) return;
+    // Ginti har city ki (vehicles_total) — server sab city ki gaadi se card hatata hai.
+    const n = c.vehicles_total != null ? Number(c.vehicles_total) : Number(c.vehicles) || 0;
+    if (!window.confirm(t("trip_tracking.rt_hatao_confirm", { name: c.name, n }))) return;
     setBusyId(c.id); setFlash("");
     const r = await api.del("/trips/rate-templates/" + c.id);
     setBusyId(null);
@@ -1268,6 +1270,11 @@ function RateCardEditor({ card, parties, onCancel, onSaved }) {
   const save = async () => {
     setTried(true);
     if (err) return;
+    // Tareeka badla (Km slab ↔ Per trip) → card wali saari gaadi ka billing
+    // bhi badlega (server ek saath karta hai) — pehle pooch lo.
+    const onCard = editing ? (card.vehicles_total != null ? Number(card.vehicles_total) : Number(card.vehicles) || 0) : 0;
+    if (editing && card.kind !== kind && onCard > 0
+      && !window.confirm(t("trip_tracking.rt_kind_badal_confirm", { n: onCard, kind: RT_KIND[kind].label }))) return;
     setSaving(true);
     const body = {
       name: name.trim(), vendor_id: vendorId ? Number(vendorId) : null, kind,
@@ -1462,7 +1469,10 @@ function VehiclePicker({ tpl, trucks, parties, onCancel, onSaved }) {
   const cands = (trucks || []).filter(r => r.is_trip_vehicle && Number(r.is_active) !== 0
     && (tpl.vendor_id == null || String(truckVendorId(r)) === String(tpl.vendor_id)))
     .sort((a, b) => String(a.registration_no || a.name || "").localeCompare(String(b.registration_no || b.name || "")));
-  const [sel, setSel] = useState(() => new Set(cands.filter(r => Number(r.rate_card_id) === Number(tpl.id)).map(r => r.id)));
+  // Bina vendor wali gaadi par card nahi lagta (uska bill kisi ke naam nahi
+  // banta — server 400 deta hai): dikhti hai par tick band, saath me wajah.
+  const noVendor = (r) => truckVendorId(r) == null;
+  const [sel, setSel] = useState(() => new Set(cands.filter(r => Number(r.rate_card_id) === Number(tpl.id) && !noVendor(r)).map(r => r.id)));
   const caps = [...new Set(cands.map(capOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const [fCap, setFCap] = useState(tpl.capacity && caps.includes(tpl.capacity) ? tpl.capacity : "");
   const [fVendor, setFVendor] = useState("");
@@ -1476,9 +1486,10 @@ function VehiclePicker({ tpl, trucks, parties, onCancel, onSaved }) {
   const shown = cands.filter(r => (!fCap || capOf(r) === fCap)
     && (!fVendor || (fVendor === "none" ? truckVendorId(r) == null : String(truckVendorId(r)) === fVendor))
     && matchTruck(r, q));
-  const allOn = shown.length > 0 && shown.every(r => sel.has(r.id));
+  const pickable = shown.filter(r => !noVendor(r));
+  const allOn = pickable.length > 0 && pickable.every(r => sel.has(r.id));
   const toggle = (id) => setSel(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const toggleAll = () => setSel(s => { const n = new Set(s); shown.forEach(r => (allOn ? n.delete(r.id) : n.add(r.id))); return n; });
+  const toggleAll = () => setSel(s => { const n = new Set(s); pickable.forEach(r => (allOn ? n.delete(r.id) : n.add(r.id))); return n; });
   const regOf = (id) => { const r = (trucks || []).find(x => x.id === id); return r ? (r.registration_no || r.name) : "#" + id; };
 
   const save = async () => {
@@ -1531,24 +1542,26 @@ function VehiclePicker({ tpl, trucks, parties, onCancel, onSaved }) {
         {!trucks && <div style={{ padding: 18, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("common.loading_2")}</div>}
         {trucks && cands.length === 0 && <div style={{ padding: 18, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("trip_tracking.gs_koi_gaadi_nahi")}</div>}
         {trucks && cands.length > 0 && shown.length === 0 && <div style={{ padding: 18, textAlign: "center", fontSize: 12, color: T.t4 }}>{t("trip_tracking.khoj_me_koi_gaadi_nahi")}</div>}
-        {shown.length > 0 && (
+        {pickable.length > 0 && (
           <label style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 12px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, cursor: "pointer", position: "sticky", top: 0 }}>
             <input type="checkbox" checked={allOn} onChange={toggleAll} style={{ accentColor: T.ind }} />
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: T.t2 }}>{t("trip_tracking.gs_sab_dikh_rahi", { n: shown.length })}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: T.t2 }}>{t("trip_tracking.gs_sab_dikh_rahi", { n: pickable.length })}</span>
           </label>
         )}
         {shown.map(r => {
           const on = sel.has(r.id);
+          const blocked = noVendor(r);
           const elsewhere = r.rate_card_id && Number(r.rate_card_id) !== Number(tpl.id);
           const bm = BILLING[r.trip_billing] || BILLING.trip;
           return (
-            <label key={r.id} style={{ display: "grid", gridTemplateColumns: "22px 1.2fr 1.2fr 90px 1.4fr 90px", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: `1px solid ${T.b1}`, cursor: "pointer", background: on ? T.indL + "88" : "transparent" }}>
-              <input type="checkbox" checked={on} onChange={() => toggle(r.id)} style={{ accentColor: T.ind }} />
+            <label key={r.id} style={{ display: "grid", gridTemplateColumns: "22px 1.2fr 1.2fr 90px 1.4fr 90px", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: `1px solid ${T.b1}`, cursor: blocked ? "not-allowed" : "pointer", background: on ? T.indL + "88" : "transparent", opacity: blocked ? 0.6 : 1 }}>
+              <input type="checkbox" checked={on} disabled={blocked} onChange={() => toggle(r.id)} style={{ accentColor: T.ind }} />
               <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{r.registration_no || r.name}</span>
               <span style={{ fontSize: 11.5, color: T.t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.vendor_name || r.default_vendor_name || t("trip_tracking.vendor_nahi")}</span>
               <span style={{ fontSize: 11.5, color: capOf(r) ? T.t2 : T.t4 }}>{capOf(r) || "—"}</span>
-              <span style={{ fontSize: 11, color: elsewhere ? T.amb : T.t4, fontWeight: elsewhere ? 700 : 500 }}>
-                {elsewhere ? t("trip_tracking.gs_pehle_par", { name: r.rate_card_name || "—" })
+              <span style={{ fontSize: 11, color: blocked || elsewhere ? T.amb : T.t4, fontWeight: blocked || elsewhere ? 700 : 500 }}>
+                {blocked ? t("trip_tracking.gs_bina_vendor")
+                  : elsewhere ? t("trip_tracking.gs_pehle_par", { name: r.rate_card_name || "—" })
                   : Number(r.rate_card_id) === Number(tpl.id) ? t("trip_tracking.gs_is_card_par") : ""}
               </span>
               <span><Pill label={bm.label} c={bm.c} bg={bm.bg} /></span>
