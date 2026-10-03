@@ -657,7 +657,9 @@ function ChallanModule(){
         for (const it of items) {
           const matName = it.description || "";
           const libHit = lib[matName.trim().toLowerCase()] || {};
-          const storedRate = Number(it.rate) || 0;
+          // Billed line: asli rate bill se (server bill_rate bhejta hai);
+          // grn_items.rate bill par kabhi nahi bharta.
+          const storedRate = Number(it.bill_rate) || Number(it.rate) || 0;
           const libRate = libHit.last_rate || libHit.base_rate || 0;
           let rate;
           if (isVendorFlow) {
