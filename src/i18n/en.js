@@ -11017,6 +11017,7 @@ const dict = {
   "trip_tracking.ro_err_note":                                 "Write a note — why it changed (at least 3 characters)",
   "trip_tracking.ro_err_km":                                   "Enter a valid billed km (0 or more)",
   "trip_tracking.ro_tip":                                      "{from} → {to} · {note} — {by}, {at}",
+  "trip_tracking.rv_override_kept":                            "This trip's rate was set manually — changing km will not change the amount; use 'Change rate' to change the amount.",
   "trip_tracking.rate_trip":                                   "Rate / trip",
   "trip_tracking.purana_rate_route":                           "Old rate {rate}/trip — applies only to per-trip vehicles without a rate card",
   "trip_tracking.rc_add_km":                                   "+ Add next km",

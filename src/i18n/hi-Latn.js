@@ -11019,6 +11019,7 @@ const dict = {
   "trip_tracking.ro_err_note":                                 "Note likho — kyun badla (kam se kam 3 akshar)",
   "trip_tracking.ro_err_km":                                   "Bill km sahi number bharo (0 ya zyada)",
   "trip_tracking.ro_tip":                                      "{from} → {to} · {note} — {by}, {at}",
+  "trip_tracking.rv_override_kept":                            "Is trip ka rate haath se badla gaya hai — km badalne se paisa nahi badlega; paisa badalna ho to 'Rate badlo'.",
   "trip_tracking.rate_trip":                                   "Rate / trip",
   "trip_tracking.purana_rate_route":                           "Purana rate {rate}/trip — sirf bina rate card wali Per trip gaadi par",
   "trip_tracking.rc_add_km":                                   "+ Agla km add karo",

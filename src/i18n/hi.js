@@ -11016,6 +11016,7 @@ const dict = {
   "trip_tracking.ro_err_note":                                 "नोट लिखें — क्यों बदला (कम से कम 3 अक्षर)",
   "trip_tracking.ro_err_km":                                   "बिल km सही नंबर भरें (0 या ज़्यादा)",
   "trip_tracking.ro_tip":                                      "{from} → {to} · {note} — {by}, {at}",
+  "trip_tracking.rv_override_kept":                            "इस ट्रिप का रेट हाथ से बदला गया है — km बदलने से पैसा नहीं बदलेगा; पैसा बदलना हो तो 'Rate badlo'।",
   "trip_tracking.rate_trip":                                   "रेट / ट्रिप",
   "trip_tracking.purana_rate_route":                           "पुराना रेट {rate}/ट्रिप — सिर्फ़ बिना रेट कार्ड वाली प्रति ट्रिप गाड़ी पर",
   "trip_tracking.rc_add_km":                                   "+ अगला km ऐड करो",

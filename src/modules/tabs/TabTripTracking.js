@@ -67,8 +67,12 @@ function canOverrideRate(u = currentUser()) {
 }
 // Trip par "Rate badlo" kab: poori hui, bill me nahi, reject nahi, bill
 // banne wali (fleet 'own' / mahina nahi) — server ka overrideBlock wahi.
+// Billing = load ka billing_snap; purani trip (billing_snap khaali) par
+// ownership se — Owned = 'own' (server ka tripBilling), warna 'trip'.
+const tripBillingOf = (tr) => (["km", "trip", "monthly", "own", "pending"].includes(tr.billing_snap) ? tr.billing_snap
+  : (String(tr.ownership || "").toLowerCase() === "owned" ? "own" : "trip"));
 const canOverrideTrip = (tr) => !!tr && tr.status === "completed" && tr.bill_id == null && tr.verify_status !== "rejected"
-  && !["own", "monthly"].includes(tr.billing_snap || "");
+  && !["own", "monthly"].includes(tripBillingOf(tr));
 
 // ════════════════════════════════════════════════════════════════
 // TabTripTracking — web management view for the Trip Tracking module
@@ -591,6 +595,8 @@ function MonitorTab({ projectId, onChange }) {
                                   <span style={{ fontSize: 12, color: T.t2 }}>{t("trip_tracking.rv_bill_km_amount", { amt: rs2(rcAmount(snap, kmNum)) })}</span>
                                 )}
                                 <span style={{ fontSize: 11, color: T.t4 }}>{t("trip_tracking.rv_bill_km_hint")}</span>
+                                {/* "Rate badlo" ke baad paisa pakka — approve par km badle to bhi server paisa nahi badalta (override_kept). */}
+                                {overrideOf(item4) && <span style={{ flexBasis: "100%", fontSize: 11, color: T.amb, fontWeight: 600 }}>{t("trip_tracking.rv_override_kept")}</span>}
                               </div>
                             )}
                             <input value={notes[item4.id] || ""} onChange={e => setNotes(n => ({ ...n, [item4.id]: e.target.value }))}

@@ -2310,8 +2310,12 @@ const canOverrideRate = () => {
 };
 // Trip par "Rate badlo" kab: poori hui, bill me nahi, reject nahi, aur bill
 // banne wali (fleet 'own' / mahina nahi) — server ka overrideBlock wahi.
+// Billing = load ka billing_snap; purani trip (billing_snap khaali) par
+// ownership se — Owned = 'own' (server ka tripBilling), warna 'trip'.
+const tripBillingOf = (tr) => (["km", "trip", "monthly", "own", "pending"].includes(tr.billing_snap) ? tr.billing_snap
+  : (String(tr.ownership || "").toLowerCase() === "owned" ? "own" : "trip"));
 const canOverrideTrip = (tr) => !!tr && tr.status === "completed" && tr.bill_id == null && tr.verify_status !== "rejected"
-  && !["own", "monthly"].includes(tr.billing_snap || "");
+  && !["own", "monthly"].includes(tripBillingOf(tr));
 // Trip ka "Rate badla" JSON — TEXT (purana client / seedha DB) ya object.
 const overrideOf = (tr) => {
   const v = tr && tr.rate_override;
@@ -2914,7 +2918,10 @@ function historyLine(h, tplId, parties) {
       const reg = a.registration_no ? " · " + a.registration_no : "";
       return (Number(a.rate_card_id) === Number(tplId) ? t("trip_tracking.rt_h_gaadi_lagi", { n: 1 }) : t("trip_tracking.rt_h_gaadi_hati", { n: 1 })) + reg;
     }
-    const parts = [t("trip_tracking.rt_h_gaadi_lagi", { n: Number(h.vehicles_changed) || Number(a.assigned) || 0 })];
+    // vehicles_changed = asli badlav (jo nayi lagi); purani row me sirf assigned (poori list) tha.
+    const added = h.vehicles_changed != null ? Number(h.vehicles_changed) : (Number(a.added != null ? a.added : a.assigned) || 0);
+    const parts = [];
+    if (added > 0 || !(Number(a.removed) > 0)) parts.push(t("trip_tracking.rt_h_gaadi_lagi", { n: added }));
     if (Number(a.removed) > 0) parts.push(t("trip_tracking.rt_h_gaadi_hati", { n: Number(a.removed) }));
     return parts.join(" · ");
   }
