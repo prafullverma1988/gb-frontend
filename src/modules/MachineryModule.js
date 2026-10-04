@@ -23,7 +23,7 @@ import ImportFixPanel, { useImportFix } from "../components/ImportFix";
 import { BackClose } from "../utils/backNav";
 import CityPicker from "../components/CityPicker";
 import { canApproveAction } from "../utils/approvalAuthority";
-import { can, canAny } from "../utils/perms";
+import { can, canAny, currentUser } from "../utils/perms";
 
 // Gadi number ka milan: space/dash/dot ka farak nahi ginna — backend bhi
 // theek yahi karta hai (utils/machineIdentity.js). Dono taraf ek jaisa na ho
@@ -2298,6 +2298,35 @@ const matchTv = (v, vendorName, q) => {
 // rateGate jaisa — Equipment Edit ya Finance Create.
 // ══════════════════════════════════════════════════════════════════
 const canEditRates = () => can("Equipment", "edit") || canAny("Finance", "create", { strict: true });
+// "Rate badlo" (ek trip ka rate, 4 Oct 2026) — server ka overrideGate: approver
+// (Admin / PM role, ya Equipment ka Approve tick — review approve jaisa) YA
+// rateGate. Asli rok server par; yahan sirf button chhupana.
+const canOverrideRate = () => {
+  const u = currentUser();
+  const role = String(u?.role || "").toLowerCase().replace(/[\s-]+/g, "_");
+  if (["admin", "super_admin", "project_manager"].includes(role)) return true;
+  const row = (u?.module_permissions || {}).Equipment;
+  return (!!row && row.approve === true) || canEditRates();
+};
+// Trip par "Rate badlo" kab: poori hui, bill me nahi, reject nahi, aur bill
+// banne wali (fleet 'own' / mahina nahi) — server ka overrideBlock wahi.
+const canOverrideTrip = (tr) => !!tr && tr.status === "completed" && tr.bill_id == null && tr.verify_status !== "rejected"
+  && !["own", "monthly"].includes(tr.billing_snap || "");
+// Trip ka "Rate badla" JSON — TEXT (purana client / seedha DB) ya object.
+const overrideOf = (tr) => {
+  const v = tr && tr.rate_override;
+  if (!v) return null;
+  if (typeof v === "object") return v;
+  try { return JSON.parse(v); } catch { return null; }
+};
+// Date + waqt — "4 Oct 26, 2:15 PM" (itihaas / tooltip).
+const fmtDT = (raw) => {
+  if (!raw) return "—";
+  const d = new Date(String(raw).replace(" ", "T"));
+  if (isNaN(d.getTime())) return String(raw).slice(0, 16);
+  let h = d.getHours(); const m = d.getMinutes(); const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+  return fmtD(d) + ", " + h + ":" + String(m).padStart(2, "0") + " " + ap;
+};
 
 // ── Km rate card ka ganit ───────────────────────────────────────
 // Server ke utils/tripKm.js (roundKm / amountForKm) jaisa hi — yahan sirf
@@ -2420,6 +2449,9 @@ function RateCardEditor({ card, parties, onCancel, onSaved }) {
   const [focusIdx, setFocusIdx] = useState(null);
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showHist, setShowHist] = useState(false);
+  // Kitni gaadi par ye card laga hai (har city ki) — future-only note isi par.
+  const onCardN = editing ? (card.vehicles_total != null ? Number(card.vehicles_total) : Number(card.vehicles) || 0) : 0;
 
   const numOk = (v) => v !== "" && v != null && Number.isFinite(Number(v)) && Number(v) >= 0;
   const cap = capCheck(capQty, capUnit);
@@ -2494,9 +2526,26 @@ function RateCardEditor({ card, parties, onCancel, onSaved }) {
 
   return (
     <div style={{ padding: "14px 15px", borderBottom: `1px solid ${T.b1}`, background: T.bluL + "55" }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 10 }}>
-        {editing ? t("trip_tracking.rt_edit_title", { name: card.name }) : t("trip_tracking.rc_new")}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, flex: 1, minWidth: 160 }}>
+          {editing ? t("trip_tracking.rt_edit_title", { name: card.name }) : t("trip_tracking.rc_new")}
+        </span>
+        {editing && (
+          <button type="button" onClick={() => setShowHist((v) => !v)} style={linkBtn(showHist ? T.t3 : T.ind)}>
+            {t("trip_tracking.rt_itihaas")} {showHist ? "▴" : "▾"}
+          </button>
+        )}
       </div>
+      {/* Prafull (4 Oct 2026, pakka): card badlo to naya rate SIRF aage ki trip par —
+          bani hui trip apne waqt ka paisa rakhti hai. Gaadi wale card par yahi
+          saaf likha rahe, taaki "rate badla par purani trip waisi hi" shikayat na aaye. */}
+      {editing && onCardN > 0 && (
+        <div style={{ border: `1px solid ${T.amb}55`, background: T.ambL, borderRadius: 8, padding: "8px 11px", marginBottom: 10, fontSize: 12, color: T.t2, lineHeight: 1.5 }}>
+          <span style={{ fontWeight: 700, color: T.amb }}>{t("trip_tracking.rt_future_only", { n: onCardN })}</span>
+          <span style={{ display: "block", fontSize: 11, color: T.t3, marginTop: 2 }}>{t("trip_tracking.rt_future_only_hint")}</span>
+        </div>
+      )}
+      {editing && showHist && <CardHistory tplId={card.id} parties={parties} />}
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1.3fr 1fr", gap: 10 }}>
         <div><div style={rcLbl}>{t("trip_tracking.rt_naam_req")}</div>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder={t("trip_tracking.rt_naam_ph")}
@@ -2851,6 +2900,221 @@ function RatePendingBlock({ cards, canRates, onGaadi, onPick, onNewCard }) {
   );
 }
 
+// ── Card ka itihaas (4 Oct 2026) ─────────────────────────────────
+// GET /trips/rate-templates/:id/history — har save ki row (kisne, kab, kya).
+// Padhne laayak line before/after ke farak se: "Rate badla: 1st ₹100→₹120,
+// aage ₹60→₹70" / "Gaadi lagi: 3" / "Card hataya"; kuch na pakda jaaye to
+// "Badla". Sirf dikhane ko — server ka JSON hi sach hai.
+function historyLine(h, tplId, parties) {
+  const a = h.after || {}, b = h.before || {};
+  if (h.action === "created") return t("trip_tracking.rt_h_created") + (a.name ? " — " + rateLine(a) : "");
+  if (h.action === "deleted") return t("trip_tracking.rt_h_deleted");
+  if (h.action === "vehicles") {
+    if (a.vehicle_id != null) {
+      const reg = a.registration_no ? " · " + a.registration_no : "";
+      return (Number(a.rate_card_id) === Number(tplId) ? t("trip_tracking.rt_h_gaadi_lagi", { n: 1 }) : t("trip_tracking.rt_h_gaadi_hati", { n: 1 })) + reg;
+    }
+    const parts = [t("trip_tracking.rt_h_gaadi_lagi", { n: Number(h.vehicles_changed) || Number(a.assigned) || 0 })];
+    if (Number(a.removed) > 0) parts.push(t("trip_tracking.rt_h_gaadi_hati", { n: Number(a.removed) }));
+    return parts.join(" · ");
+  }
+  const out = [];
+  const diff = (k, label, fmt = (x) => x) => { if (JSON.stringify(b[k]) !== JSON.stringify(a[k])) out.push(t(label, { from: fmt(b[k]), to: fmt(a[k]) })); };
+  diff("name", "trip_tracking.rt_h_naam", (x) => x || "—");
+  diff("kind", "trip_tracking.rt_h_tareeka", kindLabel);
+  if (b.vendor_id !== a.vendor_id) out.push(t("trip_tracking.rt_h_kiska", { from: kiskaOf(b, parties), to: kiskaOf(a, parties) }));
+  // Rate — per trip ka ₹, ya km slab ki wo rows jo badli.
+  const rd = [];
+  if ((a.kind || "km") === "trip" || (b.kind || "km") === "trip") {
+    if (Number(b.trip_rate) !== Number(a.trip_rate) && (a.trip_rate != null || b.trip_rate != null)) rd.push(rs2(b.trip_rate) + "→" + rs2(a.trip_rate));
+  }
+  const ra = Array.isArray(a.rates) ? a.rates : [], rb = Array.isArray(b.rates) ? b.rates : [];
+  for (let i = 0; i < Math.max(ra.length, rb.length); i++) {
+    if (Number(rb[i]) !== Number(ra[i])) rd.push(nth(i + 1) + " " + (rb[i] == null ? "—" : rs2(rb[i])) + "→" + (ra[i] == null ? "—" : rs2(ra[i])));
+  }
+  if (a.onward_rate != null && b.onward_rate != null && Number(a.onward_rate) !== Number(b.onward_rate)) rd.push(t("trip_tracking.rt_h_aage", { from: rs2(b.onward_rate), to: rs2(a.onward_rate) }));
+  if (rd.length) out.push(t("trip_tracking.rt_h_rate", { diff: rd.join(", ") }));
+  if (b.method !== a.method && (a.kind || "km") === "km") out.push(t("trip_tracking.rt_h_method", { from: (RC_METHOD[b.method] || RC_METHOD.slab).label, to: (RC_METHOD[a.method] || RC_METHOD.slab).label }));
+  if (b.round_mode !== a.round_mode && (a.kind || "km") === "km") out.push(t("trip_tracking.rt_h_round", { from: (RC_ROUND[b.round_mode] || RC_ROUND.nearest).label, to: (RC_ROUND[a.round_mode] || RC_ROUND.nearest).label }));
+  const capT = (x) => (x.capacity_qty != null ? Number(x.capacity_qty) + " " + (x.capacity_unit || "") : "—");
+  if (capT(b) !== capT(a)) out.push(t("trip_tracking.rt_h_capacity", { from: capT(b), to: capT(a) }));
+  if ((b.note || "") !== (a.note || "")) out.push(t("trip_tracking.rt_h_note"));
+  return out.length ? out.join(" · ") : t("trip_tracking.rt_h_badla");
+}
+function CardHistory({ tplId, parties }) {
+  const [st, setSt] = useState({ loading: true, rows: [] });
+  useEffect(() => {
+    let alive = true;
+    api.get(`/trips/rate-templates/${tplId}/history`)
+      .then((r) => { if (alive) setSt(r && r.success && Array.isArray(r.data) ? { loading: false, rows: r.data } : { loading: false, rows: [], err: true }); })
+      .catch(() => { if (alive) setSt({ loading: false, rows: [], err: true }); });
+    return () => { alive = false; };
+  }, [tplId]);
+  return (
+    <div style={{ border: `1px solid ${T.b1}`, background: T.surface, borderRadius: 8, padding: "8px 11px", marginBottom: 10, fontSize: 11.5, color: T.t2, maxHeight: 220, overflowY: "auto" }}>
+      {st.loading && <div style={{ color: T.t4 }}>{t("common.loading_2")}</div>}
+      {!st.loading && st.err && <div style={{ color: T.red }}>{t("trip_tracking.rt_itihaas_fail")}</div>}
+      {!st.loading && !st.err && st.rows.length === 0 && <div style={{ color: T.t4 }}>{t("trip_tracking.rt_itihaas_empty")}</div>}
+      {st.rows.map((h) => (
+        <div key={h.id} style={{ display: "flex", gap: 10, padding: "4px 0", borderTop: `1px solid ${T.b1}`, alignItems: "baseline" }}>
+          <span style={{ color: T.t4, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", minWidth: 118 }}>{fmtDT(h.created_at)}</span>
+          <span style={{ color: T.t3, whiteSpace: "nowrap", minWidth: 90, overflow: "hidden", textOverflow: "ellipsis" }}>{h.by_name || "—"}</span>
+          <span style={{ flex: 1, color: T.t1, fontWeight: 600 }}>{historyLine(h, tplId, parties)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── "Rate badlo" — ek trip ka rate (4 Oct 2026) ──────────────────
+// Prafull (pakka): card badalne se sirf aage ki trip badalti hai; bani hui
+// trip ka paisa yahin, trip-wise, note ke saath. Server POST
+// /trips/:id/rate-override { amount, km_billed?, note } — sirf ye trip
+// badalti hai; card aur baaki trip waise hi. Km trip par bill km bhi.
+const tripLabel = (tr) => (tr.registration_no || tr.truck_name || "") + " #" + tr.trip_no;
+const amtOrPending = (v) => (v == null ? t("trip_tracking.rate_pending") : rupee(v));
+function RateOverrideModal({ trip, onClose, onSaved }) {
+  const isKm = trip.billing_snap === "km";
+  const [amount, setAmount] = useState(trip.amount != null ? String(Number(trip.amount)) : "");
+  const [km, setKm] = useState(trip.km_billed != null ? String(Number(trip.km_billed)) : "");
+  const [note, setNote] = useState("");
+  const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const numOk = (v) => v !== "" && Number.isFinite(Number(v)) && Number(v) >= 0;
+  const err = !numOk(amount) ? t("trip_tracking.ro_err_amount")
+    : note.trim().length < 3 ? t("trip_tracking.ro_err_note")
+    : isKm && km !== "" && !numOk(km) ? t("trip_tracking.ro_err_km") : null;
+  const snap = trip.rate_card_snap && typeof trip.rate_card_snap === "object" ? trip.rate_card_snap : null;
+  const save = async () => {
+    setTried(true);
+    if (err) return;
+    setBusy(true);
+    const body = { amount: Number(amount), note: note.trim() };
+    // Km sirf tab jab sach me badla — warna server km_source 'edited' likh deta.
+    if (isKm && km !== "" && (trip.km_billed == null || Math.abs(Number(km) - Number(trip.km_billed)) > 0.001)) body.km_billed = Number(km);
+    const r = await api.post(`/trips/${trip.id}/rate-override`, body);
+    setBusy(false);
+    if (!r || r.success === false) { window.alert(srvMsg(r)); return; }
+    onSaved((r.data && r.data.trip) || null, t("trip_tracking.ro_saved", { trip: tripLabel(trip), from: amtOrPending(trip.amount), to: rupee(Number(amount)) }));
+  };
+  return (
+    <Modal open onClose={onClose} width={480} title={t("trip_tracking.ro_title", { trip: tripLabel(trip) })}
+      sub={t("trip_tracking.ro_abhi_line", { amt: amtOrPending(trip.amount), km: trip.km_billed != null ? fmtKm(trip.km_billed) : "—", card: (snap && snap.name) || t("trip_tracking.ro_card_nahi") })}
+      footer={<><Btn ghost onClick={onClose}>{t("common.cancel")}</Btn>
+        <Btn onClick={save} disabled={busy}>{busy ? t("common.saving") : t("common.save")}</Btn></>}>
+      <Notice>{t("trip_tracking.ro_hint")}</Notice>
+      <div style={{ display: "grid", gridTemplateColumns: isKm ? "1fr 1fr" : "1fr", gap: 10 }}>
+        <div><div style={rcLbl}>{t("trip_tracking.ro_new_amount")}</div>
+          <RupeeInput value={amount} onChange={setAmount} bad={tried && !numOk(amount)} autoFocus /></div>
+        {isKm && (
+          <div><div style={rcLbl}>{t("trip_tracking.ro_bill_km")}</div>
+            <input value={km} inputMode="decimal" onChange={(e) => setKm(e.target.value.replace(/[^0-9.]/g, ""))}
+              style={{ ...inp, width: 140, fontVariantNumeric: "tabular-nums", borderColor: tried && km !== "" && !numOk(km) ? T.red : T.b1 }} />
+            <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_tracking.ro_bill_km_hint")}</div></div>
+        )}
+      </div>
+      <div style={{ marginTop: 10 }}><div style={rcLbl}>{t("trip_tracking.ro_note")}</div>
+        <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder={t("trip_tracking.ro_note_ph")}
+          style={{ ...inp, borderColor: tried && note.trim().length < 3 ? T.red : T.b1 }} /></div>
+      {tried && err && <div style={{ marginTop: 10, fontSize: 12, color: T.red, fontWeight: 600 }}>{err}</div>}
+    </Modal>
+  );
+}
+// "Rate badla" ka chip — tooltip me pehle → ab, note, kisne, kab.
+function OverrideChip({ trip }) {
+  const o = overrideOf(trip);
+  if (!o) return null;
+  const tip = t("trip_tracking.ro_tip", { from: amtOrPending(o.from_amount), to: rupee(o.to_amount), note: o.note || "—", by: o.by_name || "—", at: fmtDT(o.at) });
+  return <span title={tip} style={{ display: "inline-flex", cursor: "help" }}><Pill label={t("trip_tracking.ro_chip")} c={T.blu} bg={T.bluL} /></span>;
+}
+
+// ── Gaadi → uski trips (4 Oct 2026) ──────────────────────────────
+// Trip vehicles ki row par gaadi ka number dabao → pichhle 60 din ki trips
+// (nayi pehle): date, route, km, amount, status, bill chip. Bina-bill poori
+// trip par "Rate badlo". GET /trips?equipment_id=&from=&to= — company ki
+// trips, project ki seema nahi (office poori gaadi dekhta hai).
+const tripStatus = (tr) => {
+  if (tr.status === "in_transit") return { l: t("trip_tracking.in_transit"), c: T.amb, bg: T.ambL };
+  if (tr.status === "cancelled") return { l: t("common.cancelled"), c: T.t3, bg: T.sltL };
+  const v = tr.verify_status;
+  if (v === "auto_verified") return { l: t("trip_tracking.auto_verified"), c: T.grn, bg: T.grnL };
+  if (v === "approved") return { l: t("common.approved"), c: T.grn, bg: T.grnL };
+  if (v === "flagged") return { l: t("trip_tracking.flagged"), c: T.red, bg: T.redL };
+  if (v === "rejected") return { l: t("common.rejected"), c: T.red, bg: T.redL };
+  return { l: t("common.pending"), c: T.amb, bg: T.ambL };
+};
+function VehicleTripsDrawer({ vehicle, onClose, onChanged }) {
+  const [st, setSt] = useState({ loading: true, rows: [] });
+  const [over, setOver] = useState(null);     // trip jiska "Rate badlo" khula
+  const [flash, setFlash] = useState("");
+  const canOver = canOverrideRate();
+  const load = useCallback(() => {
+    const to = new Date(); const from = new Date(to.getTime() - 60 * 86400000);
+    const ymd = (d) => d.toLocaleDateString("en-CA");
+    api.get(`/trips?equipment_id=${vehicle.id}&from=${ymd(from)}&to=${ymd(to)}`)
+      .then((r) => setSt(r && r.success && Array.isArray(r.data) ? { loading: false, rows: r.data } : { loading: false, rows: [], err: true }))
+      .catch(() => setSt({ loading: false, rows: [], err: true }));
+  }, [vehicle.id]);
+  useEffect(() => { load(); }, [load]);
+  const reg = vehicle.registration_no || vehicle.name || "#" + vehicle.id;
+  const COLS = "64px 1.4fr 56px 96px 1fr 90px";
+  return (
+    <>
+      <Modal open onClose={onClose} width={760} title={t("machinery.vt_title", { reg })}
+        sub={[vehicle.vendor_name || t("machinery.tv_vendor_nahi"), vehicle.capacity || t("machinery.tv_cap_nahi"), t("machinery.vt_sub")].join(" · ")}
+        footer={<Btn ghost onClick={onClose}>{t("common.close")}</Btn>}>
+        {flash && <div style={{ border: `1px solid ${T.grn}44`, background: T.grnL, borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12, color: T.grn, fontWeight: 600 }}>{flash}</div>}
+        {st.loading && <Empty>{t("common.loading_2")}</Empty>}
+        {!st.loading && st.err && <Empty>{t("machinery.vt_fail")}</Empty>}
+        {!st.loading && !st.err && st.rows.length === 0 && <Empty>{t("machinery.vt_empty")}</Empty>}
+        {st.rows.length > 0 && (
+          <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
+            <Row head cols={COLS}>
+              <span>{t("machinery.vt_h_date")}</span><span>{t("machinery.vt_h_route")}</span><span style={{ textAlign: "right" }}>{t("machinery.vt_h_km")}</span>
+              <span style={{ textAlign: "right" }}>{t("machinery.vt_h_amount")}</span><span>{t("machinery.vt_h_status")}</span><span />
+            </Row>
+            {st.rows.map((tr) => {
+              const sm = tripStatus(tr);
+              const billed = tr.bill_id != null;
+              return (
+                <Row key={tr.id} cols={COLS}>
+                  <span style={{ fontSize: 11.5, color: T.t2, whiteSpace: "nowrap" }}>{fmtD(tr.trip_date)}<span style={{ display: "block", fontSize: 10, color: T.t4 }}>#{tr.trip_no}</span></span>
+                  <span style={{ fontSize: 12, color: T.t1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.route_name || "—"}</span>
+                  <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{tr.km_billed != null ? fmtKm(tr.km_billed) : "—"}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                    {["own", "monthly"].includes(tr.billing_snap || "") ? <span style={{ fontSize: 10.5, fontWeight: 600, color: T.t4 }}>{billingMeta(tr.billing_snap).l}</span>
+                      : tr.status === "in_transit" ? "—"
+                      : tr.amount != null ? rupee(tr.amount) : <span style={{ fontSize: 10, color: T.amb }}>{t("trip_tracking.rate_pending")}</span>}
+                  </span>
+                  <span style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                    <Pill label={sm.l} c={sm.c} bg={sm.bg} />
+                    {billed && <Pill label={t("machinery.vt_billed")} c={T.ind} bg={T.indL} />}
+                    <OverrideChip trip={tr} />
+                  </span>
+                  <span style={{ display: "flex", justifyContent: "flex-end" }}>
+                    {canOver && canOverrideTrip(tr) && (
+                      <button type="button" onClick={() => setOver(tr)} style={linkBtn(T.ind)}>{t("trip_tracking.ro_button")}</button>
+                    )}
+                  </span>
+                </Row>
+              );
+            })}
+          </div>
+        )}
+      </Modal>
+      {over && (
+        <RateOverrideModal trip={over} onClose={() => setOver(null)}
+          onSaved={(saved, msg) => {
+            setOver(null); setFlash(msg);
+            // Server ki taaza row usi jagah; na aaye to list dobara.
+            if (saved) setSt((p) => ({ ...p, rows: p.rows.map((x) => (x.id === saved.id ? saved : x)) })); else load();
+            onChanged && onChanged();
+          }} />
+      )}
+    </>
+  );
+}
+
 // ── Gaadi-wise "Card lagao" ──────────────────────────────────────
 // Trip vehicles ki row par "Card nahi" ya card ka chip (ya amber dabbe ki
 // gaadi) dabao. Is gaadi ke laayak chalu card (Sab vendor ya isi vendor ka)
@@ -3107,6 +3371,7 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
   const [pick, setPick] = useState(null);          // { tpl, baaki } — "Gaadi select karo"
   const [flash, setFlash] = useState("");
   const [cardFor, setCardFor] = useState(null);    // gaadi-wise "Card lagao"
+  const [tripsFor, setTripsFor] = useState(null);  // gaadi → uski trips (Rate badlo)
   // Save ke baad sab dobara. Gaadi ki list (trucks) bhi — purani list par
   // "Gaadi select karo" khula to card ki abhi lagi gaadi untick dikhti aur
   // save use card se hata deta (endpoint poori list leta hai).
@@ -3303,7 +3568,9 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
                         return (
                           <div key={v.id} style={{ display: "grid", gridTemplateColumns: TV_COLS, gap: 6, padding: "8px 8px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", opacity: removed ? 0.6 : 1 }}>
                             <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
-                              <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, color: T.ind, background: T.indL, border: `1px solid ${T.ind}22`, borderRadius: 5, padding: "1px 7px", fontVariantNumeric: "tabular-nums" }}>{v.registration_no || "—"}</span>
+                              {/* Number dabao → is gaadi ki trips (pichhle 60 din) + "Rate badlo" (4 Oct 2026). */}
+                              <button type="button" title={t("machinery.tv_reg_click")} onClick={() => setTripsFor(vehOf(v, g))}
+                                style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, color: T.ind, background: T.indL, border: `1px solid ${T.ind}22`, borderRadius: 5, padding: "1px 7px", fontVariantNumeric: "tabular-nums", cursor: "pointer", fontFamily: "inherit" }}>{v.registration_no || "—"}</button>
                               {removed && <Pill label={t("machinery.tv_removed")} c={T.t3} bg={T.sltL} />}
                               {/* Capacity aur rate card (4 Oct 2026). Km / Per trip / Rate baaki gaadi bina
                                   card = amber. Card ka chip dabao = "Card lagao" (rateGate wale ko);
@@ -3366,6 +3633,7 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
       <RemoveMachineModal open={!!removing} onClose={() => setRemoving(null)}
         machine={removing ? { id: removing.id, name: removing.registration_no } : null} onRemoved={refresh} />
       {cardModal}
+      {tripsFor && <VehicleTripsDrawer vehicle={tripsFor} onClose={() => setTripsFor(null)} onChanged={onReload} />}
     </div>
   );
 }

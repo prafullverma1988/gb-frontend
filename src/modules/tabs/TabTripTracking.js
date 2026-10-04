@@ -57,6 +57,19 @@ function canCancelTrip(trip, u = currentUser()) {
   return (Date.now() - at.getTime()) / 60000 <= 10;
 }
 
+// "Rate badlo" (ek trip ka rate, 4 Oct 2026) — server ka overrideGate:
+// approver (upar) YA rate ka haq (Equipment Edit / Finance Create).
+function canOverrideRate(u = currentUser()) {
+  if (canApproveTrip(u)) return true;
+  if (canEq("edit", u)) return true;
+  const fin = (u?.module_permissions || {}).Finance;
+  return !!fin && fin.create === true;
+}
+// Trip par "Rate badlo" kab: poori hui, bill me nahi, reject nahi, bill
+// banne wali (fleet 'own' / mahina nahi) — server ka overrideBlock wahi.
+const canOverrideTrip = (tr) => !!tr && tr.status === "completed" && tr.bill_id == null && tr.verify_status !== "rejected"
+  && !["own", "monthly"].includes(tr.billing_snap || "");
+
 // ════════════════════════════════════════════════════════════════
 // TabTripTracking — web management view for the Trip Tracking module
 // (truck trips load→unload; the camera/GPS punch itself lives in the
@@ -182,6 +195,23 @@ const parseCard = (raw) => {
     return c && typeof c === "object" ? { ...c, rates: parseRates(c.rates) } : null;
   } catch { return null; }
 };
+
+// Trip ka "Rate badla" JSON (4 Oct 2026) — server object bhejta hai; purana
+// TEXT bhi samajh lo.
+const overrideOf = (tr) => {
+  const v = tr && tr.rate_override;
+  if (!v) return null;
+  if (typeof v === "object") return v;
+  try { return JSON.parse(v); } catch { return null; }
+};
+const fmtDT = (raw) => {
+  if (!raw) return "—";
+  const d = new Date(String(raw).replace(" ", "T"));
+  if (isNaN(d.getTime())) return String(raw).slice(0, 16);
+  return d.getDate() + " " + MONTHS[d.getMonth()] + " " + String(d.getFullYear()).slice(2) + ", " + fmtClock(raw);
+};
+const tripLabel = (tr) => (tr.registration_no || tr.truck_name || t("trip_tracking.truck")) + " #" + tr.trip_no;
+const amtOrPending = (v) => (v == null ? t("trip_tracking.rate_pending") : rs(v));
 
 const inp = { width: "100%", padding: "9px 11px", borderRadius: 7, border: `1.5px solid ${T.b1}`,
   fontSize: 13, outline: "none", fontFamily: "inherit", color: T.t1, background: T.surface, boxSizing: "border-box" };
@@ -339,6 +369,9 @@ function MonitorTab({ projectId, onChange }) {
   // Review par "Bill km" — trip id → likha hua (khaali = jo hai wahi rahe).
   const [billKm, setBillKm] = useState({});
   const [busyId, setBusyId] = useState(null);
+  // "Rate badlo" (4 Oct 2026) — khuli trip aur save ke baad ki line.
+  const [over, setOver] = useState(null);
+  const [flash, setFlash] = useState("");
   // Trip kholne par naksha: route ka raasta + geofence — route ek hi baar laao.
   const [routesById, setRoutesById] = useState({});
   useEffect(() => {
@@ -420,6 +453,16 @@ function MonitorTab({ projectId, onChange }) {
           active={filter} onChange={setFilter} />
       </div>
 
+      {flash && <div style={{ border: `1px solid ${T.grn}44`, background: T.grnL, borderRadius: 8, padding: "9px 13px", marginBottom: 12, fontSize: 12, color: T.grn, fontWeight: 600 }}>{flash}</div>}
+      {over && (
+        <RateOverrideModal trip={over} onClose={() => setOver(null)}
+          onSaved={(saved, msg) => {
+            setOver(null); setFlash(msg);
+            // Server ki taaza row usi jagah (filter "completed" / "all" me dikhti rahe); na aaye to list dobara.
+            if (saved) setRows((p) => p.map((x) => (x.id === saved.id ? saved : x))); else load();
+            onChange && onChange();
+          }} />
+      )}
       <Panel>
         {loading && <div style={{ textAlign: "center", padding: "30px 0", color: T.t4, fontSize: 13 }}>{t("trip_tracking.loading_trips")}</div>}
         {!loading && rows.length === 0 && (
@@ -452,6 +495,7 @@ function MonitorTab({ projectId, onChange }) {
                         ? <span style={{ fontSize: 11, fontWeight: 600, color: T.t4 }}>{BILLING[item4.billing_snap].label}</span>
                         : (item4.amount != null ? rs(item4.amount) : "—")}
                       {item4.km_billed != null && <span style={{ display: "block", fontSize: 10.5, fontWeight: 500, color: T.t4 }}>{t("trip_tracking.n_km", { n: fmtKm(item4.km_billed) })}</span>}
+                      {overrideOf(item4) && <span style={{ display: "block", marginTop: 2 }}><OverrideChip trip={item4} /></span>}
                     </span>
                     <span style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>{verifyPill(item4)}
                       {flags.slice(0, 1).map(f => { const m = flagMeta(f); return <Pill key={f} label={m.label} c={m.tone === "red" ? T.red : T.amb} bg={m.tone === "red" ? T.redL : T.ambL} />; })}
@@ -504,6 +548,13 @@ function MonitorTab({ projectId, onChange }) {
                               : item4.rate_snap != null ? rs(item4.rate_snap) : t("trip_tracking.rate_pending") })}</div>
                           {item4.delay_reason && <div style={{ color: T.amb }}>{t("trip_tracking.delay_delay_reason", { delay_reason: delayReasonLabel(item4.delay_reason) })}</div>}
                           {item4.review_note && <div style={{ color: T.t3 }}>{t("trip_tracking.review_note_review_note", { review_note: item4.review_note })}</div>}
+                          {/* Office ne is trip ka rate haath se badla (4 Oct 2026) — pehle → ab, note, kisne, kab. */}
+                          {overrideOf(item4) && (
+                            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                              <OverrideChip trip={item4} />
+                              <span style={{ color: T.t3 }}>{overrideLine(overrideOf(item4))}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -513,10 +564,16 @@ function MonitorTab({ projectId, onChange }) {
                         const canReview = item4.verify_status === "flagged" && item4.status !== "in_transit" && approver;
                         const canCancel = item4.status === "in_transit" && canCancelTrip(item4);
                         const canClose = item4.status === "in_transit" && approver;
+                        // "Rate badlo" — poori, bina-bill trip par, jiske paas haq ho (4 Oct 2026).
+                        const canOver = canOverrideRate() && canOverrideTrip(item4);
                         if (!canReview && !canCancel && !canClose) {
-                          return item4.verify_status === "flagged" && item4.status !== "in_transit"
-                            ? <div style={{ fontSize: 11.5, color: T.t4 }}>{t("trip_tracking.review_approver_karega")}</div>
-                            : null;
+                          return (
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                              {item4.verify_status === "flagged" && item4.status !== "in_transit"
+                                ? <span style={{ fontSize: 11.5, color: T.t4 }}>{t("trip_tracking.review_approver_karega")}</span> : <span />}
+                              {canOver && <BtnOutline label={t("trip_tracking.ro_button")} color={T.ind} onClick={() => setOver(item4)} />}
+                            </div>
+                          );
                         }
                         const kmBox = canReview && showBillKm(item4);
                         const kmVal = billKm[item4.id] != null ? billKm[item4.id] : (item4.km_billed != null ? String(item4.km_billed) : "");
@@ -540,6 +597,7 @@ function MonitorTab({ projectId, onChange }) {
                               placeholder={item4.status === "in_transit" ? (canClose ? t("trip_tracking.remark_cancel_manual_close_ke_liye") : t("trip_tracking.remark_cancel_ke_liye")) : t("trip_tracking.note_reject_ke_liye_zaroori")}
                               style={{ ...inp, marginBottom: 8 }} />
                             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                              {canOver && <BtnOutline label={t("trip_tracking.ro_button")} color={T.ind} busy={busyId === item4.id} onClick={() => setOver(item4)} />}
                               {canReview && (
                                 <>
                                   <BtnOutline label={t("common.reject_2")} color={T.red} busy={busyId === item4.id} onClick={() => act(item4, "reject")} />
@@ -1331,7 +1389,10 @@ function BillingTab({ projectId }) {
                 {expanded.trips.length === 0 && <div style={{ fontSize: 11.5, color: T.t4, padding: "6px 0" }}>{t("trip_tracking.koi_trip_detail_nahi")}</div>}
                 {expanded.trips.map(item6 => (
                   <div key={item6.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 11.5 }}>
-                    <span style={{ color: T.t3 }}>{(item6.registration_no || t("trip_tracking.truck"))} · #{item6.trip_no} · {item6.route_name || "—"}{item6.km_billed != null ? " · " + t("trip_tracking.n_km", { n: fmtKm(item6.km_billed) }) : ""}</span>
+                    <span style={{ color: T.t3, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      <span>{(item6.registration_no || t("trip_tracking.truck"))} · #{item6.trip_no} · {item6.route_name || "—"}{item6.km_billed != null ? " · " + t("trip_tracking.n_km", { n: fmtKm(item6.km_billed) }) : ""}</span>
+                      <OverrideChip trip={item6} />
+                    </span>
                     <span style={{ color: T.t1, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{rs(item6.amount)}</span>
                   </div>
                 ))}
@@ -1609,6 +1670,75 @@ function TripLoadDetails({ trip }) {
         </div>
       )}
     </>
+  );
+}
+// ── "Rate badlo" — ek trip ka rate (4 Oct 2026) ──────────────────
+// Prafull (pakka): card badalne se sirf aage ki trip badalti hai; bani hui
+// trip ka paisa yahin, trip-wise, note ke saath. Server POST
+// /trips/:id/rate-override { amount, km_billed?, note } — sirf ye trip
+// badalti hai. (Machinery → Trip vehicles me bhi yahi — apni copy, module
+// independence.)
+const overrideLine = (o) => t("trip_tracking.ro_tip", { from: amtOrPending(o.from_amount), to: rs(o.to_amount), note: o.note || "—", by: o.by_name || "—", at: fmtDT(o.at) });
+function OverrideChip({ trip }) {
+  const o = overrideOf(trip);
+  if (!o) return null;
+  return <span title={overrideLine(o)} style={{ display: "inline-flex", cursor: "help" }}><Pill label={t("trip_tracking.ro_chip")} c={T.blu} bg={T.bluL} /></span>;
+}
+function RateOverrideModal({ trip, onClose, onSaved }) {
+  const isKm = trip.billing_snap === "km";
+  const [amount, setAmount] = useState(trip.amount != null ? String(Number(trip.amount)) : "");
+  const [km, setKm] = useState(trip.km_billed != null ? String(Number(trip.km_billed)) : "");
+  const [note, setNote] = useState("");
+  const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const numOk = (v) => v !== "" && Number.isFinite(Number(v)) && Number(v) >= 0;
+  const err = !numOk(amount) ? t("trip_tracking.ro_err_amount")
+    : note.trim().length < 3 ? t("trip_tracking.ro_err_note")
+    : isKm && km !== "" && !numOk(km) ? t("trip_tracking.ro_err_km") : null;
+  const snap = parseCard(trip.rate_card_snap);
+  const save = async () => {
+    setTried(true);
+    if (err) return;
+    setBusy(true);
+    const body = { amount: Number(amount), note: note.trim() };
+    // Km sirf tab jab sach me badla — warna server km_source 'edited' likh deta.
+    if (isKm && km !== "" && (trip.km_billed == null || Math.abs(Number(km) - Number(trip.km_billed)) > 0.001)) body.km_billed = Number(km);
+    const r = await api.post("/trips/" + trip.id + "/rate-override", body);
+    setBusy(false);
+    if (!r || r.success === false) { window.alert((r && r.message) || t("trip_tracking.action_fail")); return; }
+    onSaved((r.data && r.data.trip) || null, t("trip_tracking.ro_saved", { trip: tripLabel(trip), from: amtOrPending(trip.amount), to: rs(Number(amount)) }));
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ position: "relative", width: 480, maxWidth: "94vw", background: T.surface, borderRadius: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", padding: "16px 20px" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.ro_title", { trip: tripLabel(trip) })}</div>
+        <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>
+          {t("trip_tracking.ro_abhi_line", { amt: amtOrPending(trip.amount), km: trip.km_billed != null ? fmtKm(trip.km_billed) : "—", card: (snap && snap.name) || t("trip_tracking.ro_card_nahi") })}
+        </div>
+        <div style={{ fontSize: 12, color: T.t2, background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "8px 11px", margin: "12px 0" }}>{t("trip_tracking.ro_hint")}</div>
+        <div style={{ display: "grid", gridTemplateColumns: isKm ? "1fr 1fr" : "1fr", gap: 10 }}>
+          <div><div style={lblS}>{t("trip_tracking.ro_new_amount")}</div>
+            <input value={amount} inputMode="decimal" autoFocus onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+              style={{ ...inp, fontVariantNumeric: "tabular-nums", borderColor: tried && !numOk(amount) ? T.red : T.b1 }} /></div>
+          {isKm && (
+            <div><div style={lblS}>{t("trip_tracking.ro_bill_km")}</div>
+              <input value={km} inputMode="decimal" onChange={(e) => setKm(e.target.value.replace(/[^0-9.]/g, ""))}
+                style={{ ...inp, fontVariantNumeric: "tabular-nums", borderColor: tried && km !== "" && !numOk(km) ? T.red : T.b1 }} />
+              <div style={{ fontSize: 10.5, color: T.t4, marginTop: 3 }}>{t("trip_tracking.ro_bill_km_hint")}</div></div>
+          )}
+        </div>
+        <div style={{ marginTop: 10 }}><div style={lblS}>{t("trip_tracking.ro_note")}</div>
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder={t("trip_tracking.ro_note_ph")}
+            style={{ ...inp, borderColor: tried && note.trim().length < 3 ? T.red : T.b1 }} /></div>
+        {tried && err && <div style={{ marginTop: 10, fontSize: 12, color: T.red, fontWeight: 600 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+          <BtnOutline label={t("common.cancel")} color={T.t3} onClick={onClose} />
+          <BtnSolid label={busy ? t("common.saving") : t("common.save")} color={T.ind} busy={busy} onClick={save} />
+        </div>
+      </div>
+    </div>
   );
 }
 function BtnOutline({ label, color, busy, onClick }) {
