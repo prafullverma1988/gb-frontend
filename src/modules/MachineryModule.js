@@ -2177,7 +2177,7 @@ const TvChip = ({ c, bg, children }) => (
   <span style={{ fontSize: 10.5, color: c, fontWeight: 700, background: bg, padding: "3px 9px", borderRadius: 20, border: `1px solid ${c}33`, whiteSpace: "nowrap" }}>{children}</span>
 );
 
-function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
+function TripVehicleForm({ open, onClose, onSaved, vehicle, parties, cities, setCities, defaultCity }) {
   const editing = !!(vehicle && vehicle.id);
   const [reg, setReg] = useState("");
   const [vendor, setVendor] = useState(null);
@@ -2185,6 +2185,9 @@ function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
   const [capQty, setCapQty] = useState("");
   const [capUnit, setCapUnit] = useState("");
   const [driver, setDriver] = useState("");
+  // City sirf nayi gaadi par — upar city patti me jo city chuni ho wahi pehle se.
+  const [cityId, setCityId] = useState("");
+  useEffect(() => { if (open && !(vehicle && vehicle.id)) setCityId(defaultCity || ""); }, [open, vehicle, defaultCity]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -2212,7 +2215,7 @@ function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
       capacity_qty: cap.qty, capacity_unit: cap.unit };
     const r = editing
       ? await api.put(`/trips/trucks/${vehicle.id}`, body)
-      : await api.post("/trips/trucks", { ...body, ...(driver.trim() ? { driver_name: driver.trim() } : {}) });
+      : await api.post("/trips/trucks", { ...body, ...(driver.trim() ? { driver_name: driver.trim() } : {}), ...(cityId ? { city_id: Number(cityId) } : {}) });
     setBusy(false);
     if (!r || r.success === false) { setErr(srvMsg(r)); return; }
     onClose();
@@ -2263,6 +2266,11 @@ function TripVehicleForm({ open, onClose, onSaved, vehicle, parties }) {
           <div style={{ height: 12 }} />
           <Field label={t("machinery.tv_f_driver")}>
             <input value={driver} onChange={(e) => setDriver(e.target.value)} maxLength={80} style={inp} />
+          </Field>
+          <div style={{ height: 12 }} />
+          <Field label={t("machinery.city")} hint={t("machinery.is_city_ke_sab_project_par")}>
+            <CityPicker value={cityId} onChange={(v) => setCityId(v)} cities={cities || []} setCities={setCities}
+              placeholder={t("machinery.city_chuno")} selectStyle={inp} />
           </Field>
         </>
       )}
@@ -2719,7 +2727,7 @@ function RateCardEditor({ card, parties, onCancel, onSaved }) {
 // gaadi bhi), kaunsi hat rahi hai — aur wahi dikha kar pakka. "Rate baaki"
 // gaadi ka card ke tareeke par aana to hona hi hai — wo akela poochne ki
 // wajah nahi, bas confirm khule to saath me likha aata hai.
-function VehiclePicker({ tpl, trucks, parties, onlyBaaki, onCancel, onSaved }) {
+function VehiclePicker({ tpl, trucks, parties, onlyBaaki, onCancel, onSaved, cityOk, cityName }) {
   const kindLbl = kindLabel(tpl.kind);
   const cands = (trucks || []).filter((r) => r.is_trip_vehicle && Number(r.is_active) !== 0
     && (tpl.vendor_id == null || String(truckVendorId(r)) === String(tpl.vendor_id)))
@@ -2744,6 +2752,7 @@ function VehiclePicker({ tpl, trucks, parties, onlyBaaki, onCancel, onSaved }) {
   const shown = cands.filter((r) => (!fCap || capOf(r) === fCap)
     && (!fBaaki || rateBaaki(r))
     && (!fVendor || (fVendor === "none" ? truckVendorId(r) == null : String(truckVendorId(r)) === fVendor))
+    && (!cityOk || cityOk(r))
     && matchTv(r, vName(r), q));
   const pickable = shown.filter((r) => !noVendor(r));
   const allOn = pickable.length > 0 && pickable.every((r) => sel.has(r.id));
@@ -2787,7 +2796,7 @@ function VehiclePicker({ tpl, trucks, parties, onlyBaaki, onCancel, onSaved }) {
     <div style={{ padding: "14px 15px", borderBottom: `1px solid ${T.b1}`, background: T.indL + "66" }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{t("trip_tracking.gs_title", { name: tpl.name })}</div>
       <div style={{ fontSize: 11, color: T.t3, marginTop: 2, lineHeight: 1.5 }}>
-        {kiskaOf(tpl, parties)} · {kindLbl}{tpl.capacity ? " · " + tpl.capacity : ""} — {t("trip_tracking.gs_hint", { kind: kindLbl })}
+        {kiskaOf(tpl, parties)} · {kindLbl}{tpl.capacity ? " · " + tpl.capacity : ""}{cityName ? " · " + t("trip_tracking.tc_sirf_city", { city: cityName }) : ""} — {t("trip_tracking.gs_hint", { kind: kindLbl })}
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "10px 0 8px", flexWrap: "wrap" }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("machinery.tv_khoj_ph")}
@@ -3245,7 +3254,7 @@ function CardPickModal({ vehicle, cards, parties, onClose, onSaved }) {
 // har gaadi par "Card badlo" (CardPickModal — trip ke rate par asar ka
 // preview ke saath). Pehle sirf ek table thi jisme "1 vehicles" likha aata
 // tha aur dekhne ka koi raasta nahi tha ki kaunsi.
-function RateCardView({ cards, trucks, tvRows, parties, canRates, edit, onEdit, pick, onPick, flash, onFlash, onChanged, onGaadi }) {
+function RateCardView({ cards, trucks, tvRows, parties, canRates, edit, onEdit, pick, onPick, flash, onFlash, onChanged, onGaadi, cityOk, cityName }) {
   const [busyId, setBusyId] = useState(null);
   const [showHist, setShowHist] = useState(false);
   const list = (cards.list || []).map((c) => (c.kind === "trip" ? c : normCard(c)));
@@ -3266,7 +3275,7 @@ function RateCardView({ cards, trucks, tvRows, parties, canRates, edit, onEdit, 
     }));
     return m;
   }, [tvRows]);
-  const onCard = (c) => (trucks || []).filter((r) => Number(r.is_active) !== 0 && Number(r.rate_card_id) === Number(c.id))
+  const onCard = (c) => (trucks || []).filter((r) => Number(r.is_active) !== 0 && Number(r.rate_card_id) === Number(c.id) && (!cityOk || cityOk(r)))
     .sort((a, b) => String(a.registration_no || a.name || "").localeCompare(String(b.registration_no || b.name || "")));
   const vName = (r) => r.vendor_name || r.default_vendor_name || t("machinery.tv_vendor_nahi");
   const asVeh = (r) => ({
@@ -3397,7 +3406,7 @@ function RateCardView({ cards, trucks, tvRows, parties, canRates, edit, onEdit, 
           {/* Gaadi jodo — picker usi card ke andar */}
           {pick && !trucks && <Empty>{t("common.loading_2")}</Empty>}
           {pick && trucks && String(pick.tpl.id) === String(sel.id) && (
-            <VehiclePicker key={"p-" + pick.tpl.id + (pick.baaki ? "-b" : "")} tpl={pick.tpl} trucks={trucks} parties={parties} onlyBaaki={pick.baaki}
+            <VehiclePicker key={"p-" + pick.tpl.id + (pick.baaki ? "-b" : "")} tpl={pick.tpl} trucks={trucks} parties={parties} onlyBaaki={pick.baaki} cityOk={cityOk} cityName={cityName}
               onCancel={() => onPick(null)}
               onSaved={(res) => {
                 onFlash(t("trip_tracking.gs_saved", { name: pick.tpl.name, n: res.assigned || 0, trips: res.trips_updated || 0 }));
@@ -3407,7 +3416,7 @@ function RateCardView({ cards, trucks, tvRows, parties, canRates, edit, onEdit, 
 
           {/* Is card ki gaadiyan */}
           <div style={{ padding: "10px 15px 4px", fontSize: 11, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px" }}>
-            {t("trip_tracking.tc_is_card_ki_gaadi", { n: cardTrucks.length })}
+            {t("trip_tracking.tc_is_card_ki_gaadi", { n: cardTrucks.length })}{cityName ? " · " + cityName : ""}
           </div>
           {!trucks && <Empty>{t("common.loading_2")}</Empty>}
           {trucks && cardTrucks.length === 0 && (
@@ -3451,13 +3460,62 @@ function RateCardView({ cards, trucks, tvRows, parties, canRates, edit, onEdit, 
   );
 }
 
+// ── City patti (5 Oct 2026, Prafull: "trip vehicle me city wise filter") ──
+// Har city ka chip gaadi ki ginti ke saath; "Sab city" = koi chhanni nahi,
+// "City nahi" = jin gaadi par city nahi lagi. Gaadi aur Rate card dono view
+// me wahi chhanni (card ki gaadiyan aur "+ Gaadi jodo" list bhi).
+function CityBar({ opts, value, onChange }) {
+  if (!opts || (!opts.list.length && !opts.none)) return null;
+  const chip = (k, label, n) => {
+    const on = value === k;
+    return (
+      <button key={k || "all"} type="button" onClick={() => onChange(k)} aria-pressed={on}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontFamily: "inherit",
+          fontSize: 12, fontWeight: on ? 700 : 500, border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface, color: on ? T.ind : T.t2 }}>
+        {label}
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: on ? T.ind : T.t4, fontVariantNumeric: "tabular-nums" }}>{n}</span>
+      </button>
+    );
+  };
+  const total = opts.list.reduce((a, c) => a + c.n, 0) + opts.none;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginRight: 4 }}>{t("machinery.city")}</span>
+      {chip("", t("trip_tracking.tc_sab_city"), total)}
+      {opts.list.map((c) => chip(c.id, c.name, c.n))}
+      {opts.none > 0 && chip("none", t("trip_tracking.tc_city_nahi"), opts.none)}
+    </div>
+  );
+}
+
 // Upar "Gaadi" | "Rate card" (4 Oct 2026): Gaadi = vendor-wise gaadi aur unki
 // trip ka hisaab (pehle jaisa) + gaadi-wise "Card lagao"; Rate card = card ki
 // poori sambhaal (Trip Tracking se yahan aayi). Rate card ka switch tabhi jab
 // server /rate-templates deta hai (purana server / ijazat nahi = sirf Gaadi).
-function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, view, onView }) {
+function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, view, onView, cities, setCities }) {
   const [openV, setOpenV] = useState({});          // vendor ka dabba khula / band
   const [fCap, setFCap] = useState("");            // capacity ki chhanni
+  // City ki chhanni — yaad rehti hai (agli baar wahi city).
+  const [fCity, setFCity] = useState(() => { try { return localStorage.getItem("tv_city") || ""; } catch (e) { return ""; } });
+  useEffect(() => { try { localStorage.setItem("tv_city", fCity); } catch (e) { /* storage band */ } }, [fCity]);
+  const cityOpts = useMemo(() => {
+    const m = new Map(); let none = 0;
+    (tv.rows || []).forEach((g) => (g.vehicles || []).forEach((v) => {
+      if (v.vendor_changed || Number(v.is_active) === 0) return;
+      if (v.city_id == null) { none += 1; return; }
+      const k = String(v.city_id);
+      const c = m.get(k) || { id: k, name: v.city_name || "#" + k, n: 0 };
+      c.n += 1; m.set(k, c);
+    }));
+    return { list: [...m.values()].sort((a, b) => a.name.localeCompare(b.name)), none };
+  }, [tv.rows]);
+  // Chuni city ab list me nahi (gaadi hat gayi / doosri company) → Sab.
+  useEffect(() => {
+    if (fCity && fCity !== "none" && tv.rows && !cityOpts.list.some((c) => c.id === fCity)) setFCity("");
+  }, [cityOpts, fCity, tv.rows]);
+  const cityOk = useCallback((v) => !fCity || (fCity === "none" ? v.city_id == null : String(v.city_id) === fCity), [fCity]);
+  const cityName = fCity === "none" ? t("trip_tracking.tc_city_nahi") : ((cityOpts.list.find((c) => c.id === fCity) || {}).name || "");
+  const cityBar = <CityBar opts={cityOpts} value={fCity} onChange={setFCity} />;
   const [showRemoved, setShowRemoved] = useState(false);
   const [form, setForm] = useState(null);          // null | {} nayi | gaadi (edit)
   const [removing, setRemoving] = useState(null);
@@ -3511,7 +3569,7 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
   // Gaadi ka vendor beech me badla ho to server use PURANE vendor ke dabbe me
   // bhi bhejta hai (vendor_changed, sirf us vendor ki trips ke saath) — wahan
   // ki trips/₹ us vendor ke hain, par gaadi uski ginti me nahi aati.
-  const filtering = !!(String(q || "").trim() || fCap);
+  const filtering = !!(String(q || "").trim() || fCap || fCity);
   const { groups, hidden, vendorName, caps } = useMemo(() => {
     const hiddenIds = new Set();
     const capSet = new Set();
@@ -3521,7 +3579,7 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
       all.forEach((v) => { if (capOf(v)) capSet.add(capOf(v)); });
       const gName = g.vendor_name || t("machinery.tv_vendor_nahi");
       const vehicles = all.filter((v) => (showRemoved || Number(v.is_active) !== 0)
-        && (!fCap || capOf(v) === fCap) && matchTv(v, gName, q));
+        && (!fCap || capOf(v) === fCap) && cityOk(v) && matchTv(v, gName, q));
       // Hatayi hui gaadi ki trips bhi paisa hain — chhupi hon to bata do.
       if (!showRemoved) all.filter((v) => Number(v.is_active) === 0 && Number(v.trips) > 0).forEach((v) => hiddenIds.add(v.id));
       const sum = { vehicles: vehicles.filter((v) => !v.vendor_changed).length };
@@ -3539,7 +3597,7 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
       : names.get(Number(vid)) || ((parties || []).find((p) => String(p.id) === String(vid)) || {}).name || "#" + vid);
     return { groups: gs, hidden: hiddenIds.size, vendorName,
       caps: [...capSet].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) };
-  }, [tv.rows, showRemoved, parties, q, fCap]);
+  }, [tv.rows, showRemoved, parties, q, fCap, cityOk]);
 
   const all = groups.reduce((a, g) => ({
     vehicles: a.vehicles + g.sum.vehicles, trips: a.trips + g.sum.trips, amount: a.amount + g.sum.amount,
@@ -3571,7 +3629,8 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
     return (
       <div>
         {switcher}
-        <RateCardView cards={cards} trucks={trucks} tvRows={tv.rows} parties={parties} canRates={canRates}
+        {cityBar}
+        <RateCardView cards={cards} trucks={trucks} tvRows={tv.rows} parties={parties} canRates={canRates} cityOk={cityOk} cityName={fCity ? cityName : ""}
           edit={edit} onEdit={setEdit} pick={pick} onPick={setPick} flash={flash} onFlash={setFlash}
           onChanged={refresh} onGaadi={(r) => setCardFor(r)} />
         {cardModal}
@@ -3582,6 +3641,7 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
   return (
     <div>
       {switcher}
+      {cityBar}
       <Notice>{t("machinery.tv_note")}</Notice>
       {flash && <div style={{ border: `1px solid ${T.grn}44`, background: T.grnL, borderRadius: 8, padding: "9px 13px", marginBottom: 12, fontSize: 12, color: T.grn, fontWeight: 600 }}>{flash}</div>}
       <RatePendingBlock cards={cards} canRates={canRates} onGaadi={(r) => setCardFor(r)} onPick={openPick} onNewCard={openNewCard} />
@@ -3611,7 +3671,7 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
           </select>
         )}
         {filtering && (
-          <button type="button" onClick={() => { onQ(""); setFCap(""); }}
+          <button type="button" onClick={() => { onQ(""); setFCap(""); setFCity(""); }}
             style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, color: T.ind }}>
             {t("common.clear")}
           </button>
@@ -3751,7 +3811,8 @@ function TripVehiclesTab({ tv, from, to, onRange, onReload, parties, q, onQ, vie
         </div>
       )}
 
-      <TripVehicleForm open={!!form} vehicle={form} parties={parties} onClose={() => setForm(null)} onSaved={refresh} />
+      <TripVehicleForm open={!!form} vehicle={form} parties={parties} onClose={() => setForm(null)} onSaved={refresh}
+        cities={cities} setCities={setCities} defaultCity={fCity && fCity !== "none" ? fCity : ""} />
       <RemoveMachineModal open={!!removing} onClose={() => setRemoving(null)}
         machine={removing ? { id: removing.id, name: removing.registration_no } : null} onRemoved={refresh} />
       {cardModal}
@@ -5175,7 +5236,7 @@ function MachineryModule() {
             </div>
 
             {curTab === "tripv" && (
-              <TripVehiclesTab tv={tv} from={tvFrom} to={tvTo} parties={parties} onReload={loadTv} q={tvQ} onQ={setTvQ}
+              <TripVehiclesTab tv={tv} from={tvFrom} to={tvTo} parties={parties} onReload={loadTv} q={tvQ} onQ={setTvQ} cities={cities} setCities={setCities}
                 view={tvView} onView={setTvView}
                 onRange={(f, t2) => { setTvFrom(f); setTvTo(t2); }} />
             )}
