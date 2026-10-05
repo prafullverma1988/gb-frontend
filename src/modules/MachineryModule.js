@@ -5045,8 +5045,265 @@ function TelematicsTab({ data, onReload, onNewMachine }) {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════
+// MACHINE REQUESTS (5 Oct 2026, Prafull)
+// Site ki "Request equipment" (mobile + project ka Equipment tab) yahan ek
+// jagah: kab, kisne, kis project ke liye, kaun si machine recommend ki, task /
+// note aur priority. City / project / machine / date ki chhanni server par
+// (GET /equipment/request), status ki ginti yahin. Admin / PM yahin se
+// Fulfill (kaun si machine bheji) ya Reject (wajah) karte hain — server par
+// bhi wahi rok (requireRole) aur ek baar faisla = dobara nahi (409).
+// ══════════════════════════════════════════════════════════════════
+const IcInbox = (p) => <Ic {...p} d="M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" />;
+const MR_PRIO = [
+  { k: "urgent", get l() { return t("machinery.mr_p_urgent"); }, c: T.red, bg: T.redL, rank: 0 },
+  { k: "high",   get l() { return t("machinery.mr_p_high"); },   c: T.amb, bg: T.ambL, rank: 1 },
+  { k: "normal", get l() { return t("machinery.mr_p_normal"); }, c: T.t3,  bg: T.sltL, rank: 2 },
+];
+const mrPrio = (k) => MR_PRIO.find((p) => p.k === k) || MR_PRIO[2];
+const MR_STATUS = [
+  { k: "pending",   get l() { return t("machinery.mr_st_pending"); },   c: T.amb, bg: T.ambL },
+  { k: "fulfilled", get l() { return t("machinery.mr_st_fulfilled"); }, c: T.grn, bg: T.grnL },
+  { k: "rejected",  get l() { return t("machinery.mr_st_rejected"); },  c: T.red, bg: T.redL },
+];
+const mrStatus = (k) => MR_STATUS.find((s) => s.k === String(k || "pending").toLowerCase()) || MR_STATUS[0];
+const MrReg = ({ v }) => (v ? (
+  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.3, color: T.ind, background: T.indL, border: `1px solid ${T.ind}22`, borderRadius: 5, padding: "0 5px", whiteSpace: "nowrap" }}>{v}</span>
+) : null);
+const MR_COLS = "118px 1fr 1.05fr 1.2fr 1.25fr 84px 168px";
+
+function MachineRequestsTab({ fleet, projects, cities, onChanged }) {
+  const [status, setStatus] = useState("pending");
+  const [fCity, setFCity] = useState("");
+  const [fProj, setFProj] = useState("");
+  const [fMach, setFMach] = useState("");
+  const [fFrom, setFFrom] = useState("");
+  const [fTo, setFTo] = useState("");
+  const [data, setData] = useState({ loading: true, failed: false, rows: [] });
+  const [act, setAct] = useState(null);   // { id, kind: "fulfill" | "reject", eq, note, busy, err }
+  const canDecide = canApproveAction({ roles: ["admin", "super_admin", "project_manager"] });
+
+  const load = useCallback(async () => {
+    setData((d) => ({ ...d, loading: true }));
+    const qs = new URLSearchParams();
+    if (fCity) qs.set("city_id", fCity);
+    if (fProj) qs.set("project_id", fProj);
+    if (fMach) qs.set("equipment_id", fMach);
+    if (fFrom) qs.set("from", fFrom);
+    if (fTo) qs.set("to", fTo);
+    const r = await api.get("/equipment/request" + (qs.toString() ? "?" + qs : "")).catch(() => null);
+    if (r && r.success) setData({ loading: false, failed: false, rows: Array.isArray(r.data) ? r.data : [] });
+    else setData({ loading: false, failed: true, rows: [] });
+  }, [fCity, fProj, fMach, fFrom, fTo]);
+  useEffect(() => { load(); }, [load]);
+
+  const counts = useMemo(() => {
+    const c = { all: data.rows.length, pending: 0, fulfilled: 0, rejected: 0, urgent: 0 };
+    for (const r of data.rows) {
+      const s = mrStatus(r.status).k; c[s] += 1;
+      if (s === "pending" && r.priority === "urgent") c.urgent += 1;
+    }
+    return c;
+  }, [data.rows]);
+  // Pending pehle (urgent → high → normal), fir naye se purane
+  const shown = useMemo(() => data.rows
+    .filter((r) => status === "all" || mrStatus(r.status).k === status)
+    .slice()
+    .sort((a, b) => {
+      const pa = mrStatus(a.status).k === "pending" ? 0 : 1, pb = mrStatus(b.status).k === "pending" ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      if (pa === 0) { const d = mrPrio(a.priority).rank - mrPrio(b.priority).rank; if (d) return d; }
+      return new Date(b.created_at) - new Date(a.created_at);
+    }), [data.rows, status]);
+
+  const projOpts = projects.filter((p) => !fCity || String(p.city_id || "") === String(fCity));
+  const machOpts = fleet.filter((m) => !fCity || String(m.city_id || "") === String(fCity));
+  const anyFilter = fCity || fProj || fMach || fFrom || fTo;
+  const clearAll = () => { setFCity(""); setFProj(""); setFMach(""); setFFrom(""); setFTo(""); };
+
+  // Fulfill: machine pehle se recommend wali; list me us project ki city ki pehle
+  const openFulfill = (r) => setAct({ id: r.id, kind: "fulfill", eq: r.preferred_equipment_id ? String(r.preferred_equipment_id) : "", note: "", busy: false, err: "" });
+  const openReject = (r) => setAct({ id: r.id, kind: "reject", eq: "", note: "", busy: false, err: "" });
+  const decide = async () => {
+    if (!act) return;
+    if (act.kind === "reject" && !act.note.trim()) { setAct((a) => ({ ...a, err: t("machinery.mr_reason_zaroori") })); return; }
+    setAct((a) => ({ ...a, busy: true, err: "" }));
+    const body = act.kind === "fulfill"
+      ? { equipment_id: act.eq ? Number(act.eq) : null, admin_note: act.note.trim() || null }
+      : { admin_note: act.note.trim() };
+    const r = await api.post(`/equipment/request/${act.id}/${act.kind}`, body).catch((e) => ({ success: false, message: e.message }));
+    if (!r || r.success === false) { setAct((a) => ({ ...a, busy: false, err: srvMsg(r) })); return; }
+    setAct(null);
+    await load();
+    if (onChanged) onChanged();
+  };
+
+  const sel = (active) => ({ padding: "7px 10px", borderRadius: 7, border: `1.5px solid ${active ? T.ind : T.b1}`, fontSize: 12, fontFamily: "inherit", color: T.t1, background: T.surface, outline: "none", minWidth: 0 });
+  const dayBit = (r) => {
+    const parts = [];
+    if (r.from_date && r.to_date) parts.push(`${fmtD(r.from_date)} – ${fmtD(r.to_date)}`);
+    else if (r.from_date) parts.push(t("machinery.mr_from_only", { d: fmtD(r.from_date) }));
+    else if (r.to_date) parts.push(t("machinery.mr_to_only", { d: fmtD(r.to_date) }));
+    if (r.duration_approx) parts.push(r.duration_approx);
+    return parts.join(" · ");
+  };
+
+  return (
+    <Panel title={t("machinery.mr_tab")} action={
+      counts.urgent > 0 ? <Pill label={t("machinery.mr_urgent_n", { n: counts.urgent })} c={T.red} bg={T.redL} /> : null}>
+      {/* Status + chhanni */}
+      <div style={{ display: "flex", gap: 6, alignItems: "center", padding: "10px 14px 0", flexWrap: "wrap" }}>
+        {[...MR_STATUS, { k: "all", get l() { return t("machinery.mr_st_all"); } }].map((s) => {
+          const on = status === s.k;
+          return (
+            <button key={s.k} type="button" onClick={() => setStatus(s.k)}
+              style={{ padding: "6px 12px", borderRadius: 16, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: on ? 700 : 600,
+                border: `1.5px solid ${on ? T.ind : T.b1}`, background: on ? T.indL : T.surface, color: on ? T.ind : T.t3 }}>
+              {s.l} <span style={{ fontWeight: 700, color: on ? T.ind : T.t4 }}>{counts[s.k] || 0}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, flexWrap: "wrap" }}>
+        <select value={fCity} onChange={(e) => { setFCity(e.target.value); setFProj(""); setFMach(""); }} style={sel(fCity)}>
+          <option value="">{t("machinery.sab_city")}</option>
+          {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={fProj} onChange={(e) => setFProj(e.target.value)} style={{ ...sel(fProj), maxWidth: 220 }}>
+          <option value="">{t("machinery.mr_all_projects")}</option>
+          {projOpts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select value={fMach} onChange={(e) => setFMach(e.target.value)} style={{ ...sel(fMach), maxWidth: 240 }}>
+          <option value="">{t("machinery.mr_all_machines")}</option>
+          {machOpts.map((m) => <option key={m.id} value={m.id}>{m.name}{m.registration_no ? " · " + m.registration_no : ""}</option>)}
+        </select>
+        <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.mr_request_date")}</span>
+        <input type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} style={sel(fFrom)} />
+        <span style={{ fontSize: 11.5, color: T.t4 }}>–</span>
+        <input type="date" value={fTo} min={fFrom || undefined} onChange={(e) => setFTo(e.target.value)} style={sel(fTo)} />
+        {anyFilter && (
+          <button type="button" onClick={clearAll}
+            style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, color: T.ind }}>
+            {t("common.clear")}
+          </button>
+        )}
+      </div>
+
+      <Row head cols={MR_COLS}>
+        <span>{t("machinery.mr_col_when")}</span><span>{t("machinery.mr_col_project")}</span><span>{t("machinery.mr_col_need")}</span>
+        <span>{t("machinery.mr_col_machine")}</span><span>{t("machinery.mr_col_work")}</span><span>{t("machinery.mr_col_priority")}</span><span>{t("machinery.mr_col_status")}</span>
+      </Row>
+      {data.loading && data.rows.length === 0 && <Empty>{t("common.loading")}</Empty>}
+      {!data.loading && data.failed && <Empty>{t("machinery.mr_load_fail")}</Empty>}
+      {!data.loading && !data.failed && shown.length === 0 && (
+        <Empty>{data.rows.length === 0 && !anyFilter ? t("machinery.mr_empty_all") : t("machinery.mr_empty_filter")}</Empty>
+      )}
+      {shown.map((r) => {
+        const st = mrStatus(r.status);
+        const pr = mrPrio(r.priority);
+        const pending = st.k === "pending";
+        const open = act && act.id === r.id;
+        const reqCity = projects.find((p) => p.id === r.project_id);
+        const cityId = r.project_city_id || (reqCity && reqCity.city_id);
+        const fleetSorted = open && act.kind === "fulfill"
+          ? [...fleet].sort((a, b) => ((String(b.city_id) === String(cityId)) - (String(a.city_id) === String(cityId))) || String(a.name).localeCompare(String(b.name)))
+          : [];
+        return (
+          <div key={r.id} style={{ borderBottom: `1px solid ${T.b1}`, background: pending && pr.k === "urgent" ? T.redL + "55" : "transparent" }}>
+            <div style={{ display: "grid", gridTemplateColumns: MR_COLS, gap: 8, alignItems: "start", padding: "11px 14px", fontSize: 12.5, color: T.t2 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{fmtDT(r.created_at)}</div>
+                <div style={{ fontSize: 11, color: T.t3 }}>{r.requested_by_name || "—"}</div>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.project_name || "—"}</div>
+                <div style={{ fontSize: 11, color: r.city_name ? T.t3 : T.t4 }}>{r.city_name || t("machinery.city_nahi")}</div>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{r.equipment_type}{r.capacity ? " · " + r.capacity : ""}</div>
+                {dayBit(r) && <div style={{ fontSize: 11, color: T.t3 }}>{dayBit(r)}</div>}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                {r.preferred_equipment_name ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{r.preferred_equipment_name}</span>
+                    <MrReg v={r.preferred_registration_no} />
+                  </div>
+                ) : <span style={{ fontSize: 11.5, color: T.t4 }}>{t("machinery.mr_koi_bhi")}</span>}
+                {st.k === "fulfilled" && r.fulfilled_equipment_name && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: T.grn }}>{t("machinery.mr_sent", { name: r.fulfilled_equipment_name })}</span>
+                    <MrReg v={r.fulfilled_registration_no} />
+                  </div>
+                )}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                {r.task_name && <div style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{t("machinery.mr_task", { name: r.task_name })}</div>}
+                {r.reason && <div style={{ fontSize: 11.5, color: T.t3, lineHeight: 1.45, marginTop: r.task_name ? 2 : 0 }}>{r.reason}</div>}
+                {!r.task_name && !r.reason && <span style={{ fontSize: 11.5, color: T.t4 }}>—</span>}
+              </div>
+              <span><Pill label={pr.l} c={pr.c} bg={pr.bg} /></span>
+              <div>
+                <Pill label={st.l} c={st.c} bg={st.bg} />
+                {!pending && (r.decided_by_name || r.decided_at) && (
+                  <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>
+                    {[r.decided_by_name, r.decided_at ? fmtD(r.decided_at) : null].filter(Boolean).join(" · ")}
+                  </div>
+                )}
+                {!pending && r.admin_note && <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2, lineHeight: 1.4 }}>{r.admin_note}</div>}
+                {pending && canDecide && !open && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                    <Btn size="sm" c={T.grn} onClick={() => openFulfill(r)}>{t("machinery.mr_fulfill")}</Btn>
+                    <Btn size="sm" ghost onClick={() => openReject(r)}>{t("machinery.mr_reject")}</Btn>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {open && (
+              <div style={{ margin: "0 14px 12px", padding: "11px 12px", borderRadius: 9, border: `1.5px solid ${act.kind === "fulfill" ? T.grn : T.red}55`, background: T.surfaceB }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: T.t1, marginBottom: 8 }}>
+                  {act.kind === "fulfill" ? t("machinery.mr_fulfill_q") : t("machinery.mr_reject_q")}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: act.kind === "fulfill" ? "1.3fr 1fr auto" : "1fr auto", gap: 8, alignItems: "center" }}>
+                  {act.kind === "fulfill" && (
+                    <select value={act.eq} onChange={(e) => setAct((a) => ({ ...a, eq: e.target.value }))} style={inp}>
+                      <option value="">{t("machinery.mr_machine_none")}</option>
+                      {fleetSorted.map((m) => (
+                        <option key={m.id} value={String(m.id)}>
+                          {m.name}{m.registration_no ? " · " + m.registration_no : ""}{m.city_name ? " — " + m.city_name : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <input value={act.note} onChange={(e) => setAct((a) => ({ ...a, note: e.target.value, err: "" }))}
+                    placeholder={act.kind === "fulfill" ? t("machinery.mr_note_ph") : t("machinery.mr_reject_ph")} style={inp} />
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <Btn size="sm" ghost onClick={() => setAct(null)} disabled={act.busy}>{t("common.cancel")}</Btn>
+                    <Btn size="sm" c={act.kind === "fulfill" ? T.grn : T.red} onClick={decide} disabled={act.busy}>
+                      {act.busy ? t("common.saving") : act.kind === "fulfill" ? t("machinery.mr_fulfill_do") : t("machinery.mr_reject_do")}
+                    </Btn>
+                  </div>
+                </div>
+                {act.err && <ErrBox>{act.err}</ErrBox>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </Panel>
+  );
+}
+
 function MachineryModule() {
   const [tab, setTab] = useState("fleet");
+  // Machine Requests tab ka badge — kitni request abhi faisle ka intezaar kar rahi
+  const [reqPending, setReqPending] = useState(0);
+  const loadReqCount = useCallback(async () => {
+    const r = await api.get("/equipment/request?status=pending").catch(() => null);
+    if (r && r.success) setReqPending(Array.isArray(r.data) ? r.data.length : 0);
+  }, []);
+  useEffect(() => { loadReqCount(); }, [loadReqCount]);
   const [loading, setLoading] = useState(true);
   const [fleet, setFleet] = useState([]);
   const [due, setDue] = useState([]);
@@ -5190,6 +5447,8 @@ function MachineryModule() {
     { id: "fleet", l: t("machinery.fleet"), I: IcTruck },
     // Vendor / kiraye ki trip gaadiyan — server naya ho tabhi.
     ...(tv.state === "ok" || tv.state === "error" ? [{ id: "tripv", l: t("machinery.tv_tab"), I: IcRoute }] : []),
+    // Site se aayi machine ki maang (mobile + project Equipment tab)
+    { id: "requests", l: t("machinery.mr_tab"), I: IcInbox, badge: reqPending || null },
     { id: "due", l: t("machinery.reminders"), I: IcBell, badge: active.length || null },
     // Badge = kitni vendor units abhi kisi machine se judi nahi — wahi is
     // tab ka asli kaam hai. Account hi na ho to badge ka koi matlab nahi.
@@ -5239,6 +5498,10 @@ function MachineryModule() {
               <TripVehiclesTab tv={tv} from={tvFrom} to={tvTo} parties={parties} onReload={loadTv} q={tvQ} onQ={setTvQ} cities={cities} setCities={setCities}
                 view={tvView} onView={setTvView}
                 onRange={(f, t2) => { setTvFrom(f); setTvTo(t2); }} />
+            )}
+
+            {curTab === "requests" && (
+              <MachineRequestsTab fleet={fleet} projects={projects} cities={cities} onChanged={loadReqCount} />
             )}
 
             {curTab === "reports" && (

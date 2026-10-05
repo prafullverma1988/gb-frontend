@@ -68,7 +68,7 @@ function TabEquipment({ projectId }) {
   const updLog = (k, v) => setLogForm(p => ({ ...p, [k]: v }));
 
   // Request form
-  const emptyReq = { equipment_type: "Earthwork", capacity: "", from_date: "", to_date: "", duration_approx: "", reason: "", task_id: "" };
+  const emptyReq = { equipment_type: "Earthwork", capacity: "", from_date: "", to_date: "", duration_approx: "", reason: "", task_id: "", priority: "normal" };
   const [reqForm, setReqForm] = useState(emptyReq);
   const [reqSaving, setReqSaving] = useState(false);
   const updReq = (k, v) => setReqForm(p => ({ ...p, [k]: v }));
@@ -78,6 +78,12 @@ function TabEquipment({ projectId }) {
   // /equipment/request/recommend), duration dates se, aur "kis kaam ke liye" me
   // project ka task bhi aur likha hua bhi.
   const REQ_TYPES = ["Earthwork","Lifting","Concrete","Steel","Safety","Transport","Pumping","Compaction"];
+  // Kitni jaldi chahiye — server ki chaabi + rang
+  const REQ_PRIO = [
+    { k: "normal", l: t("equipment.req_p_normal"), c: T.t3,  bg: T.bg },
+    { k: "high",   l: t("equipment.req_p_high"),   c: T.amb, bg: T.ambL },
+    { k: "urgent", l: t("equipment.req_p_urgent"), c: T.red, bg: T.redL },
+  ];
   const [reqRec, setReqRec] = useState({ loading: false, failed: false, city: "", machines: [] });
   const [reqMachQ, setReqMachQ] = useState("");
   const [reqPref, setReqPref] = useState(null);
@@ -272,6 +278,7 @@ function TabEquipment({ projectId }) {
         reason: String(reqForm.reason || "").trim() || null,
         preferred_equipment_id: reqPref ? reqPref.id : null,
         task_id: reqForm.task_id ? Number(reqForm.task_id) : null,
+        priority: reqForm.priority || "normal",
       });
       if (res && res.success) {
         setShowReqForm(false);
@@ -466,7 +473,7 @@ function TabEquipment({ projectId }) {
           <div>
             {showReqForm && (
               <div style={{ padding: "12px 15px", borderBottom: `1px solid ${T.b1}`, background: T.bluL + "55" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 0.9fr", gap: 10 }}>
                   <div>
                     <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.equipment_type")}</div>
                     <select value={reqForm.equipment_type} onChange={e => updReq("equipment_type", e.target.value)} style={inp}>
@@ -491,70 +498,83 @@ function TabEquipment({ projectId }) {
                       title={reqDays > 0 ? t("equipment.req_dates_se") : undefined}
                       placeholder={t("equipment.req_duration_ph")} style={{ ...inp, ...(reqDays > 0 ? { background: T.bg, color: T.t2 } : {}) }} />
                   </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.req_priority")}</div>
+                    {(() => {
+                      const pr = REQ_PRIO.find(x => x.k === reqForm.priority) || REQ_PRIO[0];
+                      return (
+                        <select value={reqForm.priority} onChange={e => updReq("priority", e.target.value)}
+                          style={{ ...inp, color: pr.c, fontWeight: pr.k === "normal" ? 400 : 700, borderColor: pr.k === "normal" ? T.b1 : pr.c }}>
+                          {REQ_PRIO.map(x => <option key={x.k} value={x.k}>{x.l}</option>)}
+                        </select>
+                      );
+                    })()}
+                  </div>
                 </div>
                 {reqBadRange && <div style={{ fontSize: 11, color: T.red, marginTop: 6 }}>{t("equipment.req_to_before_from")}</div>}
 
-                {/* Recommended Machine — project ki city ki library machine */}
+                {/* Recommend machine — site admin ko batata hai kaun si machine bhejein
+                    (project ki city ki library machine). Search + dropdown. */}
                 <div style={{ marginTop: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
-                    <div style={{ fontSize: 10, color: T.t4, fontWeight: 600 }}>{t("equipment.req_recommended")}</div>
+                    <div style={{ fontSize: 10, color: T.t4, fontWeight: 600 }}>{t("equipment.req_recommend")}</div>
                     {!reqRec.loading && !reqRec.failed && (
                       <span style={{ fontSize: 10.5, color: T.t4 }}>{t("equipment.req_city_n", { city: reqRec.city || "—", n: reqRec.machines.length })}</span>
                     )}
                   </div>
-                  <div style={{ fontSize: 10.5, color: T.t4, margin: "2px 0 6px" }}>{t("equipment.req_machine_hint")}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4, margin: "2px 0 6px" }}>{t("equipment.req_recommend_hint")}</div>
                   {reqRec.loading && <div style={{ fontSize: 11.5, color: T.t4, padding: "6px 0" }}>{t("common.loading")}</div>}
                   {!reqRec.loading && reqRec.failed && <div style={{ fontSize: 11.5, color: T.t4, padding: "6px 0" }}>{t("equipment.req_machine_load_fail")}</div>}
                   {!reqRec.loading && !reqRec.failed && reqRec.machines.length === 0 && (
                     <div style={{ fontSize: 11.5, color: T.t4, padding: "6px 0" }}>{t("equipment.req_no_machine")}</div>
                   )}
-                  {reqPref ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.blu}`, background: T.surface }}>
-                      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{reqPref.name}</span>
-                        {reqPref.registration_no && <span style={regBadge}>{reqPref.registration_no}</span>}
-                        {[reqKind(reqPref), reqCap(reqPref)].filter(Boolean).length > 0 && (
-                          <span style={{ fontSize: 11, color: T.t3 }}>{[reqKind(reqPref), reqCap(reqPref)].filter(Boolean).join(" · ")}</span>
-                        )}
-                      </div>
-                      <button type="button" onClick={() => setReqPref(null)}
-                        style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 11.5, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>
-                        {t("equipment.req_hatao")}
-                      </button>
-                    </div>
-                  ) : (!reqRec.loading && reqRec.machines.length > 0 && (
-                    <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, background: T.surface, overflow: "hidden" }}>
-                      <input value={reqMachQ} onChange={e => setReqMachQ(e.target.value)} placeholder={t("equipment.req_machine_search")}
-                        style={{ ...inp, border: "none", borderBottom: `1px solid ${T.b1}`, borderRadius: 0 }} />
-                      <div style={{ maxHeight: 176, overflowY: "auto" }}>
-                        {reqMachines.length === 0 && <div style={{ fontSize: 11.5, color: T.t4, padding: "8px 12px" }}>{t("equipment.req_no_match")}</div>}
-                        {reqMachines.map((m, i) => (
-                          <div key={m.id} role="button" onClick={() => pickReqMachine(m)}
-                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", cursor: "pointer", borderTop: i ? `1px solid ${T.b1}` : "none" }}>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{m.name}</span>
-                            {m.registration_no && <span style={regBadge}>{m.registration_no}</span>}
-                            <span style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: T.t4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {[reqKind(m), reqCap(m), m.ownership].filter(Boolean).join(" · ")}
-                            </span>
+                  {!reqRec.loading && reqRec.machines.length > 0 && (() => {
+                    const opts = reqPref && !reqMachines.some(m => m.id === reqPref.id) ? [reqPref, ...reqMachines] : reqMachines;
+                    return (
+                      <>
+                        <div style={{ display: "grid", gridTemplateColumns: "0.6fr 1.8fr", gap: 10 }}>
+                          <input value={reqMachQ} onChange={e => setReqMachQ(e.target.value)} placeholder={t("equipment.req_machine_search")} style={inp} />
+                          <select value={reqPref ? String(reqPref.id) : ""}
+                            onChange={e => { const m = reqRec.machines.find(x => String(x.id) === e.target.value); if (m) pickReqMachine(m); else setReqPref(null); }}
+                            style={{ ...inp, ...(reqPref ? { borderColor: T.blu } : {}) }}>
+                            <option value="">{opts.length ? t("equipment.req_machine_none") : t("equipment.req_no_match")}</option>
+                            {opts.map(m => (
+                              <option key={m.id} value={String(m.id)}>
+                                {m.name}{m.registration_no ? " · " + m.registration_no : ""}{[reqKind(m), reqCap(m)].filter(Boolean).length ? " — " + [reqKind(m), reqCap(m)].filter(Boolean).join(" · ") : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {reqPref && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 11.5, fontWeight: 700, color: T.t1 }}>{reqPref.name}</span>
+                            {reqPref.registration_no && <span style={regBadge}>{reqPref.registration_no}</span>}
+                            <span style={{ fontSize: 11, color: T.t4 }}>{[reqKind(reqPref), reqCap(reqPref), reqPref.ownership].filter(Boolean).join(" · ")}</span>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
-                {/* Kis kaam ke liye — project ka task, aur/ya apne shabdon me */}
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.req_kis_kaam")}</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "0.6fr 1.2fr 1.6fr", gap: 10 }}>
-                    <input value={reqTaskQ} onChange={e => setReqTaskQ(e.target.value)} placeholder={t("equipment.req_task_filter")} style={inp} />
-                    <select value={reqForm.task_id} onChange={e => updReq("task_id", e.target.value)} style={inp}>
-                      <option value="">{reqTasks.length ? t("equipment.req_task_none") : t("equipment.req_no_task")}</option>
-                      {reqTaskOpts.map(x => <option key={x.id} value={x.id}>{x.parent ? x.parent + " › " : ""}{x.name}</option>)}
-                    </select>
-                    <input value={reqForm.reason} onChange={e => updReq("reason", e.target.value)} placeholder={t("equipment.site_needs_jcb_for_excavation")} style={inp} />
+                {/* Task (project ka) aur Note (kaam apne shabdon me) — koi ek zaroori */}
+                <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.req_task_label")}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "0.7fr 1.6fr", gap: 8 }}>
+                      <input value={reqTaskQ} onChange={e => setReqTaskQ(e.target.value)} placeholder={t("equipment.req_task_filter")} style={inp} />
+                      <select value={reqForm.task_id} onChange={e => updReq("task_id", e.target.value)} style={inp}>
+                        <option value="">{reqTasks.length ? t("equipment.req_task_none") : t("equipment.req_no_task")}</option>
+                        {reqTaskOpts.map(x => <option key={x.id} value={x.id}>{x.parent ? x.parent + " › " : ""}{x.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>{t("equipment.req_note")}</div>
+                    <input value={reqForm.reason} onChange={e => updReq("reason", e.target.value)} placeholder={t("equipment.req_note_ph")} style={inp} />
                   </div>
                 </div>
+                <div style={{ fontSize: 10.5, color: T.t4, marginTop: 5 }}>{t("equipment.req_task_ya_note")}</div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
                   <button onClick={() => { setShowReqForm(false); resetReq(); }} type="button"
                     style={{ padding: "7px 14px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>{t("common.cancel")}</button>
@@ -575,7 +595,11 @@ function TabEquipment({ projectId }) {
                   <div key={rq.id} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1.4fr 110px",
                     padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center", gap: 6 }}>
                     <div>
-                      <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{rq.equipment_type || "—"}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1, display: "flex", alignItems: "center", gap: 6 }}>
+                        {rq.equipment_type || "—"}
+                        {(() => { const pr = REQ_PRIO.find(x => x.k === rq.priority); return pr && pr.k !== "normal"
+                          ? <span style={{ fontSize: 9.5, fontWeight: 700, padding: "1px 7px", borderRadius: 8, color: pr.c, background: pr.bg }}>{pr.l}</span> : null; })()}
+                      </div>
                       {rq.capacity && <div style={{ fontSize: 10.5, color: T.t4 }}>{rq.capacity}</div>}
                       {/* Site ne library ki koi khaas machine maangi ho (mobile form, 5 Oct 2026) */}
                       {rq.preferred_equipment_name && (
